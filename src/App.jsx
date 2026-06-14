@@ -5,6 +5,8 @@ import Landing from './pages/Landing';
 import Busca from './pages/Busca';
 import Analise from './pages/Analise';
 import Painel from './pages/Painel';
+import Membros from './pages/Membros';
+import Curso from './pages/Curso';
 
 export default function App() {
   return (
@@ -17,6 +19,8 @@ export default function App() {
             <Route path="/buscar" element={<Busca />} />
             <Route path="/analise" element={<Analise />} />
             <Route path="/painel" element={<Painel />} />
+            <Route path="/membros" element={<Membros />} />
+            <Route path="/membros/curso/:id" element={<Curso />} />
           </Routes>
         </main>
       </div>

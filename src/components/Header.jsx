@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap } from 'lucide-react';
 
 export default function Header() {
   const nav = useNavigate();
@@ -9,7 +9,8 @@ export default function Header() {
 
   const links = [
     { path: '/', label: 'Home', icon: Home },
-    { path: '/buscar', label: 'Buscar Leilões', icon: Search },
+    { path: '/buscar', label: 'Leilões', icon: Search },
+    { path: '/membros', label: 'Área de Membros', icon: GraduationCap },
     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
   ];
 
