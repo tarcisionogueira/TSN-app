@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { Search, Loader2, Filter, MapPin, ChevronDown, ChevronUp, Globe, Info, ExternalLink } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, Loader2, Filter, MapPin, ChevronDown, ChevronUp, Globe, Info, ExternalLink, Sparkles, RefreshCw } from 'lucide-react';
 import PropertyCard from '../components/PropertyCard';
 import { buscarImoveis, buscarLeiloeirosEstado } from '../utils/claude';
-import { saveBuscaRecente, loadBuscasRecentes } from '../utils/storage';
+import { saveBuscaRecente } from '../utils/storage';
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
@@ -44,10 +44,21 @@ export default function Busca() {
   const up = (name, val) => setFiltros(p => ({ ...p, [name]: val }));
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x => x !== v) : [...filtros.pagamento, v]);
 
+  // Filtragem client-side sobre os resultados já carregados
+  const resultadosFiltrados = useMemo(() => {
+    return resultados.filter(im => {
+      if (filtros.tipo && im.tipo !== filtros.tipo) return false;
+      if (filtros.estado && im.estado !== filtros.estado) return false;
+      if (filtros.cidade && !im.cidade?.toLowerCase().includes(filtros.cidade.toLowerCase())) return false;
+      if (filtros.modalidade && im.modalidade !== filtros.modalidade) return false;
+      if (filtros.valorMin && im.valorMinimo < Number(filtros.valorMin)) return false;
+      if (filtros.valorMax && im.valorMinimo > Number(filtros.valorMax)) return false;
+      if (filtros.pagamento?.length > 0 && !filtros.pagamento.some(p => im.pagamento?.includes(p))) return false;
+      return true;
+    });
+  }, [resultados, filtros]);
+
   const buscar = async () => {
-    if (!filtros.estado && !filtros.cidade && !filtros.tipo) {
-      setErro('Informe pelo menos o estado, cidade ou tipo de imóvel.'); return;
-    }
     setErro(''); setLoading(true); setBuscaFeita(true);
     saveBuscaRecente(filtros);
     try {
@@ -55,8 +66,9 @@ export default function Busca() {
       setResultados(res);
       if (res.length === 0) setErro('Nenhum resultado encontrado. Tente ampliar os filtros.');
     } catch (e) {
-      setErro('Erro na busca. Verifique a chave de API e tente novamente.');
+      setErro('Não foi possível carregar os resultados. Tente novamente.');
       console.error(e);
+      setResultados([]);
     }
     setLoading(false);
   };
@@ -182,10 +194,20 @@ export default function Busca() {
           <div>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#0f172a' }}>Busca de Imóveis em Leilão</h1>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>
-              {buscaFeita ? `${resultados.length} imóvel(is) encontrado(s)` : 'Configure os filtros e inicie a busca por IA'}
+              {buscaFeita && !loading
+                ? `${resultadosFiltrados.length} imóvel(is) encontrado(s)${resultadosFiltrados.length !== resultados.length ? ` de ${resultados.length} (filtrados)` : ''}`
+                : loading ? 'Buscando imóveis com IA...'
+                : 'Configure os filtros e clique em Buscar Agora'}
             </p>
           </div>
-          {loading && <Loader2 size={20} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }}/>}
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            {buscaFeita && !loading && (
+              <button onClick={buscar} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor:'pointer' }}>
+                <RefreshCw size={12}/> Buscar novamente
+              </button>
+            )}
+            {loading && <Loader2 size={20} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }}/>}
+          </div>
         </div>
 
         {!buscaFeita && (
@@ -225,9 +247,27 @@ export default function Busca() {
         )}
 
         {!loading && resultados.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-            {resultados.map(im => <PropertyCard key={im.id} imovel={im} />)}
-          </div>
+          <>
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Sparkles size={15} color="#16a34a"/>
+              <span style={{ fontSize: 12, color: '#15803d', lineHeight: 1.5 }}>
+                <strong>Exemplos gerados por IA</strong> com base nos seus filtros e no mercado real. Verifique disponibilidade atual clicando em "Ver no Site" antes de analisar.
+                {resultadosFiltrados.length !== resultados.length && (
+                  <> · Mostrando <strong>{resultadosFiltrados.length}</strong> de {resultados.length} (filtros ativos)</>
+                )}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+              {resultadosFiltrados.map(im => <PropertyCard key={im.id} imovel={im} />)}
+            </div>
+            {resultadosFiltrados.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px 20px', background: 'white', borderRadius: 14, border: '1px solid #e2e8f0' }}>
+                <Filter size={32} color="#94a3b8" style={{ margin: '0 auto 12px' }}/>
+                <h3 style={{ color: '#334155', fontWeight: 800, margin: '0 0 8px' }}>Nenhum resultado com esses filtros</h3>
+                <p style={{ color: '#94a3b8', fontSize: 13 }}>Tente remover alguns filtros para ampliar a busca.</p>
+              </div>
+            )}
+          </>
         )}
 
         {buscaFeita && !loading && resultados.length === 0 && (

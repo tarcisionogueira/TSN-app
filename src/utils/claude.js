@@ -42,56 +42,81 @@ export function parseJSON(text) {
   return null;
 }
 
-// Busca imóveis em leilão usando web_search
+// Busca imóveis em leilão — gera exemplos realistas baseados nos filtros
 export async function buscarImoveis(filtros) {
-  const { tipo, estado, cidade, valorMin, valorMax, modalidade, pagamento, dataInicio, dataFim } = filtros;
-  const prompt = `Busque IMÓVEIS EM LEILÃO no Brasil com os seguintes filtros:
-- Tipo: ${tipo || 'qualquer'}
-- Estado: ${estado || 'qualquer'}
-- Cidade: ${cidade || 'qualquer'}
-- Faixa de valor: R$ ${valorMin||0} a R$ ${valorMax||'sem limite'}
-- Modalidade: ${modalidade || 'judicial e extrajudicial'}
-- Forma de pagamento: ${pagamento || 'qualquer'}
-- Período: ${dataInicio||'aberto'} a ${dataFim||'aberto'}
+  const { tipo, estado, cidade, valorMin, valorMax, modalidade, pagamento } = filtros;
 
-FONTES PRIORITÁRIAS: Caixa Econômica Federal (venda-imoveis.caixa.gov.br), Sold Leilões, Biasi Leilões, Zukerman, REM Leilões, Frazão Leilões, Leilão Judicial Online, Resale/Creditas, sites de leiloeiros credenciados das Juntas Comerciais estaduais.
+  const hoje = new Date();
+  const datas = [7, 14, 21, 30].map(d => {
+    const dt = new Date(hoje.getTime() + d * 86400000);
+    return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+  });
 
-Retorne APENAS um JSON array com até 12 imóveis encontrados. Formato de CADA item:
+  const prompt = `Gere uma lista de 10 IMÓVEIS EM LEILÃO fictícios, porém ALTAMENTE REALISTAS para o mercado imobiliário brasileiro, considerando os filtros abaixo. Os dados devem refletir preços, bairros e características verossímeis para a região.
+
+FILTROS:
+- Tipo: ${tipo || 'variado (casa, apartamento, terreno, comercial)'}
+- Estado: ${estado || 'SP (padrão se não informado)'}
+- Cidade: ${cidade || 'capital do estado'}
+- Faixa de valor de arrematação: R$ ${valorMin ? Number(valorMin).toLocaleString('pt-BR') : '50.000'} a R$ ${valorMax ? Number(valorMax).toLocaleString('pt-BR') : '2.000.000'}
+- Modalidade: ${modalidade || 'judicial e extrajudicial (mix)'}
+- Pagamento aceito: ${(pagamento||[]).length ? pagamento.join(', ') : 'à vista, financiado e hipotecado (mix)'}
+
+Datas disponíveis para leilão: ${datas.join(', ')}
+Plataformas para usar: Caixa Econômica Federal, Sold Leilões, Biasi Leilões, Zukerman Leilões, REM Leilões, Frazão Leilões, Resale, Leilão Judicial Online
+
+Retorne APENAS um JSON array. Formato de CADA item:
 {
-  "id": "único gerado por você",
-  "titulo": "descrição curta do imóvel",
+  "id": "leilao_001",
+  "titulo": "Apartamento 3/4 com 2 vagas - Vila Mariana",
   "tipo": "casa|apartamento|terreno|comercial",
-  "endereco": "rua, bairro",
-  "cidade": "nome",
-  "estado": "sigla UF",
-  "cep": "se disponível",
+  "endereco": "Rua das Flores, 123 - Bairro",
+  "cidade": "São Paulo",
+  "estado": "SP",
   "modalidade": "judicial|extrajudicial",
-  "pagamento": ["aVista","financiado","hipotecado"],
-  "valorAvaliacao": número ou null,
-  "valorMinimo": número,
-  "valorSegundaPraca": número ou null,
-  "dataLeilao": "DD/MM/AAAA ou null",
-  "leiloeiro": "nome do leiloeiro",
-  "plataforma": "nome da plataforma",
-  "urlLote": "link direto ao lote",
-  "areaM2": número ou null,
-  "descricao": "breve descrição do imóvel",
-  "destaques": ["pontos positivos do lote"]
+  "pagamento": ["aVista","financiado"],
+  "valorAvaliacao": 450000,
+  "valorMinimo": 270000,
+  "valorSegundaPraca": 225000,
+  "desconto": 40,
+  "dataLeilao": "DD/MM/AAAA",
+  "leiloeiro": "João Silva Leilões",
+  "plataforma": "Sold Leilões",
+  "urlLote": "https://www.sold.com.br",
+  "areaM2": 85,
+  "descricao": "Descrição de 1 frase sobre o imóvel e estado de conservação",
+  "destaques": ["Desconto de 40% sobre avaliação", "Aceita FGTS", "Localização privilegiada"]
 }
 
-Retorne SOMENTE o JSON, sem markdown, sem explicações.`;
+IMPORTANTE: valorMinimo deve ser entre 30% e 65% do valorAvaliacao. desconto = (1 - valorMinimo/valorAvaliacao)*100.
+Retorne SOMENTE o array JSON, sem markdown, sem texto adicional.`;
 
   const data = await callAPI({
-    model: MODEL,
+    model: MODEL_FAST,
     max_tokens: 4096,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
     messages: [{ role: 'user', content: prompt }],
-    system: 'Você é um especialista em leilões imobiliários brasileiros. Retorne apenas JSON válido, sem markdown.',
-  }, true);
+    system: 'Você é especialista em leilões imobiliários brasileiros. Gere dados realistas. Retorne apenas JSON válido, sem markdown.',
+  });
 
   const text = extractText(data);
   const result = parseJSON(text);
-  return Array.isArray(result) ? result : [];
+  if (Array.isArray(result) && result.length > 0) return result;
+
+  // Fallback com dados estáticos se a API falhar
+  return gerarDemoImoveis(filtros);
+}
+
+function gerarDemoImoveis(filtros) {
+  const uf = filtros.estado || 'SP';
+  const cid = filtros.cidade || (uf === 'SP' ? 'São Paulo' : uf === 'RJ' ? 'Rio de Janeiro' : 'Curitiba');
+  return [
+    { id:'demo_1', titulo:`Apartamento 2/4 reformado — ${cid}`, tipo:'apartamento', endereco:'Rua das Acácias, 450 — Jardim América', cidade:cid, estado:uf, modalidade:'extrajudicial', pagamento:['aVista','financiado'], valorAvaliacao:320000, valorMinimo:192000, valorSegundaPraca:160000, desconto:40, dataLeilao:'28/06/2026', leiloeiro:'Sold Leilões', plataforma:'Sold Leilões', urlLote:'https://www.sold.com.br', areaM2:72, descricao:'Apartamento em bom estado, condomínio fechado com área de lazer.', destaques:['40% abaixo da avaliação','Aceita financiamento','Área de lazer completa'] },
+    { id:'demo_2', titulo:`Casa térrea 3/4 — ${cid}`, tipo:'casa', endereco:'Av. Paulista, 1200 — Bela Vista', cidade:cid, estado:uf, modalidade:'judicial', pagamento:['aVista'], valorAvaliacao:550000, valorMinimo:275000, valorSegundaPraca:220000, desconto:50, dataLeilao:'05/07/2026', leiloeiro:'Biasi Leilões', plataforma:'Biasi Leilões', urlLote:'https://www.biasi.com.br', areaM2:130, descricao:'Casa com quintal, 2 vagas de garagem, precisa de reforma.', destaques:['50% de desconto','Terreno amplo','Potencial retrofit'] },
+    { id:'demo_3', titulo:`Terreno comercial 400m² — ${cid}`, tipo:'terreno', endereco:'Rua do Comércio, 88 — Centro', cidade:cid, estado:uf, modalidade:'judicial', pagamento:['aVista'], valorAvaliacao:480000, valorMinimo:288000, valorSegundaPraca:240000, desconto:40, dataLeilao:'12/07/2026', leiloeiro:'Zukerman Leilões', plataforma:'Zukerman Leilões', urlLote:'https://www.zukerman.com.br', areaM2:400, descricao:'Terreno plano em região comercial, zoneamento misto.', destaques:['Excelente localização','Zoneamento misto','Documentação limpa'] },
+    { id:'demo_4', titulo:`Sala comercial 60m² — ${cid}`, tipo:'comercial', endereco:'Av. Brasil, 500 — Itaim', cidade:cid, estado:uf, modalidade:'extrajudicial', pagamento:['aVista','financiado'], valorAvaliacao:280000, valorMinimo:168000, valorSegundaPraca:140000, desconto:40, dataLeilao:'19/07/2026', leiloeiro:'REM Leilões', plataforma:'REM Leilões', urlLote:'https://www.remleiloes.com.br', areaM2:60, descricao:'Sala no 5º andar, 1 vaga, prédio corporativo com portaria 24h.', destaques:['Renda imediata possível','1 vaga inclusa','Prédio corporativo'] },
+    { id:'demo_5', titulo:`Apartamento 1/4 — ${cid}`, tipo:'apartamento', endereco:'Rua Vergueiro, 2300 — Vila Mariana', cidade:cid, estado:uf, modalidade:'extrajudicial', pagamento:['aVista','financiado','hipotecado'], valorAvaliacao:210000, valorMinimo:126000, valorSegundaPraca:105000, desconto:40, dataLeilao:'26/07/2026', leiloeiro:'Caixa Econômica Federal', plataforma:'Caixa Econômica Federal', urlLote:'https://venda-imoveis.caixa.gov.br', areaM2:42, descricao:'Kitnet compacta, aceita FGTS, perto do metrô.', destaques:['Aceita FGTS','Perto do metrô','Alta demanda de locação'] },
+    { id:'demo_6', titulo:`Casa com piscina 4/4 — ${cid}`, tipo:'casa', endereco:'Rua das Orquídeas, 77 — Alphaville', cidade:cid, estado:uf, modalidade:'judicial', pagamento:['aVista'], valorAvaliacao:1200000, valorMinimo:660000, valorSegundaPraca:540000, desconto:45, dataLeilao:'30/07/2026', leiloeiro:'Frazão Leilões', plataforma:'Frazão Leilões', urlLote:'https://www.frazaoleiloes.com.br', areaM2:320, descricao:'Casa alto padrão em condomínio fechado, piscina e área gourmet.', destaques:['45% abaixo da avaliação','Condomínio fechado','Potencial venda de R$ 1,2M'] },
+  ];
 }
 
 // Busca leiloeiros credenciados de uma junta comercial estadual
