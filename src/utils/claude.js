@@ -177,47 +177,79 @@ ${texto.substring(0, 6000)}`;
   return parseJSON(extractText(data));
 }
 
-// Análise de mercado com comparativos
+// Análise de mercado com dois níveis: mesmo condomínio + vizinhança
 export async function analisarMercado(inputs) {
-  const { endereco, tipoImovel, areaM2, cidade, estado, isCondominio } = inputs;
-  const prompt = `Realize pesquisa de mercado imobiliário para:
-- Imóvel: ${tipoImovel} com ${areaM2}m²
-- Localização: ${endereco}, ${cidade}/${estado}
-- É condomínio fechado: ${isCondominio ? 'SIM — busque EXCLUSIVAMENTE dentro deste condomínio' : 'NÃO — busque no mesmo bairro'}
+  const { endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio } = inputs;
 
-TAREFA 1 — VENDA: Encontre até 10 imóveis similares à venda. Para cada: portal, endereço/identificação, valor total e valor/m².
-TAREFA 2 — LOCAÇÃO: Encontre até 6 imóveis similares para alugar. Para cada: portal, identificação, valor mensal.
-TAREFA 3 — CALCULE:
-- Preço médio de venda (R$/m²)
-- Faixa de preço de venda (min-max)
-- Aluguel médio mensal
-- Yield bruto médio de locação (aluguel/valor_venda × 100 %)
-- Yield líquido estimado (descontando 15% de vacância/despesas)
+  const prompt = `Você é um perito avaliador imobiliário. Realize pesquisa de mercado COMPLETA em DOIS NÍVEIS para o imóvel:
+- Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
+- Endereço: ${endereco}, ${cidade}/${estado}
+${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
 
-Retorne JSON:
+═══ NÍVEL 1 — MESMO CONDOMÍNIO / MESMO ENDEREÇO ═══
+Busque o máximo de anúncios de venda E locação DENTRO do mesmo condomínio ou edifício.
+Se não encontrar no condomínio exato, busque na mesma rua ou logradouro.
+Meta: pelo menos 5 amostras de venda e 3 de locação.
+
+═══ NÍVEL 2 — VIZINHANÇA / BAIRRO ═══
+Busque o máximo de anúncios similares no mesmo bairro e adjacências (raio ~1km).
+Meta: pelo menos 10 amostras de venda e 5 de locação.
+
+FONTES: ZAP Imóveis, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, anúncios diretos.
+
+Retorne APENAS este JSON (sem markdown):
 {
-  "vendas": [{"descricao":"...","valor":número,"m2":número,"valorM2":número,"fonte":""}],
-  "locacoes": [{"descricao":"...","valorMensal":número,"fonte":""}],
-  "precoMedioM2": número,
-  "precoMinM2": número,
-  "precoMaxM2": número,
-  "aluguelMedio": número,
-  "yieldBruto": número (percentual),
-  "yieldLiquido": número (percentual),
-  "totalAmostrasVenda": número,
-  "totalAmostrasLocacao": número,
-  "comentario": "análise qualitativa do mercado local em 2-3 frases"
+  "nivel1": {
+    "descricao": "Ex: Residencial Torre Norte, Rua das Flores 100",
+    "vendas": [{"descricao":"Apt 2/4 andar 8","valor":320000,"m2":72,"valorM2":4444,"fonte":"ZAP"}],
+    "locacoes": [{"descricao":"Apt 2/4","valorMensal":2200,"fonte":"QuintoAndar"}],
+    "precoMedioM2": número,
+    "precoMinM2": número,
+    "precoMaxM2": número,
+    "aluguelMedio": número,
+    "totalAmostras": número,
+    "disponiveis": true|false
+  },
+  "nivel2": {
+    "descricao": "Ex: Bairro Vila Mariana, raio 1km",
+    "vendas": [{"descricao":"...","valor":número,"m2":número,"valorM2":número,"fonte":""}],
+    "locacoes": [{"descricao":"...","valorMensal":número,"fonte":""}],
+    "precoMedioM2": número,
+    "precoMinM2": número,
+    "precoMaxM2": número,
+    "aluguelMedio": número,
+    "totalAmostras": número
+  },
+  "consolidado": {
+    "precoMedioM2": média ponderada dos dois níveis,
+    "aluguelMedio": número,
+    "yieldBruto": número (percentual anual = aluguelMedio*12/valorMedioTotal*100),
+    "yieldLiquido": número (descontando 15% vacância/despesas),
+    "valorEstimadoImovel": precoMedioM2 * ${areaM2 || 0},
+    "descontoArremate": null
+  },
+  "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, tendência do mercado e recomendação de precificação"
 }`;
 
   const data = await callAPI({
     model: MODEL,
-    max_tokens: 4096,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+    max_tokens: 6000,
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
     messages: [{ role: 'user', content: prompt }],
-    system: 'Você é um perito avaliador imobiliário. Retorne apenas JSON válido.',
+    system: 'Você é um perito avaliador imobiliário sênior. Busque o máximo de amostras possível. Retorne apenas JSON válido.',
   }, true);
 
-  return parseJSON(extractText(data));
+  const result = parseJSON(extractText(data));
+  // Compatibilidade retroativa com código que usa campos do nível raiz
+  if (result) {
+    result.precoMedioM2 = result.consolidado?.precoMedioM2 || result.nivel2?.precoMedioM2 || 0;
+    result.aluguelMedio = result.consolidado?.aluguelMedio || 0;
+    result.yieldBruto = result.consolidado?.yieldBruto || 0;
+    result.yieldLiquido = result.consolidado?.yieldLiquido || 0;
+    result.vendas = result.nivel2?.vendas || [];
+    result.locacoes = result.nivel2?.locacoes || [];
+  }
+  return result;
 }
 
 // Gera parecer executivo completo
