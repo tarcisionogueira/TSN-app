@@ -1,217 +1,227 @@
 import { fmt, fmtPct } from '../utils/calculos';
 
-export default function RelatorioPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTabela, priceTabela }) {
+export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer }) {
   const win = window.open('', '_blank');
   if (!win) { alert('Permita pop-ups para gerar o PDF.'); return; }
 
-  const parseAI = (txt) => {
+  const parseSecoes = (txt) => {
     if (!txt) return {};
-    const result = {};
-    const parts = txt.split(/SEÇÃO:/i).filter(s => s.trim());
-    parts.forEach(p => {
+    const res = {};
+    txt.split(/§\s*SEÇÃO:/i).filter(s=>s.trim()).forEach(p => {
       const nl = p.indexOf('\n');
       if (nl < 0) return;
-      const title = p.substring(0, nl).trim().toUpperCase();
-      const content = p.substring(nl).trim();
-      if (title.includes('POSICIONAMENTO')) result.posicionamento = content;
-      else if (title.includes('DEFESA')) result.defesa = content;
-      else if (title.includes('LOCAÇÃO') || title.includes('PROJEÇÃO')) result.locacao = content;
-      else if (title.includes('AMOSTRAS')) result.amostras = content;
+      const t = p.substring(0,nl).trim().toUpperCase();
+      const c = p.substring(nl).trim();
+      if (t.includes('POSICIONAMENTO')) res.pos = c;
+      else if (t.includes('DEFESA')) res.def = c;
+      else if (t.includes('LOCAÇÃO') || t.includes('RENTAB')) res.loc = c;
+      else if (t.includes('CONCLUSÃO')) res.conc = c;
     });
-    return result;
+    return res;
   };
 
-  const ai = parseAI(d.aiAnalysis || '');
-  const riscosBloqueantes = (d.riscos || []).filter(r => r.tipo === 'bloqueante');
-  const sacTotal = sacTabela.reduce((s, r) => s + r.parcela, 0);
-  const priceTotal = priceTabela.reduce((s, r) => s + r.parcela, 0);
-  const labelRef = isUsoProprio ? 'Valor de Mercado' : 'Venda Bruta (90%)';
+  const sec = parseSecoes(parecer || '');
+  const riscosBloq = (d.riscos||[]).filter(r=>r.tipo==='bloqueante');
+  const sacTotal = (sacTab||[]).reduce((s,r)=>s+r.parcela,0);
+  const priceTotal = (priceTab||[]).reduce((s,r)=>s+r.parcela,0);
+  const sacPrincipal = (sacTab||[]).reduce((s,r)=>s+r.amortizacao,0);
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8">
-<title>Relatório TSN Ativos — ${d.nome || d.endereco}</title>
+<title>Relatório TSN Ativos — ${d.nome||d.endereco}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
-  body{font-family:'Inter',sans-serif;font-size:11px;color:#0f172a;padding:20px;line-height:1.5;background:white;}
-  @media print{body{padding:0;}@page{margin:8mm;size:A4 portrait;}.pb{page-break-before:always;}.avoid{page-break-inside:avoid;}}
-  .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:20px;}
-  h2{font-size:13px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:20px 0 10px;}
-  h3{font-size:11px;font-weight:700;margin:14px 0 6px;color:#1e293b;}
-  table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10.5px;}
-  th,td{border:1px solid #cbd5e1;padding:5px 8px;}
+  body{font-family:'Inter',sans-serif;font-size:10.5px;color:#0f172a;padding:20px;line-height:1.5;background:white;margin:0;}
+  @media print{body{padding:0;}@page{margin:8mm;size:A4;}
+    .pb{page-break-before:always;}.av{page-break-inside:avoid;}}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:18px;}
+  h2{font-size:12px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:18px 0 8px;}
+  h3{font-size:10.5px;font-weight:700;margin:12px 0 6px;color:#1e293b;}
+  table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:10px;}
+  th,td{border:1px solid #cbd5e1;padding:5px 7px;}
   th{background:#f1f5f9;font-weight:700;text-align:left;}
   .r{text-align:right;}.c{text-align:center;}
-  .green{color:#059669;font-weight:700;}.red{color:#dc2626;font-weight:700;}
-  .amber{color:#d97706;font-weight:700;}.blue{color:#2563eb;font-weight:700;}
-  .bg-green{background:#d1fae5;}.bg-red{background:#fee2e2;}.bg-amber{background:#fef3c7;}.bg-blue{background:#dbeafe;}
-  .alert-box{border:2px solid #dc2626;background:#fef2f2;padding:12px;border-radius:6px;margin:12px 0;}
-  .obs-box{border-left:4px solid #2563eb;background:#f0f9ff;padding:10px 14px;margin-bottom:14px;}
-  .risk-item{padding:5px 8px;margin-bottom:4px;border-radius:4px;display:flex;align-items:flex-start;gap:8px;}
-  pre{white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:10.5px;margin:0;}
-</style>
-</head><body>
+  .g{color:#059669;font-weight:700;}.rd{color:#dc2626;font-weight:700;}
+  .am{color:#d97706;font-weight:700;}.bl{color:#2563eb;font-weight:700;}
+  .bg-g{background:#d1fae5;}.bg-rd{background:#fee2e2;}.bg-bl{background:#dbeafe;}
+  .box{border:2px solid #dc2626;background:#fef2f2;padding:10px;border-radius:5px;margin:10px 0;}
+  .obs{border-left:4px solid #2563eb;background:#f0f9ff;padding:8px 12px;margin-bottom:12px;}
+  pre{white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:10px;margin:0;line-height:1.6;}
+  .viab{padding:12px;border-radius:6px;margin:12px 0;border:2px solid;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+  .card{background:#f8fafc;border-radius:5px;padding:8px 10px;text-align:center;}
+  .card-v{font-size:16px;font-weight:900;margin-top:2px;}
+  .card-l{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;}
+</style></head><body>
 
-<!-- CABEÇALHO -->
-<div class="hdr avoid">
+<div class="hdr av">
   <div>
-    <div style="font-size:20px;font-weight:900;text-transform:uppercase;margin-bottom:4px;">TSN ATIVOS</div>
-    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Aquisição em Leilão & Investimentos Estratégicos</div>
-    <div style="font-size:12px;font-weight:900;margin-bottom:4px;">ANÁLISE DE VIABILIDADE DE ARREMATAÇÃO</div>
-    <div style="font-size:10px;color:#475569;">${d.tipoImovel?.toUpperCase()} — ${d.endereco}</div>
+    <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">TSN ATIVOS</div>
+    <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Aquisição em Leilão & Investimentos Estratégicos</div>
+    <div style="font-size:13px;font-weight:900;margin-bottom:3px;">ANÁLISE DE VIABILIDADE DE ARREMATAÇÃO</div>
+    <div style="font-size:10px;color:#475569;">${(d.tipo||'').toUpperCase()} — ${d.endereco||''} ${d.cidade?'· '+d.cidade:''} ${d.estado?'/'+d.estado:''}</div>
+    ${d.leiloeiro?`<div style="font-size:9px;color:#64748b;margin-top:3px;">Leiloeiro: ${d.leiloeiro}${d.dataLeilao?' · '+d.dataLeilao:''}</div>`:''}
   </div>
-  <div style="text-align:right;">
-    <div style="font-size:10px;font-weight:700;margin-bottom:4px;">Data: ${new Date().toLocaleDateString('pt-BR')}</div>
-    <div style="font-size:9px;color:#64748b;">Cenário: ${isAVista ? 'À VISTA' : 'ALAVANCADO'}</div>
-    <div style="font-size:9px;color:#64748b;">Objetivo: ${isUsoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}</div>
-    <div style="font-size:9px;color:#64748b;">Área: ${d.areaM2}m² (priv.) / ${d.areaTerrenoM2}m² (terreno)</div>
-  </div>
-</div>
-
-<!-- ALERTAS BLOQUEANTES -->
-${riscosBloqueantes.length > 0 ? `
-<div class="alert-box avoid">
-  <div style="font-size:14px;font-weight:900;color:#b91c1c;margin-bottom:8px;">⚠ RISCO JURÍDICO BLOQUEANTE — ANÁLISE SUSPENSA ATÉ REGULARIZAÇÃO</div>
-  ${riscosBloqueantes.map(r => `<div style="color:#dc2626;font-size:11px;margin-bottom:4px;">• ${r.texto}</div>`).join('')}
-</div>` : ''}
-
-<!-- OBSERVAÇÕES DA GESTÃO -->
-${d.observacoes ? `<div class="obs-box avoid"><b style="font-size:10px;text-transform:uppercase;">Anotações da Gestão:</b><br/><span style="color:#475569;">${d.observacoes.replace(/\n/g,'<br/>')}</span></div>` : ''}
-
-<!-- SEÇÃO IA: POSICIONAMENTO -->
-${ai.posicionamento ? `<div class="avoid"><h2>Apresentação Institucional & Posicionamento Estratégico</h2><pre>${ai.posicionamento}</pre></div>` : ''}
-
-<!-- VIABILIDADE -->
-<div class="avoid" style="margin:16px 0;padding:14px;border-radius:8px;border:2px solid ${isViavel ? '#10b981' : '#dc2626'};background:${isViavel ? '#d1fae5' : '#fee2e2'};">
-  <div style="font-size:16px;font-weight:900;color:${isViavel ? '#065f46' : '#b91c1c'};">
-    ${isViavel ? '✓ OPERAÇÃO VIÁVEL — APROVADA' : '✗ OPERAÇÃO REPROVADA — RETORNO INSUFICIENTE'}
-  </div>
-  <div style="font-size:11px;color:${isViavel ? '#047857' : '#dc2626'};margin-top:4px;">
-    ${isUsoProprio
-      ? `Economia de R$ ${fmt(m.lucro, 0)} vs compra direta no mercado (${fmtPct(m.roi)} de desconto efetivo)`
-      : `Retorno ${fmtPct(m.roi)} ${isAVista ? 'ROI' : 'ROE'} — ${isViavel ? 'Atinge a trava mínima de 40%' : 'Abaixo dos 40% exigidos'} · Teto máximo: R$ ${fmt(teto, 0)}`}
+  <div style="text-align:right;flex-shrink:0;">
+    <div style="font-size:10px;font-weight:700;margin-bottom:3px;">Data: ${new Date().toLocaleDateString('pt-BR')}</div>
+    <div style="font-size:9px;color:#64748b;">Cenário: ${isAVista?'À VISTA':'ALAVANCADO (SAC/PRICE)'}</div>
+    <div style="font-size:9px;color:#64748b;">Objetivo: ${isUsoProprio?'USO PRÓPRIO':'INVESTIMENTO'}</div>
+    <div style="font-size:9px;color:#64748b;">Área: ${d.areaM2||0}m² (priv.) / ${d.areaTerrenoM2||0}m² (terreno)</div>
+    <div style="font-size:9px;color:#64748b;margin-top:3px;">Honorários Jurídicos TSN: 10%</div>
   </div>
 </div>
 
-<!-- DETALHAMENTO FINANCEIRO -->
-<h2>Detalhamento Financeiro da Operação</h2>
-<div class="avoid">
+${riscosBloq.length>0?`<div class="box av"><div style="font-size:13px;font-weight:900;color:#b91c1c;margin-bottom:6px;">⚠ RISCO JURÍDICO BLOQUEANTE</div>${riscosBloq.map(r=>`<div style="color:#dc2626;font-size:10px;margin-bottom:3px;">• ${r.texto}</div>`).join('')}</div>`:''}
+
+${d.observacoes?`<div class="obs av"><b style="font-size:9px;text-transform:uppercase;">Anotações da Gestão:</b><br/><span style="color:#475569;">${d.observacoes.replace(/\n/g,'<br/>')}</span></div>`:''}
+
+<div class="viab av" style="border-color:${isViavel?'#10b981':'#dc2626'};background:${isViavel?'#d1fae5':'#fee2e2'};">
+  <div style="font-size:15px;font-weight:900;color:${isViavel?'#065f46':'#b91c1c'};">${isViavel?'✓ OPERAÇÃO VIÁVEL — APROVADA':'✗ OPERAÇÃO REPROVADA — RETORNO INSUFICIENTE'}</div>
+  <div style="font-size:10px;color:${isViavel?'#047857':'#dc2626'};margin-top:4px;">
+    ${isUsoProprio?`Economia de R$ ${fmt(m.lucro,0)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 40% mínimos':'Abaixo dos 40% exigidos pela TSN Ativos'} · Teto de disputa: R$ ${fmt(teto,0)}`}
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;" class="av">
+  ${[['Capital Aportado',`R$ ${fmt(m.capitalMobilizado,0)}`,'#dc2626'],
+     [isUsoProprio?'Economia Real':'Lucro Líquido',`R$ ${fmt(m.lucro,0)}`,(m.lucro>=0?'#059669':'#dc2626')],
+     ['Yield Locação',`${fmtPct(m.yieldMensal)}/mês`,'#7c3aed'],
+     ['Teto Disputa',`R$ ${fmt(teto,0)}`,'#d97706']].map(([l,v,c])=>`
+  <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
+</div>
+
+${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</pre></div>`:''}
+
+<h2>Detalhamento Financeiro Completo</h2>
+<div class="av">
   <h3>A) Capital Mobilizado (Saídas)</h3>
   <table>
     <tr><th>Item</th><th class="c">% do Aporte</th><th class="r">Lance Base</th><th class="r">Teto (R$ ${fmt(teto,0)})</th></tr>
-    <tr><td>${isAVista ? 'Arrematação (imóvel)' : `Sinal (${d.sinalPercentual}%)`}</td><td class="c">${m.capitalMobilizado > 0 ? fmtPct((isAVista ? m.vArremate : m.valorSinal) / m.capitalMobilizado * 100) : '-'}</td><td class="r red">R$ ${fmt(isAVista ? m.vArremate : m.valorSinal)}</td><td class="r amber">R$ ${fmt(isAVista ? mt.vArremate : mt.valorSinal)}</td></tr>
-    <tr><td>Honorários Jurídicos TSN (10%)</td><td class="c">${m.capitalMobilizado > 0 ? fmtPct(m.honorarios/m.capitalMobilizado*100) : '-'}</td><td class="r red">R$ ${fmt(m.honorarios)}</td><td class="r amber">R$ ${fmt(mt.honorarios)}</td></tr>
-    <tr><td>Taxa Leiloeiro (${d.taxaLeiloeiroPercentual}%)</td><td class="c">${m.capitalMobilizado > 0 ? fmtPct(m.taxaLeiloeiro/m.capitalMobilizado*100) : '-'}</td><td class="r red">R$ ${fmt(m.taxaLeiloeiro)}</td><td class="r amber">R$ ${fmt(mt.taxaLeiloeiro)}</td></tr>
-    <tr><td>ITBI + Registro (${d.itbiPercentual}%)</td><td class="c">${m.capitalMobilizado > 0 ? fmtPct(m.itbiRegistro/m.capitalMobilizado*100) : '-'}</td><td class="r red">R$ ${fmt(m.itbiRegistro)}</td><td class="r amber">R$ ${fmt(mt.itbiRegistro)}</td></tr>
-    ${(d.laudemio || 0) > 0 ? `<tr><td>Laudêmio</td><td class="c">-</td><td class="r red">R$ ${fmt(m.laudemio)}</td><td class="r amber">R$ ${fmt(mt.laudemio)}</td></tr>` : ''}
-    ${(d.foreiro || 0) > 0 ? `<tr><td>Foreiro</td><td class="c">-</td><td class="r red">R$ ${fmt(m.foreiro)}</td><td class="r amber">R$ ${fmt(mt.foreiro)}</td></tr>` : ''}
-    ${(d.debitosAssumidos || 0) > 0 ? `<tr><td>Débitos Assumidos</td><td class="c">-</td><td class="r red">R$ ${fmt(m.debitos)}</td><td class="r amber">R$ ${fmt(mt.debitos)}</td></tr>` : ''}
-    <tr><td>Reforma / Retrofit</td><td class="c">${m.capitalMobilizado > 0 ? fmtPct(m.manutencao/m.capitalMobilizado*100) : '-'}</td><td class="r red">R$ ${fmt(m.manutencao)}</td><td class="r amber">R$ ${fmt(mt.manutencao)}</td></tr>
-    ${!isAVista ? `<tr><td>Parcelas Banco (${d.prazoVendaMeses} meses)</td><td class="c">-</td><td class="r red">R$ ${fmt(m.parcelasPagas)}</td><td class="r amber">R$ ${fmt(mt.parcelasPagas)}</td></tr>` : ''}
-    <tr><td>Carrego (IPTU + Condomínio)</td><td class="c">-</td><td class="r red">R$ ${fmt(m.custoCarrrego)}</td><td class="r amber">R$ ${fmt(mt.custoCarrrego)}</td></tr>
-    <tr style="background:#fef2f2;font-weight:800;"><td>TOTAL APORTADO (A)</td><td class="c">100%</td><td class="r red" style="font-size:12px;">R$ ${fmt(m.capitalMobilizado)}</td><td class="r amber" style="font-size:12px;">R$ ${fmt(mt.capitalMobilizado)}</td></tr>
+    ${[
+      ['Arrematação/Sinal', isAVista?m.vArremate:m.valorSinal, isAVista?mt.vArremate:mt.valorSinal],
+      ['Honorários Jurídicos TSN (10%)', m.honorarios, mt.honorarios],
+      [`Taxa Leiloeiro (${d.taxaLeiloeiroPercentual}%)`, m.taxaLeiloeiro, mt.taxaLeiloeiro],
+      [`ITBI + Registro (${d.itbiPercentual}%)`, m.itbiRegistro, mt.itbiRegistro],
+      ...(d.laudemio>0?[['Laudêmio', m.laudemio, mt.laudemio]]:[]),
+      ...(d.foreiro>0?[['Foreiro', m.foreiro, mt.foreiro]]:[]),
+      ...(d.debitosAssumidos>0?[['Débitos Assumidos', m.debitos, mt.debitos]]:[]),
+      ['Reforma / Retrofit', m.manutencao, mt.manutencao],
+      ...(!isAVista?[['Parcelas Banco','–','–']]:[]),
+      ['Carrego (IPTU/Cond)', m.custoCarrrego, mt.custoCarrrego],
+    ].filter(r=>typeof r[1]==='string'||r[1]>0||r[2]>0).map(([l,b,tv])=>`
+    <tr><td>${l}</td><td class="c">${m.capitalMobilizado>0&&typeof b==='number'?fmtPct(b/m.capitalMobilizado*100):'-'}</td>
+    <td class="r rd">- R$ ${typeof b==='number'?fmt(b):b}</td>
+    <td class="r am">- R$ ${typeof tv==='number'?fmt(tv):tv}</td></tr>`).join('')}
+    <tr style="background:#fef2f2;font-weight:800;"><td>TOTAL APORTADO (A)</td><td class="c">100%</td>
+    <td class="r rd" style="font-size:12px;">R$ ${fmt(m.capitalMobilizado)}</td>
+    <td class="r am" style="font-size:12px;">R$ ${fmt(mt.capitalMobilizado)}</td></tr>
   </table>
 
-  <h3>B) Receita / Formação de Patrimônio</h3>
+  <h3>B) Resultado</h3>
   <table>
     <tr><th>Item</th><th class="r">Lance Base</th><th class="r">Teto</th></tr>
-    <tr><td>${labelRef}</td><td class="r green">R$ ${fmt(m.valorRef)}</td><td class="r">R$ ${fmt(mt.valorRef)}</td></tr>
-    ${!isUsoProprio ? `<tr><td>(-) Comissão Venda (5%)</td><td class="r red">- R$ ${fmt(m.comissao)}</td><td class="r red">- R$ ${fmt(mt.comissao)}</td></tr>
-    <tr><td>(-) IR Ganho de Capital (15%)</td><td class="r red">- R$ ${fmt(m.ir)}</td><td class="r red">- R$ ${fmt(mt.ir)}</td></tr>` : ''}
-    ${!isAVista ? `<tr><td>(-) Quitação Banco</td><td class="r red">- R$ ${fmt(m.saldoDevedor)}</td><td class="r red">- R$ ${fmt(mt.saldoDevedor)}</td></tr>` : ''}
-    <tr style="background:#d1fae5;font-weight:800;"><td>RECEITA LÍQUIDA NA CONTA (B)</td><td class="r green" style="font-size:12px;">R$ ${fmt(m.receitaLiquida)}</td><td class="r" style="font-size:12px;">R$ ${fmt(mt.receitaLiquida)}</td></tr>
-  </table>
-
-  <h3>C) Resultado Final</h3>
-  <table style="width:60%;">
-    <tr><td>Capital Aportado (A)</td><td class="r red">R$ ${fmt(m.capitalMobilizado)}</td></tr>
-    <tr><td>${isUsoProprio ? 'ECONOMIA REAL' : 'LUCRO REAL LÍQUIDO'} (B - A)</td><td class="r ${m.lucro >= 0 ? 'green' : 'red'}" style="font-size:14px;">R$ ${fmt(m.lucro)}</td></tr>
-    <tr style="background:#dbeafe;font-weight:900;"><td>RETORNO TOTAL (${isAVista ? 'ROI' : 'ROE'})</td><td class="r blue" style="font-size:14px;">${fmtPct(m.roi)}</td></tr>
-    ${!isUsoProprio ? `<tr><td>Yield Locação Mensal</td><td class="r">${fmtPct(m.yieldMensal)}/mês (${fmtPct(m.yieldAnual)}/ano)</td></tr>` : ''}
+    <tr><td>${isUsoProprio?'Valor de Mercado':'Venda Bruta (90% do mercado)'}</td>
+    <td class="r g">R$ ${fmt(m.valorRef)}</td><td class="r">R$ ${fmt(mt.valorRef)}</td></tr>
+    ${!isUsoProprio?`<tr><td>(-) Comissão Venda + IR Ganho de Capital</td>
+    <td class="r rd">- R$ ${fmt(m.comissao+m.ir)}</td><td class="r rd">- R$ ${fmt(mt.comissao+mt.ir)}</td></tr>`:''}
+    ${!isAVista?`<tr><td>(-) Quitação do Banco</td>
+    <td class="r rd">- R$ ${fmt(m.saldoDevedor)}</td><td class="r rd">- R$ ${fmt(mt.saldoDevedor)}</td></tr>`:''}
+    <tr style="background:#d1fae5;font-weight:800;">
+    <td>RECEITA LÍQUIDA NA CONTA (B)</td>
+    <td class="r g" style="font-size:12px;">R$ ${fmt(m.receitaLiquida)}</td>
+    <td class="r" style="font-size:12px;">R$ ${fmt(mt.receitaLiquida)}</td></tr>
+    <tr style="background:#dbeafe;font-weight:900;font-size:12px;">
+    <td>${isUsoProprio?'ECONOMIA REAL':'LUCRO REAL LÍQUIDO'} (B - A)</td>
+    <td class="r ${m.lucro>=0?'g':'rd'}" style="font-size:14px;">R$ ${fmt(m.lucro)}</td>
+    <td class="r ${mt.lucro>=0?'g':'rd'}" style="font-size:14px;">R$ ${fmt(mt.lucro)}</td></tr>
+    <tr style="background:#ede9fe;font-weight:900;">
+    <td>RETORNO TOTAL (${isAVista?'ROI':'ROE'})</td>
+    <td class="r bl" style="font-size:14px;">${fmtPct(m.roi)}</td>
+    <td class="r am" style="font-size:14px;">${fmtPct(mt.roi)}</td></tr>
+    ${d.valorLocacao>0?`<tr><td>Yield de Locação (Ref.)</td>
+    <td class="r" style="color:#7c3aed;font-weight:700;">${fmtPct(m.yieldMensal)}/mês · ${fmtPct(m.yieldAnual)}/ano</td><td></td></tr>`:''}
   </table>
 </div>
 
-<!-- DEFESA DA ARREMATAÇÃO -->
-${ai.defesa ? `<div class="avoid pb"><h2>Defesa da Arrematação</h2><pre>${ai.defesa}</pre></div>` : ''}
+${sec.def?`<div class="av"><h2>Defesa da Arrematação</h2><pre>${sec.def}</pre></div>`:''}
 
-<!-- PROJEÇÃO DE LOCAÇÃO -->
-${ai.locacao && !isUsoProprio && d.tipoImovel !== 'terreno' ? `<div class="avoid"><h2>Projeção de Retorno por Locação</h2><pre>${ai.locacao}</pre></div>` : ''}
+${mercado?`<div class="av">
+<h2>Avaliação Mercadológica</h2>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+  ${[['Preço Médio/m²',`R$ ${fmt(mercado.precoMedioM2||0,0)}`,'#2563eb'],
+     ['Aluguel Médio',`R$ ${fmt(mercado.aluguelMedio||0,0)}/mês`,'#7c3aed'],
+     ['Yield Bruto',fmtPct(mercado.yieldBruto||0),'#059669'],
+     ['Yield Líquido',fmtPct(mercado.yieldLiquido||0),'#d97706']].map(([l,v,c])=>`
+  <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
+</div>
+${mercado.comentario?`<p style="font-size:10px;color:#475569;margin:0 0 10px;background:#f8fafc;padding:8px;border-radius:4px;">${mercado.comentario}</p>`:''}
+${mercado.vendas?.length?`<h3>Amostras de Venda (${mercado.totalAmostrasVenda} encontradas)</h3>
+<table><tr><th>Imóvel</th><th class="r">Valor Total</th><th class="r">R$/m²</th><th>Fonte</th></tr>
+${mercado.vendas.slice(0,8).map(v=>`<tr><td>${v.descricao}</td><td class="r g">R$ ${fmt(v.valor,0)}</td><td class="r">R$ ${fmt(v.valorM2,0)}</td><td style="font-size:9px;color:#94a3b8">${v.fonte}</td></tr>`).join('')}</table>`:''}
+${mercado.locacoes?.length?`<h3>Amostras de Locação</h3>
+<table><tr><th>Imóvel</th><th class="r">Aluguel/mês</th><th>Fonte</th></tr>
+${mercado.locacoes.map(l=>`<tr><td>${l.descricao}</td><td class="r" style="color:#7c3aed;font-weight:700;">R$ ${fmt(l.valorMensal,0)}</td><td style="font-size:9px;color:#94a3b8">${l.fonte}</td></tr>`).join('')}</table>`:''}
+</div>`:''}
 
-<!-- TABELA DE FINANCIAMENTO SAC/PRICE -->
-${!isAVista && sacTabela.length > 0 ? `
-<div class="avoid pb">
-  <h2>Tabelas de Financiamento — SAC vs PRICE</h2>
-  <p style="font-size:10px;color:#475569;margin-bottom:10px;">Principal financiado: R$ ${fmt((d.valorArrematacao||0)*(1-(d.sinalPercentual||0)/100))} · CET: ${d.cetAnual}% a.a. · Prazo: ${d.prazoMeses} meses</p>
-  <div style="display:flex;gap:20px;margin-bottom:10px;">
-    <div style="flex:1;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
-      <div style="font-weight:900;margin-bottom:4px;font-size:11px;">SAC</div>
-      <div>1ª Parcela: <b>R$ ${fmt(sacTabela[0]?.parcela,0)}</b></div>
-      <div>Últ. Parcela: <b>R$ ${fmt(sacTabela[sacTabela.length-1]?.parcela,0)}</b></div>
-      <div>Total Pago: <b class="red">R$ ${fmt(sacTotal,0)}</b></div>
-    </div>
-    <div style="flex:1;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
-      <div style="font-weight:900;margin-bottom:4px;font-size:11px;">PRICE</div>
-      <div>Parcela Fixa: <b>R$ ${fmt(priceTabela[0]?.parcela,0)}</b></div>
-      <div>Última: <b>R$ ${fmt(priceTabela[priceTabela.length-1]?.parcela,0)}</b></div>
-      <div>Total Pago: <b class="red">R$ ${fmt(priceTotal,0)}</b></div>
-    </div>
+${sec.loc?`<div class="av"><h2>Projeção de Rentabilidade por Locação</h2><pre>${sec.loc}</pre></div>`:''}
+
+<div class="pb av">
+<h2>Fluxo de Caixa Mensal</h2>
+<table><tr><th>Mês</th><th>Descrição</th><th class="r">Entradas</th><th class="r">Saídas</th><th class="r">Saldo</th></tr>
+${fluxo.linhas.map((r,i)=>`<tr style="background:${i%2===0?'white':'#f8fafc'}">
+<td style="font-weight:700;">Mês ${r.mes}</td><td style="color:#475569;">${r.descricao}</td>
+<td class="r g">${r.entrada>0?'+ R$ '+fmt(r.entrada):'—'}</td>
+<td class="r rd">${r.saida>0?'- R$ '+fmt(r.saida):'—'}</td>
+<td class="r ${r.saldo>=0?'g':'rd'}" style="background:${r.saldo>=0?'#f0fdf4':'#fef2f2'}">R$ ${fmt(r.saldo)}</td></tr>`).join('')}
+<tr style="background:#0f172a;color:white;font-weight:800;"><td colspan="3" class="r" style="font-size:9px;text-transform:uppercase;">Total Aportado</td>
+<td class="r" style="color:#fca5a5;">- R$ ${fmt(fluxo.totalSaidas)}</td><td></td></tr>
+<tr style="background:#065f46;color:white;font-weight:900;"><td colspan="4" class="r" style="text-transform:uppercase;">Resultado Final</td>
+<td class="r" style="font-size:13px;">= R$ ${fmt(fluxo.totalEntradas-fluxo.totalSaidas)}</td></tr>
+</table>
+</div>
+
+${!isAVista&&sacTab?.length>0?`<div class="pb av">
+<h2>Tabelas de Financiamento — SAC vs PRICE</h2>
+<p style="font-size:9px;color:#475569;margin-bottom:8px;">Principal: R$ ${fmt((d.valorArrematacao||0)*(1-(d.sinalPercentual||0)/100),0)} · CET: ${d.cetAnual}% a.a. · Prazo: ${d.prazoMeses} meses</p>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+  <div style="background:#f8fafc;border-radius:5px;padding:10px;">
+    <div style="font-weight:900;margin-bottom:4px;">SAC</div>
+    <div style="font-size:10px;">1ª Parcela: <b>R$ ${fmt(sacTab[0]?.parcela||0,0)}</b></div>
+    <div style="font-size:10px;">Última: <b>R$ ${fmt(sacTab[sacTab.length-1]?.parcela||0,0)}</b></div>
+    <div style="font-size:10px;">Total Pago: <b class="rd">R$ ${fmt(sacTotal,0)}</b></div>
   </div>
-  <table>
-    <tr><th>Mês</th><th class="r">SAC Parcela</th><th class="r">SAC Saldo</th><th class="r">PRICE Parcela</th><th class="r">PRICE Saldo</th></tr>
-    ${sacTabela.filter((_, i) => i < 6 || i >= sacTabela.length - 3 || i % Math.max(1, Math.floor(sacTabela.length / 12)) === 0).slice(0,20).map((r, i) => `
-    <tr style="background:${i%2===0?'white':'#f8fafc'}">
-      <td>${r.mes}</td>
-      <td class="r">R$ ${fmt(r.parcela,0)}</td>
-      <td class="r blue">R$ ${fmt(r.saldo,0)}</td>
-      <td class="r">R$ ${fmt(priceTabela[r.mes-1]?.parcela||0,0)}</td>
-      <td class="r blue">R$ ${fmt(priceTabela[r.mes-1]?.saldo||0,0)}</td>
-    </tr>`).join('')}
-  </table>
-</div>` : ''}
-
-<!-- FLUXO DE CAIXA -->
-<div class="avoid pb">
-  <h2>Demonstrativo de Fluxo de Caixa</h2>
-  <table>
-    <tr><th>Mês</th><th>Descrição</th><th class="r">Entradas</th><th class="r">Saídas</th><th class="r">Saldo Acumulado</th></tr>
-    ${fluxo.linhas.map((r, i) => `<tr style="background:${i%2===0?'white':'#f8fafc'}">
-      <td style="font-weight:700;">Mês ${r.mes}</td>
-      <td style="color:#475569;">${r.descricao}</td>
-      <td class="r green">${r.entrada>0 ? `+ R$ ${fmt(r.entrada)}` : '—'}</td>
-      <td class="r red">${r.saida>0 ? `- R$ ${fmt(r.saida)}` : '—'}</td>
-      <td class="r ${r.saldo>=0?'green':'red'}" style="background:${r.saldo>=0?'#f0fdf4':'#fef2f2'}">R$ ${fmt(r.saldo)}</td>
-    </tr>`).join('')}
-    <tr style="background:#0f172a;color:white;font-weight:800;">
-      <td colspan="3" class="r" style="font-size:10px;text-transform:uppercase;">Total Saídas</td>
-      <td class="r" style="color:#fca5a5;">- R$ ${fmt(fluxo.totalSaidas)}</td><td></td></tr>
-    <tr style="background:#065f46;color:white;font-weight:900;">
-      <td colspan="4" class="r" style="text-transform:uppercase;">Resultado Final</td>
-      <td class="r" style="font-size:13px;">= R$ ${fmt(fluxo.totalEntradas - fluxo.totalSaidas)}</td>
-    </tr>
-  </table>
+  <div style="background:#f8fafc;border-radius:5px;padding:10px;">
+    <div style="font-weight:900;margin-bottom:4px;">PRICE</div>
+    <div style="font-size:10px;">Parcela Fixa: <b>R$ ${fmt(priceTab[0]?.parcela||0,0)}</b></div>
+    <div style="font-size:10px;">Total Pago: <b class="rd">R$ ${fmt(priceTotal,0)}</b></div>
+    <div style="font-size:10px;">Diferença: <b class="am">R$ ${fmt(Math.abs(priceTotal-sacTotal),0)} (${priceTotal>sacTotal?'SAC mais barato':'PRICE mais barato'})</b></div>
+  </div>
 </div>
+<table><tr><th>Mês</th><th class="r">SAC Parcela</th><th class="r">SAC Saldo</th><th class="r">PRICE Parcela</th><th class="r">PRICE Saldo</th></tr>
+${sacTab.filter((_,i)=>i<5||i===sacTab.length-1||i%Math.max(1,Math.floor(sacTab.length/10))===0).slice(0,18).map((r,i)=>`
+<tr style="background:${i%2===0?'white':'#f8fafc'}">
+<td>${r.mes}</td><td class="r">R$ ${fmt(r.parcela,0)}</td><td class="r bl">R$ ${fmt(r.saldo,0)}</td>
+<td class="r">R$ ${fmt(priceTab[r.mes-1]?.parcela||0,0)}</td><td class="r bl">R$ ${fmt(priceTab[r.mes-1]?.saldo||0,0)}</td></tr>`).join('')}
+</table>
+</div>`:''}
 
-<!-- AMOSTRAS DE MERCADO -->
-${ai.amostras ? `<div class="avoid"><h2>Amostras de Mercado — Validação Comparativa</h2><pre>${ai.amostras}</pre></div>` : ''}
+${(d.riscos||[]).length>0?`<div class="av">
+<h2>Riscos Jurídicos Identificados</h2>
+${(d.riscos||[]).map(r=>`<div style="padding:6px 10px;margin-bottom:4px;border-radius:4px;background:${r.tipo==='bloqueante'?'#fee2e2':r.tipo==='alerta'?'#fef3c7':'#dbeafe'};border:1px solid ${r.tipo==='bloqueante'?'#fca5a5':r.tipo==='alerta'?'#fde68a':'#bfdbfe'};display:flex;gap:8px;align-items:flex-start;">
+<span style="font-size:8px;font-weight:800;background:white;padding:2px 6px;border-radius:10px;color:${r.tipo==='bloqueante'?'#dc2626':r.tipo==='alerta'?'#d97706':'#2563eb'};white-space:nowrap;">${r.tipo.toUpperCase()}</span>
+<span style="font-size:10px;">${r.texto}</span></div>`).join('')}
+</div>`:''}
 
-<!-- RISCOS JURÍDICOS -->
-${(d.riscos||[]).length > 0 ? `
-<div class="avoid">
-  <h2>Análise de Riscos Jurídicos</h2>
-  ${(d.riscos||[]).map(r => `<div class="risk-item" style="background:${r.tipo==='bloqueante'?'#fee2e2':r.tipo==='alerta'?'#fef3c7':'#dbeafe'};border:1px solid ${r.tipo==='bloqueante'?'#fca5a5':r.tipo==='alerta'?'#fde68a':'#bfdbfe'}">
-    <span style="font-size:9px;font-weight:800;background:white;padding:2px 6px;border-radius:10px;color:${r.tipo==='bloqueante'?'#dc2626':r.tipo==='alerta'?'#d97706':'#2563eb'};white-space:nowrap;">${r.tipo.toUpperCase()}</span>
-    <span>${r.texto}</span>
-  </div>`).join('')}
-</div>` : ''}
+${sec.conc?`<div class="av"><h2>Conclusão e Recomendação da Gestão</h2><pre>${sec.conc}</pre></div>`:''}
 
-<!-- RODAPÉ -->
-<div style="margin-top:30px;border-top:2px solid #e2e8f0;padding-top:14px;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;">
-  <span>TSN Ativos — Análise gerada em ${new Date().toLocaleString('pt-BR')}</span>
-  <span>Documento confidencial — uso exclusivo do cliente</span>
+<div style="margin-top:28px;border-top:2px solid #e2e8f0;padding-top:12px;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8;">
+  <span>TSN Ativos · Análise gerada em ${new Date().toLocaleString('pt-BR')}</span>
+  <span>Documento confidencial · Uso exclusivo do cliente</span>
 </div>
 </body></html>`;
 
   win.document.write(html);
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 600);
+  setTimeout(() => win.print(), 700);
 }
