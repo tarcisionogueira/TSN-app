@@ -43,6 +43,43 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* NÚMEROS DA PLATAFORMA */}
+      <section style={{ padding: '48px 20px', background: 'white', borderTop: '1px solid #f1f5f9' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>Plataforma em Números</div>
+            <h2 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', margin: 0 }}>Resultados reais de quem usa o método TSN</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+            {[
+              { label: 'Volume arrematado', value: 'R$ 70M+', sub: 'em imóveis no portfólio TSN', color: '#2563eb', bg: '#eff6ff', icon: '🏦' },
+              { label: 'ROI médio realizado', value: '48%', sub: 'por operação concluída', color: '#10b981', bg: '#f0fdf4', icon: '📈' },
+              { label: 'Imóveis analisados', value: '1.200+', sub: 'pela plataforma', color: '#8b5cf6', bg: '#f5f3ff', icon: '🔍' },
+              { label: 'Estados atendidos', value: '11', sub: 'com leiloeiros credenciados', color: '#f59e0b', bg: '#fffbeb', icon: '📍' },
+              { label: 'Economia média', value: '34%', sub: 'abaixo do valor de mercado', color: '#ef4444', bg: '#fff1f2', icon: '🏷️' },
+              { label: 'Tempo de análise', value: '< 5 min', sub: 'com inteligência artificial', color: '#0891b2', bg: '#ecfeff', icon: '⚡' },
+            ].map(s => (
+              <div key={s.label} style={{ background: s.bg, borderRadius: 14, padding: '20px 18px', border: `1px solid ${s.color}20` }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: s.color, marginTop: 4 }}>{s.label}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3, lineHeight: 1.4 }}>{s.sub}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 24, background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', borderRadius: 14, padding: '20px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 4 }}>Quer ver os números do seu portfólio aqui?</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: 'white' }}>Comece gratuitamente — sem cartão de crédito</div>
+            </div>
+            <button onClick={() => nav('/buscar')}
+              style={{ padding: '12px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Buscar meu primeiro imóvel →
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* COMO FUNCIONA */}
       <section style={{ padding: '80px 20px', background: '#f8fafc' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>

@@ -36,6 +36,8 @@ const lbl = { fontSize:10, fontWeight:700, color:'#475569', display:'block', mar
 
 export default function Busca() {
   const nav = useNavigate();
+  const plano = localStorage.getItem('tsn_plano_membro') || 'gratuito';
+  const isPago = plano === 'analista' || plano === 'gestor';
   const [filtros, setFiltros] = useState({ tipo:'', estado:'SP', cidade:'', valorMin:'', valorMax:'', modalidade:'', pagamento:[] });
   const [resultados, setResultados] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -281,12 +283,25 @@ export default function Busca() {
 
         {/* Info inicial */}
         {!buscaFeita && (
-          <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'14px 18px', display:'flex', gap:10 }}>
-            <AlertCircle size={16} color="#2563eb" style={{flexShrink:0,marginTop:1}}/>
-            <div style={{ fontSize:13, color:'#1e40af', lineHeight:1.7 }}>
-              <strong>Como funciona:</strong> A IA busca leilões reais publicados em plataformas como Caixa Econômica, Sold, Biasi e leiloeiros das Juntas Comerciais. Selecione um imóvel para analisar a viabilidade ou marque diretamente como Arrematado para controle financeiro.
-              <br/><strong>Dica:</strong> Selecione <strong>Estado = SP</strong> e clique em Buscar Leilões para começar.
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'14px 18px', display:'flex', gap:10 }}>
+              <AlertCircle size={16} color="#2563eb" style={{flexShrink:0,marginTop:1}}/>
+              <div style={{ fontSize:13, color:'#1e40af', lineHeight:1.7 }}>
+                <strong>Como funciona:</strong> A IA busca leilões reais publicados em plataformas como Caixa Econômica, Sold, Biasi e leiloeiros das Juntas Comerciais.
+                <br/><strong>Dica:</strong> Selecione <strong>Estado = SP</strong> e clique em Buscar Leilões para começar.
+              </div>
             </div>
+            {!isPago && (
+              <div style={{ background:'#fef3c7', border:'1px solid #fde68a', borderRadius:12, padding:'12px 16px', display:'flex', gap:10, alignItems:'center' }}>
+                <span style={{ fontSize:16 }}>🔒</span>
+                <div style={{ fontSize:13, color:'#92400e', flex:1 }}>
+                  <strong>Plano Explorador (gratuito):</strong> Você vê os imóveis, o desconto e a flag de viabilidade 🟢/🔴. Para acessar o leiloeiro e gerar análise completa, faça upgrade para o plano <strong>Analista</strong>.
+                </div>
+                <button onClick={()=>{}} style={{ padding:'7px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                  Ver planos
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -354,29 +369,48 @@ export default function Busca() {
                     {im.valorAvaliacao>0 ? `R$ ${fmt0(im.valorAvaliacao)}` : '—'}
                   </div>
 
-                  {/* Desconto */}
-                  <div>
+                  {/* Desconto + Flag */}
+                  <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-start' }}>
                     {desc>0 && (
                       <span style={{ fontSize:14, fontWeight:900, color:desc>=40?'#10b981':'#f59e0b' }}>{desc}%</span>
+                    )}
+                    {desc>0 && (
+                      <span style={{ fontSize:11, fontWeight:800 }}>
+                        {desc>=30 ? '🟢' : '🔴'}
+                      </span>
                     )}
                   </div>
 
                   {/* Ações */}
                   <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                     {im.urlLote && (
-                      <a href={im.urlLote} target="_blank" rel="noopener noreferrer"
-                        style={{ padding:'5px 8px', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', gap:4 }}>
-                        <ExternalLink size={11}/> Site
-                      </a>
+                      isPago
+                        ? <a href={im.urlLote} target="_blank" rel="noopener noreferrer"
+                            style={{ padding:'5px 8px', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', gap:4 }}>
+                            <ExternalLink size={11}/> Site
+                          </a>
+                        : <span title="Disponível no plano Analista"
+                            style={{ padding:'5px 8px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:600, display:'flex', alignItems:'center', gap:4, cursor:'not-allowed' }}>
+                            🔒 Site
+                          </span>
                     )}
-                    <button onClick={()=>irParaAnalise(im)}
-                      style={{ padding:'5px 10px', background:'#2563eb', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
-                      📊 Analisar
-                    </button>
-                    <button onClick={()=>marcarArrematado(im)}
-                      style={{ padding:'5px 10px', background:'#10b981', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
-                      ✓ Arrematado
-                    </button>
+                    {isPago
+                      ? <button onClick={()=>irParaAnalise(im)}
+                          style={{ padding:'5px 10px', background:'#2563eb', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
+                          📊 Analisar
+                        </button>
+                      : <span title="Disponível no plano Analista"
+                          style={{ padding:'5px 10px', background:'#f8fafc', color:'#cbd5e1', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'not-allowed', whiteSpace:'nowrap' }}>
+                          🔒 Analisar
+                        </span>
+                    }
+                    {plano === 'gestor'
+                      ? <button onClick={()=>marcarArrematado(im)}
+                          style={{ padding:'5px 10px', background:'#10b981', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
+                          ✓ Arrematado
+                        </button>
+                      : null
+                    }
                   </div>
                 </div>
               );
