@@ -4,7 +4,7 @@ import {
   Play, Lock, CheckCircle2, Clock, BookOpen, Star, Users,
   ChevronRight, Award, Zap, Crown, Search, Filter,
 } from 'lucide-react';
-import { CURSOS, CATEGORIAS, PLANOS_MEMBROS } from '../data/cursos';
+import { CURSOS, CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
 
 // Progresso salvo no localStorage
 function getProgresso() {
@@ -59,7 +59,7 @@ export default function Membros() {
               Área de Membros
             </div>
             <div style={{ background:'rgba(255,255,255,0.1)', borderRadius:10, padding:'8px 14px', fontSize:12, fontWeight:700, color:'#94a3b8' }}>
-              Plano atual: <span style={{ color:'white' }}>{PLANOS_MEMBROS[plano]?.nome}</span>
+              Plano atual: <span style={{ color:'white' }}>{PLANOS[plano]?.nome}</span>
             </div>
           </div>
           <h1 style={{ margin:'0 0 12px', fontSize:32, fontWeight:900, color:'white', lineHeight:1.2 }}>
@@ -206,25 +206,55 @@ export default function Membros() {
       {showPlanos && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
           onClick={()=>setShowPlanos(false)}>
-          <div style={{ background:'white', borderRadius:20, padding:'32px', maxWidth:700, width:'100%', boxShadow:'0 24px 60px rgba(0,0,0,0.3)' }}
+          <div style={{ background:'white', borderRadius:20, padding:'32px', maxWidth:860, width:'100%', boxShadow:'0 24px 60px rgba(0,0,0,0.3)', maxHeight:'90vh', overflowY:'auto' }}
             onClick={e=>e.stopPropagation()}>
-            <h2 style={{ margin:'0 0 6px', fontSize:22, fontWeight:900 }}>Planos de Acesso</h2>
-            <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:14 }}>Escolha o plano ideal para sua jornada</p>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12 }}>
-              {Object.entries(PLANOS_MEMBROS).map(([k,p])=>(
+            <h2 style={{ margin:'0 0 4px', fontSize:22, fontWeight:900 }}>Planos de Acesso</h2>
+            <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:14 }}>Escolha o plano ideal para sua jornada em leilões imobiliários</p>
+
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:14, marginBottom:20 }}>
+              {Object.entries(PLANOS).map(([k,p])=>(
                 <div key={k} onClick={()=>ativarPlano(k)}
-                  style={{ borderRadius:14, border:`2px solid ${plano===k?p.cor:'#e2e8f0'}`, padding:'18px 16px', cursor:'pointer', background:plano===k?p.cor+'10':'white', transition:'all 0.15s' }}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=p.cor} onMouseLeave={e=>e.currentTarget.style.borderColor=plano===k?p.cor:'#e2e8f0'}>
-                  <div style={{ fontWeight:900, fontSize:15, color:p.cor, marginBottom:4 }}>{p.nome}</div>
-                  <div style={{ fontSize:22, fontWeight:900, color:'#0f172a', marginBottom:8 }}>
+                  style={{ borderRadius:16, border:`2px solid ${plano===k?p.cor:p.destaque?p.cor+'60':'#e2e8f0'}`, padding:'20px 18px', cursor:'pointer', background:plano===k?p.cor+'10':p.destaque?p.cor+'06':'white', transition:'all 0.15s', position:'relative' }}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=p.cor} onMouseLeave={e=>e.currentTarget.style.borderColor=plano===k?p.cor:p.destaque?p.cor+'60':'#e2e8f0'}>
+                  {p.destaque && <div style={{ position:'absolute', top:-10, left:'50%', transform:'translateX(-50%)', background:p.cor, color:'white', fontSize:10, fontWeight:800, padding:'3px 12px', borderRadius:20, whiteSpace:'nowrap' }}>⭐ MAIS POPULAR</div>}
+                  <div style={{ fontWeight:900, fontSize:16, color:p.cor, marginBottom:6 }}>{p.nome}</div>
+                  <div style={{ fontSize:28, fontWeight:900, color:'#0f172a', lineHeight:1 }}>
                     {k==='gratuito'?'Grátis':`R$ ${p.preco}`}
                   </div>
-                  <div style={{ fontSize:11, color:'#64748b', lineHeight:1.5 }}>{p.descricao}</div>
-                  {plano===k && <div style={{ marginTop:10, fontSize:11, fontWeight:700, color:p.cor, display:'flex', alignItems:'center', gap:4 }}><CheckCircle2 size={12}/> Plano ativo</div>}
+                  {p.periodicidade && <div style={{ fontSize:12, color:'#94a3b8', marginBottom:12 }}>{p.periodicidade}</div>}
+                  {!p.periodicidade && <div style={{ marginBottom:12 }}/>}
+                  <div style={{ fontSize:11, color:'#64748b', lineHeight:1.6, marginBottom:14 }}>{p.descricao}</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                    {p.recursos.map((r,i)=>(
+                      <div key={i} style={{ fontSize:11, color: r.startsWith('✅')?'#374151':'#94a3b8' }}>{r}</div>
+                    ))}
+                  </div>
+                  {plano===k
+                    ? <div style={{ marginTop:14, fontSize:11, fontWeight:700, color:p.cor, display:'flex', alignItems:'center', gap:4 }}><CheckCircle2 size={12}/> Plano ativo</div>
+                    : <button style={{ marginTop:14, width:'100%', padding:'9px', background:p.cor, color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                        {k==='gratuito'?'Usar gratuitamente':`Assinar ${p.nome}`}
+                      </button>
+                  }
                 </div>
               ))}
             </div>
-            <p style={{ margin:'16px 0 0', fontSize:11, color:'#94a3b8', textAlign:'center' }}>
+
+            {/* Pacote de cursos */}
+            <div style={{ borderRadius:14, border:'2px dashed #f59e0b', padding:'18px 20px', background:'#fffbeb', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+              <div style={{ flex:1, minWidth:200 }}>
+                <div style={{ fontSize:12, fontWeight:800, color:'#92400e', textTransform:'uppercase', letterSpacing:1, marginBottom:4 }}>📦 {PACOTE.titulo}</div>
+                <div style={{ fontSize:13, color:'#78350f' }}>Todos os 4 cursos pagos em um único pacote — economize <strong>R$ {PACOTE.economia}</strong></div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:12, color:'#94a3b8', textDecoration:'line-through' }}>R$ {PACOTE.precoOriginal}</div>
+                <div style={{ fontSize:24, fontWeight:900, color:'#92400e' }}>R$ {PACOTE.preco}</div>
+                <button style={{ marginTop:6, padding:'8px 18px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                  Adquirir pacote
+                </button>
+              </div>
+            </div>
+
+            <p style={{ margin:'14px 0 0', fontSize:11, color:'#94a3b8', textAlign:'center' }}>
               Em produção, pagamentos serão processados via Asaas. Por ora, selecione para simular o acesso.
             </p>
           </div>

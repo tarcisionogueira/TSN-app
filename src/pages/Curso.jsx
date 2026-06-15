@@ -4,7 +4,7 @@ import {
   Play, Lock, CheckCircle2, Clock, BookOpen, ChevronLeft,
   ChevronDown, ChevronUp, Award, Crown, ArrowRight, ArrowLeft,
 } from 'lucide-react';
-import { CURSOS, PLANOS_MEMBROS } from '../data/cursos';
+import { CURSOS, PLANOS } from '../data/cursos';
 
 function getProgresso() {
   try { return JSON.parse(localStorage.getItem('tsn_progresso') || '{}'); } catch { return {}; }
@@ -18,7 +18,7 @@ function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'gratui
 
 function podeAssistir(licao, plano) {
   if (licao.gratis) return true;
-  return plano === 'profissional' || plano === 'vitalicio';
+  return plano === 'analista' || plano === 'gestor';
 }
 
 export default function Curso() {
