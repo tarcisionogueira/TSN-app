@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, BarChart3, ShieldCheck, FileText, TrendingUp, Zap, Users, ChevronRight, CheckCircle2, Star, Building2, Gavel, Globe } from 'lucide-react';
-import { PLANOS } from '../utils/supabase';
+import { PLANOS } from '../data/cursos';
 
 export default function Landing() {
   const nav = useNavigate();
