@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp, Globe,
   ExternalLink, AlertCircle, RefreshCw, MapPin, Building2,
-  CheckCircle2, ArrowRight,
+  CheckCircle2, ArrowRight, X,
 } from 'lucide-react';
 import { buscarImoveis, buscarLeiloeirosEstado } from '../utils/claude';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
+import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
@@ -38,7 +39,8 @@ export default function Busca() {
   const nav = useNavigate();
   const plano = localStorage.getItem('tsn_plano_membro') || 'gratuito';
   const isPago = plano === 'analista' || plano === 'gestor';
-  const [filtros, setFiltros] = useState({ tipo:'', estado:'SP', cidade:'', valorMin:'', valorMax:'', modalidade:'', pagamento:[] });
+  const [filtros, setFiltros] = useState({ tipo:'', estado:'SP', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] });
+  const [buscaCidade, setBuscaCidade] = useState('');
   const [resultados, setResultados] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingLeiloeiros, setLoadingLeiloeiros] = useState(false);
@@ -57,13 +59,15 @@ export default function Busca() {
 
   const buscar = async () => {
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
-    saveBuscaRecente(filtros);
+    // Passa cidades e raio para o filtro
+    const filtrosApi = { ...filtros, cidade: filtros.cidades.join(', ') };
+    saveBuscaRecente(filtrosApi);
     try {
-      const res = await buscarImoveis(filtros);
+      const res = await buscarImoveis(filtrosApi);
       setResultados(res);
       if (res.length === 0) setErro('Nenhum resultado. Tente ajustar os filtros ou verificar as plataformas diretamente.');
     } catch (e) {
-      setErro('Erro na busca. Configure a chave de API (VITE_CLAUDE_KEY) ou verifique a conexão.');
+      setErro('Erro na busca. Verifique a chave de API e tente novamente.');
       console.error(e);
     }
     setLoading(false);
@@ -163,14 +167,58 @@ export default function Busca() {
               </div>
               <div>
                 <label style={lbl}>Estado (UF)</label>
-                <select value={filtros.estado} onChange={e=>up('estado',e.target.value)} style={inp}>
+                <select value={filtros.estado} onChange={e=>{ up('estado',e.target.value); up('cidades',[]); setBuscaCidade(''); }} style={inp}>
                   <option value="">Todos</option>
                   {ESTADOS.map(e=><option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
               <div>
-                <label style={lbl}>Cidade</label>
-                <input value={filtros.cidade} onChange={e=>up('cidade',e.target.value)} placeholder="Ex: São Paulo" style={inp}/>
+                <label style={lbl}>Cidade(s) — múltipla seleção</label>
+                {/* Cidades selecionadas */}
+                {filtros.cidades.length > 0 && (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
+                    {filtros.cidades.map(c=>(
+                      <span key={c} style={{ display:'flex', alignItems:'center', gap:3, background:'#dbeafe', color:'#1e40af', fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:20 }}>
+                        {c}
+                        <button onClick={()=>up('cidades', filtros.cidades.filter(x=>x!==c))}
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#1e40af', padding:0, display:'flex' }}>
+                          <X size={10}/>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <input
+                  value={buscaCidade}
+                  onChange={e=>setBuscaCidade(e.target.value)}
+                  placeholder={filtros.estado ? 'Buscar cidade...' : 'Selecione um estado primeiro'}
+                  disabled={!filtros.estado}
+                  style={{ ...inp, marginBottom:4 }}
+                />
+                {filtros.estado && buscaCidade.length >= 1 && (
+                  <div style={{ maxHeight:160, overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:8, background:'white' }}>
+                    {(CIDADES_POR_ESTADO[filtros.estado] || [])
+                      .filter(c => c.toLowerCase().includes(buscaCidade.toLowerCase()) && !filtros.cidades.includes(c))
+                      .map(c => (
+                        <button key={c} onClick={()=>{ up('cidades', [...filtros.cidades, c]); setBuscaCidade(''); }}
+                          style={{ width:'100%', padding:'7px 12px', border:'none', background:'none', textAlign:'left', cursor:'pointer', fontSize:12, color:'#334155', borderBottom:'1px solid #f1f5f9' }}
+                          onMouseEnter={e=>e.currentTarget.style.background='#eff6ff'}
+                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                          {c}
+                        </button>
+                      ))
+                    }
+                    {(CIDADES_POR_ESTADO[filtros.estado] || []).filter(c=>c.toLowerCase().includes(buscaCidade.toLowerCase())&&!filtros.cidades.includes(c)).length===0 && (
+                      <div style={{ padding:'8px 12px', fontSize:11, color:'#94a3b8' }}>Nenhuma cidade encontrada</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={lbl}>Raio de distância</label>
+                <select value={filtros.raioKm} onChange={e=>up('raioKm', Number(e.target.value))} style={inp}>
+                  {RAIOS_KM.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
               </div>
               <div>
                 <label style={lbl}>Valor de Lance (R$)</label>
