@@ -155,7 +155,7 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
 export default function Painel() {
   const nav = useNavigate();
   const [imoveis, setImoveis] = useState([]);
-  const [aba, setAba] = useState('arrematacoes');
+  const [aba, setAba] = useState('arrematacoes'); // 'arrematacoes' | 'lancamentos'
   const [controleAberto, setControleAberto] = useState(null);
   const [filtroStatus, setFiltroStatus] = useState('');
   const [novoLanc, setNovoLanc] = useState({ data: new Date().toISOString().slice(0,10), tipo:'saida', categoria:'Outros', imovelId:'', descricao:'', valor:'' });
@@ -186,16 +186,19 @@ export default function Painel() {
     const im = imoveis.find(i=>i.id===novoLanc.imovelId);
     if (!im) return;
     const lanc = { ...novoLanc, id: Date.now(), valor: Number(novoLanc.valor) };
-    atualizarImovel({ ...im, lancamentosFinanceiros: [...(im.lancamentosFinanceiros||[]), lanc] });
+    const updated = { ...im, lancamentosFinanceiros: [...(im.lancamentosFinanceiros||[]), lanc] };
+    atualizarImovel(updated);
     setNovoLanc(p => ({ ...p, descricao:'', valor:'' }));
   };
 
   const removerLancamento = (imovelId, lancId) => {
     const im = imoveis.find(i=>i.id===imovelId);
     if (!im) return;
-    atualizarImovel({ ...im, lancamentosFinanceiros: (im.lancamentosFinanceiros||[]).filter(l=>l.id!==lancId) });
+    const updated = { ...im, lancamentosFinanceiros: (im.lancamentosFinanceiros||[]).filter(l=>l.id!==lancId) };
+    atualizarImovel(updated);
   };
 
+  // Cálculos por imóvel
   const calcImovel = (im) => {
     const lancs = im.lancamentosFinanceiros || [];
     const entradas = lancs.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+Number(l.valor),0);
@@ -203,27 +206,29 @@ export default function Painel() {
     const vendaReal = lancs.filter(l=>l.categoria==='Venda').reduce((s,l)=>s+Number(l.valor),0);
     const totalInvestido = saidas || Number(im.valorArrematacao||0);
     const projecaoVenda = Number(im.valorMercado||0) * 0.9;
-    const roiReal = vendaReal>0&&totalInvestido>0 ? (vendaReal-totalInvestido)/totalInvestido*100 : null;
-    const roiProj = projecaoVenda>0&&totalInvestido>0 ? (projecaoVenda-totalInvestido)/totalInvestido*100 : null;
+    const roiReal = vendaReal > 0 && totalInvestido > 0 ? ((vendaReal - totalInvestido) / totalInvestido * 100) : null;
+    const roiProj = projecaoVenda > 0 && totalInvestido > 0 ? ((projecaoVenda - totalInvestido) / totalInvestido * 100) : null;
     return { entradas, saidas, vendaReal, totalInvestido, projecaoVenda, roiReal, roiProj };
   };
 
+  // Todos os lançamentos com referência ao imóvel
   const todosLancamentos = imoveis.flatMap(im =>
-    (im.lancamentosFinanceiros||[]).map(l => ({ ...l, imovelNome: im.nome||im.endereco||'Imóvel', imovelId: im.id }))
+    (im.lancamentosFinanceiros||[]).map(l => ({ ...l, imovelNome: im.nome || im.endereco || 'Imóvel', imovelId: im.id }))
   ).sort((a,b) => (b.data||'').localeCompare(a.data||''));
 
   const totalEntradas = todosLancamentos.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+Number(l.valor),0);
   const totalSaidas   = todosLancamentos.filter(l=>l.tipo==='saida').reduce((s,l)=>s+Number(l.valor),0);
+
   const filtrados = imoveis.filter(im => !filtroStatus || im.status===filtroStatus);
 
-  const inp2 = { padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:7, fontSize:12, background:'white', boxSizing:'border-box' };
-
-  const TabBtn = ({ id, label }) => (
+  const tabBtn = (id, label) => (
     <button onClick={()=>setAba(id)}
-      style={{ padding:'10px 22px', border:'none', background:aba===id?'#0f172a':'transparent', color:aba===id?'white':'#64748b', fontWeight:700, fontSize:14, cursor:'pointer', borderRadius:'10px 10px 0 0', transition:'all 0.15s' }}>
+      style={{ padding:'10px 20px', border:'none', background: aba===id ? '#0f172a' : 'transparent', color: aba===id ? 'white' : '#64748b', fontWeight:700, fontSize:14, cursor:'pointer', borderRadius: aba===id ? '10px 10px 0 0' : '10px 10px 0 0', borderBottom: aba===id ? 'none' : '2px solid #e2e8f0' }}>
       {label}
     </button>
   );
+
+  const inp2 = { padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:7, fontSize:12, background:'white', boxSizing:'border-box' };
 
   return (
     <div style={{ maxWidth:1280, margin:'0 auto', padding:'24px 20px' }}>
@@ -236,14 +241,14 @@ export default function Painel() {
         </div>
         <button onClick={()=>nav('/buscar')}
           style={{ padding:'10px 18px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-          <Plus size={14}/> Buscar Leilões
+          + Buscar Leilões
         </button>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs rápidos */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, marginBottom:20 }}>
         {[
-          { l:'Imóveis', v:imoveis.length, c:'#2563eb', bg:'#eff6ff' },
+          { l:'Imóveis', v: imoveis.length, c:'#2563eb', bg:'#eff6ff' },
           { l:'Total Investido', v:`R$ ${fmt(imoveis.reduce((s,i)=>s+Number(i.valorArrematacao||0),0),0)}`, c:'#ef4444', bg:'#fef2f2' },
           { l:'Entradas', v:`R$ ${fmt(totalEntradas,0)}`, c:'#10b981', bg:'#f0fdf4' },
           { l:'Saídas', v:`R$ ${fmt(totalSaidas,0)}`, c:'#f59e0b', bg:'#fffbeb' },
@@ -258,13 +263,15 @@ export default function Painel() {
 
       {/* Tabs */}
       <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0', marginBottom:0 }}>
-        <TabBtn id="arrematacoes" label={`🏠 Arrematações (${imoveis.length})`}/>
-        <TabBtn id="lancamentos" label={`💰 Lançamentos (${todosLancamentos.length})`}/>
+        {tabBtn('arrematacoes', `🏠 Arrematações (${imoveis.length})`)}
+        {tabBtn('lancamentos', `💰 Lançamentos (${todosLancamentos.length})`)}
       </div>
 
       {/* === ABA ARREMATAÇÕES === */}
       {aba==='arrematacoes' && (
         <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', overflow:'hidden' }}>
+
+          {/* Filtros rápidos */}
           <div style={{ padding:'12px 16px', borderBottom:'1px solid #f1f5f9', display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
             <span style={{ fontSize:11, fontWeight:700, color:'#64748b', marginRight:4 }}>STATUS:</span>
             <button onClick={()=>setFiltroStatus('')}
@@ -297,7 +304,7 @@ export default function Painel() {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
-                    {['Imóvel','Status','Aquisição','Projeção Venda','Venda Real','ROI','Ações'].map(h=>(
+                    {['Imóvel','Status','Aquisição (R$)','Projeção Venda','Venda Real','ROI Real','Ações'].map(h=>(
                       <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase', letterSpacing:0.5, whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -321,22 +328,22 @@ export default function Painel() {
                           R$ {fmt(Number(im.valorArrematacao||0),0)}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
-                          {c.projecaoVenda>0
+                          {c.projecaoVenda > 0
                             ? <><div style={{ fontWeight:700, color:'#10b981' }}>R$ {fmt(c.projecaoVenda,0)}</div>
-                                <div style={{ fontSize:10, color:'#94a3b8' }}>{c.roiProj!=null?fmtPct(c.roiProj)+' ROI proj.':''}</div></>
-                            : <span style={{ color:'#cbd5e1' }}>—</span>}
+                                <div style={{ fontSize:10, color:'#94a3b8' }}>proj. ({c.roiProj!=null?fmtPct(c.roiProj):'—'} ROI)</div></>
+                            : <span style={{ color:'#cbd5e1', fontSize:12 }}>—</span>}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
-                          {c.vendaReal>0
+                          {c.vendaReal > 0
                             ? <div style={{ fontWeight:800, color:'#10b981' }}>R$ {fmt(c.vendaReal,0)}</div>
                             : <span style={{ color:'#cbd5e1', fontSize:12 }}>Não vendido</span>}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
-                          {c.roiReal!=null
+                          {c.roiReal != null
                             ? <span style={{ fontWeight:900, fontSize:15, color:c.roiReal>=40?'#10b981':c.roiReal>=0?'#f59e0b':'#ef4444' }}>{fmtPct(c.roiReal)}</span>
-                            : c.roiProj!=null
+                            : c.roiProj != null
                             ? <span style={{ fontSize:12, color:'#94a3b8' }}>proj: {fmtPct(c.roiProj)}</span>
-                            : <span style={{ color:'#cbd5e1' }}>—</span>}
+                            : <span style={{ color:'#cbd5e1', fontSize:12 }}>—</span>}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
                           <div style={{ display:'flex', gap:6 }}>
@@ -367,6 +374,8 @@ export default function Painel() {
       {/* === ABA LANÇAMENTOS === */}
       {aba==='lancamentos' && (
         <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', overflow:'hidden' }}>
+
+          {/* Formulário novo lançamento */}
           <div style={{ padding:'16px 20px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc' }}>
             <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:12 }}>Novo Lançamento</div>
             <div style={{ display:'grid', gridTemplateColumns:'130px 1fr 1fr 1fr 120px auto', gap:8, alignItems:'flex-end' }}>
@@ -376,7 +385,8 @@ export default function Painel() {
               </div>
               <div>
                 <div style={{ fontSize:10, fontWeight:700, color:'#64748b', marginBottom:4 }}>IMÓVEL</div>
-                <select value={novoLanc.imovelId} onChange={e=>setNovoLanc(p=>({...p,imovelId:e.target.value}))} style={{ ...inp2, width:'100%' }}>
+                <select value={novoLanc.imovelId} onChange={e=>setNovoLanc(p=>({...p,imovelId:e.target.value}))}
+                  style={{ ...inp2, width:'100%' }}>
                   <option value="">Selecione...</option>
                   {imoveis.map(im=><option key={im.id} value={im.id}>{im.nome||im.endereco||'Imóvel'}</option>)}
                 </select>
@@ -391,13 +401,15 @@ export default function Painel() {
               </div>
               <div>
                 <div style={{ fontSize:10, fontWeight:700, color:'#64748b', marginBottom:4 }}>CATEGORIA</div>
-                <select value={novoLanc.categoria} onChange={e=>setNovoLanc(p=>({...p,categoria:e.target.value}))} style={{ ...inp2, width:'100%' }}>
+                <select value={novoLanc.categoria} onChange={e=>setNovoLanc(p=>({...p,categoria:e.target.value}))}
+                  style={{ ...inp2, width:'100%' }}>
                   {CAT_LANC.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <div style={{ fontSize:10, fontWeight:700, color:'#64748b', marginBottom:4 }}>VALOR (R$)</div>
-                <input type="number" value={novoLanc.valor} onChange={e=>setNovoLanc(p=>({...p,valor:e.target.value}))} placeholder="0,00" style={{ ...inp2, width:'100%' }}/>
+                <input type="number" value={novoLanc.valor} onChange={e=>setNovoLanc(p=>({...p,valor:e.target.value}))} placeholder="0,00"
+                  style={{ ...inp2, width:'100%' }}/>
               </div>
               <button onClick={adicionarLancamento}
                 style={{ padding:'8px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:13, cursor:'pointer', height:36, whiteSpace:'nowrap' }}>
@@ -410,7 +422,8 @@ export default function Painel() {
             </div>
           </div>
 
-          {todosLancamentos.length===0 ? (
+          {/* Lista de lançamentos */}
+          {todosLancamentos.length === 0 ? (
             <div style={{ textAlign:'center', padding:'50px 20px', color:'#94a3b8', fontSize:13 }}>Nenhum lançamento ainda. Adicione acima.</div>
           ) : (
             <div style={{ overflowX:'auto' }}>
@@ -452,6 +465,7 @@ export default function Painel() {
         </div>
       )}
 
+      {/* Modal controle financeiro (para lançar de dentro de uma arrematação) */}
       {controleAberto && (
         <ControleFinanceiro
           im={controleAberto}
