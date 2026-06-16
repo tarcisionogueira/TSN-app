@@ -41,13 +41,32 @@ create index if not exists idx_imoveis_leilao_valor     on public.imoveis_leilao
 -- RLS: leitura pública (imóveis são dados públicos de leilão)
 alter table public.imoveis_leilao enable row level security;
 
-create policy "Leitura publica de imoveis" on public.imoveis_leilao
-  for select using (true);
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'imoveis_leilao' and policyname = 'Leitura publica de imoveis'
+  ) then
+    create policy "Leitura publica de imoveis" on public.imoveis_leilao
+      for select using (true);
+  end if;
+end $$;
 
-create policy "Apenas service_role pode inserir/atualizar" on public.imoveis_leilao
-  for all using (auth.role() = 'service_role');
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'imoveis_leilao' and policyname = 'Service role gerencia imoveis'
+  ) then
+    create policy "Service role gerencia imoveis" on public.imoveis_leilao
+      for all using (auth.role() = 'service_role');
+  end if;
+end $$;
 
--- Política de perfis (adicionar se ainda não existir)
-create policy if not exists "Leitura proprio perfil"
-  on public.perfis for select
-  using (auth.uid() = id);
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'perfis' and policyname = 'Leitura proprio perfil'
+  ) then
+    create policy "Leitura proprio perfil" on public.perfis
+      for select using (auth.uid() = id);
+  end if;
+end $$;
