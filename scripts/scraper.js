@@ -122,143 +122,68 @@ async function scraperCEF(estado) {
   }
 }
 
-// ─── SCRAPER LEILÃO CAIXA (site alternativo) ──────────────────────────────────
+// ─── SCRAPER SUPERBID (API direta, sem dependência de hash Next.js) ───────────
 
-async function scraperLeilaoCaixa(estado) {
-  console.log(`  LeilaoCaixa ${estado}...`);
+async function scraperSuperbid(pageNumber = 1) {
+  console.log(`  Superbid página ${pageNumber}...`);
   try {
-    const url = `https://www.leilaocaixa.com.br/imoveis?estado=${estado}&page=1`;
-    const html = await fetchHtml(url);
-    const imoveis = [];
-
-    // Tenta extrair __NEXT_DATA__ ou JSON embutido
-    const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-    if (match) {
-      const nd = JSON.parse(match[1]);
-      const items = nd?.props?.pageProps?.imoveis || nd?.props?.pageProps?.items || [];
-      for (const im of items.slice(0, 30)) {
-        imoveis.push({
-          fonte: 'CEF',
-          fonte_id: `lc_${im.id || im.nrImovel || im.codigo}`,
-          titulo: im.titulo || im.title || `Imóvel ${estado}`,
-          tipo: normalizarTipo(im.tipo || im.type),
-          modalidade: 'extrajudicial',
-          estado,
-          cidade: im.cidade || im.city || '',
-          bairro: im.bairro || '',
-          endereco: im.endereco || im.address || '',
-          valor_avaliacao: parseFloat(im.valorAvaliacao || im.avaliacao || 0),
-          valor_minimo: parseFloat(im.valorMinimo || im.preco || im.valor || 0),
-          area_m2: parseFloat(im.area || 0),
-          descricao: im.descricao || '',
-          link_edital: im.link || im.url || '',
-          link_foto: im.foto || im.imagem || null,
-          leiloeiro: 'Caixa Econômica Federal',
-          data_leilao: im.dataLeilao || null,
-          forma_pagamento: normalizarPagamento(im.modalidade),
-          raw: JSON.stringify(im).slice(0, 500),
-        });
+    const url = `https://offer-query.superbid.net/seo/offers/?locale=pt_BR&portalId=[2,15]&requestOrigin=marketplace&timeZoneId=America%2FSao_Paulo&orderBy=score:desc&pageNumber=${pageNumber}&pageSize=50&searchType=opened&categoryId=imoveis`;
+    const data = await fetchJson(url, {
+      headers: {
+        'Origin': 'https://www.superbid.net',
+        'Referer': 'https://www.superbid.net/categorias/imoveis',
       }
+    });
+
+    const offers = data?.offers || [];
+    if (offers.length === 0) {
+      console.log(`    Superbid p${pageNumber}: nenhum resultado`);
+      return [];
     }
-    return imoveis.filter(im => im.valor_minimo > 0);
-  } catch (err) {
-    console.log(`    Erro LeilaoCaixa ${estado}: ${err.message.slice(0, 80)}`);
-    return [];
-  }
-}
 
-// ─── SCRAPER RESALE (portal de leilões) ──────────────────────────────────────
+    const imoveis = offers.map(of => {
+      const p = of.product || {};
+      const loc = p.location || {};
+      const det = of.offerDetail || {};
+      const isJudicial = (of.auction?.subMarketplaces || []).some(s => s.desc === 'Judicial');
 
-async function scraperResale(estado) {
-  console.log(`  Resale ${estado}...`);
-  try {
-    const url = `https://www.resale.com.br/busca?tipo=imovel&uf=${estado}&page=1`;
-    const html = await fetchHtml(url);
-    const imoveis = [];
+      // Extrai área da descrição
+      const areaMatch = (of.offerDescription || '').match(/(\d+[\.,]?\d*)\s*m2/i);
+      const area = areaMatch ? parseFloat(areaMatch[1].replace(',', '.')) : 0;
 
-    const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-    if (match) {
-      const nd = JSON.parse(match[1]);
-      const items = nd?.props?.pageProps?.listings
-        || nd?.props?.pageProps?.results
-        || nd?.props?.pageProps?.imoveis
-        || [];
-      for (const im of items.slice(0, 30)) {
-        const valorMin = parseFloat(im.auction_value || im.starting_bid || im.minimum_bid || im.valor || 0);
-        if (valorMin <= 0) continue;
-        imoveis.push({
-          fonte: 'SOLD',
-          fonte_id: `resale_${im.id || im.slug}`,
-          titulo: im.title || im.titulo || `Imóvel ${estado}`,
-          tipo: normalizarTipo(im.type || im.tipo || im.category),
-          modalidade: (im.origin || im.tipo_leilao || '').toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
-          estado,
-          cidade: im.city || im.cidade || '',
-          bairro: im.neighborhood || im.bairro || '',
-          endereco: im.address || im.endereco || '',
-          valor_avaliacao: parseFloat(im.appraisal || im.valor_avaliacao || 0),
-          valor_minimo: valorMin,
-          area_m2: parseFloat(im.area || im.area_m2 || 0),
-          descricao: im.description || im.descricao || '',
-          link_edital: im.url || im.link || `https://www.resale.com.br/imovel/${im.slug || im.id}`,
-          link_foto: im.main_image || im.thumbnail || null,
-          leiloeiro: im.auctioneer || 'Resale',
-          data_leilao: im.auction_date || im.data_leilao || null,
-          forma_pagamento: 'a_vista',
-          raw: JSON.stringify(im).slice(0, 500),
-        });
-      }
-    }
+      // Extrai estado da cidade (ex: "Campinas - SP" → "SP")
+      const cidadeCompleta = loc.city || '';
+      const estadoMatch = cidadeCompleta.match(/[-–]\s*([A-Z]{2})$/);
+      const estadoUF = estadoMatch ? estadoMatch[1] : (loc.state || '');
+      const cidadeNome = cidadeCompleta.replace(/\s*[-–]\s*[A-Z]{2}$/, '').trim();
+
+      return {
+        fonte: 'SOLD',
+        fonte_id: `sbid_${of.id}`,
+        titulo: p.shortDesc || `Imóvel ${cidadeCompleta}`,
+        tipo: normalizarTipo(p.subCategory?.description),
+        modalidade: isJudicial ? 'judicial' : 'extrajudicial',
+        estado: estadoUF,
+        cidade: cidadeNome,
+        bairro: loc.neighborhood || '',
+        endereco: loc.street || '',
+        valor_avaliacao: parseFloat(det.referenceValue || det.directSaleValue || 0),
+        valor_minimo: parseFloat(det.initialBidValue || det.currentMinBid || 0),
+        area_m2: area,
+        descricao: (of.offerDescription || '').replace(/<[^>]+>/g, '').slice(0, 500),
+        link_edital: `https://www.superbid.net/lote/${of.id}`,
+        link_foto: p.thumbnailUrl || null,
+        leiloeiro: of.store?.name || of.seller?.name || 'Superbid',
+        data_leilao: of.endDate || null,
+        forma_pagamento: 'a_vista',
+        raw: JSON.stringify({ id: of.id, shortDesc: p.shortDesc, city: loc.city }).slice(0, 300),
+      };
+    }).filter(im => im.valor_minimo > 0);
+
+    console.log(`    Superbid p${pageNumber}: ${imoveis.length} imóveis`);
     return imoveis;
   } catch (err) {
-    console.log(`    Erro Resale ${estado}: ${err.message.slice(0, 80)}`);
-    return [];
-  }
-}
-
-// ─── SCRAPER LANCE CERTO ─────────────────────────────────────────────────────
-
-async function scraperLanceCerto(estado) {
-  console.log(`  LanceCerto ${estado}...`);
-  try {
-    const url = `https://www.lancecerto.com.br/imoveis?estado=${estado}`;
-    const html = await fetchHtml(url);
-    const imoveis = [];
-
-    // Extrai cards de imóveis pelo padrão JSON-LD ou __NEXT_DATA__
-    const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-    if (match) {
-      const nd = JSON.parse(match[1]);
-      const items = nd?.props?.pageProps?.lots || nd?.props?.pageProps?.items || [];
-      for (const im of items.slice(0, 20)) {
-        const valorMin = parseFloat(im.lance_inicial || im.starting_bid || im.valor_minimo || 0);
-        if (valorMin <= 0) continue;
-        imoveis.push({
-          fonte: 'JUDICIAL',
-          fonte_id: `lc2_${im.id || im.codigo}`,
-          titulo: im.titulo || im.title || `Imóvel ${estado}`,
-          tipo: normalizarTipo(im.tipo || im.type),
-          modalidade: 'judicial',
-          estado,
-          cidade: im.cidade || im.city || '',
-          bairro: im.bairro || '',
-          endereco: im.endereco || '',
-          valor_avaliacao: parseFloat(im.valor_avaliacao || im.appraisal || 0),
-          valor_minimo: valorMin,
-          area_m2: parseFloat(im.area || 0),
-          descricao: im.descricao || '',
-          link_edital: `https://www.lancecerto.com.br/lote/${im.slug || im.id}`,
-          link_foto: im.foto || im.image || null,
-          leiloeiro: im.leiloeiro || 'Lance Certo',
-          data_leilao: im.data_leilao || null,
-          forma_pagamento: 'a_vista',
-          raw: JSON.stringify(im).slice(0, 500),
-        });
-      }
-    }
-    return imoveis;
-  } catch (err) {
-    console.log(`    Erro LanceCerto ${estado}: ${err.message.slice(0, 80)}`);
+    console.log(`    Erro Superbid p${pageNumber}: ${err.message.slice(0, 100)}`);
     return [];
   }
 }
@@ -378,34 +303,17 @@ async function main() {
     await new Promise(r => setTimeout(r, 1000));
   }
 
-  // 2. Leilão Caixa (site alternativo)
-  console.log('\n📋 Scraping Leilão Caixa...');
-  for (const estado of ['SP','RJ','MG','PR']) {
-    const imoveis = await scraperLeilaoCaixa(estado);
+  // 2. Superbid (API direta — 1450 imóveis paginados de 50 em 50)
+  console.log('\n📋 Scraping Superbid...');
+  for (let page = 1; page <= 6; page++) {
+    const imoveis = await scraperSuperbid(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
-    await new Promise(r => setTimeout(r, 1500));
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 2000));
   }
 
-  // 3. Resale
-  console.log('\n📋 Scraping Resale...');
-  for (const estado of ['SP','RJ','MG','PR','RS']) {
-    const imoveis = await scraperResale(estado);
-    await salvarImoveis(imoveis);
-    total += imoveis.length;
-    await new Promise(r => setTimeout(r, 1500));
-  }
-
-  // 4. Lance Certo
-  console.log('\n📋 Scraping Lance Certo...');
-  for (const estado of ['SP','RJ','MG']) {
-    const imoveis = await scraperLanceCerto(estado);
-    await salvarImoveis(imoveis);
-    total += imoveis.length;
-    await new Promise(r => setTimeout(r, 1500));
-  }
-
-  // 5. Zukerman (judicial SP)
+  // 3. Zukerman (judicial SP)
   console.log('\n📋 Scraping leiloeiros judiciais...');
   const zuk = await scraperZukerman();
   await salvarImoveis(zuk);
