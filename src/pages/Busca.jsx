@@ -8,6 +8,7 @@ import {
 import { buscarImoveis, buscarLeiloeirosEstado } from '../utils/claude';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
+import { supabase } from '../utils/supabase';
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
@@ -59,15 +60,63 @@ export default function Busca() {
 
   const buscar = async () => {
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
-    // Passa cidades e raio para o filtro
     const filtrosApi = { ...filtros, cidade: filtros.cidades.join(', ') };
     saveBuscaRecente(filtrosApi);
     try {
-      const res = await buscarImoveis(filtrosApi);
-      setResultados(res);
-      if (res.length === 0) setErro('Nenhum resultado. Tente ajustar os filtros ou verificar as plataformas diretamente.');
+      // 1. Tenta buscar do banco Supabase (scraper diário)
+      let query = supabase
+        .from('imoveis_leilao')
+        .select('*')
+        .eq('ativo', true)
+        .order('score_viabilidade', { ascending: false })
+        .limit(100);
+
+      if (filtros.estado) query = query.eq('estado', filtros.estado);
+      if (filtros.cidades.length > 0) query = query.in('cidade', filtros.cidades);
+      if (filtros.tipo) query = query.eq('tipo', filtros.tipo);
+      if (filtros.modalidade) query = query.eq('modalidade', filtros.modalidade);
+      if (filtros.valorMin) query = query.gte('valor_minimo', Number(filtros.valorMin));
+      if (filtros.valorMax) query = query.lte('valor_minimo', Number(filtros.valorMax));
+      if (filtros.pagamento?.length > 0) query = query.in('forma_pagamento', filtros.pagamento);
+
+      const { data: dbData, error: dbError } = await query;
+
+      if (!dbError && dbData && dbData.length > 0) {
+        // Mapeia formato do banco para formato da UI
+        const mapeados = dbData.map(im => ({
+          id: im.id,
+          titulo: im.titulo,
+          tipo: im.tipo,
+          modalidade: im.modalidade,
+          estado: im.estado,
+          cidade: im.cidade,
+          bairro: im.bairro,
+          endereco: im.endereco,
+          valorAvaliacao: im.valor_avaliacao,
+          valorMinimo: im.valor_minimo,
+          descontoPercentual: im.desconto_percentual,
+          areaM2: im.area_m2,
+          descricao: im.descricao,
+          linkEdital: im.link_edital,
+          foto: im.link_foto,
+          leiloeiro: im.leiloeiro,
+          dataLeilao: im.data_leilao,
+          pagamento: [im.forma_pagamento],
+          viavel: im.viavel,
+          scoreViabilidade: im.score_viabilidade,
+          fonte: im.fonte,
+        }));
+        setResultados(mapeados);
+      } else {
+        // 2. Fallback: busca via Claude AI
+        const res = await buscarImoveis(filtrosApi);
+        setResultados(res);
+      }
+
+      if (resultados.length === 0 && !erro)
+        setErro('Nenhum resultado. Tente ajustar os filtros ou verificar as plataformas diretamente.');
     } catch (e) {
-      setErro('Erro na busca. Verifique a chave de API e tente novamente.');
+      setErro('Erro na busca. Tente novamente.');
       console.error(e);
     }
     setLoading(false);
