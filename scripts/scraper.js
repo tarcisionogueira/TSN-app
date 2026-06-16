@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js';
 import https from 'https';
 import http from 'http';
+import { Buffer } from 'buffer';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -80,7 +81,151 @@ async function avaliarViabilidade(imovel) {
   return { viavel: null, score: 30, motivo: 'Sem valor de avaliação para comparar' };
 }
 
-// ─── SCRAPER CEF (API oficial) ────────────────────────────────────────────────
+// ─── SCRAPER CEF CSV ─────────────────────────────────────────────────────────
+
+function fetchBuffer(url) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/csv,text/plain,*/*',
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+      },
+      timeout: 30000,
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchBuffer(res.headers.location).then(resolve).catch(reject);
+      }
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => resolve({ buffer: Buffer.concat(chunks), status: res.statusCode }));
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+  });
+}
+
+function parseBRNumber(str) {
+  if (!str) return 0;
+  return parseFloat(String(str).replace(/R\$\s*/g,'').replace(/\./g,'').replace(',','.').trim()) || 0;
+}
+
+function parseCSVCaixa(buffer) {
+  // CEF usa latin-1 (ISO-8859-1)
+  const text = buffer.toString('latin1');
+  const lines = text.split(/\r?\n/);
+
+  // Localiza a linha do cabeçalho (contém "Número do imóvel" ou "Numero do imovel")
+  let headerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].toLowerCase().includes('mero') && lines[i].includes(';')) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) return { headers: [], rows: [] };
+
+  const headers = lines[headerIdx].split(';').map(h => h.trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos para comparar
+    .replace(/[^a-z0-9 ]/g, '').trim()
+  );
+
+  const rows = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cols = line.split(';');
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = (cols[idx] || '').trim(); });
+    rows.push(obj);
+  }
+  return { headers, rows };
+}
+
+// Mapeamento defensivo de colunas da Caixa (nomes variam por versão do CSV)
+function mapearColunaCaixa(row) {
+  const get = (...keys) => {
+    for (const k of keys) {
+      const found = Object.keys(row).find(rk => rk.includes(k));
+      if (found && row[found]) return row[found];
+    }
+    return '';
+  };
+
+  return {
+    id:              get('numero do im', 'numero im', 'n  do im', 'imovel'),
+    tipo:            get('tipo do im', 'tipo im', 'tipo'),
+    logradouro:      get('logradouro', 'endereco', 'rua'),
+    bairro:          get('bairro'),
+    cidade:          get('cidade', 'municipio'),
+    uf:              get(' uf', 'estado', 'uf'),
+    valor_avaliacao: get('valor de avalia', 'avalia'),
+    valor_minimo:    get('valor minimo', 'valor de venda', 'lance inicial', 'preco'),
+    modalidade:      get('modalidade', 'tipo de venda'),
+    link:            get('link de acesso', 'link', 'url'),
+  };
+}
+
+async function scraperCEFcsv(uf) {
+  console.log(`  CEF CSV ${uf}...`);
+  try {
+    const url = `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf}.csv`;
+    const { buffer, status } = await fetchBuffer(url);
+
+    if (status !== 200) {
+      console.log(`    CEF CSV ${uf}: status ${status}`);
+      return [];
+    }
+
+    const { rows } = parseCSVCaixa(buffer);
+    if (rows.length === 0) {
+      console.log(`    CEF CSV ${uf}: 0 linhas após parse`);
+      return [];
+    }
+
+    const imoveis = rows.map(row => {
+      const m = mapearColunaCaixa(row);
+      const valorMin = parseBRNumber(m.valor_minimo);
+      const valorAval = parseBRNumber(m.valor_avaliacao);
+      if (!m.id || valorMin <= 0) return null;
+
+      const modalLower = m.modalidade.toLowerCase();
+      const isLeilao = modalLower.includes('leil');
+      const isFinanciado = modalLower.includes('financ') || modalLower.includes('fgts');
+
+      return {
+        fonte: 'CEF',
+        fonte_id: `cef_${m.id.replace(/\s/g,'')}`,
+        titulo: `${m.tipo || 'Imóvel'} — ${m.bairro} ${m.cidade} ${uf}`.trim(),
+        tipo: normalizarTipo(m.tipo),
+        modalidade: isLeilao ? 'judicial' : 'extrajudicial',
+        estado: uf,
+        cidade: m.cidade,
+        bairro: m.bairro,
+        endereco: m.logradouro,
+        valor_avaliacao: valorAval,
+        valor_minimo: valorMin,
+        area_m2: 0,
+        descricao: `${m.modalidade} — ${m.tipo}`,
+        link_edital: m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${m.id}`,
+        link_foto: null,
+        leiloeiro: 'Caixa Econômica Federal',
+        data_leilao: null,
+        forma_pagamento: isFinanciado ? 'financiado' : 'a_vista',
+        raw: JSON.stringify(m).slice(0, 400),
+      };
+    }).filter(Boolean);
+
+    console.log(`    CEF CSV ${uf}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro CEF CSV ${uf}: ${err.message.slice(0, 100)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER CEF (API JSON — fallback) ────────────────────────────────────────
 
 async function scraperCEF(estado) {
   console.log(`  CEF ${estado}...`);
@@ -294,13 +439,14 @@ async function main() {
 
   let total = 0;
 
-  // 1. CEF
-  console.log('📋 Scraping CEF...');
-  for (const estado of ['SP','RJ','MG','BA','PR','RS','PE','CE','GO','SC']) {
-    const imoveis = await scraperCEF(estado);
+  // 1. CEF via CSV (download direto, sem proteção bot)
+  console.log('📋 Scraping CEF CSV...');
+  const ufs = ['SP','RJ','MG','BA','PR','RS','PE','CE','GO','SC','ES','MA','PA','PB','RN','MT','MS','PI','AL','SE','TO','DF'];
+  for (const uf of ufs) {
+    const imoveis = await scraperCEFcsv(uf);
     await salvarImoveis(imoveis);
     total += imoveis.length;
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 800));
   }
 
   // 2. Superbid (API direta — 1450 imóveis paginados de 50 em 50)
