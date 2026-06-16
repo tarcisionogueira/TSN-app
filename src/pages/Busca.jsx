@@ -173,7 +173,8 @@ export default function Busca() {
                 </select>
               </div>
               <div>
-                <label style={lbl}>Cidade(s) — múltipla seleção</label>
+                <label style={lbl}>Cidade(s) — opcional, múltipla seleção</label>
+                <div style={{ fontSize:10, color:'#94a3b8', marginBottom:6 }}>Deixe vazio para buscar em todo o estado</div>
                 {/* Cidades selecionadas */}
                 {filtros.cidades.length > 0 && (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
@@ -191,7 +192,7 @@ export default function Busca() {
                 <input
                   value={buscaCidade}
                   onChange={e=>setBuscaCidade(e.target.value)}
-                  placeholder={filtros.estado ? 'Buscar cidade...' : 'Selecione um estado primeiro'}
+                  placeholder={filtros.estado ? 'Buscar cidade (opcional)...' : 'Selecione um estado primeiro'}
                   disabled={!filtros.estado}
                   style={{ ...inp, marginBottom:4 }}
                 />
