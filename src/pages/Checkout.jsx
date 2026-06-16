@@ -73,7 +73,7 @@ export default function Checkout() {
         </p>
 
         <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px', marginBottom: 24 }}>
-          {plano.features.map(f => (
+          {(plano.recursos || plano.features || []).map(f => (
             <div key={f} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
               <CheckCircle2 size={14} color={plano.cor} style={{ flexShrink: 0, marginTop: 2 }} />
               <span style={{ fontSize: 13, color: '#334155' }}>{f}</span>

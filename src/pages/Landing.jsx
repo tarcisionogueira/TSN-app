@@ -169,9 +169,8 @@ export default function Landing() {
                 {plano.preco > 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24 }}>/mês</div>}
                 <div style={{ height: 1, background: '#e2e8f0', margin: '16px 0' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-                  {plano.features.map(f => (
+                  {(plano.recursos || plano.features || []).map(f => (
                     <div key={f} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <CheckCircle2 size={15} color={plano.cor} style={{ flexShrink: 0, marginTop: 2 }} />
                       <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.4 }}>{f}</span>
                     </div>
                   ))}
