@@ -176,7 +176,10 @@ export default function Landing() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => plano.preco === 0 ? nav('/login') : nav(`/login?plano=${key}`)}
+                <button onClick={() => {
+                  if (plano.preco === 0) { nav('/login'); return; }
+                  nav(user ? `/checkout?plano=${key}` : `/login?plano=${key}`);
+                }}
                   style={{ width: '100%', padding: '11px', border: plano.destaque ? 'none' : `2px solid ${plano.cor}`, borderRadius: 10, background: plano.destaque ? plano.cor : 'transparent', color: plano.destaque ? 'white' : plano.cor, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                   {plano.preco === 0 ? 'Começar Grátis' : 'Assinar Agora'}
                 </button>

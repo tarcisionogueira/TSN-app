@@ -30,7 +30,7 @@ export default function Login() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.senha });
       if (error) throw error;
-      nav('/');
+      nav(planoEscolhido ? `/checkout?plano=${planoEscolhido}` : '/');
     } catch (err) {
       setErro(err.message === 'Invalid login credentials' ? 'Email ou senha incorretos.' : err.message);
     }

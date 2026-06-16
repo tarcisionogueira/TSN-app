@@ -9,6 +9,7 @@ import Painel from './pages/Painel';
 import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Login from './pages/Login';
+import Checkout from './pages/Checkout';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/checkout" element={<Checkout />} />
           <Route path="*" element={
             <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif" }}>
               <Header />
