@@ -178,8 +178,15 @@ async function scraperCEFcsv(uf) {
       return [];
     }
 
-    const { rows } = parseCSVCaixa(buffer);
+    // Diagnóstico: primeiras linhas do arquivo
+    const rawText = buffer.toString('latin1');
+    const firstLines = rawText.split(/\r?\n/).slice(0, 5);
+    console.log(`    CEF CSV ${uf} L1: ${JSON.stringify(firstLines[0]?.slice(0,100))}`);
+    console.log(`    CEF CSV ${uf} L2: ${JSON.stringify(firstLines[1]?.slice(0,100))}`);
+
+    const { headers, rows } = parseCSVCaixa(buffer);
     if (rows.length === 0) {
+      console.log(`    CEF CSV ${uf}: headers=${JSON.stringify(headers.slice(0,4))}`);
       console.log(`    CEF CSV ${uf}: 0 linhas após parse`);
       return [];
     }
