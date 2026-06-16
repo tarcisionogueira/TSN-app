@@ -47,6 +47,7 @@ export default function Login() {
         email: form.email,
         password: form.senha,
         options: {
+          emailRedirectTo: `${window.location.origin}/`,
           data: { nome: form.nome, cpf: form.cpf, telefone: form.telefone, endereco: form.endereco, role: 'aluno' },
         },
       });
