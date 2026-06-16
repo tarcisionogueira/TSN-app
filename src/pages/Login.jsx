@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 
@@ -11,7 +11,9 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 
 export default function Login() {
   const nav = useNavigate();
-  const [modo, setModo] = useState('login'); // 'login' | 'cadastro' | 'sucesso'
+  const loc = useLocation();
+  const planoEscolhido = new URLSearchParams(loc.search).get('plano');
+  const [modo, setModo] = useState(planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [showSenha, setShowSenha] = useState(false);
@@ -59,6 +61,13 @@ export default function Login() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, padding: '40px 36px', width: '100%', maxWidth: 420, boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
+
+        {/* Banner plano escolhido */}
+        {planoEscolhido && (
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1d4ed8', fontWeight: 600 }}>
+            ✅ Plano <strong style={{ textTransform: 'capitalize' }}>{planoEscolhido}</strong> selecionado — crie sua conta para continuar
+          </div>
+        )}
 
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>

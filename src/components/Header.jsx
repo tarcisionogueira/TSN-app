@@ -11,12 +11,13 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const links = [
-    { path: '/', label: 'Home', icon: Home },
+  const linksPublicos = [{ path: '/', label: 'Home', icon: Home }];
+  const linksPrivados = [
     { path: '/buscar', label: 'Leilões', icon: Search },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap },
     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
   ];
+  const links = user ? [...linksPublicos, ...linksPrivados] : linksPublicos;
 
   const active = (p) => loc.pathname === p;
 
@@ -59,10 +60,12 @@ export default function Header() {
             </button>
           )}
 
-          <button onClick={() => nav('/analise')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, padding: '8px 16px', border: 'none', borderRadius: 8, background: '#2563eb', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            Fazer Análise <ChevronRight size={14} />
-          </button>
+          {user && (
+            <button onClick={() => nav('/analise')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, padding: '8px 16px', border: 'none', borderRadius: 8, background: '#2563eb', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              Fazer Análise <ChevronRight size={14} />
+            </button>
+          )}
 
           {/* Usuário */}
           {user ? (
