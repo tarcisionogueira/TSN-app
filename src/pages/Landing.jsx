@@ -2,9 +2,11 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, BarChart3, ShieldCheck, FileText, TrendingUp, Zap, Users, ChevronRight, CheckCircle2, Star, Building2, Gavel, Globe } from 'lucide-react';
 import { PLANOS } from '../data/cursos';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Landing() {
   const nav = useNavigate();
+  const { user } = useAuth();
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -23,11 +25,11 @@ export default function Landing() {
             A TSN Ativos transforma leilões imobiliários em oportunidades estruturadas. Busca, análise financeira, avaliação jurídica e laudo de mercado — tudo em uma plataforma.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => nav('/buscar')}
+            <button onClick={() => nav(user ? '/buscar' : '/login')}
               style={{ padding: '14px 28px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Search size={16} /> Buscar Imóveis em Leilão
             </button>
-            <button onClick={() => nav('/analise')}
+            <button onClick={() => nav(user ? '/analise' : '/login')}
               style={{ padding: '14px 28px', background: 'white', color: '#0f172a', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <BarChart3 size={16} /> Analisar um Imóvel <ChevronRight size={14} />
             </button>
@@ -174,7 +176,10 @@ export default function Landing() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => plano.preco === 0 ? nav('/buscar') : alert('Em breve — integração Asaas')}
+                <button onClick={() => {
+                  if (plano.preco === 0) { nav('/login'); return; }
+                  nav(user ? `/checkout?plano=${key}` : `/login?plano=${key}`);
+                }}
                   style={{ width: '100%', padding: '11px', border: plano.destaque ? 'none' : `2px solid ${plano.cor}`, borderRadius: 10, background: plano.destaque ? plano.cor : 'transparent', color: plano.destaque ? 'white' : plano.cor, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                   {plano.preco === 0 ? 'Começar Grátis' : 'Assinar Agora'}
                 </button>
