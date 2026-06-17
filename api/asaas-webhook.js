@@ -8,7 +8,7 @@ const supabase = createClient(
 // Mapeia o valor pago (arredondado) para o plano correspondente
 const PLANO_POR_VALOR = {
   50: 'top1',      // R$ 49,90 (arredonda para 50)
-  80: 'top2',      // R$ 79,90 (arredonda para 80)
+  100: 'top2',     // R$ 99,90 (arredonda para 100)
   5000: 'clube',   // mensalidade do Clube de Negócios / Assessorado
 };
 
