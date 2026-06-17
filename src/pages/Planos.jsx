@@ -4,14 +4,29 @@ import { Check } from 'lucide-react';
 import { PLANOS } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 
+const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
+
 export default function Planos() {
   const nav = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const planoAtualPreco = PLANOS[role]?.preco ?? -1;
 
   const irParaCheckout = (key, plano) => {
+    if (key === role && user) return; // já é o plano atual
     if (plano.preco === 0) { nav(user ? '/membros' : '/login'); return; }
     nav(user ? `/checkout?plano=${key}` : `/login?plano=${key}`);
   };
+
+  // Texto do botão considerando o plano atual do usuário (upgrade/downgrade)
+  const labelBotao = (key, plano) => {
+    if (user && key === role) return 'Seu plano atual';
+    if (plano.preco === 0) return 'Começar Grátis';
+    if (user && PLANOS_PAGOS.includes(role) && key !== 'assessorado' && role !== 'assessorado') {
+      return plano.preco > planoAtualPreco ? 'Fazer upgrade →' : 'Fazer downgrade →';
+    }
+    return 'Assinar Agora';
+  };
+  const ehPlanoAtual = (key) => user && key === role;
 
   const planosHome = Object.entries(PLANOS).filter(([, p]) => p.homepage);
   const planosPremium = Object.entries(PLANOS).filter(([, p]) => !p.homepage);
@@ -43,9 +58,9 @@ export default function Planos() {
                   <span key={f} style={{ fontSize: 13, color: '#334155', lineHeight: 1.4 }}>{f}</span>
                 ))}
               </div>
-              <button onClick={() => irParaCheckout(key, plano)}
-                style={{ width: '100%', padding: '11px', border: plano.destaque ? 'none' : `2px solid ${plano.cor}`, borderRadius: 10, background: plano.destaque ? plano.cor : 'transparent', color: plano.destaque ? 'white' : plano.cor, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                {plano.preco === 0 ? 'Começar Grátis' : 'Assinar Agora'}
+              <button onClick={() => irParaCheckout(key, plano)} disabled={ehPlanoAtual(key)}
+                style={{ width: '100%', padding: '11px', border: ehPlanoAtual(key) ? '2px solid #cbd5e1' : plano.destaque ? 'none' : `2px solid ${plano.cor}`, borderRadius: 10, background: ehPlanoAtual(key) ? '#f1f5f9' : plano.destaque ? plano.cor : 'transparent', color: ehPlanoAtual(key) ? '#64748b' : plano.destaque ? 'white' : plano.cor, fontWeight: 700, fontSize: 14, cursor: ehPlanoAtual(key) ? 'default' : 'pointer' }}>
+                {labelBotao(key, plano)}
               </button>
             </div>
           ))}
@@ -100,9 +115,9 @@ export default function Planos() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => irParaCheckout(key, plano)}
-                  style={{ width: '100%', padding: '13px', border: 'none', borderRadius: 10, background: plano.cor, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                  Quero esse plano
+                <button onClick={() => irParaCheckout(key, plano)} disabled={ehPlanoAtual(key)}
+                  style={{ width: '100%', padding: '13px', border: ehPlanoAtual(key) ? '2px solid #cbd5e1' : 'none', borderRadius: 10, background: ehPlanoAtual(key) ? '#f1f5f9' : plano.cor, color: ehPlanoAtual(key) ? '#64748b' : 'white', fontWeight: 700, fontSize: 14, cursor: ehPlanoAtual(key) ? 'default' : 'pointer' }}>
+                  {ehPlanoAtual(key) ? 'Seu plano atual' : 'Quero esse plano'}
                 </button>
               </div>
             ))}

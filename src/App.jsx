@@ -2,7 +2,10 @@ import React from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
+import Footer from './components/Footer';
 import Landing from './pages/Landing';
+import Termos from './pages/Termos';
+import Privacidade from './pages/Privacidade';
 import Busca from './pages/Busca';
 import Analise from './pages/Analise';
 import Painel from './pages/Painel';
@@ -22,9 +25,9 @@ export default function App() {
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={
-            <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
               <Header />
-              <main>
+              <main style={{ flex: 1 }}>
                 <Routes>
                   <Route path="/" element={<Landing />} />
                   <Route path="/planos" element={<Planos />} />
@@ -33,8 +36,11 @@ export default function App() {
                   <Route path="/painel" element={<Painel />} />
                   <Route path="/membros" element={<Membros />} />
                   <Route path="/membros/curso/:id" element={<Curso />} />
+                  <Route path="/termos" element={<Termos />} />
+                  <Route path="/privacidade" element={<Privacidade />} />
                 </Routes>
               </main>
+              <Footer />
             </div>
           } />
         </Routes>

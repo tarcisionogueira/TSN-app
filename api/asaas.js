@@ -32,6 +32,17 @@ async function asaasGet(path) {
   return data;
 }
 
+async function asaasPut(path, body) {
+  const res = await fetch(`${ASAAS_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'access_token': API_KEY },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.errors?.[0]?.description || 'Erro Asaas');
+  return data;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -86,6 +97,59 @@ export default async function handler(req, res) {
         customerId,
         linkPagamento,
         status: subscription.status,
+      });
+    }
+
+    // ── Upgrade / Downgrade de plano ──
+    if (action === 'gerenciar_assinatura') {
+      const { email, plano } = body;
+      const info = PLANOS[plano];
+      if (!info) return res.status(400).json({ error: 'Plano inválido' });
+
+      // Localiza customer e assinatura ativa
+      const customers = await asaasGet(`/customers?email=${encodeURIComponent(email)}`);
+      const customer = customers.data?.[0];
+      if (!customer) return res.status(404).json({ error: 'Cliente não encontrado no Asaas. Faça a primeira assinatura.' });
+      const subs = await asaasGet(`/subscriptions?customer=${customer.id}&status=ACTIVE`);
+      const sub = subs.data?.[0];
+      if (!sub) return res.status(404).json({ error: 'Nenhuma assinatura ativa encontrada. Crie uma assinatura primeiro.' });
+
+      const valorAtual = Number(sub.value) || 0;
+      const valorNovo = info.valor;
+      const isUpgrade = valorNovo > valorAtual;
+
+      // Atualiza a assinatura para o novo valor/plano.
+      // Upgrade: aplica já (updatePendingPayments=true). Downgrade: mantém o ciclo
+      // atual e só muda na próxima cobrança (updatePendingPayments=false).
+      await asaasPut(`/subscriptions/${sub.id}`, {
+        value: valorNovo,
+        description: info.nome,
+        updatePendingPayments: isUpgrade,
+      });
+
+      let linkPagamento = null;
+      let cobrancaDiferenca = 0;
+      if (isUpgrade) {
+        // Cobra a diferença proporcional agora, mantendo o vencimento original na recorrência.
+        cobrancaDiferenca = Number((valorNovo - valorAtual).toFixed(2));
+        const cobranca = await asaasPost('/payments', {
+          customer: customer.id,
+          billingType: 'UNDEFINED',
+          value: cobrancaDiferenca,
+          dueDate: new Date().toISOString().split('T')[0],
+          description: `Upgrade para ${info.nome} — diferença proporcional`,
+        });
+        linkPagamento = cobranca.invoiceUrl || cobranca.bankSlipUrl;
+      }
+
+      return res.status(200).json({
+        tipo: isUpgrade ? 'upgrade' : 'downgrade',
+        subscriptionId: sub.id,
+        valorAnterior: valorAtual,
+        valorNovo,
+        cobrancaDiferenca,
+        linkPagamento,
+        proximoVencimento: sub.nextDueDate,
       });
     }
 

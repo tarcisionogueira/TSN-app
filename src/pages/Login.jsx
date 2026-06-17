@@ -18,6 +18,8 @@ export default function Login() {
   const [erro, setErro] = useState('');
   const [showSenha, setShowSenha] = useState(false);
 
+  const [aceite, setAceite] = useState(false);
+
   const [form, setForm] = useState({
     email: '', senha: '', nome: '', cpf: '', telefone: '', endereco: '',
   });
@@ -54,12 +56,16 @@ export default function Login() {
     try {
       if (!form.nome || !form.email || !form.senha) throw new Error('Preencha nome, email e senha.');
       if (form.senha.length < 6) throw new Error('Senha deve ter ao menos 6 caracteres.');
+      if (!aceite) throw new Error('É necessário aceitar os Termos de Uso e a Política de Privacidade.');
       const { error } = await supabase.auth.signUp({
         email: form.email,
         password: form.senha,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
-          data: { nome: form.nome, cpf: form.cpf, telefone: form.telefone, endereco: form.endereco, role: 'aluno' },
+          data: {
+            nome: form.nome, cpf: form.cpf, telefone: form.telefone, endereco: form.endereco, role: 'aluno',
+            lgpd_aceito: true, lgpd_data: new Date().toISOString(),
+          },
         },
       });
       if (error) throw error;
@@ -204,17 +210,21 @@ export default function Login() {
                   </button>
                 </div>
               </div>
+              <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12, color: '#475569', lineHeight: 1.5, cursor: 'pointer' }}>
+                <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)}
+                  style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: 'pointer', accentColor: '#2563eb' }} />
+                <span>
+                  Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#2563eb', fontWeight: 700 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#2563eb', fontWeight: 700 }}>Política de Privacidade</a>, e autorizo o tratamento dos meus dados conforme a LGPD.
+                </span>
+              </label>
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
-              <button type="submit" disabled={loading}
-                style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
+              <button type="submit" disabled={loading || !aceite}
+                style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</>
                   : planoEscolhido ? 'Criar conta e ir para pagamento →' : 'Criar conta grátis'
                 }
               </button>
-              <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0, lineHeight: 1.5 }}>
-                Ao criar conta você concorda com os termos de uso. Seus dados são utilizados apenas para acesso à plataforma e emissão fiscal.
-              </p>
             </form>
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>Já tem conta? </span>
