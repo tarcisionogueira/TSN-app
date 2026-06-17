@@ -2,8 +2,9 @@ const ASAAS_URL = 'https://api.asaas.com/v3';
 const API_KEY = process.env.ASAAS_API_KEY;
 
 const PLANOS = {
-  analista: { nome: 'Plano Analista', valor: 197.00, ciclo: 'MONTHLY' },
-  gestor:   { nome: 'Plano Gestor',   valor: 497.00, ciclo: 'MONTHLY' },
+  top1:  { nome: 'Plano TOP 1', valor: 49.90, ciclo: 'MONTHLY' },
+  top2:  { nome: 'Plano TOP 2', valor: 99.90, ciclo: 'MONTHLY' },
+  clube: { nome: 'Clube de Negócios', valor: 5000.00, ciclo: 'MONTHLY' },
 };
 
 async function asaasPost(path, body) {
