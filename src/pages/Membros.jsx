@@ -4,7 +4,7 @@ import {
   Play, Lock, CheckCircle2, Clock, BookOpen, Star, Users,
   ChevronRight, Award, Zap, Crown, Search, Filter,
 } from 'lucide-react';
-import { CURSOS, CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
+import { CURSOS, CATEGORIAS, PLANOS, PACOTE, EBOOKS } from '../data/cursos';
 
 // Progresso salvo no localStorage
 function getProgresso() {
@@ -12,12 +12,13 @@ function getProgresso() {
 }
 
 function getPlano() {
-  return localStorage.getItem('tsn_plano_membro') || 'gratuito';
+  return localStorage.getItem('tsn_plano_membro') || 'explorador';
 }
 
 function podeAssistir(licao, planAtual) {
   if (licao.gratis) return true;
-  return planAtual === 'profissional' || planAtual === 'vitalicio';
+  // Planos com acesso a todos os cursos gravados
+  return planAtual === 'assessorado' || planAtual === 'clube';
 }
 
 export default function Membros() {
@@ -71,8 +72,9 @@ export default function Membros() {
           <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
               {[
-                [totalAulas+'+', 'Aulas'],
+                [totalAulas, 'Aulas'],
                 [CURSOS.length, 'Cursos'],
+                [EBOOKS.length, 'eBooks'],
                 [aulasConcluidas, 'Concluídas'],
                 ['∞', 'Acesso'],
               ].map(([v,l])=>(
@@ -84,7 +86,7 @@ export default function Membros() {
             </div>
             <button onClick={()=>setShowPlanos(true)}
               style={{ marginLeft:'auto', padding:'11px 22px', background:'#6366f1', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
-              <Crown size={15}/> {plano==='gratuito'?'Fazer upgrade':'Gerenciar plano'}
+              <Crown size={15}/> {plano==='explorador'?'Fazer upgrade':'Gerenciar plano'}
             </button>
           </div>
         </div>
@@ -219,7 +221,7 @@ export default function Membros() {
                   {p.destaque && <div style={{ position:'absolute', top:-10, left:'50%', transform:'translateX(-50%)', background:p.cor, color:'white', fontSize:10, fontWeight:800, padding:'3px 12px', borderRadius:20, whiteSpace:'nowrap' }}>⭐ MAIS POPULAR</div>}
                   <div style={{ fontWeight:900, fontSize:16, color:p.cor, marginBottom:6 }}>{p.nome}</div>
                   <div style={{ fontSize:28, fontWeight:900, color:'#0f172a', lineHeight:1 }}>
-                    {k==='gratuito'?'Grátis':`R$ ${p.preco}`}
+                    {p.precoLabel}
                   </div>
                   {p.periodicidade && <div style={{ fontSize:12, color:'#94a3b8', marginBottom:12 }}>{p.periodicidade}</div>}
                   {!p.periodicidade && <div style={{ marginBottom:12 }}/>}
@@ -232,7 +234,7 @@ export default function Membros() {
                   {plano===k
                     ? <div style={{ marginTop:14, fontSize:11, fontWeight:700, color:p.cor, display:'flex', alignItems:'center', gap:4 }}><CheckCircle2 size={12}/> Plano ativo</div>
                     : <button style={{ marginTop:14, width:'100%', padding:'9px', background:p.cor, color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
-                        {k==='gratuito'?'Usar gratuitamente':`Assinar ${p.nome}`}
+                        {k==='explorador'?'Usar gratuitamente':`Assinar ${p.nome}`}
                       </button>
                   }
                 </div>

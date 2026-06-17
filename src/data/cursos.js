@@ -267,74 +267,122 @@ export const PACOTE = {
 };
 
 // ─── PLANOS DE ASSINATURA ─────────────────────────────────────────────────────
+// homepage:true  → aparece na página inicial (3 primeiros)
+// homepage:false → só aparece na página completa de Planos
 export const PLANOS = {
-  gratuito: {
-    id: 'gratuito',
+  explorador: {
+    id: 'explorador',
     nome: 'Explorador',
     preco: 0,
+    precoLabel: 'Grátis',
     periodicidade: '',
     cor: '#64748b',
     bg: '#f1f5f9',
+    homepage: true,
+    destaque: false,
     descricao: 'Comece a explorar o mercado de leilões sem pagar nada',
     recursos: [
-      '✅ Busca de leilões com IA',
-      '✅ Flag de viabilidade (🟢/🔴) por mercadológico',
-      '✅ Cursos gratuitos (Onboarding + Leilão Seguro)',
-      '✅ Seleção de até 10 imóveis por mês',
-      '✅ Reunião de análise com analistas TSN (1 por mês)',
-      '❌ Relatório completo de viabilidade',
-      '❌ Fluxo de caixa e projeções',
-      '❌ Gestão de portfólio',
+      '✅ Busca de leilões em todo o Brasil',
+      '✅ Flag de viabilidade (🟢/🔴)',
+      '✅ Direcionamento ao site do leiloeiro',
+      '✅ Cursos gratuitos (Destravando Leilões + Leilão Seguro)',
+      '❌ Relatório de viabilidade por IA',
+      '❌ Análise de edital e matrícula',
     ],
     limite_analises: 10,
     relatorio: false,
     portfolio: false,
   },
-  analista: {
-    id: 'analista',
-    nome: 'Analista',
-    preco: 197,
+  top1: {
+    id: 'top1',
+    nome: 'TOP 1',
+    preco: 49.90,
+    precoLabel: 'R$ 49,90',
     periodicidade: '/mês',
     cor: '#2563eb',
     bg: '#dbeafe',
-    descricao: 'Análise completa de viabilidade com relatório profissional',
-    destaque: false,
+    homepage: true,
+    destaque: true,
+    descricao: 'Relatório completo de viabilidade gerado por inteligência artificial',
     recursos: [
-      '✅ Tudo do plano Explorador',
-      '✅ Análise financeira completa (ROI, ROE, teto)',
-      '✅ Avaliação mercadológica com dois níveis',
-      '✅ Relatório PDF completo por imóvel',
-      '✅ Fluxo de caixa mensal projetado',
-      '✅ Tabelas SAC e PRICE',
-      '✅ Laudo executivo gerado por IA',
-      '✅ Análises ilimitadas',
-      '✅ Reuniões quinzenais com analistas',
-      '❌ Gestão de portfólio no sistema',
-      '❌ Controle financeiro por imóvel',
+      '✅ Tudo do Explorador',
+      '✅ Relatório de validação mercadológica por IA',
+      '✅ Viabilidade financeira com projeções',
+      '✅ Fluxo de caixa de 12 meses de operação',
+      '✅ IA busca anúncios no mesmo condomínio e vizinhança',
+      '✅ Evidências e valor real de mercado',
+      '❌ Análise de edital, matrícula e anexos',
     ],
     limite_analises: -1,
     relatorio: true,
     portfolio: false,
   },
-  gestor: {
-    id: 'gestor',
-    nome: 'Gestor',
-    preco: 497,
+  top2: {
+    id: 'top2',
+    nome: 'TOP 2',
+    preco: 79.90,
+    precoLabel: 'R$ 79,90',
     periodicidade: '/mês',
     cor: '#7c3aed',
     bg: '#ede9fe',
-    descricao: 'Plataforma completa para gestão profissional do seu portfólio',
-    destaque: true,
+    homepage: true,
+    destaque: false,
+    descricao: 'Análise jurídica documental completa por inteligência artificial',
     recursos: [
-      '✅ Tudo do plano Analista',
-      '✅ Portfólio com status e controle completo',
-      '✅ Lançamentos financeiros por imóvel',
-      '✅ DRE real vs projeção',
-      '✅ KPIs do portfólio (TIR, VPL, múltiplo)',
-      '✅ Alertas de vencimento e oportunidades',
-      '✅ Acesso antecipado a novos recursos',
-      '✅ Suporte prioritário via WhatsApp',
-      '✅ Reuniões semanais com a equipe TSN',
+      '✅ Tudo do TOP 1',
+      '✅ Análise por IA do edital',
+      '✅ Análise por IA da matrícula',
+      '✅ Análise dos anexos do processo',
+      '✅ IA puxa os documentos automaticamente',
+      '✅ Alertas de risco (usufruto, penhora, ônus)',
+    ],
+    limite_analises: -1,
+    relatorio: true,
+    portfolio: false,
+  },
+  assessorado: {
+    id: 'assessorado',
+    nome: 'Assessorado',
+    preco: 5000,
+    precoLabel: 'R$ 5.000',
+    periodicidade: 'pagamento único · 6 meses',
+    honorarios: '+ 10% de honorários sobre o êxito da arrematação',
+    cor: '#d97706',
+    bg: '#fef3c7',
+    homepage: false,
+    destaque: false,
+    descricao: 'Assessoria completa da equipe TSN para realizar 1 arrematação',
+    recursos: [
+      '✅ Tudo do TOP 2',
+      '✅ Todos os cursos gravados gratuitamente',
+      '✅ Assessoria para 1 arrematação completa',
+      '✅ Relatórios mercadológico e jurídico feitos pela equipe',
+      '✅ Acompanhamento do leilão pela equipe TSN',
+      '✅ Análise jurídica do escritório parceiro',
+    ],
+    limite_analises: -1,
+    relatorio: true,
+    portfolio: true,
+  },
+  clube: {
+    id: 'clube',
+    nome: 'Clube de Negócios',
+    preco: 5000,
+    precoLabel: 'R$ 5.000',
+    periodicidade: '/mês · fidelidade 12 meses',
+    honorarios: '+ 10% de honorários sobre o êxito de cada arrematação',
+    cor: '#059669',
+    bg: '#d1fae5',
+    homepage: false,
+    destaque: true,
+    descricao: 'O nível máximo: mentoria contínua e arrematações ilimitadas',
+    recursos: [
+      '✅ Tudo dos planos anteriores',
+      '✅ Encontro semanal com Tarcísio (sócio TSN)',
+      '✅ Oportunidades de leilões judiciais e extrajudiciais',
+      '✅ Arrematações ilimitadas com assessoria',
+      '✅ Renovação automática (cancele quando quiser)',
+      '✅ Prioridade máxima no atendimento',
     ],
     limite_analises: -1,
     relatorio: true,
@@ -342,4 +390,36 @@ export const PLANOS = {
   },
 };
 
+// ─── PAPÉIS / PERMISSÕES ──────────────────────────────────────────────────────
+// Planos compráveis: explorador, top1, top2, assessorado, clube (campo `role` = plano)
+// Papéis operacionais (atribuídos pelo admin, não comprados):
+export const ROLES = {
+  admin:       { nome: 'Administrador', tipo: 'operacional', descricao: 'Acesso total ao sistema e configurações' },
+  explorador:  { nome: 'Explorador (Aluno)', tipo: 'plano', descricao: 'Busca gratuita de imóveis' },
+  top1:        { nome: 'TOP 1', tipo: 'plano', descricao: 'Relatório de viabilidade por IA' },
+  top2:        { nome: 'TOP 2', tipo: 'plano', descricao: 'Análise documental por IA' },
+  assessorado: { nome: 'Assessorado', tipo: 'plano', descricao: 'Assessoria para 1 arrematação' },
+  clube:       { nome: 'Clube de Negócios', tipo: 'plano', descricao: 'Mentoria contínua e arrematações ilimitadas' },
+  consultor:   { nome: 'Consultor (Afiliado)', tipo: 'operacional', descricao: 'Vende cursos e planos — não assiste o conteúdo' },
+  analista:    { nome: 'Analista', tipo: 'operacional', descricao: 'Gera relatórios, agenda reuniões e envia ao jurídico' },
+  advogado:    { nome: 'Advogado', tipo: 'operacional', descricao: 'Emite parecer jurídico das arrematações' },
+};
+
+// ─── EBOOKS / MATERIAIS COMPLEMENTARES ────────────────────────────────────────
+// Populado pelo admin. Estrutura: { id, titulo, descricao, capa, arquivo_url, gratuito }
+export const EBOOKS = [];
+
 export const CATEGORIAS = ['Todos', 'Fundamentos', 'Mercado', 'Jurídico', 'Estratégia', 'Gestão'];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+// Total real de aulas somando todas as lições de todos os cursos
+export const TOTAL_AULAS = CURSOS.reduce(
+  (acc, c) => acc + (c.modulos || []).reduce((a, m) => a + (m.licoes || []).length, 0),
+  0
+);
+export const TOTAL_CURSOS = CURSOS.length;
+
+export function formatarPreco(valor) {
+  if (!valor || valor === 0) return 'Grátis';
+  return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}

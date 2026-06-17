@@ -19,7 +19,7 @@ export default function Checkout() {
     if (!user) nav(`/login?plano=${planoKey}`);
   }, [user]);
 
-  if (!plano || planoKey === 'gratuito') {
+  if (!plano || planoKey === 'explorador' || plano.preco === 0) {
     nav('/');
     return null;
   }
@@ -69,8 +69,13 @@ export default function Checkout() {
           Plano {plano.nome}
         </h2>
         <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 15 }}>
-          <strong style={{ color: '#0f172a', fontSize: 28 }}>R$ {plano.preco}</strong>/mês
+          <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
         </p>
+        {plano.honorarios && (
+          <div style={{ background: plano.bg, color: plano.cor, fontSize: 13, fontWeight: 700, padding: '8px 12px', borderRadius: 8, marginBottom: 16 }}>
+            {plano.honorarios}
+          </div>
+        )}
 
         <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px', marginBottom: 24 }}>
           {(plano.recursos || plano.features || []).map(f => (

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+
+// E-mail que recebe os feedbacks dos usuários (altere aqui se precisar)
+const EMAIL_FEEDBACK = 'tarcisioaraujo@reimob.com.br';
 
 export default function Header() {
   const nav = useNavigate();
@@ -11,15 +14,27 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const linksPublicos = [{ path: '/', label: 'Home', icon: Home }];
+  const linksPublicos = [
+    { path: '/', label: 'Home', icon: Home },
+    { path: '/planos', label: 'Planos', icon: Tag },
+  ];
   const linksPrivados = [
     { path: '/buscar', label: 'Leilões', icon: Search },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap },
     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
   ];
-  const links = user ? [...linksPublicos, ...linksPrivados] : linksPublicos;
+  const links = user
+    ? [linksPublicos[0], ...linksPrivados, linksPublicos[1]]
+    : linksPublicos;
 
   const active = (p) => loc.pathname === p;
+
+  const abrirFeedback = () => {
+    const nome = user?.user_metadata?.nome || user?.email || 'Visitante';
+    const assunto = encodeURIComponent('[Feedback TSN Ativos]');
+    const corpo = encodeURIComponent(`\n\n---\nEnviado por: ${nome}`);
+    window.location.href = `mailto:${EMAIL_FEEDBACK}?subject=${assunto}&body=${corpo}`;
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -59,6 +74,11 @@ export default function Header() {
               ⚙️ Admin
             </button>
           )}
+
+          <button onClick={abrirFeedback} title="Enviar feedback"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+            <MessageSquare size={14} /> Feedback
+          </button>
 
           {user && (
             <button onClick={() => nav('/analise')}
@@ -116,6 +136,16 @@ export default function Header() {
               <l.icon size={16} /> {l.label}
             </button>
           ))}
+          {role === 'admin' && (
+            <button onClick={() => { nav('/admin'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              ⚙️ Admin
+            </button>
+          )}
+          <button onClick={() => { abrirFeedback(); setOpen(false); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+            <MessageSquare size={16} /> Feedback
+          </button>
           {user
             ? <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#ef4444', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
                 <LogOut size={16} /> Sair

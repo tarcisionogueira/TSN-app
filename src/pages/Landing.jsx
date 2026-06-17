@@ -159,14 +159,14 @@ export default function Landing() {
             <p style={{ color: '#64748b', fontSize: 16 }}>Comece gratuitamente, evolua quando precisar</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-            {Object.entries(PLANOS).map(([key, plano]) => (
+            {Object.entries(PLANOS).filter(([, p]) => p.homepage).map(([key, plano]) => (
               <div key={key} style={{ background: 'white', borderRadius: 16, border: plano.destaque ? `2px solid ${plano.cor}` : '1px solid #e2e8f0', padding: '28px 24px', position: 'relative', boxShadow: plano.destaque ? '0 8px 24px rgba(37,99,235,0.15)' : '0 2px 8px rgba(0,0,0,0.05)' }}>
                 {plano.destaque && <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: plano.cor, color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>Mais Popular</div>}
                 <div style={{ fontSize: 14, fontWeight: 700, color: plano.cor, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{plano.nome}</div>
                 <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>
-                  {plano.preco === 0 ? 'Grátis' : `R$ ${plano.preco}`}
+                  {plano.precoLabel}
                 </div>
-                {plano.preco > 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24 }}>/mês</div>}
+                {plano.preco > 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24 }}>{plano.periodicidade}</div>}
                 <div style={{ height: 1, background: '#e2e8f0', margin: '16px 0' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
                   {(plano.recursos || plano.features || []).map(f => (
@@ -184,6 +184,12 @@ export default function Landing() {
                 </button>
               </div>
             ))}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 32 }}>
+            <button onClick={() => nav('/planos')}
+              style={{ padding: '12px 28px', border: '2px solid #2563eb', borderRadius: 10, background: 'transparent', color: '#2563eb', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              Ver todos os planos, incluindo Assessoria e Clube de Negócios →
+            </button>
           </div>
           <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: '#94a3b8' }}>Pagamento via boleto, Pix ou cartão de crédito · Cancele quando quiser</p>
         </div>

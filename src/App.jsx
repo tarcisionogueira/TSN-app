@@ -8,6 +8,7 @@ import Analise from './pages/Analise';
 import Painel from './pages/Painel';
 import Membros from './pages/Membros';
 import Curso from './pages/Curso';
+import Planos from './pages/Planos';
 import Login from './pages/Login';
 import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
@@ -26,6 +27,7 @@ export default function App() {
               <main>
                 <Routes>
                   <Route path="/" element={<Landing />} />
+                  <Route path="/planos" element={<Planos />} />
                   <Route path="/buscar" element={<Busca />} />
                   <Route path="/analise" element={<Analise />} />
                   <Route path="/painel" element={<Painel />} />
