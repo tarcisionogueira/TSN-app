@@ -9,6 +9,7 @@ import { buscarImoveis, buscarLeiloeirosEstado } from '../utils/claude';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
 import { supabase } from '../utils/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
@@ -36,10 +37,21 @@ const PLATAFORMAS = [
 const inp = { width:'100%', padding:'9px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#0f172a', boxSizing:'border-box' };
 const lbl = { fontSize:10, fontWeight:700, color:'#475569', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
 
+const ROLES_SITE   = ['explorador','top1','top2','assessorado','clube','consultor','analista','advogado','admin'];
+const ROLES_ANALISE = ['top1','top2','assessorado','clube','analista','advogado','admin'];
+
+function fmtData(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' }); }
+  catch { return d; }
+}
+
 export default function Busca() {
   const nav = useNavigate();
-  const plano = localStorage.getItem('tsn_plano_membro') || 'gratuito';
-  const isPago = plano === 'analista' || plano === 'gestor';
+  const { role, user } = useAuth();
+  const plano = role || 'explorador';
+  const canSite    = user && ROLES_SITE.includes(role);
+  const canAnalise = user && ROLES_ANALISE.includes(role);
   const [filtros, setFiltros] = useState({ tipo:'', estado:'SP', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] });
   const [buscaCidade, setBuscaCidade] = useState('');
   const [resultados, setResultados] = useState([]);
@@ -389,13 +401,16 @@ export default function Busca() {
                 <br/><strong>Dica:</strong> Selecione <strong>Estado = SP</strong> e clique em Buscar Leilões para começar.
               </div>
             </div>
-            {!isPago && (
+            {!canAnalise && (
               <div style={{ background:'#fef3c7', border:'1px solid #fde68a', borderRadius:12, padding:'12px 16px', display:'flex', gap:10, alignItems:'center' }}>
                 <span style={{ fontSize:16 }}>🔒</span>
                 <div style={{ fontSize:13, color:'#92400e', flex:1 }}>
-                  <strong>Plano Explorador (gratuito):</strong> Você vê os imóveis, o desconto e a flag de viabilidade 🟢/🔴. Para acessar o leiloeiro e gerar análise completa, faça upgrade para o plano <strong>Analista</strong>.
+                  {!user
+                    ? <><strong>Faça login</strong> para acessar o site do leiloeiro e gerar análises completas dos imóveis.</>
+                    : <><strong>Plano Explorador:</strong> Você vê os imóveis e a flag de viabilidade 🟢/🔴. Para gerar análise completa, faça upgrade para o <strong>Plano TOP 1</strong> ou superior.</>
+                  }
                 </div>
-                <button onClick={()=>{}} style={{ padding:'7px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                <button onClick={()=>nav('/planos')} style={{ padding:'7px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                   Ver planos
                 </button>
               </div>
@@ -417,7 +432,7 @@ export default function Busca() {
           <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden' }}>
             {/* Header tabela */}
             <div style={{ display:'grid', gridTemplateColumns:'36px 1fr 100px 120px 120px 80px 200px', gap:0, background:'#f8fafc', borderBottom:'2px solid #e2e8f0', padding:'9px 16px', alignItems:'center' }}>
-              {['','Imóvel / Localização','Modalidade','Lance Mínimo','Avaliação','Desc.','Ações'].map((h,i)=>(
+              {['','Imóvel / Localização','Modalidade','Lance Mínimo','Avaliação','Desc.','Data','Ações'].map((h,i)=>(
                 <div key={i} style={{ fontSize:10, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.4 }}>{h}</div>
               ))}
             </div>
@@ -427,7 +442,7 @@ export default function Busca() {
               const sel = isSelecionado(im.id);
               return (
                 <div key={im.id}
-                  style={{ display:'grid', gridTemplateColumns:'36px 1fr 100px 120px 120px 80px 200px', gap:0, padding:'12px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa', alignItems:'center', transition:'background 0.15s' }}>
+                  style={{ display:'grid', gridTemplateColumns:'36px 1fr 100px 120px 120px 70px 80px 200px', gap:0, padding:'12px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa', alignItems:'center', transition:'background 0.15s' }}>
 
                   {/* Checkbox seleção */}
                   <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}
@@ -479,35 +494,31 @@ export default function Busca() {
                     )}
                   </div>
 
+                  {/* Data */}
+                  <div style={{ fontSize:11, color:'#64748b' }}>{fmtData(im.dataLeilao)}</div>
+
                   {/* Ações */}
                   <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                     {im.urlLote && (
-                      isPago
+                      canSite
                         ? <a href={im.urlLote} target="_blank" rel="noopener noreferrer"
                             style={{ padding:'5px 8px', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', gap:4 }}>
                             <ExternalLink size={11}/> Site
                           </a>
-                        : <span title="Disponível no plano Analista"
+                        : <span title={user ? '' : 'Faça login para acessar o site do leiloeiro'}
                             style={{ padding:'5px 8px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:600, display:'flex', alignItems:'center', gap:4, cursor:'not-allowed' }}>
                             🔒 Site
                           </span>
                     )}
-                    {isPago
+                    {canAnalise
                       ? <button onClick={()=>irParaAnalise(im)}
                           style={{ padding:'5px 10px', background:'#2563eb', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
                           📊 Analisar
                         </button>
-                      : <span title="Disponível no plano Analista"
+                      : <span title="Disponível no nível TOP 1 ou acima"
                           style={{ padding:'5px 10px', background:'#f8fafc', color:'#cbd5e1', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'not-allowed', whiteSpace:'nowrap' }}>
                           🔒 Analisar
                         </span>
-                    }
-                    {plano === 'gestor'
-                      ? <button onClick={()=>marcarArrematado(im)}
-                          style={{ padding:'5px 10px', background:'#10b981', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
-                          ✓ Arrematado
-                        </button>
-                      : null
                     }
                   </div>
                 </div>

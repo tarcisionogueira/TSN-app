@@ -8,12 +8,73 @@ const FEEDBACK_KEY = 'tsn_feedback_email';
 const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 function getEmailFeedback() { return localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL; }
 
+function ModalFeedback({ user, onClose }) {
+  const [msg, setMsg] = React.useState('');
+  const [enviado, setEnviado] = React.useState(false);
+  const nome = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Visitante';
+  const email = user?.email || '';
+
+  function enviar() {
+    if (!msg.trim()) return;
+    const assunto = encodeURIComponent('[Feedback TSN Ativos]');
+    const corpo = encodeURIComponent(msg + '\n\n---\nEnviado por: ' + nome + ' <' + email + '>');
+    window.open('mailto:' + getEmailFeedback() + '?subject=' + assunto + '&body=' + corpo);
+    setEnviado(true);
+    setTimeout(onClose, 1500);
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'white', borderRadius: 16, padding: '28px 28px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+        {enviado ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ fontSize: 40 }}>✅</div>
+            <p style={{ fontWeight: 700, color: '#0f172a', marginTop: 12 }}>Feedback enviado!</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontWeight: 800, fontSize: 18, color: '#0f172a' }}>Enviar Feedback</h3>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 20, lineHeight: 1 }}>✕</button>
+            </div>
+            {user && (
+              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+                <strong>{nome}</strong> · {email}
+              </div>
+            )}
+            <textarea
+              value={msg}
+              onChange={e => setMsg(e.target.value)}
+              placeholder="Descreva sua sugestão, problema ou elogio..."
+              style={{ width: '100%', minHeight: 130, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button onClick={onClose} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={enviar} disabled={!msg.trim()} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#0f172a', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: msg.trim() ? 1 : 0.5 }}>
+                Enviar Feedback →
+              </button>
+            </div>
+            <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
+              Seu feedback será enviado para {getEmailFeedback()}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
   const { user, role } = useAuth();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   const linksPublicos = [
     { path: '/', label: 'Home', icon: Home },
@@ -30,12 +91,7 @@ export default function Header() {
 
   const active = (p) => loc.pathname === p;
 
-  const abrirFeedback = () => {
-    const nome = user?.user_metadata?.nome || user?.email || 'Visitante';
-    const assunto = encodeURIComponent('[Feedback TSN Ativos]');
-    const corpo = encodeURIComponent(`\n\n---\nEnviado por: ${nome}`);
-    window.location.href = `mailto:${getEmailFeedback()}?subject=${assunto}&body=${corpo}`;
-  };
+  const abrirFeedback = () => setShowFeedback(true);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -157,6 +213,8 @@ export default function Header() {
           }
         </div>
       )}
+
+      {showFeedback && <ModalFeedback user={user} onClose={() => setShowFeedback(false)} />}
 
       <style>{`
         @media (max-width: 768px) {
