@@ -4,8 +4,9 @@ import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, Gradua
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
-// E-mail que recebe os feedbacks dos usuários (altere aqui se precisar)
-const EMAIL_FEEDBACK = 'tarcisioaraujo@reimob.com.br';
+const FEEDBACK_KEY = 'tsn_feedback_email';
+const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
+function getEmailFeedback() { return localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL; }
 
 export default function Header() {
   const nav = useNavigate();
@@ -33,7 +34,7 @@ export default function Header() {
     const nome = user?.user_metadata?.nome || user?.email || 'Visitante';
     const assunto = encodeURIComponent('[Feedback TSN Ativos]');
     const corpo = encodeURIComponent(`\n\n---\nEnviado por: ${nome}`);
-    window.location.href = `mailto:${EMAIL_FEEDBACK}?subject=${assunto}&body=${corpo}`;
+    window.location.href = `mailto:${getEmailFeedback()}?subject=${assunto}&body=${corpo}`;
   };
 
   const handleLogout = async () => {
