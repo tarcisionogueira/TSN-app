@@ -30,6 +30,15 @@ export function AuthProvider({ children }) {
       const u = session?.user ?? null;
       setUser(u);
       setRole(await fetchRole(u?.id));
+      // Vincula o cliente ao consultor que o indicou (link de afiliado),
+      // inclusive no login Google onde o trigger não recebe o código.
+      if (u) {
+        const ref = sessionStorage.getItem('tsn_ref_codigo');
+        if (ref) {
+          try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}
+          sessionStorage.removeItem('tsn_ref_codigo');
+        }
+      }
     });
 
     return () => subscription.unsubscribe();

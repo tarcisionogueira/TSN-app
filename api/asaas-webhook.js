@@ -31,7 +31,14 @@ export default async function handler(req, res) {
 
   const plano = PLANO_POR_VALOR[Math.round(valor)] || 'top1';
 
-  // Atualiza perfil no Supabase pelo email
+  // Localiza o perfil do cliente (precisamos do id para a comissão de afiliado)
+  const { data: cliente } = await supabase
+    .from('perfis')
+    .select('id, indicado_por')
+    .eq('email', email)
+    .single();
+
+  // Atualiza plano do cliente
   const { error } = await supabase
     .from('perfis')
     .update({ plano, asaas_id: pagamento.customer?.id })
@@ -40,6 +47,51 @@ export default async function handler(req, res) {
   if (error) {
     console.error('Webhook Supabase error:', error.message);
     return res.status(500).json({ error: error.message });
+  }
+
+  // ── Comissão de afiliado (consultor) ──
+  // Se o cliente foi indicado por um consultor, registra a comissão recorrente
+  // sobre a assinatura paga. A fatia sai da parte da TSN.
+  if (cliente?.indicado_por) {
+    try {
+      const { data: consultor } = await supabase
+        .from('perfis')
+        .select('comissao_afiliado_pct, role')
+        .eq('id', cliente.indicado_por)
+        .single();
+
+      if (consultor?.role === 'consultor') {
+        const pct = Number(consultor.comissao_afiliado_pct || 0);
+        if (pct > 0) {
+          const valorComissao = Number((valor * pct / 100).toFixed(2));
+          // Evita duplicar comissão para o mesmo pagamento
+          const { data: existente } = await supabase
+            .from('comissoes')
+            .select('id')
+            .eq('asaas_payment_id', pagamento.id)
+            .maybeSingle();
+
+          if (!existente) {
+            await supabase.from('comissoes').insert({
+              beneficiario_id: cliente.indicado_por,
+              cliente_id: cliente.id,
+              tipo: 'afiliado',
+              origem: 'assinatura',
+              referencia: `Assinatura ${plano}`,
+              valor_base: valor,
+              percentual: pct,
+              valor_comissao: valorComissao,
+              competencia: new Date().toISOString().slice(0, 10),
+              status: 'pendente',
+              asaas_payment_id: pagamento.id,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Comissão afiliado error:', e.message);
+      // não falha o webhook por causa da comissão
+    }
   }
 
   return res.status(200).json({ ok: true, plano });

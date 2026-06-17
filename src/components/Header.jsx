@@ -125,6 +125,13 @@ export default function Header() {
             </button>
           ))}
 
+          {(role === 'consultor' || role === 'admin') && (
+            <button onClick={() => nav('/consultor')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/consultor') ? '#059669' : '#05966922', color: '#6ee7b7', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              🤝 Consultor
+            </button>
+          )}
+
           {role === 'admin' && (
             <button onClick={() => nav('/admin')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/admin') ? '#7c3aed' : '#7c3aed22', color: '#c4b5fd', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -193,6 +200,12 @@ export default function Header() {
               <l.icon size={16} /> {l.label}
             </button>
           ))}
+          {(role === 'consultor' || role === 'admin') && (
+            <button onClick={() => { nav('/consultor'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#6ee7b7', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              🤝 Consultor
+            </button>
+          )}
           {role === 'admin' && (
             <button onClick={() => { nav('/admin'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
