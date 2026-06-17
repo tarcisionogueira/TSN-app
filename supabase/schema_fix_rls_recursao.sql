@@ -35,6 +35,8 @@ $$;
 -- 3. Recria as políticas de perfis sem recursão
 drop policy if exists "Admin lê todos"               on public.perfis;
 drop policy if exists "Admin lê todos os perfis"      on public.perfis;
+drop policy if exists "Admin le todos perfis"         on public.perfis;
+drop policy if exists "Admin gerencia perfis"         on public.perfis;
 drop policy if exists "Usuário lê próprio perfil"     on public.perfis;
 drop policy if exists "Usuário atualiza próprio perfil" on public.perfis;
 drop policy if exists "Admin atualiza perfis"         on public.perfis;
