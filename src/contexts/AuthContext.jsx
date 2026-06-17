@@ -26,13 +26,14 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const u = session?.user ?? null;
       setUser(u);
       setRole(await fetchRole(u?.id));
       // Vincula o cliente ao consultor que o indicou (link de afiliado),
       // inclusive no login Google onde o trigger não recebe o código.
-      if (u) {
+      // Só tenta no sign-in real (não em token refresh, user_updated, etc.)
+      if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
         const ref = sessionStorage.getItem('tsn_ref_codigo');
         if (ref) {
           try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}

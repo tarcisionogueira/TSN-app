@@ -31,7 +31,7 @@ function CopyBtn({ texto }) {
 
 export default function Consultor() {
   const nav = useNavigate();
-  const { user, role } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
   const podeVer = ROLES_CONSULTOR.includes(role);
 
   const [perfil, setPerfil] = useState(null);
@@ -60,9 +60,13 @@ export default function Consultor() {
   }, [user, podeVer]);
 
   const gerarCodigo = async () => {
-    const { data } = await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id });
+    const { data, error } = await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id });
+    if (error) { alert('Erro ao gerar código: ' + error.message); return; }
     if (data) setPerfil(p => ({ ...p, codigo_indicacao: data }));
   };
+
+  // Aguarda auth e dados carregarem antes de avaliar autorização (evita flash de tela errada)
+  if (authLoading || loading) return <div style={{ textAlign:'center', padding:'80px', color:'#94a3b8' }}>Carregando…</div>;
 
   if (!user) {
     return (
@@ -83,8 +87,6 @@ export default function Consultor() {
       </div>
     );
   }
-
-  if (loading) return <div style={{ textAlign:'center', padding:'80px', color:'#94a3b8' }}>Carregando…</div>;
 
   const codigo = perfil?.codigo_indicacao;
   const origin = window.location.origin;

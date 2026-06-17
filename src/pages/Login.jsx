@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
@@ -12,12 +12,21 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 export default function Login() {
   const nav = useNavigate();
   const loc = useLocation();
+  // HashRouter coloca query params dentro do hash, ex: /#/login?ref=ABC
+  // useLocation().search parseia corretamente dentro do hash
   const params = new URLSearchParams(loc.search);
   const planoEscolhido = params.get('plano');
-  // Código de indicação do consultor (link de afiliado ?ref=CODIGO).
-  // Persiste para sobreviver ao fluxo de cadastro / login com Google.
-  const refCodigo = (params.get('ref') || sessionStorage.getItem('tsn_ref_codigo') || '').toUpperCase();
-  if (params.get('ref')) sessionStorage.setItem('tsn_ref_codigo', params.get('ref').toUpperCase());
+  const refParam = params.get('ref')?.toUpperCase() || '';
+  const [refCodigo] = useState(() => {
+    const stored = sessionStorage.getItem('tsn_ref_codigo') || '';
+    return refParam || stored;
+  });
+
+  // Persiste o ref em sessionStorage para sobreviver ao OAuth redirect (useEffect garante render-phase seguro)
+  useEffect(() => {
+    if (refParam) sessionStorage.setItem('tsn_ref_codigo', refParam);
+  }, [refParam]);
+
   const [modo, setModo] = useState(planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
@@ -33,9 +42,12 @@ export default function Login() {
 
   const handleGoogle = async () => {
     if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
+    // Salva ref antes do redirect OAuth (sessionStorage pode ser limpo em alguns browsers)
+    if (refCodigo) sessionStorage.setItem('tsn_ref_codigo', refCodigo);
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/` },
+      // Redireciona para a raiz com hash; o HashRouter vai montar em /#/
+      options: { redirectTo: `${window.location.origin}/${window.location.pathname.replace(/\/$/, '')}#/` },
     });
   };
 
