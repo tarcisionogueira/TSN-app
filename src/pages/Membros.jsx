@@ -4,7 +4,8 @@ import {
   Play, Lock, CheckCircle2, Clock, BookOpen, Star, Users,
   ChevronRight, Award, Zap, Crown, Search, Filter,
 } from 'lucide-react';
-import { CURSOS, CATEGORIAS, PLANOS, PACOTE, EBOOKS } from '../data/cursos';
+import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
+import { supabase } from '../utils/supabase';
 
 // Progresso salvo no localStorage
 function getProgresso() {
@@ -17,7 +18,6 @@ function getPlano() {
 
 function podeAssistir(licao, planAtual) {
   if (licao.gratis) return true;
-  // Planos com acesso a todos os cursos gravados
   return planAtual === 'assessorado' || planAtual === 'clube';
 }
 
@@ -28,16 +28,41 @@ export default function Membros() {
   const [progresso, setProgresso] = useState(getProgresso());
   const [plano, setPlano] = useState(getPlano());
   const [showPlanos, setShowPlanos] = useState(false);
+  const [cursos, setCursos] = useState([]);
+  const [ebooks, setEbooks] = useState([]);
 
-  const cursosFiltrados = CURSOS.filter(c => {
+  useEffect(() => {
+    async function fetchData() {
+      const { data: cs } = await supabase.from('cursos_admin').select('*').eq('ativo', true).order('ordem');
+      const { data: as } = await supabase.from('aulas_admin').select('*').order('ordem');
+      const { data: es } = await supabase.from('ebooks_admin').select('id').eq('ativo', true);
+
+      const cursosComModulos = (cs || []).map(c => {
+        const aulasC = (as || []).filter(a => a.curso_id === c.id);
+        const modulosMap = {};
+        aulasC.forEach(a => {
+          const mod = a.modulo || 'Módulo 1';
+          if (!modulosMap[mod]) modulosMap[mod] = { titulo: mod, licoes: [] };
+          modulosMap[mod].licoes.push({ id: a.id, titulo: a.titulo, descricao: a.descricao, video_url: a.video_url, duracao: a.duracao, gratis: a.gratis });
+        });
+        return { ...c, bg: c.cor + '20', modulos: Object.values(modulosMap), aulas: aulasC.length };
+      });
+
+      setCursos(cursosComModulos);
+      setEbooks(es || []);
+    }
+    fetchData();
+  }, []);
+
+  const cursosFiltrados = cursos.filter(c => {
     const matchCat = categoria === 'Todos' || c.categoria === categoria;
-    const matchBusca = !busca || c.titulo.toLowerCase().includes(busca.toLowerCase()) || c.descricao.toLowerCase().includes(busca.toLowerCase());
+    const matchBusca = !busca || c.titulo.toLowerCase().includes(busca.toLowerCase()) || (c.descricao || '').toLowerCase().includes(busca.toLowerCase());
     return matchCat && matchBusca;
   });
 
-  const totalAulas = CURSOS.reduce((s, c) => s + c.aulas, 0);
+  const totalAulas = cursos.reduce((s, c) => s + c.aulas, 0);
   const aulasConcluidas = Object.keys(progresso).filter(k => progresso[k]).length;
-  const cursosDestaques = CURSOS.filter(c => c.destaque);
+  const cursosDestaques = cursos.filter(c => c.destaque);
 
   const NIVEL_COR = { 'Iniciante':'#10b981', 'Intermediário':'#f59e0b', 'Avançado':'#ef4444' };
 
@@ -67,14 +92,14 @@ export default function Membros() {
             Sua trilha de conhecimento<br/>em leilões imobiliários
           </h1>
           <p style={{ margin:'0 0 24px', fontSize:15, color:'#94a3b8', maxWidth:500, lineHeight:1.7 }}>
-            Do zero ao portfólio profissional. {CURSOS.length} cursos, {totalAulas} aulas com metodologia exclusiva TSN Ativos.
+            Do zero ao portfólio profissional. {cursos.length} cursos, {totalAulas} aulas com metodologia exclusiva TSN Ativos.
           </p>
           <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
               {[
                 [totalAulas, 'Aulas'],
-                [CURSOS.length, 'Cursos'],
-                [EBOOKS.length, 'eBooks'],
+                [cursos.length, 'Cursos'],
+                [ebooks.length, 'eBooks'],
                 [aulasConcluidas, 'Concluídas'],
                 ['∞', 'Acesso'],
               ].map(([v,l])=>(
@@ -112,7 +137,6 @@ export default function Membros() {
                   <div style={{ fontWeight:900, fontSize:16, color:'#0f172a', marginBottom:4 }}>{c.titulo}</div>
                   <div style={{ fontSize:12, color:'#64748b', lineHeight:1.5, marginBottom:8 }}>{c.subtitulo}</div>
                   <div style={{ display:'flex', gap:12, fontSize:11, color:'#94a3b8' }}>
-                    <span><Clock size={11}/> {c.duracao}</span>
                     <span><BookOpen size={11}/> {c.aulas} aulas</span>
                     <span style={{ marginLeft:'auto', fontWeight:800, color:c.preco===0?'#10b981':c.cor }}>
                       {c.preco===0?'Gratuito':`R$ ${c.preco}`}
@@ -176,7 +200,6 @@ export default function Membros() {
 
                 <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
                   <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, background:'#f1f5f9', color:NIVEL_COR[c.nivel]||'#64748b', border:`1px solid ${NIVEL_COR[c.nivel]}40` }}>{c.nivel}</span>
-                  <span style={{ fontSize:10, fontWeight:600, padding:'3px 8px', borderRadius:20, background:'#f8fafc', color:'#64748b', display:'flex', alignItems:'center', gap:3 }}><Clock size={10}/> {c.duracao}</span>
                   <span style={{ fontSize:10, fontWeight:600, padding:'3px 8px', borderRadius:20, background:'#f8fafc', color:'#64748b', display:'flex', alignItems:'center', gap:3 }}><BookOpen size={10}/> {c.aulas} aulas</span>
                 </div>
 
