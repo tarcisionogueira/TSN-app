@@ -40,10 +40,11 @@ const lbl = { fontSize:10, fontWeight:700, color:'#475569', display:'block', mar
 const ROLES_SITE   = ['explorador','top1','top2','assessorado','clube','consultor','analista','advogado','admin'];
 const ROLES_ANALISE = ['top1','top2','assessorado','clube','analista','advogado','admin'];
 
-function fmtData(d) {
-  if (!d) return '—';
-  try { return new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' }); }
-  catch { return d; }
+function fmtData(d, modalidade) {
+  if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
 }
 
 export default function Busca() {
@@ -109,6 +110,8 @@ export default function Busca() {
           descontoPercentual: im.desconto_percentual,
           areaM2: im.area_m2,
           descricao: im.descricao,
+          // url_lote = link direto para o lote; fallback para link_edital (edital do leilão)
+          urlLote: im.url_lote || im.link_edital,
           linkEdital: im.link_edital,
           foto: im.link_foto,
           leiloeiro: im.leiloeiro,
@@ -116,6 +119,7 @@ export default function Busca() {
           pagamento: [im.forma_pagamento],
           viavel: im.viavel,
           scoreViabilidade: im.score_viabilidade,
+          fracionado: im.fracionado,
           fonte: im.fonte,
         }));
         setResultados(mapeados);
@@ -369,7 +373,7 @@ export default function Busca() {
           <div>
             <h1 style={{ margin:0, fontSize:18, fontWeight:900, color:'#0f172a' }}>Busca de Imóveis em Leilão</h1>
             <p style={{ margin:'4px 0 0', fontSize:12, color:'#64748b' }}>
-              {loading ? 'Buscando leilões com IA...'
+              {loading ? 'Buscando leilões...'
                 : buscaFeita ? `${resultadosFiltrados.length} imóvel(is) encontrado(s)`
                 : 'Configure os filtros e clique em Buscar Leilões'}
             </p>
@@ -397,8 +401,8 @@ export default function Busca() {
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'14px 18px', display:'flex', gap:10 }}>
               <AlertCircle size={16} color="#2563eb" style={{flexShrink:0,marginTop:1}}/>
               <div style={{ fontSize:13, color:'#1e40af', lineHeight:1.7 }}>
-                <strong>Como funciona:</strong> A IA busca leilões reais publicados em plataformas como Caixa Econômica, Sold, Biasi e leiloeiros das Juntas Comerciais.
-                <br/><strong>Dica:</strong> Selecione <strong>Estado = SP</strong> e clique em Buscar Leilões para começar.
+                <strong>Como funciona:</strong> Buscamos leilões publicados em plataformas como Caixa Econômica, Sold, Biasi e leiloeiros credenciados pelas Juntas Comerciais.
+                <br/><strong>Dica:</strong> Selecione um <strong>Estado</strong> e clique em Buscar Leilões para começar.
               </div>
             </div>
             {!canAnalise && (
@@ -430,9 +434,9 @@ export default function Busca() {
         {/* Resultados em lista */}
         {!loading && resultadosFiltrados.length>0 && (
           <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden' }}>
-            {/* Header tabela */}
-            <div style={{ display:'grid', gridTemplateColumns:'36px 1fr 100px 120px 120px 80px 200px', gap:0, background:'#f8fafc', borderBottom:'2px solid #e2e8f0', padding:'9px 16px', alignItems:'center' }}>
-              {['','Imóvel / Localização','Modalidade','Lance Mínimo','Avaliação','Desc.','Data','Ações'].map((h,i)=>(
+            {/* Header tabela — colunas: checkbox | imóvel | modalidade | lance | avaliação | desc | data | ações */}
+            <div style={{ display:'grid', gridTemplateColumns:'36px 1fr 110px 120px 120px 72px 90px 190px', gap:0, background:'#f8fafc', borderBottom:'2px solid #e2e8f0', padding:'9px 16px', alignItems:'center' }}>
+              {['','Imóvel / Localização','Modalidade','Lance Mín.','Avaliação','Desc.','Data','Ações'].map((h,i)=>(
                 <div key={i} style={{ fontSize:10, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.4 }}>{h}</div>
               ))}
             </div>
@@ -442,7 +446,7 @@ export default function Busca() {
               const sel = isSelecionado(im.id);
               return (
                 <div key={im.id}
-                  style={{ display:'grid', gridTemplateColumns:'36px 1fr 100px 120px 120px 70px 80px 200px', gap:0, padding:'12px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa', alignItems:'center', transition:'background 0.15s' }}>
+                  style={{ display:'grid', gridTemplateColumns:'36px 1fr 110px 120px 120px 72px 90px 190px', gap:0, padding:'12px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa', alignItems:'center', transition:'background 0.15s' }}>
 
                   {/* Checkbox seleção */}
                   <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}
@@ -450,7 +454,14 @@ export default function Busca() {
 
                   {/* Info do imóvel */}
                   <div style={{ paddingRight:12 }}>
-                    <div style={{ fontWeight:700, color:'#0f172a', fontSize:13, lineHeight:1.2 }}>{im.titulo||im.nome}</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:700, color:'#0f172a', fontSize:13, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
+                      {im.fracionado && (
+                        <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>
+                          ⚠ Fracionado
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize:11, color:'#64748b', marginTop:2, display:'flex', alignItems:'center', gap:4 }}>
                       <MapPin size={10}/> {im.endereco||'—'}{im.cidade?', '+im.cidade:''}
                     </div>
@@ -458,7 +469,7 @@ export default function Busca() {
                       {im.areaM2>0 && <span style={{ fontSize:10, color:'#8b5cf6', fontWeight:600 }}>{im.areaM2}m²</span>}
                       {(im.pagamento||[]).map(p=>(
                         <span key={p} style={{ fontSize:9, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:10, fontWeight:600 }}>
-                          {p==='aVista'?'À Vista':p==='financiado'?'Financ.':'Hipot.'}
+                          {p==='a_vista'||p==='aVista'?'À Vista':p==='financiado'?'Financ.':'Hipot.'}
                         </span>
                       ))}
                       <span style={{ fontSize:9, color:'#94a3b8' }}>{im.plataforma||im.leiloeiro}</span>
@@ -495,7 +506,7 @@ export default function Busca() {
                   </div>
 
                   {/* Data */}
-                  <div style={{ fontSize:11, color:'#64748b' }}>{fmtData(im.dataLeilao)}</div>
+                  <div style={{ fontSize:11, color:'#64748b' }}>{fmtData(im.dataLeilao, im.modalidade)}</div>
 
                   {/* Ações */}
                   <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>

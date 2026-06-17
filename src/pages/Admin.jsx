@@ -294,7 +294,7 @@ function CursosTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // EBOOKS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', gratuito: true }; }
+function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '' }; }
 
 function EbooksTab() {
   const [ebooks, setEbooks] = useState([]);
@@ -330,7 +330,7 @@ function EbooksTab() {
     if (!form.titulo.trim()) return alert('Informe o título.');
     setSaving(true);
     try {
-      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', gratuito: form.gratuito || false, ativo: form.ativo !== false };
+      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, ativo: form.ativo !== false };
       if (modal === 'new') {
         const { error } = await supabase.from('ebooks_admin').insert(payload);
         if (error) throw error;
@@ -369,7 +369,7 @@ function EbooksTab() {
                   {ebooks.map(e => (
                     <tr key={e.id}>
                       <td style={S.td}><strong>{e.titulo}</strong><br /><span style={{ fontSize: 12, color: '#94a3b8' }}>{e.descricao?.slice(0, 60)}</span></td>
-                      <td style={S.td}><span style={{ ...S.badge(e.gratuito), background: e.gratuito ? '#dcfce7' : '#dbeafe', color: e.gratuito ? '#166534' : '#1e40af' }}>{e.gratuito ? 'Gratuito' : 'Pago'}</span></td>
+                      <td style={S.td}>{!e.preco || Number(e.preco) === 0 ? <span style={{ ...S.badge(true), background: '#dcfce7', color: '#166534' }}>Gratuito</span> : `R$ ${e.preco}`}</td>
                       <td style={S.td}><span style={S.badge(e.ativo)}>{e.ativo ? 'Ativo' : 'Inativo'}</span></td>
                       <td style={S.td}>
                         <div style={{ display: 'flex', gap: 6 }}>
@@ -399,16 +399,17 @@ function EbooksTab() {
               <textarea style={{ ...S.input, height: 72, resize: 'vertical' }} value={form.descricao || ''} onChange={e => setForm({ ...form, descricao: e.target.value })} />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>URL da capa (imagem)</label>
-              <input style={S.input} value={form.capa_url || ''} onChange={e => setForm({ ...form, capa_url: e.target.value })} placeholder="https://..." />
+              <label style={S.label}>URL da capa (imagem) — aparece como miniatura na Área de Membros</label>
+              <input style={S.input} value={form.capa_url || ''} onChange={e => setForm({ ...form, capa_url: e.target.value })} placeholder="https://... (link da imagem da capa)" />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>URL do arquivo (PDF)</label>
-              <input style={S.input} value={form.arquivo_url || ''} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} placeholder="https://..." />
+              <label style={S.label}>URL do arquivo (PDF) — abre no leitor estilo Kindle</label>
+              <input style={S.input} value={form.arquivo_url || ''} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} placeholder="https://... (link do PDF no Drive)" />
             </div>
-            <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, color: '#374151', marginBottom: 20 }}>
-              <input type="checkbox" checked={form.gratuito} onChange={e => setForm({ ...form, gratuito: e.target.checked })} /> Disponível gratuitamente
-            </label>
+            <div style={{ marginBottom: 20 }}>
+              <label style={S.label}>Preço (R$) — deixe 0 ou em branco para gratuito</label>
+              <input style={S.input} type="number" min="0" step="0.01" value={form.preco ?? ''} onChange={e => setForm({ ...form, preco: e.target.value })} placeholder="0,00" />
+            </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button style={S.btn('outline')} onClick={() => setModal(null)}>Cancelar</button>
               <button style={S.btn('primary')} onClick={saveForm} disabled={saving}>{saving ? 'Salvando...' : 'Salvar eBook'}</button>
