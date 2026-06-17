@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2, BarChart3, TrendingUp, DollarSign, Plus, Trash2,
   ChevronDown, ChevronUp, CheckCircle2, Clock, XCircle, Home,
   LayoutGrid, Warehouse, ArrowUpCircle, ArrowDownCircle, X, Save,
   FileText, Scale, CalendarClock, ShieldCheck, Printer, Sparkles, Hourglass,
+  Users,
 } from 'lucide-react';
 import { loadImoveis, saveImoveis, loadFavoritos } from '../utils/storage';
 import { fmt, fmtPct } from '../utils/calculos';
 import { useAuth } from '../contexts/AuthContext';
 import { gerarPDFFinanceiro } from '../components/RelatorioFinanceiroPDF';
+import { supabase } from '../utils/supabase';
 
 // Tipos de avaliação disponíveis na aba "Em Análise"
 const AVALIACOES = [
@@ -20,14 +22,14 @@ const AVALIACOES = [
 
 const ROLES_ANALISTA = ['analista','advogado','admin'];
 
-// Estado de uma avaliação considerando o prazo de 24h
-function statusAvaliacao(av) {
-  if (!av || !av.status) return { st:'disponivel', l:'Disponível', c:'#64748b', bg:'#f1f5f9' };
-  if (av.status === 'concluido') return { st:'concluido', l:'Laudo pronto', c:'#10b981', bg:'#d1fae5' };
-  // em_andamento: verifica se o prazo de 24h já passou
-  if (av.prazoAte && Date.now() >= new Date(av.prazoAte).getTime())
+// Estado de uma solicitação (row do Supabase)
+function statusAvaliacao(solic) {
+  if (!solic) return { st:'disponivel', l:'Disponível', c:'#64748b', bg:'#f1f5f9' };
+  if (solic.status === 'concluido') return { st:'concluido', l:'Laudo pronto', c:'#10b981', bg:'#d1fae5' };
+  if (solic.prazo_ate && Date.now() >= new Date(solic.prazo_ate).getTime())
     return { st:'concluido', l:'Laudo pronto', c:'#10b981', bg:'#d1fae5' };
-  return { st:'em_andamento', l:'Em andamento (24h)', c:'#f59e0b', bg:'#fef3c7' };
+  if (solic.status === 'em_andamento') return { st:'em_andamento', l:'Em andamento (24h)', c:'#f59e0b', bg:'#fef3c7' };
+  return { st:'disponivel', l:'Disponível', c:'#64748b', bg:'#f1f5f9' };
 }
 
 function diasAteLeilao(dataLeilao) {
@@ -183,17 +185,57 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
 
 export default function Painel() {
   const nav = useNavigate();
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const isAnalista = ROLES_ANALISTA.includes(role);
   const [imoveis, setImoveis] = useState([]);
-  const [aba, setAba] = useState('arrematacoes'); // 'arrematacoes' | 'analise' | 'lancamentos'
+  const [aba, setAba] = useState('arrematacoes');
   const [controleAberto, setControleAberto] = useState(null);
-  const [agendando, setAgendando] = useState(null); // imovelId em agendamento
+  const [agendando, setAgendando] = useState(null);
   const [dataAgenda, setDataAgenda] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
   const [novoLanc, setNovoLanc] = useState({ data: new Date().toISOString().slice(0,10), tipo:'saida', categoria:'Outros', imovelId:'', descricao:'', valor:'' });
 
+  // Supabase state for Em Análise workflow
+  const [solicitacoes, setSolicitacoes] = useState([]); // do próprio user (ou todas, se analista)
+  const [agendamentos, setAgendamentos] = useState([]); // idem
+  const [todasSolics, setTodasSolics] = useState([]);   // analista: todos os clientes
+  const [todosAgends, setTodosAgends] = useState([]);   // analista: todos os clientes
+  const [loadingAnalise, setLoadingAnalise] = useState(false);
+
   useEffect(() => { setImoveis(loadImoveis()); }, []);
+
+  const carregarAnalise = useCallback(async () => {
+    if (!user) return;
+    setLoadingAnalise(true);
+    try {
+      const [{ data: solics }, { data: agends }] = await Promise.all([
+        supabase.from('solicitacoes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('agendamentos').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      ]);
+      setSolicitacoes(solics || []);
+      setAgendamentos(agends || []);
+
+      if (isAnalista) {
+        const [{ data: ts }, { data: ta }] = await Promise.all([
+          supabase.from('solicitacoes').select('*').neq('user_id', user.id).in('status', ['solicitado','em_andamento']).order('created_at', { ascending: false }),
+          supabase.from('agendamentos').select('*').neq('user_id', user.id).in('status', ['solicitado','confirmado']).order('created_at', { ascending: false }),
+        ]);
+        // Busca nomes dos clientes
+        const allUserIds = [...new Set([...(ts||[]), ...(ta||[])].map(r => r.user_id))];
+        let perfisMapa = {};
+        if (allUserIds.length > 0) {
+          const { data: ps } = await supabase.from('perfis').select('id,nome').in('id', allUserIds);
+          (ps||[]).forEach(p => { perfisMapa[p.id] = p.nome; });
+        }
+        setTodasSolics((ts||[]).map(r => ({ ...r, cliente_nome: perfisMapa[r.user_id] || r.user_id.slice(0,8) })));
+        setTodosAgends((ta||[]).map(r => ({ ...r, cliente_nome: perfisMapa[r.user_id] || r.user_id.slice(0,8) })));
+      }
+    } finally {
+      setLoadingAnalise(false);
+    }
+  }, [user, isAnalista]);
+
+  useEffect(() => { carregarAnalise(); }, [carregarAnalise]);
 
   const atualizarImovel = (imAtualizado) => {
     const updated = imoveis.map(i => i.id===imAtualizado.id ? imAtualizado : i);
@@ -231,35 +273,64 @@ export default function Painel() {
     atualizarImovel(updated);
   };
 
-  // ── Workflow "Em Análise" ──
-  const solicitarAvaliacao = (im, tipo) => {
-    const via = AVALIACOES.find(a => a.key === tipo)?.via;
-    if (via === 'analise') { nav('/analise', { state:{ imovel:im } }); return; }
-    // Processual (integração): inicia prazo de 24h
-    const agora = new Date();
-    const prazoAte = new Date(agora.getTime() + 24*3600*1000).toISOString();
-    const avaliacoes = { ...(im.avaliacoes||{}), [tipo]: { status:'em_andamento', solicitadoEm:agora.toISOString(), prazoAte } };
-    atualizarImovel({ ...im, avaliacoes });
+  // ── Workflow "Em Análise" (Supabase) ──
+  const solicitarAvaliacao = async (im, tipo) => {
+    const av = AVALIACOES.find(a => a.key === tipo);
+    if (av?.via === 'analise') { nav('/analise', { state:{ imovel:im } }); return; }
+    // Processual: registra no Supabase com prazo de 24h
+    const prazoAte = new Date(Date.now() + 24*3600*1000).toISOString();
+    const { error } = await supabase.from('solicitacoes').insert({
+      user_id: user.id,
+      imovel_ref: im.id,
+      imovel_nome: im.nome || im.endereco || 'Imóvel',
+      imovel_cidade: im.cidade || '',
+      tipo,
+      status: 'em_andamento',
+      prazo_ate: prazoAte,
+    });
+    if (!error) carregarAnalise();
+    else alert('Erro ao solicitar avaliação. Tente novamente.');
   };
 
-  const agendarAnalista = (im) => {
+  const agendarAnalista = async (im) => {
     if (!dataAgenda) return;
     const dias = diasAteLeilao(im.dataLeilao);
-    const antecedenciaOk = (() => {
-      if (!im.dataLeilao) return true;
+    if (im.dataLeilao) {
       const dAgenda = new Date(dataAgenda);
       const dLeilao = new Date(im.dataLeilao);
-      return Math.ceil((dLeilao - dAgenda) / 86400000) >= 7;
-    })();
-    if (!antecedenciaOk) { alert('A reunião deve ser agendada com no mínimo 7 dias de antecedência do leilão.'); return; }
+      if (Math.ceil((dLeilao - dAgenda) / 86400000) < 7) {
+        alert('A reunião deve ser agendada com no mínimo 7 dias de antecedência do leilão.'); return;
+      }
+    }
     if (dias != null && dias < 7) { alert('Este leilão ocorre em menos de 7 dias — não é possível agendar aprovação com analista.'); return; }
-    atualizarImovel({ ...im, agendamento: { data:dataAgenda, status:'solicitado', solicitadoEm:new Date().toISOString() } });
-    setAgendando(null); setDataAgenda('');
+
+    // Upsert: cancela agendamento anterior do mesmo imóvel e cria novo
+    const agExistente = agendamentos.find(a => a.imovel_ref === im.id && a.status === 'solicitado');
+    if (agExistente) {
+      await supabase.from('agendamentos').update({ status:'cancelado', updated_at: new Date().toISOString() }).eq('id', agExistente.id);
+    }
+    const { error } = await supabase.from('agendamentos').insert({
+      user_id: user.id,
+      imovel_ref: im.id,
+      imovel_nome: im.nome || im.endereco || 'Imóvel',
+      imovel_cidade: im.cidade || '',
+      data_agendamento: dataAgenda,
+      status: 'solicitado',
+    });
+    if (!error) { carregarAnalise(); setAgendando(null); setDataAgenda(''); }
+    else alert('Erro ao agendar. Tente novamente.');
   };
 
-  const aprovarEncaminhar = (im) => {
+  const aprovarEncaminhar = async (agendId) => {
     if (!confirm('Aprovar a análise e encaminhar ao jurídico?')) return;
-    atualizarImovel({ ...im, status:'aprovado', agendamento: { ...(im.agendamento||{}), status:'encaminhado_juridico', aprovadoEm:new Date().toISOString(), aprovadoPor:role } });
+    const { error } = await supabase.from('agendamentos').update({
+      status: 'encaminhado_juridico',
+      aprovado_por: user.id,
+      aprovado_em: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', agendId);
+    if (!error) carregarAnalise();
+    else alert('Erro ao aprovar. Tente novamente.');
   };
 
   // Cálculos por imóvel
@@ -293,8 +364,14 @@ export default function Painel() {
     gerarPDFFinanceiro({ grupos: lancamentosPorImovel, totalEntradas, totalSaidas });
   };
 
-  // Imóveis em fluxo de análise (ainda não arrematados)
-  const emAnalise = imoveis.filter(im => ['analise','aprovado','reprovado'].includes(im.status || 'analise'));
+  // Imóveis em fluxo de análise — enriquecidos com dados do Supabase
+  const emAnalise = imoveis
+    .filter(im => ['analise','aprovado','reprovado'].includes(im.status || 'analise'))
+    .map(im => ({
+      ...im,
+      _solics: solicitacoes.filter(s => s.imovel_ref === im.id),
+      _agend: agendamentos.find(a => a.imovel_ref === im.id && a.status !== 'cancelado'),
+    }));
 
   const filtrados = imoveis.filter(im => !filtroStatus || im.status===filtroStatus);
 
@@ -452,6 +529,62 @@ export default function Painel() {
       {/* === ABA EM ANÁLISE === */}
       {aba==='analise' && (
         <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', overflow:'hidden' }}>
+
+          {/* Painel do analista: solicitações e agendamentos de outros usuários */}
+          {isAnalista && (todasSolics.length > 0 || todosAgends.length > 0) && (
+            <div style={{ borderBottom:'2px solid #e2e8f0', padding:'18px', background:'#f0fdf4' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                <Users size={16} color="#10b981"/>
+                <span style={{ fontWeight:900, fontSize:14, color:'#065f46' }}>Fila de Clientes</span>
+                <span style={{ fontSize:11, color:'#64748b' }}>— solicitações e reuniões pendentes de aprovação</span>
+              </div>
+
+              {todosAgends.length > 0 && (
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:8 }}>Agendamentos pendentes</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {todosAgends.map(ag => (
+                      <div key={ag.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'12px 16px', background:'white', borderRadius:10, border:'1px solid #d1fae5', flexWrap:'wrap' }}>
+                        <div>
+                          <div style={{ fontWeight:700, color:'#0f172a', fontSize:13 }}>{ag.imovel_nome}</div>
+                          <div style={{ fontSize:12, color:'#64748b' }}>
+                            {ag.imovel_cidade && <>{ag.imovel_cidade} · </>}
+                            Cliente: <strong>{ag.cliente_nome}</strong> · Reunião em{' '}
+                            <strong>{new Date(ag.data_agendamento + 'T00:00:00').toLocaleDateString('pt-BR')}</strong>
+                          </div>
+                        </div>
+                        <button onClick={() => aprovarEncaminhar(ag.id)}
+                          style={{ padding:'8px 14px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, whiteSpace:'nowrap' }}>
+                          <ShieldCheck size={14}/> Aprovar e encaminhar ao jurídico
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {todasSolics.length > 0 && (
+                <div>
+                  <div style={{ fontSize:11, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:8 }}>Avaliações em andamento</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    {todasSolics.map(s => (
+                      <div key={s.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', background:'white', borderRadius:10, border:'1px solid #e2e8f0', flexWrap:'wrap' }}>
+                        <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, background:'#fef3c7', color:'#92400e' }}>
+                          {AVALIACOES.find(a=>a.key===s.tipo)?.label || s.tipo}
+                        </span>
+                        <span style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>{s.imovel_nome}</span>
+                        {s.imovel_cidade && <span style={{ fontSize:12, color:'#64748b' }}>{s.imovel_cidade}</span>}
+                        <span style={{ fontSize:12, color:'#64748b' }}>Cliente: <strong>{s.cliente_nome}</strong></span>
+                        {s.prazo_ate && <span style={{ fontSize:11, color:'#f59e0b' }}>Prazo: {new Date(s.prazo_ate).toLocaleString('pt-BR')}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Imóveis do próprio usuário em análise */}
           {emAnalise.length === 0 ? (
             <div style={{ textAlign:'center', padding:'70px 20px' }}>
               <div style={{ fontSize:48, marginBottom:16 }}>🔎</div>
@@ -465,7 +598,7 @@ export default function Painel() {
             <div style={{ display:'flex', flexDirection:'column', gap:16, padding:'18px' }}>
               {emAnalise.map(im => {
                 const dias = diasAteLeilao(im.dataLeilao);
-                const ag = im.agendamento;
+                const ag = im._agend;
                 const podeAgendar = dias == null || dias >= 7;
                 return (
                   <div key={im.id} style={{ border:'1px solid #e2e8f0', borderRadius:14, overflow:'hidden' }}>
@@ -490,7 +623,8 @@ export default function Painel() {
                     {/* Cards das 3 avaliações */}
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12, padding:'16px 18px' }}>
                       {AVALIACOES.map(av => {
-                        const stt = statusAvaliacao(im.avaliacoes?.[av.key]);
+                        const solic = im._solics?.find(s => s.tipo === av.key);
+                        const stt = statusAvaliacao(solic);
                         const Icon = av.icon;
                         return (
                           <div key={av.key} style={{ border:`1px solid ${av.cor}30`, borderRadius:12, padding:'14px', background:av.bg, display:'flex', flexDirection:'column', gap:8 }}>
@@ -523,16 +657,16 @@ export default function Painel() {
                         {ag?.status === 'encaminhado_juridico' ? (
                           <span style={{ color:'#10b981', fontWeight:700 }}>✓ Aprovado e encaminhado ao jurídico</span>
                         ) : ag?.status === 'solicitado' ? (
-                          <span>Reunião com analista agendada para <strong>{new Date(ag.data).toLocaleDateString('pt-BR')}</strong> · aguardando aprovação</span>
+                          <span>Reunião com analista agendada para <strong>{new Date(ag.data_agendamento + 'T00:00:00').toLocaleDateString('pt-BR')}</strong> · aguardando aprovação</span>
                         ) : (
                           <span>Agende uma reunião com o analista para aprovação (mín. 7 dias antes do leilão).</span>
                         )}
                       </div>
 
                       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                        {/* Botão de aprovação visível só para analista/advogado/admin */}
+                        {/* Analistas vendo imóveis próprios também podem aprovar */}
                         {isAnalista && ag?.status === 'solicitado' && (
-                          <button onClick={()=>aprovarEncaminhar(im)}
+                          <button onClick={()=>aprovarEncaminhar(ag.id)}
                             style={{ padding:'8px 14px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                             <ShieldCheck size={14}/> Aprovar e encaminhar ao jurídico
                           </button>
