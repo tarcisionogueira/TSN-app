@@ -24,6 +24,14 @@ export default function Login() {
 
   const up = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+  const handleGoogle = async () => {
+    if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/` },
+    });
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setErro(''); setLoading(true);
@@ -132,7 +140,18 @@ export default function Login() {
                 {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Entrando...</> : 'Entrar'}
               </button>
             </form>
-            <div style={{ marginTop: 20, textAlign: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0 4px' }}>
+              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}/>
+              <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>ou continue com</span>
+              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}/>
+            </div>
+            <button type="button" onClick={handleGoogle}
+              style={{ width: '100%', padding: '11px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.7 2.4 30.2 0 24 0 14.7 0 6.8 5.5 3 13.5l7.9 6.1C12.8 13.6 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z"/><path fill="#FBBC05" d="M10.9 28.4A14.4 14.4 0 0 1 9.5 24c0-1.5.3-3 .8-4.4L2.4 13.5A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.4 10.5l8.5-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.6 2.2-7.7 2.2-6.1 0-11.2-4.1-13.1-9.6l-7.9 6.1C6.8 42.5 14.7 48 24 48z"/></svg>
+              Entrar com Google
+            </button>
+
+            <div style={{ marginTop: 16, textAlign: 'center' }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>Não tem conta? </span>
               <button onClick={() => { setModo('cadastro'); setErro(''); }}
                 style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
