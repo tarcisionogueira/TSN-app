@@ -30,7 +30,10 @@ export default function Login() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.senha });
       if (error) throw error;
-      nav(planoEscolhido ? `/checkout?plano=${planoEscolhido}` : '/');
+      // Verifica plano no sessionStorage (definido durante cadastro) ou na URL
+      const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
+      sessionStorage.removeItem('tsn_plano_pendente');
+      nav(planoPendente ? `/checkout?plano=${planoPendente}` : '/');
     } catch (err) {
       setErro(err.message === 'Invalid login credentials' ? 'Email ou senha incorretos.' : err.message);
     }
@@ -52,6 +55,10 @@ export default function Login() {
         },
       });
       if (error) throw error;
+      // Preserva o plano na URL de confirmação de email (HashRouter usa /#/)
+      if (planoEscolhido) {
+        sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
+      }
       setModo('sucesso');
     } catch (err) {
       setErro(err.message);
@@ -88,6 +95,7 @@ export default function Login() {
             <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#0f172a' }}>Cadastro realizado!</h2>
             <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
               Verifique seu email para confirmar o cadastro e depois faça login.
+              {planoEscolhido && <><br /><strong style={{ color: '#1d4ed8' }}>Após o login você será direcionado para o pagamento do Plano {planoEscolhido.toUpperCase()}.</strong></>}
             </p>
             <button onClick={() => setModo('login')}
               style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
@@ -180,7 +188,10 @@ export default function Login() {
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
               <button type="submit" disabled={loading}
                 style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
-                {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</> : 'Criar conta grátis'}
+                {loading
+                  ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</>
+                  : planoEscolhido ? 'Criar conta e ir para pagamento →' : 'Criar conta grátis'
+                }
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0, lineHeight: 1.5 }}>
                 Ao criar conta você concorda com os termos de uso. Seus dados são utilizados apenas para acesso à plataforma e emissão fiscal.

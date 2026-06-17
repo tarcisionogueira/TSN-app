@@ -51,43 +51,63 @@ export default function Planos() {
           ))}
         </div>
 
-        {/* Planos premium / assessoria (2) */}
+        {/* Planos premium / assessoria (2) — só para logados */}
         <div style={{ textAlign: 'center', margin: '48px 0 28px' }}>
           <h2 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: '0 0 8px' }}>Assessoria & Mentoria</h2>
           <p style={{ color: '#64748b', fontSize: 15 }}>Quer que a equipe TSN conduza a arrematação com você?</p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }} className="planos-grid">
-          {planosPremium.map(([key, plano]) => (
-            <div key={key} style={{ background: 'white', borderRadius: 16, border: `2px solid ${plano.cor}`, padding: '32px 28px', position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
-              {plano.destaque && <div style={{ position: 'absolute', top: -12, left: 28, background: plano.cor, color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>Nível Máximo</div>}
-              <div style={{ fontSize: 16, fontWeight: 800, color: plano.cor, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{plano.nome}</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                <div style={{ fontSize: 34, fontWeight: 900, color: '#0f172a' }}>{plano.precoLabel}</div>
-                <div style={{ fontSize: 13, color: '#94a3b8' }}>{plano.periodicidade}</div>
-              </div>
-              {plano.honorarios && (
-                <div style={{ display: 'inline-block', background: plano.bg, color: plano.cor, fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, marginBottom: 12 }}>
-                  {plano.honorarios}
-                </div>
-              )}
-              <p style={{ fontSize: 14, color: '#64748b', marginBottom: 16 }}>{plano.descricao}</p>
-              <div style={{ height: 1, background: '#e2e8f0', margin: '16px 0' }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-                {plano.recursos.map(f => (
-                  <div key={f} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <Check size={16} color={plano.cor} style={{ flexShrink: 0, marginTop: 2 }} />
-                    <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.4 }}>{f.replace(/^✅\s*/, '')}</span>
-                  </div>
-                ))}
-              </div>
-              <button onClick={() => irParaCheckout(key, plano)}
-                style={{ width: '100%', padding: '13px', border: 'none', borderRadius: 10, background: plano.cor, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                Quero esse plano
+        {!user ? (
+          <div style={{ background: 'white', borderRadius: 16, border: '2px dashed #cbd5e1', padding: '48px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Faça login para ver os planos de assessoria</h3>
+            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
+              Os planos Assessorado e Leilão Club são personalizados e exclusivos para membros cadastrados.
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button onClick={() => nav('/login')}
+                style={{ padding: '12px 28px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                Entrar na minha conta
+              </button>
+              <button onClick={() => nav('/login')}
+                style={{ padding: '12px 28px', background: 'transparent', color: '#0f172a', border: '2px solid #e2e8f0', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                Criar conta grátis
               </button>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }} className="planos-grid">
+            {planosPremium.map(([key, plano]) => (
+              <div key={key} style={{ background: 'white', borderRadius: 16, border: `2px solid ${plano.cor}`, padding: '32px 28px', position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
+                {plano.destaque && <div style={{ position: 'absolute', top: -12, left: 28, background: plano.cor, color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>Nível Máximo</div>}
+                <div style={{ fontSize: 16, fontWeight: 800, color: plano.cor, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{plano.nome}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                  <div style={{ fontSize: 34, fontWeight: 900, color: '#0f172a' }}>{plano.precoLabel}</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8' }}>{plano.periodicidade}</div>
+                </div>
+                {plano.honorarios && (
+                  <div style={{ display: 'inline-block', background: plano.bg, color: plano.cor, fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 8, marginBottom: 12 }}>
+                    {plano.honorarios}
+                  </div>
+                )}
+                <p style={{ fontSize: 14, color: '#64748b', marginBottom: 16 }}>{plano.descricao}</p>
+                <div style={{ height: 1, background: '#e2e8f0', margin: '16px 0' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+                  {plano.recursos.map(f => (
+                    <div key={f} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <Check size={16} color={plano.cor} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.4 }}>{f.replace(/^✅\s*/, '')}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => irParaCheckout(key, plano)}
+                  style={{ width: '100%', padding: '13px', border: 'none', borderRadius: 10, background: plano.cor, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  Quero esse plano
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <p style={{ textAlign: 'center', marginTop: 32, fontSize: 13, color: '#94a3b8' }}>
           Todos os planos podem solicitar assessoria para arrematação · Pagamento via boleto, Pix ou cartão
