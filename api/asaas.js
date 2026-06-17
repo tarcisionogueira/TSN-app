@@ -1,5 +1,10 @@
-const ASAAS_URL = 'https://api.asaas.com/v3';
-const API_KEY = process.env.ASAAS_API_KEY;
+// Define ASAAS_ENV=sandbox na Vercel para testar sem cobrar de verdade.
+// Em produção (default) usa a URL real do Asaas.
+const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
+  ? 'https://api-sandbox.asaas.com/v3'
+  : 'https://api.asaas.com/v3';
+// .trim() remove espaços/quebras de linha acidentais ao colar a chave
+const API_KEY = (process.env.ASAAS_API_KEY || '').trim();
 
 const PLANOS = {
   top1:  { nome: 'Plano TOP 1', valor: 49.90, ciclo: 'MONTHLY' },
@@ -29,6 +34,10 @@ async function asaasGet(path) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  if (!API_KEY) {
+    return res.status(500).json({ error: 'Chave do Asaas não configurada no servidor (ASAAS_API_KEY).' });
+  }
 
   const { action, ...body } = req.body;
 
