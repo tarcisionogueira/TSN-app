@@ -9,6 +9,7 @@ import Privacidade from './pages/Privacidade';
 import Busca from './pages/Busca';
 import Analise from './pages/Analise';
 import Painel from './pages/Painel';
+import Consultor from './pages/Consultor';
 import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
@@ -34,6 +35,7 @@ export default function App() {
                   <Route path="/buscar" element={<Busca />} />
                   <Route path="/analise" element={<Analise />} />
                   <Route path="/painel" element={<Painel />} />
+                  <Route path="/consultor" element={<Consultor />} />
                   <Route path="/membros" element={<Membros />} />
                   <Route path="/membros/curso/:id" element={<Curso />} />
                   <Route path="/termos" element={<Termos />} />
