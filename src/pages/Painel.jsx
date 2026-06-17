@@ -4,9 +4,38 @@ import {
   Building2, BarChart3, TrendingUp, DollarSign, Plus, Trash2,
   ChevronDown, ChevronUp, CheckCircle2, Clock, XCircle, Home,
   LayoutGrid, Warehouse, ArrowUpCircle, ArrowDownCircle, X, Save,
+  FileText, Scale, CalendarClock, ShieldCheck, Printer, Sparkles, Hourglass,
 } from 'lucide-react';
 import { loadImoveis, saveImoveis, loadFavoritos } from '../utils/storage';
 import { fmt, fmtPct } from '../utils/calculos';
+import { useAuth } from '../contexts/AuthContext';
+import { gerarPDFFinanceiro } from '../components/RelatorioFinanceiroPDF';
+
+// Tipos de avaliação disponíveis na aba "Em Análise"
+const AVALIACOES = [
+  { key:'mercadologica', label:'Avaliação Mercadológica + Viabilidade', desc:'Relatório de mercado em 2 níveis com viabilidade financeira e fluxo de caixa.', icon:BarChart3, cor:'#10b981', bg:'#f0fdf4', via:'analise' },
+  { key:'edital',        label:'Avaliação de Edital e Matrícula',         desc:'Leitura do edital, matrícula e certidões com extração de riscos via IA.',       icon:FileText,  cor:'#2563eb', bg:'#eff6ff', via:'analise' },
+  { key:'processual',    label:'Avaliação Processual',                    desc:'Consulta processual integrada (Jusbrasil/CNJ). Liberação em até 24h.',          icon:Scale,     cor:'#8b5cf6', bg:'#ede9fe', via:'integracao' },
+];
+
+const ROLES_ANALISTA = ['analista','advogado','admin'];
+
+// Estado de uma avaliação considerando o prazo de 24h
+function statusAvaliacao(av) {
+  if (!av || !av.status) return { st:'disponivel', l:'Disponível', c:'#64748b', bg:'#f1f5f9' };
+  if (av.status === 'concluido') return { st:'concluido', l:'Laudo pronto', c:'#10b981', bg:'#d1fae5' };
+  // em_andamento: verifica se o prazo de 24h já passou
+  if (av.prazoAte && Date.now() >= new Date(av.prazoAte).getTime())
+    return { st:'concluido', l:'Laudo pronto', c:'#10b981', bg:'#d1fae5' };
+  return { st:'em_andamento', l:'Em andamento (24h)', c:'#f59e0b', bg:'#fef3c7' };
+}
+
+function diasAteLeilao(dataLeilao) {
+  if (!dataLeilao) return null;
+  const d = new Date(dataLeilao);
+  if (isNaN(d)) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86400000);
+}
 
 const STATUS_CONFIG = {
   analise:    { l:'Em Análise',  c:'#f59e0b', bg:'#fef3c7' },
@@ -154,9 +183,13 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
 
 export default function Painel() {
   const nav = useNavigate();
+  const { role } = useAuth();
+  const isAnalista = ROLES_ANALISTA.includes(role);
   const [imoveis, setImoveis] = useState([]);
-  const [aba, setAba] = useState('arrematacoes'); // 'arrematacoes' | 'lancamentos'
+  const [aba, setAba] = useState('arrematacoes'); // 'arrematacoes' | 'analise' | 'lancamentos'
   const [controleAberto, setControleAberto] = useState(null);
+  const [agendando, setAgendando] = useState(null); // imovelId em agendamento
+  const [dataAgenda, setDataAgenda] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
   const [novoLanc, setNovoLanc] = useState({ data: new Date().toISOString().slice(0,10), tipo:'saida', categoria:'Outros', imovelId:'', descricao:'', valor:'' });
 
@@ -198,6 +231,37 @@ export default function Painel() {
     atualizarImovel(updated);
   };
 
+  // ── Workflow "Em Análise" ──
+  const solicitarAvaliacao = (im, tipo) => {
+    const via = AVALIACOES.find(a => a.key === tipo)?.via;
+    if (via === 'analise') { nav('/analise', { state:{ imovel:im } }); return; }
+    // Processual (integração): inicia prazo de 24h
+    const agora = new Date();
+    const prazoAte = new Date(agora.getTime() + 24*3600*1000).toISOString();
+    const avaliacoes = { ...(im.avaliacoes||{}), [tipo]: { status:'em_andamento', solicitadoEm:agora.toISOString(), prazoAte } };
+    atualizarImovel({ ...im, avaliacoes });
+  };
+
+  const agendarAnalista = (im) => {
+    if (!dataAgenda) return;
+    const dias = diasAteLeilao(im.dataLeilao);
+    const antecedenciaOk = (() => {
+      if (!im.dataLeilao) return true;
+      const dAgenda = new Date(dataAgenda);
+      const dLeilao = new Date(im.dataLeilao);
+      return Math.ceil((dLeilao - dAgenda) / 86400000) >= 7;
+    })();
+    if (!antecedenciaOk) { alert('A reunião deve ser agendada com no mínimo 7 dias de antecedência do leilão.'); return; }
+    if (dias != null && dias < 7) { alert('Este leilão ocorre em menos de 7 dias — não é possível agendar aprovação com analista.'); return; }
+    atualizarImovel({ ...im, agendamento: { data:dataAgenda, status:'solicitado', solicitadoEm:new Date().toISOString() } });
+    setAgendando(null); setDataAgenda('');
+  };
+
+  const aprovarEncaminhar = (im) => {
+    if (!confirm('Aprovar a análise e encaminhar ao jurídico?')) return;
+    atualizarImovel({ ...im, status:'aprovado', agendamento: { ...(im.agendamento||{}), status:'encaminhado_juridico', aprovadoEm:new Date().toISOString(), aprovadoPor:role } });
+  };
+
   // Cálculos por imóvel
   const calcImovel = (im) => {
     const lancs = im.lancamentosFinanceiros || [];
@@ -218,6 +282,19 @@ export default function Painel() {
 
   const totalEntradas = todosLancamentos.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+Number(l.valor),0);
   const totalSaidas   = todosLancamentos.filter(l=>l.tipo==='saida').reduce((s,l)=>s+Number(l.valor),0);
+
+  // Lançamentos agrupados por imóvel (para a aba financeira e o PDF)
+  const lancamentosPorImovel = imoveis
+    .map(im => ({ id: im.id, nome: im.nome || im.endereco || 'Imóvel', cidade: im.cidade, lancamentos: [...(im.lancamentosFinanceiros||[])].sort((a,b)=>(b.data||'').localeCompare(a.data||'')) }))
+    .filter(g => g.lancamentos.length > 0);
+
+  const exportarPDFFinanceiro = () => {
+    if (lancamentosPorImovel.length === 0) { alert('Nenhum lançamento para exportar.'); return; }
+    gerarPDFFinanceiro({ grupos: lancamentosPorImovel, totalEntradas, totalSaidas });
+  };
+
+  // Imóveis em fluxo de análise (ainda não arrematados)
+  const emAnalise = imoveis.filter(im => ['analise','aprovado','reprovado'].includes(im.status || 'analise'));
 
   const filtrados = imoveis.filter(im => !filtroStatus || im.status===filtroStatus);
 
@@ -264,6 +341,7 @@ export default function Painel() {
       {/* Tabs */}
       <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0', marginBottom:0 }}>
         {tabBtn('arrematacoes', `🏠 Arrematações (${imoveis.length})`)}
+        {tabBtn('analise', `🔎 Em Análise (${emAnalise.length})`)}
         {tabBtn('lancamentos', `💰 Lançamentos (${todosLancamentos.length})`)}
       </div>
 
@@ -371,9 +449,139 @@ export default function Painel() {
         </div>
       )}
 
+      {/* === ABA EM ANÁLISE === */}
+      {aba==='analise' && (
+        <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', overflow:'hidden' }}>
+          {emAnalise.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'70px 20px' }}>
+              <div style={{ fontSize:48, marginBottom:16 }}>🔎</div>
+              <h3 style={{ color:'#334155', fontWeight:900, margin:'0 0 8px' }}>Nenhum imóvel em análise</h3>
+              <p style={{ color:'#94a3b8', marginBottom:24, fontSize:14 }}>Na busca de leilões, clique em <strong>Analisar</strong> para trazer um imóvel para cá.</p>
+              <button onClick={()=>nav('/buscar')} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:10, padding:'11px 24px', fontWeight:700, cursor:'pointer' }}>
+                Buscar Leilões
+              </button>
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:16, padding:'18px' }}>
+              {emAnalise.map(im => {
+                const dias = diasAteLeilao(im.dataLeilao);
+                const ag = im.agendamento;
+                const podeAgendar = dias == null || dias >= 7;
+                return (
+                  <div key={im.id} style={{ border:'1px solid #e2e8f0', borderRadius:14, overflow:'hidden' }}>
+                    {/* Cabeçalho do imóvel */}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'14px 18px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
+                      <div>
+                        <div style={{ fontWeight:800, color:'#0f172a', fontSize:15 }}>{im.nome||'Sem nome'}</div>
+                        <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
+                          {im.cidade}{im.estado?`, ${im.estado}`:''}
+                          {im.dataLeilao && <> · Leilão {dias!=null ? (dias>=0?`em ${dias} dia(s)`:'já ocorrido') : ''}</>}
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <BadgeStatus status={im.status||'analise'}/>
+                        <button onClick={()=>nav('/analise',{state:{imovel:im}})}
+                          style={{ padding:'7px 14px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                          <Sparkles size={13}/> Abrir análise
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Cards das 3 avaliações */}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12, padding:'16px 18px' }}>
+                      {AVALIACOES.map(av => {
+                        const stt = statusAvaliacao(im.avaliacoes?.[av.key]);
+                        const Icon = av.icon;
+                        return (
+                          <div key={av.key} style={{ border:`1px solid ${av.cor}30`, borderRadius:12, padding:'14px', background:av.bg, display:'flex', flexDirection:'column', gap:8 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <div style={{ width:30, height:30, borderRadius:8, background:av.cor, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                <Icon size={15} color="white"/>
+                              </div>
+                              <span style={{ fontSize:12.5, fontWeight:800, color:'#0f172a', lineHeight:1.25 }}>{av.label}</span>
+                            </div>
+                            <p style={{ margin:0, fontSize:11, color:'#64748b', lineHeight:1.5, minHeight:46 }}>{av.desc}</p>
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:6 }}>
+                              <span style={{ background:stt.bg, color:stt.c, fontSize:10, fontWeight:800, padding:'3px 9px', borderRadius:20, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                {stt.st==='em_andamento' ? <Hourglass size={10}/> : stt.st==='concluido' ? <CheckCircle2 size={10}/> : <Clock size={10}/>}
+                                {stt.l}
+                              </span>
+                              <button onClick={()=>solicitarAvaliacao(im, av.key)} disabled={stt.st==='em_andamento'}
+                                style={{ padding:'6px 12px', background:stt.st==='em_andamento'?'#e2e8f0':av.cor, color:stt.st==='em_andamento'?'#94a3b8':'white', border:'none', borderRadius:7, fontWeight:700, fontSize:11, cursor:stt.st==='em_andamento'?'default':'pointer', whiteSpace:'nowrap' }}>
+                                {stt.st==='em_andamento' ? 'Aguarde 24h' : stt.st==='concluido' ? 'Ver laudo' : 'Solicitar'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Faixa de agendamento / aprovação */}
+                    <div style={{ padding:'14px 18px', borderTop:'1px solid #f1f5f9', background:'#fcfcfd', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:12, color:'#475569' }}>
+                        <CalendarClock size={16} color="#2563eb"/>
+                        {ag?.status === 'encaminhado_juridico' ? (
+                          <span style={{ color:'#10b981', fontWeight:700 }}>✓ Aprovado e encaminhado ao jurídico</span>
+                        ) : ag?.status === 'solicitado' ? (
+                          <span>Reunião com analista agendada para <strong>{new Date(ag.data).toLocaleDateString('pt-BR')}</strong> · aguardando aprovação</span>
+                        ) : (
+                          <span>Agende uma reunião com o analista para aprovação (mín. 7 dias antes do leilão).</span>
+                        )}
+                      </div>
+
+                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        {/* Botão de aprovação visível só para analista/advogado/admin */}
+                        {isAnalista && ag?.status === 'solicitado' && (
+                          <button onClick={()=>aprovarEncaminhar(im)}
+                            style={{ padding:'8px 14px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                            <ShieldCheck size={14}/> Aprovar e encaminhar ao jurídico
+                          </button>
+                        )}
+                        {ag?.status !== 'encaminhado_juridico' && agendando === im.id ? (
+                          <>
+                            <input type="date" value={dataAgenda} onChange={e=>setDataAgenda(e.target.value)}
+                              style={{ ...inp2, padding:'7px 10px' }}/>
+                            <button onClick={()=>agendarAnalista(im)}
+                              style={{ padding:'8px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                              Confirmar
+                            </button>
+                            <button onClick={()=>{setAgendando(null);setDataAgenda('');}}
+                              style={{ padding:'8px 10px', background:'transparent', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, cursor:'pointer' }}>
+                              Cancelar
+                            </button>
+                          </>
+                        ) : ag?.status !== 'encaminhado_juridico' && (
+                          <button onClick={()=>{ if(!podeAgendar){alert('Este leilão ocorre em menos de 7 dias — não é possível agendar.');return;} setAgendando(im.id); setDataAgenda(''); }}
+                            style={{ padding:'8px 14px', background:'white', color:'#2563eb', border:'2px solid #bfdbfe', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', opacity:podeAgendar?1:0.5 }}>
+                            {ag?.status === 'solicitado' ? 'Reagendar' : 'Agendar com analista'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* === ABA LANÇAMENTOS === */}
       {aba==='lancamentos' && (
         <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', overflow:'hidden' }}>
+
+          {/* Barra de totais consolidados + export */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'14px 20px', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
+            <div style={{ display:'flex', gap:18, flexWrap:'wrap' }}>
+              <div><span style={{ fontSize:10, color:'#16a34a', fontWeight:800, textTransform:'uppercase' }}>Entradas</span><div style={{ fontSize:18, fontWeight:900, color:'#10b981' }}>R$ {fmt(totalEntradas,0)}</div></div>
+              <div><span style={{ fontSize:10, color:'#dc2626', fontWeight:800, textTransform:'uppercase' }}>Saídas</span><div style={{ fontSize:18, fontWeight:900, color:'#ef4444' }}>R$ {fmt(totalSaidas,0)}</div></div>
+              <div><span style={{ fontSize:10, color:(totalEntradas-totalSaidas)>=0?'#16a34a':'#dc2626', fontWeight:800, textTransform:'uppercase' }}>Saldo Geral</span><div style={{ fontSize:18, fontWeight:900, color:(totalEntradas-totalSaidas)>=0?'#10b981':'#ef4444' }}>R$ {fmt(totalEntradas-totalSaidas,0)}</div></div>
+            </div>
+            <button onClick={exportarPDFFinanceiro}
+              style={{ padding:'9px 16px', background:'#f59e0b', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:7 }}>
+              <Printer size={15}/> Exportar PDF
+            </button>
+          </div>
 
           {/* Formulário novo lançamento */}
           <div style={{ padding:'16px 20px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc' }}>
@@ -422,44 +630,63 @@ export default function Painel() {
             </div>
           </div>
 
-          {/* Lista de lançamentos */}
-          {todosLancamentos.length === 0 ? (
+          {/* Lançamentos agrupados por imóvel */}
+          {lancamentosPorImovel.length === 0 ? (
             <div style={{ textAlign:'center', padding:'50px 20px', color:'#94a3b8', fontSize:13 }}>Nenhum lançamento ainda. Adicione acima.</div>
           ) : (
-            <div style={{ overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                <thead>
-                  <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
-                    {['Data','Imóvel','Tipo','Categoria','Descrição','Valor',''].map(h=>(
-                      <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase', letterSpacing:0.5 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {todosLancamentos.map((l,i)=>(
-                    <tr key={l.id||i} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
-                      <td style={{ padding:'10px 14px', fontSize:12, color:'#64748b', whiteSpace:'nowrap' }}>{l.data}</td>
-                      <td style={{ padding:'10px 14px', fontWeight:600, color:'#334155', fontSize:12 }}>{l.imovelNome}</td>
-                      <td style={{ padding:'10px 14px' }}>
-                        <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20, background:l.tipo==='entrada'?'#d1fae5':'#fee2e2', color:l.tipo==='entrada'?'#059669':'#dc2626' }}>
-                          {l.tipo==='entrada'?'Entrada':'Saída'}
-                        </span>
-                      </td>
-                      <td style={{ padding:'10px 14px', fontSize:12, color:'#475569' }}>{l.categoria}</td>
-                      <td style={{ padding:'10px 14px', fontSize:12, color:'#64748b' }}>{l.descricao||'—'}</td>
-                      <td style={{ padding:'10px 14px', fontWeight:800, color:l.tipo==='entrada'?'#10b981':'#ef4444', whiteSpace:'nowrap' }}>
-                        {l.tipo==='entrada'?'+ ':'− '}R$ {fmt(Number(l.valor),0)}
-                      </td>
-                      <td style={{ padding:'10px 14px' }}>
-                        <button onClick={()=>removerLancamento(l.imovelId, l.id)}
-                          style={{ background:'none', border:'none', cursor:'pointer', color:'#ef4444', padding:2 }}>
-                          <Trash2 size={13}/>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ display:'flex', flexDirection:'column', gap:18, padding:'18px 20px' }}>
+              {lancamentosPorImovel.map(g => {
+                const ent = g.lancamentos.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+Number(l.valor),0);
+                const sai = g.lancamentos.filter(l=>l.tipo==='saida').reduce((s,l)=>s+Number(l.valor),0);
+                const sld = ent - sai;
+                return (
+                  <div key={g.id} style={{ border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
+                    {/* Cabeçalho do imóvel com subtotais */}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'10px 16px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
+                      <div style={{ fontWeight:800, color:'#0f172a', fontSize:14 }}>🏠 {g.nome}{g.cidade?<span style={{ fontSize:12, color:'#94a3b8', fontWeight:500 }}> · {g.cidade}</span>:null}</div>
+                      <div style={{ display:'flex', gap:14, fontSize:12 }}>
+                        <span style={{ color:'#10b981', fontWeight:700 }}>+ R$ {fmt(ent,0)}</span>
+                        <span style={{ color:'#ef4444', fontWeight:700 }}>− R$ {fmt(sai,0)}</span>
+                        <span style={{ color:sld>=0?'#10b981':'#ef4444', fontWeight:900 }}>Saldo R$ {fmt(sld,0)}</span>
+                      </div>
+                    </div>
+                    <div style={{ overflowX:'auto' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                        <thead>
+                          <tr style={{ background:'#fcfcfd', borderBottom:'1px solid #e2e8f0' }}>
+                            {['Data','Tipo','Categoria','Descrição','Valor',''].map(h=>(
+                              <th key={h} style={{ padding:'8px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase', letterSpacing:0.5 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.lancamentos.map((l,i)=>(
+                            <tr key={l.id||i} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
+                              <td style={{ padding:'9px 14px', fontSize:12, color:'#64748b', whiteSpace:'nowrap' }}>{l.data}</td>
+                              <td style={{ padding:'9px 14px' }}>
+                                <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20, background:l.tipo==='entrada'?'#d1fae5':'#fee2e2', color:l.tipo==='entrada'?'#059669':'#dc2626' }}>
+                                  {l.tipo==='entrada'?'Entrada':'Saída'}
+                                </span>
+                              </td>
+                              <td style={{ padding:'9px 14px', fontSize:12, color:'#475569' }}>{l.categoria}</td>
+                              <td style={{ padding:'9px 14px', fontSize:12, color:'#64748b' }}>{l.descricao||'—'}</td>
+                              <td style={{ padding:'9px 14px', fontWeight:800, color:l.tipo==='entrada'?'#10b981':'#ef4444', whiteSpace:'nowrap' }}>
+                                {l.tipo==='entrada'?'+ ':'− '}R$ {fmt(Number(l.valor),0)}
+                              </td>
+                              <td style={{ padding:'9px 14px' }}>
+                                <button onClick={()=>removerLancamento(g.id, l.id)}
+                                  style={{ background:'none', border:'none', cursor:'pointer', color:'#ef4444', padding:2 }}>
+                                  <Trash2 size={13}/>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
