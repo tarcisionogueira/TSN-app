@@ -6,13 +6,33 @@ const AuthContext = createContext(null);
 const IMPERSONATE_KEY = 'tsn_impersonate';
 
 async function fetchPerfil(userId) {
-  if (!userId) return { role: 'aluno', ativo: true };
+  if (!userId) return { role: 'aluno', ativo: true, inadimplenteDias: 0 };
   const { data } = await supabase
     .from('perfis')
-    .select('role, ativo')
+    .select('role, ativo, inadimplente_desde')
     .eq('id', userId)
     .single();
-  return { role: data?.role || 'aluno', ativo: data?.ativo !== false };
+
+  let inadimplenteDias = 0;
+  if (data?.inadimplente_desde) {
+    const desde = new Date(data.inadimplente_desde);
+    inadimplenteDias = Math.floor((Date.now() - desde.getTime()) / 86400000);
+  }
+
+  // Após 5 dias sem pagar, persiste o downgrade para explorador
+  if (inadimplenteDias > 5 && data?.role && data.role !== 'explorador') {
+    await supabase.from('perfis').update({
+      role_anterior: data.role,
+      role: 'explorador',
+    }).eq('id', userId);
+    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias };
+  }
+
+  return {
+    role: data?.role || 'aluno',
+    ativo: data?.ativo !== false,
+    inadimplenteDias,
+  };
 }
 
 function loadImpersonate() {
@@ -21,10 +41,11 @@ function loadImpersonate() {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null);
-  const [role, setRole]       = useState('aluno');
-  const [ativo, setAtivo]     = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser]             = useState(null);
+  const [role, setRole]             = useState('aluno');
+  const [ativo, setAtivo]           = useState(true);
+  const [inadimplenteDias, setInad] = useState(0);
+  const [loading, setLoading]       = useState(true);
   // Modo suporte: admin/analista visualizando a conta de um cliente
   const [impersonate, setImpersonate] = useState(loadImpersonate);
 
@@ -35,6 +56,7 @@ export function AuthProvider({ children }) {
       const p = await fetchPerfil(u?.id);
       setRole(p.role);
       setAtivo(p.ativo);
+      setInad(p.inadimplenteDias);
       setLoading(false);
     });
 
@@ -44,6 +66,7 @@ export function AuthProvider({ children }) {
       const p = await fetchPerfil(u?.id);
       setRole(p.role);
       setAtivo(p.ativo);
+      setInad(p.inadimplenteDias);
       // Vincula o cliente ao consultor que o indicou (link de afiliado),
       // inclusive no login Google onde o trigger não recebe o código.
       // Só tenta no sign-in real (não em token refresh, user_updated, etc.)
@@ -88,7 +111,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role, ativo, loading,
+      user, role, ativo, inadimplenteDias, loading,
       isAdmin: role === 'admin',
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,

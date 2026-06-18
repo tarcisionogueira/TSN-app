@@ -440,7 +440,7 @@ function UsuariosTab() {
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('perfis').select('id, nome, cpf, role, plano, created_at, ativo').order('created_at', { ascending: false });
+    const { data } = await supabase.from('perfis').select('id, nome, cpf, role, role_anterior, plano, created_at, ativo').order('created_at', { ascending: false });
     setUsers(data || []);
     setLoading(false);
   }, []);
@@ -454,9 +454,17 @@ function UsuariosTab() {
   }
 
   async function toggleAtivo(u) {
-    const novoAtivo = u.ativo === false ? true : false;
-    await supabase.from('perfis').update({ ativo: novoAtivo }).eq('id', u.id);
-    setUsers(users.map(x => x.id === u.id ? { ...x, ativo: novoAtivo } : x));
+    const estaAtivo = u.ativo !== false;
+    if (estaAtivo) {
+      // Inativar: salva role atual para restaurar depois
+      await supabase.from('perfis').update({ ativo: false, role_anterior: u.role }).eq('id', u.id);
+      setUsers(users.map(x => x.id === u.id ? { ...x, ativo: false, role_anterior: u.role } : x));
+    } else {
+      // Reativar: restaura role anterior (se existir)
+      const roleRestaurado = u.role_anterior || u.role;
+      await supabase.from('perfis').update({ ativo: true, role: roleRestaurado, role_anterior: null }).eq('id', u.id);
+      setUsers(users.map(x => x.id === u.id ? { ...x, ativo: true, role: roleRestaurado, role_anterior: null } : x));
+    }
   }
 
   const filtered = users.filter(u => {

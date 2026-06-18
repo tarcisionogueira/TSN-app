@@ -5,111 +5,148 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY, // chave service_role (não a anon)
 );
 
-// Mapeia o valor pago (arredondado) para o plano correspondente
+// Mapeia o valor pago (arredondado) para o plano e role correspondentes
 const PLANO_POR_VALOR = {
-  50: 'top1',      // R$ 49,90 (arredonda para 50)
-  100: 'top2',     // R$ 99,90 (arredonda para 100)
-  5000: 'clube',   // mensalidade do Clube de Negócios / Assessorado
+  50:   { plano: 'top1',  role: 'top1'  },
+  100:  { plano: 'top2',  role: 'top2'  },
+  5000: { plano: 'clube', role: 'clube' },
 };
+
+// Busca o perfil do cliente priorizando asaas_id, com fallback por email
+async function buscarCliente(asaasCustomerId, email) {
+  // 1. Tenta por asaas_id (mais confiável)
+  if (asaasCustomerId) {
+    const { data } = await supabase
+      .from('perfis')
+      .select('id, indicado_por, role, role_anterior, inadimplente_desde')
+      .eq('asaas_id', asaasCustomerId)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  // 2. Fallback: busca o user_id pelo email em auth.users via RPC
+  if (email) {
+    const { data: userId } = await supabase.rpc('get_user_id_by_email', { p_email: email });
+    if (userId) {
+      const { data } = await supabase
+        .from('perfis')
+        .select('id, indicado_por, role, role_anterior, inadimplente_desde')
+        .eq('id', userId)
+        .maybeSingle();
+      if (data) return data;
+    }
+  }
+
+  return null;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const event = req.body;
   const tipo = event.event;
+  const pagamento = event.payment;
+  const email = pagamento?.customer?.email;
+  const asaasCustomerId = pagamento?.customer?.id;
+  const valor = pagamento?.value;
 
-  // Só processa pagamentos confirmados
-  if (tipo !== 'PAYMENT_CONFIRMED' && tipo !== 'PAYMENT_RECEIVED') {
+  // ── Pagamento vencido: registra inadimplência ──
+  if (tipo === 'PAYMENT_OVERDUE') {
+    const cliente = await buscarCliente(asaasCustomerId, email);
+    if (cliente) {
+      // Só marca inadimplente se ainda não foi marcado (evita sobrescrever a data original)
+      if (!cliente.inadimplente_desde) {
+        await supabase
+          .from('perfis')
+          .update({ inadimplente_desde: new Date().toISOString().slice(0, 10) })
+          .eq('id', cliente.id);
+      }
+    }
     return res.status(200).json({ ok: true });
   }
 
-  const pagamento = event.payment;
-  const email = pagamento?.customer?.email;
-  const valor = pagamento?.value;
+  // ── Pagamento confirmado / recebido ──
+  if (tipo === 'PAYMENT_CONFIRMED' || tipo === 'PAYMENT_RECEIVED') {
+    if (!email && !asaasCustomerId) return res.status(200).json({ ok: true });
 
-  if (!email || !valor) return res.status(200).json({ ok: true });
+    const cliente = await buscarCliente(asaasCustomerId, email);
+    if (!cliente) {
+      console.log(`Webhook: perfil não encontrado — asaas_id=${asaasCustomerId} email=${email}`);
+      return res.status(200).json({ ok: true, skipped: 'perfil_nao_encontrado' });
+    }
 
-  const plano = PLANO_POR_VALOR[Math.round(valor)];
-  // Se o valor não corresponde a nenhum plano conhecido, ignora o upgrade de plano
-  // mas ainda registra comissão se houver consultor vinculado
-  if (!plano) {
-    console.log(`Webhook: valor R$${valor} não mapeado para plano, ignorando upgrade.`);
-  }
+    const mapeado = valor ? PLANO_POR_VALOR[Math.round(valor)] : null;
 
-  // Localiza o perfil do cliente (precisamos do id para a comissão de afiliado)
-  const { data: cliente, error: errCliente } = await supabase
-    .from('perfis')
-    .select('id, indicado_por')
-    .eq('email', email)
-    .maybeSingle();
+    // Prepara update: limpa inadimplência, atualiza plano/role se mapeado
+    const update = {
+      inadimplente_desde: null,
+      asaas_id: asaasCustomerId || undefined,
+    };
 
-  if (errCliente) {
-    console.error('Webhook: erro ao buscar perfil:', errCliente.message);
-    return res.status(500).json({ error: errCliente.message });
-  }
+    if (mapeado) {
+      update.plano = mapeado.plano;
+      // Restaura role: se estava inadimplente (role_anterior guardado), volta ao anterior
+      // Senão usa o role do plano pago
+      update.role = cliente.role_anterior && cliente.inadimplente_desde
+        ? cliente.role_anterior
+        : mapeado.role;
+      // Limpa role_anterior após restaurar
+      if (cliente.role_anterior && cliente.inadimplente_desde) {
+        update.role_anterior = null;
+      }
+    }
 
-  if (!cliente) {
-    console.log(`Webhook: perfil não encontrado para email ${email}, ignorando.`);
-    return res.status(200).json({ ok: true, skipped: 'perfil_nao_encontrado' });
-  }
-
-  // Atualiza plano do cliente (apenas se o valor mapeou para um plano)
-  if (plano) {
-    const { error } = await supabase
-      .from('perfis')
-      .update({ plano, asaas_id: pagamento.customer?.id })
-      .eq('id', cliente.id);
-
+    const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
     if (error) {
       console.error('Webhook Supabase error:', error.message);
       return res.status(500).json({ error: error.message });
     }
-  }
 
-  // ── Comissão de afiliado (consultor) ──
-  // Se o cliente foi indicado por um consultor, registra a comissão recorrente
-  // sobre a assinatura paga. A fatia sai da parte da TSN.
-  if (cliente?.indicado_por) {
-    try {
-      const { data: consultor } = await supabase
-        .from('perfis')
-        .select('comissao_afiliado_pct, role')
-        .eq('id', cliente.indicado_por)
-        .single();
+    // ── Comissão de afiliado (consultor) ──
+    if (cliente.indicado_por && mapeado) {
+      try {
+        const { data: consultor } = await supabase
+          .from('perfis')
+          .select('comissao_afiliado_pct, role, ativo')
+          .eq('id', cliente.indicado_por)
+          .single();
 
-      if (consultor?.role === 'consultor') {
-        const pct = Number(consultor.comissao_afiliado_pct || 0);
-        if (pct > 0) {
-          const valorComissao = Number((valor * pct / 100).toFixed(2));
-          // Evita duplicar comissão para o mesmo pagamento
-          const { data: existente } = await supabase
-            .from('comissoes')
-            .select('id')
-            .eq('asaas_payment_id', pagamento.id)
-            .maybeSingle();
+        // Só registra comissão se consultor estiver ativo
+        if (consultor?.role === 'consultor' && consultor?.ativo !== false) {
+          const pct = Number(consultor.comissao_afiliado_pct || 0);
+          if (pct > 0) {
+            const valorComissao = Number((valor * pct / 100).toFixed(2));
+            const { data: existente } = await supabase
+              .from('comissoes')
+              .select('id')
+              .eq('asaas_payment_id', pagamento.id)
+              .maybeSingle();
 
-          if (!existente) {
-            await supabase.from('comissoes').insert({
-              beneficiario_id: cliente.indicado_por,
-              cliente_id: cliente.id,
-              tipo: 'afiliado',
-              origem: 'assinatura',
-              referencia: `Assinatura ${plano}`,
-              valor_base: valor,
-              percentual: pct,
-              valor_comissao: valorComissao,
-              competencia: new Date().toISOString().slice(0, 10),
-              status: 'pendente',
-              asaas_payment_id: pagamento.id,
-            });
+            if (!existente) {
+              await supabase.from('comissoes').insert({
+                beneficiario_id: cliente.indicado_por,
+                cliente_id: cliente.id,
+                tipo: 'afiliado',
+                origem: 'assinatura',
+                referencia: `Assinatura ${mapeado.plano}`,
+                valor_base: valor,
+                percentual: pct,
+                valor_comissao: valorComissao,
+                competencia: new Date().toISOString().slice(0, 10),
+                status: 'pendente',
+                asaas_payment_id: pagamento.id,
+              });
+            }
           }
         }
+      } catch (e) {
+        console.error('Comissão afiliado error:', e.message);
       }
-    } catch (e) {
-      console.error('Comissão afiliado error:', e.message);
-      // não falha o webhook por causa da comissão
     }
+
+    return res.status(200).json({ ok: true, plano: mapeado?.plano });
   }
 
-  return res.status(200).json({ ok: true, plano });
+  // Outros eventos ignorados
+  return res.status(200).json({ ok: true });
 }
