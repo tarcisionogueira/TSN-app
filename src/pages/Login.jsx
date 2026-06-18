@@ -46,8 +46,9 @@ export default function Login() {
     if (refCodigo) sessionStorage.setItem('tsn_ref_codigo', refCodigo);
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      // Redireciona para a raiz com hash; o HashRouter vai montar em /#/
-      options: { redirectTo: `${window.location.origin}/${window.location.pathname.replace(/\/$/, '')}#/` },
+      // Usa apenas a origem — o Supabase redireciona para a URL configurada em
+      // Authentication > URL Configuration > Site URL no painel do Supabase.
+      options: { redirectTo: window.location.origin },
     });
   };
 
