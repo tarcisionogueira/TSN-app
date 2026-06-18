@@ -603,15 +603,22 @@ function ContratosTab() {
   const [modal, setModal] = useState(null);   // 'new' | contrato
   const [form, setForm] = useState(defaultContrato());
   const [saving, setSaving] = useState(false);
+  const [modalLink, setModalLink] = useState(false);
+  const [formLink, setFormLink] = useState({ titulo: '', conteudo: '', tipo_contrato: 'servico' });
+  const [linkGerado, setLinkGerado] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
+  const [contratosLink, setContratosLink] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: cts }, { data: cls }] = await Promise.all([
+    const [{ data: cts }, { data: cls }, { data: cls2 }] = await Promise.all([
       supabase.from('contratos').select('*').order('criado_em', { ascending: false }),
       supabase.from('perfis').select('id, nome, cpf').order('nome'),
+      supabase.from('contratos_link').select('*').order('criado_em', { ascending: false }),
     ]);
     setContratos(cts || []);
     setClientes(cls || []);
+    setContratosLink(cls2 || []);
     setLoading(false);
   }, []);
 
@@ -641,14 +648,39 @@ function ContratosTab() {
     load();
   }
 
+  async function gerarLinkContrato() {
+    if (!formLink.titulo || !formLink.conteudo) { alert('Preencha o título e o conteúdo do contrato.'); return; }
+    setSavingLink(true);
+    const { data, error } = await supabase.from('contratos_link').insert({
+      titulo: formLink.titulo,
+      conteudo: formLink.conteudo,
+      tipo_contrato: formLink.tipo_contrato,
+    }).select().single();
+    setSavingLink(false);
+    if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
+    const base = window.location.href.split('#')[0];
+    setLinkGerado(`${base}#/c/${data.token}`);
+    await load();
+  }
+
+  async function cancelarLink(id) {
+    if (!window.confirm('Cancelar este contrato via link?')) return;
+    await supabase.from('contratos_link').update({ status: 'cancelado' }).eq('id', id);
+    load();
+  }
+
   const nomeCliente = (id) => clientes.find(c => c.id === id)?.nome || clientes.find(c => c.id === id)?.cpf || '—';
   const ST = { rascunho: ['Rascunho', '#64748b'], aguardando_assinatura: ['Aguardando assinatura', '#d97706'], assinado: ['Assinado', '#059669'], cancelado: ['Cancelado', '#dc2626'] };
+  const ST_LINK = { aguardando: ['Aguardando', '#d97706'], assinado: ['Assinado', '#059669'], expirado: ['Expirado', '#94a3b8'], cancelado: ['Cancelado', '#dc2626'] };
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Contratos ({contratos.length})</h2>
-        <button style={S.btn('primary')} onClick={openNew}>+ Novo Contrato</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={S.btn('outline')} onClick={() => { setFormLink({ titulo: '', conteudo: '', tipo_contrato: 'servico' }); setLinkGerado(''); setModalLink(true); }}>🔗 Gerar link de assinatura</button>
+          <button style={S.btn('primary')} onClick={openNew}>+ Novo Contrato</button>
+        </div>
       </div>
 
       <div style={S.card}>
@@ -685,6 +717,116 @@ function ContratosTab() {
             </div>
           )}
       </div>
+
+      {/* Contratos via link */}
+      <div style={{ marginTop: 28 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: '0 0 12px' }}>Contratos via link ({contratosLink.length})</h3>
+        <div style={S.card}>
+          {contratosLink.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 24, fontSize: 13 }}>Nenhum contrato via link gerado ainda.</p> : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>Título</th><th style={S.th}>Tipo</th><th style={S.th}>Status</th>
+                  <th style={S.th}>Criado em</th><th style={S.th}>Expira em</th><th style={S.th}>Ações</th>
+                </tr></thead>
+                <tbody>
+                  {contratosLink.map(cl => {
+                    const [lbl, cor] = ST_LINK[cl.status] || ST_LINK.aguardando;
+                    const linkUrl = `${window.location.href.split('#')[0]}#/c/${cl.token}`;
+                    return (
+                      <tr key={cl.id}>
+                        <td style={S.td}><strong>{cl.titulo}</strong></td>
+                        <td style={{ ...S.td, textTransform: 'capitalize' }}>{cl.tipo_contrato}</td>
+                        <td style={S.td}><span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: cor + '20', color: cor }}>{lbl}</span></td>
+                        <td style={S.td}>{new Date(cl.criado_em).toLocaleDateString('pt-BR')}</td>
+                        <td style={S.td}>{new Date(cl.expira_em).toLocaleDateString('pt-BR')}</td>
+                        <td style={S.td}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {cl.status === 'aguardando' && (
+                              <button style={S.btn('outline')} onClick={() => { navigator.clipboard.writeText(linkUrl); alert('Link copiado!'); }}>Copiar link</button>
+                            )}
+                            {cl.status === 'assinado' && cl.dados_signatario && (
+                              <button style={S.btn('outline')} onClick={() => alert(`Assinado por: ${cl.dados_signatario?.nome || cl.dados_signatario?.razao_social}\nEm: ${cl.assinado_em ? new Date(cl.assinado_em).toLocaleString('pt-BR') : '—'}`)}>Ver dados</button>
+                            )}
+                            {cl.status === 'aguardando' && <button style={S.btn('danger')} onClick={() => cancelarLink(cl.id)}>Cancelar</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal: Gerar contrato via link */}
+      {modalLink && (
+        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setModalLink(false)}>
+          <div style={{ ...S.modal, maxWidth: 680 }}>
+            <h3 style={{ ...S.sectionTitle, marginBottom: 4 }}>Gerar link de assinatura</h3>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>O contrato será enviado pela Nogueira Empreendimentos. A outra parte preenche os dados e assina digitalmente.</p>
+
+            {!linkGerado ? (
+              <>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                  <div style={{ flex: 2 }}>
+                    <label style={S.label}>Título do contrato *</label>
+                    <input style={S.input} value={formLink.titulo} onChange={e => setFormLink({ ...formLink, titulo: e.target.value })} placeholder="Contrato de Prestação de Serviços…" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={S.label}>Tipo</label>
+                    <select style={S.input} value={formLink.tipo_contrato} onChange={e => setFormLink({ ...formLink, tipo_contrato: e.target.value })}>
+                      <option value="servico">Serviço</option>
+                      <option value="prestacao">Prestação</option>
+                      <option value="locacao">Locação</option>
+                      <option value="compra">Compra e Venda</option>
+                      <option value="outro">Outro</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={S.label}>Conteúdo do contrato *</label>
+                  <textarea style={{ ...S.input, height: 220, resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }}
+                    value={formLink.conteudo}
+                    onChange={e => setFormLink({ ...formLink, conteudo: e.target.value })}
+                    placeholder="Cole ou escreva as cláusulas do contrato…&#10;&#10;CLÁUSULA 1ª - DO OBJETO&#10;..." />
+                </div>
+
+                {formLink.conteudo && (
+                  <div style={{ marginBottom: 16, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 20px', maxHeight: 200, overflowY: 'auto' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Pré-visualização</div>
+                    <div style={{ fontSize: 13, color: '#0f172a', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{formLink.conteudo}</div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button style={S.btn('outline')} onClick={() => setModalLink(false)}>Cancelar</button>
+                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink}>
+                    {savingLink ? 'Gerando…' : '✓ Aprovar e gerar link'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div>
+                <div style={{ background: '#dcfce7', borderRadius: 12, padding: '20px 24px', marginBottom: 16, textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+                  <div style={{ fontWeight: 800, color: '#166534', marginBottom: 4 }}>Link gerado com sucesso!</div>
+                  <div style={{ fontSize: 12, color: '#15803d' }}>Válido por 30 dias. Ao ser assinado, os dados ficam registrados.</div>
+                </div>
+                <div style={{ background: '#f1f5f9', borderRadius: 8, padding: '12px 14px', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: '#334155', wordBreak: 'break-all', flex: 1 }}>{linkGerado}</span>
+                  <button style={S.btn('primary')} onClick={() => { navigator.clipboard.writeText(linkGerado); alert('Link copiado!'); }}>Copiar</button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button style={S.btn('outline')} onClick={() => { setModalLink(false); setLinkGerado(''); }}>Fechar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div style={S.overlay} onClick={e => e.target === e.currentTarget && setModal(null)}>
