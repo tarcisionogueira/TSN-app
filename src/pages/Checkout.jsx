@@ -67,6 +67,7 @@ export default function Checkout() {
   const [linkPagamento, setLinkPagamento] = useState(null);
   const [resultadoMudanca, setResultadoMudanca] = useState(null);
   const [erro, setErro] = useState('');
+  const [pago, setPago] = useState(false); // tela de aprovado
 
   useEffect(() => {
     if (!user) nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`);
@@ -110,7 +111,10 @@ export default function Checkout() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar cobrança');
-      setLinkPagamento(data.linkPagamento);
+      const link = data.linkPagamento;
+      setLinkPagamento(link);
+      // Abre o link do Asaas em nova aba automaticamente
+      if (link) window.open(link, '_blank', 'noopener');
       // Salva o ID do customer Asaas no perfil
       if (data.customerId && user?.id) {
         import('../utils/supabase').then(({ supabase }) => {
@@ -135,15 +139,78 @@ export default function Checkout() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao alterar plano');
       setResultadoMudanca(data);
-      if (data.linkPagamento) setLinkPagamento(data.linkPagamento);
+      if (data.linkPagamento) {
+        setLinkPagamento(data.linkPagamento);
+        window.open(data.linkPagamento, '_blank', 'noopener');
+      } else {
+        // Mudança sem link (downgrade): mostra sucesso e redireciona
+        setTimeout(() => nav('/'), 3000);
+      }
     } catch (err) {
       setErro(err.message);
     }
     setLoading(false);
   };
 
+  const confirmarPagamento = () => {
+    setPago(true);
+    setTimeout(() => nav('/'), 3500);
+  };
+
+  // Tela de aprovado — cobre tudo, redireciona para home
+  if (pago) return (
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' }}>
+      <div style={{ fontSize: 72, marginBottom: 24, animation: 'pop 0.4s ease' }}>✅</div>
+      <h1 style={{ color: 'white', fontWeight: 900, fontSize: 32, margin: '0 0 12px' }}>Pagamento aprovado!</h1>
+      <p style={{ color: '#a7f3d0', fontSize: 16, margin: '0 0 32px', lineHeight: 1.6 }}>
+        Seu plano <strong style={{ color: 'white' }}>{plano?.nome}</strong> está ativo.<br/>
+        Redirecionando para o início em instantes…
+      </p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#6ee7b7', fontSize: 14 }}>
+        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Aguarde…
+      </div>
+      <style>{`@keyframes pop{0%{transform:scale(0.5);opacity:0}80%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+
+      {/* Popup de erro — overlay sobre o checkout */}
+      {erro && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setErro('')}>
+          <div style={{ background: 'white', borderRadius: 20, padding: '32px 30px', maxWidth: 440, width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', textAlign: 'center' }}
+            onClick={e => e.stopPropagation()}>
+            {(() => {
+              const m = mapearErro(erro);
+              return m ? (
+                <>
+                  <div style={{ fontSize: 52, marginBottom: 12 }}>{m.icone}</div>
+                  <h3 style={{ color: '#dc2626', margin: '0 0 10px', fontWeight: 900, fontSize: 20 }}>{m.titulo}</h3>
+                  <p style={{ color: '#475569', fontSize: 14, lineHeight: 1.7, margin: '0 0 24px' }}>{m.orientacao}</p>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 52, marginBottom: 12 }}>⚠️</div>
+                  <h3 style={{ color: '#dc2626', margin: '0 0 10px', fontWeight: 900, fontSize: 20 }}>Pagamento não processado</h3>
+                  <p style={{ color: '#475569', fontSize: 14, lineHeight: 1.7, margin: '0 0 24px' }}>{erro}</p>
+                </>
+              );
+            })()}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => setErro('')}
+                style={{ padding: '10px 20px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <RefreshCw size={14} /> Tentar novamente
+              </button>
+              <a href="https://wa.me/5511999999999" target="_blank" rel="noreferrer"
+                style={{ padding: '10px 20px', background: '#25d366', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                💬 Falar com suporte
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) minmax(280px, 460px)', gap: 24, maxWidth: 880, width: '100%', alignItems: 'stretch' }} className="checkout-grid">
 
         {/* Coluna esquerda — conteúdo TSN sobre o produto */}
@@ -261,39 +328,26 @@ export default function Checkout() {
                 </a>
               )}
             </div>
-          ) : !linkPagamento ? (
+          ) : linkPagamento ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔗</div>
+              <p style={{ fontWeight: 800, color: '#0f172a', marginBottom: 8, fontSize: 16 }}>Página de pagamento aberta!</p>
+              <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, marginBottom: 20 }}>
+                Complete o pagamento na aba que abrimos. Após confirmar o pagamento, clique no botão abaixo.
+              </p>
+              <a href={linkPagamento} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px', background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box', marginBottom: 10 }}>
+                <ExternalLink size={15} /> Reabrir página de pagamento
+              </a>
+              <button onClick={confirmarPagamento}
+                style={{ width: '100%', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                ✅ Paguei — confirmar
+              </button>
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10 }}>Seu plano será ativado automaticamente em até 5 minutos após o pagamento.</p>
+            </div>
+          ) : (
             <>
-              {erro && (() => {
-                const m = mapearErro(erro);
-                return m ? (
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '16px', marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#dc2626', marginBottom: 6, fontSize: 14 }}>
-                      <AlertTriangle size={16} /> {m.icone} {m.titulo}
-                    </div>
-                    <p style={{ margin: '0 0 12px', fontSize: 13, color: '#7f1d1d', lineHeight: 1.6 }}>{m.orientacao}</p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button onClick={() => { setErro(''); setLinkPagamento(null); }}
-                        style={{ padding: '7px 14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <RefreshCw size={12} /> Tentar novamente
-                      </button>
-                      <a href="https://wa.me/5511999999999" target="_blank" rel="noreferrer"
-                        style={{ padding: '7px 14px', background: '#25d366', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5 }}>
-                        💬 Falar com suporte
-                      </a>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 4 }}><AlertTriangle size={14}/> Pagamento não processado</div>
-                    <div style={{ marginBottom: 8 }}>{erro}</div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => setErro('')} style={{ padding: '5px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>Tentar novamente</button>
-                      <a href="https://wa.me/5511999999999" target="_blank" rel="noreferrer" style={{ padding: '5px 12px', background: '#25d366', color: 'white', borderRadius: 6, fontWeight: 700, fontSize: 11, textDecoration: 'none' }}>💬 Suporte</a>
-                    </div>
-                  </div>
-                );
-              })()}
-              <button onClick={erro ? undefined : (ehMudanca ? mudarPlano : gerarLink)} disabled={loading || !!erro}
+              <button onClick={ehMudanca ? mudarPlano : gerarLink} disabled={loading}
                 style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
@@ -303,18 +357,6 @@ export default function Checkout() {
                 Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser
               </p>
             </>
-          ) : (
-            <div style={{ textAlign: 'center' }}>
-              <CheckCircle2 size={40} color="#10b981" style={{ margin: '0 auto 12px' }} />
-              <p style={{ fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>Cobrança gerada com sucesso!</p>
-              <a href={linkPagamento} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: 'pointer', textDecoration: 'none', boxSizing: 'border-box' }}>
-                <ExternalLink size={16} /> Abrir página de pagamento
-              </a>
-              <p style={{ fontSize: 12, color: '#64748b', marginTop: 12, lineHeight: 1.5 }}>
-                Após o pagamento ser confirmado, seu plano será ativado automaticamente. Pode levar alguns minutos.
-              </p>
-            </div>
           )}
 
           <button onClick={() => nav('/')} style={{ marginTop: 16, width: '100%', background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>

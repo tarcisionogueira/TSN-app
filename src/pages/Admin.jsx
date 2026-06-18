@@ -1275,8 +1275,8 @@ function DashboardTab() {
             <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
             {[
               { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
-              { key: 'top1',       label: 'TOP 1 (R$49,90)',    cor: '#2563eb', preco: 49.90 },
-              { key: 'top2',       label: 'TOP 2 (R$99,90)',    cor: '#7c3aed', preco: 99.90 },
+              { key: 'top1',       label: 'Investidor (R$49,90)',     cor: '#2563eb', preco: 49.90 },
+              { key: 'top2',       label: 'Investidor Pro (R$99,90)', cor: '#7c3aed', preco: 99.90 },
               { key: 'assessorado',label: 'Assessorado (R$5k)', cor: '#d97706', preco: 5000 },
               { key: 'clube',      label: 'Clube (R$5k/mês)',   cor: '#059669', preco: 5000 },
             ].map(({ key, label, cor, preco }) => {
@@ -1381,9 +1381,10 @@ function DashboardTab() {
           <div style={S.card}>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
             {[
-              { nome: 'Supabase', plano: `Free (${fmtN(dados.total)} usuários)`, custo: 'R$ 0/mês', alerta: dados.total > 40000, alertaMsg: 'Próximo do limite — considere Pro ($25/mês)' },
+              { nome: 'Supabase', plano: `Free (${fmtN(dados.total)} usuários)`, custo: 'R$ 0/mês', alerta: dados.total > 40000, alertaMsg: 'Próximo do limite gratuito — migrar para Supabase Pro ($25/mês)' },
               { nome: 'Vercel', plano: 'Free (Serverless)', custo: 'R$ 0/mês', alerta: false },
-              { nome: 'Anthropic API', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
+              { nome: 'Anthropic (Claude)', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
+              { nome: 'Asaas Gateway', plano: '~1% por PIX', custo: `R$ ${fmt(dados.taxaPix)}/mês`, alerta: dados.mrr > 8000, alertaMsg: 'MRR acima de R$10k: contatar comercial Asaas para reduzir taxa' },
             ].map(({ nome, plano, custo, alerta, alertaMsg }) => (
               <div key={nome} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1397,9 +1398,76 @@ function DashboardTab() {
               </div>
             ))}
             <div style={{ marginTop: 14, padding: '10px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 13, color: '#166534', fontWeight: 600 }}>
-              💚 Custo total de infra: R$ 0/mês (planos gratuitos ativos)
+              💚 Custo base de infra: R$ 0/mês (planos gratuitos ativos)
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Marcos de melhoria e sugestões de eficiência */}
+      <div style={{ marginTop: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          🗺️ Marcos de Melhoria & Eficiência
+          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400 }}>— ações a executar quando os gatilhos forem atingidos</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[
+            {
+              gatilho: `MRR ≥ R$ 10.000`,
+              atingido: dados.mrr >= 10000,
+              titulo: 'Negociar taxa Asaas',
+              desc: 'Contatar comercial Asaas para reduzir taxa PIX de 1% para ~0,7%. Economia estimada: R$ 30+/mês.',
+              cor: '#d97706', icone: '💳',
+            },
+            {
+              gatilho: `MRR ≥ R$ 30.000`,
+              atingido: dados.mrr >= 30000,
+              titulo: 'Migrar Supabase para plano Pro ou RDS AWS',
+              desc: 'Avaliar migração do banco para RDS na AWS São Paulo (sa-east-1) ou Supabase Pro. Mais performance, backups point-in-time e segurança reforçada.',
+              cor: '#7c3aed', icone: '🗄️',
+            },
+            {
+              gatilho: `MRR ≥ R$ 50.000`,
+              atingido: dados.mrr >= 50000,
+              titulo: 'Ativar CDN e cache de relatórios',
+              desc: 'Implementar cache de PDFs e imagens via Cloudflare R2 (S3 compatível) para reduzir latência dos laudos e custo de storage.',
+              cor: '#0891b2', icone: '⚡',
+            },
+            {
+              gatilho: `MRR ≥ R$ 100.000`,
+              atingido: dados.mrr >= 100000,
+              titulo: 'Infraestrutura dedicada + SLA',
+              desc: 'Contratar plano Enterprise Asaas (<0,3% PIX), mover para ECS Fargate ou EC2 dedicado, implementar monitoramento com Datadog/New Relic.',
+              cor: '#dc2626', icone: '🏢',
+            },
+            {
+              gatilho: '> 500 análises/mês',
+              atingido: false,
+              titulo: 'Fila assíncrona para relatórios',
+              desc: 'Implementar processamento de laudos em background (SQS ou Supabase Edge Functions) para evitar timeout nas funções serverless do Vercel.',
+              cor: '#059669', icone: '🔄',
+            },
+            {
+              gatilho: '> 50 contratos/mês',
+              atingido: false,
+              titulo: 'Assinatura digital via ICP-Brasil',
+              desc: 'Integrar com DocuSign ou ClickSign para validade jurídica reforçada com certificado digital. Custo: ~R$ 2-5/assinatura.',
+              cor: '#6366f1', icone: '📝',
+            },
+          ].map((m, i) => (
+            <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${m.cor}30`, background: m.atingido ? m.cor + '08' : 'white', alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 24, flexShrink: 0 }}>{m.icone}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{m.titulo}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: m.atingido ? m.cor : '#f1f5f9', color: m.atingido ? 'white' : '#64748b' }}>
+                    {m.atingido ? '✅ Gatilho atingido!' : `Gatilho: ${m.gatilho}`}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>{m.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
