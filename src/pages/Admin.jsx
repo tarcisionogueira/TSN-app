@@ -964,12 +964,233 @@ function ConvitesTab() {
   );
 }
 
-const TABS = ['Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Configurações'];
+function DashboardTab() {
+  const [dados, setDados] = useState(null);
+  const [asaasDados, setAsaasDados] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [asaasLoading, setAsaasLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const [{ data: perfis }, { count: inadimCount }, { count: novosCount }] = await Promise.all([
+        supabase.from('perfis').select('role, plano, inadimplente_desde'),
+        supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
+        supabase.from('perfis').select('id', { count: 'exact', head: true })
+          .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+      ]);
+
+      const contagem = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
+      (perfis || []).forEach(p => { if (p.role in contagem) contagem[p.role]++; });
+
+      const mrr = (contagem.top1 * 49.90) + (contagem.top2 * 99.90) + (contagem.assessorado * 5000) + (contagem.clube * 5000);
+      const taxaPix = mrr * 0.01;
+      const liquido = mrr - taxaPix;
+
+      setDados({
+        contagem,
+        total: Object.values(contagem).reduce((s, v) => s + v, 0),
+        mrr,
+        taxaPix,
+        liquido,
+        inadimplentes: inadimCount || 0,
+        novosMes: novosCount || 0,
+      });
+      setLoading(false);
+    }
+
+    async function loadAsaas() {
+      try {
+        const res = await fetch('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
+        if (res.ok) setAsaasDados(await res.json());
+      } catch (_) {}
+      setAsaasLoading(false);
+    }
+
+    load();
+    loadAsaas();
+  }, []);
+
+  function marcoAsaas(mrr) {
+    if (mrr >= 100000) return { cor: '#7c3aed', label: 'Tier Enterprise', desc: 'Exigir conta dedicada e taxa máxima de 0,3% no PIX' };
+    if (mrr >= 30000) return { cor: '#dc2626', label: 'Alto Volume', desc: 'Negociar taxa diferenciada — meta abaixo de 0,5%' };
+    if (mrr >= 10000) return { cor: '#d97706', label: 'Volume Médio', desc: 'Contatar comercial Asaas — redução de 1% para ~0,7% no PIX é possível' };
+    return { cor: '#10b981', label: 'Crescimento', desc: `Falta R$ ${Number(10000 - mrr).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MRR para negociar desconto de taxa com o Asaas` };
+  }
+
+  const fmt = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtN = (v) => Number(v).toLocaleString('pt-BR');
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>Carregando dashboard…</div>;
+
+  const marco = marcoAsaas(dados.mrr);
+  const proximo = dados.mrr < 10000 ? 10000 : dados.mrr < 30000 ? 30000 : dados.mrr < 100000 ? 100000 : null;
+  const progresso = proximo ? Math.min(100, (dados.mrr / proximo) * 100) : 100;
+
+  const statCard = (label, value, sub, cor = '#2563eb') => (
+    <div style={{ background: '#0f172a', borderRadius: 12, padding: '20px 22px', flex: 1, minWidth: 160 }}>
+      <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 900, color: cor, lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{sub}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Dashboard</h2>
+        <div style={{ fontSize: 12, color: '#94a3b8' }}>Atualizado agora · {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+      </div>
+
+      {/* Stat cards */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} este mês`, '#60a5fa')}
+        {statCard('MRR estimado', `R$ ${fmt(dados.mrr)}`, 'Receita mensal recorrente', '#10b981')}
+        {statCard('Taxas Asaas (est.)', `R$ ${fmt(dados.taxaPix)}`, '~1% PIX sobre MRR', '#f59e0b')}
+        {statCard('Líquido estimado', `R$ ${fmt(dados.liquido)}`, 'MRR − taxas estimadas', '#a78bfa')}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+        {/* Coluna esquerda: Usuários por plano */}
+        <div>
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
+            {[
+              { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
+              { key: 'top1',       label: 'TOP 1 (R$49,90)',    cor: '#2563eb', preco: 49.90 },
+              { key: 'top2',       label: 'TOP 2 (R$99,90)',    cor: '#7c3aed', preco: 99.90 },
+              { key: 'assessorado',label: 'Assessorado (R$5k)', cor: '#d97706', preco: 5000 },
+              { key: 'clube',      label: 'Clube (R$5k/mês)',   cor: '#059669', preco: 5000 },
+            ].map(({ key, label, cor, preco }) => {
+              const qtd = dados.contagem[key] || 0;
+              const receita = qtd * preco;
+              return (
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: cor }} />
+                    <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{qtd}</div>
+                    {preco > 0 && <div style={{ fontSize: 11, color: '#64748b' }}>R$ {fmt(receita)}/mês</div>}
+                  </div>
+                </div>
+              );
+            })}
+            {dados.inadimplentes > 0 && (
+              <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', borderRadius: 8, fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
+                ⚠️ {dados.inadimplentes} usuário{dados.inadimplentes > 1 ? 's' : ''} inadimplente{dados.inadimplentes > 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
+
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Equipe interna</div>
+            {[
+              { key: 'consultor', label: 'Consultores', cor: '#0891b2' },
+              { key: 'analista',  label: 'Analistas',   cor: '#f59e0b' },
+              { key: 'advogado',  label: 'Advogados',   cor: '#dc2626' },
+              { key: 'admin',     label: 'Admins',      cor: '#7c3aed' },
+            ].map(({ key, label, cor }) => (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: cor }} />
+                  <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
+                </div>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{dados.contagem[key] || 0}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Coluna direita: Taxas Asaas + Marco + Infraestrutura */}
+        <div>
+          {/* Taxas Asaas reais */}
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
+            {asaasLoading ? (
+              <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
+            ) : asaasDados ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  {[
+                    { label: 'Saldo disponível', value: `R$ ${fmt(asaasDados.balance?.balance || 0)}`, cor: '#10b981' },
+                    { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#2563eb' },
+                    { label: 'Recebido no mês', value: `R$ ${fmt(asaasDados.statsMes?.revenue || 0)}`, cor: '#7c3aed' },
+                    { label: 'Taxas cobradas', value: `R$ ${fmt(asaasDados.statsMes?.fees || 0)}`, cor: '#f59e0b' },
+                  ].map(({ label, value, cor }) => (
+                    <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: cor }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>
+                  Dados direto da API Asaas · atualizado agora
+                </div>
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: '#dc2626' }}>Não foi possível carregar dados do Asaas. Verifique a chave ASAAS_API_KEY.</p>
+            )}
+          </div>
+
+          {/* Marco comercial */}
+          <div style={{ ...S.card, border: `2px solid ${marco.cor}20` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Marco Comercial Asaas</div>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: marco.cor + '20', color: marco.cor }}>{marco.label}</span>
+            </div>
+            {proximo && (
+              <>
+                <div style={{ background: '#f1f5f9', borderRadius: 8, height: 10, overflow: 'hidden', marginBottom: 8 }}>
+                  <div style={{ height: '100%', width: `${progresso}%`, background: marco.cor, borderRadius: 8, transition: 'width 0.5s' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 12 }}>
+                  <span>MRR atual: R$ {fmt(dados.mrr)}</span>
+                  <span>Próximo marco: R$ {fmtN(proximo)}</span>
+                </div>
+              </>
+            )}
+            <div style={{ padding: '10px 12px', background: marco.cor + '10', borderRadius: 8, fontSize: 13, color: marco.cor, fontWeight: 600, lineHeight: 1.5 }}>
+              📞 {marco.desc}
+            </div>
+          </div>
+
+          {/* Infraestrutura */}
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
+            {[
+              { nome: 'Supabase', plano: `Free (${fmtN(dados.total)} usuários)`, custo: 'R$ 0/mês', alerta: dados.total > 40000, alertaMsg: 'Próximo do limite — considere Pro ($25/mês)' },
+              { nome: 'Vercel', plano: 'Free (Serverless)', custo: 'R$ 0/mês', alerta: false },
+              { nome: 'Anthropic API', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
+            ].map(({ nome, plano, custo, alerta, alertaMsg }) => (
+              <div key={nome} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{nome}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{plano}</div>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: alerta ? '#d97706' : '#10b981' }}>{custo}</div>
+                </div>
+                {alerta && <div style={{ marginTop: 6, fontSize: 11, color: '#d97706', fontWeight: 600 }}>⚠️ {alertaMsg}</div>}
+              </div>
+            ))}
+            <div style={{ marginTop: 14, padding: '10px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 13, color: '#166534', fontWeight: 600 }}>
+              💚 Custo total de infra: R$ 0/mês (planos gratuitos ativos)
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState('Cursos');
+  const [tab, setTab] = useState('Dashboard');
 
   if (loading) {
     return <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p style={{ color: '#64748b' }}>Carregando...</p></div>;
@@ -1004,6 +1225,7 @@ export default function Admin() {
           ))}
         </div>
 
+        {tab === 'Dashboard'      && <DashboardTab />}
         {tab === 'Cursos'         && <CursosTab />}
         {tab === 'eBooks'         && <EbooksTab />}
         {tab === 'Contratos'      && <ContratosTab />}
