@@ -63,6 +63,12 @@ export default function Checkout() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar cobrança');
       setLinkPagamento(data.linkPagamento);
+      // Salva o ID do customer Asaas no perfil
+      if (data.customerId && user?.id) {
+        import('../utils/supabase').then(({ supabase }) => {
+          supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id).then(() => {});
+        });
+      }
     } catch (err) {
       setErro(err.message);
     }

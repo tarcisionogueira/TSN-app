@@ -153,6 +153,39 @@ export default async function handler(req, res) {
       });
     }
 
+    // ── Busca ou cria customer pelo CPF/email ──
+    if (action === 'sync_customer') {
+      const { nome, email, cpf } = body;
+      if (!email) return res.status(400).json({ error: 'Email obrigatório' });
+
+      const cpfLimpo = (cpf || '').replace(/\D/g, '');
+      let customerId = null;
+
+      // Tenta por CPF primeiro
+      if (cpfLimpo) {
+        const byCpf = await asaasGet(`/customers?cpfCnpj=${cpfLimpo}`);
+        if (byCpf.data?.length > 0) customerId = byCpf.data[0].id;
+      }
+
+      // Tenta por email
+      if (!customerId) {
+        const byEmail = await asaasGet(`/customers?email=${encodeURIComponent(email)}`);
+        if (byEmail.data?.length > 0) customerId = byEmail.data[0].id;
+      }
+
+      // Cria novo customer se não encontrou
+      if (!customerId) {
+        const customer = await asaasPost('/customers', {
+          name: nome || email,
+          email,
+          cpfCnpj: cpfLimpo || undefined,
+        });
+        customerId = customer.id;
+      }
+
+      return res.status(200).json({ customerId });
+    }
+
     return res.status(400).json({ error: 'Ação inválida' });
   } catch (err) {
     console.error('Asaas error:', err.message);

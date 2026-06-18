@@ -16,18 +16,22 @@ export default function Login() {
   // useLocation().search parseia corretamente dentro do hash
   const params = new URLSearchParams(loc.search);
   const planoEscolhido = params.get('plano');
+  const promoParam = params.get('promo')?.toUpperCase() || '';
   const refParam = params.get('ref')?.toUpperCase() || '';
+  const conviteParam = params.get('convite')?.toUpperCase() || '';
+  const modoParam = params.get('modo');
   const [refCodigo] = useState(() => {
     const stored = sessionStorage.getItem('tsn_ref_codigo') || '';
     return refParam || stored;
   });
 
-  // Persiste o ref em sessionStorage para sobreviver ao OAuth redirect (useEffect garante render-phase seguro)
+  // Persiste o ref e convite em sessionStorage
   useEffect(() => {
     if (refParam) sessionStorage.setItem('tsn_ref_codigo', refParam);
-  }, [refParam]);
+    if (conviteParam) sessionStorage.setItem('tsn_convite_codigo', conviteParam);
+  }, [refParam, conviteParam]);
 
-  const [modo, setModo] = useState(planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso'
+  const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [showSenha, setShowSenha] = useState(false);
@@ -61,7 +65,13 @@ export default function Login() {
       // Verifica plano no sessionStorage (definido durante cadastro) ou na URL
       const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
       sessionStorage.removeItem('tsn_plano_pendente');
-      nav(planoPendente ? `/checkout?plano=${planoPendente}` : '/');
+      const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
+      sessionStorage.removeItem('tsn_promo_pendente');
+      if (planoPendente) {
+        nav(`/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`);
+      } else {
+        nav('/');
+      }
     } catch (err) {
       setErro(err.message === 'Invalid login credentials' ? 'Email ou senha incorretos.' : err.message);
     }
@@ -107,6 +117,12 @@ export default function Login() {
         {planoEscolhido && (
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1d4ed8', fontWeight: 600 }}>
             ✅ Plano <strong style={{ textTransform: 'capitalize' }}>{planoEscolhido}</strong> selecionado — crie sua conta para continuar
+          </div>
+        )}
+        {/* Banner convite */}
+        {conviteParam && !planoEscolhido && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#15803d', fontWeight: 600 }}>
+            🎯 Você foi convidado — crie sua conta ou entre para continuar
           </div>
         )}
 
