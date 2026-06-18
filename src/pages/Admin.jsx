@@ -874,7 +874,7 @@ function ContratosTab() {
                   <textarea style={{ ...S.input, height:110, resize:'vertical', fontFamily:'inherit', fontSize:13 }}
                     value={descricao}
                     onChange={e => setDescricao(e.target.value)}
-                    placeholder="Descreva livremente: as partes, o objeto, valores, prazos, penalidades, confidencialidade, LGPD, foro, etc. O assistente perguntará o que faltar."/>
+                    placeholder="Descreva o que o contrato deve conter. Informe o máximo possível: qual o objeto (o que será feito/entregue), valor e forma de pagamento, prazo de vigência, condições de rescisão, obrigações específicas de cada parte, penalidades, etc. O assistente perguntará sobre o que faltar antes de gerar o texto final."/>
                 </div>
 
                 <div style={{ marginBottom:16 }}>
