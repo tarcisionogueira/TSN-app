@@ -119,6 +119,10 @@ export default function Calculadora() {
   // Custos do leilão = leiloeiro + honorários + ITBI+registro (sem débitos/reforma — esses são do imóvel)
   const custosLeilao = m.taxaLeiloeiro + m.honorarios + m.itbiRegistro;
 
+  // Desembolso imediato na arrematação (o que precisa ter disponível no dia)
+  const sinalOuArrematacao = isAVista ? vArr : (m.valorSinal || 0);
+  const desembolsoArrematacao = sinalOuArrematacao + custosLeilao + (m.debitos || 0) + (m.manutencao || 0);
+
   // Entrada no caixa = receita líquida na venda
   const entradaCaixa = m.receitaLiquida;
 
@@ -289,6 +293,23 @@ export default function Calculadora() {
               {m.debitos > 0 && <Linha label="Débitos assumidos" valor={`R$ ${fmt(m.debitos, 0)}`} />}
               {m.manutencao > 0 && <Linha label="Reforma estimada" valor={`R$ ${fmt(m.manutencao, 0)}`} />}
               {m.custoCarrrego > 0 && <Linha label="Carrego (IPTU + cond.)" valor={`R$ ${fmt(m.custoCarrrego, 0)}`} />}
+
+              {/* Necessidade de caixa — o que precisa ter disponível */}
+              <div style={{ margin: '12px 0 4px', padding: '12px 14px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Necessidade de caixa</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 600 }}>
+                    {isAVista ? 'Total na arrematação' : 'Total no ato (sinal + custos)'}
+                  </span>
+                  <span style={{ fontSize: 15, fontWeight: 900, color: '#1e3a8a' }}>R$ {fmt(desembolsoArrematacao, 0)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 600 }}>Parcela mensal a suportar</span>
+                  <span style={{ fontSize: 15, fontWeight: 900, color: '#1e3a8a' }}>
+                    {isAVista ? '—' : `R$ ${fmt(m.parcelaMedia, 0)}`}
+                  </span>
+                </div>
+              </div>
 
               {!isAVista && (
                 <>
