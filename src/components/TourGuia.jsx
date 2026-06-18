@@ -5,7 +5,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 const VERSAO_ATUAL = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
-const MAX_EXIBICOES_MES = 3;
+const TOUR_SESSION_KEY = `tsn_tour_${VERSAO_ATUAL}`; // mostra 1x por sessão de login
 
 export default function TourGuia() {
   const { user, role } = useAuth();
@@ -59,13 +59,15 @@ export default function TourGuia() {
 
       setProgresso(prog);
 
-      // Exibe se ainda não atingiu o limite
-      const views = prog?.visualizacoes || 0;
-      if (views < MAX_EXIBICOES_MES) {
+      // Exibe apenas uma vez por sessão de login (sessionStorage é limpo ao fechar o browser/aba)
+      const jaVisto = sessionStorage.getItem(TOUR_SESSION_KEY);
+      if (!jaVisto && !prog?.completo) {
         const etapasList = await carregarEtapas(VERSAO_ATUAL);
         if (etapasList.length > 0) {
           setVersaoVendo(VERSAO_ATUAL);
           setVisivel(true);
+          sessionStorage.setItem(TOUR_SESSION_KEY, '1');
+          const views = prog?.visualizacoes || 0;
           await registrarVisualizacao(prog, views);
         }
       }

@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Play, Lock, CheckCircle2, Clock, BookOpen, Star, Users,
-  ChevronRight, Award, Zap, Crown, Search, Filter,
+  Play, CheckCircle2, BookOpen, Star,
+  ChevronRight, Crown, Search,
 } from 'lucide-react';
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
 import { supabase } from '../utils/supabase';
-import LeitorEbook from '../components/LeitorEbook';
 
 // Progresso salvo no localStorage
 function getProgresso() {
@@ -32,7 +31,6 @@ export default function Membros() {
   const [showPlanos, setShowPlanos] = useState(false);
   const [cursos, setCursos] = useState([]);
   const [ebooks, setEbooks] = useState([]);
-  const [ebookAberto, setEbookAberto] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -66,8 +64,6 @@ export default function Membros() {
   const totalAulas = cursos.reduce((s, c) => s + c.aulas, 0);
   const aulasConcluidas = Object.keys(progresso).filter(k => progresso[k]).length;
   const cursosDestaques = cursos.filter(c => c.destaque);
-
-  const NIVEL_COR = { 'Iniciante':'#10b981', 'Intermediário':'#f59e0b', 'Avançado':'#ef4444' };
 
   const ativarPlano = (p) => {
     localStorage.setItem('tsn_plano_membro', p);
@@ -171,7 +167,7 @@ export default function Membros() {
       </div>
 
       {/* Grade de cursos */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))', gap:16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
         {cursosFiltrados.map(c => {
           const totalLicoes = c.modulos.flatMap(m=>m.licoes).length;
           const concluidas = c.modulos.flatMap(m=>m.licoes).filter(l=>progresso[l.id]).length;
@@ -179,51 +175,33 @@ export default function Membros() {
           return (
             <div key={c.id} onClick={()=>nav(`/membros/curso/${c.id}`)}
               style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden', cursor:'pointer', transition:'all 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' }}
-              onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.12)'; e.currentTarget.style.transform='translateY(-2px)'; }}
+              onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.12)'; e.currentTarget.style.transform='translateY(-3px)'; }}
               onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.transform='none'; }}>
 
-              {/* Thumbnail */}
-              <div style={{ background:`linear-gradient(135deg, ${c.cor} 0%, ${c.cor}cc 100%)`, padding:'28px 24px', display:'flex', alignItems:'center', gap:16 }}>
-                <div style={{ fontSize:44 }}>{c.emoji}</div>
-                <div>
-                  <div style={{ fontSize:10, color:'rgba(255,255,255,0.7)', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>{c.categoria}</div>
-                  <div style={{ fontSize:15, fontWeight:900, color:'white', lineHeight:1.3 }}>{c.titulo}</div>
-                </div>
-              </div>
-
-              {/* Barra de progresso */}
-              {concluidas > 0 && (
-                <div style={{ height:4, background:'#f1f5f9' }}>
-                  <div style={{ height:4, background:c.cor, width:`${pct}%`, transition:'width 0.3s' }}/>
+              {/* Capa / Thumbnail */}
+              {c.capa_url ? (
+                <img src={c.capa_url} alt={c.titulo}
+                  style={{ width:'100%', aspectRatio:'2/3', objectFit:'cover', display:'block', background:'#f1f5f9' }}
+                  onError={e=>{ e.currentTarget.style.display='none'; }}/>
+              ) : (
+                <div style={{ background:`linear-gradient(135deg, ${c.cor} 0%, ${c.cor}cc 100%)`, aspectRatio:'2/3', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10 }}>
+                  <div style={{ fontSize:52 }}>{c.emoji}</div>
+                  <div style={{ fontSize:11, color:'rgba(255,255,255,0.8)', fontWeight:700, textTransform:'uppercase', textAlign:'center', padding:'0 12px' }}>{c.categoria}</div>
                 </div>
               )}
 
-              <div style={{ padding:'16px 18px' }}>
-                <p style={{ margin:'0 0 12px', fontSize:12, color:'#64748b', lineHeight:1.6 }}>{c.descricao.slice(0,100)}...</p>
-
-                <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
-                  <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, background:'#f1f5f9', color:NIVEL_COR[c.nivel]||'#64748b', border:`1px solid ${NIVEL_COR[c.nivel]}40` }}>{c.nivel}</span>
-                  <span style={{ fontSize:10, fontWeight:600, padding:'3px 8px', borderRadius:20, background:'#f8fafc', color:'#64748b', display:'flex', alignItems:'center', gap:3 }}><BookOpen size={10}/> {c.aulas} aulas</span>
+              {/* Barra de progresso */}
+              {concluidas > 0 && (
+                <div style={{ height:3, background:'#f1f5f9' }}>
+                  <div style={{ height:3, background:c.cor, width:`${pct}%` }}/>
                 </div>
+              )}
 
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <div>
-                    {c.gratuito ? (
-                      <span style={{ fontWeight:800, fontSize:15, color:'#10b981' }}>Gratuito</span>
-                    ) : (
-                      <div>
-                        <span style={{ fontSize:11, color:'#94a3b8' }}>Acesso individual: </span>
-                        <span style={{ fontWeight:800, fontSize:15, color:c.cor }}>R$ {c.preco}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    {concluidas>0 && <span style={{ fontSize:10, color:'#10b981', fontWeight:700 }}>{pct}%</span>}
-                    <button style={{ background:c.cor, color:'white', border:'none', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-                      {pct===100 ? <><CheckCircle2 size={12}/> Concluído</> : pct>0 ? <><Play size={12}/> Continuar</> : <><Play size={12}/> Iniciar</>}
-                    </button>
-                  </div>
-                </div>
+              <div style={{ padding:'12px 14px' }}>
+                <div style={{ fontWeight:800, fontSize:13, color:'#0f172a', lineHeight:1.4 }}>{c.titulo}</div>
+                {concluidas > 0 && (
+                  <div style={{ fontSize:10, color:'#10b981', fontWeight:700, marginTop:4 }}>{pct}% concluído</div>
+                )}
               </div>
             </div>
           );
@@ -236,42 +214,27 @@ export default function Membros() {
           <div style={{ fontSize:12, fontWeight:800, color:'#6366f1', textTransform:'uppercase', letterSpacing:1, marginBottom:14, display:'flex', alignItems:'center', gap:6 }}>
             📖 eBooks & Materiais
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:16 }}>
-            {ebooks.map(eb => {
-              const gratis = !eb.preco || Number(eb.preco) === 0;
-              return (
-                <div key={eb.id}
-                  style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.05)', display:'flex', flexDirection:'column' }}>
-                  {/* Capa */}
-                  {eb.capa_url ? (
-                    <img src={eb.capa_url} alt={eb.titulo}
-                      style={{ width:'100%', height:180, objectFit:'cover', background:'#f1f5f9' }}
-                      onError={e=>{ e.currentTarget.style.display='none'; }}/>
-                  ) : (
-                    <div style={{ width:'100%', height:120, background:'linear-gradient(135deg,#6366f1,#4f46e5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:40 }}>📖</div>
-                  )}
-                  <div style={{ padding:'14px 16px', flex:1, display:'flex', flexDirection:'column', gap:8 }}>
-                    <div style={{ fontWeight:800, fontSize:14, color:'#0f172a', lineHeight:1.3 }}>{eb.titulo}</div>
-                    {eb.descricao && <div style={{ fontSize:12, color:'#64748b', lineHeight:1.5 }}>{eb.descricao}</div>}
-                    <div style={{ marginTop:'auto', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <span style={{ fontWeight:800, fontSize:14, color:gratis?'#10b981':'#6366f1' }}>
-                        {gratis ? 'Gratuito' : `R$ ${Number(eb.preco).toFixed(2)}`}
-                      </span>
-                      <button onClick={() => setEbookAberto(eb)}
-                        style={{ padding:'7px 14px', background:'#6366f1', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-                        📖 Ler
-                      </button>
-                    </div>
-                  </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:16 }}>
+            {ebooks.map(eb => (
+              <div key={eb.id} onClick={()=>nav(`/membros/ebook/${eb.id}`)}
+                style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden', cursor:'pointer', transition:'all 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' }}
+                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.12)'; e.currentTarget.style.transform='translateY(-3px)'; }}
+                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.transform='none'; }}>
+                {eb.capa_url ? (
+                  <img src={eb.capa_url} alt={eb.titulo}
+                    style={{ width:'100%', aspectRatio:'2/3', objectFit:'cover', display:'block', background:'#f1f5f9' }}
+                    onError={e=>{ e.currentTarget.style.display='none'; }}/>
+                ) : (
+                  <div style={{ width:'100%', aspectRatio:'2/3', background:'linear-gradient(135deg,#6366f1,#4f46e5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:44 }}>📖</div>
+                )}
+                <div style={{ padding:'10px 12px' }}>
+                  <div style={{ fontWeight:800, fontSize:12, color:'#0f172a', lineHeight:1.4 }}>{eb.titulo}</div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       )}
-
-      {/* Leitor de eBook */}
-      <LeitorEbook ebook={ebookAberto} onClose={() => setEbookAberto(null)} />
 
       {/* Modal de planos */}
       {showPlanos && (

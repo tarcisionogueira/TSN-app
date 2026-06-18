@@ -149,7 +149,7 @@ export default function Calculadora() {
         </div>
         <h2 style={{ color: '#0f172a', margin: '0 0 8px' }}>Calculadora de Lance</h2>
         <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6 }}>
-          Ferramenta exclusiva para assinantes a partir do plano <strong>Top 1</strong>. Simule o teto máximo de lance, todos os custos do leilão e o retorno do investimento.
+          Ferramenta exclusiva para assinantes a partir do plano <strong>Investidor</strong>. Simule o teto máximo de lance, todos os custos do leilão e o retorno do investimento.
         </p>
         <button onClick={() => nav('/planos')} style={{ marginTop: 18, padding: '11px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
           Ver planos

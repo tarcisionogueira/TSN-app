@@ -22,6 +22,8 @@ import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
 import Promo from './pages/Promo';
 import Convite from './pages/Convite';
+import EbookPage from './pages/EbookPage';
+import ContratoLink from './pages/ContratoLink';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -96,6 +98,7 @@ function MainLayout() {
           <Route path="/calculadora" element={<Calculadora />} />
           <Route path="/membros" element={<Membros />} />
           <Route path="/membros/curso/:id" element={<Curso />} />
+          <Route path="/membros/ebook/:id" element={<EbookPage />} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />
         </Routes>
@@ -115,6 +118,7 @@ export default function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/promo/:codigo" element={<Promo />} />
           <Route path="/convite/:codigo" element={<Convite />} />
+          <Route path="/c/:token" element={<ContratoLink />} />
           <Route path="*" element={<MainLayout />} />
         </Routes>
       </HashRouter>

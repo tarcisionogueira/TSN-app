@@ -4,6 +4,19 @@ import { supabase } from '../utils/supabase';
 const AuthContext = createContext(null);
 
 const IMPERSONATE_KEY = 'tsn_impersonate';
+const LAST_ACTIVITY_KEY = 'tsn_last_activity';
+const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24h
+
+// Atualiza o timestamp de atividade a cada interação
+function updateActivity() {
+  localStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+}
+
+function isSessionExpired() {
+  const last = localStorage.getItem(LAST_ACTIVITY_KEY);
+  if (!last) return false;
+  return Date.now() - Number(last) > SESSION_TIMEOUT_MS;
+}
 
 async function fetchPerfil(userId) {
   if (!userId) return { role: 'aluno', ativo: true, inadimplenteDias: 0 };
@@ -50,8 +63,16 @@ export function AuthProvider({ children }) {
   const [impersonate, setImpersonate] = useState(loadImpersonate);
 
   useEffect(() => {
+    // Verificar expiração de 24h na carga inicial
     supabase.auth.getSession().then(async ({ data }) => {
       const u = data.session?.user ?? null;
+      if (u && isSessionExpired()) {
+        await supabase.auth.signOut();
+        localStorage.removeItem(LAST_ACTIVITY_KEY);
+        setLoading(false);
+        return;
+      }
+      if (u) updateActivity();
       setUser(u);
       const p = await fetchPerfil(u?.id);
       setRole(p.role);
@@ -59,6 +80,11 @@ export function AuthProvider({ children }) {
       setInad(p.inadimplenteDias);
       setLoading(false);
     });
+
+    // Atualiza atividade em cliques e teclas
+    const onActivity = () => updateActivity();
+    window.addEventListener('click', onActivity, { passive: true });
+    window.addEventListener('keydown', onActivity, { passive: true });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const u = session?.user ?? null;
@@ -84,13 +110,19 @@ export function AuthProvider({ children }) {
         }
       }
       // Encerra o modo suporte ao sair da sessão
+      if (event === 'SIGNED_IN') updateActivity();
       if (event === 'SIGNED_OUT') {
         sessionStorage.removeItem(IMPERSONATE_KEY);
+        localStorage.removeItem(LAST_ACTIVITY_KEY);
         setImpersonate(null);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('click', onActivity);
+      window.removeEventListener('keydown', onActivity);
+    };
   }, []);
 
   // Inicia o modo suporte. Os dados continuam protegidos por RLS: admin/analista

@@ -603,15 +603,22 @@ function ContratosTab() {
   const [modal, setModal] = useState(null);   // 'new' | contrato
   const [form, setForm] = useState(defaultContrato());
   const [saving, setSaving] = useState(false);
+  const [modalLink, setModalLink] = useState(false);
+  const [formLink, setFormLink] = useState({ titulo: '', conteudo: '', tipo_contrato: 'servico' });
+  const [linkGerado, setLinkGerado] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
+  const [contratosLink, setContratosLink] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: cts }, { data: cls }] = await Promise.all([
+    const [{ data: cts }, { data: cls }, { data: cls2 }] = await Promise.all([
       supabase.from('contratos').select('*').order('criado_em', { ascending: false }),
       supabase.from('perfis').select('id, nome, cpf').order('nome'),
+      supabase.from('contratos_link').select('*').order('criado_em', { ascending: false }),
     ]);
     setContratos(cts || []);
     setClientes(cls || []);
+    setContratosLink(cls2 || []);
     setLoading(false);
   }, []);
 
@@ -641,14 +648,39 @@ function ContratosTab() {
     load();
   }
 
+  async function gerarLinkContrato() {
+    if (!formLink.titulo || !formLink.conteudo) { alert('Preencha o título e o conteúdo do contrato.'); return; }
+    setSavingLink(true);
+    const { data, error } = await supabase.from('contratos_link').insert({
+      titulo: formLink.titulo,
+      conteudo: formLink.conteudo,
+      tipo_contrato: formLink.tipo_contrato,
+    }).select().single();
+    setSavingLink(false);
+    if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
+    const base = window.location.href.split('#')[0];
+    setLinkGerado(`${base}#/c/${data.token}`);
+    await load();
+  }
+
+  async function cancelarLink(id) {
+    if (!window.confirm('Cancelar este contrato via link?')) return;
+    await supabase.from('contratos_link').update({ status: 'cancelado' }).eq('id', id);
+    load();
+  }
+
   const nomeCliente = (id) => clientes.find(c => c.id === id)?.nome || clientes.find(c => c.id === id)?.cpf || '—';
   const ST = { rascunho: ['Rascunho', '#64748b'], aguardando_assinatura: ['Aguardando assinatura', '#d97706'], assinado: ['Assinado', '#059669'], cancelado: ['Cancelado', '#dc2626'] };
+  const ST_LINK = { aguardando: ['Aguardando', '#d97706'], assinado: ['Assinado', '#059669'], expirado: ['Expirado', '#94a3b8'], cancelado: ['Cancelado', '#dc2626'] };
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Contratos ({contratos.length})</h2>
-        <button style={S.btn('primary')} onClick={openNew}>+ Novo Contrato</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={S.btn('outline')} onClick={() => { setFormLink({ titulo: '', conteudo: '', tipo_contrato: 'servico' }); setLinkGerado(''); setModalLink(true); }}>🔗 Gerar link de assinatura</button>
+          <button style={S.btn('primary')} onClick={openNew}>+ Novo Contrato</button>
+        </div>
       </div>
 
       <div style={S.card}>
@@ -685,6 +717,116 @@ function ContratosTab() {
             </div>
           )}
       </div>
+
+      {/* Contratos via link */}
+      <div style={{ marginTop: 28 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: '0 0 12px' }}>Contratos via link ({contratosLink.length})</h3>
+        <div style={S.card}>
+          {contratosLink.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 24, fontSize: 13 }}>Nenhum contrato via link gerado ainda.</p> : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>Título</th><th style={S.th}>Tipo</th><th style={S.th}>Status</th>
+                  <th style={S.th}>Criado em</th><th style={S.th}>Expira em</th><th style={S.th}>Ações</th>
+                </tr></thead>
+                <tbody>
+                  {contratosLink.map(cl => {
+                    const [lbl, cor] = ST_LINK[cl.status] || ST_LINK.aguardando;
+                    const linkUrl = `${window.location.href.split('#')[0]}#/c/${cl.token}`;
+                    return (
+                      <tr key={cl.id}>
+                        <td style={S.td}><strong>{cl.titulo}</strong></td>
+                        <td style={{ ...S.td, textTransform: 'capitalize' }}>{cl.tipo_contrato}</td>
+                        <td style={S.td}><span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: cor + '20', color: cor }}>{lbl}</span></td>
+                        <td style={S.td}>{new Date(cl.criado_em).toLocaleDateString('pt-BR')}</td>
+                        <td style={S.td}>{new Date(cl.expira_em).toLocaleDateString('pt-BR')}</td>
+                        <td style={S.td}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {cl.status === 'aguardando' && (
+                              <button style={S.btn('outline')} onClick={() => { navigator.clipboard.writeText(linkUrl); alert('Link copiado!'); }}>Copiar link</button>
+                            )}
+                            {cl.status === 'assinado' && cl.dados_signatario && (
+                              <button style={S.btn('outline')} onClick={() => alert(`Assinado por: ${cl.dados_signatario?.nome || cl.dados_signatario?.razao_social}\nEm: ${cl.assinado_em ? new Date(cl.assinado_em).toLocaleString('pt-BR') : '—'}`)}>Ver dados</button>
+                            )}
+                            {cl.status === 'aguardando' && <button style={S.btn('danger')} onClick={() => cancelarLink(cl.id)}>Cancelar</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal: Gerar contrato via link */}
+      {modalLink && (
+        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setModalLink(false)}>
+          <div style={{ ...S.modal, maxWidth: 680 }}>
+            <h3 style={{ ...S.sectionTitle, marginBottom: 4 }}>Gerar link de assinatura</h3>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>O contrato será enviado pela Nogueira Empreendimentos. A outra parte preenche os dados e assina digitalmente.</p>
+
+            {!linkGerado ? (
+              <>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                  <div style={{ flex: 2 }}>
+                    <label style={S.label}>Título do contrato *</label>
+                    <input style={S.input} value={formLink.titulo} onChange={e => setFormLink({ ...formLink, titulo: e.target.value })} placeholder="Contrato de Prestação de Serviços…" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={S.label}>Tipo</label>
+                    <select style={S.input} value={formLink.tipo_contrato} onChange={e => setFormLink({ ...formLink, tipo_contrato: e.target.value })}>
+                      <option value="servico">Serviço</option>
+                      <option value="prestacao">Prestação</option>
+                      <option value="locacao">Locação</option>
+                      <option value="compra">Compra e Venda</option>
+                      <option value="outro">Outro</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={S.label}>Conteúdo do contrato *</label>
+                  <textarea style={{ ...S.input, height: 220, resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }}
+                    value={formLink.conteudo}
+                    onChange={e => setFormLink({ ...formLink, conteudo: e.target.value })}
+                    placeholder="Cole ou escreva as cláusulas do contrato…&#10;&#10;CLÁUSULA 1ª - DO OBJETO&#10;..." />
+                </div>
+
+                {formLink.conteudo && (
+                  <div style={{ marginBottom: 16, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 20px', maxHeight: 200, overflowY: 'auto' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Pré-visualização</div>
+                    <div style={{ fontSize: 13, color: '#0f172a', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{formLink.conteudo}</div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button style={S.btn('outline')} onClick={() => setModalLink(false)}>Cancelar</button>
+                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink}>
+                    {savingLink ? 'Gerando…' : '✓ Aprovar e gerar link'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div>
+                <div style={{ background: '#dcfce7', borderRadius: 12, padding: '20px 24px', marginBottom: 16, textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+                  <div style={{ fontWeight: 800, color: '#166534', marginBottom: 4 }}>Link gerado com sucesso!</div>
+                  <div style={{ fontSize: 12, color: '#15803d' }}>Válido por 30 dias. Ao ser assinado, os dados ficam registrados.</div>
+                </div>
+                <div style={{ background: '#f1f5f9', borderRadius: 8, padding: '12px 14px', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: '#334155', wordBreak: 'break-all', flex: 1 }}>{linkGerado}</span>
+                  <button style={S.btn('primary')} onClick={() => { navigator.clipboard.writeText(linkGerado); alert('Link copiado!'); }}>Copiar</button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button style={S.btn('outline')} onClick={() => { setModalLink(false); setLinkGerado(''); }}>Fechar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div style={S.overlay} onClick={e => e.target === e.currentTarget && setModal(null)}>
@@ -757,8 +899,8 @@ function ContratosTab() {
 
 // ─── Aba Promoções ────────────────────────────────────────────────────────────
 const PRODUTOS_PROMO = [
-  { key: 'top1', label: 'TOP 1 — R$ 49,90/mês' },
-  { key: 'top2', label: 'TOP 2 — R$ 99,90/mês' },
+  { key: 'top1', label: 'Investidor — R$ 49,90/mês' },
+  { key: 'top2', label: 'Investidor Pro — R$ 99,90/mês' },
   { key: 'assessorado', label: 'Assessorado — R$ 5.000' },
   { key: 'clube', label: 'Leilão Club — R$ 5.000/mês' },
 ];
@@ -1133,8 +1275,8 @@ function DashboardTab() {
             <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
             {[
               { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
-              { key: 'top1',       label: 'TOP 1 (R$49,90)',    cor: '#2563eb', preco: 49.90 },
-              { key: 'top2',       label: 'TOP 2 (R$99,90)',    cor: '#7c3aed', preco: 99.90 },
+              { key: 'top1',       label: 'Investidor (R$49,90)',     cor: '#2563eb', preco: 49.90 },
+              { key: 'top2',       label: 'Investidor Pro (R$99,90)', cor: '#7c3aed', preco: 99.90 },
               { key: 'assessorado',label: 'Assessorado (R$5k)', cor: '#d97706', preco: 5000 },
               { key: 'clube',      label: 'Clube (R$5k/mês)',   cor: '#059669', preco: 5000 },
             ].map(({ key, label, cor, preco }) => {
@@ -1239,9 +1381,10 @@ function DashboardTab() {
           <div style={S.card}>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
             {[
-              { nome: 'Supabase', plano: `Free (${fmtN(dados.total)} usuários)`, custo: 'R$ 0/mês', alerta: dados.total > 40000, alertaMsg: 'Próximo do limite — considere Pro ($25/mês)' },
+              { nome: 'Supabase', plano: `Free (${fmtN(dados.total)} usuários)`, custo: 'R$ 0/mês', alerta: dados.total > 40000, alertaMsg: 'Próximo do limite gratuito — migrar para Supabase Pro ($25/mês)' },
               { nome: 'Vercel', plano: 'Free (Serverless)', custo: 'R$ 0/mês', alerta: false },
-              { nome: 'Anthropic API', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
+              { nome: 'Anthropic (Claude)', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
+              { nome: 'Asaas Gateway', plano: '~1% por PIX', custo: `R$ ${fmt(dados.taxaPix)}/mês`, alerta: dados.mrr > 8000, alertaMsg: 'MRR acima de R$10k: contatar comercial Asaas para reduzir taxa' },
             ].map(({ nome, plano, custo, alerta, alertaMsg }) => (
               <div key={nome} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1255,9 +1398,76 @@ function DashboardTab() {
               </div>
             ))}
             <div style={{ marginTop: 14, padding: '10px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 13, color: '#166534', fontWeight: 600 }}>
-              💚 Custo total de infra: R$ 0/mês (planos gratuitos ativos)
+              💚 Custo base de infra: R$ 0/mês (planos gratuitos ativos)
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Marcos de melhoria e sugestões de eficiência */}
+      <div style={{ marginTop: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          🗺️ Marcos de Melhoria & Eficiência
+          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400 }}>— ações a executar quando os gatilhos forem atingidos</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[
+            {
+              gatilho: `MRR ≥ R$ 10.000`,
+              atingido: dados.mrr >= 10000,
+              titulo: 'Negociar taxa Asaas',
+              desc: 'Contatar comercial Asaas para reduzir taxa PIX de 1% para ~0,7%. Economia estimada: R$ 30+/mês.',
+              cor: '#d97706', icone: '💳',
+            },
+            {
+              gatilho: `MRR ≥ R$ 30.000`,
+              atingido: dados.mrr >= 30000,
+              titulo: 'Migrar Supabase para plano Pro ou RDS AWS',
+              desc: 'Avaliar migração do banco para RDS na AWS São Paulo (sa-east-1) ou Supabase Pro. Mais performance, backups point-in-time e segurança reforçada.',
+              cor: '#7c3aed', icone: '🗄️',
+            },
+            {
+              gatilho: `MRR ≥ R$ 50.000`,
+              atingido: dados.mrr >= 50000,
+              titulo: 'Ativar CDN e cache de relatórios',
+              desc: 'Implementar cache de PDFs e imagens via Cloudflare R2 (S3 compatível) para reduzir latência dos laudos e custo de storage.',
+              cor: '#0891b2', icone: '⚡',
+            },
+            {
+              gatilho: `MRR ≥ R$ 100.000`,
+              atingido: dados.mrr >= 100000,
+              titulo: 'Infraestrutura dedicada + SLA',
+              desc: 'Contratar plano Enterprise Asaas (<0,3% PIX), mover para ECS Fargate ou EC2 dedicado, implementar monitoramento com Datadog/New Relic.',
+              cor: '#dc2626', icone: '🏢',
+            },
+            {
+              gatilho: '> 500 análises/mês',
+              atingido: false,
+              titulo: 'Fila assíncrona para relatórios',
+              desc: 'Implementar processamento de laudos em background (SQS ou Supabase Edge Functions) para evitar timeout nas funções serverless do Vercel.',
+              cor: '#059669', icone: '🔄',
+            },
+            {
+              gatilho: '> 50 contratos/mês',
+              atingido: false,
+              titulo: 'Assinatura digital via ICP-Brasil',
+              desc: 'Integrar com DocuSign ou ClickSign para validade jurídica reforçada com certificado digital. Custo: ~R$ 2-5/assinatura.',
+              cor: '#6366f1', icone: '📝',
+            },
+          ].map((m, i) => (
+            <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${m.cor}30`, background: m.atingido ? m.cor + '08' : 'white', alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 24, flexShrink: 0 }}>{m.icone}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{m.titulo}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: m.atingido ? m.cor : '#f1f5f9', color: m.atingido ? 'white' : '#64748b' }}>
+                    {m.atingido ? '✅ Gatilho atingido!' : `Gatilho: ${m.gatilho}`}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>{m.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
