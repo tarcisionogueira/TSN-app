@@ -434,13 +434,13 @@ function UsuariosTab() {
   const [busca, setBusca] = useState('');
 
   const verComo = (u) => {
-    iniciarSuporte({ id: u.id, nome: u.nome || u.email, role: u.role || 'explorador', email: u.email });
+    iniciarSuporte({ id: u.id, nome: u.nome || u.cpf, role: u.role || 'explorador' });
     navSup('/painel');
   };
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('perfis').select('id, nome, email, role, plano, criado_em').order('criado_em', { ascending: false });
+    const { data } = await supabase.from('perfis').select('id, nome, cpf, role, plano, created_at').order('created_at', { ascending: false });
     setUsers(data || []);
     setLoading(false);
   }, []);
@@ -456,7 +456,7 @@ function UsuariosTab() {
   const filtered = users.filter(u => {
     if (!busca) return true;
     const q = busca.toLowerCase();
-    return (u.nome || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
+    return (u.nome || '').toLowerCase().includes(q) || (u.cpf || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
   });
 
   const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top1: '#2563eb', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626' };
@@ -465,7 +465,7 @@ function UsuariosTab() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Usuários ({users.length})</h2>
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, email ou role..." style={{ ...S.input, maxWidth: 280 }} />
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou role..." style={{ ...S.input, maxWidth: 280 }} />
         <button style={S.btn('outline')} onClick={loadUsers}>↻ Atualizar</button>
       </div>
 
@@ -477,7 +477,7 @@ function UsuariosTab() {
               <table style={S.table}>
                 <thead><tr>
                   <th style={S.th}>Nome</th>
-                  <th style={S.th}>Email</th>
+                  <th style={S.th}>CPF</th>
                   <th style={S.th}>Role</th>
                   <th style={S.th}>Plano</th>
                   <th style={S.th}>Cadastro</th>
@@ -487,14 +487,14 @@ function UsuariosTab() {
                   {filtered.map(u => (
                     <tr key={u.id}>
                       <td style={S.td}><strong>{u.nome || '—'}</strong></td>
-                      <td style={S.td}>{u.email}</td>
+                      <td style={S.td}>{u.cpf || '—'}</td>
                       <td style={S.td}>
                         <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: (ROLE_COLORS[u.role] || '#64748b') + '20', color: ROLE_COLORS[u.role] || '#64748b' }}>
                           {u.role || 'explorador'}
                         </span>
                       </td>
                       <td style={S.td}>{u.plano || '—'}</td>
-                      <td style={S.td}>{u.criado_em ? new Date(u.criado_em).toLocaleDateString('pt-BR') : '—'}</td>
+                      <td style={S.td}>{u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—'}</td>
                       <td style={S.td}>
                         {editingId === u.id ? (
                           <div style={{ display: 'flex', gap: 6 }}>
@@ -580,7 +580,7 @@ function ContratosTab() {
     setLoading(true);
     const [{ data: cts }, { data: cls }] = await Promise.all([
       supabase.from('contratos').select('*').order('criado_em', { ascending: false }),
-      supabase.from('perfis').select('id, nome, email').order('nome'),
+      supabase.from('perfis').select('id, nome, cpf').order('nome'),
     ]);
     setContratos(cts || []);
     setClientes(cls || []);
@@ -613,7 +613,7 @@ function ContratosTab() {
     load();
   }
 
-  const nomeCliente = (id) => clientes.find(c => c.id === id)?.nome || clientes.find(c => c.id === id)?.email || '—';
+  const nomeCliente = (id) => clientes.find(c => c.id === id)?.nome || clientes.find(c => c.id === id)?.cpf || '—';
   const ST = { rascunho: ['Rascunho', '#64748b'], aguardando_assinatura: ['Aguardando assinatura', '#d97706'], assinado: ['Assinado', '#059669'], cancelado: ['Cancelado', '#dc2626'] };
 
   return (
@@ -683,7 +683,7 @@ function ContratosTab() {
                   <label style={S.label}>Cliente *</label>
                   <select style={S.input} value={form.cliente_id} onChange={e => setForm({ ...form, cliente_id: e.target.value })}>
                     <option value="">Selecione o cliente…</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nome || c.email}</option>)}
+                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nome || c.cpf}</option>)}
                   </select>
                 </div>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>

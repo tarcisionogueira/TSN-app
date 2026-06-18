@@ -6,9 +6,16 @@
 -- ─── 1. Constraint UNIQUE em asaas_payment_id ───────────────
 -- Garante que o mesmo pagamento Asaas nunca gere duas comissões
 -- (proteção dupla além do check no webhook)
-alter table public.comissoes
-  add constraint if not exists comissoes_asaas_payment_id_unique
-  unique (asaas_payment_id);
+-- (Postgres não aceita ADD CONSTRAINT IF NOT EXISTS; usamos DO block)
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'comissoes_asaas_payment_id_unique'
+  ) then
+    alter table public.comissoes
+      add constraint comissoes_asaas_payment_id_unique unique (asaas_payment_id);
+  end if;
+end $$;
 
 -- ─── 2. gerar_codigo_indicacao: valida que p_id = caller ────
 -- Evita que um usuário gere código de indicação para outro perfil
