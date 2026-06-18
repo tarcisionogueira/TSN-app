@@ -152,19 +152,42 @@ export default function Checkout() {
     setLoading(false);
   };
 
-  const confirmarPagamento = () => {
+  const confirmarPagamento = async () => {
     setPago(true);
+    if (planoKey === 'assessorado' || planoKey === 'clube') {
+      try {
+        const res = await fetch('/api/auto-contrato', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user?.id,
+            planoKey,
+            nomeUsuario,
+            emailUsuario: user?.email,
+          }),
+        });
+        const data = await res.json();
+        if (data.token) {
+          setTimeout(() => nav(`/c/${data.token}`), 2000);
+          return;
+        }
+      } catch (_) {}
+    }
     setTimeout(() => nav('/'), 3500);
   };
 
-  // Tela de aprovado — cobre tudo, redireciona para home
+  // Tela de aprovado — cobre tudo, redireciona para home (ou contrato)
+  const ehContratoPlano = planoKey === 'assessorado' || planoKey === 'clube';
   if (pago) return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' }}>
       <div style={{ fontSize: 72, marginBottom: 24, animation: 'pop 0.4s ease' }}>✅</div>
       <h1 style={{ color: 'white', fontWeight: 900, fontSize: 32, margin: '0 0 12px' }}>Pagamento aprovado!</h1>
       <p style={{ color: '#a7f3d0', fontSize: 16, margin: '0 0 32px', lineHeight: 1.6 }}>
-        Seu plano <strong style={{ color: 'white' }}>{plano?.nome}</strong> está ativo.<br/>
-        Redirecionando para o início em instantes…
+        {ehContratoPlano ? (
+          <>Pagamento aprovado! Preparando seu contrato para assinatura…</>
+        ) : (
+          <>Seu plano <strong style={{ color: 'white' }}>{plano?.nome}</strong> está ativo.<br/>Redirecionando para o início em instantes…</>
+        )}
       </p>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#6ee7b7', fontSize: 14 }}>
         <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Aguarde…

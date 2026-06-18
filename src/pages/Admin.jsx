@@ -599,6 +599,7 @@ function ContratosTab() {
   const [detalhe, setDetalhe] = useState(null); // contrato aberto para ver
 
   // Etapa 1
+  const [templateSelecionado, setTemplateSelecionado] = useState(null);
   const [titulo, setTitulo] = useState('');
   const [tipo, setTipo] = useState('servico');
   const [descricao, setDescricao] = useState('');
@@ -626,8 +627,27 @@ function ContratosTab() {
   function abrirModal() {
     setTitulo(''); setTipo('servico'); setDescricao('');
     setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
-    setLinkGerado('');
+    setLinkGerado(''); setTemplateSelecionado(null);
     setStep(1);
+  }
+
+  function aplicarTemplate(key) {
+    setTemplateSelecionado(key);
+    if (key === 'assessorado') {
+      setTitulo('Contrato de Assessoria para Aquisição de Imóvel em Leilão');
+      setTipo('servico');
+      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses para conclusão da arrematação. Não inclui mentoria. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.');
+    } else if (key === 'clube') {
+      setTitulo('Contrato de Adesão ao Clube de Negócios TSN Ativos');
+      setTipo('servico');
+      setDescricao('Adesão ao Clube de Negócios TSN Ativos: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.');
+    } else if (key === 'nda') {
+      setTitulo('Acordo de Confidencialidade e Não Divulgação');
+      setTipo('nda');
+      setDescricao('');
+    } else if (key === 'personalizado') {
+      setTitulo(''); setTipo('servico'); setDescricao('');
+    }
   }
 
   async function lerArquivos(files) {
@@ -848,6 +868,24 @@ function ContratosTab() {
             {/* ── Etapa 1: Descrever ── */}
             {step === 1 && (
               <>
+                {/* Seleção rápida de template */}
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
+                  {[
+                    { key:'assessorado', label:'📋 Assessorado' },
+                    { key:'clube',       label:'🏛️ Clube de Negócios' },
+                    { key:'nda',         label:'📄 NDA/Sigilo' },
+                    { key:'personalizado', label:'✏️ Personalizado' },
+                  ].map(t => (
+                    <button key={t.key} onClick={() => aplicarTemplate(t.key)}
+                      style={{ padding:'5px 14px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:'1px solid',
+                        background: templateSelecionado === t.key ? '#0f172a' : '#fff',
+                        color: templateSelecionado === t.key ? '#fff' : '#475569',
+                        borderColor: templateSelecionado === t.key ? '#0f172a' : '#cbd5e1' }}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
                 <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Descreva o contrato</h3>
                 <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>O contrato será emitido pela <strong>Nogueira Empreendimentos</strong>. A outra parte preenche os dados e assina digitalmente.</p>
 
@@ -985,8 +1023,8 @@ function ContratosTab() {
 const PRODUTOS_PROMO = [
   { key: 'top1', label: 'Investidor — R$ 49,90/mês' },
   { key: 'top2', label: 'Investidor Pro — R$ 99,90/mês' },
-  { key: 'assessorado', label: 'Assessorado — R$ 5.000' },
-  { key: 'clube', label: 'Leilão Club — R$ 5.000/mês' },
+  { key: 'assessorado', label: 'Assessorado — R$ 500×12 ou R$ 5.000 à vista' },
+  { key: 'clube', label: 'Clube de Negócios — R$ 5.000/mês (12 meses)' },
 ];
 
 const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', ativo: true });
@@ -1284,7 +1322,7 @@ function DashboardTab() {
       const contagem = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
       (perfis || []).forEach(p => { if (p.role in contagem) contagem[p.role]++; });
 
-      const mrr = (contagem.top1 * 49.90) + (contagem.top2 * 99.90) + (contagem.assessorado * 5000) + (contagem.clube * 5000);
+      const mrr = (contagem.top1 * 49.90) + (contagem.top2 * 99.90) + (contagem.assessorado * 500) + (contagem.clube * 5000);
       const taxaPix = mrr * 0.01;
       const liquido = mrr - taxaPix;
 
@@ -1361,8 +1399,8 @@ function DashboardTab() {
               { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
               { key: 'top1',       label: 'Investidor (R$49,90)',     cor: '#2563eb', preco: 49.90 },
               { key: 'top2',       label: 'Investidor Pro (R$99,90)', cor: '#7c3aed', preco: 99.90 },
-              { key: 'assessorado',label: 'Assessorado (R$5k)', cor: '#d97706', preco: 5000 },
-              { key: 'clube',      label: 'Clube (R$5k/mês)',   cor: '#059669', preco: 5000 },
+              { key: 'assessorado',label: 'Assessorado (R$500×12)', cor: '#d97706', preco: 500 },
+              { key: 'clube',      label: 'Clube de Negócios (R$5k/mês)', cor: '#059669', preco: 5000 },
             ].map(({ key, label, cor, preco }) => {
               const qtd = dados.contagem[key] || 0;
               const receita = qtd * preco;
