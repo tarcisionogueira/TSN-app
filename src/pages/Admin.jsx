@@ -899,8 +899,8 @@ function ContratosTab() {
 
 // ─── Aba Promoções ────────────────────────────────────────────────────────────
 const PRODUTOS_PROMO = [
-  { key: 'top1', label: 'TOP 1 — R$ 49,90/mês' },
-  { key: 'top2', label: 'TOP 2 — R$ 99,90/mês' },
+  { key: 'top1', label: 'Investidor — R$ 49,90/mês' },
+  { key: 'top2', label: 'Investidor Pro — R$ 99,90/mês' },
   { key: 'assessorado', label: 'Assessorado — R$ 5.000' },
   { key: 'clube', label: 'Leilão Club — R$ 5.000/mês' },
 ];

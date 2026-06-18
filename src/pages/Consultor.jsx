@@ -136,7 +136,7 @@ export default function Consultor() {
     setTimeout(() => setCopiandoConvite(''), 2000);
   };
 
-  const PRODUTOS_NOME = { top1: 'TOP 1', top2: 'TOP 2', assessorado: 'Assessorado', clube: 'Leilão Club' };
+  const PRODUTOS_NOME = { top1: 'Investidor', top2: 'Investidor Pro', assessorado: 'Assessorado', clube: 'Leilão Club' };
 
   const codigo = perfil?.codigo_indicacao;
   const origin = window.location.origin;

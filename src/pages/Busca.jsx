@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search, Loader2, Filter, ChevronDown, ChevronUp, Globe,
-  ExternalLink, AlertCircle, RefreshCw, MapPin, Building2,
-  CheckCircle2, ArrowRight, X,
+  Search, Loader2, Filter, ChevronDown, ChevronUp,
+  ExternalLink, RefreshCw, MapPin,
+  ArrowRight, X,
 } from 'lucide-react';
-import { buscarImoveis, buscarLeiloeirosEstado } from '../utils/claude';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
 import { supabase } from '../utils/supabase';
@@ -13,26 +12,6 @@ import { useAuth } from '../contexts/AuthContext';
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
-const JUCE = {
-  SP:'https://www.jucesp.sp.gov.br/Servicos/LeiloeirosPublicosOficiais',
-  RJ:'https://www.jucerj.rj.gov.br/index.php/relacao-de-leiloeiros',
-  MG:'https://www.jucemg.mg.gov.br/leiloeiros',
-  BA:'https://www.juceb.ba.gov.br/servicos/leiloeiros',
-  PR:'https://www.jucepar.pr.gov.br/Pagina/Leiloeiros',
-  RS:'https://www.jucergs.rs.gov.br',
-  PE:'https://www.jucepe.pe.gov.br',
-};
-
-const PLATAFORMAS = [
-  { nome:'Caixa Econômica Federal', url:'https://venda-imoveis.caixa.gov.br', desc:'Maior acervo nacional', badge:'CEF' },
-  { nome:'Sold Leilões', url:'https://www.sold.com.br', desc:'Judicial e extrajudicial', badge:'SOLD' },
-  { nome:'Biasi Leilões', url:'https://www.biasi.com.br', desc:'Referência nacional', badge:'BIASI' },
-  { nome:'Zukerman Leilões', url:'https://www.zukerman.com.br', desc:'Foco SP/RJ', badge:'ZUK' },
-  { nome:'REM Leilões', url:'https://www.remleiloes.com.br', desc:'Multi-estado', badge:'REM' },
-  { nome:'Frazão Leilões', url:'https://www.frazaoleiloes.com.br', desc:'Nordeste', badge:'FRZ' },
-  { nome:'Resale', url:'https://www.resale.com.br', desc:'Creditas Imóveis', badge:'RES' },
-  { nome:'Leilão Judicial Online', url:'https://www.leilaojudicialonline.com.br', desc:'Judicial', badge:'LJO' },
-];
 
 const inp = { width:'100%', padding:'9px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#0f172a', boxSizing:'border-box' };
 const lbl = { fontSize:10, fontWeight:700, color:'#475569', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
@@ -53,18 +32,14 @@ export default function Busca() {
   const plano = role || 'explorador';
   const canSite    = user && ROLES_SITE.includes(role);
   const canAnalise = user && ROLES_ANALISE.includes(role);
-  const [filtros, setFiltros] = useState({ tipo:'', estado:'SP', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] });
+  const [filtros, setFiltros] = useState({ tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] });
   const [buscaCidade, setBuscaCidade] = useState('');
   const [resultados, setResultados] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loadingLeiloeiros, setLoadingLeiloeiros] = useState(false);
-  const [leiloeiros, setLeiloeiros] = useState(null);
   const [erro, setErro] = useState('');
   const [buscaFeita, setBuscaFeita] = useState(false);
   const [showFiltros, setShowFiltros] = useState(true);
-  const [showJuce, setShowJuce] = useState(false);
   const [selecionados, setSelecionados] = useState([]);
-  const [imovelDetalhes, setImovelDetalhes] = useState(null);
 
   const up = (name, val) => setFiltros(p => ({ ...p, [name]: val }));
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x=>x!==v) : [...filtros.pagamento, v]);
@@ -94,56 +69,37 @@ export default function Busca() {
 
       const { data: dbData, error: dbError } = await query;
 
-      if (!dbError && dbData && dbData.length > 0) {
-        // Mapeia formato do banco para formato da UI
-        const mapeados = dbData.map(im => ({
-          id: im.id,
-          titulo: im.titulo,
-          tipo: im.tipo,
-          modalidade: im.modalidade,
-          estado: im.estado,
-          cidade: im.cidade,
-          bairro: im.bairro,
-          endereco: im.endereco,
-          valorAvaliacao: im.valor_avaliacao,
-          valorMinimo: im.valor_minimo,
-          descontoPercentual: im.desconto_percentual,
-          areaM2: im.area_m2,
-          descricao: im.descricao,
-          // url_lote = link direto para o lote; fallback para link_edital (edital do leilão)
-          urlLote: im.url_lote || im.link_edital,
-          linkEdital: im.link_edital,
-          foto: im.link_foto,
-          leiloeiro: im.leiloeiro,
-          dataLeilao: im.data_leilao,
-          pagamento: [im.forma_pagamento],
-          viavel: im.viavel,
-          scoreViabilidade: im.score_viabilidade,
-          fracionado: im.fracionado,
-          fonte: im.fonte,
-        }));
-        setResultados(mapeados);
-      } else {
-        // 2. Fallback: busca via Claude AI
-        const res = await buscarImoveis(filtrosApi);
-        setResultados(res);
-      }
-
-      if (resultados.length === 0 && !erro)
-        setErro('Nenhum resultado. Tente ajustar os filtros ou verificar as plataformas diretamente.');
+      const mapeados = (!dbError && dbData) ? dbData.map(im => ({
+        id: im.id,
+        titulo: im.titulo,
+        tipo: im.tipo,
+        modalidade: im.modalidade,
+        estado: im.estado,
+        cidade: im.cidade,
+        bairro: im.bairro,
+        endereco: im.endereco,
+        valorAvaliacao: im.valor_avaliacao,
+        valorMinimo: im.valor_minimo,
+        descontoPercentual: im.desconto_percentual,
+        areaM2: im.area_m2,
+        descricao: im.descricao,
+        urlLote: im.url_lote || im.link_edital,
+        linkEdital: im.link_edital,
+        foto: im.link_foto,
+        leiloeiro: im.leiloeiro,
+        dataLeilao: im.data_leilao,
+        pagamento: [im.forma_pagamento],
+        viavel: im.viavel,
+        scoreViabilidade: im.score_viabilidade,
+        fracionado: im.fracionado,
+        fonte: im.fonte,
+      })) : [];
+      setResultados(mapeados);
     } catch (e) {
       setErro('Erro na busca. Tente novamente.');
       console.error(e);
     }
     setLoading(false);
-  };
-
-  const buscarLeiloeiros = async () => {
-    if (!filtros.estado) { setErro('Selecione um estado.'); return; }
-    setLoadingLeiloeiros(true);
-    try { setLeiloeiros(await buscarLeiloeirosEstado(filtros.estado)); }
-    catch { setErro('Não foi possível buscar os leiloeiros.'); }
-    setLoadingLeiloeiros(false);
   };
 
   const irParaAnalise = (im) => {
@@ -311,58 +267,6 @@ export default function Busca() {
           )}
         </div>
 
-        {/* Leiloeiros da Junta */}
-        <div style={{ background:'white', borderRadius:12, border:'1px solid #e2e8f0', overflow:'hidden' }}>
-          <button onClick={()=>setShowJuce(!showJuce)}
-            style={{ width:'100%', padding:'11px 14px', background:'#f8fafc', border:'none', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', fontWeight:700, fontSize:12, color:'#334155' }}>
-            <span style={{ display:'flex', alignItems:'center', gap:7 }}><Globe size={13}/> Leiloeiros Credenciados</span>
-            {showJuce ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
-          </button>
-          {showJuce && (
-            <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:8 }}>
-              <p style={{ fontSize:11, color:'#64748b', margin:0, lineHeight:1.5 }}>
-                Leiloeiros registrados nas Juntas Comerciais (JUCESP, JUCERJ, etc.)
-              </p>
-              {filtros.estado && JUCE[filtros.estado] && (
-                <a href={JUCE[filtros.estado]} target="_blank" rel="noopener noreferrer"
-                  style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, color:'#2563eb', fontWeight:600, textDecoration:'none' }}>
-                  <ExternalLink size={11}/> Lista JUCE{filtros.estado}
-                </a>
-              )}
-              <button onClick={buscarLeiloeiros} disabled={loadingLeiloeiros||!filtros.estado}
-                style={{ padding:'7px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:11, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5, opacity:!filtros.estado?0.5:1 }}>
-                {loadingLeiloeiros ? <Loader2 size={12} style={{animation:'spin 1s linear infinite'}}/> : <Search size={12}/>}
-                {filtros.estado ? `Leiloeiros no ${filtros.estado}` : 'Selecione um estado'}
-              </button>
-              {leiloeiros && (leiloeiros.leiloeiros||[]).map((l,i)=>(
-                <div key={i} style={{ padding:'7px 10px', background:'#f8fafc', borderRadius:7, border:'1px solid #e2e8f0' }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#0f172a' }}>{l.nome}</div>
-                  {l.especialidade && <div style={{ fontSize:10, color:'#64748b' }}>{l.especialidade}</div>}
-                  {l.site && <a href={l.site} target="_blank" rel="noopener noreferrer" style={{ fontSize:10, color:'#2563eb', textDecoration:'none' }}>{l.site}</a>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Plataformas */}
-        <div style={{ background:'white', borderRadius:12, border:'1px solid #e2e8f0', padding:'12px 14px' }}>
-          <div style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Plataformas</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-            {PLATAFORMAS.map(p=>(
-              <a key={p.nome} href={p.url} target="_blank" rel="noopener noreferrer"
-                style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 9px', borderRadius:7, textDecoration:'none', border:'1px solid #f1f5f9' }}
-                onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                <span style={{ background:'#0f172a', color:'white', fontSize:8, fontWeight:800, padding:'2px 5px', borderRadius:4, flexShrink:0 }}>{p.badge}</span>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#0f172a' }}>{p.nome}</div>
-                  <div style={{ fontSize:10, color:'#94a3b8' }}>{p.desc}</div>
-                </div>
-                <ExternalLink size={10} color="#94a3b8"/>
-              </a>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}
@@ -398,20 +302,13 @@ export default function Busca() {
         {/* Info inicial */}
         {!buscaFeita && (
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'14px 18px', display:'flex', gap:10 }}>
-              <AlertCircle size={16} color="#2563eb" style={{flexShrink:0,marginTop:1}}/>
-              <div style={{ fontSize:13, color:'#1e40af', lineHeight:1.7 }}>
-                <strong>Como funciona:</strong> Buscamos leilões publicados em plataformas como Caixa Econômica, Sold, Biasi e leiloeiros credenciados pelas Juntas Comerciais.
-                <br/><strong>Dica:</strong> Selecione um <strong>Estado</strong> e clique em Buscar Leilões para começar.
-              </div>
-            </div>
             {!canAnalise && (
               <div style={{ background:'#fef3c7', border:'1px solid #fde68a', borderRadius:12, padding:'12px 16px', display:'flex', gap:10, alignItems:'center' }}>
                 <span style={{ fontSize:16 }}>🔒</span>
                 <div style={{ fontSize:13, color:'#92400e', flex:1 }}>
                   {!user
                     ? <><strong>Faça login</strong> para acessar o site do leiloeiro e gerar análises completas dos imóveis.</>
-                    : <><strong>Plano Explorador:</strong> Você vê os imóveis e a flag de viabilidade 🟢/🔴. Para gerar análise completa, faça upgrade para o <strong>Plano TOP 1</strong> ou superior.</>
+                    : <><strong>Plano Explorador:</strong> Você vê os imóveis e a flag de viabilidade 🟢/🔴. Para gerar análise completa, faça upgrade para o <strong>Plano Investidor</strong> ou superior.</>
                   }
                 </div>
                 <button onClick={()=>nav('/planos')} style={{ padding:'7px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
@@ -526,7 +423,7 @@ export default function Busca() {
                           style={{ padding:'5px 10px', background:'#2563eb', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
                           📊 Analisar
                         </button>
-                      : <span title="Disponível no nível TOP 1 ou acima"
+                      : <span title="Disponível no plano Investidor ou acima"
                           style={{ padding:'5px 10px', background:'#f8fafc', color:'#cbd5e1', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'not-allowed', whiteSpace:'nowrap' }}>
                           🔒 Analisar
                         </span>
