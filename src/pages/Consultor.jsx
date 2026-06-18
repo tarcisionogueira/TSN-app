@@ -38,22 +38,27 @@ export default function Consultor() {
   const [carteira, setCarteira] = useState([]);
   const [comissoes, setComissoes] = useState([]);
   const [cursos, setCursos] = useState([]);
+  const [linksPromo, setLinksPromo] = useState([]);
+  const [novoPromo, setNovoPromo] = useState({ produto: 'top1', desconto_pct: '', descricao_condicoes: '' });
+  const [salvandoPromo, setSalvandoPromo] = useState(false);
   const [aba, setAba] = useState('material'); // 'material' | 'carteira' | 'comissoes'
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user || !podeVer) { setLoading(false); return; }
     async function load() {
-      const [{ data: p }, { data: cli }, { data: com }, { data: cs }] = await Promise.all([
+      const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: lp }] = await Promise.all([
         supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', user.id).single(),
         supabase.from('perfis').select('id, nome, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
         supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
         supabase.from('cursos_admin').select('id, titulo, preco').eq('ativo', true).order('ordem'),
+        supabase.from('links_promo').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
       ]);
       setPerfil(p || null);
       setCarteira(cli || []);
       setComissoes(com || []);
       setCursos(cs || []);
+      setLinksPromo(lp || []);
       setLoading(false);
     }
     load();
@@ -87,6 +92,30 @@ export default function Consultor() {
       </div>
     );
   }
+
+  const criarLinkPromo = async () => {
+    setSalvandoPromo(true);
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const cod = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    const payload = {
+      codigo: cod,
+      produto: novoPromo.produto,
+      desconto_pct: Number(novoPromo.desconto_pct) || 0,
+      descricao_condicoes: novoPromo.descricao_condicoes,
+      criado_por: user.id,
+      ativo: true,
+    };
+    const { data, error } = await supabase.from('links_promo').insert(payload).select().single();
+    if (!error && data) setLinksPromo(p => [data, ...p]);
+    setSalvandoPromo(false);
+  };
+
+  const togglePromo = async (lp) => {
+    await supabase.from('links_promo').update({ ativo: !lp.ativo }).eq('id', lp.id);
+    setLinksPromo(ps => ps.map(p => p.id === lp.id ? { ...p, ativo: !p.ativo } : p));
+  };
+
+  const PRODUTOS_NOME = { top1: 'TOP 1', top2: 'TOP 2', assessorado: 'Assessorado', clube: 'Leilão Club' };
 
   const codigo = perfil?.codigo_indicacao;
   const origin = window.location.origin;
@@ -179,6 +208,66 @@ export default function Consultor() {
                     <input readOnly value={linkPlanos} style={{ flex:1, minWidth:240, padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, color:'#334155', background:'#f8fafc' }}/>
                     <CopyBtn texto={linkPlanos}/>
                   </div>
+                </div>
+
+                {/* Links promocionais */}
+                <div style={{ borderTop:'2px solid #e2e8f0', paddingTop:18 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:12 }}>
+                    <Tag size={13}/> Links Promocionais com Desconto
+                  </div>
+
+                  {/* Criar novo promo */}
+                  <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'14px 16px', marginBottom:14 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:'#475569', marginBottom:10 }}>Criar novo link promocional</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+                      <select value={novoPromo.produto} onChange={e => setNovoPromo(p=>({...p, produto:e.target.value}))}
+                        style={{ padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, color:'#0f172a', background:'white' }}>
+                        {Object.entries(PRODUTOS_NOME).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                      <input type="number" value={novoPromo.desconto_pct} onChange={e => setNovoPromo(p=>({...p,desconto_pct:e.target.value}))}
+                        placeholder="Desconto %" min="0" max="100"
+                        style={{ padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, color:'#0f172a' }} />
+                    </div>
+                    <textarea value={novoPromo.descricao_condicoes} onChange={e => setNovoPromo(p=>({...p,descricao_condicoes:e.target.value}))}
+                      placeholder="Condições promocionais (ex: '30% de desconto no 1º mês para novos clientes indicados por você')"
+                      rows={2} style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, color:'#0f172a', resize:'vertical', boxSizing:'border-box', marginBottom:10 }}/>
+                    <button onClick={criarLinkPromo} disabled={salvandoPromo}
+                      style={{ padding:'8px 20px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer' }}>
+                      {salvandoPromo ? 'Gerando…' : '+ Gerar link'}
+                    </button>
+                  </div>
+
+                  {/* Lista de links promo */}
+                  {linksPromo.length === 0 ? (
+                    <p style={{ fontSize:13, color:'#94a3b8' }}>Nenhum link promocional criado ainda.</p>
+                  ) : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {linksPromo.map(lp => {
+                        const lpUrl = `${origin}/#/promo/${lp.codigo}`;
+                        return (
+                          <div key={lp.id} style={{ padding:'12px 14px', border:`1px solid ${lp.ativo?'#e2e8f0':'#fecaca'}`, borderRadius:10, background:lp.ativo?'white':'#fff5f5' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
+                              <div>
+                                <span style={{ fontFamily:'monospace', fontWeight:900, fontSize:14, color:'#0f172a', marginRight:8 }}>{lp.codigo}</span>
+                                <span style={{ fontSize:12, color:'#2563eb', fontWeight:700 }}>{PRODUTOS_NOME[lp.produto]}</span>
+                                {lp.desconto_pct > 0 && <span style={{ fontSize:12, color:'#059669', fontWeight:700, marginLeft:6 }}>{lp.desconto_pct}% off</span>}
+                                {!lp.ativo && <span style={{ fontSize:11, color:'#dc2626', fontWeight:700, marginLeft:6 }}>INATIVO</span>}
+                              </div>
+                              <div style={{ display:'flex', gap:6 }}>
+                                <CopyBtn texto={lpUrl}/>
+                                <button onClick={() => togglePromo(lp)}
+                                  style={{ padding:'5px 10px', background:lp.ativo?'#fee2e2':'#dcfce7', border:'none', borderRadius:6, fontSize:11, fontWeight:700, color:lp.ativo?'#dc2626':'#166534', cursor:'pointer' }}>
+                                  {lp.ativo?'Desativar':'Ativar'}
+                                </button>
+                              </div>
+                            </div>
+                            {lp.descricao_condicoes && <div style={{ marginTop:6, fontSize:12, color:'#64748b' }}>📋 {lp.descricao_condicoes}</div>}
+                            <div style={{ marginTop:4, fontSize:11, color:'#94a3b8', fontFamily:'monospace', wordBreak:'break-all' }}>{lpUrl}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Links de cursos */}

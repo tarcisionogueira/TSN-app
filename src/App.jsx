@@ -18,6 +18,7 @@ import Planos from './pages/Planos';
 import Login from './pages/Login';
 import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
+import Promo from './pages/Promo';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/promo/:codigo" element={<Promo />} />
           <Route path="*" element={
             <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
               <Header />
