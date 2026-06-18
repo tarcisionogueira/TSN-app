@@ -1,10 +1,58 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PLANOS } from '../data/cursos';
 
 const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
+
+// Mapeia mensagens técnicas de erro do Asaas para orientações amigáveis
+const MENSAGENS_RECUSA = [
+  {
+    detectar: ['INSUFFICIENT_FUNDS', 'saldo insuficiente', 'insufficient'],
+    titulo: 'Saldo ou limite insuficiente',
+    orientacao: 'Seu cartão não possui limite disponível para esta transação. Tente outro cartão, realize um pagamento via PIX, ou libere o limite com seu banco.',
+    icone: '💳',
+  },
+  {
+    detectar: ['EXPIRED_CARD', 'cartão vencido', 'expired'],
+    titulo: 'Cartão vencido',
+    orientacao: 'O cartão informado está expirado. Use um cartão com data de validade vigente ou escolha pagar via PIX ou boleto.',
+    icone: '📅',
+  },
+  {
+    detectar: ['INVALID_SECURITY_CODE', 'cvv', 'security code', 'código de segurança'],
+    titulo: 'Código de segurança inválido',
+    orientacao: 'O CVV digitado não corresponde ao cartão. Verifique os 3 dígitos no verso do cartão (ou 4 dígitos na frente, para Amex).',
+    icone: '🔒',
+  },
+  {
+    detectar: ['TRANSACTION_NOT_PERMITTED', 'não permitida', 'not permitted', 'bloqueado'],
+    titulo: 'Transação não permitida pelo banco',
+    orientacao: 'Seu banco bloqueou a transação. Acesse o app do seu banco, libere compras online ou entre em contato com a central de atendimento do cartão.',
+    icone: '🏦',
+  },
+  {
+    detectar: ['CREDIT_LIMIT_EXCEEDED', 'limite excedido', 'limit exceeded'],
+    titulo: 'Limite do cartão excedido',
+    orientacao: 'Você atingiu o limite de crédito disponível. Tente outro cartão ou escolha pagar via PIX para ativação imediata.',
+    icone: '📊',
+  },
+  {
+    detectar: ['INVALID_CARD_DATA', 'dados inválidos', 'invalid card'],
+    titulo: 'Dados do cartão inválidos',
+    orientacao: 'Os dados do cartão foram recusados. Confira o número, o nome impresso, a validade e o CVV. Tente novamente ou use outro meio de pagamento.',
+    icone: '⚠️',
+  },
+];
+
+function mapearErro(msg = '') {
+  const lower = msg.toLowerCase();
+  for (const m of MENSAGENS_RECUSA) {
+    if (m.detectar.some(d => lower.includes(d.toLowerCase()))) return m;
+  }
+  return null;
+}
 
 export default function Checkout() {
   const nav = useNavigate();
@@ -215,8 +263,37 @@ export default function Checkout() {
             </div>
           ) : !linkPagamento ? (
             <>
-              {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 16 }}>{erro}</div>}
-              <button onClick={ehMudanca ? mudarPlano : gerarLink} disabled={loading}
+              {erro && (() => {
+                const m = mapearErro(erro);
+                return m ? (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '16px', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#dc2626', marginBottom: 6, fontSize: 14 }}>
+                      <AlertTriangle size={16} /> {m.icone} {m.titulo}
+                    </div>
+                    <p style={{ margin: '0 0 12px', fontSize: 13, color: '#7f1d1d', lineHeight: 1.6 }}>{m.orientacao}</p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => { setErro(''); setLinkPagamento(null); }}
+                        style={{ padding: '7px 14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <RefreshCw size={12} /> Tentar novamente
+                      </button>
+                      <a href="https://wa.me/5511999999999" target="_blank" rel="noreferrer"
+                        style={{ padding: '7px 14px', background: '#25d366', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        💬 Falar com suporte
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 4 }}><AlertTriangle size={14}/> Pagamento não processado</div>
+                    <div style={{ marginBottom: 8 }}>{erro}</div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => setErro('')} style={{ padding: '5px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>Tentar novamente</button>
+                      <a href="https://wa.me/5511999999999" target="_blank" rel="noreferrer" style={{ padding: '5px 12px', background: '#25d366', color: 'white', borderRadius: 6, fontWeight: 700, fontSize: 11, textDecoration: 'none' }}>💬 Suporte</a>
+                    </div>
+                  </div>
+                );
+              })()}
+              <button onClick={erro ? undefined : (ehMudanca ? mudarPlano : gerarLink)} disabled={loading || !!erro}
                 style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>

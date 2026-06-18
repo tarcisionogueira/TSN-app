@@ -147,6 +147,22 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, plano: mapeado?.plano });
   }
 
+  // ── Pagamento recusado ──
+  if (tipo === 'PAYMENT_REFUSED') {
+    const cliente = await buscarCliente(asaasCustomerId, email);
+    if (cliente) {
+      const motivo = pagamento?.refusedReason || 'PAYMENT_REFUSED';
+      // Registra o motivo de recusa para exibir ao usuário na próxima sessão
+      await supabase.from('perfis').update({
+        pagamento_erro: motivo,
+        pagamento_erro_data: new Date().toISOString(),
+      }).eq('id', cliente.id).then(() => {});
+      // Nota: a coluna pagamento_erro requer migração SQL (schema_pagamento_erro.sql)
+      // Se a coluna não existir, este update falha silenciosamente sem impacto.
+    }
+    return res.status(200).json({ ok: true, event: 'refused' });
+  }
+
   // Outros eventos ignorados
   return res.status(200).json({ ok: true });
 }
