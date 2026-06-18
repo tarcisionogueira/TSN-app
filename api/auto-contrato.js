@@ -20,7 +20,7 @@ CLÁUSULA 3ª — DAS OBRIGAÇÕES DO CONTRATADO
 O CONTRATADO obriga-se a: (a) fornecer informações verídicas sobre sua capacidade de investimento; (b) disponibilizar os documentos necessários à análise; (c) tomar as decisões de lance e aquisição com plena autonomia, sendo de sua exclusiva responsabilidade o resultado do investimento; (d) assinar o presente instrumento em até 30 (trinta) dias a contar do envio do link de assinatura, sob pena de cancelamento do serviço e estorno do valor pago.
 
 CLÁUSULA 4ª — DO VALOR E FORMA DE PAGAMENTO
-Os serviços de assessoria são remunerados pelo valor de R$ 5.000,00 (cinco mil reais), cobrados na contratação, acrescidos de honorários de êxito de 10% (dez por cento) sobre o valor do lance do imóvel arrematado, devidos no momento da arrematação.
+Os serviços de assessoria são remunerados conforme modalidade escolhida pelo CONTRATADO no ato da contratação: (a) R$ 3.000,00 (três mil reais) parcelados em 6 (seis) parcelas mensais de R$ 500,00 (quinhentos reais), com vencimento no dia 10 de cada mês a contar da assinatura; ou (b) R$ 5.000,00 (cinco mil reais) em pagamento único à vista. Sobre o imóvel arrematado incidem honorários de êxito de 10% (dez por cento) sobre o valor do lance, devidos no momento da arrematação, independentemente da modalidade de pagamento escolhida.
 
 CLÁUSULA 5ª — DO PRAZO
 O presente contrato vigorará pelo prazo necessário à conclusão da aquisição do imóvel, sem prazo máximo definido, podendo ser rescindido por qualquer das partes mediante aviso prévio de 30 (trinta) dias, respondendo a parte que der causa à rescisão pelo pagamento de multa de 10% (dez por cento) sobre o valor contratado.
@@ -65,10 +65,10 @@ CLÁUSULA 2ª — DOS BENEFÍCIOS DO CLUBE
 A adesão confere ao MEMBRO: (a) participação em sessões mensais de mentoria em grupo; (b) análises prioritárias de imóveis em leilão; (c) acesso à plataforma TSN Ativos com recursos exclusivos; (d) networking com demais membros do clube; (e) relatórios mensais de oportunidades de leilão.
 
 CLÁUSULA 3ª — DO VALOR E FORMA DE PAGAMENTO
-A mensalidade de adesão ao Clube é de R$ 5.000,00 (cinco mil reais) por mês, devida até o dia 10 de cada mês. O não pagamento por mais de 30 dias ensejará a suspensão automática do acesso até a regularização.
+A adesão ao Clube é remunerada conforme modalidade escolhida pelo MEMBRO no ato da contratação: (a) R$ 5.000,00 (cinco mil reais) mensais, devidos até o dia 10 de cada mês, totalizando R$ 60.000,00 (sessenta mil reais) ao longo dos 12 (doze) meses de fidelidade; ou (b) R$ 48.000,00 (quarenta e oito mil reais) em pagamento único à vista, com desconto de 20% (vinte por cento) sobre o total parcelado. O não pagamento por mais de 30 (trinta) dias corridos ensejará a suspensão automática do acesso até a regularização.
 
 CLÁUSULA 4ª — DO PRAZO E FIDELIDADE
-O presente contrato tem prazo mínimo de adesão de 3 (três) meses, podendo ser rescindido após esse período mediante aviso prévio de 30 (trinta) dias. A rescisão dentro do prazo mínimo sujeitará o MEMBRO ao pagamento proporcional das mensalidades restantes.
+O presente contrato tem prazo mínimo de fidelidade de 12 (doze) meses a contar da assinatura, independentemente da modalidade de pagamento escolhida. Após esse período, o MEMBRO poderá cancelar a adesão mediante aviso prévio de 30 (trinta) dias. A rescisão imotivada dentro do prazo de fidelidade sujeitará o MEMBRO ao pagamento integral das mensalidades restantes até o término dos 12 meses.
 
 CLÁUSULA 5ª — DAS OBRIGAÇÕES DO MEMBRO
 O MEMBRO obriga-se a: (a) efetuar os pagamentos nas datas acordadas; (b) utilizar as informações e análises do Clube exclusivamente para uso próprio, sendo vedada a divulgação a terceiros; (c) assinar o presente instrumento em até 30 (trinta) dias a contar do envio do link de assinatura, sob pena de cancelamento e estorno do valor pago.

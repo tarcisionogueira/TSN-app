@@ -636,11 +636,11 @@ function ContratosTab() {
     if (key === 'assessorado') {
       setTitulo('Contrato de Assessoria para Aquisição de Imóvel em Leilão');
       setTipo('servico');
-      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Valor: R$5.000 na contratação + 10% honorários de êxito sobre o valor arrematado. Prazo: até conclusão da aquisição. Rescisão: aviso prévio de 30 dias + multa de 10%.');
+      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Valor: R$500 em 6x ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Prazo: até conclusão da aquisição. Rescisão: aviso prévio de 30 dias + multa de 10%.');
     } else if (key === 'clube') {
       setTitulo('Contrato de Adesão ao Clube de Negócios TSN Ativos');
       setTipo('servico');
-      setDescricao('Adesão ao Clube de Negócios TSN Ativos: mentoria mensal em grupo, análises prioritárias, acesso à plataforma, networking e relatórios mensais. Mensalidade: R$5.000/mês, vencimento dia 10. Fidelidade mínima: 3 meses. Rescisão após prazo mínimo: aviso de 30 dias.');
+      setDescricao('Adesão ao Clube de Negócios TSN Ativos: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.');
     } else if (key === 'nda') {
       setTitulo('Acordo de Confidencialidade e Não Divulgação');
       setTipo('nda');
@@ -1023,8 +1023,8 @@ function ContratosTab() {
 const PRODUTOS_PROMO = [
   { key: 'top1', label: 'Investidor — R$ 49,90/mês' },
   { key: 'top2', label: 'Investidor Pro — R$ 99,90/mês' },
-  { key: 'assessorado', label: 'Assessorado — R$ 5.000' },
-  { key: 'clube', label: 'Leilão Club — R$ 5.000/mês' },
+  { key: 'assessorado', label: 'Assessorado — R$ 500×6 ou R$ 5.000 à vista' },
+  { key: 'clube', label: 'Clube de Negócios — R$ 5.000/mês (12 meses)' },
 ];
 
 const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', ativo: true });
@@ -1322,7 +1322,7 @@ function DashboardTab() {
       const contagem = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
       (perfis || []).forEach(p => { if (p.role in contagem) contagem[p.role]++; });
 
-      const mrr = (contagem.top1 * 49.90) + (contagem.top2 * 99.90) + (contagem.assessorado * 5000) + (contagem.clube * 5000);
+      const mrr = (contagem.top1 * 49.90) + (contagem.top2 * 99.90) + (contagem.assessorado * 500) + (contagem.clube * 5000);
       const taxaPix = mrr * 0.01;
       const liquido = mrr - taxaPix;
 
@@ -1399,8 +1399,8 @@ function DashboardTab() {
               { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
               { key: 'top1',       label: 'Investidor (R$49,90)',     cor: '#2563eb', preco: 49.90 },
               { key: 'top2',       label: 'Investidor Pro (R$99,90)', cor: '#7c3aed', preco: 99.90 },
-              { key: 'assessorado',label: 'Assessorado (R$5k)', cor: '#d97706', preco: 5000 },
-              { key: 'clube',      label: 'Clube (R$5k/mês)',   cor: '#059669', preco: 5000 },
+              { key: 'assessorado',label: 'Assessorado (R$500×6)', cor: '#d97706', preco: 500 },
+              { key: 'clube',      label: 'Clube de Negócios (R$5k/mês)', cor: '#059669', preco: 5000 },
             ].map(({ key, label, cor, preco }) => {
               const qtd = dados.contagem[key] || 0;
               const receita = qtd * preco;
