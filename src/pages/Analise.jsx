@@ -1,14 +1,16 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
   CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
-  Home, ClipboardList, LineChart, Award, Info, RefreshCw,
+  Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
 } from 'lucide-react';
 import { extrairDadosDocumento, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../utils/supabase';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import RiscoJuridico from '../components/RiscoJuridico';
 import Lancamentos from '../components/Lancamentos';
@@ -89,9 +91,36 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
   );
 }
 
+const LIMITE_ANALISES_TOP1 = 10;
+const mesAtual = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+
 export default function Analise() {
   const location = useLocation();
+  const nav = useNavigate();
+  const { user, role } = useAuth();
   const imovelInicial = location.state?.imovel;
+
+  // Controle de limite (top1)
+  const [analisesBloqueado, setAnalisesBloqueado] = useState(false);
+  const [analisesUsadas, setAnalisesUsadas] = useState(0);
+
+  useEffect(() => {
+    if (role !== 'top1' || !user) return;
+    supabase
+      .from('perfis')
+      .select('analises_mes, analises_count')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
+        const mes = data.analises_mes;
+        const count = data.analises_count || 0;
+        if (mes === mesAtual()) {
+          setAnalisesUsadas(count);
+          if (count >= LIMITE_ANALISES_TOP1) setAnalisesBloqueado(true);
+        }
+      });
+  }, [role, user]);
 
   const [d, setD] = useState(() => {
     if (imovelInicial) return {
@@ -107,6 +136,7 @@ export default function Analise() {
   });
 
   const [textoDoc, setTextoDoc] = useState('');
+  const [textoMatricula, setTextoMatricula] = useState('');
   const [cenario, setCenario] = useState('financiado');
   const [mercado, setMercado] = useState(null);
   const [parecer, setParecer] = useState('');
@@ -172,10 +202,15 @@ export default function Analise() {
   const showMsg = (text, type='success') => { setMsg({ text, type }); setTimeout(()=>setMsg({text:'',type:''}), 3500); };
 
   const extrairDoc = async () => {
-    if (!textoDoc.trim()) { showMsg('Cole o texto do edital ou matrícula primeiro.','error'); return; }
+    if (!textoDoc.trim() && !textoMatricula.trim()) { showMsg('Cole o texto do edital ou matrícula primeiro.','error'); return; }
     setLoadDoc(true);
     try {
-      const ext = await extrairDadosDocumento(textoDoc);
+      // Combina edital + matrícula para extração unificada (top2+)
+      const textoCompleto = [
+        textoDoc.trim() ? `=== EDITAL ===\n${textoDoc.trim()}` : '',
+        textoMatricula.trim() ? `=== MATRÍCULA ===\n${textoMatricula.trim()}` : '',
+      ].filter(Boolean).join('\n\n');
+      const ext = await extrairDadosDocumento(textoCompleto);
       if (ext) {
         setD(p => ({
           ...p, ...ext,
@@ -229,13 +264,23 @@ export default function Analise() {
     setLoadParecer(false);
   };
 
-  const salvar = () => {
+  const salvar = async () => {
     const list = loadImoveis();
     const idx = list.findIndex(i => i.id===d.id);
+    const isNovo = idx < 0;
     const entry = { ...d, parecer, mercado, updatedAt: new Date().toISOString() };
-    saveImoveis(idx>=0 ? list.map(i=>i.id===d.id?entry:i) : [...list,entry]);
+    saveImoveis(isNovo ? [...list, entry] : list.map(i=>i.id===d.id?entry:i));
     setSaved(true); showMsg('Imóvel salvo no portfólio!');
     setTimeout(()=>setSaved(false), 2500);
+
+    // Contabiliza análise para top1 (só conta ao salvar pela primeira vez)
+    if (role === 'top1' && user && isNovo) {
+      const mes = mesAtual();
+      const novoCount = analisesUsadas + 1;
+      await supabase.from('perfis').update({ analises_mes: mes, analises_count: novoCount }).eq('id', user.id);
+      setAnalisesUsadas(novoCount);
+      if (novoCount >= LIMITE_ANALISES_TOP1) setAnalisesBloqueado(true);
+    }
   };
 
   const imprimirPDF = () => gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer });
@@ -268,6 +313,21 @@ export default function Analise() {
         </div>
       </div>
 
+      {/* Limite de análises — plano Investidor */}
+      {role === 'top1' && (
+        <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <span>{analisesBloqueado
+            ? `🔒 Limite de ${LIMITE_ANALISES_TOP1} análises mensais atingido. Faça upgrade para o plano Investidor Pro para análises ilimitadas.`
+            : `📊 Análises utilizadas este mês: ${analisesUsadas}/${LIMITE_ANALISES_TOP1}`
+          }</span>
+          {analisesBloqueado && (
+            <button onClick={() => nav('/planos')} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+              Ver planos
+            </button>
+          )}
+        </div>
+      )}
+
       {msg.text && <div style={{ padding:'10px 16px', borderRadius:10, background:msg.type==='error'?'#fee2e2':'#d1fae5', color:msg.type==='error'?'#dc2626':'#065f46', fontSize:12, fontWeight:700 }}>{msg.text}</div>}
 
       {/* ALERTA BLOQUEANTE */}
@@ -282,10 +342,10 @@ export default function Analise() {
       )}
 
       {/* ── ETAPA 1: DOCUMENTO ── */}
-      <Section step="1" title="Edital / Matrícula" icon={FileText} color="#2563eb" open={openSec.doc} onToggle={()=>toggleSec('doc')} badge="Upload ou cole o texto">
+      <Section step="1" title="Edital" icon={FileText} color="#2563eb" open={openSec.doc} onToggle={()=>toggleSec('doc')} badge="Upload ou cole o texto">
         <div style={{ display:'flex', flexDirection:'column', gap:12, paddingTop:14 }}>
           <textarea value={textoDoc} onChange={e=>setTextoDoc(e.target.value)} rows={7}
-            placeholder="Cole aqui o texto do edital, matrícula, certidões ou qualquer documento do imóvel. A IA irá extrair automaticamente todos os dados relevantes..."
+            placeholder="Cole aqui o texto do edital do leilão. A extração irá capturar endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, datas e muito mais..."
             style={{ width:'100%', padding:'12px', border:'1px solid #e2e8f0', borderRadius:10, fontSize:13, color:'#0f172a', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
           <div style={{ display:'flex', gap:8 }}>
             <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #e2e8f0', borderRadius:10, color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer', transition:'border-color 0.2s' }}
@@ -293,17 +353,35 @@ export default function Analise() {
               <UploadCloud size={16}/> Upload .TXT
               <input type="file" accept=".txt" onChange={handleFileUpload} style={{display:'none'}}/>
             </label>
-            <button onClick={extrairDoc} disabled={loadDoc||!textoDoc.trim()}
-              style={{ flex:2, padding:'10px', background:textoDoc.trim()?'#2563eb':'#e2e8f0', color:textoDoc.trim()?'white':'#94a3b8', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              {loadDoc ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Extraindo dados...</> : <><Sparkles size={15}/> Extrair dados com IA</>}
+            <button onClick={extrairDoc} disabled={loadDoc||analisesBloqueado||(!textoDoc.trim()&&!textoMatricula.trim())}
+              style={{ flex:2, padding:'10px', background:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'#2563eb':'#e2e8f0', color:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'white':'#94a3b8', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              {loadDoc ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Extraindo dados...</> : analisesBloqueado ? <><Lock size={14}/> Limite atingido</> : <><Sparkles size={15}/> Extrair dados</>}
             </button>
           </div>
           <div style={{ display:'flex', gap:8, fontSize:11, color:'#94a3b8' }}>
             <Info size={12} style={{flexShrink:0,marginTop:1}}/>
-            <span>A IA extrai: endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, laudêmio, datas e muito mais.</span>
+            <span>Extrai: endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, laudêmio, datas e muito mais.</span>
           </div>
         </div>
       </Section>
+
+      {/* ── ETAPA 1B: MATRÍCULA (Investidor Pro e acima) ── */}
+      {['top2','assessorado','clube','analista','advogado','admin'].includes(role) && (
+        <Section step="1B" title="Matrícula do Imóvel" icon={ClipboardList} color="#7c3aed" open={openSec.matricula ?? false} onToggle={()=>toggleSec('matricula')} badge="Incluso no Investidor Pro">
+          <div style={{ display:'flex', flexDirection:'column', gap:12, paddingTop:14 }}>
+            <div style={{ background:'#ede9fe', border:'1px solid #c4b5fd', borderRadius:10, padding:'10px 14px', fontSize:12, color:'#6d28d9' }}>
+              <strong>Investidor Pro:</strong> Cole a matrícula do imóvel junto com o edital. Os dois documentos são extraídos juntos em uma única análise, identificando ônus, usufrutos, hipotecas, alienações e histórico de proprietários.
+            </div>
+            <textarea value={textoMatricula} onChange={e=>setTextoMatricula(e.target.value)} rows={6}
+              placeholder="Cole aqui o texto da matrícula do imóvel (certidão de inteiro teor). A análise identificará automaticamente ônus reais, hipotecas, penhoras, usufrutos, alienação fiduciária e histórico de proprietários..."
+              style={{ width:'100%', padding:'12px', border:'1px solid #c4b5fd', borderRadius:10, fontSize:13, color:'#0f172a', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
+            <label style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #c4b5fd', borderRadius:10, color:'#7c3aed', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+              <UploadCloud size={16}/> Upload matrícula .TXT
+              <input type="file" accept=".txt" onChange={async e => { const f = e.target.files[0]; if (f) setTextoMatricula(await f.text()); }} style={{display:'none'}}/>
+            </label>
+          </div>
+        </Section>
+      )}
 
       {/* ── ETAPA 2: DADOS DO IMÓVEL ── */}
       <Section step="2" title="Dados do Imóvel" icon={Home} color="#0f172a" open={openSec.dados} onToggle={()=>toggleSec('dados')}
