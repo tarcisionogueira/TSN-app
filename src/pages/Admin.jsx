@@ -604,9 +604,10 @@ function ContratosTab() {
   const [form, setForm] = useState(defaultContrato());
   const [saving, setSaving] = useState(false);
   const [modalLink, setModalLink] = useState(false);
-  const [formLink, setFormLink] = useState({ titulo: '', conteudo: '', tipo_contrato: 'servico' });
+  const [formLink, setFormLink] = useState({ titulo: '', conteudo: '', tipo_contrato: 'servico', descricao: '' });
   const [linkGerado, setLinkGerado] = useState('');
   const [savingLink, setSavingLink] = useState(false);
+  const [gerandoContrato, setGerandoContrato] = useState(false);
   const [contratosLink, setContratosLink] = useState([]);
 
   const load = useCallback(async () => {
@@ -663,6 +664,22 @@ function ContratosTab() {
     await load();
   }
 
+  async function gerarComAssistente() {
+    if (!formLink.descricao.trim()) { alert('Descreva o que o contrato deve conter.'); return; }
+    setGerandoContrato(true);
+    try {
+      const r = await fetch('/api/gerar-contrato', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ descricao: formLink.descricao, tipo: formLink.tipo_contrato, titulo: formLink.titulo }),
+      });
+      const d = await r.json();
+      if (d.conteudo) setFormLink(f => ({ ...f, conteudo: d.conteudo }));
+      else alert('Não foi possível gerar o contrato. Tente novamente.');
+    } catch { alert('Erro de conexão ao gerar o contrato.'); }
+    setGerandoContrato(false);
+  }
+
   async function cancelarLink(id) {
     if (!window.confirm('Cancelar este contrato via link?')) return;
     await supabase.from('contratos_link').update({ status: 'cancelado' }).eq('id', id);
@@ -678,7 +695,7 @@ function ContratosTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Contratos ({contratos.length})</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={S.btn('outline')} onClick={() => { setFormLink({ titulo: '', conteudo: '', tipo_contrato: 'servico' }); setLinkGerado(''); setModalLink(true); }}>🔗 Gerar link de assinatura</button>
+          <button style={S.btn('outline')} onClick={() => { setFormLink({ titulo: '', conteudo: '', tipo_contrato: 'servico', descricao: '' }); setLinkGerado(''); setModalLink(true); }}>🔗 Gerar link de assinatura</button>
           <button style={S.btn('primary')} onClick={openNew}>+ Novo Contrato</button>
         </div>
       </div>
@@ -786,8 +803,24 @@ function ContratosTab() {
                     </select>
                   </div>
                 </div>
+
+                {/* Campo de descrição para geração automática */}
+                <div style={{ marginBottom: 12, background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '14px 16px' }}>
+                  <label style={{ ...S.label, color: '#0369a1' }}>Descreva o que o contrato deve conter</label>
+                  <textarea style={{ ...S.input, height: 80, resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }}
+                    value={formLink.descricao}
+                    onChange={e => setFormLink({ ...formLink, descricao: e.target.value })}
+                    placeholder="Ex: Contrato de consultoria para análise de leilões de imóveis, duração 6 meses, valor R$1.500/mês, pagamento todo dia 5, pode ser rescindido com 30 dias de aviso…"/>
+                  <button
+                    onClick={gerarComAssistente}
+                    disabled={gerandoContrato || !formLink.descricao.trim()}
+                    style={{ ...S.btn('primary'), marginTop: 8, width: '100%', justifyContent: 'center', opacity: (!formLink.descricao.trim() || gerandoContrato) ? 0.6 : 1 }}>
+                    {gerandoContrato ? '⏳ Gerando contrato…' : '✨ Gerar contrato automaticamente'}
+                  </button>
+                </div>
+
                 <div style={{ marginBottom: 16 }}>
-                  <label style={S.label}>Conteúdo do contrato *</label>
+                  <label style={S.label}>Conteúdo do contrato {formLink.conteudo ? '(edite se necessário)' : '— ou escreva manualmente *'}</label>
                   <textarea style={{ ...S.input, height: 220, resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }}
                     value={formLink.conteudo}
                     onChange={e => setFormLink({ ...formLink, conteudo: e.target.value })}
@@ -803,7 +836,7 @@ function ContratosTab() {
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                   <button style={S.btn('outline')} onClick={() => setModalLink(false)}>Cancelar</button>
-                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink}>
+                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || !formLink.conteudo.trim()}>
                     {savingLink ? 'Gerando…' : '✓ Aprovar e gerar link'}
                   </button>
                 </div>
