@@ -62,7 +62,7 @@ export default function Calculadora() {
   const [condominioMensal, setCondominioMensal] = useState(0);
   const [sinal, setSinal] = useState(25);
   const [prazoMeses, setPrazoMeses] = useState(360);
-  const [cet, setCet] = useState(12);
+  const [cet, setCet] = useState(15);   // 15% padrão, editável
   const [prazoVenda, setPrazoVenda] = useState(12);
   const [metaRoi, setMetaRoi] = useState(30);  // 30% padrão
 
@@ -75,9 +75,16 @@ export default function Calculadora() {
       .then(({ data }) => { if (data?.codigo_indicacao) setCodigoRef(data.codigo_indicacao); });
   }, [user, role]);
 
-  // Judicial → sempre à vista (sem financiamento bancário)
+  // Judicial: ao mudar para judicial, ajusta defaults do CPC 895
   useEffect(() => {
-    if (origem === 'judicial') setPagamento('a_vista');
+    if (origem === 'judicial') {
+      setSinal(25);
+      setPrazoMeses(30);
+      setCet(0);   // CPC 895 não tem juros (correção pelo IPCA/SELIC a critério do juiz)
+    } else {
+      setPrazoMeses(360);
+      setCet(15);
+    }
   }, [origem]);
 
   const isAVista = pagamento === 'a_vista';
@@ -172,20 +179,23 @@ export default function Calculadora() {
             ))}
           </div>
 
-          {/* Pagamento — apenas para extrajudicial */}
-          {origem === 'extrajudicial' && (
-            <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-              {[['a_vista', 'À vista'], ['financiado', 'Financiado']].map(([v, l]) => (
-                <button key={v} onClick={() => setPagamento(v)}
-                  style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid', borderColor: pagamento === v ? '#059669' : '#e2e8f0', background: pagamento === v ? '#ecfdf5' : 'white', color: pagamento === v ? '#059669' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                  {l}
-                </button>
-              ))}
+          {/* Pagamento */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            {[['a_vista', 'À vista'], ['financiado', origem === 'judicial' ? 'Parcelado (CPC 895)' : 'Financiado']].map(([v, l]) => (
+              <button key={v} onClick={() => setPagamento(v)}
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid', borderColor: pagamento === v ? '#059669' : '#e2e8f0', background: pagamento === v ? '#ecfdf5' : 'white', color: pagamento === v ? '#059669' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {origem === 'judicial' && pagamento === 'financiado' && (
+            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#1d4ed8', fontWeight: 600 }}>
+              CPC Art. 895: 25% de entrada + 30 parcelas mensais. Correção monetária a critério judicial.
             </div>
           )}
-          {origem === 'judicial' && (
-            <div style={{ marginBottom: 18, padding: '8px 12px', background: '#fef3c7', borderRadius: 8, fontSize: 12, color: '#92400e', fontWeight: 600 }}>
-              Leilão judicial: pagamento tipicamente à vista. Parcelas sob condição judicial específica.
+          {origem === 'judicial' && pagamento === 'a_vista' && (
+            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#fef3c7', borderRadius: 8, fontSize: 12, color: '#92400e', fontWeight: 600 }}>
+              Pagamento à vista no prazo fixado pelo juiz (geralmente 24h–15 dias após a arrematação).
             </div>
           )}
 
@@ -200,26 +210,43 @@ export default function Calculadora() {
             <Campo label="Condomínio mensal" value={condominioMensal} onChange={setCondominioMensal} prefix="R$" placeholder="0" />
           </div>
 
-          {/* Financiamento — apenas extrajudicial + financiado */}
-          {!isAVista && origem === 'extrajudicial' && (
+          {/* Parcelamento / Financiamento */}
+          {!isAVista && (
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>Financiamento</div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                {[['sac', 'SAC'], ['price', 'PRICE']].map(([v, l]) => (
-                  <button key={v} onClick={() => setTabela(v)}
-                    style={{ flex: 1, padding: '7px', borderRadius: 8, border: '1px solid', borderColor: tabela === v ? '#2563eb' : '#e2e8f0', background: tabela === v ? '#eff6ff' : 'white', color: tabela === v ? '#2563eb' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {l}
-                  </button>
-                ))}
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                {origem === 'judicial' ? 'Parcelamento CPC 895' : 'Financiamento'}
               </div>
+              {origem === 'extrajudicial' && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  {[['sac', 'SAC'], ['price', 'PRICE']].map(([v, l]) => (
+                    <button key={v} onClick={() => setTabela(v)}
+                      style={{ flex: 1, padding: '7px', borderRadius: 8, border: '1px solid', borderColor: tabela === v ? '#2563eb' : '#e2e8f0', background: tabela === v ? '#eff6ff' : 'white', color: tabela === v ? '#2563eb' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-                <Campo label="Entrada / sinal" value={sinal} onChange={setSinal} suffix="%" />
-                <Campo label="Prazo" value={prazoMeses} onChange={setPrazoMeses} suffix="m" />
-                <Campo label="CET anual" value={cet} onChange={setCet} suffix="%" />
+                <Campo
+                  label={origem === 'judicial' ? 'Entrada (mín. 25%)' : 'Entrada / sinal'}
+                  value={sinal} onChange={setSinal} suffix="%" />
+                <Campo
+                  label={origem === 'judicial' ? 'Parcelas (máx. 30)' : 'Prazo'}
+                  value={prazoMeses} onChange={setPrazoMeses} suffix={origem === 'judicial' ? 'x' : 'm'} />
+                <Campo
+                  label={origem === 'judicial' ? 'Correção anual' : 'CET anual'}
+                  value={cet} onChange={setCet} suffix="%" />
               </div>
-              <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 8, fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
-                <strong>CET real:</strong> use o simulador de financiamento habitacional da sua instituição financeira e informe o valor acima. Caixa Econômica, Bradesco e Santander disponibilizam simuladores em seus sites.
-              </div>
+              {origem === 'extrajudicial' && (
+                <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 8, fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
+                  <strong>CET real:</strong> use o simulador de financiamento habitacional da sua instituição financeira e informe o valor acima.
+                </div>
+              )}
+              {origem === 'judicial' && (
+                <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 8, fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
+                  Correção = 0% se o juiz não determinar índice; informe a taxa esperada (ex: SELIC ~10,5%) para projeção conservadora.
+                </div>
+              )}
             </div>
           )}
 
@@ -237,9 +264,12 @@ export default function Calculadora() {
               <Target size={15} /> Teto máximo de lance
             </div>
             <div style={{ fontSize: temDados ? 32 : 22, fontWeight: 900, margin: '6px 0 2px' }}>
-              {temDados ? `R$ ${fmt(teto, 0)}` : 'Preencha os valores'}
+              {temDados ? `R$ ${fmt(teto, 0)}` : '—'}
             </div>
-            {temDados && <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter ROI de {fmtPct(metaRoi, 0)} ({isAVista ? 'à vista' : `financiado ${nomeTabela}`}).</div>}
+            {temDados
+              ? <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter ROI de {fmtPct(metaRoi, 0)} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}).</div>
+              : <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>Preencha <strong>Arrematação</strong> e <strong>Valor de mercado</strong> para calcular.</div>
+            }
           </div>
 
           {/* Cenário atual */}
@@ -263,8 +293,10 @@ export default function Calculadora() {
               {!isAVista && (
                 <>
                   <Linha label="Sinal / entrada" valor={`R$ ${fmt(m.valorSinal, 0)}`} />
-                  <Linha label={`Parcela (${nomeTabela})`} valor={`R$ ${fmt(m.parcelaMedia, 0)}`} />
-                  <Linha label="Saldo p/ quitação" valor={`R$ ${fmt(m.saldoDevedor, 0)}`} sublabel="Saldo devedor ao vender" />
+                  <Linha
+                    label={origem === 'judicial' ? 'Parcela (CPC 895)' : `Parcela (${nomeTabela})`}
+                    valor={`R$ ${fmt(m.parcelaMedia, 0)}`} />
+                  <Linha label="Saldo p/ quitação" valor={`R$ ${fmt(m.saldoDevedor, 0)}`} sublabel={origem === 'judicial' ? 'Saldo restante das parcelas' : 'Saldo devedor ao vender'} />
                 </>
               )}
 
