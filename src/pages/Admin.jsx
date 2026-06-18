@@ -964,6 +964,82 @@ function ConvitesTab() {
   );
 }
 
+const FONTES_SCRAPER = [
+  { key: 'santander',  label: 'Santander',        cor: '#dc2626' },
+  { key: 'rodobens',   label: 'Rodobens',          cor: '#d97706' },
+  { key: 'sold',       label: 'Sold (BV/Bradesco/Itaú)', cor: '#2563eb' },
+  { key: 'zuk',        label: 'Zuk (Sicredi)',     cor: '#059669' },
+  { key: 'megaleiloes',label: 'MegaLeilões',       cor: '#7c3aed' },
+  { key: 'sicoob',     label: 'Sicoob',            cor: '#0891b2' },
+];
+
+function ScrapersMonitor() {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from('scrapers_log')
+      .select('*')
+      .order('iniciado_em', { ascending: false })
+      .limit(30)
+      .then(({ data }) => { setLogs(data || []); setLoading(false); });
+  }, []);
+
+  // Último log por fonte
+  const ultimoPorFonte = {};
+  FONTES_SCRAPER.forEach(f => {
+    ultimoPorFonte[f.key] = logs.find(l => l.fonte === f.key);
+  });
+
+  const erros = FONTES_SCRAPER.filter(f => ultimoPorFonte[f.key]?.status === 'erro');
+  const semDados = FONTES_SCRAPER.filter(f => ultimoPorFonte[f.key]?.status === 'sem_dados');
+
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Monitor de Scrapers</div>
+        {erros.length > 0 && (
+          <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
+            ⚠️ {erros.length} com erro
+          </span>
+        )}
+      </div>
+      {loading ? <p style={{ fontSize: 13, color: '#94a3b8' }}>Carregando...</p> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {FONTES_SCRAPER.map(f => {
+            const log = ultimoPorFonte[f.key];
+            const ok = log?.status === 'ok';
+            const erro = log?.status === 'erro';
+            const semDado = log?.status === 'sem_dados';
+            const nunca = !log;
+            const cor = ok ? '#10b981' : erro ? '#dc2626' : semDado ? '#d97706' : '#94a3b8';
+            const bg = ok ? '#f0fdf4' : erro ? '#fef2f2' : semDado ? '#fefce8' : '#f8fafc';
+            const icone = ok ? '✅' : erro ? '❌' : semDado ? '⚠️' : '⏸';
+            return (
+              <div key={f.key} style={{ padding: '10px 12px', background: bg, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: f.cor, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{f.label}</div>
+                    {log && <div style={{ fontSize: 11, color: '#64748b' }}>
+                      {log.imoveis_encontrados} imóveis · {new Date(log.iniciado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {log.duracao_ms && ` · ${(log.duracao_ms / 1000).toFixed(1)}s`}
+                    </div>}
+                    {erro && log.erro_msg && <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{log.erro_msg}</div>}
+                    {nunca && <div style={{ fontSize: 11, color: '#94a3b8' }}>Nunca executado</div>}
+                  </div>
+                </div>
+                <span style={{ fontSize: 16 }}>{icone}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardTab() {
   const [dados, setDados] = useState(null);
   const [asaasDados, setAsaasDados] = useState(null);
@@ -1155,6 +1231,9 @@ function DashboardTab() {
               📞 {marco.desc}
             </div>
           </div>
+
+          {/* Monitor de Scrapers */}
+          <ScrapersMonitor />
 
           {/* Infraestrutura */}
           <div style={S.card}>
