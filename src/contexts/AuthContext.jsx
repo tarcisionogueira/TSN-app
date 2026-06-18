@@ -5,14 +5,14 @@ const AuthContext = createContext(null);
 
 const IMPERSONATE_KEY = 'tsn_impersonate';
 
-async function fetchRole(userId) {
-  if (!userId) return 'aluno';
+async function fetchPerfil(userId) {
+  if (!userId) return { role: 'aluno', ativo: true };
   const { data } = await supabase
     .from('perfis')
-    .select('role')
+    .select('role, ativo')
     .eq('id', userId)
     .single();
-  return data?.role || 'aluno';
+  return { role: data?.role || 'aluno', ativo: data?.ativo !== false };
 }
 
 function loadImpersonate() {
@@ -23,6 +23,7 @@ function loadImpersonate() {
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [role, setRole]       = useState('aluno');
+  const [ativo, setAtivo]     = useState(true);
   const [loading, setLoading] = useState(true);
   // Modo suporte: admin/analista visualizando a conta de um cliente
   const [impersonate, setImpersonate] = useState(loadImpersonate);
@@ -31,14 +32,18 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(async ({ data }) => {
       const u = data.session?.user ?? null;
       setUser(u);
-      setRole(await fetchRole(u?.id));
+      const p = await fetchPerfil(u?.id);
+      setRole(p.role);
+      setAtivo(p.ativo);
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const u = session?.user ?? null;
       setUser(u);
-      setRole(await fetchRole(u?.id));
+      const p = await fetchPerfil(u?.id);
+      setRole(p.role);
+      setAtivo(p.ativo);
       // Vincula o cliente ao consultor que o indicou (link de afiliado),
       // inclusive no login Google onde o trigger não recebe o código.
       // Só tenta no sign-in real (não em token refresh, user_updated, etc.)
@@ -47,6 +52,12 @@ export function AuthProvider({ children }) {
         if (ref) {
           try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}
           sessionStorage.removeItem('tsn_ref_codigo');
+        }
+        // Vincula via link de convite
+        const convite = sessionStorage.getItem('tsn_convite_codigo');
+        if (convite) {
+          try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
+          sessionStorage.removeItem('tsn_convite_codigo');
         }
       }
       // Encerra o modo suporte ao sair da sessão
@@ -77,7 +88,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role, loading,
+      user, role, ativo, loading,
       isAdmin: role === 'admin',
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,

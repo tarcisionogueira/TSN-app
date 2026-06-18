@@ -41,24 +41,28 @@ export default function Consultor() {
   const [linksPromo, setLinksPromo] = useState([]);
   const [novoPromo, setNovoPromo] = useState({ produto: 'top1', desconto_pct: '', descricao_condicoes: '' });
   const [salvandoPromo, setSalvandoPromo] = useState(false);
+  const [linksConvite, setLinksConvite] = useState([]);
+  const [copiandoConvite, setCopiandoConvite] = useState('');
   const [aba, setAba] = useState('material'); // 'material' | 'carteira' | 'comissoes'
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user || !podeVer) { setLoading(false); return; }
     async function load() {
-      const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: lp }] = await Promise.all([
+      const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: lp }, { data: lc }] = await Promise.all([
         supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', user.id).single(),
         supabase.from('perfis').select('id, nome, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
         supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
         supabase.from('cursos_admin').select('id, titulo, preco').eq('ativo', true).order('ordem'),
         supabase.from('links_promo').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
+        supabase.from('links_convite').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
       ]);
       setPerfil(p || null);
       setCarteira(cli || []);
       setComissoes(com || []);
       setCursos(cs || []);
       setLinksPromo(lp || []);
+      setLinksConvite(lc || []);
       setLoading(false);
     }
     load();
@@ -113,6 +117,23 @@ export default function Consultor() {
   const togglePromo = async (lp) => {
     await supabase.from('links_promo').update({ ativo: !lp.ativo }).eq('id', lp.id);
     setLinksPromo(ps => ps.map(p => p.id === lp.id ? { ...p, ativo: !p.ativo } : p));
+  };
+
+  const gerarConvite = async () => {
+    const codigo = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const { data, error } = await supabase.from('links_convite').insert({ codigo, criado_por: user.id }).select().single();
+    if (!error && data) setLinksConvite(p => [data, ...p]);
+  };
+
+  const toggleConvite = async (c) => {
+    await supabase.from('links_convite').update({ ativo: !c.ativo }).eq('id', c.id);
+    setLinksConvite(ps => ps.map(p => p.id === c.id ? { ...p, ativo: !p.ativo } : p));
+  };
+
+  const copiarConvite = (codigo) => {
+    navigator.clipboard.writeText(`${window.location.origin}/#/convite/${codigo}`);
+    setCopiandoConvite(codigo);
+    setTimeout(() => setCopiandoConvite(''), 2000);
   };
 
   const PRODUTOS_NOME = { top1: 'TOP 1', top2: 'TOP 2', assessorado: 'Assessorado', clube: 'Leilão Club' };
@@ -263,6 +284,48 @@ export default function Consultor() {
                             </div>
                             {lp.descricao_condicoes && <div style={{ marginTop:6, fontSize:12, color:'#64748b' }}>📋 {lp.descricao_condicoes}</div>}
                             <div style={{ marginTop:4, fontSize:11, color:'#94a3b8', fontFamily:'monospace', wordBreak:'break-all' }}>{lpUrl}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Links de convite */}
+                <div>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase' }}>
+                      🎯 Links de convite
+                    </div>
+                    <button onClick={gerarConvite} style={{ padding:'5px 12px', background:'#0f172a', color:'white', border:'none', borderRadius:6, fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                      + Gerar convite
+                    </button>
+                  </div>
+                  <p style={{ fontSize:12, color:'#94a3b8', marginBottom:8 }}>Convites vinculam o novo usuário a você como indicador.</p>
+                  {linksConvite.length === 0 ? (
+                    <p style={{ fontSize:13, color:'#94a3b8' }}>Nenhum convite gerado ainda.</p>
+                  ) : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {linksConvite.map(c => {
+                        const convUrl = `${origin}/#/convite/${c.codigo}`;
+                        return (
+                          <div key={c.id} style={{ padding:'12px 14px', border:`1px solid ${c.ativo?'#e2e8f0':'#fecaca'}`, borderRadius:10, background:c.ativo?'white':'#fff5f5' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                              <div>
+                                <span style={{ fontFamily:'monospace', fontWeight:900, fontSize:14, color:'#0f172a', marginRight:8 }}>{c.codigo}</span>
+                                <span style={{ fontSize:12, color:'#64748b' }}>{c.usos} uso{c.usos!==1?'s':''}</span>
+                                {!c.ativo && <span style={{ fontSize:11, color:'#dc2626', fontWeight:700, marginLeft:6 }}>INATIVO</span>}
+                              </div>
+                              <div style={{ display:'flex', gap:6 }}>
+                                <button onClick={() => copiarConvite(c.codigo)} style={{ padding:'5px 10px', background:copiandoConvite===c.codigo?'#dcfce7':'#f1f5f9', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', color:copiandoConvite===c.codigo?'#166534':'#374151' }}>
+                                  {copiandoConvite===c.codigo?'✓ Copiado':'Copiar link'}
+                                </button>
+                                <button onClick={() => toggleConvite(c)} style={{ padding:'5px 10px', background:c.ativo?'#fee2e2':'#dcfce7', border:'none', borderRadius:6, fontSize:11, fontWeight:700, color:c.ativo?'#dc2626':'#166534', cursor:'pointer' }}>
+                                  {c.ativo?'Desativar':'Ativar'}
+                                </button>
+                              </div>
+                            </div>
+                            <div style={{ marginTop:4, fontSize:11, color:'#94a3b8', fontFamily:'monospace', wordBreak:'break-all' }}>{convUrl}</div>
                           </div>
                         );
                       })}

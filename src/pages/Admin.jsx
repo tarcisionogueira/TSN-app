@@ -440,7 +440,7 @@ function UsuariosTab() {
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('perfis').select('id, nome, cpf, role, plano, created_at').order('created_at', { ascending: false });
+    const { data } = await supabase.from('perfis').select('id, nome, cpf, role, plano, created_at, ativo').order('created_at', { ascending: false });
     setUsers(data || []);
     setLoading(false);
   }, []);
@@ -451,6 +451,12 @@ function UsuariosTab() {
     await supabase.from('perfis').update({ role: newRole }).eq('id', id);
     setUsers(users.map(u => u.id === id ? { ...u, role: newRole } : u));
     setEditingId(null);
+  }
+
+  async function toggleAtivo(u) {
+    const novoAtivo = u.ativo === false ? true : false;
+    await supabase.from('perfis').update({ ativo: novoAtivo }).eq('id', u.id);
+    setUsers(users.map(x => x.id === u.id ? { ...x, ativo: novoAtivo } : x));
   }
 
   const filtered = users.filter(u => {
@@ -481,38 +487,52 @@ function UsuariosTab() {
                   <th style={S.th}>Role</th>
                   <th style={S.th}>Plano</th>
                   <th style={S.th}>Cadastro</th>
+                  <th style={S.th}>Status</th>
                   <th style={S.th}>Ações</th>
                 </tr></thead>
                 <tbody>
-                  {filtered.map(u => (
-                    <tr key={u.id}>
-                      <td style={S.td}><strong>{u.nome || '—'}</strong></td>
-                      <td style={S.td}>{u.cpf || '—'}</td>
-                      <td style={S.td}>
-                        <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: (ROLE_COLORS[u.role] || '#64748b') + '20', color: ROLE_COLORS[u.role] || '#64748b' }}>
-                          {u.role || 'explorador'}
-                        </span>
-                      </td>
-                      <td style={S.td}>{u.plano || '—'}</td>
-                      <td style={S.td}>{u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—'}</td>
-                      <td style={S.td}>
-                        {editingId === u.id ? (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <select style={{ ...S.input, width: 'auto', padding: '6px 8px' }} value={newRole} onChange={e => setNewRole(e.target.value)}>
-                              {ROLES_DISPONIVEIS.map(r => <option key={r} value={r}>{r}</option>)}
-                            </select>
-                            <button style={S.btn('primary')} onClick={() => saveRole(u.id)}>Salvar</button>
-                            <button style={S.btn('outline')} onClick={() => setEditingId(null)}>✕</button>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar role</button>
-                            <button style={S.btn('outline')} onClick={() => verComo(u)} title="Entrar na conta do usuário (modo suporte)">👁 Ver como</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.map(u => {
+                    const ativo = u.ativo !== false;
+                    return (
+                      <tr key={u.id} style={{ opacity: ativo ? 1 : 0.6 }}>
+                        <td style={S.td}><strong>{u.nome || '—'}</strong></td>
+                        <td style={S.td}>{u.cpf || '—'}</td>
+                        <td style={S.td}>
+                          <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: (ROLE_COLORS[u.role] || '#64748b') + '20', color: ROLE_COLORS[u.role] || '#64748b' }}>
+                            {u.role || 'explorador'}
+                          </span>
+                        </td>
+                        <td style={S.td}>{u.plano || '—'}</td>
+                        <td style={S.td}>{u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—'}</td>
+                        <td style={S.td}>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: ativo ? '#d1fae5' : '#fee2e2', color: ativo ? '#059669' : '#dc2626' }}>
+                            {ativo ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </td>
+                        <td style={S.td}>
+                          {editingId === u.id ? (
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <select style={{ ...S.input, width: 'auto', padding: '6px 8px' }} value={newRole} onChange={e => setNewRole(e.target.value)}>
+                                {ROLES_DISPONIVEIS.map(r => <option key={r} value={r}>{r}</option>)}
+                              </select>
+                              <button style={S.btn('primary')} onClick={() => saveRole(u.id)}>Salvar</button>
+                              <button style={S.btn('outline')} onClick={() => setEditingId(null)}>✕</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar role</button>
+                              <button style={S.btn('outline')} onClick={() => verComo(u)} title="Entrar na conta do usuário (modo suporte)">👁 Ver como</button>
+                              <button
+                                style={{ padding: '5px 10px', background: ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}
+                                onClick={() => toggleAtivo(u)}>
+                                {ativo ? 'Inativar' : 'Reativar'}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -863,7 +883,80 @@ function PromoTab() {
   );
 }
 
-const TABS = ['Cursos', 'eBooks', 'Contratos', 'Promoções', 'Usuários', 'Configurações'];
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONVITES TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function ConvitesTab() {
+  const { user } = useAuth();
+  const [convites, setConvites] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [copiado, setCopiado] = useState('');
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('links_convite').select('*, perfis:criado_por(nome)').order('criado_em', { ascending: false });
+    setConvites(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const gerarLink = async () => {
+    const codigo = Math.random().toString(36).substring(2, 10).toUpperCase();
+    await supabase.from('links_convite').insert({ codigo, criado_por: user.id });
+    await carregar();
+  };
+
+  const toggleAtivo = async (c) => {
+    await supabase.from('links_convite').update({ ativo: !c.ativo }).eq('id', c.id);
+    await carregar();
+  };
+
+  const copiar = (codigo) => {
+    navigator.clipboard.writeText(`${window.location.origin}/#/convite/${codigo}`);
+    setCopiado(codigo);
+    setTimeout(() => setCopiado(''), 2000);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Links de Convite</h2>
+        <button style={S.btn('primary')} onClick={gerarLink}>+ Gerar novo convite</button>
+      </div>
+      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
+        Links de convite vinculam o novo usuário à equipe que o convidou, sem prazo de expiração.
+      </p>
+      <div style={S.card}>
+        {loading ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando...</p>
+          : convites.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum convite gerado ainda.</p>
+          : convites.map(c => (
+            <div key={c.id} style={{ padding: '14px 16px', border: `1px solid ${c.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, marginBottom: 10, background: c.ativo ? 'white' : '#fff5f5', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{c.codigo}</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  Por: {c.perfis?.nome || '—'} · {c.usos} uso{c.usos !== 1 ? 's' : ''} · {new Date(c.criado_em).toLocaleDateString('pt-BR')}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: c.ativo ? '#d1fae5' : '#fee2e2', color: c.ativo ? '#059669' : '#dc2626' }}>
+                  {c.ativo ? 'Ativo' : 'Inativo'}
+                </span>
+                <button onClick={() => copiar(c.codigo)} style={{ padding: '5px 10px', background: copiado === c.codigo ? '#dcfce7' : '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', color: copiado === c.codigo ? '#166534' : '#374151' }}>
+                  {copiado === c.codigo ? '✓ Copiado' : 'Copiar link'}
+                </button>
+                <button onClick={() => toggleAtivo(c)} style={{ padding: '5px 10px', background: c.ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: c.ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}>
+                  {c.ativo ? 'Desativar' : 'Ativar'}
+                </button>
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+const TABS = ['Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -907,6 +1000,7 @@ export default function Admin() {
         {tab === 'eBooks'         && <EbooksTab />}
         {tab === 'Contratos'      && <ContratosTab />}
         {tab === 'Promoções'      && <PromoTab />}
+        {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Configurações'  && <ConfigTab />}
       </div>
