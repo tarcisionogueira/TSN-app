@@ -425,11 +425,18 @@ function EbooksTab() {
 // USUÁRIOS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function UsuariosTab() {
+  const { iniciarSuporte } = useAuth();
+  const navSup = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [newRole, setNewRole] = useState('');
   const [busca, setBusca] = useState('');
+
+  const verComo = (u) => {
+    iniciarSuporte({ id: u.id, nome: u.nome || u.email, role: u.role || 'explorador', email: u.email });
+    navSup('/painel');
+  };
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -498,7 +505,10 @@ function UsuariosTab() {
                             <button style={S.btn('outline')} onClick={() => setEditingId(null)}>✕</button>
                           </div>
                         ) : (
-                          <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar role</button>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar role</button>
+                            <button style={S.btn('outline')} onClick={() => verComo(u)} title="Entrar na conta do usuário (modo suporte)">👁 Ver como</button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -551,7 +561,173 @@ function ConfigTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN ADMIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
-const TABS = ['Cursos', 'eBooks', 'Usuários', 'Configurações'];
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONTRATOS TAB — admin gera, aprova e libera contratos para assinatura
+// ═══════════════════════════════════════════════════════════════════════════════
+function defaultContrato() {
+  return { titulo: '', produto: 'assessoria', conteudo: '', valor: '', requer_assinatura: true, cliente_id: '' };
+}
+
+function ContratosTab() {
+  const [contratos, setContratos] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null);   // 'new' | contrato
+  const [form, setForm] = useState(defaultContrato());
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: cts }, { data: cls }] = await Promise.all([
+      supabase.from('contratos').select('*').order('criado_em', { ascending: false }),
+      supabase.from('perfis').select('id, nome, email').order('nome'),
+    ]);
+    setContratos(cts || []);
+    setClientes(cls || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  function openNew() { setForm(defaultContrato()); setModal('new'); }
+  function openEdit(c) { setForm({ ...c, valor: c.valor || '' }); setModal(c); }
+
+  async function salvar(status) {
+    if (!form.titulo || !form.cliente_id) { alert('Preencha o título e selecione o cliente.'); return; }
+    setSaving(true);
+    const payload = {
+      titulo: form.titulo, produto: form.produto, conteudo: form.conteudo || '',
+      valor: Number(form.valor) || 0, requer_assinatura: form.requer_assinatura,
+      cliente_id: form.cliente_id, status,
+    };
+    if (modal === 'new') await supabase.from('contratos').insert(payload);
+    else await supabase.from('contratos').update(payload).eq('id', form.id);
+    setSaving(false);
+    setModal(null);
+    await load();
+  }
+
+  async function cancelar(id) {
+    if (!window.confirm('Cancelar este contrato?')) return;
+    await supabase.from('contratos').update({ status: 'cancelado' }).eq('id', id);
+    load();
+  }
+
+  const nomeCliente = (id) => clientes.find(c => c.id === id)?.nome || clientes.find(c => c.id === id)?.email || '—';
+  const ST = { rascunho: ['Rascunho', '#64748b'], aguardando_assinatura: ['Aguardando assinatura', '#d97706'], assinado: ['Assinado', '#059669'], cancelado: ['Cancelado', '#dc2626'] };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Contratos ({contratos.length})</h2>
+        <button style={S.btn('primary')} onClick={openNew}>+ Novo Contrato</button>
+      </div>
+
+      <div style={S.card}>
+        {loading ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando...</p>
+          : contratos.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum contrato criado ainda.</p>
+          : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>Título</th><th style={S.th}>Cliente</th><th style={S.th}>Produto</th>
+                  <th style={S.th}>Valor</th><th style={S.th}>Status</th><th style={S.th}>Ações</th>
+                </tr></thead>
+                <tbody>
+                  {contratos.map(c => {
+                    const [lbl, cor] = ST[c.status] || ST.rascunho;
+                    return (
+                      <tr key={c.id}>
+                        <td style={S.td}><strong>{c.titulo}</strong></td>
+                        <td style={S.td}>{nomeCliente(c.cliente_id)}</td>
+                        <td style={{ ...S.td, textTransform: 'capitalize' }}>{c.produto}</td>
+                        <td style={S.td}>{c.valor > 0 ? `R$ ${Number(c.valor).toFixed(2)}` : '—'}</td>
+                        <td style={S.td}><span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: cor + '20', color: cor }}>{lbl}</span></td>
+                        <td style={S.td}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button style={S.btn('outline')} onClick={() => openEdit(c)}>{c.status === 'assinado' ? 'Ver' : 'Editar'}</button>
+                            {c.status !== 'assinado' && c.status !== 'cancelado' && <button style={S.btn('danger')} onClick={() => cancelar(c.id)}>Cancelar</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+
+      {modal && (
+        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setModal(null)}>
+          <div style={{ ...S.modal, maxWidth: 560 }}>
+            <h3 style={{ ...S.sectionTitle, marginBottom: 16 }}>{modal === 'new' ? 'Novo Contrato' : 'Contrato'}</h3>
+
+            {modal !== 'new' && modal.status === 'assinado' ? (
+              <div>
+                <p style={{ fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>{modal.titulo}</p>
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.6, color: '#334155', background: '#f8fafc', borderRadius: 8, padding: 14, maxHeight: 260, overflowY: 'auto', marginBottom: 14 }}>{modal.conteudo}</div>
+                <div style={{ padding: 14, background: '#dcfce7', borderRadius: 10 }}>
+                  <strong style={{ color: '#166534', fontSize: 13 }}>✔ Assinado por {modal.assinante_nome}</strong>
+                  {modal.assinatura_data && <div><img src={modal.assinatura_data} alt="assinatura" style={{ maxHeight: 80, background: 'white', borderRadius: 6, marginTop: 8, padding: 4 }} /></div>}
+                  <div style={{ fontSize: 11, color: '#15803d', marginTop: 6 }}>{modal.assinado_em && new Date(modal.assinado_em).toLocaleString('pt-BR')}</div>
+                  <div style={{ fontSize: 10, color: '#15803d', wordBreak: 'break-all', marginTop: 4 }}>Hash: {modal.assinatura_hash}</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                  <button style={S.btn('outline')} onClick={() => setModal(null)}>Fechar</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={S.label}>Cliente *</label>
+                  <select style={S.input} value={form.cliente_id} onChange={e => setForm({ ...form, cliente_id: e.target.value })}>
+                    <option value="">Selecione o cliente…</option>
+                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nome || c.email}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                  <div style={{ flex: 2 }}>
+                    <label style={S.label}>Título *</label>
+                    <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} placeholder="Contrato de Assessoria…" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={S.label}>Produto</label>
+                    <select style={S.input} value={form.produto} onChange={e => setForm({ ...form, produto: e.target.value })}>
+                      {['assessoria', 'clube', 'curso', 'outro'].map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={S.label}>Conteúdo do contrato</label>
+                  <textarea style={{ ...S.input, height: 180, resize: 'vertical', fontFamily: 'inherit' }} value={form.conteudo} onChange={e => setForm({ ...form, conteudo: e.target.value })} placeholder="Cole ou escreva as cláusulas do contrato…" />
+                </div>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 18 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={S.label}>Valor (R$)</label>
+                    <input type="number" min="0" step="0.01" style={S.input} value={form.valor} onChange={e => setForm({ ...form, valor: e.target.value })} placeholder="0,00" />
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#374151', marginTop: 18 }}>
+                    <input type="checkbox" checked={form.requer_assinatura} onChange={e => setForm({ ...form, requer_assinatura: e.target.checked })} /> Exige assinatura
+                  </label>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button style={S.btn('outline')} onClick={() => setModal(null)}>Cancelar</button>
+                  <button style={S.btn('outline')} onClick={() => salvar('rascunho')} disabled={saving}>Salvar rascunho</button>
+                  <button style={S.btn('primary')} onClick={() => salvar('aguardando_assinatura')} disabled={saving}>
+                    {saving ? 'Salvando…' : 'Liberar para assinatura'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TABS = ['Cursos', 'eBooks', 'Contratos', 'Usuários', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -593,6 +769,7 @@ export default function Admin() {
 
         {tab === 'Cursos'         && <CursosTab />}
         {tab === 'eBooks'         && <EbooksTab />}
+        {tab === 'Contratos'      && <ContratosTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Configurações'  && <ConfigTab />}
       </div>
