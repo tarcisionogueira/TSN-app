@@ -4,6 +4,7 @@ import { useAuth } from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import TourGuia from './components/TourGuia';
 import Landing from './pages/Landing';
 import Termos from './pages/Termos';
 import Privacidade from './pages/Privacidade';
@@ -82,6 +83,7 @@ function MainLayout() {
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <Header />
       {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
+      {isLoggedIn && <TourGuia />}
       <main style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<Landing />} />
