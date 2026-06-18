@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
@@ -80,11 +80,13 @@ export default function Header() {
     { path: '/', label: 'Home', icon: Home },
     { path: '/planos', label: 'Planos', icon: Tag },
   ];
+  const ROLES_CALC = ['top1', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
   const linksPrivados = [
     { path: '/buscar', label: 'Leilões', icon: Search },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap },
     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
     { path: '/contratos', label: 'Contratos', icon: FileText },
+    ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator }] : []),
   ];
   const links = user
     ? [linksPublicos[0], ...linksPrivados, linksPublicos[1]]

@@ -11,6 +11,7 @@ import Analise from './pages/Analise';
 import Painel from './pages/Painel';
 import Consultor from './pages/Consultor';
 import Contratos from './pages/Contratos';
+import Calculadora from './pages/Calculadora';
 import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
@@ -38,6 +39,7 @@ export default function App() {
                   <Route path="/painel" element={<Painel />} />
                   <Route path="/consultor" element={<Consultor />} />
                   <Route path="/contratos" element={<Contratos />} />
+                  <Route path="/calculadora" element={<Calculadora />} />
                   <Route path="/membros" element={<Membros />} />
                   <Route path="/membros/curso/:id" element={<Curso />} />
                   <Route path="/termos" element={<Termos />} />
