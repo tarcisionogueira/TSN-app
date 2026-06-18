@@ -854,7 +854,7 @@ function ContratosTab() {
                 <div style={{ display:'flex', gap:10, marginBottom:12 }}>
                   <div style={{ flex:2 }}>
                     <label style={S.label}>Título do contrato</label>
-                    <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="NDA — Programação sistema TSN" />
+                    <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do contrato" />
                   </div>
                   <div style={{ flex:1 }}>
                     <label style={S.label}>Tipo</label>
@@ -874,7 +874,7 @@ function ContratosTab() {
                   <textarea style={{ ...S.input, height:110, resize:'vertical', fontFamily:'inherit', fontSize:13 }}
                     value={descricao}
                     onChange={e => setDescricao(e.target.value)}
-                    placeholder="Descreva o que o contrato deve conter. Informe o máximo possível: qual o objeto (o que será feito/entregue), valor e forma de pagamento, prazo de vigência, condições de rescisão, obrigações específicas de cada parte, penalidades, etc. O assistente perguntará sobre o que faltar antes de gerar o texto final."/>
+                    placeholder="Descreva livremente o que o contrato deve conter."/>
                 </div>
 
                 <div style={{ marginBottom:16 }}>

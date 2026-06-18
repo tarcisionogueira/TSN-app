@@ -7,6 +7,39 @@ const EMPRESA = {
   foro: 'Feira de Santana/BA',
 };
 
+// Padrões legais brasileiros por tipo de contrato — evita perguntas desnecessárias
+const PADROES = {
+  nda: {
+    prazo_sigilo: '5 (cinco) anos a contar da data de assinatura',
+    valor: null, // NDA geralmente não tem valor
+    rescisao_aviso: null,
+    legislacao: 'Lei nº 9.609/1998 (Software), Lei nº 13.709/2018 (LGPD), Código Civil Brasileiro',
+  },
+  servico: {
+    prazo_padrao: 'indeterminado, podendo ser rescindido por qualquer das partes mediante aviso prévio de 30 (trinta) dias',
+    pagamento_padrao: 'mensalmente, até o dia 10 do mês subsequente ao da prestação',
+    multa_rescisao: '10% (dez por cento) sobre o valor total do contrato',
+    legislacao: 'Código Civil Brasileiro (Arts. 593-609)',
+  },
+  prestacao: {
+    prazo_padrao: 'indeterminado, podendo ser rescindido por qualquer das partes mediante aviso prévio de 30 (trinta) dias',
+    pagamento_padrao: 'mensalmente, até o dia 10 do mês subsequente ao da prestação',
+    multa_rescisao: '10% (dez por cento) sobre o valor total do contrato',
+    legislacao: 'Código Civil Brasileiro (Arts. 593-609)',
+  },
+  locacao: {
+    prazo_padrao: '12 (doze) meses',
+    reajuste: 'anualmente pelo IGP-M/FGV ou IPCA/IBGE, o que for menor',
+    multa_rescisao: '3 (três) aluguéis vigentes, proporcionais ao tempo restante',
+    legislacao: 'Lei nº 8.245/1991 (Lei do Inquilinato)',
+  },
+  compra: {
+    prazo_escritura: '30 (trinta) dias após a quitação total do preço',
+    multa_rescisao: '10% (dez por cento) sobre o valor do negócio',
+    legislacao: 'Código Civil Brasileiro (Arts. 481-532)',
+  },
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -25,70 +58,31 @@ export default async function handler(req, res) {
     outro: 'Contrato',
   }[tipo] || 'Prestação de Serviços';
 
-  // Contexto dos arquivos
+  const padrao = PADROES[tipo] || {};
+
   const ctxArquivos = arquivos.length > 0
-    ? '\n\nDocumentos de referência fornecidos:\n' +
+    ? '\n\nDocumentos de referência:\n' +
       arquivos.map(a => a.conteudo
         ? `--- ${a.nome} ---\n${a.conteudo}`
-        : `• Arquivo referenciado: ${a.nome}`
+        : `• Referência: ${a.nome}`
       ).join('\n\n')
     : '';
 
-  // Respostas às perguntas anteriores
   const ctxRespostas = respostas && Object.keys(respostas).length > 0
-    ? '\n\nRespostas às perguntas da rodada anterior:\n' + Object.values(respostas).map((r, i) => `${i+1}. ${r}`).join('\n')
+    ? '\n\nRespostas fornecidas pelo contratante:\n' + Object.values(respostas).map((r, i) => `${i+1}. ${r}`).join('\n')
     : '';
 
-  const prompt = `Você é um especialista jurídico brasileiro contratado pela ${EMPRESA.razao_social} para redigir contratos.
+  const ctxPadroes = Object.keys(padrao).length > 0
+    ? `\nParâmetros legais padrão para este tipo de contrato (use diretamente se não conflitar com a descrição):\n` +
+      Object.entries(padrao).filter(([k]) => k !== 'legislacao').map(([k, v]) => v ? `• ${k}: ${v}` : null).filter(Boolean).join('\n')
+    : '';
 
-=== DADOS DA EMPRESA CONTRATANTE (use exatamente como estão — não use placeholder) ===
-Razão Social: ${EMPRESA.razao_social}
-CNPJ: ${EMPRESA.cnpj}
-Foro: ${EMPRESA.foro} (sempre — salvo instrução explícita em contrário)
-
-=== SOLICITAÇÃO ===
-Tipo de contrato: ${tipoLabel}
+  const prompt = `Tipo de contrato: ${tipoLabel}
 Título: ${titulo || tipoLabel}
-Descrição fornecida: ${descricao}
+Descrição: ${descricao}
 ${ctxArquivos}
 ${ctxRespostas}
-
-=== INSTRUÇÕES OBRIGATÓRIAS ===
-
-1. DADOS QUE VOCÊ JÁ CONHECE — use diretamente, sem placeholder:
-   - Contratante: ${EMPRESA.razao_social}, CNPJ ${EMPRESA.cnpj}, Feira de Santana/BA
-   - Foro: comarca de ${EMPRESA.foro}
-
-2. DADOS QUE O SIGNATÁRIO PREENCHERÁ — use estes placeholders exatos:
-   - [NOME DO SIGNATÁRIO]
-   - [CPF/CNPJ DO SIGNATÁRIO]
-   - [RG DO SIGNATÁRIO] (se PF)
-   - [ENDEREÇO DO SIGNATÁRIO]
-   - [EMAIL DO SIGNATÁRIO]
-
-3. REGRA CRÍTICA — PROIBIDO deixar qualquer outro placeholder ou "[A DEFINIR]":
-   - Se o valor não foi informado e é relevante → adicione à seção PERGUNTAS
-   - Se o prazo não foi informado → adicione à seção PERGUNTAS
-   - Se a forma de pagamento não foi informada → adicione à seção PERGUNTAS
-   - Se precisar de qualquer dado que não está na descrição e não é dado do signatário → adicione à seção PERGUNTAS
-   - Em caso de dúvida: PERGUNTE, não invente, não deixe em branco
-
-4. ESTRUTURA DO CONTRATO:
-   - Preâmbulo com qualificação das partes (contratante completo + signatário com placeholders)
-   - Cláusulas numeradas em ordinais (CLÁUSULA 1ª — DO OBJETO, etc.)
-   - Inclua sempre: objeto, obrigações, prazo, valor/pagamento (se aplicável), confidencialidade (se NDA), LGPD, rescisão, penalidades, foro
-   - Sem asteriscos, markdown ou formatação especial — apenas texto corrido jurídico
-   - Local e data ao final: "Feira de Santana, _____ de _____________ de 20____."
-   - Campos de assinatura: um para cada parte
-
-5. TAMANHO: máximo 1000 palavras, linguagem jurídica formal, português brasileiro
-
-=== SEÇÃO DE PERGUNTAS ===
-Ao final, inclua obrigatoriamente entre os marcadores abaixo as perguntas sobre informações ausentes que sejam CRÍTICAS para a segurança jurídica do contrato. Se não houver nada faltando, deixe vazio.
-
-<<<PERGUNTAS>>>
-(uma pergunta por linha, numeradas)
-<<<FIM_PERGUNTAS>>>`;
+${ctxPadroes}`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -101,10 +95,33 @@ Ao final, inclua obrigatoriamente entre os marcadores abaixo as perguntas sobre 
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 2500,
-        system: `Você é um advogado especialista em contratos brasileiros trabalhando para a ${EMPRESA.razao_social}.
-Você conhece a empresa profundamente: CNPJ ${EMPRESA.cnpj}, sede em ${EMPRESA.cidade}/${EMPRESA.estado}, foro sempre em ${EMPRESA.foro}.
-Você NUNCA deixa campos em branco ou com placeholder exceto para os dados do signatário (a outra parte).
-Quando falta alguma informação relevante, você PERGUNTA — nunca inventa ou deixa "[A PREENCHER]".`,
+        system: `Você é o advogado interno da NOGUEIRA EMPREENDIMENTOS LTDA (CNPJ 02.311.492/0001-61), sediada em Feira de Santana/BA.
+
+SEU TRABALHO: Redigir contratos completos, profissionais e juridicamente seguros.
+
+DADOS FIXOS — use sempre, sem perguntar:
+- Contratante: NOGUEIRA EMPREENDIMENTOS LTDA, CNPJ 02.311.492/0001-61, Feira de Santana/BA
+- Foro: Comarca de Feira de Santana/BA (sempre, salvo instrução explícita)
+- Comunicações e notificações urgentes: utilizar os dados de contato da própria parte (email e telefone informados no momento da assinatura)
+
+REGRAS DE OURO:
+1. Use padrões legais brasileiros para preencher lacunas — não pergunte o que a lei ou a prática já definem (prazo de rescisão padrão, multas usuais, legislação aplicável, etc.)
+2. NUNCA use placeholder como [A DEFINIR] ou [INSERIR] — exceto para os dados do signatário abaixo
+3. Os ÚNICOS placeholders permitidos no corpo do contrato são:
+   [NOME DO SIGNATÁRIO], [CPF/CNPJ DO SIGNATÁRIO], [RG DO SIGNATÁRIO], [ENDEREÇO DO SIGNATÁRIO], [EMAIL DO SIGNATÁRIO]
+4. Pergunte SOMENTE sobre informações que realmente mudam o contrato e que você não pode inferir da descrição ou dos padrões legais — exemplo: valor específico de um serviço, prazo particular de uma obra, objeto muito específico
+5. NUNCA inclua "carimbo" nos campos de assinatura — apenas "Assinatura"
+6. Use linguagem jurídica formal, sem markdown (sem **, sem ##, sem ---)
+7. Cláusula de LGPD obrigatória quando envolver dados pessoais
+8. Encerre com: "Feira de Santana, _____ de _____________ de 20____." seguido dos campos de assinatura de ambas as partes
+
+FORMATO DE SAÍDA:
+- Texto corrido do contrato (máximo 1000 palavras)
+- Ao final, seção de perguntas SOMENTE se houver informação crítica e não inferível:
+
+<<<PERGUNTAS>>>
+(uma por linha, numeradas — apenas o essencial)
+<<<FIM_PERGUNTAS>>>`,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -125,11 +142,13 @@ Quando falta alguma informação relevante, você PERGUNTA — nunca inventa ou 
       ? blocoPerguntas.split('\n').map(l => l.replace(/^\d+[\.\)]\s*/, '').trim()).filter(Boolean)
       : [];
 
-    // Remove bloco de perguntas do conteúdo
+    // Limpa texto: remove bloco de perguntas e formatação markdown
     const conteudo = texto
       .replace(/<<<PERGUNTAS>>>[\s\S]*?<<<FIM_PERGUNTAS>>>/, '')
-      .replace(/\*\*/g, '')   // remove markdown bold
-      .replace(/##\s*/g, '')  // remove markdown headers
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/^#{1,4}\s*/gm, '')
+      .replace(/^---+$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
 
     return res.status(200).json({ conteudo, perguntas });
