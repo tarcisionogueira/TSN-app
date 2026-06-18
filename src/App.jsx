@@ -44,12 +44,44 @@ function ContaInativa() {
   );
 }
 
+function PopupInadimplente({ dias }) {
+  const [fechado, setFechado] = React.useState(false);
+  if (fechado) return null;
+
+  const diasRestantes = Math.max(0, 5 - dias);
+  const critico = dias >= 5;
+
+  return (
+    <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, maxWidth: 480, width: 'calc(100% - 32px)' }}>
+      <div style={{ background: critico ? '#7f1d1d' : '#78350f', color: 'white', borderRadius: 14, padding: '16px 20px', boxShadow: '0 12px 40px rgba(0,0,0,0.4)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+        <div style={{ fontSize: 28, flexShrink: 0 }}>{critico ? '🚫' : '⚠️'}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>
+            {critico ? 'Acesso reduzido por inadimplência' : `Pagamento em aberto — ${diasRestantes} dia${diasRestantes !== 1 ? 's' : ''} para regularizar`}
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>
+            {critico
+              ? 'Seu acesso foi reduzido ao plano gratuito. Regularize o pagamento para restaurar seu plano.'
+              : 'Existe uma cobrança em aberto na sua conta. Regularize para manter acesso completo.'}
+          </div>
+          <a href="https://wa.me/5511999999999" target="_blank" rel="noreferrer"
+            style={{ display: 'inline-block', marginTop: 10, padding: '7px 16px', background: 'white', color: critico ? '#7f1d1d' : '#78350f', borderRadius: 8, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+            Regularizar pagamento
+          </a>
+        </div>
+        <button onClick={() => setFechado(true)} style={{ background: 'none', border: 'none', color: 'white', fontSize: 18, cursor: 'pointer', opacity: 0.7, padding: 0, flexShrink: 0 }}>✕</button>
+      </div>
+    </div>
+  );
+}
+
 function MainLayout() {
-  const { ativo, isLoggedIn } = useAuth();
+  const { ativo, isLoggedIn, inadimplenteDias } = useAuth();
   if (isLoggedIn && !ativo) return <ContaInativa />;
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <Header />
+      {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
       <main style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<Landing />} />
