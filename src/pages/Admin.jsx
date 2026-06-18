@@ -599,6 +599,7 @@ function ContratosTab() {
   const [detalhe, setDetalhe] = useState(null); // contrato aberto para ver
 
   // Etapa 1
+  const [templateSelecionado, setTemplateSelecionado] = useState(null);
   const [titulo, setTitulo] = useState('');
   const [tipo, setTipo] = useState('servico');
   const [descricao, setDescricao] = useState('');
@@ -626,8 +627,27 @@ function ContratosTab() {
   function abrirModal() {
     setTitulo(''); setTipo('servico'); setDescricao('');
     setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
-    setLinkGerado('');
+    setLinkGerado(''); setTemplateSelecionado(null);
     setStep(1);
+  }
+
+  function aplicarTemplate(key) {
+    setTemplateSelecionado(key);
+    if (key === 'assessorado') {
+      setTitulo('Contrato de Assessoria para Aquisição de Imóvel em Leilão');
+      setTipo('servico');
+      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Valor: R$5.000 na contratação + 10% honorários de êxito sobre o valor arrematado. Prazo: até conclusão da aquisição. Rescisão: aviso prévio de 30 dias + multa de 10%.');
+    } else if (key === 'clube') {
+      setTitulo('Contrato de Adesão ao Clube de Negócios TSN Ativos');
+      setTipo('servico');
+      setDescricao('Adesão ao Clube de Negócios TSN Ativos: mentoria mensal em grupo, análises prioritárias, acesso à plataforma, networking e relatórios mensais. Mensalidade: R$5.000/mês, vencimento dia 10. Fidelidade mínima: 3 meses. Rescisão após prazo mínimo: aviso de 30 dias.');
+    } else if (key === 'nda') {
+      setTitulo('Acordo de Confidencialidade e Não Divulgação');
+      setTipo('nda');
+      setDescricao('');
+    } else if (key === 'personalizado') {
+      setTitulo(''); setTipo('servico'); setDescricao('');
+    }
   }
 
   async function lerArquivos(files) {
@@ -848,6 +868,24 @@ function ContratosTab() {
             {/* ── Etapa 1: Descrever ── */}
             {step === 1 && (
               <>
+                {/* Seleção rápida de template */}
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
+                  {[
+                    { key:'assessorado', label:'📋 Assessorado' },
+                    { key:'clube',       label:'🏛️ Clube de Negócios' },
+                    { key:'nda',         label:'📄 NDA/Sigilo' },
+                    { key:'personalizado', label:'✏️ Personalizado' },
+                  ].map(t => (
+                    <button key={t.key} onClick={() => aplicarTemplate(t.key)}
+                      style={{ padding:'5px 14px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:'1px solid',
+                        background: templateSelecionado === t.key ? '#0f172a' : '#fff',
+                        color: templateSelecionado === t.key ? '#fff' : '#475569',
+                        borderColor: templateSelecionado === t.key ? '#0f172a' : '#cbd5e1' }}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
                 <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Descreva o contrato</h3>
                 <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>O contrato será emitido pela <strong>Nogueira Empreendimentos</strong>. A outra parte preenche os dados e assina digitalmente.</p>
 

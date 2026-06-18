@@ -1,3 +1,5 @@
+import { createClient } from '@supabase/supabase-js';
+
 // Dados fixos da empresa contratante
 const EMPRESA = {
   razao_social: 'NOGUEIRA EMPREENDIMENTOS LTDA',
@@ -49,6 +51,23 @@ export default async function handler(req, res) {
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Chave de API não configurada' });
 
+  // Busca últimos 3 contratos assinados como referência de estilo
+  let ctxContratosAnteriores = '';
+  try {
+    const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+    const { data: anteriores } = await supabase
+      .from('contratos_link')
+      .select('titulo, conteudo')
+      .eq('status', 'assinado')
+      .order('assinado_em', { ascending: false })
+      .limit(3);
+    if (anteriores && anteriores.length > 0) {
+      ctxContratosAnteriores = '\n\nContratos anteriores aprovados como referência de estilo e padrão:\n' +
+        anteriores.map((c, i) => `${i+1}. ${c.titulo}\n${(c.conteudo || '').slice(0, 300)}…`).join('\n\n');
+    }
+  } catch (_) {}
+
   const tipoLabel = {
     servico: 'Prestação de Serviços',
     prestacao: 'Prestação de Serviços',
@@ -82,7 +101,8 @@ Título: ${titulo || tipoLabel}
 Descrição: ${descricao}
 ${ctxArquivos}
 ${ctxRespostas}
-${ctxPadroes}`;
+${ctxPadroes}
+${ctxContratosAnteriores}`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -109,11 +129,12 @@ REGRAS DE OURO:
 2. NUNCA use placeholder como [A DEFINIR] ou [INSERIR] — exceto para os dados do signatário abaixo
 3. Os ÚNICOS placeholders permitidos no corpo do contrato são:
    [NOME DO SIGNATÁRIO], [CPF/CNPJ DO SIGNATÁRIO], [RG DO SIGNATÁRIO], [ENDEREÇO DO SIGNATÁRIO], [EMAIL DO SIGNATÁRIO]
-4. Pergunte SOMENTE sobre informações que realmente mudam o contrato e que você não pode inferir da descrição ou dos padrões legais — exemplo: valor específico de um serviço, prazo particular de uma obra, objeto muito específico
+4. Pergunte SOMENTE se o valor monetário específico não foi informado e não há como inferir. Para tudo mais, use os padrões legais brasileiros.
 5. NUNCA inclua "carimbo" nos campos de assinatura — apenas "Assinatura"
 6. Use linguagem jurídica formal, sem markdown (sem **, sem ##, sem ---)
 7. Cláusula de LGPD obrigatória quando envolver dados pessoais
 8. Encerre com: "Feira de Santana, _____ de _____________ de 20____." seguido dos campos de assinatura de ambas as partes
+9. Quando houver contratos anteriores aprovados como referência no prompt, siga o mesmo estilo, estrutura e padrão de linguagem deles.
 
 FORMATO DE SAÍDA:
 - Texto corrido do contrato (máximo 1000 palavras)
