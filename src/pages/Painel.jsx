@@ -188,7 +188,8 @@ export default function Painel() {
   const { user, role } = useAuth();
   const isAnalista = ROLES_ANALISTA.includes(role);
   const [imoveis, setImoveis] = useState([]);
-  const [aba, setAba] = useState('arrematacoes');
+  const [aba, setAba] = useState('analise');
+  const [imovelLancamentos, setImovelLancamentos] = useState(null);
   const [controleAberto, setControleAberto] = useState(null);
   const [agendando, setAgendando] = useState(null);
   const [dataAgenda, setDataAgenda] = useState('');
@@ -373,7 +374,16 @@ export default function Painel() {
       _agend: agendamentos.find(a => a.imovel_ref === im.id && a.status !== 'cancelado'),
     }));
 
+  // Imóveis arrematados (e posteriores)
+  const arrematados = imoveis.filter(im => ['arrematado','em_reforma','venda','alugado','concluido'].includes(im.status));
+
   const filtrados = imoveis.filter(im => !filtroStatus || im.status===filtroStatus);
+
+  const marcarArrematado = (im) => {
+    if (!confirm('Confirmar arrematação deste imóvel? Ele será movido para a aba Arrematação.')) return;
+    alterarStatus(im.id, 'arrematado');
+    setAba('arrematacoes');
+  };
 
   const tabBtn = (id, label) => (
     <button onClick={()=>setAba(id)}
@@ -417,41 +427,21 @@ export default function Painel() {
 
       {/* Tabs */}
       <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0', marginBottom:0 }}>
-        {tabBtn('arrematacoes', `🏠 Arrematações (${imoveis.length})`)}
         {tabBtn('analise', `🔎 Em Análise (${emAnalise.length})`)}
+        {tabBtn('arrematacoes', `🏠 Arrematação (${arrematados.length})`)}
         {tabBtn('lancamentos', `💰 Lançamentos (${todosLancamentos.length})`)}
       </div>
 
-      {/* === ABA ARREMATAÇÕES === */}
+      {/* === ABA ARREMATAÇÃO === */}
       {aba==='arrematacoes' && (
         <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', overflow:'hidden' }}>
-
-          {/* Filtros rápidos */}
-          <div style={{ padding:'12px 16px', borderBottom:'1px solid #f1f5f9', display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
-            <span style={{ fontSize:11, fontWeight:700, color:'#64748b', marginRight:4 }}>STATUS:</span>
-            <button onClick={()=>setFiltroStatus('')}
-              style={{ padding:'4px 10px', border:'1px solid #e2e8f0', borderRadius:20, fontSize:11, fontWeight:700, cursor:'pointer', background:!filtroStatus?'#0f172a':'white', color:!filtroStatus?'white':'#64748b' }}>
-              Todos
-            </button>
-            {Object.entries(STATUS_CONFIG).map(([k,s])=>{
-              const count = imoveis.filter(i=>i.status===k).length;
-              if(!count) return null;
-              return (
-                <button key={k} onClick={()=>setFiltroStatus(filtroStatus===k?'':k)}
-                  style={{ padding:'4px 10px', border:`1px solid ${filtroStatus===k?s.c:'#e2e8f0'}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:'pointer', background:filtroStatus===k?s.bg:'white', color:filtroStatus===k?s.c:'#64748b' }}>
-                  {s.l} ({count})
-                </button>
-              );
-            })}
-          </div>
-
-          {imoveis.length === 0 ? (
+          {arrematados.length === 0 ? (
             <div style={{ textAlign:'center', padding:'70px 20px' }}>
               <div style={{ fontSize:48, marginBottom:16 }}>🏠</div>
-              <h3 style={{ color:'#334155', fontWeight:900, margin:'0 0 8px' }}>Portfólio vazio</h3>
-              <p style={{ color:'#94a3b8', marginBottom:24, fontSize:14 }}>Busque leilões e marque como Arrematado para acompanhar aqui.</p>
-              <button onClick={()=>nav('/buscar')} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:10, padding:'11px 24px', fontWeight:700, cursor:'pointer' }}>
-                Buscar Leilões
+              <h3 style={{ color:'#334155', fontWeight:900, margin:'0 0 8px' }}>Nenhum imóvel arrematado ainda</h3>
+              <p style={{ color:'#94a3b8', marginBottom:24, fontSize:14 }}>Na aba "Em Análise", clique em <strong>✅ Arrematei!</strong> para mover um imóvel para cá.</p>
+              <button onClick={()=>setAba('analise')} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:10, padding:'11px 24px', fontWeight:700, cursor:'pointer' }}>
+                Ver Em Análise
               </button>
             </div>
           ) : (
@@ -459,22 +449,28 @@ export default function Painel() {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
-                    {['Imóvel','Status','Aquisição (R$)','Projeção Venda','Venda Real','ROI Real','Ações'].map(h=>(
+                    {['Imóvel','Cidade / Bairro','Status','Val. Arrematação','Total Desembolsado','Entrada (Venda)','ROI','Ações'].map(h=>(
                       <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase', letterSpacing:0.5, whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtrados.map((im,i) => {
+                  {arrematados.map((im,i) => {
                     const c = calcImovel(im);
+                    const totalDesembolsado = c.saidas || Number(im.valorArrematacao||0);
+                    const entradaVenda = c.vendaReal;
+                    const roi = entradaVenda > 0 && totalDesembolsado > 0
+                      ? ((entradaVenda - totalDesembolsado) / totalDesembolsado * 100) : null;
                     return (
                       <tr key={im.id} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
                         <td style={{ padding:'12px 14px' }}>
                           <div style={{ fontWeight:700, color:'#0f172a', fontSize:13 }}>{im.nome||'Sem nome'}</div>
-                          <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{im.cidade}{im.estado?`, ${im.estado}`:''}</div>
+                        </td>
+                        <td style={{ padding:'12px 14px', fontSize:12, color:'#64748b' }}>
+                          {[im.cidade, im.bairro, im.estado].filter(Boolean).join(' · ') || '—'}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
-                          <select value={im.status||'analise'} onChange={e=>alterarStatus(im.id,e.target.value)}
+                          <select value={im.status} onChange={e=>alterarStatus(im.id,e.target.value)}
                             style={{ fontSize:11, fontWeight:700, border:`1px solid ${STATUS_CONFIG[im.status]?.c||'#e2e8f0'}`, borderRadius:20, padding:'4px 10px', background:STATUS_CONFIG[im.status]?.bg||'#f1f5f9', color:STATUS_CONFIG[im.status]?.c||'#64748b', cursor:'pointer' }}>
                             {Object.entries(STATUS_CONFIG).map(([v,s])=><option key={v} value={v}>{s.l}</option>)}
                           </select>
@@ -482,22 +478,17 @@ export default function Painel() {
                         <td style={{ padding:'12px 14px', fontWeight:800, color:'#0f172a' }}>
                           R$ {fmt(Number(im.valorArrematacao||0),0)}
                         </td>
-                        <td style={{ padding:'12px 14px' }}>
-                          {c.projecaoVenda > 0
-                            ? <><div style={{ fontWeight:700, color:'#10b981' }}>R$ {fmt(c.projecaoVenda,0)}</div>
-                                <div style={{ fontSize:10, color:'#94a3b8' }}>proj. ({c.roiProj!=null?fmtPct(c.roiProj):'—'} ROI)</div></>
-                            : <span style={{ color:'#cbd5e1', fontSize:12 }}>—</span>}
+                        <td style={{ padding:'12px 14px', fontWeight:700, color:'#ef4444' }}>
+                          R$ {fmt(totalDesembolsado,0)}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
-                          {c.vendaReal > 0
-                            ? <div style={{ fontWeight:800, color:'#10b981' }}>R$ {fmt(c.vendaReal,0)}</div>
+                          {entradaVenda > 0
+                            ? <span style={{ fontWeight:800, color:'#10b981' }}>R$ {fmt(entradaVenda,0)}</span>
                             : <span style={{ color:'#cbd5e1', fontSize:12 }}>Não vendido</span>}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
-                          {c.roiReal != null
-                            ? <span style={{ fontWeight:900, fontSize:15, color:c.roiReal>=40?'#10b981':c.roiReal>=0?'#f59e0b':'#ef4444' }}>{fmtPct(c.roiReal)}</span>
-                            : c.roiProj != null
-                            ? <span style={{ fontSize:12, color:'#94a3b8' }}>proj: {fmtPct(c.roiProj)}</span>
+                          {roi != null
+                            ? <span style={{ fontWeight:900, fontSize:15, color:roi>=40?'#10b981':roi>=0?'#f59e0b':'#ef4444' }}>{fmtPct(roi)}</span>
                             : <span style={{ color:'#cbd5e1', fontSize:12 }}>—</span>}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
@@ -505,10 +496,6 @@ export default function Painel() {
                             <button onClick={()=>setControleAberto(im)}
                               style={{ padding:'6px 10px', background:'#f0fdf4', color:'#10b981', border:'1px solid #bbf7d0', borderRadius:7, fontWeight:700, fontSize:11, cursor:'pointer', whiteSpace:'nowrap' }}>
                               💰 Lançar
-                            </button>
-                            <button onClick={()=>nav('/analise',{state:{imovel:im}})}
-                              style={{ padding:'6px 10px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:7, fontWeight:700, fontSize:11, cursor:'pointer' }}>
-                              📊
                             </button>
                             <button onClick={()=>excluir(im.id)}
                               style={{ padding:'6px 8px', background:'#fef2f2', color:'#ef4444', border:'1px solid #fecaca', borderRadius:7, cursor:'pointer' }}>
@@ -611,11 +598,15 @@ export default function Painel() {
                           {im.dataLeilao && <> · Leilão {dias!=null ? (dias>=0?`em ${dias} dia(s)`:'já ocorrido') : ''}</>}
                         </div>
                       </div>
-                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                         <BadgeStatus status={im.status||'analise'}/>
                         <button onClick={()=>nav('/analise',{state:{imovel:im}})}
                           style={{ padding:'7px 14px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                           <Sparkles size={13}/> Abrir análise
+                        </button>
+                        <button onClick={()=>marcarArrematado(im)}
+                          style={{ padding:'7px 14px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                          ✅ Arrematei!
                         </button>
                       </div>
                     </div>
@@ -701,8 +692,42 @@ export default function Painel() {
       )}
 
       {/* === ABA LANÇAMENTOS === */}
-      {aba==='lancamentos' && (
+      {aba==='lancamentos' && imovelLancamentos && (
+        <ControleFinanceiro
+          im={imovelLancamentos}
+          onClose={()=>setImovelLancamentos(null)}
+          onUpdate={(imAtualizado)=>{ atualizarImovel(imAtualizado); setImovelLancamentos(imAtualizado); }}
+        />
+      )}
+
+      {aba==='lancamentos' && !imovelLancamentos && (
         <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', overflow:'hidden' }}>
+
+          {/* Cards de imóveis arrematados para selecionar */}
+          {arrematados.length > 0 && (
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid #e2e8f0' }}>
+              <div style={{ fontSize:11, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:12 }}>Selecione um imóvel para lançar</div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:10 }}>
+                {arrematados.map(im => {
+                  const c = calcImovel(im);
+                  const sc = STATUS_CONFIG[im.status] || STATUS_CONFIG.arrematado;
+                  return (
+                    <div key={im.id} onClick={()=>setImovelLancamentos(im)}
+                      style={{ border:`1px solid ${sc.c}40`, borderRadius:12, padding:'12px 14px', cursor:'pointer', background:sc.bg+'80', transition:'all 0.15s' }}
+                      onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'}
+                      onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                      <div style={{ fontWeight:800, fontSize:13, color:'#0f172a', marginBottom:4 }}>{im.nome||'Sem nome'}</div>
+                      <div style={{ fontSize:11, color:'#64748b', marginBottom:6 }}>{im.cidade||'—'}</div>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:11 }}>
+                        <span style={{ color:'#ef4444' }}>Saídas: R$ {fmt(c.saidas,0)}</span>
+                        <span style={{ color:'#10b981' }}>Entradas: R$ {fmt(c.entradas,0)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Barra de totais consolidados + export */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'14px 20px', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
