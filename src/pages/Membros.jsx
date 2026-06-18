@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
 import { supabase } from '../utils/supabase';
+import LeitorEbook from '../components/LeitorEbook';
 
 // Progresso salvo no localStorage
 function getProgresso() {
@@ -18,6 +19,7 @@ function getPlano() {
 
 function podeAssistir(licao, planAtual) {
   if (licao.gratis) return true;
+  if (planAtual === 'admin') return true;
   return planAtual === 'assessorado' || planAtual === 'clube';
 }
 
@@ -30,12 +32,13 @@ export default function Membros() {
   const [showPlanos, setShowPlanos] = useState(false);
   const [cursos, setCursos] = useState([]);
   const [ebooks, setEbooks] = useState([]);
+  const [ebookAberto, setEbookAberto] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
       const { data: cs } = await supabase.from('cursos_admin').select('*').eq('ativo', true).order('ordem');
       const { data: as } = await supabase.from('aulas_admin').select('*').order('ordem');
-      const { data: es } = await supabase.from('ebooks_admin').select('id').eq('ativo', true);
+      const { data: es } = await supabase.from('ebooks_admin').select('*').eq('ativo', true).order('criado_em', { ascending: false });
 
       const cursosComModulos = (cs || []).map(c => {
         const aulasC = (as || []).filter(a => a.curso_id === c.id);
@@ -226,6 +229,49 @@ export default function Membros() {
           );
         })}
       </div>
+
+      {/* Seção de eBooks */}
+      {ebooks.length > 0 && (
+        <div style={{ marginTop:24 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:'#6366f1', textTransform:'uppercase', letterSpacing:1, marginBottom:14, display:'flex', alignItems:'center', gap:6 }}>
+            📖 eBooks & Materiais
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:16 }}>
+            {ebooks.map(eb => {
+              const gratis = !eb.preco || Number(eb.preco) === 0;
+              return (
+                <div key={eb.id}
+                  style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.05)', display:'flex', flexDirection:'column' }}>
+                  {/* Capa */}
+                  {eb.capa_url ? (
+                    <img src={eb.capa_url} alt={eb.titulo}
+                      style={{ width:'100%', height:180, objectFit:'cover', background:'#f1f5f9' }}
+                      onError={e=>{ e.currentTarget.style.display='none'; }}/>
+                  ) : (
+                    <div style={{ width:'100%', height:120, background:'linear-gradient(135deg,#6366f1,#4f46e5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:40 }}>📖</div>
+                  )}
+                  <div style={{ padding:'14px 16px', flex:1, display:'flex', flexDirection:'column', gap:8 }}>
+                    <div style={{ fontWeight:800, fontSize:14, color:'#0f172a', lineHeight:1.3 }}>{eb.titulo}</div>
+                    {eb.descricao && <div style={{ fontSize:12, color:'#64748b', lineHeight:1.5 }}>{eb.descricao}</div>}
+                    <div style={{ marginTop:'auto', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <span style={{ fontWeight:800, fontSize:14, color:gratis?'#10b981':'#6366f1' }}>
+                        {gratis ? 'Gratuito' : `R$ ${Number(eb.preco).toFixed(2)}`}
+                      </span>
+                      <button onClick={() => setEbookAberto(eb)}
+                        style={{ padding:'7px 14px', background:'#6366f1', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+                        📖 Ler
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Leitor de eBook */}
+      <LeitorEbook ebook={ebookAberto} onClose={() => setEbookAberto(null)} />
 
       {/* Modal de planos */}
       {showPlanos && (

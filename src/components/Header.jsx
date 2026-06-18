@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
@@ -71,7 +71,7 @@ function ModalFeedback({ user, onClose }) {
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { user, role } = useAuth();
+  const { user, role, impersonate, encerrarSuporte } = useAuth();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -84,6 +84,7 @@ export default function Header() {
     { path: '/buscar', label: 'Leilões', icon: Search },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap },
     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
+    { path: '/contratos', label: 'Contratos', icon: FileText },
   ];
   const links = user
     ? [linksPublicos[0], ...linksPrivados, linksPublicos[1]]
@@ -102,7 +103,18 @@ export default function Header() {
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
 
   return (
-    <header style={{ background: '#0f172a', borderBottom: '1px solid #1e293b', position: 'sticky', top: 0, zIndex: 100 }}>
+    <header style={{ position: 'sticky', top: 0, zIndex: 100 }}>
+      {/* Banner do modo suporte (admin/analista visualizando a conta de um cliente) */}
+      {impersonate && (
+        <div style={{ background: '#d97706', color: 'white', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
+          <Eye size={15} /> Modo suporte — visualizando a conta de <strong>{impersonate.nome}</strong>
+          <button onClick={encerrarSuporte}
+            style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            Sair do modo suporte
+          </button>
+        </div>
+      )}
+      <div style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 20px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 
         {/* Logo */}
@@ -189,6 +201,7 @@ export default function Header() {
         <button onClick={() => setOpen(!open)} style={{ display: 'none', background: 'none', border: 'none', color: 'white', cursor: 'pointer' }} className="show-mobile">
           {open ? <X size={22} /> : <Menu size={22} />}
         </button>
+      </div>
       </div>
 
       {/* Mobile menu */}

@@ -1,0 +1,32 @@
+name: Scraper Caixa (imóveis em leilão)
+
+on:
+  schedule:
+    # Diariamente às 06:00 UTC (03:00 horário de Brasília)
+    - cron: '0 6 * * *'
+  workflow_dispatch:        # permite rodar manualmente pela aba Actions
+    inputs:
+      ufs:
+        description: 'UFs a sincronizar (ex: BA,SP,RJ). Vazio = todas'
+        required: false
+        default: ''
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instala dependências
+        run: npm install @supabase/supabase-js
+
+      - name: Executa o scraper
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          UFS: ${{ github.event.inputs.ufs }}
+        run: node scripts/scraper-caixa.mjs

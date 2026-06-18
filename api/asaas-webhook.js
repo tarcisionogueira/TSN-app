@@ -29,24 +29,41 @@ export default async function handler(req, res) {
 
   if (!email || !valor) return res.status(200).json({ ok: true });
 
-  const plano = PLANO_POR_VALOR[Math.round(valor)] || 'top1';
+  const plano = PLANO_POR_VALOR[Math.round(valor)];
+  // Se o valor não corresponde a nenhum plano conhecido, ignora o upgrade de plano
+  // mas ainda registra comissão se houver consultor vinculado
+  if (!plano) {
+    console.log(`Webhook: valor R$${valor} não mapeado para plano, ignorando upgrade.`);
+  }
 
   // Localiza o perfil do cliente (precisamos do id para a comissão de afiliado)
-  const { data: cliente } = await supabase
+  const { data: cliente, error: errCliente } = await supabase
     .from('perfis')
     .select('id, indicado_por')
     .eq('email', email)
-    .single();
+    .maybeSingle();
 
-  // Atualiza plano do cliente
-  const { error } = await supabase
-    .from('perfis')
-    .update({ plano, asaas_id: pagamento.customer?.id })
-    .eq('email', email);
+  if (errCliente) {
+    console.error('Webhook: erro ao buscar perfil:', errCliente.message);
+    return res.status(500).json({ error: errCliente.message });
+  }
 
-  if (error) {
-    console.error('Webhook Supabase error:', error.message);
-    return res.status(500).json({ error: error.message });
+  if (!cliente) {
+    console.log(`Webhook: perfil não encontrado para email ${email}, ignorando.`);
+    return res.status(200).json({ ok: true, skipped: 'perfil_nao_encontrado' });
+  }
+
+  // Atualiza plano do cliente (apenas se o valor mapeou para um plano)
+  if (plano) {
+    const { error } = await supabase
+      .from('perfis')
+      .update({ plano, asaas_id: pagamento.customer?.id })
+      .eq('id', cliente.id);
+
+    if (error) {
+      console.error('Webhook Supabase error:', error.message);
+      return res.status(500).json({ error: error.message });
+    }
   }
 
   // ── Comissão de afiliado (consultor) ──
