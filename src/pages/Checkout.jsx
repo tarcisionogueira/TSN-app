@@ -11,16 +11,26 @@ export default function Checkout() {
   const [params] = useSearchParams();
   const { user, role } = useAuth();
   const planoKey = params.get('plano');
+  const promoCode = params.get('promo')?.toUpperCase() || '';
   const plano = PLANOS[planoKey];
 
   const [loading, setLoading] = useState(false);
+  const [promoInfo, setPromoInfo] = useState(null);
   const [linkPagamento, setLinkPagamento] = useState(null);
   const [resultadoMudanca, setResultadoMudanca] = useState(null);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
-    if (!user) nav(`/login?plano=${planoKey}`);
+    if (!user) nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`);
   }, [user]);
+
+  useEffect(() => {
+    if (!promoCode) return;
+    import('../utils/supabase').then(({ supabase }) => {
+      supabase.from('links_promo').select('*').eq('codigo', promoCode).eq('ativo', true).single()
+        .then(({ data }) => { if (data) setPromoInfo(data); });
+    });
+  }, [promoCode]);
 
   if (!plano || planoKey === 'explorador' || plano.preco === 0) {
     nav('/');
@@ -129,9 +139,30 @@ export default function Checkout() {
           <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#0f172a' }}>
             Plano {plano.nome}
           </h2>
-          <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: 15 }}>
-            <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
-          </p>
+          {promoInfo ? (() => {
+            const orig = plano.preco;
+            const promo = promoInfo.desconto_pct > 0
+              ? orig * (1 - promoInfo.desconto_pct / 100)
+              : promoInfo.desconto_valor > 0 ? Math.max(0, orig - promoInfo.desconto_valor) : orig;
+            const fmtR = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+            return (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 14, color: '#94a3b8', textDecoration: 'line-through' }}>R$ {fmtR(orig)}</span>
+                  <strong style={{ color: '#059669', fontSize: 28 }}>R$ {fmtR(promo)}</strong>
+                  <span style={{ color: '#64748b', fontSize: 15 }}>{plano.periodicidade}</span>
+                </div>
+                <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef9c3', borderRadius: 8, fontSize: 13, color: '#a16207', fontWeight: 700 }}>
+                  🎁 Código <strong>{promoCode}</strong> aplicado
+                  {promoInfo.descricao_condicoes && ` — ${promoInfo.descricao_condicoes}`}
+                </div>
+              </div>
+            );
+          })() : (
+            <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: 15 }}>
+              <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
+            </p>
+          )}
           {plano.honorarios && (
             <div style={{ background: plano.bg, color: plano.cor, fontSize: 13, fontWeight: 700, padding: '8px 12px', borderRadius: 8, marginBottom: 16 }}>
               {plano.honorarios}

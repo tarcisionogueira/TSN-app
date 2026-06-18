@@ -727,7 +727,143 @@ function ContratosTab() {
   );
 }
 
-const TABS = ['Cursos', 'eBooks', 'Contratos', 'Usuários', 'Configurações'];
+// ─── Aba Promoções ────────────────────────────────────────────────────────────
+const PRODUTOS_PROMO = [
+  { key: 'top1', label: 'TOP 1 — R$ 49,90/mês' },
+  { key: 'top2', label: 'TOP 2 — R$ 99,90/mês' },
+  { key: 'assessorado', label: 'Assessorado — R$ 5.000' },
+  { key: 'clube', label: 'Leilão Club — R$ 5.000/mês' },
+];
+
+const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', ativo: true });
+
+function PromoTab() {
+  const { user } = useAuth();
+  const [links, setLinks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(defaultPromo());
+  const [editId, setEditId] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('links_promo').select('*, perfis(nome)').order('criado_em', { ascending: false });
+    setLinks(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const up = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const gerarCodigo = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const cod = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    up('codigo', cod);
+  };
+
+  const salvar = async () => {
+    if (!form.codigo.trim()) { setMsg('Informe o código.'); return; }
+    setSalvando(true); setMsg('');
+    const payload = {
+      codigo: form.codigo.trim().toUpperCase(),
+      produto: form.produto,
+      descricao_condicoes: form.descricao_condicoes,
+      desconto_pct: Number(form.desconto_pct) || 0,
+      desconto_valor: Number(form.desconto_valor) || 0,
+      ativo: form.ativo,
+      criado_por: user.id,
+    };
+    const { error } = editId
+      ? await supabase.from('links_promo').update(payload).eq('id', editId)
+      : await supabase.from('links_promo').insert(payload);
+    if (error) { setMsg('Erro: ' + error.message); }
+    else { setMsg(editId ? 'Atualizado!' : 'Link criado!'); setForm(defaultPromo()); setEditId(null); await carregar(); }
+    setSalvando(false);
+  };
+
+  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', ativo: l.ativo }); setEditId(l.id); };
+  const toggleAtivo = async (l) => { await supabase.from('links_promo').update({ ativo: !l.ativo }).eq('id', l.id); await carregar(); };
+  const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${cod}`);
+
+  return (
+    <div>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '0 0 20px' }}>Links Promocionais</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, alignItems: 'start' }}>
+        {/* Formulário */}
+        <div style={S.card}>
+          <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 16 }}>{editId ? 'Editar link' : 'Novo link promocional'}</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <input value={form.codigo} onChange={e => up('codigo', e.target.value.toUpperCase())} placeholder="CÓDIGO (ex: TSN30)" style={{ ...S.input, flex: 1, fontFamily: 'monospace', fontWeight: 700 }} maxLength={12} />
+            <button onClick={gerarCodigo} style={{ padding: '0 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}>Gerar</button>
+          </div>
+          <select value={form.produto} onChange={e => up('produto', e.target.value)} style={{ ...S.input, marginBottom: 14 }}>
+            {PRODUTOS_PROMO.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>DESCONTO %</label>
+              <input type="number" value={form.desconto_pct} onChange={e => up('desconto_pct', e.target.value)} placeholder="ex: 30" style={S.input} min="0" max="100" />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>DESCONTO R$</label>
+              <input type="number" value={form.desconto_valor} onChange={e => up('desconto_valor', e.target.value)} placeholder="ex: 20" style={S.input} min="0" />
+            </div>
+          </div>
+          <textarea value={form.descricao_condicoes} onChange={e => up('descricao_condicoes', e.target.value)}
+            placeholder="Condições promocionais (ex: '30% de desconto no primeiro mês para novos alunos')"
+            rows={3} style={{ ...S.input, resize: 'vertical', marginBottom: 14 }} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', marginBottom: 14, cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.ativo} onChange={e => up('ativo', e.target.checked)} /> Link ativo
+          </label>
+          {msg && <div style={{ padding: '8px 12px', background: msg.startsWith('Erro') ? '#fee2e2' : '#dcfce7', color: msg.startsWith('Erro') ? '#dc2626' : '#166534', borderRadius: 8, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>{msg}</div>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={salvar} disabled={salvando} style={S.btn('primary')}>{salvando ? 'Salvando…' : editId ? 'Atualizar' : 'Criar link'}</button>
+            {editId && <button onClick={() => { setForm(defaultPromo()); setEditId(null); }} style={S.btn('outline')}>Cancelar</button>}
+          </div>
+        </div>
+
+        {/* Lista */}
+        <div style={S.card}>
+          {loading ? <p style={{ color: '#94a3b8' }}>Carregando…</p>
+            : links.length === 0 ? <p style={{ color: '#94a3b8' }}>Nenhum link criado ainda.</p>
+            : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {links.map(l => {
+                  const linkUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${l.codigo}`;
+                  const desconto = l.desconto_pct > 0 ? `${l.desconto_pct}% off` : l.desconto_valor > 0 ? `R$ ${l.desconto_valor} off` : 'sem desconto';
+                  return (
+                    <div key={l.id} style={{ padding: '14px 16px', border: `1px solid ${l.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, background: l.ativo ? 'white' : '#fff5f5' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                        <div>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 15, color: '#0f172a', marginRight: 10 }}>{l.codigo}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb' }}>{PRODUTOS_PROMO.find(p => p.key === l.produto)?.label || l.produto}</span>
+                          <span style={{ fontSize: 12, color: '#059669', fontWeight: 700, marginLeft: 8 }}>{desconto}</span>
+                          {!l.ativo && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>INATIVO</span>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button onClick={() => copiarLink(l.codigo)} style={{ padding: '5px 10px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#475569', cursor: 'pointer' }}>Copiar link</button>
+                          <button onClick={() => editar(l)} style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#2563eb', cursor: 'pointer' }}>Editar</button>
+                          <button onClick={() => toggleAtivo(l)} style={{ padding: '5px 10px', background: l.ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: l.ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}>{l.ativo ? 'Desativar' : 'Ativar'}</button>
+                        </div>
+                      </div>
+                      {l.descricao_condicoes && <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>📋 {l.descricao_condicoes}</div>}
+                      <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', wordBreak: 'break-all' }}>{linkUrl}</div>
+                      {l.perfis?.nome && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Criado por: {l.perfis.nome}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const TABS = ['Cursos', 'eBooks', 'Contratos', 'Promoções', 'Usuários', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -770,6 +906,7 @@ export default function Admin() {
         {tab === 'Cursos'         && <CursosTab />}
         {tab === 'eBooks'         && <EbooksTab />}
         {tab === 'Contratos'      && <ContratosTab />}
+        {tab === 'Promoções'      && <PromoTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Configurações'  && <ConfigTab />}
       </div>
