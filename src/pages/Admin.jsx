@@ -636,7 +636,7 @@ function ContratosTab() {
     if (key === 'assessorado') {
       setTitulo('Contrato de Assessoria para Aquisição de Imóvel em Leilão');
       setTipo('servico');
-      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Valor: R$500 em 6x ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Prazo: até conclusão da aquisição. Rescisão: aviso prévio de 30 dias + multa de 10%.');
+      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses para conclusão da arrematação. Não inclui mentoria. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.');
     } else if (key === 'clube') {
       setTitulo('Contrato de Adesão ao Clube de Negócios TSN Ativos');
       setTipo('servico');
@@ -1023,7 +1023,7 @@ function ContratosTab() {
 const PRODUTOS_PROMO = [
   { key: 'top1', label: 'Investidor — R$ 49,90/mês' },
   { key: 'top2', label: 'Investidor Pro — R$ 99,90/mês' },
-  { key: 'assessorado', label: 'Assessorado — R$ 500×6 ou R$ 5.000 à vista' },
+  { key: 'assessorado', label: 'Assessorado — R$ 500×12 ou R$ 5.000 à vista' },
   { key: 'clube', label: 'Clube de Negócios — R$ 5.000/mês (12 meses)' },
 ];
 
@@ -1399,7 +1399,7 @@ function DashboardTab() {
               { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
               { key: 'top1',       label: 'Investidor (R$49,90)',     cor: '#2563eb', preco: 49.90 },
               { key: 'top2',       label: 'Investidor Pro (R$99,90)', cor: '#7c3aed', preco: 99.90 },
-              { key: 'assessorado',label: 'Assessorado (R$500×6)', cor: '#d97706', preco: 500 },
+              { key: 'assessorado',label: 'Assessorado (R$500×12)', cor: '#d97706', preco: 500 },
               { key: 'clube',      label: 'Clube de Negócios (R$5k/mês)', cor: '#059669', preco: 5000 },
             ].map(({ key, label, cor, preco }) => {
               const qtd = dados.contagem[key] || 0;

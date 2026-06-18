@@ -11,7 +11,7 @@ CONTRATADO: [NOME DO SIGNATÁRIO], inscrito no CPF nº [CPF/CNPJ DO SIGNATÁRIO]
 As partes acima qualificadas têm entre si justo e contratado o seguinte:
 
 CLÁUSULA 1ª — DO OBJETO
-O presente contrato tem por objeto a prestação de serviços de assessoria completa pela CONTRATANTE ao CONTRATADO para identificação, análise de viabilidade, análise jurídica, acompanhamento e suporte na aquisição de imóvel por meio de leilão judicial ou extrajudicial, doravante denominada "Assessoria para Aquisição".
+O presente contrato tem por objeto a prestação de serviços de assessoria pela CONTRATANTE ao CONTRATADO para identificação, análise de viabilidade, análise jurídica, acompanhamento e suporte na aquisição de 1 (um) imóvel por meio de leilão judicial ou extrajudicial, com prazo de até 12 (doze) meses a contar da assinatura para a conclusão da arrematação. Os serviços ora contratados não incluem mentoria ou treinamento.
 
 CLÁUSULA 2ª — DOS SERVIÇOS INCLUSOS
 A assessoria compreende: (a) análise de viabilidade econômica e financeira do imóvel; (b) análise do edital e da matrícula do imóvel; (c) levantamento de riscos jurídicos e ônus reais; (d) cálculo do teto de lance e estratégia de disputa; (e) acompanhamento do leilão; (f) suporte pós-arrematação até a regularização documental.
@@ -20,10 +20,10 @@ CLÁUSULA 3ª — DAS OBRIGAÇÕES DO CONTRATADO
 O CONTRATADO obriga-se a: (a) fornecer informações verídicas sobre sua capacidade de investimento; (b) disponibilizar os documentos necessários à análise; (c) tomar as decisões de lance e aquisição com plena autonomia, sendo de sua exclusiva responsabilidade o resultado do investimento; (d) assinar o presente instrumento em até 30 (trinta) dias a contar do envio do link de assinatura, sob pena de cancelamento do serviço e estorno do valor pago.
 
 CLÁUSULA 4ª — DO VALOR E FORMA DE PAGAMENTO
-Os serviços de assessoria são remunerados conforme modalidade escolhida pelo CONTRATADO no ato da contratação: (a) R$ 3.000,00 (três mil reais) parcelados em 6 (seis) parcelas mensais de R$ 500,00 (quinhentos reais), com vencimento no dia 10 de cada mês a contar da assinatura; ou (b) R$ 5.000,00 (cinco mil reais) em pagamento único à vista. Sobre o imóvel arrematado incidem honorários de êxito de 10% (dez por cento) sobre o valor do lance, devidos no momento da arrematação, independentemente da modalidade de pagamento escolhida.
+Os serviços de assessoria são remunerados conforme modalidade escolhida pelo CONTRATADO no ato da contratação: (a) R$ 6.000,00 (seis mil reais) parcelados em 12 (doze) parcelas mensais de R$ 500,00 (quinhentos reais), com vencimento no dia 10 de cada mês a contar da assinatura; ou (b) R$ 5.000,00 (cinco mil reais) em pagamento único à vista, com desconto sobre o total parcelado. Sobre o imóvel arrematado incidem honorários de êxito de 10% (dez por cento) sobre o valor do lance, devidos no momento da arrematação, independentemente da modalidade de pagamento escolhida.
 
 CLÁUSULA 5ª — DO PRAZO
-O presente contrato vigorará pelo prazo necessário à conclusão da aquisição do imóvel, sem prazo máximo definido, podendo ser rescindido por qualquer das partes mediante aviso prévio de 30 (trinta) dias, respondendo a parte que der causa à rescisão pelo pagamento de multa de 10% (dez por cento) sobre o valor contratado.
+O presente contrato vigorará pelo prazo de até 12 (doze) meses a contar da data de assinatura, sendo este o prazo máximo para a conclusão da arrematação. Não havendo arrematação dentro desse período por razões imputáveis ao CONTRATADO, o contrato encerrar-se-á sem devolução dos valores pagos. Qualquer das partes poderá rescindir antecipadamente mediante aviso prévio de 30 (trinta) dias, respondendo a parte que der causa à rescisão imotivada pelo pagamento de multa de 10% (dez por cento) sobre o valor total do contrato.
 
 CLÁUSULA 6ª — DA CONFIDENCIALIDADE E LGPD
 As partes obrigam-se a manter sigilo sobre todas as informações confidenciais trocadas durante a execução deste contrato. O tratamento de dados pessoais dar-se-á em conformidade com a Lei nº 13.709/2018 (LGPD), limitando-se ao estritamente necessário para a execução dos serviços.
