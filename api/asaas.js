@@ -186,6 +186,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ customerId });
     }
 
+    if (action === 'financas') {
+      const hoje = new Date();
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+      const [balance, statsMes] = await Promise.all([
+        asaasGet('/finances/balance'),
+        asaasGet(`/finances/statistics?startDate=${inicioMes}&endDate=${fimMes}`),
+      ]);
+      return res.status(200).json({ balance, statsMes });
+    }
+
     return res.status(400).json({ error: 'Ação inválida' });
   } catch (err) {
     console.error('Asaas error:', err.message);
