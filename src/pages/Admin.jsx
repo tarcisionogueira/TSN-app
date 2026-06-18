@@ -587,185 +587,180 @@ function ConfigTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MAIN ADMIN PAGE
-// ═══════════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════════════
 // CONTRATOS TAB — admin gera, aprova e libera contratos para assinatura
 // ═══════════════════════════════════════════════════════════════════════════════
-function defaultContrato() {
-  return { titulo: '', produto: 'assessoria', conteudo: '', valor: '', requer_assinatura: true, cliente_id: '' };
-}
 
 function ContratosTab() {
-  const [contratos, setContratos] = useState([]);
-  const [clientes, setClientes] = useState([]);
+  const [contratosLink, setContratosLink] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);   // 'new' | contrato
-  const [form, setForm] = useState(defaultContrato());
-  const [saving, setSaving] = useState(false);
-  const [modalLink, setModalLink] = useState(false);
-  const [formLink, setFormLink] = useState({ titulo: '', conteudo: '', tipo_contrato: 'servico', descricao: '' });
+
+  // Modal em 3 etapas: null (fechado) | 1 (descrever) | 2 (revisar) | 3 (link gerado)
+  const [step, setStep] = useState(null);
+  const [detalhe, setDetalhe] = useState(null); // contrato aberto para ver
+
+  // Etapa 1
+  const [titulo, setTitulo] = useState('');
+  const [tipo, setTipo] = useState('servico');
+  const [descricao, setDescricao] = useState('');
+  const [arquivos, setArquivos] = useState([]); // [{ nome, conteudo }]
+
+  // Etapa 2
+  const [conteudo, setConteudo] = useState('');
+  const [perguntas, setPerguntas] = useState([]);
+  const [respostas, setRespostas] = useState({});
+  const [gerandoContrato, setGerandoContrato] = useState(false);
+
+  // Etapa 3
   const [linkGerado, setLinkGerado] = useState('');
   const [savingLink, setSavingLink] = useState(false);
-  const [gerandoContrato, setGerandoContrato] = useState(false);
-  const [contratosLink, setContratosLink] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: cts }, { data: cls }, { data: cls2 }] = await Promise.all([
-      supabase.from('contratos').select('*').order('criado_em', { ascending: false }),
-      supabase.from('perfis').select('id, nome, cpf').order('nome'),
-      supabase.from('contratos_link').select('*').order('criado_em', { ascending: false }),
-    ]);
-    setContratos(cts || []);
-    setClientes(cls || []);
-    setContratosLink(cls2 || []);
+    const { data } = await supabase.from('contratos_link').select('*').order('criado_em', { ascending: false });
+    setContratosLink((data || []).filter(c => c.status !== 'cancelado'));
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  function openNew() { setForm(defaultContrato()); setModal('new'); }
-  function openEdit(c) { setForm({ ...c, valor: c.valor || '' }); setModal(c); }
-
-  async function salvar(status) {
-    if (!form.titulo || !form.cliente_id) { alert('Preencha o título e selecione o cliente.'); return; }
-    setSaving(true);
-    const payload = {
-      titulo: form.titulo, produto: form.produto, conteudo: form.conteudo || '',
-      valor: Number(form.valor) || 0, requer_assinatura: form.requer_assinatura,
-      cliente_id: form.cliente_id, status,
-    };
-    if (modal === 'new') await supabase.from('contratos').insert(payload);
-    else await supabase.from('contratos').update(payload).eq('id', form.id);
-    setSaving(false);
-    setModal(null);
-    await load();
+  function abrirModal() {
+    setTitulo(''); setTipo('servico'); setDescricao('');
+    setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
+    setLinkGerado('');
+    setStep(1);
   }
 
-  async function cancelar(id) {
-    if (!window.confirm('Cancelar este contrato?')) return;
-    await supabase.from('contratos').update({ status: 'cancelado' }).eq('id', id);
-    load();
+  async function lerArquivos(files) {
+    const lidos = [];
+    for (const file of files) {
+      if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+        const texto = await file.text();
+        lidos.push({ nome: file.name, conteudo: texto.slice(0, 3000) });
+      } else {
+        lidos.push({ nome: file.name, conteudo: null }); // PDF/docx: só nome como referência
+      }
+    }
+    setArquivos(prev => [...prev, ...lidos]);
   }
 
-  async function gerarLinkContrato() {
-    if (!formLink.titulo || !formLink.conteudo) { alert('Preencha o título e o conteúdo do contrato.'); return; }
-    setSavingLink(true);
-    const { data, error } = await supabase.from('contratos_link').insert({
-      titulo: formLink.titulo,
-      conteudo: formLink.conteudo,
-      tipo_contrato: formLink.tipo_contrato,
-    }).select().single();
-    setSavingLink(false);
-    if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
-    const base = window.location.href.split('#')[0];
-    setLinkGerado(`${base}#/c/${data.token}`);
-    await load();
-  }
-
-  async function gerarComAssistente() {
-    if (!formLink.descricao.trim()) { alert('Descreva o que o contrato deve conter.'); return; }
+  async function gerarContrato() {
+    if (!descricao.trim()) { alert('Descreva o que o contrato deve conter.'); return; }
     setGerandoContrato(true);
     try {
       const r = await fetch('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ descricao: formLink.descricao, tipo: formLink.tipo_contrato, titulo: formLink.titulo }),
+        body: JSON.stringify({
+          titulo,
+          tipo,
+          descricao,
+          arquivos: arquivos.map(a => ({ nome: a.nome, conteudo: a.conteudo })),
+          respostas: Object.keys(respostas).length > 0 ? respostas : undefined,
+        }),
       });
       const d = await r.json();
-      if (d.conteudo) setFormLink(f => ({ ...f, conteudo: d.conteudo }));
-      else alert('Não foi possível gerar o contrato. Tente novamente.');
+      if (d.conteudo) {
+        setConteudo(d.conteudo);
+        setPerguntas(d.perguntas || []);
+        setRespostas({});
+        setStep(2);
+      } else {
+        alert(d.error || 'Não foi possível gerar o contrato. Tente novamente.');
+      }
     } catch { alert('Erro de conexão ao gerar o contrato.'); }
     setGerandoContrato(false);
   }
 
+  async function gerarLinkContrato() {
+    if (!conteudo.trim()) { alert('O conteúdo do contrato está vazio.'); return; }
+    setSavingLink(true);
+    const { data, error } = await supabase.from('contratos_link').insert({
+      titulo: titulo || 'Contrato',
+      conteudo,
+      tipo_contrato: tipo,
+    }).select().single();
+    setSavingLink(false);
+    if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
+    const base = window.location.href.split('#')[0];
+    setLinkGerado(`${base}#/c/${data.token}`);
+    setStep(3);
+    await load();
+  }
+
+  async function excluirLink(id) {
+    if (!window.confirm('Excluir este contrato permanentemente?')) return;
+    await supabase.from('contratos_link').delete().eq('id', id);
+    load();
+  }
+
   async function cancelarLink(id) {
-    if (!window.confirm('Cancelar este contrato via link?')) return;
+    if (!window.confirm('Cancelar este contrato?')) return;
     await supabase.from('contratos_link').update({ status: 'cancelado' }).eq('id', id);
     load();
   }
 
-  const nomeCliente = (id) => clientes.find(c => c.id === id)?.nome || clientes.find(c => c.id === id)?.cpf || '—';
-  const ST = { rascunho: ['Rascunho', '#64748b'], aguardando_assinatura: ['Aguardando assinatura', '#d97706'], assinado: ['Assinado', '#059669'], cancelado: ['Cancelado', '#dc2626'] };
-  const ST_LINK = { aguardando: ['Aguardando', '#d97706'], assinado: ['Assinado', '#059669'], expirado: ['Expirado', '#94a3b8'], cancelado: ['Cancelado', '#dc2626'] };
+  const ST_LINK = {
+    aguardando: ['Aguardando assinatura', '#d97706'],
+    assinado:   ['Assinado', '#059669'],
+    expirado:   ['Expirado', '#94a3b8'],
+    cancelado:  ['Cancelado', '#dc2626'],
+  };
+
+  const TIPO_LABEL = { servico:'Serviço', prestacao:'Prestação', locacao:'Locação', compra:'Compra e Venda', outro:'Outro', nda:'NDA / Sigilo' };
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Contratos ({contratos.length})</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={S.btn('outline')} onClick={() => { setFormLink({ titulo: '', conteudo: '', tipo_contrato: 'servico', descricao: '' }); setLinkGerado(''); setModalLink(true); }}>🔗 Gerar link de assinatura</button>
-          <button style={S.btn('primary')} onClick={openNew}>+ Novo Contrato</button>
-        </div>
+      {/* Cabeçalho */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <h2 style={{ fontSize:18, fontWeight:700, color:'#0f172a', margin:0 }}>Contratos ({contratosLink.length})</h2>
+        <button style={S.btn('primary')} onClick={abrirModal}>🔗 Novo contrato com link</button>
       </div>
 
+      {/* Tabela */}
       <div style={S.card}>
-        {loading ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando...</p>
-          : contratos.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum contrato criado ainda.</p>
+        {loading ? <p style={{ color:'#94a3b8', textAlign:'center', padding:32 }}>Carregando...</p>
+          : contratosLink.length === 0
+          ? <p style={{ color:'#94a3b8', textAlign:'center', padding:32, fontSize:13 }}>Nenhum contrato gerado ainda. Clique em "Novo contrato com link" para começar.</p>
           : (
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX:'auto' }}>
               <table style={S.table}>
                 <thead><tr>
-                  <th style={S.th}>Título</th><th style={S.th}>Cliente</th><th style={S.th}>Produto</th>
-                  <th style={S.th}>Valor</th><th style={S.th}>Status</th><th style={S.th}>Ações</th>
-                </tr></thead>
-                <tbody>
-                  {contratos.map(c => {
-                    const [lbl, cor] = ST[c.status] || ST.rascunho;
-                    return (
-                      <tr key={c.id}>
-                        <td style={S.td}><strong>{c.titulo}</strong></td>
-                        <td style={S.td}>{nomeCliente(c.cliente_id)}</td>
-                        <td style={{ ...S.td, textTransform: 'capitalize' }}>{c.produto}</td>
-                        <td style={S.td}>{c.valor > 0 ? `R$ ${Number(c.valor).toFixed(2)}` : '—'}</td>
-                        <td style={S.td}><span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: cor + '20', color: cor }}>{lbl}</span></td>
-                        <td style={S.td}>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button style={S.btn('outline')} onClick={() => openEdit(c)}>{c.status === 'assinado' ? 'Ver' : 'Editar'}</button>
-                            {c.status !== 'assinado' && c.status !== 'cancelado' && <button style={S.btn('danger')} onClick={() => cancelar(c.id)}>Cancelar</button>}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-      </div>
-
-      {/* Contratos via link */}
-      <div style={{ marginTop: 28 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: '0 0 12px' }}>Contratos via link ({contratosLink.length})</h3>
-        <div style={S.card}>
-          {contratosLink.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 24, fontSize: 13 }}>Nenhum contrato via link gerado ainda.</p> : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={S.table}>
-                <thead><tr>
-                  <th style={S.th}>Título</th><th style={S.th}>Tipo</th><th style={S.th}>Status</th>
-                  <th style={S.th}>Criado em</th><th style={S.th}>Expira em</th><th style={S.th}>Ações</th>
+                  <th style={S.th}>Título</th>
+                  <th style={S.th}>Tipo</th>
+                  <th style={S.th}>Contratante</th>
+                  <th style={S.th}>Contratado</th>
+                  <th style={S.th}>Status</th>
+                  <th style={S.th}>Criado</th>
+                  <th style={S.th}>Expira</th>
+                  <th style={S.th}>Ações</th>
                 </tr></thead>
                 <tbody>
                   {contratosLink.map(cl => {
                     const [lbl, cor] = ST_LINK[cl.status] || ST_LINK.aguardando;
                     const linkUrl = `${window.location.href.split('#')[0]}#/c/${cl.token}`;
+                    const sig = cl.dados_signatario;
+                    const nomeContratado = sig ? (sig.nome || sig.razao_social || '—') : (cl.status === 'aguardando' ? 'Aguardando preenchimento' : '—');
                     return (
                       <tr key={cl.id}>
                         <td style={S.td}><strong>{cl.titulo}</strong></td>
-                        <td style={{ ...S.td, textTransform: 'capitalize' }}>{cl.tipo_contrato}</td>
-                        <td style={S.td}><span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: cor + '20', color: cor }}>{lbl}</span></td>
-                        <td style={S.td}>{new Date(cl.criado_em).toLocaleDateString('pt-BR')}</td>
-                        <td style={S.td}>{new Date(cl.expira_em).toLocaleDateString('pt-BR')}</td>
+                        <td style={S.td}>{TIPO_LABEL[cl.tipo_contrato] || cl.tipo_contrato}</td>
+                        <td style={{ ...S.td, fontSize:11 }}>Nogueira Empreendimentos</td>
+                        <td style={{ ...S.td, fontSize:11 }}>{nomeContratado}</td>
+                        <td style={S.td}><span style={{ padding:'2px 10px', borderRadius:999, fontSize:12, fontWeight:700, background:cor+'20', color:cor }}>{lbl}</span></td>
+                        <td style={{ ...S.td, fontSize:11 }}>{new Date(cl.criado_em).toLocaleDateString('pt-BR')}</td>
+                        <td style={{ ...S.td, fontSize:11 }}>{new Date(cl.expira_em).toLocaleDateString('pt-BR')}</td>
                         <td style={S.td}>
-                          <div style={{ display: 'flex', gap: 6 }}>
+                          <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+                            <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => setDetalhe(cl)}>Ver</button>
                             {cl.status === 'aguardando' && (
-                              <button style={S.btn('outline')} onClick={() => { navigator.clipboard.writeText(linkUrl); alert('Link copiado!'); }}>Copiar link</button>
+                              <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => { navigator.clipboard.writeText(linkUrl); alert('Link copiado!'); }}>Copiar link</button>
                             )}
-                            {cl.status === 'assinado' && cl.dados_signatario && (
-                              <button style={S.btn('outline')} onClick={() => alert(`Assinado por: ${cl.dados_signatario?.nome || cl.dados_signatario?.razao_social}\nEm: ${cl.assinado_em ? new Date(cl.assinado_em).toLocaleString('pt-BR') : '—'}`)}>Ver dados</button>
+                            {cl.status === 'aguardando' && (
+                              <button style={{ ...S.btn('danger'), fontSize:11, padding:'4px 10px' }} onClick={() => cancelarLink(cl.id)}>Cancelar</button>
                             )}
-                            {cl.status === 'aguardando' && <button style={S.btn('danger')} onClick={() => cancelarLink(cl.id)}>Cancelar</button>}
+                            {(cl.status === 'cancelado' || cl.status === 'expirado') && (
+                              <button style={{ ...S.btn('danger'), fontSize:11, padding:'4px 10px' }} onClick={() => excluirLink(cl.id)}>Excluir</button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -775,151 +770,207 @@ function ContratosTab() {
               </table>
             </div>
           )}
-        </div>
       </div>
 
-      {/* Modal: Gerar contrato via link */}
-      {modalLink && (
-        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setModalLink(false)}>
-          <div style={{ ...S.modal, maxWidth: 680 }}>
-            <h3 style={{ ...S.sectionTitle, marginBottom: 4 }}>Gerar link de assinatura</h3>
-            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>O contrato será enviado pela Nogueira Empreendimentos. A outra parte preenche os dados e assina digitalmente.</p>
+      {/* Modal de detalhe do contrato */}
+      {detalhe && (
+        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setDetalhe(null)}>
+          <div style={{ ...S.modal, maxWidth:640 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+              <div>
+                <h3 style={{ margin:'0 0 4px', fontSize:17, fontWeight:700 }}>{detalhe.titulo}</h3>
+                <span style={{ fontSize:12, color:'#64748b' }}>{TIPO_LABEL[detalhe.tipo_contrato] || detalhe.tipo_contrato}</span>
+              </div>
+              <button onClick={() => setDetalhe(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8' }}>×</button>
+            </div>
 
-            {!linkGerado ? (
-              <>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                  <div style={{ flex: 2 }}>
-                    <label style={S.label}>Título do contrato *</label>
-                    <input style={S.input} value={formLink.titulo} onChange={e => setFormLink({ ...formLink, titulo: e.target.value })} placeholder="Contrato de Prestação de Serviços…" />
+            {/* Partes */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
+              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px' }}>
+                <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
+                <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>Nogueira Empreendimentos</div>
+              </div>
+              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px' }}>
+                <div style={{ fontSize:10, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
+                {detalhe.dados_signatario ? (
+                  <>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>{detalhe.dados_signatario.nome || detalhe.dados_signatario.razao_social}</div>
+                    <div style={{ fontSize:11, color:'#475569' }}>{detalhe.dados_signatario.cpf || detalhe.dados_signatario.cnpj}</div>
+                    <div style={{ fontSize:11, color:'#475569' }}>{detalhe.dados_signatario.email}</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Aguardando preenchimento pelo signatário</div>
+                )}
+              </div>
+            </div>
+
+            {/* Conteúdo */}
+            <div style={{ background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0', padding:'14px 16px', maxHeight:300, overflowY:'auto', marginBottom:16 }}>
+              <div style={{ fontSize:13, color:'#0f172a', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{detalhe.conteudo}</div>
+            </div>
+
+            {/* Assinatura (se assinado) */}
+            {detalhe.status === 'assinado' && (
+              <div style={{ background:'#dcfce7', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'#166534' }}>✔ Assinado em {detalhe.assinado_em ? new Date(detalhe.assinado_em).toLocaleString('pt-BR') : '—'}</div>
+                {detalhe.assinatura && <img src={detalhe.assinatura} alt="assinatura" style={{ maxHeight:60, background:'white', borderRadius:6, marginTop:8, padding:4 }}/>}
+                {detalhe.assinatura_hash && <div style={{ fontSize:10, color:'#15803d', wordBreak:'break-all', marginTop:4 }}>Hash: {detalhe.assinatura_hash}</div>}
+              </div>
+            )}
+
+            <div style={{ display:'flex', justifyContent:'flex-end' }}>
+              <button style={S.btn('outline')} onClick={() => setDetalhe(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Novo contrato — 3 etapas */}
+      {step && (
+        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setStep(null)}>
+          <div style={{ ...S.modal, maxWidth:700 }}>
+
+            {/* Indicador de etapas */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:20 }}>
+              {['Descrever','Revisar','Link gerado'].map((s, i) => (
+                <React.Fragment key={s}>
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <div style={{ width:22, height:22, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800,
+                      background: step > i+1 ? '#059669' : step === i+1 ? '#2563eb' : '#e2e8f0',
+                      color: step >= i+1 ? 'white' : '#94a3b8' }}>{step > i+1 ? '✓' : i+1}</div>
+                    <span style={{ fontSize:12, fontWeight:step===i+1?700:400, color:step===i+1?'#0f172a':'#94a3b8' }}>{s}</span>
                   </div>
-                  <div style={{ flex: 1 }}>
+                  {i < 2 && <div style={{ flex:1, height:1, background:'#e2e8f0' }}/>}
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* ── Etapa 1: Descrever ── */}
+            {step === 1 && (
+              <>
+                <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Descreva o contrato</h3>
+                <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>O contrato será emitido pela <strong>Nogueira Empreendimentos</strong>. A outra parte preenche os dados e assina digitalmente.</p>
+
+                <div style={{ display:'flex', gap:10, marginBottom:12 }}>
+                  <div style={{ flex:2 }}>
+                    <label style={S.label}>Título do contrato</label>
+                    <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="NDA — Programação sistema TSN" />
+                  </div>
+                  <div style={{ flex:1 }}>
                     <label style={S.label}>Tipo</label>
-                    <select style={S.input} value={formLink.tipo_contrato} onChange={e => setFormLink({ ...formLink, tipo_contrato: e.target.value })}>
+                    <select style={S.input} value={tipo} onChange={e => setTipo(e.target.value)}>
                       <option value="servico">Serviço</option>
                       <option value="prestacao">Prestação</option>
                       <option value="locacao">Locação</option>
                       <option value="compra">Compra e Venda</option>
+                      <option value="nda">NDA / Sigilo</option>
                       <option value="outro">Outro</option>
                     </select>
                   </div>
                 </div>
 
-                {/* Campo de descrição para geração automática */}
-                <div style={{ marginBottom: 12, background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '14px 16px' }}>
-                  <label style={{ ...S.label, color: '#0369a1' }}>Descreva o que o contrato deve conter</label>
-                  <textarea style={{ ...S.input, height: 80, resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }}
-                    value={formLink.descricao}
-                    onChange={e => setFormLink({ ...formLink, descricao: e.target.value })}
-                    placeholder="Ex: Contrato de consultoria para análise de leilões de imóveis, duração 6 meses, valor R$1.500/mês, pagamento todo dia 5, pode ser rescindido com 30 dias de aviso…"/>
-                  <button
-                    onClick={gerarComAssistente}
-                    disabled={gerandoContrato || !formLink.descricao.trim()}
-                    style={{ ...S.btn('primary'), marginTop: 8, width: '100%', justifyContent: 'center', opacity: (!formLink.descricao.trim() || gerandoContrato) ? 0.6 : 1 }}>
-                    {gerandoContrato ? '⏳ Gerando contrato…' : '✨ Gerar contrato automaticamente'}
-                  </button>
+                <div style={{ marginBottom:14 }}>
+                  <label style={S.label}>O que o contrato deve conter? *</label>
+                  <textarea style={{ ...S.input, height:110, resize:'vertical', fontFamily:'inherit', fontSize:13 }}
+                    value={descricao}
+                    onChange={e => setDescricao(e.target.value)}
+                    placeholder="Descreva livremente: as partes, o objeto, valores, prazos, penalidades, confidencialidade, LGPD, foro, etc. O assistente perguntará o que faltar."/>
                 </div>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={S.label}>Conteúdo do contrato {formLink.conteudo ? '(edite se necessário)' : '— ou escreva manualmente *'}</label>
-                  <textarea style={{ ...S.input, height: 220, resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }}
-                    value={formLink.conteudo}
-                    onChange={e => setFormLink({ ...formLink, conteudo: e.target.value })}
-                    placeholder="Cole ou escreva as cláusulas do contrato…&#10;&#10;CLÁUSULA 1ª - DO OBJETO&#10;..." />
+                <div style={{ marginBottom:16 }}>
+                  <label style={S.label}>Anexar arquivos de referência (opcional)</label>
+                  <div style={{ fontSize:11, color:'#94a3b8', marginBottom:6 }}>Documentos que embasam o contrato. Textos (.txt, .md) são lidos; PDFs ficam referenciados pelo nome.</div>
+                  <input type="file" multiple accept=".txt,.md,.pdf,.doc,.docx"
+                    style={{ fontSize:12, color:'#334155' }}
+                    onChange={e => lerArquivos(Array.from(e.target.files))} />
+                  {arquivos.length > 0 && (
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8 }}>
+                      {arquivos.map((a, i) => (
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:4, background: a.conteudo ? '#dbeafe' : '#fef3c7', color: a.conteudo ? '#1e40af' : '#92400e', fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20 }}>
+                          {a.conteudo ? '📄' : '📎'} {a.nome}
+                          <button onClick={() => setArquivos(prev => prev.filter((_, j) => j !== i))}
+                            style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:0, marginLeft:2 }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {formLink.conteudo && (
-                  <div style={{ marginBottom: 16, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 20px', maxHeight: 200, overflowY: 'auto' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Pré-visualização</div>
-                    <div style={{ fontSize: 13, color: '#0f172a', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{formLink.conteudo}</div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <button style={S.btn('outline')} onClick={() => setModalLink(false)}>Cancelar</button>
-                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || !formLink.conteudo.trim()}>
-                    {savingLink ? 'Gerando…' : '✓ Aprovar e gerar link'}
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
+                  <button style={S.btn('outline')} onClick={() => setStep(null)}>Cancelar</button>
+                  <button style={S.btn('primary')} onClick={gerarContrato} disabled={gerandoContrato || !descricao.trim()}>
+                    {gerandoContrato ? '⏳ Gerando contrato…' : 'Gerar contrato →'}
                   </button>
                 </div>
               </>
-            ) : (
-              <div>
-                <div style={{ background: '#dcfce7', borderRadius: 12, padding: '20px 24px', marginBottom: 16, textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
-                  <div style={{ fontWeight: 800, color: '#166534', marginBottom: 4 }}>Link gerado com sucesso!</div>
-                  <div style={{ fontSize: 12, color: '#15803d' }}>Válido por 30 dias. Ao ser assinado, os dados ficam registrados.</div>
-                </div>
-                <div style={{ background: '#f1f5f9', borderRadius: 8, padding: '12px 14px', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: '#334155', wordBreak: 'break-all', flex: 1 }}>{linkGerado}</span>
-                  <button style={S.btn('primary')} onClick={() => { navigator.clipboard.writeText(linkGerado); alert('Link copiado!'); }}>Copiar</button>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button style={S.btn('outline')} onClick={() => { setModalLink(false); setLinkGerado(''); }}>Fechar</button>
-                </div>
-              </div>
             )}
-          </div>
-        </div>
-      )}
 
-      {modal && (
-        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div style={{ ...S.modal, maxWidth: 560 }}>
-            <h3 style={{ ...S.sectionTitle, marginBottom: 16 }}>{modal === 'new' ? 'Novo Contrato' : 'Contrato'}</h3>
-
-            {modal !== 'new' && modal.status === 'assinado' ? (
-              <div>
-                <p style={{ fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>{modal.titulo}</p>
-                <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.6, color: '#334155', background: '#f8fafc', borderRadius: 8, padding: 14, maxHeight: 260, overflowY: 'auto', marginBottom: 14 }}>{modal.conteudo}</div>
-                <div style={{ padding: 14, background: '#dcfce7', borderRadius: 10 }}>
-                  <strong style={{ color: '#166534', fontSize: 13 }}>✔ Assinado por {modal.assinante_nome}</strong>
-                  {modal.assinatura_data && <div><img src={modal.assinatura_data} alt="assinatura" style={{ maxHeight: 80, background: 'white', borderRadius: 6, marginTop: 8, padding: 4 }} /></div>}
-                  <div style={{ fontSize: 11, color: '#15803d', marginTop: 6 }}>{modal.assinado_em && new Date(modal.assinado_em).toLocaleString('pt-BR')}</div>
-                  <div style={{ fontSize: 10, color: '#15803d', wordBreak: 'break-all', marginTop: 4 }}>Hash: {modal.assinatura_hash}</div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-                  <button style={S.btn('outline')} onClick={() => setModal(null)}>Fechar</button>
-                </div>
-              </div>
-            ) : (
+            {/* ── Etapa 2: Revisar ── */}
+            {step === 2 && (
               <>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={S.label}>Cliente *</label>
-                  <select style={S.input} value={form.cliente_id} onChange={e => setForm({ ...form, cliente_id: e.target.value })}>
-                    <option value="">Selecione o cliente…</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nome || c.cpf}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                  <div style={{ flex: 2 }}>
-                    <label style={S.label}>Título *</label>
-                    <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} placeholder="Contrato de Assessoria…" />
+                <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Revisar contrato</h3>
+
+                {/* Partes */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                  <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'10px 14px' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:2 }}>Contratante</div>
+                    <div style={{ fontSize:13, fontWeight:700 }}>Nogueira Empreendimentos</div>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={S.label}>Produto</label>
-                    <select style={S.input} value={form.produto} onChange={e => setForm({ ...form, produto: e.target.value })}>
-                      {['assessoria', 'clube', 'curso', 'outro'].map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                  <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:2 }}>Contratado</div>
+                    <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Preenchido pelo signatário ao assinar</div>
                   </div>
                 </div>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={S.label}>Conteúdo do contrato</label>
-                  <textarea style={{ ...S.input, height: 180, resize: 'vertical', fontFamily: 'inherit' }} value={form.conteudo} onChange={e => setForm({ ...form, conteudo: e.target.value })} placeholder="Cole ou escreva as cláusulas do contrato…" />
-                </div>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 18 }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={S.label}>Valor (R$)</label>
-                    <input type="number" min="0" step="0.01" style={S.input} value={form.valor} onChange={e => setForm({ ...form, valor: e.target.value })} placeholder="0,00" />
+
+                {/* Perguntas do assistente */}
+                {perguntas.length > 0 && (
+                  <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'14px 16px', marginBottom:14 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:'#c2410c', marginBottom:10 }}>⚠ O assistente identificou pontos para confirmar:</div>
+                    {perguntas.map((p, i) => (
+                      <div key={i} style={{ marginBottom:10 }}>
+                        <label style={{ fontSize:12, color:'#7c2d12', fontWeight:600, display:'block', marginBottom:4 }}>{p}</label>
+                        <input style={{ ...S.input, fontSize:12 }}
+                          value={respostas[i] || ''}
+                          onChange={e => setRespostas(r => ({ ...r, [i]: e.target.value }))}
+                          placeholder="Sua resposta…" />
+                      </div>
+                    ))}
+                    <button style={{ ...S.btn('outline'), fontSize:12, marginTop:4 }} onClick={gerarContrato} disabled={gerandoContrato}>
+                      {gerandoContrato ? '⏳ Regerando…' : '↻ Regerar com respostas'}
+                    </button>
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#374151', marginTop: 18 }}>
-                    <input type="checkbox" checked={form.requer_assinatura} onChange={e => setForm({ ...form, requer_assinatura: e.target.checked })} /> Exige assinatura
-                  </label>
+                )}
+
+                {/* Conteúdo editável */}
+                <div style={{ marginBottom:14 }}>
+                  <label style={S.label}>Texto do contrato (edite se necessário)</label>
+                  <textarea style={{ ...S.input, height:280, resize:'vertical', fontFamily:'Georgia, serif', fontSize:13, lineHeight:1.7 }}
+                    value={conteudo} onChange={e => setConteudo(e.target.value)} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <button style={S.btn('outline')} onClick={() => setModal(null)}>Cancelar</button>
-                  <button style={S.btn('outline')} onClick={() => salvar('rascunho')} disabled={saving}>Salvar rascunho</button>
-                  <button style={S.btn('primary')} onClick={() => salvar('aguardando_assinatura')} disabled={saving}>
-                    {saving ? 'Salvando…' : 'Liberar para assinatura'}
+
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <button style={S.btn('outline')} onClick={() => setStep(1)}>← Voltar</button>
+                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || !conteudo.trim()}>
+                    {savingLink ? 'Gerando link…' : '✓ Aprovar e gerar link'}
                   </button>
+                </div>
+              </>
+            )}
+
+            {/* ── Etapa 3: Link gerado ── */}
+            {step === 3 && (
+              <>
+                <div style={{ textAlign:'center', padding:'20px 0 12px' }}>
+                  <div style={{ fontSize:48, marginBottom:10 }}>🔗</div>
+                  <h3 style={{ fontSize:18, fontWeight:800, color:'#0f172a', margin:'0 0 6px' }}>Link gerado com sucesso!</h3>
+                  <p style={{ fontSize:13, color:'#64748b', margin:0 }}>Válido por 30 dias. Ao ser assinado, os dados ficam registrados.</p>
+                </div>
+                <div style={{ background:'#f1f5f9', borderRadius:8, padding:'14px 16px', margin:'16px 0', display:'flex', gap:10, alignItems:'center' }}>
+                  <span style={{ fontSize:12, color:'#334155', wordBreak:'break-all', flex:1 }}>{linkGerado}</span>
+                  <button style={S.btn('primary')} onClick={() => navigator.clipboard.writeText(linkGerado).then(() => alert('Link copiado!'))}>Copiar</button>
+                </div>
+                <div style={{ display:'flex', justifyContent:'flex-end' }}>
+                  <button style={S.btn('outline')} onClick={() => setStep(null)}>Fechar</button>
                 </div>
               </>
             )}
