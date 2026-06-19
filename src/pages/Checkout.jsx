@@ -402,6 +402,16 @@ export default function Checkout() {
                 ✅ Paguei — confirmar
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10 }}>Seu plano será ativado automaticamente em até 5 minutos após o pagamento.</p>
+              <div style={{ marginTop: 12, padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12 }}>
+                <p style={{ fontSize: 13, color: '#166534', margin: '0 0 10px', fontWeight: 600 }}>
+                  ✅ Após confirmar o pagamento, assine o contrato do seu plano:
+                </p>
+                <button
+                  onClick={() => window.location.hash = '/contratos'}
+                  style={{ padding: '10px 20px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  Ir para Meus Contratos →
+                </button>
+              </div>
             </div>
           ) : (
             <>

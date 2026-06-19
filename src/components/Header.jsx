@@ -12,33 +12,38 @@ function ModalFeedback({ user, onClose }) {
   const [queixa, setQueixa] = React.useState('');
   const [solucao, setSolucao] = React.useState('');
   const [resolvido, setResolvido] = React.useState('');
+  const [nps, setNps] = React.useState(null);
+  const [enviando, setEnviando] = React.useState(false);
   const [enviado, setEnviado] = React.useState(false);
+  const [erro, setErro] = React.useState('');
   const nome = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Visitante';
   const email = user?.email || '';
 
-  function enviar() {
+  async function enviar() {
     if (!queixa.trim()) return;
-    const assunto = encodeURIComponent('[Feedback TSN Ativos]');
-    const linhas = [
-      'PROBLEMA / QUEIXA:',
-      queixa.trim(),
-      '',
-      'SOLUÇÃO SUGERIDA:',
-      solucao.trim() || '(não informada)',
-      '',
-      'FOI RESOLVIDO?',
-      resolvido || 'Não informado',
-      '',
-      '---',
-      'Enviado por: ' + nome + ' <' + email + '>',
-    ];
-    const corpo = encodeURIComponent(linhas.join('\n'));
-    window.open('mailto:' + getEmailFeedback() + '?subject=' + assunto + '&body=' + corpo);
-    setEnviado(true);
-    setTimeout(onClose, 1800);
+    setEnviando(true); setErro('');
+    try {
+      const { error } = await supabase.from('feedbacks').insert({
+        user_id: user?.id || null,
+        user_nome: nome,
+        user_email: email,
+        queixa: queixa.trim(),
+        solucao: solucao.trim() || null,
+        resolvido: resolvido || null,
+        nps: nps,
+        status: 'novo',
+      });
+      if (error) throw error;
+      setEnviado(true);
+      setTimeout(onClose, 2000);
+    } catch (e) {
+      setErro('Não foi possível enviar. Tente novamente.');
+    }
+    setEnviando(false);
   }
 
   const inputStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' };
+  const npsColors = { 0:'#dc2626',1:'#dc2626',2:'#ef4444',3:'#f97316',4:'#f97316',5:'#eab308',6:'#eab308',7:'#84cc16',8:'#22c55e',9:'#16a34a',10:'#059669' };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
@@ -47,7 +52,8 @@ function ModalFeedback({ user, onClose }) {
         {enviado ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 40 }}>✅</div>
-            <p style={{ fontWeight: 700, color: '#0f172a', marginTop: 12 }}>Feedback enviado!</p>
+            <p style={{ fontWeight: 700, color: '#0f172a', marginTop: 12 }}>Feedback registrado!</p>
+            <p style={{ fontSize: 13, color: '#64748b' }}>Obrigado. Nossa equipe vai analisar em breve.</p>
           </div>
         ) : (
           <>
@@ -61,12 +67,12 @@ function ModalFeedback({ user, onClose }) {
               </div>
             )}
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>PROBLEMA / QUEIXA *</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>PROBLEMA / SUGESTÃO *</label>
               <textarea
                 value={queixa}
                 onChange={e => setQueixa(e.target.value)}
                 placeholder="Descreva o problema ou sugestão com detalhes..."
-                style={{ ...inputStyle, minHeight: 100 }}
+                style={{ ...inputStyle, minHeight: 90 }}
                 autoFocus
               />
             </div>
@@ -75,27 +81,42 @@ function ModalFeedback({ user, onClose }) {
               <textarea
                 value={solucao}
                 onChange={e => setSolucao(e.target.value)}
-                placeholder="O que você acha que poderia resolver? (opcional)"
-                style={{ ...inputStyle, minHeight: 80 }}
+                placeholder="O que resolveria? (opcional)"
+                style={{ ...inputStyle, minHeight: 70 }}
               />
             </div>
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>FOI RESOLVIDO?</label>
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
                 {['Sim', 'Não', 'Em andamento'].map(op => (
-                  <label key={op} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#374151', cursor: 'pointer', padding: '6px 12px', borderRadius: 8, border: `1px solid ${resolvido === op ? '#2563eb' : '#e2e8f0'}`, background: resolvido === op ? '#eff6ff' : 'white', fontWeight: resolvido === op ? 700 : 400 }}>
+                  <label key={op} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#374151', cursor: 'pointer', padding: '6px 8px', borderRadius: 8, border: `1px solid ${resolvido === op ? '#2563eb' : '#e2e8f0'}`, background: resolvido === op ? '#eff6ff' : 'white', fontWeight: resolvido === op ? 700 : 400, textAlign: 'center' }}>
                     <input type="radio" name="resolvido" value={op} checked={resolvido === op} onChange={() => setResolvido(op)} style={{ display: 'none' }} />
                     {op}
                   </label>
                 ))}
               </div>
             </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>SATISFAÇÃO GERAL (0–10)</label>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {Array.from({ length: 11 }, (_, i) => (
+                  <button key={i} onClick={() => setNps(i)}
+                    style={{ width: 34, height: 34, borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: nps === i ? (npsColors[i] || '#2563eb') : '#f1f5f9', color: nps === i ? 'white' : '#64748b' }}>
+                    {i}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                <span>Péssimo</span><span>Excelente</span>
+              </div>
+            </div>
+            {erro && <div style={{ padding: '8px 12px', background: '#fee2e2', color: '#dc2626', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{erro}</div>}
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={onClose} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
                 Cancelar
               </button>
-              <button onClick={enviar} disabled={!queixa.trim()} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#0f172a', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: queixa.trim() ? 1 : 0.5 }}>
-                Enviar Feedback →
+              <button onClick={enviar} disabled={!queixa.trim() || enviando} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#0f172a', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: queixa.trim() && !enviando ? 1 : 0.5 }}>
+                {enviando ? 'Enviando…' : 'Enviar Feedback →'}
               </button>
             </div>
           </>
