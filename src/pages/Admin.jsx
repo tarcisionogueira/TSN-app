@@ -641,6 +641,18 @@ function ContratosTab() {
       setTitulo('Contrato de Adesão ao Clube de Negócios TSN Ativos');
       setTipo('servico');
       setDescricao('Adesão ao Clube de Negócios TSN Ativos: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.');
+    } else if (key === 'analista') {
+      setTitulo('Contrato de Prestação de Serviços de Análise de Imóveis em Leilão');
+      setTipo('servico');
+      setDescricao('Contratação de analista para elaboração de relatórios de viabilidade econômico-financeira e análise de editais de imóveis em leilão judicial e extrajudicial. Remuneração por laudo emitido, a combinar. Sigilo sobre todos os dados dos clientes e imóveis analisados. Prazo indeterminado, rescisão com aviso de 30 dias.');
+    } else if (key === 'advogado') {
+      setTitulo('Contrato de Parceria Jurídica para Análise de Imóveis em Leilão');
+      setTipo('servico');
+      setDescricao('Parceria com advogado para análise jurídica de matrícula, edital, processo e certidões de imóveis em leilão, emissão de parecer jurídico por operação. Remuneração por parecer emitido, a combinar. Total sigilo sobre dados dos clientes. Prazo indeterminado, rescisão com aviso de 30 dias. Escritório parceiro independente.');
+    } else if (key === 'consultor') {
+      setTitulo('Contrato de Consultoria e Afiliação TSN Ativos');
+      setTipo('servico');
+      setDescricao('Contratação de consultor/afiliado para divulgação dos serviços TSN Ativos e captação de novos clientes. Remuneração por comissão sobre cada cliente ativo indicado, a combinar. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.');
     } else if (key === 'nda') {
       setTitulo('Acordo de Confidencialidade e Não Divulgação');
       setTipo('nda');
@@ -871,9 +883,12 @@ function ContratosTab() {
                 {/* Seleção rápida de template */}
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
                   {[
-                    { key:'assessorado', label:'📋 Assessorado' },
-                    { key:'clube',       label:'🏛️ Clube de Negócios' },
-                    { key:'nda',         label:'📄 NDA/Sigilo' },
+                    { key:'assessorado',  label:'📋 Assessorado' },
+                    { key:'clube',        label:'🏛️ Clube de Negócios' },
+                    { key:'analista',     label:'🔍 Analista' },
+                    { key:'advogado',     label:'⚖️ Advogado Parceiro' },
+                    { key:'consultor',    label:'🤝 Consultor/Afiliado' },
+                    { key:'nda',          label:'📄 NDA/Sigilo' },
                     { key:'personalizado', label:'✏️ Personalizado' },
                   ].map(t => (
                     <button key={t.key} onClick={() => aplicarTemplate(t.key)}
@@ -1596,7 +1611,124 @@ function DashboardTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Configurações'];
+// ─── Aba Tour ─────────────────────────────────────────────────────────────────
+function TourTab() {
+  const [passos, setPassos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editando, setEditando] = useState(null); // id do passo em edição inline
+  const [novoTitulo, setNovoTitulo] = useState('');
+  const [novoDesc, setNovoDesc] = useState('');
+
+  const carregar = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('tour_steps').select('*').order('ordem', { ascending: true });
+    setPassos(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { carregar(); }, []);
+
+  const salvarEdicao = async (p) => {
+    await supabase.from('tour_steps').update({ titulo: p.titulo, descricao: p.descricao }).eq('id', p.id);
+    setEditando(null);
+    carregar();
+  };
+
+  const toggleAtivo = async (p) => {
+    await supabase.from('tour_steps').update({ ativo: !p.ativo }).eq('id', p.id);
+    carregar();
+  };
+
+  const mover = async (p, dir) => {
+    const idx = passos.findIndex(x => x.id === p.id);
+    const alvo = passos[idx + dir];
+    if (!alvo) return;
+    await Promise.all([
+      supabase.from('tour_steps').update({ ordem: alvo.ordem }).eq('id', p.id),
+      supabase.from('tour_steps').update({ ordem: p.ordem }).eq('id', alvo.id),
+    ]);
+    carregar();
+  };
+
+  const excluir = async (id) => {
+    if (!confirm('Excluir este passo do tour?')) return;
+    await supabase.from('tour_steps').delete().eq('id', id);
+    carregar();
+  };
+
+  const adicionar = async () => {
+    if (!novoTitulo.trim()) return;
+    const maxOrdem = passos.length > 0 ? Math.max(...passos.map(p => p.ordem)) + 1 : 1;
+    await supabase.from('tour_steps').insert({ titulo: novoTitulo, descricao: novoDesc, ordem: maxOrdem, ativo: true });
+    setNovoTitulo(''); setNovoDesc('');
+    carregar();
+  };
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Carregando…</div>;
+
+  return (
+    <div style={{ maxWidth: 800 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h3 style={{ margin: 0, fontWeight: 800, color: '#0f172a' }}>Passos do Tour Guiado</h3>
+        <span style={{ fontSize: 12, color: '#94a3b8' }}>{passos.filter(p => p.ativo).length} ativos</span>
+      </div>
+
+      {/* Novo passo */}
+      <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: '16px 18px', marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: '#475569', marginBottom: 4 }}>Novo passo</div>
+        <input value={novoTitulo} onChange={e => setNovoTitulo(e.target.value)} placeholder="Título do passo"
+          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, width: '100%', boxSizing: 'border-box' }} />
+        <textarea value={novoDesc} onChange={e => setNovoDesc(e.target.value)} placeholder="Descrição (opcional)" rows={2}
+          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, resize: 'vertical', width: '100%', boxSizing: 'border-box' }} />
+        <button onClick={adicionar} disabled={!novoTitulo.trim()}
+          style={{ alignSelf: 'flex-end', padding: '8px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: novoTitulo.trim() ? 1 : 0.5 }}>
+          + Adicionar
+        </button>
+      </div>
+
+      {passos.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>Nenhum passo cadastrado.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {passos.map((p, idx) => (
+            <div key={p.id} style={{ background: 'white', border: `1px solid ${p.ativo ? '#e2e8f0' : '#fecaca'}`, borderRadius: 12, padding: '14px 16px', opacity: p.ativo ? 1 : 0.6 }}>
+              {editando === p.id ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input defaultValue={p.titulo} id={`t-${p.id}`}
+                    style={{ padding: '7px 10px', borderRadius: 7, border: '1px solid #e2e8f0', fontSize: 13, width: '100%', boxSizing: 'border-box' }} />
+                  <textarea defaultValue={p.descricao} id={`d-${p.id}`} rows={2}
+                    style={{ padding: '7px 10px', borderRadius: 7, border: '1px solid #e2e8f0', fontSize: 13, resize: 'vertical', width: '100%', boxSizing: 'border-box' }} />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => salvarEdicao({ ...p, titulo: document.getElementById(`t-${p.id}`).value, descricao: document.getElementById(`d-${p.id}`).value })}
+                      style={{ padding: '6px 16px', background: '#10b981', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Salvar</button>
+                    <button onClick={() => setEditando(null)}
+                      style={{ padding: '6px 14px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 7, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#0f172a', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{idx + 1}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{p.titulo}</div>
+                    {p.descricao && <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>{p.descricao}</div>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                    <button onClick={() => mover(p, -1)} disabled={idx === 0} style={{ padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', fontSize: 11, opacity: idx === 0 ? 0.3 : 1 }}>▲</button>
+                    <button onClick={() => mover(p, 1)} disabled={idx === passos.length - 1} style={{ padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', fontSize: 11, opacity: idx === passos.length - 1 ? 0.3 : 1 }}>▼</button>
+                    <button onClick={() => toggleAtivo(p)} style={{ padding: '4px 10px', border: 'none', borderRadius: 6, background: p.ativo ? '#dcfce7' : '#fee2e2', color: p.ativo ? '#059669' : '#dc2626', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>{p.ativo ? 'Ativo' : 'Inativo'}</button>
+                    <button onClick={() => setEditando(p.id)} style={{ padding: '4px 10px', border: 'none', borderRadius: 6, background: '#f1f5f9', color: '#475569', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}>Editar</button>
+                    <button onClick={() => excluir(p.id)} style={{ padding: '4px 10px', border: 'none', borderRadius: 6, background: '#fee2e2', color: '#dc2626', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>✕</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Tour', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -1643,6 +1775,7 @@ export default function Admin() {
         {tab === 'Promoções'      && <PromoTab />}
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
+        {tab === 'Tour'           && <TourTab />}
         {tab === 'Configurações'  && <ConfigTab />}
       </div>
     </div>

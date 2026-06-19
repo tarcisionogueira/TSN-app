@@ -129,6 +129,7 @@ export default async function handler(req, res) {
       tipo_contrato: 'servico',
       status: 'aguardando',
       criado_por: null,
+      assinante_email: emailUsuario || null,
     })
     .select('token')
     .single();
