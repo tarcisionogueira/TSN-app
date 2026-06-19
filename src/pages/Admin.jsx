@@ -2085,7 +2085,61 @@ function FeedbacksTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Feedbacks', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Tour', 'Scrapers', 'Configurações'];
+function AceitesTab() {
+  const [aceites, setAceites] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState('');
+
+  useEffect(() => {
+    supabase.from('aceites_plano').select('*').order('aceito_em', { ascending: false }).limit(200)
+      .then(({ data }) => { setAceites(data || []); setLoading(false); });
+  }, []);
+
+  const filtered = aceites.filter(a => !busca || a.user_email?.toLowerCase().includes(busca.toLowerCase()) || a.plano_key?.includes(busca));
+
+  return (
+    <div>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>Registros de Aceite</h2>
+      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>Evidência de consentimento para uso em contestação de chargeback.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por email ou plano..." style={{ ...S.input, maxWidth: 320 }} />
+        <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>{filtered.length} registros</span>
+      </div>
+      <div style={S.card}>
+        {loading ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando…</p>
+          : filtered.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum registro encontrado.</p>
+          : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>Email</th>
+                  <th style={S.th}>Plano</th>
+                  <th style={S.th}>Valor</th>
+                  <th style={S.th}>Data/Hora do aceite</th>
+                  <th style={S.th}>User Agent (device)</th>
+                  <th style={S.th}>ID Asaas</th>
+                </tr></thead>
+                <tbody>
+                  {filtered.map(a => (
+                    <tr key={a.id}>
+                      <td style={S.td}>{a.user_email}</td>
+                      <td style={S.td}><strong>{a.plano_key}</strong></td>
+                      <td style={S.td}>R$ {Number(a.valor).toFixed(2)}</td>
+                      <td style={S.td}>{new Date(a.aceito_em).toLocaleString('pt-BR')}</td>
+                      <td style={S.td}><span style={{ fontSize: 10, color: '#64748b', wordBreak: 'break-all' }}>{(a.user_agent || '').slice(0, 60)}</span></td>
+                      <td style={S.td}><span style={{ fontSize: 11, fontFamily: 'monospace', color: '#2563eb' }}>{a.asaas_payment_id || '—'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}
+
+const TABS = ['Dashboard', 'Feedbacks', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Aceites', 'Tour', 'Scrapers', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -2133,6 +2187,7 @@ export default function Admin() {
         {tab === 'Promoções'      && <PromoTab />}
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
+        {tab === 'Aceites'        && <AceitesTab />}
         {tab === 'Tour'           && <TourTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Configurações'  && <ConfigTab />}
