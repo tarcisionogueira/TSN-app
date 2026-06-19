@@ -10,6 +10,18 @@ const ROLES_DISPONIVEIS = [
   'admin','explorador','top1','top2','assessorado','clube','consultor','analista','advogado',
 ];
 
+const ROLE_LABELS = {
+  admin: 'Administrador',
+  explorador: 'Explorador (Gratuito)',
+  top1: 'Investidor',
+  top2: 'Investidor Pro',
+  assessorado: 'Assessorado',
+  clube: 'Clube de Negócios',
+  consultor: 'Consultor / Afiliado',
+  analista: 'Analista',
+  advogado: 'Advogado Parceiro',
+};
+
 // ─── styles ──────────────────────────────────────────────────────────────────
 const S = {
   page: { minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif" },
@@ -479,7 +491,7 @@ function UsuariosTab() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Usuários ({users.length})</h2>
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou role..." style={{ ...S.input, maxWidth: 280 }} />
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou nível..." style={{ ...S.input, maxWidth: 280 }} />
         <button style={S.btn('outline')} onClick={loadUsers}>↻ Atualizar</button>
       </div>
 
@@ -492,7 +504,7 @@ function UsuariosTab() {
                 <thead><tr>
                   <th style={S.th}>Nome</th>
                   <th style={S.th}>CPF</th>
-                  <th style={S.th}>Role</th>
+                  <th style={S.th}>Nível</th>
                   <th style={S.th}>Plano</th>
                   <th style={S.th}>Cadastro</th>
                   <th style={S.th}>Status</th>
@@ -507,7 +519,7 @@ function UsuariosTab() {
                         <td style={S.td}>{u.cpf || '—'}</td>
                         <td style={S.td}>
                           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: (ROLE_COLORS[u.role] || '#64748b') + '20', color: ROLE_COLORS[u.role] || '#64748b' }}>
-                            {u.role || 'explorador'}
+                            {ROLE_LABELS[u.role] || u.role || 'Explorador'}
                           </span>
                         </td>
                         <td style={S.td}>{u.plano || '—'}</td>
@@ -521,14 +533,14 @@ function UsuariosTab() {
                           {editingId === u.id ? (
                             <div style={{ display: 'flex', gap: 6 }}>
                               <select style={{ ...S.input, width: 'auto', padding: '6px 8px' }} value={newRole} onChange={e => setNewRole(e.target.value)}>
-                                {ROLES_DISPONIVEIS.map(r => <option key={r} value={r}>{r}</option>)}
+                                {ROLES_DISPONIVEIS.map(r => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
                               </select>
                               <button style={S.btn('primary')} onClick={() => saveRole(u.id)}>Salvar</button>
                               <button style={S.btn('outline')} onClick={() => setEditingId(null)}>✕</button>
                             </div>
                           ) : (
                             <div style={{ display: 'flex', gap: 6 }}>
-                              <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar role</button>
+                              <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar nível</button>
                               <button style={S.btn('outline')} onClick={() => verComo(u)} title="Entrar na conta do usuário (modo suporte)">👁 Ver como</button>
                               <button
                                 style={{ padding: '5px 10px', background: ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}
@@ -1129,7 +1141,7 @@ const PRODUTOS_PROMO = [
   { key: 'clube', label: 'Clube de Negócios — R$ 5.000/mês (12 meses)' },
 ];
 
-const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', ativo: true });
+const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', validade_dias: '', ativo: true });
 
 function PromoTab() {
   const { user } = useAuth();
@@ -1166,6 +1178,7 @@ function PromoTab() {
       descricao_condicoes: form.descricao_condicoes,
       desconto_pct: Number(form.desconto_pct) || 0,
       desconto_valor: Number(form.desconto_valor) || 0,
+      validade_dias: Number(form.validade_dias) || null,
       ativo: form.ativo,
       criado_por: user.id,
     };
@@ -1177,7 +1190,7 @@ function PromoTab() {
     setSalvando(false);
   };
 
-  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', ativo: l.ativo }); setEditId(l.id); };
+  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', validade_dias: l.validade_dias || '', ativo: l.ativo }); setEditId(l.id); };
   const toggleAtivo = async (l) => { await supabase.from('links_promo').update({ ativo: !l.ativo }).eq('id', l.id); await carregar(); };
   const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${cod}`);
 
@@ -1204,6 +1217,10 @@ function PromoTab() {
               <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>DESCONTO R$</label>
               <input type="number" value={form.desconto_valor} onChange={e => up('desconto_valor', e.target.value)} placeholder="ex: 20" style={S.input} min="0" />
             </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>VALIDADE (dias, deixe em branco = sem expiração)</label>
+            <input type="number" value={form.validade_dias} onChange={e => up('validade_dias', e.target.value)} placeholder="ex: 30" style={S.input} min="1" />
           </div>
           <textarea value={form.descricao_condicoes} onChange={e => up('descricao_condicoes', e.target.value)}
             placeholder="Condições promocionais (ex: '30% de desconto no primeiro mês para novos alunos')"
@@ -1242,6 +1259,7 @@ function PromoTab() {
                           <button onClick={() => toggleAtivo(l)} style={{ padding: '5px 10px', background: l.ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: l.ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}>{l.ativo ? 'Desativar' : 'Ativar'}</button>
                         </div>
                       </div>
+                      {l.validade_dias && <div style={{ marginTop: 4, fontSize: 12, color: '#f59e0b', fontWeight: 600 }}>⏱ Válido por {l.validade_dias} dias</div>}
                       {l.descricao_condicoes && <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>📋 {l.descricao_condicoes}</div>}
                       <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', wordBreak: 'break-all' }}>{linkUrl}</div>
                       {l.perfis?.nome && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Criado por: {l.perfis.nome}</div>}
@@ -1265,6 +1283,8 @@ function ConvitesTab() {
   const [convites, setConvites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiado, setCopiado] = useState('');
+  const [gerando, setGerando] = useState(false);
+  const [msgConvite, setMsgConvite] = useState('');
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -1276,9 +1296,14 @@ function ConvitesTab() {
   useEffect(() => { carregar(); }, [carregar]);
 
   const gerarLink = async () => {
+    setGerando(true); setMsgConvite('');
     const codigo = Math.random().toString(36).substring(2, 10).toUpperCase();
-    await supabase.from('links_convite').insert({ codigo, criado_por: user.id });
+    const { error } = await supabase.from('links_convite').insert({ codigo, criado_por: user.id });
+    if (error) setMsgConvite('Erro: ' + error.message);
+    else setMsgConvite('Convite ' + codigo + ' criado!');
     await carregar();
+    setGerando(false);
+    setTimeout(() => setMsgConvite(''), 3000);
   };
 
   const toggleAtivo = async (c) => {
@@ -1296,7 +1321,10 @@ function ConvitesTab() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Links de Convite</h2>
-        <button style={S.btn('primary')} onClick={gerarLink}>+ Gerar novo convite</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {msgConvite && <span style={{ fontSize: 12, fontWeight: 700, color: msgConvite.startsWith('Erro') ? '#dc2626' : '#059669' }}>{msgConvite}</span>}
+          <button style={S.btn('primary')} onClick={gerarLink} disabled={gerando}>{gerando ? 'Gerando…' : '+ Gerar novo convite'}</button>
+        </div>
       </div>
       <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
         Links de convite vinculam o novo usuário à equipe que o convidou, sem prazo de expiração.

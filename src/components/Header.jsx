@@ -9,24 +9,41 @@ const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 function getEmailFeedback() { return localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL; }
 
 function ModalFeedback({ user, onClose }) {
-  const [msg, setMsg] = React.useState('');
+  const [queixa, setQueixa] = React.useState('');
+  const [solucao, setSolucao] = React.useState('');
+  const [resolvido, setResolvido] = React.useState('');
   const [enviado, setEnviado] = React.useState(false);
   const nome = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Visitante';
   const email = user?.email || '';
 
   function enviar() {
-    if (!msg.trim()) return;
+    if (!queixa.trim()) return;
     const assunto = encodeURIComponent('[Feedback TSN Ativos]');
-    const corpo = encodeURIComponent(msg + '\n\n---\nEnviado por: ' + nome + ' <' + email + '>');
+    const linhas = [
+      'PROBLEMA / QUEIXA:',
+      queixa.trim(),
+      '',
+      'SOLUÇÃO SUGERIDA:',
+      solucao.trim() || '(não informada)',
+      '',
+      'FOI RESOLVIDO?',
+      resolvido || 'Não informado',
+      '',
+      '---',
+      'Enviado por: ' + nome + ' <' + email + '>',
+    ];
+    const corpo = encodeURIComponent(linhas.join('\n'));
     window.open('mailto:' + getEmailFeedback() + '?subject=' + assunto + '&body=' + corpo);
     setEnviado(true);
-    setTimeout(onClose, 1500);
+    setTimeout(onClose, 1800);
   }
+
+  const inputStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'white', borderRadius: 16, padding: '28px 28px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: 'white', borderRadius: 16, padding: '28px 28px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', maxHeight: '90vh', overflowY: 'auto' }}>
         {enviado ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 40 }}>✅</div>
@@ -39,28 +56,48 @@ function ModalFeedback({ user, onClose }) {
               <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 20, lineHeight: 1 }}>✕</button>
             </div>
             {user && (
-              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#64748b', marginBottom: 16 }}>
                 <strong>{nome}</strong> · {email}
               </div>
             )}
-            <textarea
-              value={msg}
-              onChange={e => setMsg(e.target.value)}
-              placeholder="Descreva sua sugestão, problema ou elogio..."
-              style={{ width: '100%', minHeight: 130, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
-              autoFocus
-            />
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>PROBLEMA / QUEIXA *</label>
+              <textarea
+                value={queixa}
+                onChange={e => setQueixa(e.target.value)}
+                placeholder="Descreva o problema ou sugestão com detalhes..."
+                style={{ ...inputStyle, minHeight: 100 }}
+                autoFocus
+              />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>SOLUÇÃO SUGERIDA</label>
+              <textarea
+                value={solucao}
+                onChange={e => setSolucao(e.target.value)}
+                placeholder="O que você acha que poderia resolver? (opcional)"
+                style={{ ...inputStyle, minHeight: 80 }}
+              />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>FOI RESOLVIDO?</label>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {['Sim', 'Não', 'Em andamento'].map(op => (
+                  <label key={op} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#374151', cursor: 'pointer', padding: '6px 12px', borderRadius: 8, border: `1px solid ${resolvido === op ? '#2563eb' : '#e2e8f0'}`, background: resolvido === op ? '#eff6ff' : 'white', fontWeight: resolvido === op ? 700 : 400 }}>
+                    <input type="radio" name="resolvido" value={op} checked={resolvido === op} onChange={() => setResolvido(op)} style={{ display: 'none' }} />
+                    {op}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={onClose} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
                 Cancelar
               </button>
-              <button onClick={enviar} disabled={!msg.trim()} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#0f172a', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: msg.trim() ? 1 : 0.5 }}>
+              <button onClick={enviar} disabled={!queixa.trim()} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#0f172a', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: queixa.trim() ? 1 : 0.5 }}>
                 Enviar Feedback →
               </button>
             </div>
-            <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
-              Seu feedback será enviado para {getEmailFeedback()}
-            </p>
           </>
         )}
       </div>
