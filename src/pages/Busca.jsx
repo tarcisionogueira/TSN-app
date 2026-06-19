@@ -27,6 +27,11 @@ function fmtData(d, modalidade) {
   return dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
 }
 
+const PLANO_LABELS = {
+  explorador: 'Explorador', top1: 'Investidor', top2: 'Investidor Pro',
+  assessorado: 'Assessorado', clube: 'Clube de Negócios',
+};
+
 export default function Busca() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
@@ -58,8 +63,8 @@ export default function Busca() {
         .from('imoveis_leilao')
         .select('*')
         .eq('ativo', true)
-        .order('score_viabilidade', { ascending: false })
-        .limit(100);
+        .order('criado_em', { ascending: false })
+        .limit(50);
 
       if (filtros.estado) query = query.eq('estado', filtros.estado);
       if (filtros.cidades.length > 0) query = query.in('cidade', filtros.cidades);
@@ -310,12 +315,22 @@ export default function Busca() {
                 <div style={{ fontSize:13, color:'#92400e', flex:1 }}>
                   {!user
                     ? <><strong>Faça login</strong> para acessar o site do leiloeiro e gerar análises completas dos imóveis.</>
-                    : <><strong>Plano Explorador:</strong> Você vê os imóveis e a flag de viabilidade 🟢/🔴. Para gerar análise completa, faça upgrade para o <strong>Plano Investidor</strong> ou superior.</>
+                    : <>
+                        <strong>Plano {PLANO_LABELS[role] || 'atual'}:</strong> Você vê os imóveis e a flag de viabilidade 🟢/🔴.
+                        {' '}Para gerar análise completa, faça upgrade para o <strong>Plano Investidor</strong> ou superior.
+                      </>
                   }
                 </div>
-                <button onClick={()=>nav('/planos')} style={{ padding:'7px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
-                  Ver planos
-                </button>
+                {user && (
+                  <button onClick={()=>nav('/planos')} style={{ padding:'7px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                    Ver planos
+                  </button>
+                )}
+                {!user && (
+                  <button onClick={()=>nav('/login')} style={{ padding:'7px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                    Entrar
+                  </button>
+                )}
               </div>
             )}
           </div>
