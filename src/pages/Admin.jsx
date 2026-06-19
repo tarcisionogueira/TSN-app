@@ -10,18 +10,6 @@ const ROLES_DISPONIVEIS = [
   'admin','explorador','top1','top2','assessorado','clube','consultor','analista','advogado',
 ];
 
-const ROLE_LABELS = {
-  admin: 'Administrador',
-  explorador: 'Explorador (Gratuito)',
-  top1: 'Investidor',
-  top2: 'Investidor Pro',
-  assessorado: 'Assessorado',
-  clube: 'Clube de Negócios',
-  consultor: 'Consultor / Afiliado',
-  analista: 'Analista',
-  advogado: 'Advogado Parceiro',
-};
-
 // ─── styles ──────────────────────────────────────────────────────────────────
 const S = {
   page: { minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif" },
@@ -200,9 +188,19 @@ function CursosTab() {
           <div style={S.modal}>
             <h3 style={{ ...S.sectionTitle, marginBottom: 20 }}>{modal === 'new' ? 'Novo Curso' : 'Editar Curso'}</h3>
 
-            <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>Título *</label>
-              <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} />
+            <div style={S.row}>
+              <div style={{ ...S.col, flex: 3 }}>
+                <label style={S.label}>Título *</label>
+                <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} />
+              </div>
+              <div style={{ ...S.col, flex: 1 }}>
+                <label style={S.label}>Emoji</label>
+                <input style={S.input} value={form.emoji} onChange={e => setForm({ ...form, emoji: e.target.value })} />
+              </div>
+              <div style={{ ...S.col, flex: 1 }}>
+                <label style={S.label}>Cor</label>
+                <input type="color" style={{ ...S.input, padding: 4, height: 38 }} value={form.cor} onChange={e => setForm({ ...form, cor: e.target.value })} />
+              </div>
             </div>
 
             <div style={{ marginBottom: 14 }}>
@@ -481,7 +479,7 @@ function UsuariosTab() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Usuários ({users.length})</h2>
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou nível..." style={{ ...S.input, maxWidth: 280 }} />
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou role..." style={{ ...S.input, maxWidth: 280 }} />
         <button style={S.btn('outline')} onClick={loadUsers}>↻ Atualizar</button>
       </div>
 
@@ -494,7 +492,7 @@ function UsuariosTab() {
                 <thead><tr>
                   <th style={S.th}>Nome</th>
                   <th style={S.th}>CPF</th>
-                  <th style={S.th}>Nível</th>
+                  <th style={S.th}>Role</th>
                   <th style={S.th}>Plano</th>
                   <th style={S.th}>Cadastro</th>
                   <th style={S.th}>Status</th>
@@ -509,7 +507,7 @@ function UsuariosTab() {
                         <td style={S.td}>{u.cpf || '—'}</td>
                         <td style={S.td}>
                           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: (ROLE_COLORS[u.role] || '#64748b') + '20', color: ROLE_COLORS[u.role] || '#64748b' }}>
-                            {ROLE_LABELS[u.role] || u.role || 'Explorador'}
+                            {u.role || 'explorador'}
                           </span>
                         </td>
                         <td style={S.td}>{u.plano || '—'}</td>
@@ -523,14 +521,14 @@ function UsuariosTab() {
                           {editingId === u.id ? (
                             <div style={{ display: 'flex', gap: 6 }}>
                               <select style={{ ...S.input, width: 'auto', padding: '6px 8px' }} value={newRole} onChange={e => setNewRole(e.target.value)}>
-                                {ROLES_DISPONIVEIS.map(r => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                                {ROLES_DISPONIVEIS.map(r => <option key={r} value={r}>{r}</option>)}
                               </select>
                               <button style={S.btn('primary')} onClick={() => saveRole(u.id)}>Salvar</button>
                               <button style={S.btn('outline')} onClick={() => setEditingId(null)}>✕</button>
                             </div>
                           ) : (
                             <div style={{ display: 'flex', gap: 6 }}>
-                              <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar nível</button>
+                              <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar role</button>
                               <button style={S.btn('outline')} onClick={() => verComo(u)} title="Entrar na conta do usuário (modo suporte)">👁 Ver como</button>
                               <button
                                 style={{ padding: '5px 10px', background: ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}
@@ -948,11 +946,16 @@ function ContratosTab() {
 
       {/* Modal: Novo contrato — 3 etapas */}
       {step && (
-        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setStep(null)}>
-          <div style={{ ...S.modal, maxWidth:700 }}>
+        <div style={{ ...S.overlay, alignItems: step === 2 ? 'stretch' : 'center', padding: step === 2 ? 0 : '20px' }}
+          onClick={e => e.target === e.currentTarget && setStep(null)}>
+          <div style={step === 2
+            ? { background:'white', display:'flex', flexDirection:'column', width:'100%', height:'100%', maxWidth:'100%', overflow:'hidden' }
+            : { ...S.modal, maxWidth:700 }}>
 
-            {/* Indicador de etapas */}
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:20 }}>
+            {/* Indicador de etapas — em etapa 2 fica no topo fixo */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, padding: step===2 ? '14px 24px' : '0 0 20px',
+              borderBottom: step===2 ? '1px solid #e2e8f0' : 'none', flexShrink:0,
+              background: step===2 ? 'white' : 'transparent' }}>
               {['Descrever','Revisar','Link gerado'].map((s, i) => (
                 <React.Fragment key={s}>
                   <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -964,6 +967,9 @@ function ContratosTab() {
                   {i < 2 && <div style={{ flex:1, height:1, background:'#e2e8f0' }}/>}
                 </React.Fragment>
               ))}
+              {step === 2 && (
+                <button onClick={() => setStep(null)} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8', lineHeight:1 }}>×</button>
+              )}
             </div>
 
             {/* ── Etapa 1: Descrever ── */}
@@ -1047,56 +1053,75 @@ function ContratosTab() {
               </>
             )}
 
-            {/* ── Etapa 2: Revisar ── */}
+            {/* ── Etapa 2: Revisar — layout fullscreen ── */}
             {step === 2 && (
-              <>
-                <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Revisar contrato</h3>
+              <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
 
-                {/* Partes */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
-                  <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'10px 14px' }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:2 }}>Contratante</div>
-                    <div style={{ fontSize:13, fontWeight:700 }}>Nogueira Empreendimentos</div>
-                  </div>
-                  <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px' }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:2 }}>Contratado</div>
-                    <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Preenchido pelo signatário ao assinar</div>
+                {/* Sidebar esquerda — partes + perguntas */}
+                <div style={{ width:300, flexShrink:0, borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', overflowY:'auto', background:'#f8fafc' }}>
+                  <div style={{ padding:'20px 18px', flex:1 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:12 }}>Partes do contrato</div>
+
+                    <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px', marginBottom:10 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>Nogueira Empreendimentos</div>
+                    </div>
+                    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px', marginBottom:20 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
+                      <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Preenchido pelo signatário ao assinar</div>
+                    </div>
+
+                    {perguntas.length > 0 && (
+                      <>
+                        <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:10 }}>Pontos a confirmar</div>
+                        <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'14px 14px', marginBottom:14 }}>
+                          {perguntas.map((p, i) => (
+                            <div key={i} style={{ marginBottom:12 }}>
+                              <label style={{ fontSize:11, color:'#c2410c', fontWeight:700, display:'block', marginBottom:5, lineHeight:1.4 }}>{p}</label>
+                              <input style={{ ...S.input, fontSize:12 }}
+                                value={respostas[i] || ''}
+                                onChange={e => setRespostas(r => ({ ...r, [i]: e.target.value }))}
+                                placeholder="Sua resposta…" />
+                            </div>
+                          ))}
+                          <button style={{ ...S.btn('outline'), fontSize:12, width:'100%' }} onClick={gerarContrato} disabled={gerandoContrato}>
+                            {gerandoContrato ? '⏳ Regerando…' : '↻ Regerar com respostas'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ fontSize:11, color:'#94a3b8', lineHeight:1.6, marginTop: perguntas.length > 0 ? 0 : 8 }}>
+                      Revise o texto ao lado. Clique em qualquer trecho para editar diretamente antes de aprovar.
+                    </div>
                   </div>
                 </div>
 
-                {/* Perguntas do assistente */}
-                {perguntas.length > 0 && (
-                  <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'14px 16px', marginBottom:14 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:'#c2410c', marginBottom:10 }}>⚠ O assistente identificou pontos para confirmar:</div>
-                    {perguntas.map((p, i) => (
-                      <div key={i} style={{ marginBottom:10 }}>
-                        <label style={{ fontSize:12, color:'#7c2d12', fontWeight:600, display:'block', marginBottom:4 }}>{p}</label>
-                        <input style={{ ...S.input, fontSize:12 }}
-                          value={respostas[i] || ''}
-                          onChange={e => setRespostas(r => ({ ...r, [i]: e.target.value }))}
-                          placeholder="Sua resposta…" />
-                      </div>
-                    ))}
-                    <button style={{ ...S.btn('outline'), fontSize:12, marginTop:4 }} onClick={gerarContrato} disabled={gerandoContrato}>
-                      {gerandoContrato ? '⏳ Regerando…' : '↻ Regerar com respostas'}
-                    </button>
+                {/* Área principal — texto do contrato */}
+                <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                  <div style={{ padding:'16px 24px 8px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>{titulo || 'Contrato'}</div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Edite diretamente se necessário antes de aprovar.</div>
                   </div>
-                )}
-
-                {/* Conteúdo editável */}
-                <div style={{ marginBottom:14 }}>
-                  <label style={S.label}>Texto do contrato (edite se necessário)</label>
-                  <textarea style={{ ...S.input, height:280, resize:'vertical', fontFamily:'Georgia, serif', fontSize:13, lineHeight:1.7 }}
-                    value={conteudo} onChange={e => setConteudo(e.target.value)} />
+                  <textarea
+                    style={{ flex:1, border:'none', outline:'none', resize:'none', fontFamily:'Georgia, serif', fontSize:14, lineHeight:1.9, padding:'24px 32px', color:'#1e293b', background:'white' }}
+                    value={conteudo}
+                    onChange={e => setConteudo(e.target.value)} />
                 </div>
+              </div>
+            )}
 
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <button style={S.btn('outline')} onClick={() => setStep(1)}>← Voltar</button>
-                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || !conteudo.trim()}>
+            {/* ── Etapa 2: barra inferior ── */}
+            {step === 2 && (
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 24px', borderTop:'1px solid #e2e8f0', background:'white', flexShrink:0 }}>
+                <button style={S.btn('outline')} onClick={() => setStep(1)}>← Voltar e editar</button>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <span style={{ fontSize:12, color:'#94a3b8' }}>{conteudo.split(/\s+/).filter(Boolean).length} palavras</span>
+                  <button style={{ ...S.btn('primary'), padding:'10px 28px' }} onClick={gerarLinkContrato} disabled={savingLink || !conteudo.trim()}>
                     {savingLink ? 'Gerando link…' : '✓ Aprovar e gerar link'}
                   </button>
                 </div>
-              </>
+              </div>
             )}
 
             {/* ── Etapa 3: Link gerado ── */}
@@ -1131,7 +1156,7 @@ const PRODUTOS_PROMO = [
   { key: 'clube', label: 'Clube de Negócios — R$ 5.000/mês (12 meses)' },
 ];
 
-const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', validade_dias: '', validade_ate: '', publico: false, ativo: true });
+const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', ativo: true });
 
 function PromoTab() {
   const { user } = useAuth();
@@ -1168,9 +1193,6 @@ function PromoTab() {
       descricao_condicoes: form.descricao_condicoes,
       desconto_pct: Number(form.desconto_pct) || 0,
       desconto_valor: Number(form.desconto_valor) || 0,
-      validade_dias: Number(form.validade_dias) || null,
-      validade_ate: form.validade_ate || null,
-      publico: !!form.publico,
       ativo: form.ativo,
       criado_por: user.id,
     };
@@ -1182,7 +1204,7 @@ function PromoTab() {
     setSalvando(false);
   };
 
-  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', validade_dias: l.validade_dias || '', validade_ate: l.validade_ate ? l.validade_ate.slice(0,10) : '', publico: !!l.publico, ativo: l.ativo }); setEditId(l.id); };
+  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', ativo: l.ativo }); setEditId(l.id); };
   const toggleAtivo = async (l) => { await supabase.from('links_promo').update({ ativo: !l.ativo }).eq('id', l.id); await carregar(); };
   const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${cod}`);
 
@@ -1209,25 +1231,6 @@ function PromoTab() {
               <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>DESCONTO R$</label>
               <input type="number" value={form.desconto_valor} onChange={e => up('desconto_valor', e.target.value)} placeholder="ex: 20" style={S.input} min="0" />
             </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>VALIDADE (dias)</label>
-              <input type="number" value={form.validade_dias} onChange={e => up('validade_dias', e.target.value)} placeholder="ex: 30" style={S.input} min="1" />
-            </div>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>VÁLIDO ATÉ (data)</label>
-              <input type="date" value={form.validade_ate} onChange={e => up('validade_ate', e.target.value)} style={S.input} />
-            </div>
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', cursor: 'pointer', padding: '8px 12px', borderRadius: 8, border: `1px solid ${form.publico ? '#2563eb' : '#e2e8f0'}`, background: form.publico ? '#eff6ff' : 'white' }}>
-              <input type="checkbox" checked={form.publico} onChange={e => up('publico', e.target.checked)} />
-              <span style={{ fontWeight: form.publico ? 700 : 400, color: form.publico ? '#2563eb' : '#475569' }}>
-                🌐 Promoção pública (aparece na página de planos para todos)
-              </span>
-            </label>
-            {form.publico && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, paddingLeft: 4 }}>Promoções privadas só funcionam via link direto — ninguém mais vê.</div>}
           </div>
           <textarea value={form.descricao_condicoes} onChange={e => up('descricao_condicoes', e.target.value)}
             placeholder="Condições promocionais (ex: '30% de desconto no primeiro mês para novos alunos')"
@@ -1266,10 +1269,6 @@ function PromoTab() {
                           <button onClick={() => toggleAtivo(l)} style={{ padding: '5px 10px', background: l.ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: l.ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}>{l.ativo ? 'Desativar' : 'Ativar'}</button>
                         </div>
                       </div>
-                      {l.publico && <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, background: '#eff6ff', color: '#2563eb', padding: '1px 8px', borderRadius: 20, marginRight: 6 }}>🌐 Público</span>}
-                      {!l.publico && <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, background: '#f1f5f9', color: '#64748b', padding: '1px 8px', borderRadius: 20, marginRight: 6 }}>🔒 Privado</span>}
-                      {l.validade_ate && <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>📅 Até {new Date(l.validade_ate).toLocaleDateString('pt-BR')} </span>}
-                      {l.validade_dias && <div style={{ marginTop: 4, fontSize: 12, color: '#f59e0b', fontWeight: 600 }}>⏱ Válido por {l.validade_dias} dias</div>}
                       {l.descricao_condicoes && <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>📋 {l.descricao_condicoes}</div>}
                       <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', wordBreak: 'break-all' }}>{linkUrl}</div>
                       {l.perfis?.nome && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Criado por: {l.perfis.nome}</div>}
@@ -1293,8 +1292,6 @@ function ConvitesTab() {
   const [convites, setConvites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiado, setCopiado] = useState('');
-  const [gerando, setGerando] = useState(false);
-  const [msgConvite, setMsgConvite] = useState('');
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -1306,14 +1303,9 @@ function ConvitesTab() {
   useEffect(() => { carregar(); }, [carregar]);
 
   const gerarLink = async () => {
-    setGerando(true); setMsgConvite('');
     const codigo = Math.random().toString(36).substring(2, 10).toUpperCase();
-    const { error } = await supabase.from('links_convite').insert({ codigo, criado_por: user.id });
-    if (error) setMsgConvite('Erro: ' + error.message);
-    else setMsgConvite('Convite ' + codigo + ' criado!');
+    await supabase.from('links_convite').insert({ codigo, criado_por: user.id });
     await carregar();
-    setGerando(false);
-    setTimeout(() => setMsgConvite(''), 3000);
   };
 
   const toggleAtivo = async (c) => {
@@ -1331,10 +1323,7 @@ function ConvitesTab() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Links de Convite</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {msgConvite && <span style={{ fontSize: 12, fontWeight: 700, color: msgConvite.startsWith('Erro') ? '#dc2626' : '#059669' }}>{msgConvite}</span>}
-          <button style={S.btn('primary')} onClick={gerarLink} disabled={gerando}>{gerando ? 'Gerando…' : '+ Gerar novo convite'}</button>
-        </div>
+        <button style={S.btn('primary')} onClick={gerarLink}>+ Gerar novo convite</button>
       </div>
       <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
         Links de convite vinculam o novo usuário à equipe que o convidou, sem prazo de expiração.
@@ -1929,207 +1918,7 @@ function ScrapersTab() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// FEEDBACKS TAB
-// ═══════════════════════════════════════════════════════════════════════════════
-const STATUS_FB = { novo: { label: 'Novo', cor: '#dc2626', bg: '#fee2e2' }, em_andamento: { label: 'Em andamento', cor: '#d97706', bg: '#fef3c7' }, resolvido: { label: 'Resolvido', cor: '#059669', bg: '#dcfce7' }, fechado: { label: 'Fechado', cor: '#64748b', bg: '#f1f5f9' } };
-const NPS_CORES = { 0:'#dc2626',1:'#dc2626',2:'#ef4444',3:'#f97316',4:'#f97316',5:'#eab308',6:'#eab308',7:'#84cc16',8:'#22c55e',9:'#16a34a',10:'#059669' };
-
-function FeedbacksTab() {
-  const [feedbacks, setFeedbacks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [aberto, setAberto] = useState(null);
-  const [nota, setNota] = useState('');
-  const [salvando, setSalvando] = useState(false);
-
-  const carregar = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from('feedbacks').select('*').order('criado_em', { ascending: false });
-    setFeedbacks(data || []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
-  const atualizarStatus = async (id, status) => {
-    await supabase.from('feedbacks').update({ status, atualizado_em: new Date().toISOString() }).eq('id', id);
-    await carregar();
-    if (aberto?.id === id) setAberto(p => ({ ...p, status }));
-  };
-
-  const salvarNota = async () => {
-    if (!aberto) return;
-    setSalvando(true);
-    await supabase.from('feedbacks').update({ nota_admin: nota, atualizado_em: new Date().toISOString() }).eq('id', aberto.id);
-    setSalvando(false);
-    await carregar();
-  };
-
-  const comNps = feedbacks.filter(f => f.nps != null);
-  const npsMedia = comNps.length > 0 ? (comNps.reduce((a, f) => a + f.nps, 0) / comNps.length).toFixed(1) : null;
-  const promotores = comNps.filter(f => f.nps >= 9).length;
-  const detratores = comNps.filter(f => f.nps <= 6).length;
-  const npsScore = comNps.length > 0 ? Math.round(((promotores - detratores) / comNps.length) * 100) : null;
-
-  return (
-    <div>
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '0 0 20px' }}>Feedbacks dos Membros</h2>
-
-      {feedbacks.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-          <div style={S.card}><div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>TOTAL</div><div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a' }}>{feedbacks.length}</div></div>
-          <div style={S.card}><div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>PENDENTES</div><div style={{ fontSize: 28, fontWeight: 900, color: '#dc2626' }}>{feedbacks.filter(f => f.status === 'novo').length}</div></div>
-          <div style={S.card}><div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>NOTA MÉDIA</div><div style={{ fontSize: 28, fontWeight: 900, color: npsMedia >= 8 ? '#059669' : npsMedia >= 6 ? '#d97706' : '#dc2626' }}>{npsMedia ?? '—'}<span style={{ fontSize: 14, color: '#94a3b8' }}>/10</span></div></div>
-          <div style={S.card}><div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>NPS SCORE</div><div style={{ fontSize: 28, fontWeight: 900, color: npsScore >= 50 ? '#059669' : npsScore >= 0 ? '#d97706' : '#dc2626' }}>{npsScore != null ? npsScore : '—'}</div>{comNps.length > 0 && <div style={{ fontSize: 10, color: '#94a3b8' }}>{promotores} prom · {detratores} det</div>}</div>
-        </div>
-      )}
-
-      {comNps.length > 0 && (
-        <div style={{ ...S.card, marginBottom: 20 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 12 }}>DISTRIBUIÇÃO DE NOTAS</div>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 60 }}>
-            {Array.from({ length: 11 }, (_, i) => {
-              const count = comNps.filter(f => f.nps === i).length;
-              const pct = comNps.length > 0 ? (count / comNps.length) * 100 : 0;
-              return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <div style={{ width: '100%', height: `${Math.max(pct, 2)}%`, background: NPS_CORES[i], borderRadius: '3px 3px 0 0', minHeight: count > 0 ? 6 : 2, opacity: count > 0 ? 1 : 0.2 }} />
-                  <span style={{ fontSize: 9, color: '#94a3b8' }}>{i}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div style={S.card}>
-        {loading ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando…</p>
-          : feedbacks.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum feedback ainda.</p>
-          : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {feedbacks.map(f => {
-                const si = STATUS_FB[f.status] || STATUS_FB.novo;
-                return (
-                  <div key={f.id} style={{ padding: '14px 16px', border: '1px solid #e2e8f0', borderRadius: 12, background: f.status === 'novo' ? '#fffbf0' : 'white' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                      <div>
-                        <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{f.user_nome || f.user_email || 'Anônimo'}</span>
-                        <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>{new Date(f.criado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                        {f.nps != null && <span style={{ marginLeft: 8, background: NPS_CORES[f.nps] + '20', color: NPS_CORES[f.nps], fontSize: 12, fontWeight: 700, padding: '1px 8px', borderRadius: 20 }}>{f.nps}/10</span>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: si.bg, color: si.cor }}>{si.label}</span>
-                        <select value={f.status} onChange={e => atualizarStatus(f.id, e.target.value)} style={{ fontSize: 11, padding: '3px 6px', borderRadius: 6, border: '1px solid #e2e8f0', cursor: 'pointer' }}>
-                          {Object.entries(STATUS_FB).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>
-                        <button onClick={() => { setAberto(f); setNota(f.nota_admin || ''); }} style={{ padding: '4px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#2563eb', cursor: 'pointer' }}>Ver</button>
-                      </div>
-                    </div>
-                    <p style={{ fontSize: 13, color: '#334155', margin: 0, lineHeight: 1.5 }}>{f.queixa.slice(0, 150)}{f.queixa.length > 150 ? '…' : ''}</p>
-                    {f.resolvido && <span style={{ fontSize: 11, color: '#64748b', marginTop: 4, display: 'block' }}>Resolvido: {f.resolvido}</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-      </div>
-
-      {aberto && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-          onClick={e => e.target === e.currentTarget && setAberto(null)}>
-          <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Feedback de {aberto.user_nome || aberto.user_email}</h3>
-              <button onClick={() => setAberto(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#94a3b8' }}>✕</button>
-            </div>
-            <div style={{ background: '#f8fafc', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 6 }}>PROBLEMA</div>
-              <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.6 }}>{aberto.queixa}</p>
-            </div>
-            {aberto.solucao && (
-              <div style={{ background: '#f8fafc', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 6 }}>SOLUÇÃO SUGERIDA</div>
-                <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.6 }}>{aberto.solucao}</p>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-              {aberto.nps != null && <div style={{ padding: '6px 14px', background: NPS_CORES[aberto.nps] + '20', borderRadius: 20 }}><span style={{ fontSize: 12, fontWeight: 700, color: NPS_CORES[aberto.nps] }}>Nota: {aberto.nps}/10</span></div>}
-              {aberto.resolvido && <div style={{ padding: '6px 14px', background: '#f1f5f9', borderRadius: 20 }}><span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Resolvido: {aberto.resolvido}</span></div>}
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 6 }}>ANOTAÇÃO INTERNA</div>
-              <textarea value={nota} onChange={e => setNota(e.target.value)} rows={3} placeholder="Anotações internas (não visível ao usuário)..." style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <select value={aberto.status} onChange={e => atualizarStatus(aberto.id, e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}>
-                {Object.entries(STATUS_FB).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
-              <button onClick={salvarNota} disabled={salvando} style={{ padding: '8px 16px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                {salvando ? 'Salvando…' : 'Salvar nota'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AceitesTab() {
-  const [aceites, setAceites] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [busca, setBusca] = useState('');
-
-  useEffect(() => {
-    supabase.from('aceites_plano').select('*').order('aceito_em', { ascending: false }).limit(200)
-      .then(({ data }) => { setAceites(data || []); setLoading(false); });
-  }, []);
-
-  const filtered = aceites.filter(a => !busca || a.user_email?.toLowerCase().includes(busca.toLowerCase()) || a.plano_key?.includes(busca));
-
-  return (
-    <div>
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>Registros de Aceite</h2>
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>Evidência de consentimento para uso em contestação de chargeback.</p>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por email ou plano..." style={{ ...S.input, maxWidth: 320 }} />
-        <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>{filtered.length} registros</span>
-      </div>
-      <div style={S.card}>
-        {loading ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando…</p>
-          : filtered.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum registro encontrado.</p>
-          : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={S.table}>
-                <thead><tr>
-                  <th style={S.th}>Email</th>
-                  <th style={S.th}>Plano</th>
-                  <th style={S.th}>Valor</th>
-                  <th style={S.th}>Data/Hora do aceite</th>
-                  <th style={S.th}>User Agent (device)</th>
-                  <th style={S.th}>ID Asaas</th>
-                </tr></thead>
-                <tbody>
-                  {filtered.map(a => (
-                    <tr key={a.id}>
-                      <td style={S.td}>{a.user_email}</td>
-                      <td style={S.td}><strong>{a.plano_key}</strong></td>
-                      <td style={S.td}>R$ {Number(a.valor).toFixed(2)}</td>
-                      <td style={S.td}>{new Date(a.aceito_em).toLocaleString('pt-BR')}</td>
-                      <td style={S.td}><span style={{ fontSize: 10, color: '#64748b', wordBreak: 'break-all' }}>{(a.user_agent || '').slice(0, 60)}</span></td>
-                      <td style={S.td}><span style={{ fontSize: 11, fontFamily: 'monospace', color: '#2563eb' }}>{a.asaas_payment_id || '—'}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-      </div>
-    </div>
-  );
-}
-
-const TABS = ['Dashboard', 'Feedbacks', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Aceites', 'Scrapers', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Scrapers', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -2170,14 +1959,13 @@ export default function Admin() {
         </div>
 
         {tab === 'Dashboard'      && <DashboardTab />}
-        {tab === 'Feedbacks'      && <FeedbacksTab />}
         {tab === 'Cursos'         && <CursosTab />}
         {tab === 'eBooks'         && <EbooksTab />}
         {tab === 'Contratos'      && <ContratosTab />}
         {tab === 'Promoções'      && <PromoTab />}
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
-        {tab === 'Aceites'        && <AceitesTab />}
+        {tab === 'Tour'           && <TourTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Configurações'  && <ConfigTab />}
       </div>

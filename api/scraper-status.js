@@ -12,7 +12,7 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/imoveis_leilao?fonte=eq.caixa&select=id,atualizado_em&order=atualizado_em.desc&limit=1`,
+      `${supabaseUrl}/rest/v1/imoveis_leilao?select=id,atualizado_em&order=atualizado_em.desc&limit=1`,
       {
         headers: {
           apikey: serviceKey,
