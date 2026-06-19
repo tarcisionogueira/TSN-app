@@ -946,11 +946,16 @@ function ContratosTab() {
 
       {/* Modal: Novo contrato — 3 etapas */}
       {step && (
-        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setStep(null)}>
-          <div style={{ ...S.modal, maxWidth:700 }}>
+        <div style={{ ...S.overlay, alignItems: step === 2 ? 'stretch' : 'center', padding: step === 2 ? 0 : '20px' }}
+          onClick={e => e.target === e.currentTarget && setStep(null)}>
+          <div style={step === 2
+            ? { background:'white', display:'flex', flexDirection:'column', width:'100%', height:'100%', maxWidth:'100%', overflow:'hidden' }
+            : { ...S.modal, maxWidth:700 }}>
 
-            {/* Indicador de etapas */}
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:20 }}>
+            {/* Indicador de etapas — em etapa 2 fica no topo fixo */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, padding: step===2 ? '14px 24px' : '0 0 20px',
+              borderBottom: step===2 ? '1px solid #e2e8f0' : 'none', flexShrink:0,
+              background: step===2 ? 'white' : 'transparent' }}>
               {['Descrever','Revisar','Link gerado'].map((s, i) => (
                 <React.Fragment key={s}>
                   <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -962,6 +967,9 @@ function ContratosTab() {
                   {i < 2 && <div style={{ flex:1, height:1, background:'#e2e8f0' }}/>}
                 </React.Fragment>
               ))}
+              {step === 2 && (
+                <button onClick={() => setStep(null)} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8', lineHeight:1 }}>×</button>
+              )}
             </div>
 
             {/* ── Etapa 1: Descrever ── */}
@@ -1045,56 +1053,75 @@ function ContratosTab() {
               </>
             )}
 
-            {/* ── Etapa 2: Revisar ── */}
+            {/* ── Etapa 2: Revisar — layout fullscreen ── */}
             {step === 2 && (
-              <>
-                <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Revisar contrato</h3>
+              <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
 
-                {/* Partes */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
-                  <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'10px 14px' }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:2 }}>Contratante</div>
-                    <div style={{ fontSize:13, fontWeight:700 }}>Nogueira Empreendimentos</div>
-                  </div>
-                  <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px' }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:2 }}>Contratado</div>
-                    <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Preenchido pelo signatário ao assinar</div>
+                {/* Sidebar esquerda — partes + perguntas */}
+                <div style={{ width:300, flexShrink:0, borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', overflowY:'auto', background:'#f8fafc' }}>
+                  <div style={{ padding:'20px 18px', flex:1 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:12 }}>Partes do contrato</div>
+
+                    <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px', marginBottom:10 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>Nogueira Empreendimentos</div>
+                    </div>
+                    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px', marginBottom:20 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
+                      <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Preenchido pelo signatário ao assinar</div>
+                    </div>
+
+                    {perguntas.length > 0 && (
+                      <>
+                        <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:10 }}>Pontos a confirmar</div>
+                        <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'14px 14px', marginBottom:14 }}>
+                          {perguntas.map((p, i) => (
+                            <div key={i} style={{ marginBottom:12 }}>
+                              <label style={{ fontSize:11, color:'#c2410c', fontWeight:700, display:'block', marginBottom:5, lineHeight:1.4 }}>{p}</label>
+                              <input style={{ ...S.input, fontSize:12 }}
+                                value={respostas[i] || ''}
+                                onChange={e => setRespostas(r => ({ ...r, [i]: e.target.value }))}
+                                placeholder="Sua resposta…" />
+                            </div>
+                          ))}
+                          <button style={{ ...S.btn('outline'), fontSize:12, width:'100%' }} onClick={gerarContrato} disabled={gerandoContrato}>
+                            {gerandoContrato ? '⏳ Regerando…' : '↻ Regerar com respostas'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ fontSize:11, color:'#94a3b8', lineHeight:1.6, marginTop: perguntas.length > 0 ? 0 : 8 }}>
+                      Revise o texto ao lado. Clique em qualquer trecho para editar diretamente antes de aprovar.
+                    </div>
                   </div>
                 </div>
 
-                {/* Perguntas do assistente */}
-                {perguntas.length > 0 && (
-                  <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'14px 16px', marginBottom:14 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:'#c2410c', marginBottom:10 }}>⚠ O assistente identificou pontos para confirmar:</div>
-                    {perguntas.map((p, i) => (
-                      <div key={i} style={{ marginBottom:10 }}>
-                        <label style={{ fontSize:12, color:'#7c2d12', fontWeight:600, display:'block', marginBottom:4 }}>{p}</label>
-                        <input style={{ ...S.input, fontSize:12 }}
-                          value={respostas[i] || ''}
-                          onChange={e => setRespostas(r => ({ ...r, [i]: e.target.value }))}
-                          placeholder="Sua resposta…" />
-                      </div>
-                    ))}
-                    <button style={{ ...S.btn('outline'), fontSize:12, marginTop:4 }} onClick={gerarContrato} disabled={gerandoContrato}>
-                      {gerandoContrato ? '⏳ Regerando…' : '↻ Regerar com respostas'}
-                    </button>
+                {/* Área principal — texto do contrato */}
+                <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                  <div style={{ padding:'16px 24px 8px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>{titulo || 'Contrato'}</div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Edite diretamente se necessário antes de aprovar.</div>
                   </div>
-                )}
-
-                {/* Conteúdo editável */}
-                <div style={{ marginBottom:14 }}>
-                  <label style={S.label}>Texto do contrato (edite se necessário)</label>
-                  <textarea style={{ ...S.input, height:280, resize:'vertical', fontFamily:'Georgia, serif', fontSize:13, lineHeight:1.7 }}
-                    value={conteudo} onChange={e => setConteudo(e.target.value)} />
+                  <textarea
+                    style={{ flex:1, border:'none', outline:'none', resize:'none', fontFamily:'Georgia, serif', fontSize:14, lineHeight:1.9, padding:'24px 32px', color:'#1e293b', background:'white' }}
+                    value={conteudo}
+                    onChange={e => setConteudo(e.target.value)} />
                 </div>
+              </div>
+            )}
 
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <button style={S.btn('outline')} onClick={() => setStep(1)}>← Voltar</button>
-                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || !conteudo.trim()}>
+            {/* ── Etapa 2: barra inferior ── */}
+            {step === 2 && (
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 24px', borderTop:'1px solid #e2e8f0', background:'white', flexShrink:0 }}>
+                <button style={S.btn('outline')} onClick={() => setStep(1)}>← Voltar e editar</button>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <span style={{ fontSize:12, color:'#94a3b8' }}>{conteudo.split(/\s+/).filter(Boolean).length} palavras</span>
+                  <button style={{ ...S.btn('primary'), padding:'10px 28px' }} onClick={gerarLinkContrato} disabled={savingLink || !conteudo.trim()}>
                     {savingLink ? 'Gerando link…' : '✓ Aprovar e gerar link'}
                   </button>
                 </div>
-              </>
+              </div>
             )}
 
             {/* ── Etapa 3: Link gerado ── */}
@@ -1891,7 +1918,7 @@ function ScrapersTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Tour', 'Scrapers', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Scrapers', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
