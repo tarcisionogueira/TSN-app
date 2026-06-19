@@ -101,6 +101,9 @@ export default function Busca() {
         scoreViabilidade: im.score_viabilidade,
         fracionado: im.fracionado,
         fonte: im.fonte,
+        numeroEdital: im.numero_edital,
+        numeroMatricula: im.numero_matricula,
+        numeroProcesso: im.numero_processo,
       })) : [];
       setResultados(mapeados);
     } catch (e) {
@@ -446,10 +449,10 @@ export default function Busca() {
                         canSite
                           ? <a href={im.urlLote} target="_blank" rel="noopener noreferrer"
                               style={{ flex:1, padding:'10px 8px', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center', gap:4, minHeight:44 }}>
-                              <ExternalLink size={13}/> Site
+                              <ExternalLink size={13}/> {im.fonte==='CEF'?'Edital/Mat.':'Site'}
                             </a>
                           : <span style={{ flex:1, padding:'10px 8px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:4, cursor:'not-allowed', minHeight:44 }}>
-                              🔒 Site
+                              🔒 {im.fonte==='CEF'?'Edital/Mat.':'Site'}
                             </span>
                       )}
                       {canAnalise
@@ -500,6 +503,13 @@ export default function Busca() {
                       ))}
                       <span style={{ fontSize:9, color:'#94a3b8' }}>{im.plataforma||im.leiloeiro}</span>
                     </div>
+                    {(im.numeroEdital||im.numeroMatricula||im.numeroProcesso) && (
+                      <div style={{ display:'flex', gap:6, marginTop:4, flexWrap:'wrap' }}>
+                        {im.numeroEdital && <span style={{ fontSize:9, background:'#eff6ff', color:'#1d4ed8', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>Edital {im.numeroEdital}</span>}
+                        {im.numeroMatricula && <span style={{ fontSize:9, background:'#f0fdf4', color:'#15803d', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>Mat. {im.numeroMatricula}</span>}
+                        {im.numeroProcesso && <span style={{ fontSize:9, background:'#faf5ff', color:'#7c3aed', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>Proc. {im.numeroProcesso}</span>}
+                      </div>
+                    )}
                   </div>
 
                   {/* Modalidade */}
@@ -540,11 +550,11 @@ export default function Busca() {
                       canSite
                         ? <a href={im.urlLote} target="_blank" rel="noopener noreferrer"
                             style={{ padding:'5px 8px', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', gap:4 }}>
-                            <ExternalLink size={11}/> Site
+                            <ExternalLink size={11}/> {im.fonte==='CEF'?'Edital/Mat.':'Site'}
                           </a>
                         : <span title={user ? '' : 'Faça login para acessar o site do leiloeiro'}
                             style={{ padding:'5px 8px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:600, display:'flex', alignItems:'center', gap:4, cursor:'not-allowed' }}>
-                            🔒 Site
+                            🔒 {im.fonte==='CEF'?'Edital/Mat.':'Site'}
                           </span>
                     )}
                     {canAnalise

@@ -136,12 +136,13 @@ REGRAS DE OURO:
 2. NUNCA use placeholder como [A DEFINIR] ou [INSERIR] — exceto para os dados do signatário abaixo
 3. Os ÚNICOS placeholders permitidos no corpo do contrato são:
    [NOME DO SIGNATÁRIO], [CPF/CNPJ DO SIGNATÁRIO], [RG DO SIGNATÁRIO], [ENDEREÇO DO SIGNATÁRIO], [EMAIL DO SIGNATÁRIO]
-4. Pergunte SOMENTE se o valor monetário específico não foi informado e não há como inferir. Para tudo mais, use os padrões legais brasileiros.
-5. NUNCA inclua "carimbo" nos campos de assinatura — apenas "Assinatura"
-6. Use linguagem jurídica formal, sem markdown (sem **, sem ##, sem ---)
-7. Cláusula de LGPD obrigatória quando envolver dados pessoais
-8. Encerre com: "Feira de Santana, _____ de _____________ de 20____." seguido dos campos de assinatura de ambas as partes
-9. Quando houver contratos anteriores aprovados como referência no prompt, siga o mesmo estilo, estrutura e padrão de linguagem deles.
+4. NUNCA pergunte sobre dados pessoais do CONTRATADO/SIGNATÁRIO (nome, CPF, e-mail, endereço, empresa, representante, cargo, CNPJ, etc.). Esses dados são coletados pelo próprio signatário no momento da assinatura digital. Use os placeholders acima no corpo do contrato.
+5. Pergunte SOMENTE se o valor monetário específico não foi informado e não há como inferir. Para tudo mais, use os padrões legais brasileiros.
+6. NUNCA inclua "carimbo" nos campos de assinatura — apenas "Assinatura"
+7. Use linguagem jurídica formal, sem markdown (sem **, sem ##, sem ---)
+8. Cláusula de LGPD obrigatória quando envolver dados pessoais
+9. Encerre com: "Feira de Santana, _____ de _____________ de 20____." seguido dos campos de assinatura de ambas as partes
+10. Quando houver contratos anteriores aprovados como referência no prompt, siga o mesmo estilo, estrutura e padrão de linguagem deles.
 
 FORMATO DE SAÍDA:
 - Texto corrido do contrato (máximo 1000 palavras)

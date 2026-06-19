@@ -200,19 +200,9 @@ function CursosTab() {
           <div style={S.modal}>
             <h3 style={{ ...S.sectionTitle, marginBottom: 20 }}>{modal === 'new' ? 'Novo Curso' : 'Editar Curso'}</h3>
 
-            <div style={S.row}>
-              <div style={{ ...S.col, flex: 3 }}>
-                <label style={S.label}>Título *</label>
-                <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} />
-              </div>
-              <div style={{ ...S.col, flex: 1 }}>
-                <label style={S.label}>Emoji</label>
-                <input style={S.input} value={form.emoji} onChange={e => setForm({ ...form, emoji: e.target.value })} />
-              </div>
-              <div style={{ ...S.col, flex: 1 }}>
-                <label style={S.label}>Cor</label>
-                <input type="color" style={{ ...S.input, padding: 4, height: 38 }} value={form.cor} onChange={e => setForm({ ...form, cor: e.target.value })} />
-              </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={S.label}>Título *</label>
+              <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} />
             </div>
 
             <div style={{ marginBottom: 14 }}>
