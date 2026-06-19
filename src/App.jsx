@@ -24,6 +24,7 @@ import Promo from './pages/Promo';
 import Convite from './pages/Convite';
 import EbookPage from './pages/EbookPage';
 import ContratoLink from './pages/ContratoLink';
+import ProdutoLanding from './pages/ProdutoLanding';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -119,6 +120,7 @@ export default function App() {
           <Route path="/promo/:codigo" element={<Promo />} />
           <Route path="/convite/:codigo" element={<Convite />} />
           <Route path="/c/:token" element={<ContratoLink />} />
+          <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />
           <Route path="*" element={<MainLayout />} />
         </Routes>
       </HashRouter>
