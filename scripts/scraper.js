@@ -229,9 +229,9 @@ async function scraperCEFcsv(uf) {
         tipo: normalizarTipo(m.tipo),
         modalidade: isLeilao ? 'judicial' : 'extrajudicial',
         estado: uf,
-        cidade: m.cidade,
-        bairro: m.bairro,
-        endereco: m.logradouro,
+        cidade: toTitleCase(m.cidade),
+        bairro: toTitleCase(m.bairro),
+        endereco: toTitleCase(m.logradouro),
         valor_avaliacao: valorAval,
         valor_minimo: valorMin,
         area_m2: 0,
@@ -603,6 +603,11 @@ async function scraperELeiloes(page = 1) {
 }
 
 // ─── NORMALIZADORES ──────────────────────────────────────────────────────────
+
+function toTitleCase(str) {
+  if (!str) return str;
+  return str.toLowerCase().replace(/(?:^|\s|-)(\S)/g, c => c.toUpperCase());
+}
 
 function normalizarTipo(tipo) {
   if (!tipo) return 'imovel';
