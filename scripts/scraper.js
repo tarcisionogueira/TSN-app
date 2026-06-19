@@ -112,22 +112,38 @@ function parseBRNumber(str) {
 }
 
 function parseCSVCaixa(buffer) {
-  // CEF usa latin-1 (ISO-8859-1)
-  const text = buffer.toString('latin1');
+  // Tenta latin-1 primeiro (formato histórico CEF), depois UTF-8
+  let text = buffer.toString('latin1');
+  // Se parecer UTF-8 (BOM ou sequências multi-byte comuns), redecodifica
+  if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+    text = buffer.toString('utf8').replace(/^﻿/, '');
+  }
   const lines = text.split(/\r?\n/);
 
-  // Localiza a linha do cabeçalho (contém "Número do imóvel" ou "Numero do imovel")
+  // Localiza a linha de cabeçalho: primeira linha com ≥5 ponto-e-vírgulas
+  // que NÃO seja linha de metadado (Lista de Im..., Data de g...)
   let headerIdx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].toLowerCase().includes('mero') && lines[i].includes(';')) {
+  for (let i = 0; i < Math.min(lines.length, 30); i++) {
+    const l = lines[i];
+    const semis = (l.match(/;/g) || []).length;
+    const lower = l.toLowerCase();
+    const isMetadata = lower.includes('lista de im') || lower.includes('data de g') || lower.trim() === '';
+    if (semis >= 5 && !isMetadata) {
       headerIdx = i;
       break;
     }
   }
-  if (headerIdx === -1) return { headers: [], rows: [] };
+
+  // Log diagnóstico das primeiras 6 linhas (para debug futuro)
+  if (headerIdx === -1) {
+    for (let i = 0; i < Math.min(lines.length, 6); i++) {
+      // já logado externamente em scraperCEFcsv
+    }
+    return { headers: [], rows: [] };
+  }
 
   const headers = lines[headerIdx].split(';').map(h => h.trim().toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos para comparar
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9 ]/g, '').trim()
   );
 
@@ -178,16 +194,14 @@ async function scraperCEFcsv(uf) {
       return [];
     }
 
-    // Diagnóstico: primeiras linhas do arquivo
-    const rawText = buffer.toString('latin1');
-    const firstLines = rawText.split(/\r?\n/).slice(0, 5);
-    console.log(`    CEF CSV ${uf} L1: ${JSON.stringify(firstLines[0]?.slice(0,100))}`);
-    console.log(`    CEF CSV ${uf} L2: ${JSON.stringify(firstLines[1]?.slice(0,100))}`);
-
     const { headers, rows } = parseCSVCaixa(buffer);
     if (rows.length === 0) {
-      console.log(`    CEF CSV ${uf}: headers=${JSON.stringify(headers.slice(0,4))}`);
-      console.log(`    CEF CSV ${uf}: 0 linhas após parse`);
+      // Diagnóstico expandido: mostra as 8 primeiras linhas para identificar o formato
+      const rawText = buffer.toString('latin1');
+      const fl = rawText.split(/\r?\n/).slice(0, 8);
+      fl.forEach((l, i) => console.log(`    CEF ${uf} L${i}: ${JSON.stringify(l.slice(0,120))}`));
+      console.log(`    CEF CSV ${uf}: headers=${JSON.stringify(headers.slice(0,5))}`);
+      console.log(`    CEF CSV ${uf}: 0 registros`);
       return [];
     }
 
@@ -285,9 +299,12 @@ async function scraperSuperbid(pageNumber = 1) {
       }
     });
 
-    const offers = data?.offers || [];
+    // Superbid pode mudar o campo root — tenta vários
+    const offers = data?.offers || data?.data?.offers || data?.result?.offers
+      || data?.content || data?.items || data?.results || [];
     if (offers.length === 0) {
-      console.log(`    Superbid p${pageNumber}: nenhum resultado`);
+      const keys = Object.keys(data || {}).slice(0, 8).join(',');
+      console.log(`    Superbid p${pageNumber}: nenhum resultado. Keys: ${keys}`);
       return [];
     }
 
@@ -482,41 +499,45 @@ async function scraperHastaPublica(page = 1) {
 
 // ─── SCRAPER TOP LEILÕES ──────────────────────────────────────────────────────
 
-async function scraperTopLeiloes(page = 1) {
-  console.log(`  TopLeilões página ${page}...`);
+async function scraperSuperbidAlt(pageNumber = 1) {
+  // URL alternativa da API Superbid (busca de imóveis)
+  console.log(`  Superbid Alt página ${pageNumber}...`);
   try {
-    // API JSON pública usada pelo site
-    const url = `https://www.topleiloes.com.br/api/v1/lotes?tipo_bem=imovel&pagina=${page}&por_pagina=50&status=aberto`;
-    const data = await fetchJson(url);
-    const lotes = data?.lotes || data?.data || [];
-    if (!lotes.length) {
-      console.log(`    TopLeilões p${page}: nenhum resultado`);
+    const url = `https://offer-query.superbid.net/v1/offer/search?locale=pt_BR&categorySlug=imoveis&pageNumber=${pageNumber}&pageSize=50&status=OPENED&orderBy=score`;
+    const data = await fetchJson(url, {
+      headers: { 'Origin': 'https://www.superbid.net', 'Referer': 'https://www.superbid.net/' },
+    });
+    const offers = data?.offers || data?.data || data?.content || data?.items || data?.results || [];
+    if (!offers.length) {
+      console.log(`    Superbid Alt p${pageNumber}: ${JSON.stringify(Object.keys(data || {}))}`);
       return [];
     }
-    const imoveis = lotes.map(l => ({
-      fonte: 'TOPLEILOES',
-      fonte_id: `top_${l.id || l.codigo}`,
-      titulo: l.descricao?.slice(0, 100) || `Imóvel TopLeilões ${l.id}`,
-      tipo: normalizarTipo(l.tipo_bem || l.categoria),
-      modalidade: (l.tipo_leilao || '').toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
-      estado: l.uf || l.estado || '',
-      cidade: l.cidade || '',
-      bairro: l.bairro || '',
-      endereco: l.endereco || '',
-      valor_avaliacao: parseFloat(l.valor_avaliacao || 0),
-      valor_minimo: parseFloat(l.lance_inicial || l.valor_minimo || 0),
-      area_m2: parseFloat(l.area || 0),
-      descricao: l.descricao?.slice(0, 500) || '',
-      link_edital: l.url || `https://www.topleiloes.com.br/lote/${l.id}`,
-      link_foto: l.foto || l.imagem || null,
-      leiloeiro: l.leiloeiro || 'TopLeilões',
-      data_leilao: l.data_leilao || null,
-      forma_pagamento: 'a_vista',
-    })).filter(im => im.valor_minimo > 0);
-    console.log(`    TopLeilões p${page}: ${imoveis.length} imóveis`);
-    return imoveis;
+    return offers.map(of => {
+      const p = of.product || of;
+      const loc = p.location || of.location || {};
+      return {
+        fonte: 'SOLD',
+        fonte_id: `sbid_${of.id || of.offerId}`,
+        titulo: p.shortDesc || p.description || `Imóvel Superbid`,
+        tipo: normalizarTipo(p.subCategory?.description || of.categoryDesc),
+        modalidade: 'extrajudicial',
+        estado: loc.state || '',
+        cidade: (loc.city || '').replace(/\s*[-–]\s*[A-Z]{2}$/, '').trim(),
+        bairro: loc.neighborhood || '',
+        endereco: loc.street || '',
+        valor_avaliacao: parseFloat(of.referenceValue || of.directSaleValue || 0),
+        valor_minimo: parseFloat(of.initialBidValue || of.currentMinBid || of.minBid || 0),
+        area_m2: 0,
+        descricao: '',
+        link_edital: `https://www.superbid.net/lote/${of.id || of.offerId}`,
+        link_foto: p.thumbnailUrl || null,
+        leiloeiro: of.store?.name || 'Superbid',
+        data_leilao: of.endDate || null,
+        forma_pagamento: 'a_vista',
+      };
+    }).filter(im => im.valor_minimo > 0);
   } catch (err) {
-    console.log(`    Erro TopLeilões: ${err.message.slice(0, 80)}`);
+    console.log(`    Erro Superbid Alt: ${err.message.slice(0, 100)}`);
     return [];
   }
 }
@@ -680,10 +701,10 @@ async function main() {
     await new Promise(r => setTimeout(r, 1500));
   }
 
-  // 6. TopLeilões (API pública)
-  console.log('\n📋 Scraping TopLeilões...');
-  for (let page = 1; page <= 3; page++) {
-    const imoveis = await scraperTopLeiloes(page);
+  // 6. Superbid URL alternativa
+  console.log('\n📋 Scraping Superbid Alt...');
+  for (let page = 1; page <= 4; page++) {
+    const imoveis = await scraperSuperbidAlt(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
     if (imoveis.length === 0) break;
