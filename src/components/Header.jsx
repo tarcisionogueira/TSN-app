@@ -157,13 +157,31 @@ export default function Header() {
     ? [linksPublicos[0], ...linksPrivados, linksPublicos[1]]
     : linksPublicos;
 
-  // Auto-inicia tour para membros logados que ainda não fizeram
+  // Auto-inicia tour para membros não-admin: até 3x por mês, cooldown de 24h
   React.useEffect(() => {
-    if (user && !localStorage.getItem(TOUR_KEY)) {
-      const timer = setTimeout(() => setShowTour(true), 1200);
+    if (!user || role === 'admin') return;
+    const agora = Date.now();
+    const mesAtual = new Date().toISOString().slice(0, 7);
+    const tourMesKey  = 'tsn_tour_mes';
+    const tourCountKey = 'tsn_tour_count';
+    const tourLastKey  = 'tsn_tour_last';
+    const savedMes   = localStorage.getItem(tourMesKey);
+    const savedCount = parseInt(localStorage.getItem(tourCountKey) || '0', 10);
+    const savedLast  = parseInt(localStorage.getItem(tourLastKey) || '0', 10);
+    // Reinicia contador no início de cada mês
+    const countAtual = savedMes === mesAtual ? savedCount : 0;
+    if (savedMes !== mesAtual) localStorage.setItem(tourMesKey, mesAtual);
+    const COOLDOWN = 24 * 60 * 60 * 1000;
+    if (countAtual < 3 && (agora - savedLast) >= COOLDOWN) {
+      const timer = setTimeout(() => {
+        setShowTour(true);
+        localStorage.setItem(tourCountKey, String(countAtual + 1));
+        localStorage.setItem(tourLastKey, String(agora));
+        localStorage.setItem(tourMesKey, mesAtual);
+      }, 1400);
       return () => clearTimeout(timer);
     }
-  }, [user]);
+  }, [user, role]);
 
   const active = (p) => loc.pathname === p;
 

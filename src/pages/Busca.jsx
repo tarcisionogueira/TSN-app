@@ -68,7 +68,10 @@ export default function Busca() {
         .limit(50);
 
       if (filtros.estado) query = query.eq('estado', filtros.estado);
-      if (filtros.cidades.length > 0) query = query.in('cidade', filtros.cidades);
+      // ilike para cidades (CEF armazena em maiúsculas, dropdown usa Title Case)
+      if (filtros.cidades.length > 0) {
+        query = query.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
+      }
       if (filtros.tipo) query = query.eq('tipo', filtros.tipo);
       if (filtros.modalidade) query = query.eq('modalidade', filtros.modalidade);
       if (filtros.valorMin) query = query.gte('valor_minimo', Number(filtros.valorMin));
