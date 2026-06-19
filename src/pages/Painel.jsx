@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '../utils/useIsMobile';
 import {
   Building2, BarChart3, TrendingUp, DollarSign, Plus, Trash2,
   ChevronDown, ChevronUp, CheckCircle2, Clock, XCircle, Home,
@@ -117,7 +118,7 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
         {/* Novo lançamento */}
         <div style={{ padding:'16px 22px', borderBottom:'1px solid #f1f5f9', background:'#f8fafc' }}>
           <div style={{ fontSize:11, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:12 }}>Novo Lançamento</div>
-          <div style={{ display:'grid', gridTemplateColumns:'120px 1fr 1fr 100px auto', gap:8, alignItems:'flex-end' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))', gap:8, alignItems:'flex-end' }}>
             <div>
               <label style={{ fontSize:10, fontWeight:700, color:'#64748b', display:'block', marginBottom:4 }}>DATA</label>
               <input type="date" value={form.data} onChange={e=>setForm(p=>({...p,data:e.target.value}))}
@@ -185,6 +186,7 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
 
 export default function Painel() {
   const nav = useNavigate();
+  const isMobile = useIsMobile();
   const { user, role } = useAuth();
   const isAnalista = ROLES_ANALISTA.includes(role);
   const [imoveis, setImoveis] = useState([]);
@@ -360,6 +362,35 @@ export default function Painel() {
     .map(im => ({ id: im.id, nome: im.nome || im.endereco || 'Imóvel', cidade: im.cidade, lancamentos: [...(im.lancamentosFinanceiros||[])].sort((a,b)=>(b.data||'').localeCompare(a.data||'')) }))
     .filter(g => g.lancamentos.length > 0);
 
+  const imprimirAnalise = (im) => {
+    const w = window.open('', '_blank');
+    const data = new Date().toLocaleDateString('pt-BR');
+    w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head>
+      <meta charset="UTF-8"/><title>Relatório — ${im.nome||'Imóvel'}</title>
+      <style>
+        body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:0 30px;color:#1a1a1a;line-height:1.7}
+        h1{font-size:22px;font-weight:bold;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:6px}
+        h2{font-size:15px;font-weight:bold;margin:24px 0 6px;color:#334155;text-transform:uppercase;letter-spacing:.5px}
+        .meta{font-size:12px;color:#64748b;margin-bottom:24px}
+        .corpo{white-space:pre-wrap;font-size:14px;line-height:1.85}
+        .rodape{margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center}
+        @media print{body{margin:20px}}
+      </style>
+    </head><body>
+      <h1>Relatório de Análise</h1>
+      <div class="meta">
+        ${im.nome||'Imóvel sem nome'}${im.cidade?` · ${im.cidade}`:''}${im.estado?`/${im.estado}`:''}
+        ${im.dataLeilao ? ` · Leilão: ${new Date(im.dataLeilao).toLocaleDateString('pt-BR')}` : ''}
+        · Gerado em ${data}
+      </div>
+      ${im.parecer ? `<h2>Parecer e Viabilidade</h2><div class="corpo">${im.parecer.replace(/</g,'&lt;')}</div>` : ''}
+      ${im.mercado ? `<h2>Dados de Mercado</h2><div class="corpo">${im.mercado.replace(/</g,'&lt;')}</div>` : ''}
+      <div class="rodape">TSN Ativos · Relatório gerado em ${data}</div>
+      <script>window.onload=()=>{window.print();}</script>
+    </body></html>`);
+    w.document.close();
+  };
+
   const exportarPDFFinanceiro = () => {
     if (lancamentosPorImovel.length === 0) { alert('Nenhum lançamento para exportar.'); return; }
     gerarPDFFinanceiro({ grupos: lancamentosPorImovel, totalEntradas, totalSaidas });
@@ -395,7 +426,7 @@ export default function Painel() {
   const inp2 = { padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:7, fontSize:12, background:'white', boxSizing:'border-box' };
 
   return (
-    <div style={{ maxWidth:1280, margin:'0 auto', padding:'24px 20px' }}>
+    <div style={{ maxWidth:1280, margin:'0 auto', padding: isMobile ? '16px 12px' : '24px 20px' }}>
 
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12 }}>
@@ -426,10 +457,10 @@ export default function Painel() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0', marginBottom:0 }}>
-        {tabBtn('analise', `🔎 Em Análise (${emAnalise.length})`)}
-        {tabBtn('arrematacoes', `🏠 Arrematação (${arrematados.length})`)}
-        {tabBtn('lancamentos', `💰 Lançamentos (${todosLancamentos.length})`)}
+      <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0', marginBottom:0, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+        {tabBtn('analise', isMobile ? `🔎 Análise (${emAnalise.length})` : `🔎 Em Análise (${emAnalise.length})`)}
+        {tabBtn('arrematacoes', isMobile ? `🏠 Arrem. (${arrematados.length})` : `🏠 Arrematação (${arrematados.length})`)}
+        {tabBtn('lancamentos', isMobile ? `💰 Lançam. (${todosLancamentos.length})` : `💰 Lançamentos (${todosLancamentos.length})`)}
       </div>
 
       {/* === ABA ARREMATAÇÃO === */}
@@ -600,6 +631,12 @@ export default function Painel() {
                       </div>
                       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                         <BadgeStatus status={im.status||'analise'}/>
+                        {im.parecer && (
+                          <button onClick={() => imprimirAnalise(im)}
+                            style={{ padding:'7px 14px', background:'#f1f5f9', color:'#475569', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                            <Printer size={13}/> Relatório
+                          </button>
+                        )}
                         <button onClick={()=>nav('/analise',{state:{imovel:im}})}
                           style={{ padding:'7px 14px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                           <Sparkles size={13}/> Abrir análise
@@ -745,7 +782,7 @@ export default function Painel() {
           {/* Formulário novo lançamento */}
           <div style={{ padding:'16px 20px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc' }}>
             <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:12 }}>Novo Lançamento</div>
-            <div style={{ display:'grid', gridTemplateColumns:'130px 1fr 1fr 1fr 120px auto', gap:8, alignItems:'flex-end' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '130px 1fr 1fr 1fr 120px auto', gap:8, alignItems:'flex-end' }}>
               <div>
                 <div style={{ fontSize:10, fontWeight:700, color:'#64748b', marginBottom:4 }}>DATA</div>
                 <input type="date" value={novoLanc.data} onChange={e=>setNovoLanc(p=>({...p,data:e.target.value}))} style={{ ...inp2, width:'100%' }}/>
@@ -863,7 +900,7 @@ export default function Painel() {
       <style>{`
         @media (max-width: 768px) {
           table { font-size: 11px !important; }
-          td, th { padding: 8px 8px !important; }
+          td, th { padding: 6px 8px !important; }
         }
       `}</style>
     </div>

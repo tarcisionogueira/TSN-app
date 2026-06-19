@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, CheckCircle2, Clock, ShieldCheck, X, Users, MapPin, Download } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { useIsMobile } from '../utils/useIsMobile';
 import AssinaturaCanvas from '../components/AssinaturaCanvas';
 
 async function sha256(texto) {
@@ -23,10 +24,11 @@ function capturarGeo() {
 }
 
 const STATUS_INFO = {
-  rascunho:              { label: 'Em preparação',           cor: '#64748b', bg: '#f1f5f9' },
+  rascunho:              { label: 'Em preparação',             cor: '#64748b', bg: '#f1f5f9' },
   aguardando_assinatura: { label: 'Aguardando sua assinatura', cor: '#d97706', bg: '#fef3c7' },
-  assinado:              { label: 'Assinado',                cor: '#059669', bg: '#dcfce7' },
-  cancelado:             { label: 'Cancelado',               cor: '#dc2626', bg: '#fee2e2' },
+  aguardando:            { label: 'Aguardando sua assinatura', cor: '#d97706', bg: '#fef3c7' },
+  assinado:              { label: 'Assinado',                  cor: '#059669', bg: '#dcfce7' },
+  cancelado:             { label: 'Cancelado',                 cor: '#dc2626', bg: '#fee2e2' },
 };
 
 const S = {
@@ -37,6 +39,7 @@ const S = {
 
 export default function Contratos() {
   const nav = useNavigate();
+  const isMobile = useIsMobile();
   const { user, effectiveUserId, loading: authLoading } = useAuth();
   const [contratos, setContratos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,17 +62,17 @@ export default function Contratos() {
   const [erro, setErro] = useState('');
 
   const carregar = useCallback(async () => {
-    if (!effectiveUserId) { setLoading(false); return; }
+    if (!user) { setLoading(false); return; }
     setLoading(true);
     const { data } = await supabase
-      .from('contratos')
+      .from('contratos_link')
       .select('*')
-      .eq('cliente_id', effectiveUserId)
-      .neq('status', 'rascunho')
+      .eq('assinante_email', user.email)
+      .neq('status', 'cancelado')
       .order('criado_em', { ascending: false });
     setContratos(data || []);
     setLoading(false);
-  }, [effectiveUserId]);
+  }, [user]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -126,7 +129,7 @@ export default function Contratos() {
         payload.assinatura_testemunha = assinaturaTest;
         payload.testemunha_em        = carimbo;
       }
-      const { error } = await supabase.from('contratos').update(payload).eq('id', aberto.id);
+      const { error } = await supabase.from('contratos_link').update(payload).eq('id', aberto.id);
       if (error) throw error;
       setAberto(null);
       await carregar();
@@ -178,7 +181,7 @@ export default function Contratos() {
   }
 
   return (
-    <div style={{ maxWidth: 920, margin: '0 auto', padding: '28px 20px' }}>
+    <div style={{ maxWidth: 920, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px' }}>
       <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: '0 0 4px' }}>Meus Contratos</h1>
       <p style={{ color: '#64748b', margin: '0 0 24px', fontSize: 14 }}>Contratos de assessoria, clube de negócios e demais produtos.</p>
 
@@ -192,14 +195,15 @@ export default function Contratos() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {contratos.map(c => {
             const si = STATUS_INFO[c.status] || STATUS_INFO.rascunho;
+            const aguardando = c.status === 'aguardando';
             return (
-              <div key={c.id} style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div key={c.id} style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: isMobile ? '14px 16px' : '18px 20px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 12 : 16, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{c.titulo}</div>
                   <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                    {c.produto && <span style={{ textTransform: 'capitalize' }}>{c.produto}</span>}
-                    {c.valor > 0 && <span> · R$ {Number(c.valor).toFixed(2)}</span>}
+                    {c.tipo_contrato && <span style={{ textTransform: 'capitalize' }}>{c.tipo_contrato}</span>}
                     {c.assinado_em && <span> · Assinado em {new Date(c.assinado_em).toLocaleDateString('pt-BR')}</span>}
+                    {!c.assinado_em && c.criado_em && <span> · Enviado em {new Date(c.criado_em).toLocaleDateString('pt-BR')}</span>}
                   </div>
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 20, background: si.bg, color: si.cor, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -209,13 +213,13 @@ export default function Contratos() {
                 <div style={{ display: 'flex', gap: 8 }}>
                   {c.status === 'assinado' && (
                     <button onClick={() => baixarComprovante(c)}
-                      style={{ padding: '8px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      style={{ padding: isMobile ? '10px 12px' : '8px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, minHeight: 44 }}>
                       <Download size={13} /> Comprovante
                     </button>
                   )}
-                  <button onClick={() => abrir(c)}
-                    style={{ padding: '8px 16px', background: c.status === 'aguardando_assinatura' ? '#2563eb' : '#f1f5f9', color: c.status === 'aguardando_assinatura' ? 'white' : '#475569', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                    {c.status === 'aguardando_assinatura' ? 'Ler e assinar' : 'Visualizar'}
+                  <button onClick={() => nav(`/c/${c.token}`)}
+                    style={{ padding: isMobile ? '12px 16px' : '8px 16px', background: aguardando ? '#2563eb' : '#f1f5f9', color: aguardando ? 'white' : '#475569', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 44, width: isMobile ? '100%' : 'auto' }}>
+                    {aguardando ? 'Ler e assinar' : 'Visualizar'}
                   </button>
                 </div>
               </div>
@@ -323,7 +327,7 @@ export default function Contratos() {
                     </label>
                     {usaTestemunha && (
                       <div style={{ marginTop: 14, padding: 14, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 12 }}>
                           <div>
                             <label style={S.label}>Nome da testemunha</label>
                             <input style={S.input} value={nomeTest} onChange={e => setNomeTest(e.target.value)} placeholder="Nome completo" />

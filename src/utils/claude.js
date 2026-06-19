@@ -279,9 +279,14 @@ export async function gerarParecer(inputs, metricas, mercado) {
   const prompt = `
 Redija um PARECER EXECUTIVO de arrematação como Gestor Sênior da TSN Ativos.
 
-IMÓVEL: ${inputs.tipoImovel} — ${inputs.endereco}
+IMÓVEL: ${inputs.tipo || inputs.tipoImovel} — ${inputs.endereco}
 OBJETIVO: ${inputs.objetivoCompra === 'uso_proprio' ? 'Uso Próprio' : 'Investimento'}
 CENÁRIO: ${inputs._cenario || 'À Vista'}
+ORIGEM: ${inputs.origem || 'extrajudicial'}
+CIDADE: ${inputs.cidade || ''}
+ESTADO: ${inputs.estado || ''}
+TIPO: ${inputs.tipo || 'apartamento'}
+${inputs.nomeCondominio ? `CONDOMÍNIO: ${inputs.nomeCondominio}` : ''}
 
 DADOS FINANCEIROS:
 - Lance base: R$ ${(inputs.valorArrematacao||0).toLocaleString('pt-BR')}
@@ -298,17 +303,34 @@ ${mercado?.comentario ? `- Análise de mercado: ${mercado.comentario}` : ''}
 RISCOS JURÍDICOS: ${(inputs.riscos||[]).map(r=>r.texto||r).join('; ') || 'Nenhum identificado'}
 OBSERVAÇÕES: ${inputs.observacoes || 'Sem observações adicionais'}
 
-Escreva em português formal. Estruture com 4 seções marcadas com "§ SEÇÃO:":
+Escreva em português formal. Estruture com 5 seções marcadas com "§ SEÇÃO:":
 § SEÇÃO: POSICIONAMENTO ESTRATÉGICO
 § SEÇÃO: DEFESA DA ARREMATAÇÃO
 § SEÇÃO: ANÁLISE DE RENTABILIDADE (locação, yield, payback)
-§ SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO DA GESTÃO`;
+§ SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO DA GESTÃO
+§ SEÇÃO: CHECKLIST DE DÉBITOS E DILIGÊNCIAS
+
+Instruções obrigatórias para a seção CHECKLIST DE DÉBITOS E DILIGÊNCIAS:
+- Para cada item do checklist, indicar o status com um dos marcadores: [  ] Pendente verificação | [S] Subrogado ao arrematante | [V] Verificado — sem débito | [!] Atenção — verificar urgente
+- Se a origem for judicial e a arrematação for por hasta pública, marcar os débitos de IPTU e condomínio como subrogados ao arrematante, conforme Lei 9.514/97 e CPC art. 908. Indicar isso explicitamente no item correspondente.
+- Se a origem for extrajudicial (alienação fiduciária), todos os débitos são de responsabilidade do arrematante — indicar isso claramente em cada item relevante.
+- Sempre incluir o nome da concessionária ou órgão responsável da região do imóvel quando conhecido.
+- Não usar markdown. Não usar asteriscos, cerquilhas ou negrito. Usar apenas texto simples.
+
+Itens obrigatórios do checklist (listar todos, um por linha, com status, nome do órgão/concessionária e instrução de como verificar):
+1. AGUA E ESGOTO — informar a concessionária da cidade (exemplos: EMBASA na Bahia, SAAE em municípios do interior, CORSAN no RS, CAESB no DF, SANEPAR no PR, CEDAE no RJ, SABESP em SP, CAGECE no CE, CAERN no RN, CAEMA no MA, SANEAGO em GO, Compesa em PE, Agespisa no PI). Informar site ou telefone quando conhecido.
+2. ENERGIA ELETRICA — informar a distribuidora da região (exemplos: Coelba na Bahia, CEMIG em MG, ENEL SP/CE/GO/RJ, CELESC em SC, CELPE em PE, COPEL no PR, CEEE no RS, Energisa em MT/MS/PB/SE/TO/RO, Equatorial no MA/AL/GO/PA/PI). Informar site ou telefone quando conhecido.
+3. GAS ENCANADO — se aplicável ao tipo de imóvel e cidade, indicar a distribuidora (exemplos: Comgás em SP, CEG no RJ, Bahiagás na BA, Copergás em PE, Gasmig em MG). Se não aplicável ao tipo ou cidade, indicar expressamente.
+4. IPTU — Prefeitura do município de ${inputs.cidade || 'cidade do imóvel'}. Orientar a consultar o site da prefeitura ou Central de Atendimento municipal. Se origem judicial e hasta pública, indicar subrogação conforme CPC art. 908.
+5. CONDOMINIO — ${inputs.nomeCondominio ? `Condomínio ${inputs.nomeCondominio}: v` : 'V'}erificar débitos condominiais com o síndico ou administradora. Se origem judicial e hasta pública, indicar subrogação. Se extrajudicial, responsabilidade do arrematante.
+6. DEBITOS TRABALHISTAS — orientar a consultar o Tribunal Regional do Trabalho da região para verificar se há penhoras ou execuções trabalhistas vinculadas ao imóvel.
+7. DEBITO HIPOTECARIO E FINANCIAMENTO — orientar a verificar na matrícula do imóvel a existência de alienação fiduciária ou hipoteca vigente, e como proceder para sua quitação ou sub-rogação.`;
 
   const data = await callAPI({
     model: MODEL,
-    max_tokens: 3000,
+    max_tokens: 4500,
     messages: [{ role: 'user', content: prompt }],
-    system: 'Você é gestor sênior da TSN Ativos. Redija pareceres executivos precisos e persuasivos.',
+    system: 'Você é gestor sênior da TSN Ativos. Redija pareceres executivos precisos e persuasivos. Nunca use markdown, asteriscos, cerquilhas ou formatação especial. Use apenas texto simples.',
   });
 
   return extractText(data);

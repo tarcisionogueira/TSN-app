@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
+import { useIsMobile } from '../utils/useIsMobile';
 
 const inp = { width:'100%', padding:'10px 13px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:14, background:'white', color:'#0f172a', boxSizing:'border-box' };
 const lbl = { fontSize:12, fontWeight:700, color:'#475569', display:'block', marginBottom:5 };
@@ -67,6 +68,7 @@ function AssinaturaCanvas({ onChange }) {
 
 export default function ContratoLink() {
   const { token } = useParams();
+  const isMobile = useIsMobile();
   const [contrato, setContrato] = useState(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -76,6 +78,7 @@ export default function ContratoLink() {
   const [assinatura, setAssinatura] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [aceite, setAceite] = useState(false);
+  const [lgpdAceite, setLgpdAceite] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -159,31 +162,45 @@ export default function ContratoLink() {
   );
 
   return (
-    <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', padding:'40px 20px', fontFamily:"'Inter',sans-serif" }}>
-      <div style={{ maxWidth:600, margin:'0 auto', background:'white', borderRadius:20, overflow:'hidden', boxShadow:'0 24px 60px rgba(0,0,0,0.35)' }}>
+    <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', padding: isMobile ? '16px 12px' : '40px 20px', fontFamily:"'Inter',sans-serif" }}>
+      <div style={{ maxWidth:600, margin:'0 auto', background:'white', borderRadius: isMobile ? 14 : 20, overflow:'hidden', boxShadow:'0 24px 60px rgba(0,0,0,0.35)' }}>
 
         {/* Header */}
-        <div style={{ background:'#0f172a', padding:'24px 28px', color:'white' }}>
+        <div style={{ background:'#0f172a', padding: isMobile ? '18px 20px' : '24px 28px', color:'white' }}>
           <div style={{ fontSize:11, fontWeight:700, color:'#60a5fa', textTransform:'uppercase', letterSpacing:1, marginBottom:6 }}>TSN Ativos — Assinatura de Contrato</div>
           <h1 style={{ margin:0, fontSize:20, fontWeight:800 }}>{contrato.titulo}</h1>
         </div>
 
-        <div style={{ padding:'28px 28px 36px' }}>
+        <div style={{ padding: isMobile ? '20px 16px 28px' : '28px 28px 36px' }}>
 
           {/* ETAPA: tipo de pessoa */}
           {etapa === 'tipo' && (
             <div>
-              <p style={{ color:'#475569', fontSize:15, lineHeight:1.6, marginBottom:28 }}>
+              <p style={{ color:'#475569', fontSize:15, lineHeight:1.6, marginBottom:20 }}>
                 Você foi convidado a assinar um documento digital. Para prosseguir, informe se você é pessoa física ou jurídica.
               </p>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:28 }}>
+
+              {/* Aviso LGPD — deve ser aceito antes de informar dados pessoais */}
+              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'14px 16px', marginBottom:20, fontSize:13, color:'#1e40af', lineHeight:1.6 }}>
+                <strong>Aviso de Privacidade (LGPD)</strong><br />
+                Para a assinatura eletrônica deste contrato, coletaremos seus dados pessoais (nome, CPF/CNPJ, RG, endereço e assinatura). O tratamento ocorre com base no seu consentimento e na execução de contrato, conforme a <strong>Lei nº 13.709/2018 (LGPD)</strong>.
+              </div>
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:13, color:'#334155', lineHeight:1.5, marginBottom:24, cursor:'pointer' }}>
+                <input type="checkbox" checked={lgpdAceite} onChange={e => setLgpdAceite(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
+                <span>
+                  Autorizo o uso dos meus dados pessoais para fins de assinatura eletrônica deste contrato, conforme a Lei nº 13.709/2018 (LGPD).
+                </span>
+              </label>
+
+              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14, marginBottom:28 }}>
                 {[
                   { key:'pf', emoji:'👤', titulo:'Pessoa Física', sub:'CPF, RG e dados pessoais' },
                   { key:'pj', emoji:'🏢', titulo:'Pessoa Jurídica', sub:'CNPJ e dados da empresa' },
                 ].map(({ key, emoji, titulo, sub }) => (
-                  <button key={key} onClick={() => { setTipoPessoa(key); setEtapa('dados'); }}
-                    style={{ padding:'22px 16px', border:'2px solid #e2e8f0', borderRadius:14, background:'white', cursor:'pointer', textAlign:'center', transition:'all 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.background='#eff6ff'; }}
+                  <button key={key} onClick={() => { if (!lgpdAceite) return; setTipoPessoa(key); setEtapa('dados'); }}
+                    disabled={!lgpdAceite}
+                    style={{ padding:'22px 16px', border:'2px solid #e2e8f0', borderRadius:14, background:'white', cursor:lgpdAceite?'pointer':'not-allowed', textAlign:'center', transition:'all 0.15s', opacity:lgpdAceite?1:0.5 }}
+                    onMouseEnter={e => { if (!lgpdAceite) return; e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.background='#eff6ff'; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.background='white'; }}>
                     <div style={{ fontSize:36, marginBottom:10 }}>{emoji}</div>
                     <div style={{ fontWeight:800, color:'#0f172a', marginBottom:4 }}>{titulo}</div>

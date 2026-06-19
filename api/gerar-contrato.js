@@ -45,8 +45,15 @@ const PADROES = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { descricao, tipo, titulo, arquivos = [], respostas } = req.body || {};
-  if (!descricao) return res.status(400).json({ error: 'descricao obrigatória' });
+  const { descricao: descricaoRaw, tipo, titulo, arquivos = [], respostas } = req.body || {};
+  if (!descricaoRaw) return res.status(400).json({ error: 'descricao obrigatória' });
+
+  // Sanitização de entrada: limita tamanho e remove marcadores de delimitação do sistema
+  // para evitar prompt injection via descricao do usuário
+  const descricao = String(descricaoRaw)
+    .slice(0, 5000)
+    .replace(/<<</g, '«')
+    .replace(/>>>/g, '»');
 
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Chave de API não configurada' });

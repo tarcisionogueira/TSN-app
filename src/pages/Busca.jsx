@@ -9,6 +9,7 @@ import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils
 import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useIsMobile } from '../utils/useIsMobile';
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
@@ -28,6 +29,7 @@ function fmtData(d, modalidade) {
 
 export default function Busca() {
   const nav = useNavigate();
+  const isMobile = useIsMobile();
   const { role, user } = useAuth();
   const plano = role || 'explorador';
   const canSite    = user && ROLES_SITE.includes(role);
@@ -157,7 +159,7 @@ export default function Busca() {
   const desconto = (im) => im.valorAvaliacao>0 ? Math.round((1-im.valorMinimo/im.valorAvaliacao)*100) : 0;
 
   return (
-    <div style={{ maxWidth:1280, margin:'0 auto', padding:'24px 20px', display:'grid', gridTemplateColumns:'280px 1fr', gap:20, alignItems:'start' }}>
+    <div style={{ maxWidth:1280, margin:'0 auto', padding: isMobile ? '16px 12px' : '24px 20px', display:'grid', gridTemplateColumns: isMobile ? '1fr' : '280px 1fr', gap:20, alignItems:'start' }}>
 
       {/* SIDEBAR */}
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -331,16 +333,99 @@ export default function Busca() {
         {/* Resultados em lista */}
         {!loading && resultadosFiltrados.length>0 && (
           <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden' }}>
-            {/* Header tabela — colunas: checkbox | imóvel | modalidade | lance | avaliação | desc | data | ações */}
-            <div style={{ display:'grid', gridTemplateColumns:'36px 1fr 110px 120px 120px 72px 90px 190px', gap:0, background:'#f8fafc', borderBottom:'2px solid #e2e8f0', padding:'9px 16px', alignItems:'center' }}>
-              {['','Imóvel / Localização','Modalidade','Lance Mín.','Avaliação','Desc.','Data','Ações'].map((h,i)=>(
-                <div key={i} style={{ fontSize:10, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.4 }}>{h}</div>
-              ))}
-            </div>
+            {/* Desktop: header tabela */}
+            {!isMobile && (
+              <div style={{ display:'grid', gridTemplateColumns:'36px 1fr 110px 120px 120px 72px 90px 190px', gap:0, background:'#f8fafc', borderBottom:'2px solid #e2e8f0', padding:'9px 16px', alignItems:'center' }}>
+                {['','Imóvel / Localização','Modalidade','Lance Mín.','Avaliação','Desc.','Data','Ações'].map((h,i)=>(
+                  <div key={i} style={{ fontSize:10, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.4 }}>{h}</div>
+                ))}
+              </div>
+            )}
 
             {resultadosFiltrados.map((im,i)=>{
               const desc = desconto(im);
               const sel = isSelecionado(im.id);
+
+              // Mobile: card layout
+              if (isMobile) {
+                return (
+                  <div key={im.id} style={{ padding:'14px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:8 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                          <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}
+                            style={{ width:16, height:16, cursor:'pointer', accentColor:'#2563eb', flexShrink:0 }}/>
+                          <span style={{ fontWeight:700, color:'#0f172a', fontSize:14, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
+                          {im.fonte === 'caixa' && (
+                            <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
+                          )}
+                          {im.fracionado && (
+                            <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>
+                              ⚠ Fracionado
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize:12, color:'#64748b', marginTop:4, display:'flex', alignItems:'center', gap:4 }}>
+                          <MapPin size={11}/> {im.endereco||'—'}{im.cidade?', '+im.cidade:''}
+                        </div>
+                      </div>
+                      <div style={{ textAlign:'right', flexShrink:0 }}>
+                        {desc>0 && <div style={{ fontSize:18, fontWeight:900, color:desc>=40?'#10b981':'#f59e0b' }}>{desc}% {desc>=30?'🟢':'🔴'}</div>}
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom:10 }}>
+                      <div>
+                        <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Lance mín.</div>
+                        <div style={{ fontWeight:800, color:'#0f172a', fontSize:16 }}>R$ {fmt0(im.valorMinimo)}</div>
+                      </div>
+                      {im.valorAvaliacao>0 && (
+                        <div>
+                          <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Avaliação</div>
+                          <div style={{ fontSize:13, color:'#64748b' }}>R$ {fmt0(im.valorAvaliacao)}</div>
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Data</div>
+                        <div style={{ fontSize:13, color:'#64748b' }}>{fmtData(im.dataLeilao, im.modalidade)}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:8 }}>
+                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:20, background:im.modalidade==='judicial'?'#fef3c7':'#dbeafe', color:im.modalidade==='judicial'?'#92400e':'#1e40af' }}>
+                        {im.modalidade==='judicial'?'Judicial':'Extrajudicial'}
+                      </span>
+                      {im.areaM2>0 && <span style={{ fontSize:11, color:'#8b5cf6', fontWeight:600, padding:'3px 8px', background:'#f5f3ff', borderRadius:20 }}>{im.areaM2}m²</span>}
+                      {(im.pagamento||[]).map(p=>(
+                        <span key={p} style={{ fontSize:10, background:'#f1f5f9', color:'#475569', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>
+                          {p==='a_vista'||p==='aVista'?'À Vista':p==='financiado'?'Financiado':'Hipotecado'}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      {im.urlLote && (
+                        canSite
+                          ? <a href={im.urlLote} target="_blank" rel="noopener noreferrer"
+                              style={{ flex:1, padding:'10px 8px', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center', gap:4, minHeight:44 }}>
+                              <ExternalLink size={13}/> Site
+                            </a>
+                          : <span style={{ flex:1, padding:'10px 8px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:4, cursor:'not-allowed', minHeight:44 }}>
+                              🔒 Site
+                            </span>
+                      )}
+                      {canAnalise
+                        ? <button onClick={()=>irParaAnalise(im)}
+                            style={{ flex:2, padding:'10px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:44 }}>
+                            📊 Analisar
+                          </button>
+                        : <span style={{ flex:2, padding:'10px', background:'#f8fafc', color:'#cbd5e1', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:44 }}>
+                            🔒 Analisar
+                          </span>
+                      }
+                    </div>
+                  </div>
+                );
+              }
+
+              // Desktop: row layout
               return (
                 <div key={im.id}
                   style={{ display:'grid', gridTemplateColumns:'36px 1fr 110px 120px 120px 72px 90px 190px', gap:0, padding:'12px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa', alignItems:'center', transition:'background 0.15s' }}>
@@ -353,6 +438,9 @@ export default function Busca() {
                   <div style={{ paddingRight:12 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                       <span style={{ fontWeight:700, color:'#0f172a', fontSize:13, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
+                      {im.fonte === 'caixa' && (
+                        <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
+                      )}
                       {im.fracionado && (
                         <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>
                           ⚠ Fracionado
@@ -448,9 +536,6 @@ export default function Busca() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
-        @media (max-width: 768px) {
-          div[style*="280px 1fr"] { grid-template-columns: 1fr !important; }
-        }
       `}</style>
     </div>
   );
