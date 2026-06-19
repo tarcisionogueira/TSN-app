@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, CheckCircle2, BookOpen, Star,
-  ChevronRight, Crown, Search,
+  ChevronRight, Crown, Search, AlertTriangle,
 } from 'lucide-react';
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
 import { supabase } from '../utils/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 // Progresso salvo no localStorage
 function getProgresso() {
@@ -24,11 +25,15 @@ function podeAssistir(licao, planAtual) {
 
 export default function Membros() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const [categoria, setCategoria] = useState('Todos');
   const [busca, setBusca] = useState('');
   const [progresso, setProgresso] = useState(getProgresso());
   const [plano, setPlano] = useState(getPlano());
   const [showPlanos, setShowPlanos] = useState(false);
+  const [showCancelar, setShowCancelar] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [cancelMsg, setCancelMsg] = useState('');
   const [cursos, setCursos] = useState([]);
   const [ebooks, setEbooks] = useState([]);
 
@@ -108,10 +113,18 @@ export default function Membros() {
                 </div>
               ))}
             </div>
-            <button onClick={()=>setShowPlanos(true)}
-              style={{ marginLeft:'auto', padding:'11px 22px', background:'#6366f1', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
-              <Crown size={15}/> {plano==='explorador'?'Fazer upgrade':'Gerenciar plano'}
-            </button>
+            <div style={{ marginLeft:'auto', display:'flex', gap:10, alignItems:'center' }}>
+              {plano !== 'explorador' && (
+                <button onClick={()=>setShowCancelar(true)}
+                  style={{ padding:'11px 16px', background:'transparent', color:'#ef4444', border:'1px solid #ef444460', borderRadius:10, fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                  Cancelar plano
+                </button>
+              )}
+              <button onClick={()=>setShowPlanos(true)}
+                style={{ padding:'11px 22px', background:'#6366f1', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
+                <Crown size={15}/> {plano==='explorador'?'Fazer upgrade':'Gerenciar plano'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -291,6 +304,57 @@ export default function Membros() {
             <p style={{ margin:'14px 0 0', fontSize:11, color:'#94a3b8', textAlign:'center' }}>
               Em produção, pagamentos serão processados via Asaas. Por ora, selecione para simular o acesso.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de cancelamento — reduz chargeback */}
+      {showCancelar && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={e => e.target === e.currentTarget && setShowCancelar(false)}>
+          <div style={{ background:'white', borderRadius:16, padding:28, width:'100%', maxWidth:440, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+            {cancelMsg ? (
+              <div style={{ textAlign:'center', padding:'20px 0' }}>
+                <div style={{ fontSize:36 }}>{cancelMsg.includes('Erro') ? '❌' : '✅'}</div>
+                <p style={{ fontWeight:700, color:'#0f172a', marginTop:12 }}>{cancelMsg}</p>
+                <button onClick={() => setShowCancelar(false)} style={{ marginTop:16, padding:'10px 24px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontWeight:700, cursor:'pointer' }}>Fechar</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <AlertTriangle size={24} color="#ef4444" />
+                  <h3 style={{ margin:0, fontSize:18, fontWeight:800, color:'#0f172a' }}>Cancelar plano</h3>
+                </div>
+                <p style={{ fontSize:14, color:'#475569', marginBottom:8, lineHeight:1.6 }}>
+                  Ao cancelar, você perde o acesso aos recursos do plano <strong>{PLANOS[plano]?.nome}</strong> ao final do período atual.
+                </p>
+                <p style={{ fontSize:13, color:'#64748b', marginBottom:20, lineHeight:1.6 }}>
+                  Tem certeza? Se preferir, pode fazer o downgrade para um plano menor em vez de cancelar totalmente.
+                </p>
+                <div style={{ display:'flex', gap:10 }}>
+                  <button onClick={() => setShowCancelar(false)}
+                    style={{ flex:1, padding:'11px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', color:'#475569', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                    Manter plano
+                  </button>
+                  <button disabled={cancelando} onClick={async () => {
+                    if (!user?.email) return;
+                    setCancelando(true);
+                    try {
+                      const r = await fetch('/api/asaas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'cancelar_assinatura', email: user.email }) });
+                      const d = await r.json();
+                      if (!r.ok) throw new Error(d.error || 'Erro ao cancelar');
+                      setCancelMsg('Plano cancelado com sucesso. Você mantém o acesso até o fim do período pago.');
+                    } catch(e) {
+                      setCancelMsg('Erro: ' + e.message);
+                    }
+                    setCancelando(false);
+                  }}
+                    style={{ flex:1, padding:'11px', border:'none', borderRadius:8, background:'#ef4444', color:'white', fontWeight:700, fontSize:13, cursor:'pointer', opacity: cancelando ? 0.6 : 1 }}>
+                    {cancelando ? 'Cancelando…' : 'Sim, cancelar'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

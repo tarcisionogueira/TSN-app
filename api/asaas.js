@@ -206,6 +206,36 @@ export default async function handler(req, res) {
       });
     }
 
+    // ── Cancelar assinatura (solicitado pelo próprio membro) ──
+    if (action === 'cancelar_assinatura') {
+      const { email } = body;
+      if (!email) return res.status(400).json({ error: 'Email obrigatório' });
+
+      const customers = await asaasGet(`/customers?email=${encodeURIComponent(email)}`);
+      const customer = customers.data?.[0];
+      if (!customer) return res.status(404).json({ error: 'Cliente não encontrado no Asaas.' });
+
+      const subs = await asaasGet(`/subscriptions?customer=${customer.id}&status=ACTIVE`);
+      const sub = subs.data?.[0];
+      if (!sub) return res.status(404).json({ error: 'Nenhuma assinatura ativa encontrada.' });
+
+      // Remove a assinatura no Asaas
+      const delRes = await fetch(`${ASAAS_URL}/subscriptions/${sub.id}`, {
+        method: 'DELETE',
+        headers: { 'access_token': API_KEY },
+      });
+      if (!delRes.ok) {
+        const t = await delRes.text();
+        throw new Error(`Erro ao cancelar: ${t}`);
+      }
+
+      return res.status(200).json({
+        cancelado: true,
+        subscriptionId: sub.id,
+        proximaCobranca: sub.nextDueDate,
+      });
+    }
+
     // ── Busca ou cria customer pelo CPF/email ──
     if (action === 'sync_customer') {
       const { nome, email, cpf } = body;
