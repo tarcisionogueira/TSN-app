@@ -356,6 +356,9 @@ export default function Busca() {
                           <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}
                             style={{ width:16, height:16, cursor:'pointer', accentColor:'#2563eb', flexShrink:0 }}/>
                           <span style={{ fontWeight:700, color:'#0f172a', fontSize:14, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
+                          {im.fonte === 'caixa' && (
+                            <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
+                          )}
                           {im.fracionado && (
                             <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>
                               ⚠ Fracionado
@@ -435,6 +438,9 @@ export default function Busca() {
                   <div style={{ paddingRight:12 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                       <span style={{ fontWeight:700, color:'#0f172a', fontSize:13, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
+                      {im.fonte === 'caixa' && (
+                        <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
+                      )}
                       {im.fracionado && (
                         <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>
                           ⚠ Fracionado

@@ -1728,7 +1728,83 @@ function TourTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Tour', 'Configurações'];
+// ─── Aba Scrapers ─────────────────────────────────────────────────────────────
+function ScrapersTab() {
+  const [status, setStatus] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [resultado, setResultado] = useState(null);
+  const [erroMsg, setErroMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
+  }, []);
+
+  async function executarScraper() {
+    setRunning(true); setResultado(null); setErroMsg('');
+    try {
+      const r = await fetch('/api/scraper-caixa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok) { setErroMsg(d.error || 'Erro ao executar o scraper.'); }
+      else { setResultado(d); fetch('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}); }
+    } catch (e) { setErroMsg(e.message); }
+    setRunning(false);
+  }
+
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <h3 style={{ margin: '0 0 20px', fontWeight: 800, color: '#0f172a' }}>Importar Imóveis de Leilão</h3>
+
+      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '24px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🏦</div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 4 }}>Caixa Econômica Federal</div>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
+              Importa imóveis disponíveis para venda diretamente do portal da Caixa para todos os estados do Brasil.
+              Os dados são atualizados na tabela <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, fontSize: 12 }}>imoveis_leilao</code>.
+            </p>
+          </div>
+        </div>
+        {status && (
+          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#475569', display: 'flex', gap: 20 }}>
+            <span>📦 <strong>{status.total?.toLocaleString('pt-BR') || 0}</strong> imóveis no banco</span>
+            {status.ultima_atualizacao && (
+              <span>🕐 Atualizado em {new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</span>
+            )}
+          </div>
+        )}
+        {resultado && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
+            ✅ <strong>{resultado.processados?.toLocaleString('pt-BR')}</strong> imóveis importados —
+            {resultado.estados_ok?.length} estados OK{resultado.estados_erro?.length > 0 ? `, ${resultado.estados_erro.length} com erro` : ''}
+          </div>
+        )}
+        {erroMsg && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#dc2626' }}>
+            ⚠️ {erroMsg}
+          </div>
+        )}
+        <button onClick={executarScraper} disabled={running}
+          style={{ padding: '11px 24px', background: running ? '#94a3b8' : '#c2410c', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: running ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {running ? '⏳ Buscando imóveis...' : '🔄 Buscar imóveis Caixa'}
+        </button>
+        <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>
+          Pode levar até 60 segundos. Cobre todos os 27 estados.
+        </p>
+      </div>
+
+      <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: '16px 18px', fontSize: 13, color: '#64748b' }}>
+        <strong style={{ color: '#475569' }}>Próximos scrapers previstos:</strong> Santander · Biassi · Zuk · MGL · HastaPública · TopLeilões · eLeilões
+      </div>
+    </div>
+  );
+}
+
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Tour', 'Scrapers', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -1776,6 +1852,7 @@ export default function Admin() {
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Tour'           && <TourTab />}
+        {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Configurações'  && <ConfigTab />}
       </div>
     </div>
