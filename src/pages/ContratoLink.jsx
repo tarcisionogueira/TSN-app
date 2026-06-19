@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
+import { useIsMobile } from '../utils/useIsMobile';
 
 const inp = { width:'100%', padding:'10px 13px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:14, background:'white', color:'#0f172a', boxSizing:'border-box' };
 const lbl = { fontSize:12, fontWeight:700, color:'#475569', display:'block', marginBottom:5 };
@@ -67,6 +68,7 @@ function AssinaturaCanvas({ onChange }) {
 
 export default function ContratoLink() {
   const { token } = useParams();
+  const isMobile = useIsMobile();
   const [contrato, setContrato] = useState(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -160,16 +162,16 @@ export default function ContratoLink() {
   );
 
   return (
-    <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', padding:'40px 20px', fontFamily:"'Inter',sans-serif" }}>
-      <div style={{ maxWidth:600, margin:'0 auto', background:'white', borderRadius:20, overflow:'hidden', boxShadow:'0 24px 60px rgba(0,0,0,0.35)' }}>
+    <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', padding: isMobile ? '16px 12px' : '40px 20px', fontFamily:"'Inter',sans-serif" }}>
+      <div style={{ maxWidth:600, margin:'0 auto', background:'white', borderRadius: isMobile ? 14 : 20, overflow:'hidden', boxShadow:'0 24px 60px rgba(0,0,0,0.35)' }}>
 
         {/* Header */}
-        <div style={{ background:'#0f172a', padding:'24px 28px', color:'white' }}>
+        <div style={{ background:'#0f172a', padding: isMobile ? '18px 20px' : '24px 28px', color:'white' }}>
           <div style={{ fontSize:11, fontWeight:700, color:'#60a5fa', textTransform:'uppercase', letterSpacing:1, marginBottom:6 }}>TSN Ativos — Assinatura de Contrato</div>
           <h1 style={{ margin:0, fontSize:20, fontWeight:800 }}>{contrato.titulo}</h1>
         </div>
 
-        <div style={{ padding:'28px 28px 36px' }}>
+        <div style={{ padding: isMobile ? '20px 16px 28px' : '28px 28px 36px' }}>
 
           {/* ETAPA: tipo de pessoa */}
           {etapa === 'tipo' && (
@@ -190,7 +192,7 @@ export default function ContratoLink() {
                 </span>
               </label>
 
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:28 }}>
+              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14, marginBottom:28 }}>
                 {[
                   { key:'pf', emoji:'👤', titulo:'Pessoa Física', sub:'CPF, RG e dados pessoais' },
                   { key:'pj', emoji:'🏢', titulo:'Pessoa Jurídica', sub:'CNPJ e dados da empresa' },
