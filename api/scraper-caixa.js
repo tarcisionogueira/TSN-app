@@ -39,13 +39,34 @@ function parseCsvLine(line) {
   return fields;
 }
 
+const CAIXA_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Referer': 'https://venda-imoveis.caixa.gov.br/sistema/busca-imovel.asp',
+  'Connection': 'keep-alive',
+};
+
 async function fetchEstado(uf) {
-  const url = `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf}.csv`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
-  if (!res.ok) return null;
-  const buf = await res.arrayBuffer();
-  const text = new TextDecoder('latin1').decode(buf);
-  return text;
+  // Tenta URL principal
+  const urls = [
+    `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf}.csv`,
+    `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf.toLowerCase()}.csv`,
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: CAIXA_HEADERS,
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!res.ok) continue;
+      const buf = await res.arrayBuffer();
+      const text = new TextDecoder('latin1').decode(buf);
+      if (text.length > 100) return text; // arquivo válido
+    } catch (_) {}
+  }
+  return null;
 }
 
 function csvToImoveis(csv, uf) {
@@ -141,6 +162,7 @@ export default async function handler(req, res) {
       const csv = await fetchEstado(uf);
       if (!csv) {
         estadosErro.push(uf);
+        erros.push({ uf, erro: 'CSV não retornado (bloqueio, timeout ou URL inválida)' });
         continue;
       }
       const imoveis = csvToImoveis(csv, uf);
