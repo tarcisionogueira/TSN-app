@@ -32,8 +32,10 @@ async function fetchPerfil(userId) {
     inadimplenteDias = Math.floor((Date.now() - desde.getTime()) / 86400000);
   }
 
-  // Após 5 dias sem pagar, persiste o downgrade para explorador
-  if (inadimplenteDias > 5 && data?.role && data.role !== 'explorador') {
+  // Após 5 dias sem pagar, persiste o downgrade para explorador.
+  // Roles operacionais (admin, analista, advogado, consultor) nunca são downgradeados.
+  const ROLES_OPERACIONAIS = ['admin', 'analista', 'advogado', 'consultor'];
+  if (inadimplenteDias > 5 && data?.role && data.role !== 'explorador' && !ROLES_OPERACIONAIS.includes(data.role)) {
     await supabase.from('perfis').update({
       role_anterior: data.role,
       role: 'explorador',
