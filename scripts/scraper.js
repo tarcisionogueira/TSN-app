@@ -220,7 +220,6 @@ async function scraperCEFcsv(uf) {
         leiloeiro: 'Caixa Econômica Federal',
         data_leilao: null,
         forma_pagamento: isFinanciado ? 'financiado' : 'a_vista',
-        raw: JSON.stringify(m).slice(0, 400),
       };
     }).filter(Boolean);
 
@@ -266,7 +265,6 @@ async function scraperCEF(estado) {
       leiloeiro: 'Caixa Econômica Federal',
       data_leilao: im.dataLeilao1 || im.dataLeilao || null,
       forma_pagamento: normalizarPagamento(im.modalidadeVenda),
-      raw: JSON.stringify(im).slice(0, 500),
     })).filter(im => im.valor_minimo > 0 && im.fonte_id !== 'cef_undefined');
   } catch (err) {
     console.log(`    Erro CEF ${estado}: ${err.message.slice(0, 80)}`);
@@ -328,7 +326,6 @@ async function scraperSuperbid(pageNumber = 1) {
         leiloeiro: of.store?.name || of.seller?.name || 'Superbid',
         data_leilao: of.endDate || null,
         forma_pagamento: 'a_vista',
-        raw: JSON.stringify({ id: of.id, shortDesc: p.shortDesc, city: loc.city }).slice(0, 300),
       };
     }).filter(im => im.valor_minimo > 0);
 
@@ -374,7 +371,6 @@ async function scraperZukerman() {
           leiloeiro: 'Zukerman Leilões',
           data_leilao: null,
           forma_pagamento: 'a_vista',
-          raw: card.slice(0, 300),
         });
       }
     }
@@ -382,6 +378,195 @@ async function scraperZukerman() {
     return imoveis;
   } catch (err) {
     console.log(`    Erro Zukerman: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER BIASSI ──────────────────────────────────────────────────────────
+
+async function scraperBiassi(page = 1) {
+  console.log(`  Biassi página ${page}...`);
+  try {
+    const url = `https://www.biassi.com.br/leilao/imoveis?page=${page}`;
+    const html = await fetchHtml(url);
+    const imoveis = [];
+    const cardRegex = /<div[^>]*class="[^"]*card[^"]*lote[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
+    // Tenta extrair dados dos cards de lote
+    const lotRegex = /<a[^>]*href="([^"]*\/lote\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+    let m;
+    while ((m = lotRegex.exec(html)) !== null && imoveis.length < 30) {
+      const href = m[1];
+      const inner = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const valorMatch = inner.match(/R\$\s*([\d.,]+)/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+      if (!valor) continue;
+      const id = href.split('/').pop().split('?')[0];
+      imoveis.push({
+        fonte: 'BIASSI',
+        fonte_id: `biassi_${id}`,
+        titulo: inner.slice(0, 100) || `Imóvel Biassi ${id}`,
+        tipo: normalizarTipo(inner),
+        modalidade: inner.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+        estado: '',
+        cidade: '',
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valor,
+        area_m2: 0,
+        descricao: inner.slice(0, 300),
+        link_edital: href.startsWith('http') ? href : `https://www.biassi.com.br${href}`,
+        link_foto: null,
+        leiloeiro: 'Biassi Leilões',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+    console.log(`    Biassi p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro Biassi: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER HASTA PÚBLICA ────────────────────────────────────────────────────
+
+async function scraperHastaPublica(page = 1) {
+  console.log(`  HastaPública página ${page}...`);
+  try {
+    const url = `https://www.hastapublica.com.br/busca?categoria=imoveis&pagina=${page}`;
+    const html = await fetchHtml(url);
+    const imoveis = [];
+    // Extrai links de lotes de imóveis
+    const linkRegex = /href="(\/lote\/[^"?]+)[^"]*"[^>]*>([\s\S]{0,500}?)<\/a>/gi;
+    let m;
+    const seen = new Set();
+    while ((m = linkRegex.exec(html)) !== null && imoveis.length < 30) {
+      const href = m[1];
+      if (seen.has(href)) continue;
+      seen.add(href);
+      const inner = m[2].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+      const valorMatch = inner.match(/R\$\s*([\d.,]+)/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+      if (!valor) continue;
+      const id = href.split('/').filter(Boolean).pop();
+      imoveis.push({
+        fonte: 'HASTA',
+        fonte_id: `hasta_${id}`,
+        titulo: inner.slice(0, 100) || `Imóvel HastaPública ${id}`,
+        tipo: normalizarTipo(inner),
+        modalidade: 'judicial',
+        estado: '',
+        cidade: '',
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valor,
+        area_m2: 0,
+        descricao: inner.slice(0, 300),
+        link_edital: `https://www.hastapublica.com.br${href}`,
+        link_foto: null,
+        leiloeiro: 'HastaPública',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+    console.log(`    HastaPública p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro HastaPública: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER TOP LEILÕES ──────────────────────────────────────────────────────
+
+async function scraperTopLeiloes(page = 1) {
+  console.log(`  TopLeilões página ${page}...`);
+  try {
+    // API JSON pública usada pelo site
+    const url = `https://www.topleiloes.com.br/api/v1/lotes?tipo_bem=imovel&pagina=${page}&por_pagina=50&status=aberto`;
+    const data = await fetchJson(url);
+    const lotes = data?.lotes || data?.data || [];
+    if (!lotes.length) {
+      console.log(`    TopLeilões p${page}: nenhum resultado`);
+      return [];
+    }
+    const imoveis = lotes.map(l => ({
+      fonte: 'TOPLEILOES',
+      fonte_id: `top_${l.id || l.codigo}`,
+      titulo: l.descricao?.slice(0, 100) || `Imóvel TopLeilões ${l.id}`,
+      tipo: normalizarTipo(l.tipo_bem || l.categoria),
+      modalidade: (l.tipo_leilao || '').toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+      estado: l.uf || l.estado || '',
+      cidade: l.cidade || '',
+      bairro: l.bairro || '',
+      endereco: l.endereco || '',
+      valor_avaliacao: parseFloat(l.valor_avaliacao || 0),
+      valor_minimo: parseFloat(l.lance_inicial || l.valor_minimo || 0),
+      area_m2: parseFloat(l.area || 0),
+      descricao: l.descricao?.slice(0, 500) || '',
+      link_edital: l.url || `https://www.topleiloes.com.br/lote/${l.id}`,
+      link_foto: l.foto || l.imagem || null,
+      leiloeiro: l.leiloeiro || 'TopLeilões',
+      data_leilao: l.data_leilao || null,
+      forma_pagamento: 'a_vista',
+    })).filter(im => im.valor_minimo > 0);
+    console.log(`    TopLeilões p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro TopLeilões: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER ELEILÕES ─────────────────────────────────────────────────────────
+
+async function scraperELeiloes(page = 1) {
+  console.log(`  eLeilões página ${page}...`);
+  try {
+    const url = `https://www.eleiloes.com.br/busca?categoria=imoveis&pagina=${page}`;
+    const html = await fetchHtml(url);
+    const imoveis = [];
+    // eLeilões usa cards com data-product ou article
+    const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:card|product|lote)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+    let m;
+    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 30) {
+      const card = m[1];
+      const href = card.match(/href="([^"]*lote[^"]+)"/i)?.[1] || '';
+      if (!href) continue;
+      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const valorMatch = card.match(/R\$\s*([\d.,]+)/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+      if (!valor) continue;
+      const id = href.split('/').filter(Boolean).pop().split('?')[0];
+      const foto = card.match(/<img[^>]*src="([^"]+)"/i)?.[1] || null;
+      imoveis.push({
+        fonte: 'ELEILOES',
+        fonte_id: `eleil_${id}`,
+        titulo: titulo.slice(0, 100) || `Imóvel eLeilões ${id}`,
+        tipo: normalizarTipo(titulo),
+        modalidade: titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+        estado: '',
+        cidade: '',
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valor,
+        area_m2: 0,
+        descricao: titulo.slice(0, 300),
+        link_edital: href.startsWith('http') ? href : `https://www.eleiloes.com.br${href}`,
+        link_foto: foto,
+        leiloeiro: 'eLeilões',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+    console.log(`    eLeilões p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro eLeilões: ${err.message.slice(0, 80)}`);
     return [];
   }
 }
@@ -431,9 +616,12 @@ async function salvarImoveis(imoveis) {
     };
   }));
 
+  // Remove 'raw' field — not in schema
+  const rows = comViabilidade.map(({ raw: _raw, ...rest }) => rest);
+
   const { error } = await supabase
     .from('imoveis_leilao')
-    .upsert(comViabilidade, { onConflict: 'fonte_id', ignoreDuplicates: false });
+    .upsert(rows, { onConflict: 'fonte,fonte_id', ignoreDuplicates: false });
 
   if (error) console.error('Erro ao salvar:', error.message);
   else console.log(`    ✅ ${comViabilidade.length} imóveis salvos`);
@@ -448,7 +636,7 @@ async function main() {
 
   // 1. CEF via CSV (download direto, sem proteção bot)
   console.log('📋 Scraping CEF CSV...');
-  const ufs = ['SP','RJ','MG','BA','PR','RS','PE','CE','GO','SC','ES','MA','PA','PB','RN','MT','MS','PI','AL','SE','TO','DF'];
+  const ufs = ['SP','RJ','MG','BA','PR','RS','PE','CE','GO','SC','ES','MA','PA','PB','RN','MT','MS','PI','AL','SE','TO','DF','AC','AM','AP','RO','RR'];
   for (const uf of ufs) {
     const imoveis = await scraperCEFcsv(uf);
     await salvarImoveis(imoveis);
@@ -471,6 +659,46 @@ async function main() {
   const zuk = await scraperZukerman();
   await salvarImoveis(zuk);
   total += zuk.length;
+
+  // 4. Biassi (extrajudicial/judicial SP e outros estados)
+  console.log('\n📋 Scraping Biassi...');
+  for (let page = 1; page <= 3; page++) {
+    const imoveis = await scraperBiassi(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 5. HastaPública (judicial)
+  console.log('\n📋 Scraping HastaPública...');
+  for (let page = 1; page <= 3; page++) {
+    const imoveis = await scraperHastaPublica(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 6. TopLeilões (API pública)
+  console.log('\n📋 Scraping TopLeilões...');
+  for (let page = 1; page <= 3; page++) {
+    const imoveis = await scraperTopLeiloes(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 7. eLeilões
+  console.log('\n📋 Scraping eLeilões...');
+  for (let page = 1; page <= 3; page++) {
+    const imoveis = await scraperELeiloes(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
 
   // Marca imóveis antigos como expirados (não vistos há 7 dias)
   const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
