@@ -5,24 +5,24 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY, // chave service_role (não a anon)
 );
 
-// Mapeia o valor pago (arredondado) para o plano e role correspondentes.
-// Valor 5000 é ambíguo (clube mensal ou assessorado à vista) — resolvido pela descrição.
-const PLANO_POR_VALOR = {
-  50:    { plano: 'top1',        role: 'top1'        },
-  100:   { plano: 'top2',        role: 'top2'        },
-  500:   { plano: 'assessorado', role: 'assessorado' },
-  48000: { plano: 'clube',       role: 'clube'       },
-};
+// Tolerância de ±1 para evitar problema com arredondamento de gateway
+function dentroFaixa(valor, alvo, tol = 1) {
+  return Math.abs(valor - alvo) <= tol;
+}
 
 function mapearPorValor(valor, descricao) {
-  const v = Math.round(valor);
-  if (v === 5000) {
-    const d = (descricao || '').toLowerCase();
-    return d.includes('assessorado')
+  const v = Number(valor) || 0;
+  const desc = (descricao || '').toLowerCase();
+  if (dentroFaixa(v, 49.9))   return { plano: 'top1',        role: 'top1'        };
+  if (dentroFaixa(v, 99.9))   return { plano: 'top2',        role: 'top2'        };
+  if (dentroFaixa(v, 499.9))  return { plano: 'assessorado', role: 'assessorado' };
+  if (dentroFaixa(v, 5000)) {
+    return desc.includes('assessorado')
       ? { plano: 'assessorado', role: 'assessorado' }
       : { plano: 'clube',       role: 'clube'       };
   }
-  return PLANO_POR_VALOR[v] || null;
+  if (dentroFaixa(v, 48000, 50)) return { plano: 'clube',    role: 'clube'       };
+  return null;
 }
 
 // Busca o perfil do cliente priorizando asaas_id, com fallback por email
@@ -55,6 +55,16 @@ async function buscarCliente(asaasCustomerId, email) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
+
+  // Verifica token secreto do webhook (configurado no painel Asaas)
+  const webhookToken = process.env.ASAAS_WEBHOOK_TOKEN;
+  if (webhookToken) {
+    const receivedToken = req.headers['asaas-access-token'] || req.headers['authorization']?.replace('Bearer ', '');
+    if (receivedToken !== webhookToken) {
+      console.warn('Webhook: token inválido recebido');
+      return res.status(401).json({ error: 'Não autorizado' });
+    }
+  }
 
   const event = req.body;
 

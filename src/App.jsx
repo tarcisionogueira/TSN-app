@@ -1,7 +1,6 @@
 import React from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
-import { useAuth } from './contexts/AuthContext';
-import { AuthProvider } from './contexts/AuthContext';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useAuth, AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import TourGuia from './components/TourGuia';
@@ -79,6 +78,16 @@ function PopupInadimplente({ dias }) {
   );
 }
 
+// Redireciona não-logados para /login preservando o destino
+function PrivateRoute({ children, roles }) {
+  const { isLoggedIn, role, loading } = useAuth();
+  const loc = useLocation();
+  if (loading) return null;
+  if (!isLoggedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  if (roles && !roles.includes(role)) return <Navigate to="/" replace />;
+  return children;
+}
+
 function MainLayout() {
   const { ativo, isLoggedIn, inadimplenteDias } = useAuth();
   if (isLoggedIn && !ativo) return <ContaInativa />;
@@ -91,15 +100,15 @@ function MainLayout() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/planos" element={<Planos />} />
-          <Route path="/buscar" element={<Busca />} />
-          <Route path="/analise" element={<Analise />} />
-          <Route path="/painel" element={<Painel />} />
-          <Route path="/consultor" element={<Consultor />} />
-          <Route path="/contratos" element={<Contratos />} />
-          <Route path="/calculadora" element={<Calculadora />} />
-          <Route path="/membros" element={<Membros />} />
-          <Route path="/membros/curso/:id" element={<Curso />} />
-          <Route path="/membros/ebook/:id" element={<EbookPage />} />
+          <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
+          <Route path="/analise" element={<PrivateRoute><Analise /></PrivateRoute>} />
+          <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
+          <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin']}><Consultor /></PrivateRoute>} />
+          <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
+          <Route path="/calculadora" element={<PrivateRoute><Calculadora /></PrivateRoute>} />
+          <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
+          <Route path="/membros/curso/:id" element={<PrivateRoute><Curso /></PrivateRoute>} />
+          <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />
         </Routes>

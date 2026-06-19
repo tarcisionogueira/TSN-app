@@ -275,9 +275,9 @@ export default function Busca() {
                   );
                 })()}
               </div>
-              <div>
-                <label style={lbl}>Raio de distância</label>
-                <select value={filtros.raioKm} onChange={e=>up('raioKm', Number(e.target.value))} style={inp}>
+              <div style={{ opacity: 0.5, pointerEvents: 'none' }} title="Em breve">
+                <label style={lbl}>Raio de distância <span style={{ fontSize:9, background:'#e2e8f0', padding:'1px 5px', borderRadius:4 }}>Em breve</span></label>
+                <select value={filtros.raioKm} onChange={e=>up('raioKm', Number(e.target.value))} style={inp} disabled>
                   {RAIOS_KM.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
               </div>
@@ -325,7 +325,7 @@ export default function Busca() {
             {selecionados.length>0 && (
               <button onClick={()=>irParaAnalise(resultados.find(r=>r.id===selecionados[0]))}
                 style={{ padding:'8px 16px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-                <ArrowRight size={13}/> Analisar selecionado ({selecionados.length})
+                <ArrowRight size={13}/> Analisar imóvel selecionado
               </button>
             )}
             {buscaFeita&&!loading && (
@@ -403,7 +403,7 @@ export default function Busca() {
                           <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}
                             style={{ width:16, height:16, cursor:'pointer', accentColor:'#2563eb', flexShrink:0 }}/>
                           <span style={{ fontWeight:700, color:'#0f172a', fontSize:14, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
-                          {im.fonte === 'caixa' && (
+                          {im.fonte === 'CEF' && (
                             <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
                           )}
                           {im.fracionado && (
@@ -485,7 +485,7 @@ export default function Busca() {
                   <div style={{ paddingRight:12 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                       <span style={{ fontWeight:700, color:'#0f172a', fontSize:13, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
-                      {im.fonte === 'caixa' && (
+                      {im.fonte === 'CEF' && (
                         <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
                       )}
                       {im.fracionado && (

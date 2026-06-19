@@ -26,7 +26,7 @@ const VAZIO = {
   manutencaoEstimada: 0, prazoReformaMeses: 3, debitosAssumidos: 0,
   iptuMensal: 0, condominioMensal: 0, itbiPercentual: 3,
   laudemio: 0, foreiro: 0, sinalPercentual: 5, prazoMeses: 360,
-  cetAnual: 12, prazoVendaMeses: 12, observacoes: '', riscos: [], lancamentos: '',
+  cetAnual: 12, prazoVendaMeses: 12, observacoes: '', riscos: [], lancamentos: [],
 };
 
 const STATUS_OPTS = [
@@ -120,6 +120,11 @@ export default function Analise() {
         if (mes === mesAtual()) {
           setAnalisesUsadas(count);
           if (count >= LIMITE_ANALISES_TOP1) setAnalisesBloqueado(true);
+        } else {
+          // Novo mês: reinicia contador no banco
+          await supabase.from('perfis').update({ analises_mes: mesAtual(), analises_count: 0 }).eq('id', user.id);
+          setAnalisesUsadas(0);
+          setAnalisesBloqueado(false);
         }
       });
   }, [role, user]);
@@ -149,7 +154,7 @@ export default function Analise() {
   const [msg, setMsg] = useState({ text:'', type:'' });
 
   // Controle de abertura por seção
-  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false });
+  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false });
   const toggleSec = (k) => setOpenSec(p => ({ ...p, [k]: !p[k] }));
 
   const up = useCallback((name, val) => setD(p => ({ ...p, [name]: val })), []);

@@ -87,10 +87,10 @@ export default function Checkout() {
     });
   }, [promoCode]);
 
-  if (!plano || planoKey === 'explorador' || plano.preco === 0) {
-    nav('/');
-    return null;
-  }
+  React.useEffect(() => {
+    if (!plano || planoKey === 'explorador' || plano.preco === 0) nav('/');
+  }, [planoKey]);
+  if (!plano || planoKey === 'explorador' || plano.preco === 0) return null;
 
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
   const cpfUsuario = user?.user_metadata?.cpf || '';
@@ -325,7 +325,7 @@ export default function Checkout() {
           )}
 
           {promoInfo ? (() => {
-            const orig = plano.preco;
+            const orig = temModalidade && modalidade === 'vista' ? (plano.precoVista || plano.preco) : plano.preco;
             const promo = promoInfo.desconto_pct > 0
               ? orig * (1 - promoInfo.desconto_pct / 100)
               : promoInfo.desconto_valor > 0 ? Math.max(0, orig - promoInfo.desconto_valor) : orig;

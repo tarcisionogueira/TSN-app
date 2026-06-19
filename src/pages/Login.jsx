@@ -20,6 +20,7 @@ export default function Login() {
   const refParam = params.get('ref')?.toUpperCase() || '';
   const conviteParam = params.get('convite')?.toUpperCase() || '';
   const modoParam = params.get('modo');
+  const nextParam = params.get('next') || '';
   const [refCodigo] = useState(() => {
     const stored = sessionStorage.getItem('tsn_ref_codigo') || '';
     return refParam || stored;
@@ -69,6 +70,8 @@ export default function Login() {
       sessionStorage.removeItem('tsn_promo_pendente');
       if (planoPendente) {
         nav(`/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`);
+      } else if (nextParam) {
+        nav(decodeURIComponent(nextParam));
       } else {
         nav('/');
       }
