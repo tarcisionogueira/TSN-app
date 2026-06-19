@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle } from 'lucide-react';
+import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
@@ -9,28 +10,51 @@ const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 function getEmailFeedback() { return localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL; }
 
 function ModalFeedback({ user, onClose }) {
-  const [msg, setMsg] = React.useState('');
+  const [queixa, setQueixa] = React.useState('');
+  const [solucao, setSolucao] = React.useState('');
+  const [resolvido, setResolvido] = React.useState('');
+  const [nps, setNps] = React.useState(null);
+  const [enviando, setEnviando] = React.useState(false);
   const [enviado, setEnviado] = React.useState(false);
+  const [erro, setErro] = React.useState('');
   const nome = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Visitante';
   const email = user?.email || '';
 
-  function enviar() {
-    if (!msg.trim()) return;
-    const assunto = encodeURIComponent('[Feedback TSN Ativos]');
-    const corpo = encodeURIComponent(msg + '\n\n---\nEnviado por: ' + nome + ' <' + email + '>');
-    window.open('mailto:' + getEmailFeedback() + '?subject=' + assunto + '&body=' + corpo);
-    setEnviado(true);
-    setTimeout(onClose, 1500);
+  async function enviar() {
+    if (!queixa.trim()) return;
+    setEnviando(true); setErro('');
+    try {
+      const { error } = await supabase.from('feedbacks').insert({
+        user_id: user?.id || null,
+        user_nome: nome,
+        user_email: email,
+        queixa: queixa.trim(),
+        solucao: solucao.trim() || null,
+        resolvido: resolvido || null,
+        nps: nps,
+        status: 'novo',
+      });
+      if (error) throw error;
+      setEnviado(true);
+      setTimeout(onClose, 2000);
+    } catch (e) {
+      setErro('Não foi possível enviar. Tente novamente.');
+    }
+    setEnviando(false);
   }
+
+  const inputStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' };
+  const npsColors = { 0:'#dc2626',1:'#dc2626',2:'#ef4444',3:'#f97316',4:'#f97316',5:'#eab308',6:'#eab308',7:'#84cc16',8:'#22c55e',9:'#16a34a',10:'#059669' };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'white', borderRadius: 16, padding: '28px 28px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: 'white', borderRadius: 16, padding: '28px 28px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', maxHeight: '90vh', overflowY: 'auto' }}>
         {enviado ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 40 }}>✅</div>
-            <p style={{ fontWeight: 700, color: '#0f172a', marginTop: 12 }}>Feedback enviado!</p>
+            <p style={{ fontWeight: 700, color: '#0f172a', marginTop: 12 }}>Feedback registrado!</p>
+            <p style={{ fontSize: 13, color: '#64748b' }}>Obrigado. Nossa equipe vai analisar em breve.</p>
           </div>
         ) : (
           <>
@@ -39,28 +63,63 @@ function ModalFeedback({ user, onClose }) {
               <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 20, lineHeight: 1 }}>✕</button>
             </div>
             {user && (
-              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#64748b', marginBottom: 16 }}>
                 <strong>{nome}</strong> · {email}
               </div>
             )}
-            <textarea
-              value={msg}
-              onChange={e => setMsg(e.target.value)}
-              placeholder="Descreva sua sugestão, problema ou elogio..."
-              style={{ width: '100%', minHeight: 130, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
-              autoFocus
-            />
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>PROBLEMA / SUGESTÃO *</label>
+              <textarea
+                value={queixa}
+                onChange={e => setQueixa(e.target.value)}
+                placeholder="Descreva o problema ou sugestão com detalhes..."
+                style={{ ...inputStyle, minHeight: 90 }}
+                autoFocus
+              />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>SOLUÇÃO SUGERIDA</label>
+              <textarea
+                value={solucao}
+                onChange={e => setSolucao(e.target.value)}
+                placeholder="O que resolveria? (opcional)"
+                style={{ ...inputStyle, minHeight: 70 }}
+              />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>FOI RESOLVIDO?</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {['Sim', 'Não', 'Em andamento'].map(op => (
+                  <label key={op} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#374151', cursor: 'pointer', padding: '6px 8px', borderRadius: 8, border: `1px solid ${resolvido === op ? '#2563eb' : '#e2e8f0'}`, background: resolvido === op ? '#eff6ff' : 'white', fontWeight: resolvido === op ? 700 : 400, textAlign: 'center' }}>
+                    <input type="radio" name="resolvido" value={op} checked={resolvido === op} onChange={() => setResolvido(op)} style={{ display: 'none' }} />
+                    {op}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>SATISFAÇÃO GERAL (0–10)</label>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {Array.from({ length: 11 }, (_, i) => (
+                  <button key={i} onClick={() => setNps(i)}
+                    style={{ width: 34, height: 34, borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: nps === i ? (npsColors[i] || '#2563eb') : '#f1f5f9', color: nps === i ? 'white' : '#64748b' }}>
+                    {i}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                <span>Péssimo</span><span>Excelente</span>
+              </div>
+            </div>
+            {erro && <div style={{ padding: '8px 12px', background: '#fee2e2', color: '#dc2626', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{erro}</div>}
+            <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={onClose} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
                 Cancelar
               </button>
-              <button onClick={enviar} disabled={!msg.trim()} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#0f172a', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: msg.trim() ? 1 : 0.5 }}>
-                Enviar Feedback →
+              <button onClick={enviar} disabled={!queixa.trim() || enviando} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#0f172a', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: queixa.trim() && !enviando ? 1 : 0.5 }}>
+                {enviando ? 'Enviando…' : 'Enviar Feedback →'}
               </button>
             </div>
-            <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
-              Seu feedback será enviado para {getEmailFeedback()}
-            </p>
           </>
         )}
       </div>
@@ -82,24 +141,62 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
-  const linksPublicos = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/planos', label: 'Planos', icon: Tag },
-  ];
   const ROLES_CALC = ['top1', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
+  const linksPublicos = [
+    { path: '/', label: 'Home', icon: Home, tourId: 'home' },
+    { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' },
+  ];
   const linksPrivados = [
-    { path: '/buscar', label: 'Leilões', icon: Search },
-    { path: '/membros', label: 'Área de Membros', icon: GraduationCap },
-    ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator }] : []),
+    { path: '/buscar', label: 'Leilões', icon: Search, tourId: 'leiloes' },
+    { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
+    ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
   const links = user
     ? [linksPublicos[0], ...linksPrivados, linksPublicos[1]]
     : linksPublicos;
 
+  // Auto-inicia tour para membros não-admin: até 3x por mês, cooldown de 24h
+  React.useEffect(() => {
+    if (!user || role === 'admin') return;
+    const agora = Date.now();
+    const mesAtual = new Date().toISOString().slice(0, 7);
+    const tourMesKey  = 'tsn_tour_mes';
+    const tourCountKey = 'tsn_tour_count';
+    const tourLastKey  = 'tsn_tour_last';
+    const savedMes   = localStorage.getItem(tourMesKey);
+    const savedCount = parseInt(localStorage.getItem(tourCountKey) || '0', 10);
+    const savedLast  = parseInt(localStorage.getItem(tourLastKey) || '0', 10);
+    // Reinicia contador no início de cada mês
+    const countAtual = savedMes === mesAtual ? savedCount : 0;
+    if (savedMes !== mesAtual) localStorage.setItem(tourMesKey, mesAtual);
+    const COOLDOWN = 24 * 60 * 60 * 1000;
+    if (countAtual < 3 && (agora - savedLast) >= COOLDOWN) {
+      const timer = setTimeout(() => {
+        setShowTour(true);
+        localStorage.setItem(tourCountKey, String(countAtual + 1));
+        localStorage.setItem(tourLastKey, String(agora));
+        localStorage.setItem(tourMesKey, mesAtual);
+      }, 1400);
+      return () => clearTimeout(timer);
+    }
+  }, [user, role]);
+
   const active = (p) => loc.pathname === p;
 
   const abrirFeedback = () => setShowFeedback(true);
+
+  React.useEffect(() => {
+    const handler = () => setShowFeedback(true);
+    const tourHandler = () => { localStorage.removeItem(TOUR_KEY); setShowTour(true); };
+    window.addEventListener('tsn:open-feedback', handler);
+    window.addEventListener('tsn:open-tour', tourHandler);
+    return () => {
+      window.removeEventListener('tsn:open-feedback', handler);
+      window.removeEventListener('tsn:open-tour', tourHandler);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -139,6 +236,7 @@ export default function Header() {
         <nav style={{ display: 'flex', gap: 4, alignItems: 'center' }} className="hide-mobile">
           {links.map(l => (
             <button key={l.path} onClick={() => nav(l.path)}
+              data-tour={l.tourId}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#1e40af' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
               <l.icon size={14} /> {l.label}
             </button>
@@ -165,8 +263,18 @@ export default function Header() {
 
           {user && (
             <button onClick={() => nav('/analise')}
+              data-tour="analise"
               style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, padding: '8px 16px', border: 'none', borderRadius: 8, background: '#2563eb', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               Fazer Análise <ChevronRight size={14} />
+            </button>
+          )}
+
+          {/* Botão Tour */}
+          {user && (
+            <button onClick={() => { localStorage.removeItem(TOUR_KEY); setShowTour(true); }}
+              title="Ver guia rápido"
+              style={{ display: 'flex', alignItems: 'center', padding: '7px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: '#475569', cursor: 'pointer' }}>
+              <HelpCircle size={15} />
             </button>
           )}
 
@@ -174,6 +282,7 @@ export default function Header() {
           {user ? (
             <div style={{ position: 'relative', marginLeft: 4 }}>
               <button onClick={() => setShowUserMenu(p => !p)}
+                data-tour="conta"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', border: '1px solid #334155', borderRadius: 8, background: 'transparent', color: 'white', cursor: 'pointer' }}>
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>
                   {nomeUsuario[0].toUpperCase()}
@@ -266,6 +375,7 @@ export default function Header() {
       )}
 
       {showFeedback && <ModalFeedback user={user} onClose={() => setShowFeedback(false)} />}
+      {showTour && <TourGuiado onClose={() => setShowTour(false)} />}
 
       <style>{`
         @media (max-width: 768px) {
