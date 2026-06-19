@@ -1,51 +1,39 @@
--- ============================================================
--- RLS FIX — Auditoria de Segurança e LGPD
--- Execute no SQL Editor do painel Supabase
--- ============================================================
+-- ─── 1. Adiciona coluna assinante_email em contratos_link ─────────────────────
+-- (necessária para vincular contratos ao usuário pelo e-mail antes da assinatura)
+ALTER TABLE public.contratos_link
+  ADD COLUMN IF NOT EXISTS assinante_email text DEFAULT NULL;
 
--- ─── contratos_link: acesso do assinante pelo e-mail ────────
--- A política existente (schema_contratos_link.sql) permite que QUALQUER pessoa
--- leia contratos com status='aguardando' pelo token público. Isso é necessário
--- para a página de assinatura externa funcionar sem login.
---
--- Problema: usuários autenticados que acessam /contratos (Contratos.jsx)
--- fazem query por assinante_email = auth.email() diretamente no cliente,
--- mas não há política RLS cobrindo esse caso para leitura autenticada.
--- Sem esta política, a query retorna vazio (RLS bloqueia) mesmo que o e-mail bata.
+CREATE INDEX IF NOT EXISTS idx_contratos_link_assinante_email
+  ON public.contratos_link(assinante_email);
 
-drop policy if exists "Assinante lê próprios contratos_link" on public.contratos_link;
-create policy "Assinante lê próprios contratos_link" on public.contratos_link
-  for select
-  using (assinante_email = auth.email());
+-- ─── 2. RLS: assinante lê e assina contratos endereçados ao seu e-mail ────────
+DROP POLICY IF EXISTS "Assinante lê próprios contratos_link" ON public.contratos_link;
+DROP POLICY IF EXISTS "Assinante pode assinar próprio contrato_link" ON public.contratos_link;
 
--- Permite que o assinante atualize (assinar) apenas o próprio contrato aguardando
-drop policy if exists "Assinante pode assinar próprio contrato_link" on public.contratos_link;
-create policy "Assinante pode assinar próprio contrato_link" on public.contratos_link
-  for update
-  using (
-    assinante_email = auth.email()
-    and status = 'aguardando'
-    and expira_em > now()
-  )
-  with check (
-    assinante_email = auth.email()
-  );
+CREATE POLICY "Assinante lê próprios contratos_link"
+  ON public.contratos_link FOR SELECT
+  USING (assinante_email = auth.email());
 
--- ─── perfis: verificação de políticas existentes ────────────
--- As políticas abaixo já devem existir (schema.sql), mas re-declaramos
--- com DROP IF EXISTS para garantir consistência.
+CREATE POLICY "Assinante pode assinar próprio contrato_link"
+  ON public.contratos_link FOR UPDATE
+  USING (assinante_email = auth.email() AND status = 'aguardando');
 
-drop policy if exists "Usuário lê próprio perfil" on public.perfis;
-create policy "Usuário lê próprio perfil" on public.perfis
-  for select
-  using (auth.uid() = id);
+-- ─── 3. RLS: políticas de perfis (own-row, seguras contra conflito) ───────────
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'perfis' AND policyname = 'Usuário lê próprio perfil'
+  ) THEN
+    EXECUTE 'CREATE POLICY "Usuário lê próprio perfil"
+      ON public.perfis FOR SELECT USING (id = auth.uid())';
+  END IF;
 
-drop policy if exists "Usuário atualiza próprio perfil" on public.perfis;
-create policy "Usuário atualiza próprio perfil" on public.perfis
-  for update
-  using (auth.uid() = id)
-  with check (auth.uid() = id);
-
--- Nota: a política "Admin lê todos" em schema.sql usa subconsulta recursiva
--- que pode causar recursão infinita. Se houver erros de RLS recursivo,
--- aplique schema_fix_rls_recursao.sql primeiro.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'perfis' AND policyname = 'Usuário atualiza próprio perfil'
+  ) THEN
+    EXECUTE 'CREATE POLICY "Usuário atualiza próprio perfil"
+      ON public.perfis FOR UPDATE USING (id = auth.uid())';
+  END IF;
+END $$;
