@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, MessageCircle } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -249,10 +249,10 @@ export default function Header() {
             </button>
           )}
 
-          {(role === 'analista' || role === 'consultor' || role === 'admin') && (
+          {['analista','consultor','admin'].includes(role) && (
             <button onClick={() => nav('/atendimento')}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/atendimento') ? '#0284c7' : '#0284c722', color: '#7dd3fc', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              <MessageCircle size={14} /> Atendimento
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/atendimento') ? '#0891b2' : '#0891b222', color: '#67e8f9', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              <Headphones size={14} /> Atendimento
             </button>
           )}
 
@@ -310,7 +310,7 @@ export default function Header() {
                   {[
                     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
-                    { path: '/chamados', label: 'Meus Chamados', icon: MessageCircle },
+                    { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
                     { path: '/planos', label: 'Minha Assinatura', icon: Tag },
                     ...(role === 'admin' ? [{ path: '/admin', label: '⚙️ Admin', icon: null }] : []),
                   ].map(item => (
@@ -359,12 +359,6 @@ export default function Header() {
             <button onClick={() => { nav('/consultor'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#6ee7b7', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               🤝 Consultor
-            </button>
-          )}
-          {(role === 'analista' || role === 'consultor' || role === 'admin') && (
-            <button onClick={() => { nav('/atendimento'); setOpen(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#7dd3fc', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-              <MessageCircle size={16} /> Atendimento
             </button>
           )}
           {role === 'admin' && (

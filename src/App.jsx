@@ -4,7 +4,10 @@ import { useAuth, AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import TourGuia from './components/TourGuia';
+import ChatSuporte from './components/ChatSuporte';
 import Landing from './pages/Landing';
+import MeusChamados from './pages/MeusChamados';
+import Atendimento from './pages/Atendimento';
 import Termos from './pages/Termos';
 import Privacidade from './pages/Privacidade';
 import Busca from './pages/Busca';
@@ -24,9 +27,6 @@ import Convite from './pages/Convite';
 import EbookPage from './pages/EbookPage';
 import ContratoLink from './pages/ContratoLink';
 import ProdutoLanding from './pages/ProdutoLanding';
-import MeusChamados from './pages/MeusChamados';
-import Atendimento from './pages/Atendimento';
-import ChatSuporte from './components/ChatSuporte';
 
 function ContaInativa() {
   const { user } = useAuth();

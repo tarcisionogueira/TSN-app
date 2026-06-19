@@ -1,4 +1,4 @@
--- Tickets de suporte
+-- Tickets de suporte (chamados)
 CREATE TABLE IF NOT EXISTS public.chamados (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid REFERENCES auth.users(id) NOT NULL,
@@ -28,24 +28,29 @@ CREATE TABLE IF NOT EXISTS public.chamados_mensagens (
 ALTER TABLE public.chamados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chamados_mensagens ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "chamados_proprio_usuario" ON public.chamados;
+DROP POLICY IF EXISTS "chamados_staff" ON public.chamados;
+DROP POLICY IF EXISTS "mensagens_proprio_chamado" ON public.chamados_mensagens;
+DROP POLICY IF EXISTS "mensagens_staff" ON public.chamados_mensagens;
+
 -- Clientes veem apenas seus chamados
-CREATE POLICY IF NOT EXISTS "chamados_proprio_usuario" ON public.chamados
+CREATE POLICY "chamados_proprio_usuario" ON public.chamados
   FOR ALL USING (auth.uid() = user_id);
 
 -- Staff vê todos os chamados
-CREATE POLICY IF NOT EXISTS "chamados_staff" ON public.chamados
+CREATE POLICY "chamados_staff" ON public.chamados
   FOR ALL USING (
     EXISTS (SELECT 1 FROM public.perfis WHERE id = auth.uid() AND role IN ('admin','analista','consultor','advogado'))
   );
 
 -- Mensagens: clientes só do seu chamado
-CREATE POLICY IF NOT EXISTS "mensagens_proprio_chamado" ON public.chamados_mensagens
+CREATE POLICY "mensagens_proprio_chamado" ON public.chamados_mensagens
   FOR ALL USING (
     EXISTS (SELECT 1 FROM public.chamados WHERE id = chamado_id AND user_id = auth.uid())
   );
 
 -- Mensagens: staff vê todas
-CREATE POLICY IF NOT EXISTS "mensagens_staff" ON public.chamados_mensagens
+CREATE POLICY "mensagens_staff" ON public.chamados_mensagens
   FOR ALL USING (
     EXISTS (SELECT 1 FROM public.perfis WHERE id = auth.uid() AND role IN ('admin','analista','consultor','advogado'))
   );
