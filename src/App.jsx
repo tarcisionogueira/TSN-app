@@ -24,6 +24,9 @@ import Convite from './pages/Convite';
 import EbookPage from './pages/EbookPage';
 import ContratoLink from './pages/ContratoLink';
 import ProdutoLanding from './pages/ProdutoLanding';
+import MeusChamados from './pages/MeusChamados';
+import Atendimento from './pages/Atendimento';
+import ChatSuporte from './components/ChatSuporte';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -96,6 +99,7 @@ function MainLayout() {
       <Header />
       {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
       {isLoggedIn && <TourGuia />}
+      <ChatSuporte />
       <main style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -109,6 +113,8 @@ function MainLayout() {
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
           <Route path="/membros/curso/:id" element={<PrivateRoute><Curso /></PrivateRoute>} />
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
+          <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
+          <Route path="/atendimento" element={<PrivateRoute roles={['analista','consultor','admin']}><Atendimento /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />
         </Routes>
