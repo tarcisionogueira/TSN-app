@@ -1525,24 +1525,20 @@ function DashboardTab() {
           <div style={S.card}>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
             {[
-              { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
-              { key: 'top1',       label: 'Investidor (R$49,90)',     cor: '#2563eb', preco: 49.90 },
-              { key: 'top2',       label: 'Investidor Pro (R$99,90)', cor: '#7c3aed', preco: 99.90 },
-              { key: 'assessorado',label: 'Assessorado (R$500×12)', cor: '#d97706', preco: 500 },
-              { key: 'clube',      label: 'Clube de Negócios (R$5k/mês)', cor: '#059669', preco: 5000 },
-            ].map(({ key, label, cor, preco }) => {
+              { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b' },
+              { key: 'top1',       label: 'Investidor (legado)',  cor: '#93c5fd' },
+              { key: 'top2',       label: 'Investidor',          cor: '#2563eb' },
+              { key: 'assessorado',label: 'Assessorado',         cor: '#d97706' },
+              { key: 'clube',      label: 'Clube de Negócios',   cor: '#059669' },
+            ].map(({ key, label, cor }) => {
               const qtd = dados.contagem[key] || 0;
-              const receita = qtd * preco;
               return (
                 <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: cor }} />
                     <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{qtd}</div>
-                    {preco > 0 && <div style={{ fontSize: 11, color: '#64748b' }}>R$ {fmt(receita)}/mês</div>}
-                  </div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: '#0f172a' }}>{qtd}</div>
                 </div>
               );
             })}

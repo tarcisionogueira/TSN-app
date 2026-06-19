@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check } from 'lucide-react';
 import { PLANOS } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../utils/supabase';
 
 const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
 
@@ -10,6 +11,25 @@ export default function Planos() {
   const nav = useNavigate();
   const { user, role } = useAuth();
   const planoAtualPreco = PLANOS[role]?.preco ?? -1;
+  const [promosPublicas, setPromosPublicas] = useState({});
+
+  useEffect(() => {
+    supabase
+      .from('links_promo')
+      .select('produto, desconto_pct, desconto_valor, descricao_condicoes, validade_ate')
+      .eq('ativo', true)
+      .eq('publico', true)
+      .then(({ data }) => {
+        if (!data) return;
+        const map = {};
+        const hoje = new Date();
+        data.forEach(p => {
+          const expirou = p.validade_ate && new Date(p.validade_ate) < hoje;
+          if (!expirou) map[p.produto] = p;
+        });
+        setPromosPublicas(map);
+      });
+  }, []);
 
   const irParaCheckout = (key, plano) => {
     if (key === role && user) return; // já é o plano atual
@@ -54,7 +74,38 @@ export default function Planos() {
                 </div>
               )}
               <div style={{ fontSize: 14, fontWeight: 700, color: plano.cor, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{plano.nome}</div>
-              <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>{plano.precoLabel}</div>
+              {promosPublicas[key] ? (
+                <div style={{ marginBottom: 4 }}>
+                  {promosPublicas[key].desconto_pct > 0 ? (
+                    <>
+                      <div style={{ display: 'inline-block', background: '#dcfce7', color: '#166534', fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 20, marginBottom: 6 }}>
+                        {promosPublicas[key].desconto_pct}% OFF
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                        <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a' }}>{plano.precoLabel}</div>
+                        <div style={{ fontSize: 15, color: '#94a3b8', textDecoration: 'line-through' }}>{plano.precoOriginalLabel || plano.precoLabel}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>{plano.precoLabel}</div>
+                  )}
+                  {promosPublicas[key].descricao_condicoes && (
+                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginBottom: 4 }}>🎁 {promosPublicas[key].descricao_condicoes}</div>
+                  )}
+                </div>
+              ) : plano.precoOriginal ? (
+                <div style={{ marginBottom: 4 }}>
+                  <div style={{ display: 'inline-block', background: '#dcfce7', color: '#166534', fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 20, marginBottom: 6 }}>
+                    OFERTA DE LANÇAMENTO
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a' }}>{plano.precoLabel}</div>
+                    <div style={{ fontSize: 15, color: '#94a3b8', textDecoration: 'line-through' }}>{plano.precoOriginalLabel}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>{plano.precoLabel}</div>
+              )}
               {plano.preco > 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16 }}>{plano.periodicidade}</div>}
               <p style={{ fontSize: 13, color: '#64748b', minHeight: 38, marginBottom: 8 }}>{plano.descricao}</p>
               <div style={{ height: 1, background: '#e2e8f0', margin: '16px 0' }} />

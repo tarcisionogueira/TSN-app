@@ -232,7 +232,7 @@ export default function Contratos() {
       {aberto && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={e => e.target === e.currentTarget && setAberto(null)}>
-          <div style={{ background: 'white', borderRadius: 18, width: '100%', maxWidth: 660, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
+          <div style={{ background: 'white', borderRadius: 18, width: '100%', maxWidth: isMobile ? '100%' : 900, maxHeight: isMobile ? '100dvh' : '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>

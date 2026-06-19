@@ -1,6 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, MessageSquare } from 'lucide-react';
+
+function abrirFeedback() {
+  window.dispatchEvent(new CustomEvent('tsn:open-feedback'));
+}
 
 export default function Footer() {
   return (
@@ -15,7 +19,7 @@ export default function Footer() {
             </div>
           </div>
           <p style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-            Análise de imóveis em leilão com inteligência de dados, viabilidade financeira e segurança jurídica.
+            Análise de imóveis em leilão com viabilidade financeira e segurança jurídica.
           </p>
           <p style={{ fontSize: 11, marginTop: 14, color: '#64748b' }}>
             Nogueira Empreendimentos LTDA · CNPJ 02.311.492/0001-61<br />Feira de Santana — BA
@@ -31,10 +35,17 @@ export default function Footer() {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Contato</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Suporte</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <a href="mailto:tarcisioaraujo@reimob.com.br" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: 13 }}>tarcisioaraujo@reimob.com.br</a>
-              <span style={{ fontSize: 13 }}>(71) 99650-2234</span>
+              <button
+                onClick={abrirFeedback}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: '1px solid #334155', borderRadius: 8, padding: '8px 14px', color: '#94a3b8', fontSize: 13, cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#2563eb'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#334155'}
+              >
+                <MessageSquare size={14} />
+                Entrar em Contato
+              </button>
             </div>
           </div>
         </div>

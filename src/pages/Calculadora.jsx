@@ -17,13 +17,44 @@ const TAXA_LEILOEIRO_PADRAO = 5;
 const inp = { width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, background: 'white', color: '#0f172a', boxSizing: 'border-box' };
 const lbl = { fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 };
 
+function fmtInput(v) {
+  const n = Number(String(v).replace(/\D/g, ''));
+  if (!n && n !== 0) return '';
+  return n.toLocaleString('pt-BR');
+}
+
 function Campo({ label, value, onChange, prefix = '', suffix = '', type = 'number', placeholder = '' }) {
+  const isMoney = prefix === 'R$';
+  const [displayVal, setDisplayVal] = React.useState(isMoney ? fmtInput(value) : String(value || ''));
+  React.useEffect(() => {
+    if (!isMoney) return;
+    const raw = Number(String(value).replace(/\D/g, ''));
+    const formatted = raw ? fmtInput(raw) : (value === '' ? '' : fmtInput(value));
+    setDisplayVal(formatted);
+  }, [value, isMoney]);
+
+  const handleChange = (e) => {
+    const raw = e.target.value;
+    if (isMoney) {
+      const digits = raw.replace(/\D/g, '');
+      setDisplayVal(digits ? Number(digits).toLocaleString('pt-BR') : '');
+      onChange(digits || '');
+    } else {
+      onChange(raw);
+    }
+  };
+
   return (
     <div>
       <label style={lbl}>{label}</label>
       <div style={{ position: 'relative' }}>
         {prefix && <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#64748b', fontWeight: 600, pointerEvents: 'none' }}>{prefix}</span>}
-        <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        <input
+          type={isMoney ? 'text' : type}
+          value={isMoney ? displayVal : (value || '')}
+          onChange={handleChange}
+          placeholder={placeholder}
+          inputMode={isMoney ? 'numeric' : undefined}
           style={{ ...inp, paddingLeft: prefix ? 28 : 11, paddingRight: suffix ? 34 : 11 }} />
         {suffix && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#64748b', fontWeight: 600, pointerEvents: 'none' }}>{suffix}</span>}
       </div>

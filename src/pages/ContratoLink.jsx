@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 
 const inp = { width:'100%', padding:'10px 13px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:14, background:'white', color:'#0f172a', boxSizing:'border-box' };
-const lbl = { fontSize:12, fontWeight:700, color:'#475569', display:'block', marginBottom:5 };
+const lbl = { fontSize:12, fontWeight:700, color:'#94a3b8', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
 
 function Campo({ label, name, value, onChange, type='text', required=false, placeholder='' }) {
   return (
@@ -41,7 +41,7 @@ function AssinaturaCanvas({ onChange }) {
     const ctx = canvasRef.current.getContext('2d');
     const pos = getPos(e, canvasRef.current);
     ctx.beginPath(); ctx.moveTo(last.current.x, last.current.y);
-    ctx.lineTo(pos.x, pos.y); ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2;
+    ctx.lineTo(pos.x, pos.y); ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2.5;
     ctx.lineCap = 'round'; ctx.stroke();
     last.current = pos;
   };
@@ -54,13 +54,13 @@ function AssinaturaCanvas({ onChange }) {
   return (
     <div>
       <label style={lbl}>Assinatura *</label>
-      <canvas ref={canvasRef} width={460} height={140}
-        style={{ width:'100%', height:140, border:'2px dashed #cbd5e1', borderRadius:9, background:'#f8fafc', touchAction:'none', cursor:'crosshair' }}
+      <canvas ref={canvasRef} width={800} height={120}
+        style={{ width:'100%', height:120, border:'2px dashed #cbd5e1', borderRadius:9, background:'#f8fafc', touchAction:'none', cursor:'crosshair' }}
         onMouseDown={iniciar} onMouseMove={desenhar} onMouseUp={terminar} onMouseLeave={terminar}
         onTouchStart={iniciar} onTouchMove={desenhar} onTouchEnd={terminar} />
-      <div style={{ display:'flex', justifyContent:'space-between', marginTop:6, fontSize:12, color:'#94a3b8' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontSize:11, color:'#94a3b8' }}>
         <span>Assine com o mouse ou toque</span>
-        {tem && <button type="button" onClick={limpar} style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:12 }}>Limpar</button>}
+        {tem && <button type="button" onClick={limpar} style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:12, padding:0 }}>Limpar</button>}
       </div>
     </div>
   );
@@ -79,6 +79,7 @@ export default function ContratoLink() {
   const [enviando, setEnviando] = useState(false);
   const [aceite, setAceite] = useState(false);
   const [lgpdAceite, setLgpdAceite] = useState(false);
+  const conteudoRef = useRef(null);
 
   useEffect(() => {
     if (!token) return;
@@ -126,85 +127,130 @@ export default function ContratoLink() {
     if (!assinatura) { alert('Por favor, assine no campo de assinatura.'); return; }
     if (!aceite) { alert('É necessário aceitar os termos para prosseguir.'); return; }
     setEnviando(true);
-
-    // Hash da assinatura
     const enc = new TextEncoder();
     const hashBuffer = await crypto.subtle.digest('SHA-256', enc.encode(JSON.stringify(dados) + assinatura + token));
     const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
-
     const { error } = await supabase.from('contratos_link').update({
       status: 'assinado',
       tipo_pessoa: tipoPessoa,
       dados_signatario: dados,
       assinatura,
       assinado_em: new Date().toISOString(),
-      assinante_ip: null,
+      assinatura_hash: hash,
     }).eq('token', token);
-
     if (error) { alert('Erro ao assinar: ' + error.message); setEnviando(false); return; }
     setEtapa('ok');
   };
 
   if (loading) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f1f5f9', color:'#94a3b8' }}>
-      <Loader2 size={28} style={{ animation:'spin 1s linear infinite' }} />
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a' }}>
+      <Loader2 size={32} color="#60a5fa" style={{ animation:'spin 1s linear infinite' }} />
     </div>
   );
 
   if (erro) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f1f5f9', padding:20 }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a', padding:20 }}>
       <div style={{ textAlign:'center', maxWidth:420 }}>
-        <AlertCircle size={48} color="#dc2626" style={{ margin:'0 auto 16px' }} />
-        <h2 style={{ color:'#0f172a', marginBottom:8 }}>Link indisponível</h2>
-        <p style={{ color:'#64748b' }}>{erro}</p>
+        <AlertCircle size={52} color="#f87171" style={{ margin:'0 auto 20px' }} />
+        <h2 style={{ color:'white', marginBottom:8 }}>Link indisponível</h2>
+        <p style={{ color:'#94a3b8' }}>{erro}</p>
       </div>
     </div>
   );
 
-  return (
-    <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', padding: isMobile ? '16px 12px' : '40px 20px', fontFamily:"'Inter',sans-serif" }}>
-      <div style={{ maxWidth:600, margin:'0 auto', background:'white', borderRadius: isMobile ? 14 : 20, overflow:'hidden', boxShadow:'0 24px 60px rgba(0,0,0,0.35)' }}>
+  if (etapa === 'ok') return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a', padding:20 }}>
+      <div style={{ textAlign:'center', maxWidth:480, background:'#1e293b', borderRadius:20, padding:'48px 32px', border:'1px solid #334155' }}>
+        <CheckCircle2 size={72} color="#34d399" style={{ margin:'0 auto 24px' }} />
+        <h2 style={{ color:'white', marginBottom:8, fontWeight:900, fontSize:26 }}>Contrato assinado!</h2>
+        <p style={{ color:'#94a3b8', fontSize:15, lineHeight:1.7 }}>
+          Sua assinatura foi registrada com sucesso e tem validade jurídica conforme a Lei 14.063/2020.
+        </p>
+        <div style={{ marginTop:24, padding:'14px 18px', background:'rgba(52,211,153,0.1)', border:'1px solid rgba(52,211,153,0.3)', borderRadius:10, fontSize:13, color:'#34d399', textAlign:'left', lineHeight:1.8 }}>
+          <strong>Registrado em:</strong> {new Date().toLocaleString('pt-BR')}
+        </div>
+      </div>
+    </div>
+  );
 
-        {/* Header */}
-        <div style={{ background:'#0f172a', padding: isMobile ? '18px 20px' : '24px 28px', color:'white' }}>
-          <div style={{ fontSize:11, fontWeight:700, color:'#60a5fa', textTransform:'uppercase', letterSpacing:1, marginBottom:6 }}>TSN Ativos — Assinatura de Contrato</div>
-          <h1 style={{ margin:0, fontSize:20, fontWeight:800 }}>{contrato.titulo}</h1>
+  // Layout principal: coluna esquerda = contrato, coluna direita = formulário
+  // Em mobile: empilhado
+  return (
+    <div style={{ minHeight:'100vh', background:'#0f172a', fontFamily:"'Inter',sans-serif", display:'flex', flexDirection:'column' }}>
+      {/* Barra de título */}
+      <div style={{ background:'#0f172a', borderBottom:'1px solid #1e293b', padding:isMobile ? '14px 16px' : '16px 28px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        <div style={{ width:32, height:32, background:'#2563eb', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <ShieldCheck size={18} color="white" />
+        </div>
+        <div>
+          <div style={{ fontSize:11, color:'#60a5fa', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>TSN Ativos — Contrato Digital</div>
+          <div style={{ fontSize:15, fontWeight:800, color:'white' }}>{contrato.titulo}</div>
+        </div>
+      </div>
+
+      {/* Corpo */}
+      <div style={{ flex:1, display:'flex', flexDirection: isMobile ? 'column' : 'row', overflow:'hidden', minHeight:0 }}>
+
+        {/* Painel esquerdo: texto do contrato */}
+        <div ref={conteudoRef} style={{
+          flex: isMobile ? 'none' : 1,
+          overflowY:'auto',
+          padding: isMobile ? '16px 16px 0' : '28px 32px',
+          borderRight: isMobile ? 'none' : '1px solid #1e293b',
+          maxHeight: isMobile ? '45vh' : 'none',
+        }}>
+          <div style={{ fontSize:11, color:'#475569', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:16 }}>
+            Conteúdo do contrato
+          </div>
+          <div style={{
+            whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1',
+            background:'#111827', borderRadius:12, padding:'20px 22px',
+            border:'1px solid #1e293b', minHeight:200,
+          }}>
+            {contrato.conteudo}
+          </div>
+          <div style={{ height:24 }} />
         </div>
 
-        <div style={{ padding: isMobile ? '20px 16px 28px' : '28px 28px 36px' }}>
+        {/* Painel direito: formulário de assinatura */}
+        <div style={{
+          width: isMobile ? '100%' : 420,
+          flexShrink:0,
+          overflowY:'auto',
+          background:'#111827',
+          padding: isMobile ? '16px 16px 24px' : '28px 24px',
+          borderTop: isMobile ? '1px solid #1e293b' : 'none',
+        }}>
 
           {/* ETAPA: tipo de pessoa */}
           {etapa === 'tipo' && (
             <div>
-              <p style={{ color:'#475569', fontSize:15, lineHeight:1.6, marginBottom:20 }}>
-                Você foi convidado a assinar um documento digital. Para prosseguir, informe se você é pessoa física ou jurídica.
-              </p>
+              <div style={{ fontSize:14, fontWeight:800, color:'white', marginBottom:16 }}>Identificação</div>
 
-              {/* Aviso LGPD — deve ser aceito antes de informar dados pessoais */}
-              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'14px 16px', marginBottom:20, fontSize:13, color:'#1e40af', lineHeight:1.6 }}>
-                <strong>Aviso de Privacidade (LGPD)</strong><br />
-                Para a assinatura eletrônica deste contrato, coletaremos seus dados pessoais (nome, CPF/CNPJ, RG, endereço e assinatura). O tratamento ocorre com base no seu consentimento e na execução de contrato, conforme a <strong>Lei nº 13.709/2018 (LGPD)</strong>.
+              <div style={{ background:'rgba(37,99,235,0.1)', border:'1px solid rgba(37,99,235,0.3)', borderRadius:10, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#93c5fd', lineHeight:1.6 }}>
+                <strong>Aviso LGPD:</strong> Seus dados pessoais serão usados exclusivamente para a assinatura deste contrato, conforme a Lei nº 13.709/2018.
               </div>
-              <label style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:13, color:'#334155', lineHeight:1.5, marginBottom:24, cursor:'pointer' }}>
+
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:12.5, color:'#94a3b8', lineHeight:1.5, marginBottom:24, cursor:'pointer' }}>
                 <input type="checkbox" checked={lgpdAceite} onChange={e => setLgpdAceite(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
-                <span>
-                  Autorizo o uso dos meus dados pessoais para fins de assinatura eletrônica deste contrato, conforme a Lei nº 13.709/2018 (LGPD).
-                </span>
+                <span>Autorizo o uso dos meus dados para a assinatura eletrônica deste contrato (LGPD art. 7º, I e V).</span>
               </label>
 
-              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14, marginBottom:28 }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {[
                   { key:'pf', emoji:'👤', titulo:'Pessoa Física', sub:'CPF, RG e dados pessoais' },
                   { key:'pj', emoji:'🏢', titulo:'Pessoa Jurídica', sub:'CNPJ e dados da empresa' },
                 ].map(({ key, emoji, titulo, sub }) => (
                   <button key={key} onClick={() => { if (!lgpdAceite) return; setTipoPessoa(key); setEtapa('dados'); }}
                     disabled={!lgpdAceite}
-                    style={{ padding:'22px 16px', border:'2px solid #e2e8f0', borderRadius:14, background:'white', cursor:lgpdAceite?'pointer':'not-allowed', textAlign:'center', transition:'all 0.15s', opacity:lgpdAceite?1:0.5 }}
-                    onMouseEnter={e => { if (!lgpdAceite) return; e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.background='#eff6ff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.background='white'; }}>
-                    <div style={{ fontSize:36, marginBottom:10 }}>{emoji}</div>
-                    <div style={{ fontWeight:800, color:'#0f172a', marginBottom:4 }}>{titulo}</div>
-                    <div style={{ fontSize:12, color:'#64748b' }}>{sub}</div>
+                    style={{ padding:'16px', border:'1px solid #334155', borderRadius:12, background:'#1e293b', cursor:lgpdAceite?'pointer':'not-allowed', textAlign:'left', display:'flex', alignItems:'center', gap:14, opacity:lgpdAceite?1:0.4, transition:'all 0.15s' }}
+                    onMouseEnter={e => { if (!lgpdAceite) return; e.currentTarget.style.borderColor='#3b82f6'; e.currentTarget.style.background='rgba(59,130,246,0.1)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor='#334155'; e.currentTarget.style.background='#1e293b'; }}>
+                    <span style={{ fontSize:28 }}>{emoji}</span>
+                    <div>
+                      <div style={{ fontWeight:800, color:'white', fontSize:14 }}>{titulo}</div>
+                      <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>{sub}</div>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -214,64 +260,55 @@ export default function ContratoLink() {
           {/* ETAPA: dados do signatário */}
           {etapa === 'dados' && (
             <div>
-              <div style={{ fontSize:13, color:'#64748b', marginBottom:20 }}>
-                {tipoPessoa === 'pf' ? '👤 Pessoa Física' : '🏢 Pessoa Jurídica'} —{' '}
-                <button onClick={() => setEtapa('tipo')} style={{ background:'none', border:'none', color:'#2563eb', cursor:'pointer', fontSize:13, padding:0 }}>trocar</button>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+                <div style={{ fontSize:14, fontWeight:800, color:'white' }}>Seus dados</div>
+                <button onClick={() => setEtapa('tipo')} style={{ background:'none', border:'none', color:'#60a5fa', cursor:'pointer', fontSize:12, padding:0 }}>
+                  ← Voltar
+                </button>
               </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:14, marginBottom:24 }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:20 }}>
                 {campos.map(c => <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange} />)}
               </div>
               <button onClick={() => setEtapa('revisar')} disabled={!podeProsseguir()}
-                style={{ width:'100%', padding:'13px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', opacity:podeProsseguir()?1:0.5 }}>
-                Revisar contrato →
+                style={{ width:'100%', padding:'13px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', opacity:podeProsseguir()?1:0.5 }}>
+                Próximo: Revisar e assinar →
               </button>
             </div>
           )}
 
-          {/* ETAPA: revisar + assinar */}
+          {/* ETAPA: assinar */}
           {etapa === 'revisar' && (
             <div>
-              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'20px', marginBottom:24, maxHeight:300, overflowY:'auto' }}>
-                <div style={{ fontSize:13, color:'#374151', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{contrato.conteudo}</div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+                <div style={{ fontSize:14, fontWeight:800, color:'white' }}>Assinatura eletrônica</div>
+                <button onClick={() => setEtapa('dados')} style={{ background:'none', border:'none', color:'#60a5fa', cursor:'pointer', fontSize:12, padding:0 }}>
+                  ← Voltar
+                </button>
               </div>
 
-              <div style={{ display:'flex', flexDirection:'column', gap:14, marginBottom:24 }}>
+              <div style={{ marginBottom:18 }}>
                 <AssinaturaCanvas onChange={setAssinatura} />
-
-                <label style={{ display:'flex', gap:10, alignItems:'flex-start', cursor:'pointer', fontSize:13, color:'#374151', lineHeight:1.5 }}>
-                  <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
-                  <span>
-                    Declaro que li e concordo com os termos do contrato acima, que as informações fornecidas são verdadeiras e que esta assinatura digital tem validade jurídica conforme a <strong>Lei 14.063/2020</strong> e o <strong>MP 2.200-2/2001</strong>.
-                  </span>
-                </label>
               </div>
+
+              <label style={{ display:'flex', gap:10, alignItems:'flex-start', cursor:'pointer', fontSize:12.5, color:'#94a3b8', lineHeight:1.6, marginBottom:20 }}>
+                <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
+                <span>
+                  Li o contrato e concordo com seus termos. Reconheço esta assinatura eletrônica como juridicamente válida nos termos da <strong style={{ color:'#cbd5e1' }}>Lei 14.063/2020</strong> e <strong style={{ color:'#cbd5e1' }}>MP 2.200-2/2001</strong>.
+                </span>
+              </label>
 
               <button onClick={assinar} disabled={enviando || !aceite || !assinatura}
                 style={{ width:'100%', padding:'14px', background:'#059669', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:15, cursor:'pointer', opacity:(enviando||!aceite||!assinatura)?0.5:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-                {enviando ? <><Loader2 size={16} style={{ animation:'spin 1s linear infinite' }} /> Assinando…</> : '✅ Assinar contrato'}
+                {enviando
+                  ? <><Loader2 size={16} style={{ animation:'spin 1s linear infinite' }} /> Registrando…</>
+                  : <><ShieldCheck size={16} /> Assinar contrato</>
+                }
               </button>
-              <button onClick={() => setEtapa('dados')} style={{ width:'100%', marginTop:10, padding:'11px', background:'none', border:'1px solid #e2e8f0', borderRadius:10, color:'#64748b', fontWeight:600, fontSize:14, cursor:'pointer' }}>
-                ← Editar dados
-              </button>
-            </div>
-          )}
-
-          {/* ETAPA: concluído */}
-          {etapa === 'ok' && (
-            <div style={{ textAlign:'center', padding:'32px 0' }}>
-              <CheckCircle2 size={64} color="#059669" style={{ margin:'0 auto 20px' }} />
-              <h2 style={{ color:'#0f172a', marginBottom:8, fontWeight:900 }}>Contrato assinado!</h2>
-              <p style={{ color:'#64748b', fontSize:14, lineHeight:1.7, maxWidth:380, margin:'0 auto' }}>
-                Sua assinatura foi registrada com sucesso. O contrato assinado ficará disponível com as partes envolvidas.
-              </p>
-              <div style={{ marginTop:24, padding:'14px 18px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, fontSize:13, color:'#166534', textAlign:'left' }}>
-                <strong>Informações legais:</strong><br />
-                Assinatura registrada em {new Date().toLocaleString('pt-BR')} com validade jurídica conforme Lei 14.063/2020.
-              </div>
             </div>
           )}
         </div>
       </div>
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
