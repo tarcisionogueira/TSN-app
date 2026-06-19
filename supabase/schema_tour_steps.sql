@@ -11,8 +11,13 @@ CREATE TABLE IF NOT EXISTS tour_steps (
 
 ALTER TABLE tour_steps ENABLE ROW LEVEL SECURITY;
 
--- Leitura pública (todos os usuários autenticados podem ver os passos ativos)
-CREATE POLICY "tour_steps_select" ON tour_steps
-  FOR SELECT USING (true);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'tour_steps' AND policyname = 'tour_steps_select'
+  ) THEN
+    EXECUTE 'CREATE POLICY "tour_steps_select" ON tour_steps FOR SELECT USING (true)';
+  END IF;
+END $$;
 
 -- Escrita apenas para admin (via service key nas funções serverless)
