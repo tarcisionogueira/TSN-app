@@ -41,6 +41,7 @@ export default function Busca() {
   const canAnalise = user && ROLES_ANALISE.includes(role);
   const [filtros, setFiltros] = useState({ tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] });
   const [buscaCidade, setBuscaCidade] = useState('');
+  const [dropdownIndex, setDropdownIndex] = useState(-1);
   const [resultados, setResultados] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
@@ -217,31 +218,56 @@ export default function Busca() {
                     ))}
                   </div>
                 )}
-                <input
-                  value={buscaCidade}
-                  onChange={e=>setBuscaCidade(e.target.value)}
-                  placeholder={filtros.estado ? 'Buscar cidade (opcional)...' : 'Selecione um estado primeiro'}
-                  disabled={!filtros.estado}
-                  style={{ ...inp, marginBottom:4 }}
-                />
-                {filtros.estado && buscaCidade.length >= 1 && (
-                  <div style={{ maxHeight:160, overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:8, background:'white' }}>
-                    {(CIDADES_POR_ESTADO[filtros.estado] || [])
-                      .filter(c => c.toLowerCase().includes(buscaCidade.toLowerCase()) && !filtros.cidades.includes(c))
-                      .map(c => (
-                        <button key={c} onClick={()=>{ up('cidades', [...filtros.cidades, c]); setBuscaCidade(''); }}
-                          style={{ width:'100%', padding:'7px 12px', border:'none', background:'none', textAlign:'left', cursor:'pointer', fontSize:12, color:'#334155', borderBottom:'1px solid #f1f5f9' }}
-                          onMouseEnter={e=>e.currentTarget.style.background='#eff6ff'}
-                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                          {c}
-                        </button>
-                      ))
+                {(() => {
+                  const cidadesFiltradas = filtros.estado
+                    ? (CIDADES_POR_ESTADO[filtros.estado] || []).filter(c => c.toLowerCase().includes(buscaCidade.toLowerCase()) && !filtros.cidades.includes(c))
+                    : [];
+                  const handleKeyDown = (e) => {
+                    if (!cidadesFiltradas.length) return;
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setDropdownIndex(i => Math.min(i + 1, cidadesFiltradas.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setDropdownIndex(i => Math.max(i - 1, -1));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const cidade = cidadesFiltradas[dropdownIndex >= 0 ? dropdownIndex : 0];
+                      if (cidade) { up('cidades', [...filtros.cidades, cidade]); setBuscaCidade(''); setDropdownIndex(-1); }
+                    } else if (e.key === 'Escape') {
+                      setBuscaCidade(''); setDropdownIndex(-1);
                     }
-                    {(CIDADES_POR_ESTADO[filtros.estado] || []).filter(c=>c.toLowerCase().includes(buscaCidade.toLowerCase())&&!filtros.cidades.includes(c)).length===0 && (
-                      <div style={{ padding:'8px 12px', fontSize:11, color:'#94a3b8' }}>Nenhuma cidade encontrada</div>
-                    )}
-                  </div>
-                )}
+                  };
+                  return (
+                    <>
+                      <input
+                        value={buscaCidade}
+                        onChange={e=>{ setBuscaCidade(e.target.value); setDropdownIndex(-1); }}
+                        onKeyDown={handleKeyDown}
+                        placeholder={filtros.estado ? 'Buscar cidade (opcional)...' : 'Selecione um estado primeiro'}
+                        disabled={!filtros.estado}
+                        style={{ ...inp, marginBottom:4 }}
+                        autoComplete="off"
+                      />
+                      {filtros.estado && buscaCidade.length >= 1 && (
+                        <div style={{ maxHeight:160, overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:8, background:'white' }}>
+                          {cidadesFiltradas.map((c, idx) => (
+                            <button key={c}
+                              onClick={()=>{ up('cidades', [...filtros.cidades, c]); setBuscaCidade(''); setDropdownIndex(-1); }}
+                              style={{ width:'100%', padding:'7px 12px', border:'none', background: idx === dropdownIndex ? '#eff6ff' : 'none', textAlign:'left', cursor:'pointer', fontSize:12, color: idx === dropdownIndex ? '#1d4ed8' : '#334155', borderBottom:'1px solid #f1f5f9', fontWeight: idx === dropdownIndex ? 700 : 400 }}
+                              onMouseEnter={e=>{ setDropdownIndex(idx); e.currentTarget.style.background='#eff6ff'; }}
+                              onMouseLeave={e=>{ if (dropdownIndex !== idx) e.currentTarget.style.background='none'; }}>
+                              {c}
+                            </button>
+                          ))}
+                          {cidadesFiltradas.length === 0 && (
+                            <div style={{ padding:'8px 12px', fontSize:11, color:'#94a3b8' }}>Nenhuma cidade encontrada</div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
               <div>
                 <label style={lbl}>Raio de distância</label>
@@ -543,7 +569,10 @@ export default function Busca() {
           <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:14, border:'1px solid #e2e8f0' }}>
             <Search size={40} color="#94a3b8" style={{ margin:'0 auto 16px' }}/>
             <h3 style={{ color:'#334155', fontWeight:800, margin:'0 0 8px' }}>Nenhum resultado</h3>
-            <p style={{ color:'#94a3b8', fontSize:13 }}>Tente remover filtros ou buscar diretamente nas plataformas.</p>
+            <p style={{ color:'#94a3b8', fontSize:13, lineHeight:1.6 }}>
+              Tente remover filtros ou ampliar a busca para todo o estado.
+              {role === 'admin' && <><br/><strong style={{ color:'#d97706' }}>Admin:</strong> Se o banco estiver vazio, acesse <em>Admin → Scrapers → Buscar imóveis Caixa</em> para importar os dados.</>}
+            </p>
           </div>
         )}
       </div>
