@@ -170,16 +170,21 @@ function mapearColunaCaixa(row) {
   };
 
   return {
-    id:              get('numero do im', 'numero im', 'n  do im', 'imovel'),
-    tipo:            get('tipo do im', 'tipo im', 'tipo'),
-    logradouro:      get('logradouro', 'endereco', 'rua'),
-    bairro:          get('bairro'),
-    cidade:          get('cidade', 'municipio'),
-    uf:              get(' uf', 'estado', 'uf'),
-    valor_avaliacao: get('valor de avalia', 'avalia'),
-    valor_minimo:    get('valor minimo', 'valor de venda', 'lance inicial', 'preco'),
-    modalidade:      get('modalidade', 'tipo de venda'),
-    link:            get('link de acesso', 'link', 'url'),
+    id:               get('numero do im', 'numero im', 'n  do im', 'imovel'),
+    tipo:             get('tipo do im', 'tipo im', 'tipo'),
+    logradouro:       get('logradouro', 'endereco', 'rua'),
+    bairro:           get('bairro'),
+    cidade:           get('cidade', 'municipio'),
+    uf:               get(' uf', 'estado', 'uf'),
+    valor_avaliacao:  get('valor de avalia', 'avalia'),
+    valor_minimo:     get('valor minimo', 'valor de venda', 'lance inicial', 'preco'),
+    modalidade:       get('modalidade', 'tipo de venda'),
+    link:             get('link de acesso', 'link', 'url'),
+    descricao_csv:    get('descri', 'observa', 'complemento'),
+    numero_edital:    get('edital', 'n do edital', 'numero edital'),
+    numero_matricula: get('matricula', 'n da matricula', 'numero matricula', 'registro'),
+    numero_processo:  get('processo', 'n do processo', 'numero processo'),
+    situacao_ocup:    get('situacao ocup', 'ocupacao', 'ocupa'),
   };
 }
 
@@ -215,6 +220,8 @@ async function scraperCEFcsv(uf) {
       const isLeilao = modalLower.includes('leil');
       const isFinanciado = modalLower.includes('financ') || modalLower.includes('fgts');
 
+      const linkDetalhe = m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${m.id.replace(/\s/g,'')}`;
+      const descParts = [m.modalidade, m.tipo, m.situacao_ocup, m.descricao_csv].filter(Boolean);
       return {
         fonte: 'CEF',
         fonte_id: `cef_${m.id.replace(/\s/g,'')}`,
@@ -228,12 +235,15 @@ async function scraperCEFcsv(uf) {
         valor_avaliacao: valorAval,
         valor_minimo: valorMin,
         area_m2: 0,
-        descricao: `${m.modalidade} — ${m.tipo}`,
-        link_edital: m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${m.id}`,
+        descricao: descParts.join(' — ') || null,
+        link_edital: linkDetalhe,
         link_foto: null,
         leiloeiro: 'Caixa Econômica Federal',
         data_leilao: null,
         forma_pagamento: isFinanciado ? 'financiado' : 'a_vista',
+        numero_edital: m.numero_edital || null,
+        numero_matricula: m.numero_matricula || null,
+        numero_processo: m.numero_processo || null,
       };
     }).filter(Boolean);
 
