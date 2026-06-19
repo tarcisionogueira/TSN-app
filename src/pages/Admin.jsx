@@ -556,6 +556,19 @@ function UsuariosTab() {
 function ConfigTab() {
   const [email, setEmail] = useState(() => localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL);
   const [saved, setSaved] = useState(false);
+  const [planos, setPlanos] = useState([]);
+  const [planosLoading, setPlanosLoading] = useState(true);
+  const [planosSaved, setPlanosSaved] = useState({});
+  const [planosErr, setPlanosErr] = useState('');
+
+  useEffect(() => {
+    supabase.from('planos_config').select('*').order('preco', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data) setPlanos(data);
+        else setPlanosErr('Erro ao carregar planos. Rode o SQL schema_planos_config.sql no Supabase.');
+        setPlanosLoading(false);
+      });
+  }, []);
 
   function salvar() {
     localStorage.setItem(FEEDBACK_KEY, email.trim() || DEFAULT_FEEDBACK_EMAIL);
@@ -563,9 +576,83 @@ function ConfigTab() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  async function salvarPlano(p) {
+    const { error } = await supabase.from('planos_config').update({
+      preco: Number(p.preco) || 0,
+      preco_vista: p.preco_vista ? Number(p.preco_vista) : null,
+      cobrar: p.cobrar,
+      ativo: p.ativo,
+      atualizado_em: new Date().toISOString(),
+    }).eq('plano_key', p.plano_key);
+    if (!error) {
+      setPlanosSaved(prev => ({ ...prev, [p.plano_key]: true }));
+      setTimeout(() => setPlanosSaved(prev => ({ ...prev, [p.plano_key]: false })), 2000);
+    }
+  }
+
+  function updatePlano(key, field, value) {
+    setPlanos(prev => prev.map(p => p.plano_key === key ? { ...p, [field]: value } : p));
+  }
+
+  const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+
   return (
-    <div>
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>Configurações</h2>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Configurações</h2>
+
+      {/* Preços dos Planos */}
+      <div style={S.card}>
+        <p style={S.subTitle}>Preços dos Planos</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Altere os valores aqui. O sistema usa esses preços na cobrança e exibição para o cliente.
+          Campos à vista: apenas para Assessorado e Clube. Coluna "Cobrar": desative para planos operacionais gratuitos.
+        </p>
+        {planosErr && <div style={{ background: '#fee2e2', color: '#dc2626', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{planosErr}</div>}
+        {planosLoading ? (
+          <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '160px 130px 130px 80px 70px 90px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
+              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Cobrar?', 'Ativo?', ''].map(h => (
+                <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
+              ))}
+            </div>
+            {planos.map(p => (
+              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '160px 130px 130px 80px 70px 90px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.nome}</div>
+                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.plano_key}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$</div>
+                  <input type="number" step="0.01" value={p.preco} onChange={e => updatePlano(p.plano_key, 'preco', e.target.value)}
+                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (opcional)</div>
+                  <input type="number" step="0.01" value={p.preco_vista ?? ''} onChange={e => updatePlano(p.plano_key, 'preco_vista', e.target.value || null)}
+                    placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <input type="checkbox" checked={p.cobrar} onChange={e => updatePlano(p.plano_key, 'cobrar', e.target.checked)}
+                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <input type="checkbox" checked={p.ativo} onChange={e => updatePlano(p.plano_key, 'ativo', e.target.checked)}
+                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#10b981' }} />
+                </div>
+                <button onClick={() => salvarPlano(p)}
+                  style={{ padding: '7px 14px', background: planosSaved[p.plano_key] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  {planosSaved[p.plano_key] ? '✓ Salvo' : 'Salvar'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Email de feedback */}
       <div style={S.card}>
         <p style={S.subTitle}>Email para receber feedbacks dos membros</p>
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>

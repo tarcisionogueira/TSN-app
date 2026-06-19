@@ -6,7 +6,8 @@ const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
 // .trim() remove espaços/quebras de linha acidentais ao colar a chave
 const API_KEY = (process.env.ASAAS_API_KEY || '').trim();
 
-const PLANOS = {
+// Fallback hardcoded caso o Supabase não retorne
+const PLANOS_FALLBACK = {
   top1:              { nome: 'Investidor',                  valor: 49.90,    ciclo: 'MONTHLY', maxPayments: undefined },
   top2:              { nome: 'Investidor Pro',              valor: 99.90,    ciclo: 'MONTHLY', maxPayments: undefined },
   clube:             { nome: 'Clube de Negócios (Mensal)',  valor: 5000.00,  ciclo: 'MONTHLY', maxPayments: undefined },
@@ -14,6 +15,38 @@ const PLANOS = {
   assessorado:       { nome: 'Assessorado (12× R$ 500)',   valor: 500.00,   ciclo: 'MONTHLY', maxPayments: 12 },
   assessorado_vista: { nome: 'Assessorado (À Vista)',       valor: 5000.00,  avulso: true },
 };
+
+async function getPlanosConfig() {
+  try {
+    const res = await fetch(
+      `${process.env.VITE_SUPABASE_URL}/rest/v1/planos_config?select=plano_key,nome,preco,preco_vista&ativo=eq.true`,
+      { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!res.ok) return PLANOS_FALLBACK;
+    const rows = await res.json();
+    const cfg = {};
+    for (const r of rows) {
+      // mensal / assinatura
+      cfg[r.plano_key] = {
+        ...PLANOS_FALLBACK[r.plano_key],
+        nome: r.nome,
+        valor: Number(r.preco),
+      };
+      // variante à vista (assessorado_vista, clube_vista)
+      if (r.preco_vista != null) {
+        const key = `${r.plano_key}_vista`;
+        cfg[key] = {
+          ...PLANOS_FALLBACK[key],
+          nome: `${r.nome} (À Vista)`,
+          valor: Number(r.preco_vista),
+        };
+      }
+    }
+    return { ...PLANOS_FALLBACK, ...cfg };
+  } catch {
+    return PLANOS_FALLBACK;
+  }
+}
 
 async function asaasPost(path, body) {
   const res = await fetch(`${ASAAS_URL}${path}`, {
@@ -56,6 +89,8 @@ export default async function handler(req, res) {
   const { action, ...body } = req.body;
 
   try {
+    const PLANOS = await getPlanosConfig();
+
     if (action === 'criar_assinatura') {
       const { nome, email, cpf, plano } = body;
       if (!PLANOS[plano]) return res.status(400).json({ error: 'Plano inválido' });
@@ -122,7 +157,7 @@ export default async function handler(req, res) {
     if (action === 'gerenciar_assinatura') {
       const { email, plano } = body;
       const info = PLANOS[plano];
-      if (!info) return res.status(400).json({ error: 'Plano inválido' });
+      if (!info || info.avulso) return res.status(400).json({ error: 'Plano inválido para gerenciamento de assinatura' });
 
       // Localiza customer e assinatura ativa
       const customers = await asaasGet(`/customers?email=${encodeURIComponent(email)}`);
