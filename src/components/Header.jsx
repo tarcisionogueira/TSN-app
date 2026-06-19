@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle } from 'lucide-react';
+import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
@@ -140,30 +141,43 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
-  const linksPublicos = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/planos', label: 'Planos', icon: Tag },
-  ];
   const ROLES_CALC = ['top1', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
+  const linksPublicos = [
+    { path: '/', label: 'Home', icon: Home, tourId: 'home' },
+    { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' },
+  ];
   const linksPrivados = [
-    { path: '/buscar', label: 'Leilões', icon: Search },
-    { path: '/membros', label: 'Área de Membros', icon: GraduationCap },
-    ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator }] : []),
+    { path: '/buscar', label: 'Leilões', icon: Search, tourId: 'leiloes' },
+    { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
+    ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
   const links = user
     ? [linksPublicos[0], ...linksPrivados, linksPublicos[1]]
     : linksPublicos;
 
+  // Auto-inicia tour para membros logados que ainda não fizeram
+  React.useEffect(() => {
+    if (user && !localStorage.getItem(TOUR_KEY)) {
+      const timer = setTimeout(() => setShowTour(true), 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
+
   const active = (p) => loc.pathname === p;
 
   const abrirFeedback = () => setShowFeedback(true);
 
-  // Permite que outros componentes (ex: Footer) disparem o modal via evento global
   React.useEffect(() => {
     const handler = () => setShowFeedback(true);
+    const tourHandler = () => { localStorage.removeItem(TOUR_KEY); setShowTour(true); };
     window.addEventListener('tsn:open-feedback', handler);
-    return () => window.removeEventListener('tsn:open-feedback', handler);
+    window.addEventListener('tsn:open-tour', tourHandler);
+    return () => {
+      window.removeEventListener('tsn:open-feedback', handler);
+      window.removeEventListener('tsn:open-tour', tourHandler);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -204,6 +218,7 @@ export default function Header() {
         <nav style={{ display: 'flex', gap: 4, alignItems: 'center' }} className="hide-mobile">
           {links.map(l => (
             <button key={l.path} onClick={() => nav(l.path)}
+              data-tour={l.tourId}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#1e40af' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
               <l.icon size={14} /> {l.label}
             </button>
@@ -230,8 +245,18 @@ export default function Header() {
 
           {user && (
             <button onClick={() => nav('/analise')}
+              data-tour="analise"
               style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, padding: '8px 16px', border: 'none', borderRadius: 8, background: '#2563eb', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               Fazer Análise <ChevronRight size={14} />
+            </button>
+          )}
+
+          {/* Botão Tour */}
+          {user && (
+            <button onClick={() => { localStorage.removeItem(TOUR_KEY); setShowTour(true); }}
+              title="Ver guia rápido"
+              style={{ display: 'flex', alignItems: 'center', padding: '7px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: '#475569', cursor: 'pointer' }}>
+              <HelpCircle size={15} />
             </button>
           )}
 
@@ -239,6 +264,7 @@ export default function Header() {
           {user ? (
             <div style={{ position: 'relative', marginLeft: 4 }}>
               <button onClick={() => setShowUserMenu(p => !p)}
+                data-tour="conta"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', border: '1px solid #334155', borderRadius: 8, background: 'transparent', color: 'white', cursor: 'pointer' }}>
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>
                   {nomeUsuario[0].toUpperCase()}
@@ -331,6 +357,7 @@ export default function Header() {
       )}
 
       {showFeedback && <ModalFeedback user={user} onClose={() => setShowFeedback(false)} />}
+      {showTour && <TourGuiado onClose={() => setShowTour(false)} />}
 
       <style>{`
         @media (max-width: 768px) {

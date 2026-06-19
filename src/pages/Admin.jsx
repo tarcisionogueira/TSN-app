@@ -2139,7 +2139,7 @@ function AceitesTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Feedbacks', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Aceites', 'Tour', 'Scrapers', 'Configurações'];
+const TABS = ['Dashboard', 'Feedbacks', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Aceites', 'Scrapers', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -2188,7 +2188,6 @@ export default function Admin() {
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Aceites'        && <AceitesTab />}
-        {tab === 'Tour'           && <TourTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Configurações'  && <ConfigTab />}
       </div>
