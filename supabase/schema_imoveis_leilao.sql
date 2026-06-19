@@ -30,5 +30,11 @@ CREATE INDEX IF NOT EXISTS idx_imoveis_leilao_desconto ON public.imoveis_leilao(
 
 ALTER TABLE public.imoveis_leilao ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Leitura pública imoveis_leilao"
-  ON public.imoveis_leilao FOR SELECT USING (true);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'imoveis_leilao' AND policyname = 'Leitura pública imoveis_leilao'
+  ) THEN
+    EXECUTE 'CREATE POLICY "Leitura pública imoveis_leilao" ON public.imoveis_leilao FOR SELECT USING (true)';
+  END IF;
+END $$;

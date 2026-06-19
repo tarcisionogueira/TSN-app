@@ -68,10 +68,17 @@ function ModalFeedback({ user, onClose }) {
   );
 }
 
+const ROLE_LABELS = {
+  admin: 'Admin', explorador: 'Explorador', top1: 'Investidor',
+  top2: 'Investidor Pro', assessorado: 'Assessorado',
+  clube: 'Clube de Negócios', consultor: 'Consultor',
+  analista: 'Analista', advogado: 'Advogado',
+};
+
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { user, role, impersonate, encerrarSuporte } = useAuth();
+  const { user, role, loading, impersonate, encerrarSuporte } = useAuth();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -84,8 +91,6 @@ export default function Header() {
   const linksPrivados = [
     { path: '/buscar', label: 'Leilões', icon: Search },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap },
-    { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
-    { path: '/contratos', label: 'Contratos', icon: FileText },
     ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator }] : []),
   ];
   const links = user
@@ -180,8 +185,25 @@ export default function Header() {
                   <div style={{ padding: '8px 12px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
                     <div style={{ fontWeight: 700, color: '#0f172a' }}>{nomeUsuario}</div>
                     <div style={{ fontSize: 11 }}>{user.email}</div>
-                    <div style={{ fontSize: 10, background: '#f1f5f9', borderRadius: 4, padding: '2px 6px', marginTop: 4, display: 'inline-block', fontWeight: 700, textTransform: 'uppercase' }}>{role}</div>
+                    {!loading && role && role !== 'aluno' && (
+                      <div style={{ fontSize: 10, background: '#f1f5f9', borderRadius: 4, padding: '2px 6px', marginTop: 4, display: 'inline-block', fontWeight: 700, textTransform: 'uppercase' }}>
+                        {ROLE_LABELS[role] || role}
+                      </div>
+                    )}
                   </div>
+                  {[
+                    { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
+                    { path: '/contratos', label: 'Meus Contratos', icon: FileText },
+                    { path: '/planos', label: 'Minha Assinatura', icon: Tag },
+                  ].map(item => (
+                    <button key={item.path} onClick={() => { nav(item.path); setShowUserMenu(false); }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#334155', fontSize: 13, fontWeight: 600, borderRadius: 8, textAlign: 'left' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                      <item.icon size={14} /> {item.label}
+                    </button>
+                  ))}
+                  <div style={{ height: 1, background: '#f1f5f9', margin: '4px 0' }} />
                   <button onClick={handleLogout}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 13, fontWeight: 600, borderRadius: 8 }}
                     onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
