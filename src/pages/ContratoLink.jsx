@@ -76,6 +76,7 @@ export default function ContratoLink() {
   const [assinatura, setAssinatura] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [aceite, setAceite] = useState(false);
+  const [lgpdAceite, setLgpdAceite] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -173,17 +174,31 @@ export default function ContratoLink() {
           {/* ETAPA: tipo de pessoa */}
           {etapa === 'tipo' && (
             <div>
-              <p style={{ color:'#475569', fontSize:15, lineHeight:1.6, marginBottom:28 }}>
+              <p style={{ color:'#475569', fontSize:15, lineHeight:1.6, marginBottom:20 }}>
                 Você foi convidado a assinar um documento digital. Para prosseguir, informe se você é pessoa física ou jurídica.
               </p>
+
+              {/* Aviso LGPD — deve ser aceito antes de informar dados pessoais */}
+              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'14px 16px', marginBottom:20, fontSize:13, color:'#1e40af', lineHeight:1.6 }}>
+                <strong>Aviso de Privacidade (LGPD)</strong><br />
+                Para a assinatura eletrônica deste contrato, coletaremos seus dados pessoais (nome, CPF/CNPJ, RG, endereço e assinatura). O tratamento ocorre com base no seu consentimento e na execução de contrato, conforme a <strong>Lei nº 13.709/2018 (LGPD)</strong>.
+              </div>
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:13, color:'#334155', lineHeight:1.5, marginBottom:24, cursor:'pointer' }}>
+                <input type="checkbox" checked={lgpdAceite} onChange={e => setLgpdAceite(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
+                <span>
+                  Autorizo o uso dos meus dados pessoais para fins de assinatura eletrônica deste contrato, conforme a Lei nº 13.709/2018 (LGPD).
+                </span>
+              </label>
+
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:28 }}>
                 {[
                   { key:'pf', emoji:'👤', titulo:'Pessoa Física', sub:'CPF, RG e dados pessoais' },
                   { key:'pj', emoji:'🏢', titulo:'Pessoa Jurídica', sub:'CNPJ e dados da empresa' },
                 ].map(({ key, emoji, titulo, sub }) => (
-                  <button key={key} onClick={() => { setTipoPessoa(key); setEtapa('dados'); }}
-                    style={{ padding:'22px 16px', border:'2px solid #e2e8f0', borderRadius:14, background:'white', cursor:'pointer', textAlign:'center', transition:'all 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.background='#eff6ff'; }}
+                  <button key={key} onClick={() => { if (!lgpdAceite) return; setTipoPessoa(key); setEtapa('dados'); }}
+                    disabled={!lgpdAceite}
+                    style={{ padding:'22px 16px', border:'2px solid #e2e8f0', borderRadius:14, background:'white', cursor:lgpdAceite?'pointer':'not-allowed', textAlign:'center', transition:'all 0.15s', opacity:lgpdAceite?1:0.5 }}
+                    onMouseEnter={e => { if (!lgpdAceite) return; e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.background='#eff6ff'; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.background='white'; }}>
                     <div style={{ fontSize:36, marginBottom:10 }}>{emoji}</div>
                     <div style={{ fontWeight:800, color:'#0f172a', marginBottom:4 }}>{titulo}</div>

@@ -44,11 +44,22 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const event = req.body;
+
+  // Validação mínima: rejeita payloads sem estrutura esperada
+  if (!event || typeof event.event !== 'string' || !event.payment) {
+    return res.status(400).json({ error: 'Payload inválido' });
+  }
+
   const tipo = event.event;
   const pagamento = event.payment;
   const email = pagamento?.customer?.email;
   const asaasCustomerId = pagamento?.customer?.id;
   const valor = pagamento?.value;
+
+  // Rejeita eventos sem identificador de cliente
+  if (tipo !== 'PAYMENT_REFUSED' && !email && !asaasCustomerId) {
+    return res.status(200).json({ ok: true, skipped: 'sem_identificador_cliente' });
+  }
 
   // ── Pagamento vencido: registra inadimplência ──
   if (tipo === 'PAYMENT_OVERDUE') {

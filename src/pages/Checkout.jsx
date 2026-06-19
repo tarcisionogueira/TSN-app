@@ -322,9 +322,13 @@ export default function Checkout() {
             ))}
           </div>
 
-          <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: '#475569' }}>
+          <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 13, color: '#475569' }}>
             <strong>Conta:</strong> {user?.email}
             {ehMudanca && planoAtual && <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>Plano atual: <strong>{planoAtual.nome}</strong> ({planoAtual.precoLabel})</div>}
+          </div>
+          {/* Aviso LGPD — CPF e nome são enviados ao processador de pagamento */}
+          <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '8px 12px', marginBottom: 20, fontSize: 11, color: '#0369a1', lineHeight: 1.5 }}>
+            Seus dados (nome e CPF) serão compartilhados com o processador de pagamento para emissão da cobrança, conforme a <strong>Lei nº 13.709/2018 (LGPD)</strong>.
           </div>
 
           {/* Resultado de mudança de plano */}
