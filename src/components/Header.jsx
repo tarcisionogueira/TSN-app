@@ -159,6 +159,13 @@ export default function Header() {
 
   const abrirFeedback = () => setShowFeedback(true);
 
+  // Permite que outros componentes (ex: Footer) disparem o modal via evento global
+  React.useEffect(() => {
+    const handler = () => setShowFeedback(true);
+    window.addEventListener('tsn:open-feedback', handler);
+    return () => window.removeEventListener('tsn:open-feedback', handler);
+  }, []);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setShowUserMenu(false);
