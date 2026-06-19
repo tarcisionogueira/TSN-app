@@ -7,9 +7,12 @@ const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
 const API_KEY = (process.env.ASAAS_API_KEY || '').trim();
 
 const PLANOS = {
-  top1:  { nome: 'Plano TOP 1', valor: 49.90, ciclo: 'MONTHLY' },
-  top2:  { nome: 'Plano TOP 2', valor: 99.90, ciclo: 'MONTHLY' },
-  clube: { nome: 'Clube de Negócios', valor: 5000.00, ciclo: 'MONTHLY' },
+  top1:              { nome: 'Investidor',                  valor: 49.90,    ciclo: 'MONTHLY', maxPayments: undefined },
+  top2:              { nome: 'Investidor Pro',              valor: 99.90,    ciclo: 'MONTHLY', maxPayments: undefined },
+  clube:             { nome: 'Clube de Negócios (Mensal)',  valor: 5000.00,  ciclo: 'MONTHLY', maxPayments: undefined },
+  clube_vista:       { nome: 'Clube de Negócios (À Vista)', valor: 48000.00, avulso: true },
+  assessorado:       { nome: 'Assessorado (12× R$ 500)',   valor: 500.00,   ciclo: 'MONTHLY', maxPayments: 12 },
+  assessorado_vista: { nome: 'Assessorado (À Vista)',       valor: 5000.00,  avulso: true },
 };
 
 async function asaasPost(path, body) {
@@ -75,28 +78,43 @@ export default async function handler(req, res) {
         customerId = customer.id;
       }
 
-      // 2. Cria assinatura
+      // 2. Cria cobrança — avulsa (à vista) ou assinatura recorrente
       const info = PLANOS[plano];
-      const subscription = await asaasPost('/subscriptions', {
-        customer: customerId,
-        billingType: 'UNDEFINED', // usuário escolhe PIX, boleto ou cartão
-        value: info.valor,
-        nextDueDate: new Date().toISOString().split('T')[0],
-        cycle: info.ciclo,
-        description: info.nome,
-        maxPayments: undefined, // recorrente sem fim
-      });
+      let linkPagamento, subscriptionId;
 
-      // 3. Pega link de pagamento da primeira fatura
-      const invoices = await asaasGet(`/subscriptions/${subscription.id}/payments`);
-      const primeiraFatura = invoices.data?.[0];
-      const linkPagamento = primeiraFatura?.invoiceUrl || primeiraFatura?.bankSlipUrl;
+      if (info.avulso) {
+        // Pagamento único — sem renovação automática
+        const cobranca = await asaasPost('/payments', {
+          customer: customerId,
+          billingType: 'UNDEFINED',
+          value: info.valor,
+          dueDate: new Date().toISOString().split('T')[0],
+          description: info.nome,
+        });
+        linkPagamento = cobranca.invoiceUrl || cobranca.bankSlipUrl;
+      } else {
+        // Assinatura recorrente
+        const subscription = await asaasPost('/subscriptions', {
+          customer: customerId,
+          billingType: 'UNDEFINED',
+          value: info.valor,
+          nextDueDate: new Date().toISOString().split('T')[0],
+          cycle: info.ciclo,
+          description: info.nome,
+          maxPayments: info.maxPayments || undefined,
+        });
+        subscriptionId = subscription.id;
+
+        const invoices = await asaasGet(`/subscriptions/${subscription.id}/payments`);
+        const primeiraFatura = invoices.data?.[0];
+        linkPagamento = primeiraFatura?.invoiceUrl || primeiraFatura?.bankSlipUrl;
+      }
 
       return res.status(200).json({
-        subscriptionId: subscription.id,
+        subscriptionId,
         customerId,
         linkPagamento,
-        status: subscription.status,
+        avulso: !!info.avulso,
       });
     }
 

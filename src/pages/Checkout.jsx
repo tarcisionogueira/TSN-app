@@ -68,6 +68,10 @@ export default function Checkout() {
   const [resultadoMudanca, setResultadoMudanca] = useState(null);
   const [erro, setErro] = useState('');
   const [pago, setPago] = useState(false); // tela de aprovado
+  const [modalidade, setModalidade] = useState('mensal'); // 'mensal' | 'vista'
+
+  const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
+  const planoApiKey = temModalidade && modalidade === 'vista' ? `${planoKey}_vista` : planoKey;
 
   useEffect(() => {
     if (!user) nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`);
@@ -106,7 +110,7 @@ export default function Checkout() {
           nome: nomeUsuario,
           email: user.email,
           cpf: cpfUsuario,
-          plano: planoKey,
+          plano: planoApiKey,
         }),
       });
       const data = await res.json();
@@ -283,6 +287,24 @@ export default function Checkout() {
           <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#0f172a' }}>
             Plano {plano.nome}
           </h2>
+
+          {/* Seletor de modalidade — apenas para assessorado e clube */}
+          {temModalidade && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
+              {[
+                { key: 'mensal', label: planoKey === 'assessorado' ? '12× R$ 500' : 'Mensal R$ 5.000' },
+                { key: 'vista',  label: planoKey === 'assessorado' ? 'À vista R$ 5.000' : 'À vista R$ 48.000' },
+              ].map(({ key, label }) => (
+                <button key={key} onClick={() => setModalidade(key)}
+                  style={{ flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                    background: modalidade === key ? plano.cor : 'transparent',
+                    color: modalidade === key ? 'white' : '#64748b' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {promoInfo ? (() => {
             const orig = plano.preco;
             const promo = promoInfo.desconto_pct > 0
@@ -304,7 +326,16 @@ export default function Checkout() {
             );
           })() : (
             <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: 15 }}>
-              <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
+              {temModalidade && modalidade === 'vista' ? (
+                <>
+                  <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoVistaLabel}</strong>
+                  {' '}à vista · sem renovação automática
+                </>
+              ) : (
+                <>
+                  <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
+                </>
+              )}
             </p>
           )}
           {plano.honorarios && (

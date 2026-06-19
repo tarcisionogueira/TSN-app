@@ -5,12 +5,25 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY, // chave service_role (não a anon)
 );
 
-// Mapeia o valor pago (arredondado) para o plano e role correspondentes
+// Mapeia o valor pago (arredondado) para o plano e role correspondentes.
+// Valor 5000 é ambíguo (clube mensal ou assessorado à vista) — resolvido pela descrição.
 const PLANO_POR_VALOR = {
-  50:   { plano: 'top1',  role: 'top1'  },
-  100:  { plano: 'top2',  role: 'top2'  },
-  5000: { plano: 'clube', role: 'clube' },
+  50:    { plano: 'top1',        role: 'top1'        },
+  100:   { plano: 'top2',        role: 'top2'        },
+  500:   { plano: 'assessorado', role: 'assessorado' },
+  48000: { plano: 'clube',       role: 'clube'       },
 };
+
+function mapearPorValor(valor, descricao) {
+  const v = Math.round(valor);
+  if (v === 5000) {
+    const d = (descricao || '').toLowerCase();
+    return d.includes('assessorado')
+      ? { plano: 'assessorado', role: 'assessorado' }
+      : { plano: 'clube',       role: 'clube'       };
+  }
+  return PLANO_POR_VALOR[v] || null;
+}
 
 // Busca o perfil do cliente priorizando asaas_id, com fallback por email
 async function buscarCliente(asaasCustomerId, email) {
@@ -86,7 +99,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: 'perfil_nao_encontrado' });
     }
 
-    const mapeado = valor ? PLANO_POR_VALOR[Math.round(valor)] : null;
+    const mapeado = valor ? mapearPorValor(valor, pagamento?.description) : null;
 
     // Prepara update: limpa inadimplência, atualiza plano/role se mapeado
     const update = {
