@@ -816,7 +816,8 @@ export default function Painel() {
                   style={{ ...inp2, width:'100%' }}/>
               </div>
               <button onClick={adicionarLancamento}
-                style={{ padding:'8px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:13, cursor:'pointer', height:36, whiteSpace:'nowrap' }}>
+                disabled={!novoLanc.imovelId || !novoLanc.valor}
+                style={{ padding:'8px 16px', background: (!novoLanc.imovelId||!novoLanc.valor) ? '#94a3b8' : '#2563eb', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:13, cursor: (!novoLanc.imovelId||!novoLanc.valor) ? 'not-allowed' : 'pointer', height:36, whiteSpace:'nowrap' }}>
                 + Lançar
               </button>
             </div>

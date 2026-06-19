@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PLANOS } from '../data/cursos';
+import { supabase } from '../utils/supabase';
 
 const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
 
@@ -69,6 +70,7 @@ export default function Checkout() {
   const [erro, setErro] = useState('');
   const [pago, setPago] = useState(false); // tela de aprovado
   const [modalidade, setModalidade] = useState('mensal'); // 'mensal' | 'vista'
+  const [aceitouTermos, setAceitouTermos] = useState(false);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
   const planoApiKey = temModalidade && modalidade === 'vista' ? `${planoKey}_vista` : planoKey;
@@ -85,10 +87,10 @@ export default function Checkout() {
     });
   }, [promoCode]);
 
-  if (!plano || planoKey === 'explorador' || plano.preco === 0) {
-    nav('/');
-    return null;
-  }
+  React.useEffect(() => {
+    if (!plano || planoKey === 'explorador' || plano.preco === 0) nav('/');
+  }, [planoKey]);
+  if (!plano || planoKey === 'explorador' || plano.preco === 0) return null;
 
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
   const cpfUsuario = user?.user_metadata?.cpf || '';
@@ -97,6 +99,23 @@ export default function Checkout() {
   const planoAtual = PLANOS[role];
   const ehMudanca = PLANOS_PAGOS.includes(role) && role !== planoKey && planoKey !== 'assessorado' && role !== 'assessorado';
   const ehUpgrade = ehMudanca && plano.preco > (planoAtual?.preco || 0);
+
+  // Log de aceite para proteção contra chargeback
+  const logAceite = async (planoKey, valor, asaasData) => {
+    if (!user) return;
+    try {
+      await supabase.from('aceites_plano').insert({
+        user_id: user.id,
+        user_email: user.email,
+        plano_key: planoKey,
+        valor: valor,
+        asaas_payment_id: asaasData?.subscriptionId || asaasData?.customerId || null,
+        asaas_subscription_id: asaasData?.subscriptionId || null,
+        user_agent: navigator.userAgent,
+        termos_versao: '1.0',
+      });
+    } catch (_) {}
+  };
 
   const gerarLink = async () => {
     setLoading(true);
@@ -117,13 +136,13 @@ export default function Checkout() {
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar cobrança');
       const link = data.linkPagamento;
       setLinkPagamento(link);
+      // Log de aceite dos termos para proteção contra chargeback
+      await logAceite(planoApiKey, plano.preco, data);
       // Abre o link do Asaas em nova aba automaticamente
       if (link) window.open(link, '_blank', 'noopener');
       // Salva o ID do customer Asaas no perfil
       if (data.customerId && user?.id) {
-        import('../utils/supabase').then(({ supabase }) => {
-          supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id).then(() => {});
-        });
+        supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id).then(() => {});
       }
     } catch (err) {
       setErro(err.message);
@@ -306,7 +325,7 @@ export default function Checkout() {
           )}
 
           {promoInfo ? (() => {
-            const orig = plano.preco;
+            const orig = temModalidade && modalidade === 'vista' ? (plano.precoVista || plano.preco) : plano.preco;
             const promo = promoInfo.desconto_pct > 0
               ? orig * (1 - promoInfo.desconto_pct / 100)
               : promoInfo.desconto_valor > 0 ? Math.max(0, orig - promoInfo.desconto_valor) : orig;
@@ -402,11 +421,31 @@ export default function Checkout() {
                 ✅ Paguei — confirmar
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10 }}>Seu plano será ativado automaticamente em até 5 minutos após o pagamento.</p>
+              <div style={{ marginTop: 12, padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12 }}>
+                <p style={{ fontSize: 13, color: '#166534', margin: '0 0 10px', fontWeight: 600 }}>
+                  ✅ Após confirmar o pagamento, assine o contrato do seu plano:
+                </p>
+                <button
+                  onClick={() => window.location.hash = '/contratos'}
+                  style={{ padding: '10px 20px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  Ir para Meus Contratos →
+                </button>
+              </div>
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>
+                Você pode cancelar a qualquer momento em <strong>Minha Conta → Cancelar plano</strong>
+              </p>
             </div>
           ) : (
             <>
-              <button onClick={ehMudanca ? mudarPlano : gerarLink} disabled={loading}
-                style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
+              {/* Aceite dos termos — prova de consentimento */}
+              {!linkPagamento && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
+                  <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+                  <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#2563eb' }}>Termos de Uso</a> e autorizo a cobrança recorrente conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma.</span>
+                </label>
+              )}
+              <button onClick={ehMudanca ? mudarPlano : gerarLink} disabled={loading || !aceitouTermos}
+                style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: (!aceitouTermos || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceitouTermos) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
