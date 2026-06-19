@@ -19,6 +19,7 @@ export default function Atendimento() {
   const [anexos, setAnexos] = useState([]);
   const [enviando, setEnviando] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState('');
   const fileRef = useRef();
   const msgEndRef = useRef();
 
@@ -115,6 +116,15 @@ export default function Atendimento() {
   const fmtData = d => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
   const fmtHora = d => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const cont = s => chamados.filter(c => c.status === s).length;
+  const buscaLower = busca.toLowerCase();
+  const chamadosFiltrados = busca.trim()
+    ? chamados.filter(c =>
+        (c.user_nome || '').toLowerCase().includes(buscaLower) ||
+        (c.user_email || '').toLowerCase().includes(buscaLower) ||
+        (c.atendente_nome || '').toLowerCase().includes(buscaLower) ||
+        (c.titulo || '').toLowerCase().includes(buscaLower)
+      )
+    : chamados;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '310px 1fr', gap: 20, maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start' }}>
@@ -151,15 +161,26 @@ export default function Atendimento() {
             ))}
           </div>
 
+          {/* Busca por cliente ou atendente */}
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar por cliente ou atendente..."
+              style={{ width: '100%', padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+
           {/* Lista de chamados */}
           <div style={{ maxHeight: 520, overflowY: 'auto' }}>
             {loading ? (
               <div style={{ padding: 24, textAlign: 'center' }}>
                 <Loader2 size={20} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
               </div>
-            ) : chamados.length === 0 ? (
+            ) : chamadosFiltrados.length === 0 ? (
               <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Nenhum chamado</div>
-            ) : chamados.map(c => {
+            ) : chamadosFiltrados.map(c => {
               const s = STATUS_CFG[c.status] || STATUS_CFG.aberto;
               const ativo = chamadoAtivo?.id === c.id;
               return (
