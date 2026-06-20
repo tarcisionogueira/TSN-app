@@ -507,7 +507,8 @@ export default function Busca() {
               // Mobile: card layout
               if (isMobile) {
                 return (
-                  <div key={im.id} style={{ padding:'14px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa' }}>
+                  <div key={im.id} style={{ padding:'14px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa', cursor:'pointer' }}
+                    onClick={e => { if (e.target.closest('a,button,input')) return; nav('/imovel/'+im.id, { state: { imovel: im } }); }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:8 }}>
                       <div style={{ flex:1 }}>
                         <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
@@ -587,7 +588,8 @@ export default function Busca() {
               // Desktop: row layout
               return (
                 <div key={im.id}
-                  style={{ display:'grid', gridTemplateColumns:'36px 1fr 110px 120px 120px 72px 90px 190px', gap:0, padding:'12px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa', alignItems:'center', transition:'background 0.15s' }}>
+                  style={{ display:'grid', gridTemplateColumns:'36px 1fr 110px 120px 120px 72px 90px 190px', gap:0, padding:'12px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa', alignItems:'center', transition:'background 0.15s', cursor:'pointer' }}
+                  onClick={e => { if (e.target.closest('a,button,input')) return; nav('/imovel/'+im.id, { state: { imovel: im } }); }}>
 
                   {/* Checkbox seleção */}
                   <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}

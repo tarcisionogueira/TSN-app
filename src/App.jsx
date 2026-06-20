@@ -11,6 +11,7 @@ import Atendimento from './pages/Atendimento';
 import Termos from './pages/Termos';
 import Privacidade from './pages/Privacidade';
 import Busca from './pages/Busca';
+import ImovelDetalhe from './pages/ImovelDetalhe';
 import Analise from './pages/Analise';
 import Painel from './pages/Painel';
 import Consultor from './pages/Consultor';
@@ -113,6 +114,7 @@ function MainLayout() {
           <Route path="/" element={<Landing />} />
           <Route path="/planos" element={<Planos />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
+          <Route path="/imovel/:id" element={<PrivateRoute><ImovelDetalhe /></PrivateRoute>} />
           <Route path="/analise" element={<PrivateRoute><Analise /></PrivateRoute>} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
           <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin']}><Consultor /></PrivateRoute>} />
