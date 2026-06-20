@@ -4,8 +4,8 @@ import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, Ba
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
-const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem' };
-const MODAL_LABEL = { primeiro_leilao:'1º Leilão', segundo_leilao:'2º Leilão', venda_direta:'Venda Direta', licitacao_aberta:'Licitação Aberta' };
+const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
+const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', venda_direta:'Venda Direta', licitacao_aberta:'Licitação Aberta', extrajudicial:'Extrajudicial', judicial:'Judicial' };
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
 function fmtData(d, modalidade) {
@@ -261,10 +261,21 @@ export default function ImovelDetalhe() {
 
               {/* Ir ao leiloeiro */}
               {imovel.urlLote && (
-                <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0f172a', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', marginBottom: 10, boxSizing: 'border-box' }}>
-                  <ExternalLink size={15} /> Ir ao leiloeiro
-                </a>
+                <div style={{ marginBottom: 10 }}>
+                  <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0f172a', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
+                    <ExternalLink size={15} /> Ir ao leiloeiro
+                  </a>
+                  <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
+                    ⚠️ Se o link estiver expirado, o imóvel pode ter sido vendido.{' '}
+                    {imovel.fonte === 'caixa' && (
+                      <a href="https://venda-imoveis.caixa.gov.br/sistema/busca-imovel.asp" target="_blank" rel="noopener noreferrer"
+                        style={{ color: '#2563eb', fontWeight: 600 }}>
+                        Buscar na CEF →
+                      </a>
+                    )}
+                  </div>
+                </div>
               )}
 
               {/* Solicitar análise */}
