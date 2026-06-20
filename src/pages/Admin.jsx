@@ -2431,16 +2431,39 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
   const [meetLink, setMeetLink] = useState(sol.google_meet_link || '');
   const [status, setStatus] = useState(sol.status || 'solicitado');
   const [saving, setSaving] = useState(false);
+  const [notificando, setNotificando] = useState(false);
   const [clienteEmail, setClienteEmail] = useState('');
+  const [clienteNome, setClienteNome] = useState('');
+  const [reuniaoEm, setReuniaoEm] = useState(
+    sol.reuniao_em ? new Date(sol.reuniao_em).toISOString().slice(0, 16) : ''
+  );
+  const [reuniaoDuracao, setReuniaoDuracao] = useState(sol.reuniao_duracao_min || 30);
 
   useEffect(() => {
     if (sol.user_id) {
-      supabase.from('perfis').select('email').eq('id', sol.user_id).single()
-        .then(({ data }) => { if (data?.email) setClienteEmail(data.email); });
+      supabase.from('perfis').select('email, nome').eq('id', sol.user_id).single()
+        .then(({ data }) => {
+          if (data?.email) setClienteEmail(data.email);
+          if (data?.nome) setClienteNome(data.nome);
+        });
     }
   }, [sol.user_id]);
 
   const analista = membros.find(m => m.id === sol.analista_id);
+
+  function buildMeetCreateUrl() {
+    let url = `https://calendar.google.com/calendar/r/eventedit?text=${encodeURIComponent('Reunião TSN Ativos — ' + (sol.imovel_nome || 'Imóvel'))}`;
+    url += `&details=${encodeURIComponent('Análise de imóvel em leilão — TSN Ativos')}`;
+    if (clienteEmail) url += `&add=${encodeURIComponent(clienteEmail)}`;
+    if (reuniaoEm) {
+      const start = new Date(reuniaoEm);
+      const end = new Date(start.getTime() + reuniaoDuracao * 60000);
+      const fmt = d => d.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+      url += `&dates=${fmt(start)}/${fmt(end)}`;
+    }
+    if (meetLink) url += `&location=${encodeURIComponent(meetLink)}`;
+    return url;
+  }
 
   async function salvar() {
     setSaving(true);
@@ -2449,12 +2472,56 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
       notas_analista: notas,
       google_meet_link: meetLink,
       status,
+      reuniao_em: reuniaoEm ? new Date(reuniaoEm).toISOString() : null,
+      reuniao_duracao_min: reuniaoDuracao,
     }).eq('id', sol.id);
     setSaving(false);
     onSaved();
   }
 
-  const meetCreateUrl = `https://calendar.google.com/calendar/r/eventedit?text=Reuni%C3%A3o+TSN+Ativos+-+${encodeURIComponent(sol.imovel_nome || 'Im%C3%B3vel')}&details=An%C3%A1lise+de+im%C3%B3vel+em+leil%C3%A3o${clienteEmail ? '&add=' + encodeURIComponent(clienteEmail) : ''}`;
+  async function salvarENotificar() {
+    if (!reuniaoEm || !meetLink) {
+      alert('Preencha a data/hora e a URL do Google Meet antes de notificar.');
+      return;
+    }
+    if (!clienteEmail) {
+      alert('E-mail do cliente não encontrado.');
+      return;
+    }
+    setNotificando(true);
+    await supabase.from('solicitacoes').update({
+      checklist,
+      notas_analista: notas,
+      google_meet_link: meetLink,
+      status,
+      reuniao_em: new Date(reuniaoEm).toISOString(),
+      reuniao_duracao_min: reuniaoDuracao,
+    }).eq('id', sol.id);
+
+    try {
+      await fetch('/api/notificar-reuniao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteEmail,
+          clienteNome,
+          imovelNome: sol.imovel_nome || '',
+          imovelCidade: sol.imovel_cidade || '',
+          reuniaoEm,
+          reuniaoDuracao,
+          meetLink,
+          calendarUrl: buildMeetCreateUrl(),
+        }),
+      });
+      alert('Reunião salva e cliente notificado por e-mail!');
+    } catch {
+      alert('Reunião salva, mas houve erro ao enviar e-mail.');
+    }
+    setNotificando(false);
+    onSaved();
+  }
+
+  const meetCreateUrl = buildMeetCreateUrl();
 
   const statusSol = STATUS_SOL_COLORS[sol.status] || STATUS_SOL_COLORS.solicitado;
 
@@ -2482,23 +2549,38 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
               ))}
             </div>
 
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Contato com cliente</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Agendamento da Reunião</div>
+
+            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+              <div style={{ flex: 2 }}>
+                <label style={S.label}>Data e hora</label>
+                <input type="datetime-local" style={S.input} value={reuniaoEm} onChange={e => setReuniaoEm(e.target.value)} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={S.label}>Duração</label>
+                <select style={{ ...S.input, fontWeight: 600 }} value={reuniaoDuracao} onChange={e => setReuniaoDuracao(Number(e.target.value))}>
+                  <option value={30}>30 min</option>
+                  <option value={60}>60 min</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={S.label}>URL do Google Meet</label>
+              <input style={S.input} value={meetLink} onChange={e => setMeetLink(e.target.value)} placeholder="https://meet.google.com/..." />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
               {clienteEmail && (
-                <a href={`mailto:${clienteEmail}?subject=Análise TSN Ativos — ${sol.imovel_nome || 'Imóvel'}`}
+                <a href={`mailto:${clienteEmail}?subject=Reunião TSN Ativos — ${sol.imovel_nome || 'Imóvel'}`}
                   style={{ padding: '8px 14px', background: '#eff6ff', color: '#1e40af', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  ✉️ Enviar e-mail
+                  ✉️ E-mail direto
                 </a>
               )}
               <a href={meetCreateUrl} target="_blank" rel="noreferrer"
                 style={{ padding: '8px 14px', background: '#f0fdf4', color: '#065f46', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                📅 Agendar Google Meet
+                📅 Criar evento no Google Calendar
               </a>
-            </div>
-
-            <div style={{ marginBottom: 12 }}>
-              <label style={S.label}>URL do Google Meet (após agendar)</label>
-              <input style={S.input} value={meetLink} onChange={e => setMeetLink(e.target.value)} placeholder="https://meet.google.com/..." />
             </div>
 
             <div style={{ marginBottom: 12 }}>
@@ -2510,9 +2592,14 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
               </select>
             </div>
 
-            <button style={{ ...S.btn('primary'), width: '100%', marginTop: 8 }} onClick={salvar} disabled={saving}>
-              {saving ? 'Salvando…' : 'Salvar alterações'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button style={{ ...S.btn('outline'), flex: 1 }} onClick={salvar} disabled={saving || notificando}>
+                {saving ? 'Salvando…' : 'Salvar'}
+              </button>
+              <button style={{ ...S.btn('primary'), flex: 2, background: '#059669' }} onClick={salvarENotificar} disabled={saving || notificando}>
+                {notificando ? 'Enviando…' : '📧 Salvar e Notificar Cliente'}
+              </button>
+            </div>
           </div>
 
           {/* RIGHT — Checklist */}

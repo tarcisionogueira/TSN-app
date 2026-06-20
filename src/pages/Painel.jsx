@@ -204,6 +204,7 @@ export default function Painel() {
   const [todasSolics, setTodasSolics] = useState([]);   // analista: todos os clientes
   const [todosAgends, setTodosAgends] = useState([]);   // analista: todos os clientes
   const [loadingAnalise, setLoadingAnalise] = useState(false);
+  const [proximasReunioes, setProximasReunioes] = useState([]);
 
   useEffect(() => { setImoveis(loadImoveis()); }, []);
 
@@ -211,12 +212,16 @@ export default function Painel() {
     if (!user) return;
     setLoadingAnalise(true);
     try {
-      const [{ data: solics }, { data: agends }] = await Promise.all([
+      const [{ data: solics }, { data: agends }, { data: reunioes }] = await Promise.all([
         supabase.from('solicitacoes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('agendamentos').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('solicitacoes').select('id,imovel_nome,imovel_cidade,reuniao_em,reuniao_duracao_min,google_meet_link')
+          .eq('user_id', user.id).not('reuniao_em', 'is', null).not('google_meet_link', 'is', null)
+          .gte('reuniao_em', new Date().toISOString()).order('reuniao_em', { ascending: true }).limit(5),
       ]);
       setSolicitacoes(solics || []);
       setAgendamentos(agends || []);
+      setProximasReunioes(reunioes || []);
 
       if (isAnalista) {
         const [{ data: ts }, { data: ta }] = await Promise.all([
@@ -547,6 +552,37 @@ export default function Painel() {
       {/* === ABA EM ANÁLISE === */}
       {aba==='analise' && (
         <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', overflow:'hidden' }}>
+
+          {/* Próximas Reuniões do cliente */}
+          {proximasReunioes.length > 0 && (
+            <div style={{ borderBottom:'2px solid #e2e8f0', padding:'18px', background:'#eff6ff' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                <CalendarClock size={16} color="#2563eb"/>
+                <span style={{ fontWeight:900, fontSize:14, color:'#1e40af' }}>Próximas Reuniões</span>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {proximasReunioes.map(r => {
+                  const dataHora = new Date(r.reuniao_em).toLocaleString('pt-BR', {
+                    weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo',
+                  });
+                  return (
+                    <div key={r.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'14px 16px', background:'white', borderRadius:12, border:'1px solid #bfdbfe', flexWrap:'wrap' }}>
+                      <div>
+                        <div style={{ fontWeight:700, color:'#0f172a', fontSize:14 }}>{r.imovel_nome || 'Imóvel'}{r.imovel_cidade ? ` — ${r.imovel_cidade}` : ''}</div>
+                        <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
+                          📅 <strong style={{ textTransform:'capitalize' }}>{dataHora}</strong> · {r.reuniao_duracao_min || 30} min
+                        </div>
+                      </div>
+                      <a href={r.google_meet_link} target="_blank" rel="noreferrer"
+                        style={{ padding:'9px 18px', background:'#2563eb', color:'white', borderRadius:9, fontWeight:700, fontSize:13, textDecoration:'none', whiteSpace:'nowrap' }}>
+                        📹 Entrar na Reunião
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Painel do analista: solicitações e agendamentos de outros usuários */}
           {isAnalista && (todasSolics.length > 0 || todosAgends.length > 0) && (
