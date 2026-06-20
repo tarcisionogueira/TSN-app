@@ -178,6 +178,7 @@ export default function EbookPage() {
             </a>
           </div>
           <iframe src={pdfUrl} title={ebook.titulo}
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
             style={{ width:'100%', minHeight:'70vh', height:'calc(100vh - 130px)', border:'none', display:'block', background: paper }}/>
         </div>
       ) : pdfUrl ? (

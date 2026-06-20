@@ -17,11 +17,13 @@ function salvarProgressoLocal(id, feito) {
   p[id] = feito;
   localStorage.setItem('tsn_progresso', JSON.stringify(p));
 }
-function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'gratuito'; }
+function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explorador'; }
+
+const PLANOS_PAGOS = ['top1','top2','assessorado','clube','analista','consultor','advogado','admin'];
 
 function podeAssistir(licao, plano) {
   if (licao.gratis) return true;
-  return plano === 'analista' || plano === 'gestor';
+  return PLANOS_PAGOS.includes(plano);
 }
 
 export default function Curso() {
@@ -40,6 +42,7 @@ export default function Curso() {
 
   // Video progress simulation ref (tracks "watched" percentage)
   const videoTimerRef = useRef(null);
+  const autoSavedRef = useRef(false); // tracks if 80% save already fired this session
   const [videoProgress, setVideoProgress] = useState(0); // 0-100
   const [videoPlaying, setVideoPlaying] = useState(false);
 
@@ -96,14 +99,18 @@ export default function Curso() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Reset autoSaved flag when changing lesson
+  useEffect(() => { autoSavedRef.current = false; setVideoProgress(0); setVideoPlaying(false); }, [licaoAtiva?.id]);
+
   // ── Simulação de progresso de vídeo ────────────────────────────────────────
   useEffect(() => {
     if (!videoPlaying || !licaoAtiva) return;
     videoTimerRef.current = setInterval(() => {
       setVideoProgress(prev => {
         const next = prev + 1;
-        // Auto-mark complete at 80%
-        if (next >= 80 && !progresso[licaoAtiva.id]) {
+        // Auto-mark complete at 80% — use ref to avoid stale closure
+        if (next >= 80 && !autoSavedRef.current) {
+          autoSavedRef.current = true;
           salvarProgresso(licaoAtiva.id, true);
         }
         if (next >= 100) {
@@ -113,10 +120,9 @@ export default function Curso() {
         }
         return next;
       });
-    }, 300); // fast simulation so it's visible
+    }, 300);
     return () => clearInterval(videoTimerRef.current);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoPlaying, licaoAtiva]);
+  }, [videoPlaying, licaoAtiva, salvarProgresso]);
 
   if (!curso) {
     return (

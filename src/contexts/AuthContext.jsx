@@ -19,7 +19,7 @@ function isSessionExpired() {
 }
 
 async function fetchPerfil(userId) {
-  if (!userId) return { role: 'aluno', ativo: true, inadimplenteDias: 0 };
+  if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0 };
   const { data } = await supabase
     .from('perfis')
     .select('role, ativo, inadimplente_desde')
