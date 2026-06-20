@@ -107,7 +107,7 @@ export default function Busca() {
       if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')));
       if (filtrosAtivos.pagamento?.length > 0) {
         const dbVals = filtrosAtivos.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]);
-        const orParts = dbVals.map(v => `forma_pagamento.ilike.${v}`).join(',');
+        const orParts = dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(',');
         q = q.or(orParts);
       }
       return q;
