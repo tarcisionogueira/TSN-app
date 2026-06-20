@@ -652,23 +652,6 @@ function ConfigTab() {
         )}
       </div>
 
-      {/* Email de feedback */}
-      <div style={S.card}>
-        <p style={S.subTitle}>Email para receber feedbacks dos membros</p>
-        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
-          Quando um membro clica em "Feedback" no menu, um email é aberto para este endereço.
-        </p>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', maxWidth: 480 }}>
-          <div style={{ flex: 1 }}>
-            <label style={S.label}>Email de feedback</label>
-            <input style={S.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" />
-          </div>
-          <button style={S.btn('primary')} onClick={salvar}>{saved ? '✓ Salvo!' : 'Salvar'}</button>
-        </div>
-        <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
-          Configuração salva localmente neste navegador. Valor atual: <strong>{localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL}</strong>
-        </p>
-      </div>
     </div>
   );
 }

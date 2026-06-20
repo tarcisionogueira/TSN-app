@@ -21,11 +21,14 @@ const ROLES_SITE   = ['explorador','top1','top2','assessorado','clube','consulto
 const ROLES_ANALISE = ['top1','top2','assessorado','clube','analista','advogado','admin'];
 
 function fmtData(d, modalidade) {
-  if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : '—';
+  if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : 'Sem data';
   const dt = new Date(d);
   if (isNaN(dt)) return d;
   return dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
 }
+
+const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem' };
+const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
 const PLANO_LABELS = {
   explorador: 'Explorador', top1: 'Investidor', top2: 'Investidor Pro',
@@ -234,8 +237,7 @@ export default function Busca() {
   const resultadosPagina = resultados;
   const totalPaginas = Math.max(1, Math.ceil(totalResultados / POR_PAGINA));
 
-  const fmt0 = (v) => (v||0).toLocaleString('pt-BR', { minimumFractionDigits:0 });
-  const desconto = (im) => im.valorAvaliacao>0 ? Math.round((1-im.valorMinimo/im.valorAvaliacao)*100) : 0;
+  const desconto = (im) => im.descontoPercentual ? Math.round(im.descontoPercentual) : (im.valorAvaliacao>0 ? Math.round((1-im.valorMinimo/im.valorAvaliacao)*100) : 0);
 
   return (
     <div style={{ maxWidth:1280, margin:'0 auto', padding: isMobile ? '16px 12px' : '24px 20px', display:'grid', gridTemplateColumns: isMobile ? '1fr' : '280px 1fr', gap:20, alignItems:'start' }}>
@@ -511,7 +513,8 @@ export default function Busca() {
                         <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                           <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}
                             style={{ width:16, height:16, cursor:'pointer', accentColor:'#2563eb', flexShrink:0 }}/>
-                          <span style={{ fontWeight:700, color:'#0f172a', fontSize:14, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
+                          {im.tipo && <span style={{ fontSize:10, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap' }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
+                        <span style={{ fontWeight:700, color:'#0f172a', fontSize:14, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
                           {im.fonte === 'CEF' && (
                             <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
                           )}
@@ -526,18 +529,18 @@ export default function Busca() {
                         </div>
                       </div>
                       <div style={{ textAlign:'right', flexShrink:0 }}>
-                        {desc>0 && <div style={{ fontSize:18, fontWeight:900, color:desc>=40?'#10b981':'#f59e0b' }}>{desc}% {desc>=30?'🟢':'🔴'}</div>}
+                        {desc>0 && <div style={{ background: desc>=40?'#dcfce7':desc>=20?'#fef9c3':'#fee2e2', color: desc>=40?'#15803d':desc>=20?'#92400e':'#dc2626', fontSize:20, fontWeight:900, padding:'6px 12px', borderRadius:10, minWidth:64, textAlign:'center' }}>{desc}%<div style={{ fontSize:9, fontWeight:700, opacity:0.8 }}>DESCONTO</div></div>}
                       </div>
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom:10 }}>
                       <div>
                         <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Lance mín.</div>
-                        <div style={{ fontWeight:800, color:'#0f172a', fontSize:16 }}>R$ {fmt0(im.valorMinimo)}</div>
+                        <div style={{ fontWeight:800, color:'#0f172a', fontSize:16 }}>{fmtBRL(im.valorMinimo)}</div>
                       </div>
                       {im.valorAvaliacao>0 && (
                         <div>
                           <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Avaliação</div>
-                          <div style={{ fontSize:13, color:'#64748b' }}>R$ {fmt0(im.valorAvaliacao)}</div>
+                          <div style={{ fontSize:13, color:'#64748b' }}>{fmtBRL(im.valorAvaliacao)}</div>
                         </div>
                       )}
                       <div>
@@ -593,6 +596,7 @@ export default function Busca() {
                   {/* Info do imóvel */}
                   <div style={{ paddingRight:12 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                      {im.tipo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
                       <span style={{ fontWeight:700, color:'#0f172a', fontSize:13, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
                       {im.fonte === 'CEF' && (
                         <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
@@ -633,23 +637,20 @@ export default function Busca() {
 
                   {/* Lance */}
                   <div style={{ fontWeight:800, color:'#0f172a', fontSize:14 }}>
-                    R$ {fmt0(im.valorMinimo)}
+                    {fmtBRL(im.valorMinimo)}
                   </div>
 
                   {/* Avaliação */}
                   <div style={{ fontSize:12, color:'#64748b' }}>
-                    {im.valorAvaliacao>0 ? `R$ ${fmt0(im.valorAvaliacao)}` : '—'}
+                    {im.valorAvaliacao>0 ? fmtBRL(im.valorAvaliacao) : '—'}
                   </div>
 
-                  {/* Desconto + Flag */}
-                  <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-start' }}>
+                  {/* Desconto */}
+                  <div>
                     {desc>0 && (
-                      <span style={{ fontSize:14, fontWeight:900, color:desc>=40?'#10b981':'#f59e0b' }}>{desc}%</span>
-                    )}
-                    {desc>0 && (
-                      <span style={{ fontSize:11, fontWeight:800 }}>
-                        {desc>=30 ? '🟢' : '🔴'}
-                      </span>
+                      <div style={{ background: desc>=40?'#dcfce7':desc>=20?'#fef9c3':'#fee2e2', color: desc>=40?'#15803d':desc>=20?'#92400e':'#dc2626', fontWeight:900, fontSize:15, padding:'4px 8px', borderRadius:8, textAlign:'center', whiteSpace:'nowrap' }}>
+                        {desc}%
+                      </div>
                     )}
                   </div>
 
