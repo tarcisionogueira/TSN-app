@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
-import useIsMobile from '../utils/useIsMobile';
+import { useIsMobile } from '../utils/useIsMobile';
 
 const ROLE_LABELS = {
   admin: 'Administrador',
