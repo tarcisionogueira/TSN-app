@@ -170,7 +170,7 @@ function mapearColunaCaixa(row) {
   };
 
   return {
-    id:               get('numero do im', 'numero im', 'n  do im', 'imovel'),
+    id:               get('n do im', 'numero do im', 'numero im', 'imovel'),
     tipo:             get('tipo do im', 'tipo im', 'tipo'),
     logradouro:       get('logradouro', 'endereco', 'rua'),
     bairro:           get('bairro'),
@@ -178,6 +178,7 @@ function mapearColunaCaixa(row) {
     uf:               get(' uf', 'estado', 'uf'),
     valor_avaliacao:  get('valor de avalia', 'avalia'),
     valor_minimo:     get('valor minimo', 'valor de venda', 'lance inicial', 'preco'),
+    financiamento:    get('financiamento'),
     modalidade:       get('modalidade', 'tipo de venda'),
     link:             get('link de acesso', 'link', 'url'),
     descricao_csv:    get('descri', 'observa', 'complemento'),
@@ -185,7 +186,6 @@ function mapearColunaCaixa(row) {
     numero_matricula: get('matricula', 'n da matricula', 'numero matricula', 'registro'),
     numero_processo:  get('processo', 'n do processo', 'numero processo'),
     situacao_ocup:    get('situacao ocup', 'ocupacao', 'ocupa'),
-    foto:             get('foto', 'link foto', 'imagem', 'figura', 'link da foto'),
   };
 }
 
@@ -220,13 +220,18 @@ async function scraperCEFcsv(uf) {
 
       const modalLower = m.modalidade.toLowerCase();
       const isLeilao = modalLower.includes('leil');
-      const isFinanciado = modalLower.includes('financ') || modalLower.includes('fgts');
+      const finLower = (m.financiamento || '').toLowerCase();
+      const isFinanciado = finLower.includes('sim') || finLower.includes('financ') || finLower.includes('fgts')
+        || modalLower.includes('financ') || modalLower.includes('fgts');
 
-      const linkDetalhe = m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${m.id.replace(/\s/g,'')}`;
+      const numeroLimpo = m.id.replace(/\s/g, '');
+      const linkDetalhe = m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroLimpo}`;
+      // CEF não fornece URL de foto no CSV — construir a partir do número do imóvel
+      const fotoUrl = `https://venda-imoveis.caixa.gov.br/fotos/F${numeroLimpo}.jpg`;
       const descParts = [m.modalidade, m.tipo, m.situacao_ocup, m.descricao_csv].filter(Boolean);
       return {
         fonte: 'CEF',
-        fonte_id: `cef_${m.id.replace(/\s/g,'')}`,
+        fonte_id: `cef_${numeroLimpo}`,
         titulo: `${m.tipo || 'Imóvel'} — ${m.bairro} ${m.cidade} ${uf}`.trim(),
         tipo: normalizarTipo(m.tipo),
         modalidade: isLeilao ? 'judicial' : 'extrajudicial',
@@ -239,8 +244,8 @@ async function scraperCEFcsv(uf) {
         area_m2: 0,
         descricao: descParts.join(' — ') || null,
         link_edital: linkDetalhe,
-        link_foto: m.foto?.trim() || null,
-        _foto_original: m.foto?.trim() || null,
+        link_foto: fotoUrl,
+        _foto_original: fotoUrl,
         leiloeiro: 'Caixa Econômica Federal',
         data_leilao: null,
         forma_pagamento: isFinanciado ? 'financiado' : 'a_vista',
