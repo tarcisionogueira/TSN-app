@@ -1870,9 +1870,9 @@ function DashboardTab() {
             gatilhoTroca: 'MRR > R$ 10.000 (taxa PIX passa a ser custo relevante)',
             atingiuGatilho: dados.mrr >= 10000,
             alternativa: {
-              nome: 'EFÍ (Gerencianet) — PIX direto',
-              motivo: 'Banco homologado pelo Banco Central para PIX. Taxa: 0,3% por transação (vs 1% Asaas). Para R$ 20k MRR a economia é R$ 140/mês. API REST bem documentada, webhook confiável, suporte em PT-BR. Plano mensal em BRL sem dólar.',
-              custo: '0,3% PIX + R$ 0/mês fixo',
+              nome: 'EFÍ (efipay.com.br) — PIX + Cartão + Split',
+              motivo: 'Banco homologado pelo Banco Central. PIX: 0,3%–0,99% (vs 1% Asaas). Cartão: ~2,99%. Split de pagamento nativo (repasse por porcentagem — ideal para o modelo de honorários). Fatura em BRL, sem dólar. API REST PT-BR com webhooks confiáveis. Stripe foi descartado: cobra 2,9% no PIX (3× mais caro) e fatura em USD. Pagar.me é alternativa se precisar de split mais elaborado (múltiplos recebedores), mas taxa PIX maior (~0,99%).',
+              custo: '0,3% PIX · ~2,99% cartão · BRL',
               url: 'efipay.com.br',
             },
           },
