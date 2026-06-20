@@ -1,6 +1,6 @@
 // POST /api/validar-selfie
-// Recebe { imagem: "data:image/jpeg;base64,..." }
-// Verifica com Claude Vision se há um rosto humano ao lado de um documento de identidade
+// Recebe { imagem: "data:image/...", validacao_prompt?: string }
+// Verifica com Claude Vision conforme o prompt fornecido, ou faz verificação genérica
 
 export const config = { runtime: 'edge' };
 
@@ -14,7 +14,7 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ ok: false, mensagem: 'JSON inválido.' }), { status: 400 });
   }
 
-  const { imagem } = body;
+  const { imagem, validacao_prompt } = body;
   if (!imagem || !imagem.startsWith('data:image/')) {
     return new Response(JSON.stringify({ ok: false, mensagem: 'Imagem inválida.' }), { status: 400 });
   }
@@ -28,6 +28,20 @@ export default async function handler(req) {
   // Extrai base64
   const base64 = imagem.split(',')[1];
   const mediaType = imagem.match(/data:(image\/\w+);/)?.[1] || 'image/jpeg';
+
+  // Monta o prompt: usa o fornecido ou cai no genérico
+  const promptText = validacao_prompt
+    ? `${validacao_prompt}\n\nResponda SOMENTE com o JSON, sem texto adicional.`
+    : `Analise esta imagem e responda APENAS com JSON no formato:
+{"rosto_visivel": true/false, "documento_visivel": true/false, "aprovado": true/false, "motivo": "texto curto"}
+
+Regras:
+- "rosto_visivel": há uma pessoa com o rosto visível e nítido?
+- "documento_visivel": há um documento de identidade (RG, CNH, passaporte) visível?
+- "aprovado": true apenas se ambos rosto E documento estiverem visíveis e legíveis
+- "motivo": se não aprovado, explique em pt-BR o que está faltando (máx 80 chars)
+
+Responda SOMENTE com o JSON, sem texto adicional.`;
 
   try {
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -49,19 +63,10 @@ export default async function handler(req) {
             },
             {
               type: 'text',
-              text: `Analise esta imagem e responda APENAS com JSON no formato:
-{"rosto_visivel": true/false, "documento_visivel": true/false, "aprovado": true/false, "motivo": "texto curto"}
-
-Regras:
-- "rosto_visivel": há uma pessoa com o rosto visível e nítido?
-- "documento_visivel": há um documento de identidade (RG, CNH, passaporte) visível?
-- "aprovado": true apenas se ambos rosto E documento estiverem visíveis e legíveis
-- "motivo": se não aprovado, explique em pt-BR o que está faltando (máx 80 chars)
-
-Responda SOMENTE com o JSON, sem texto adicional.`,
+              text: promptText,
             },
           ],
-        }),
+        }],
       }),
     });
 
@@ -71,6 +76,24 @@ Responda SOMENTE com o JSON, sem texto adicional.`,
     let parsed;
     try { parsed = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { parsed = {}; }
 
+    // Se veio validacao_prompt, usa campo "ok" diretamente
+    if (validacao_prompt) {
+      if (parsed.ok === true) {
+        return new Response(JSON.stringify({
+          ok: true,
+          mensagem: 'Verificação concluída com sucesso.',
+          detalhes: parsed,
+        }), { status: 200 });
+      } else {
+        return new Response(JSON.stringify({
+          ok: false,
+          mensagem: parsed.motivo || 'Não foi possível verificar a imagem. Tente novamente.',
+          detalhes: parsed,
+        }), { status: 200 });
+      }
+    }
+
+    // Prompt genérico — usa campo "aprovado"
     if (parsed.aprovado) {
       return new Response(JSON.stringify({
         ok: true,

@@ -685,9 +685,12 @@ function ContratosTab() {
   const [linkGerado, setLinkGerado] = useState('');
   const [savingLink, setSavingLink] = useState(false);
 
+  const [kycIncluido, setKycIncluido] = useState(false);
+  const [kycFotos, setKycFotos] = useState({ selfie_rosto: null, doc_frente: null, selfie_doc: null });
+
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('contratos_link').select('*').order('criado_em', { ascending: false });
+    const { data } = await supabase.from('contratos_link').select('*, kyc_incluido, kyc_fotos').order('criado_em', { ascending: false });
     setContratosLink((data || []).filter(c => c.status !== 'cancelado'));
     setLoading(false);
   }, []);
@@ -698,6 +701,7 @@ function ContratosTab() {
     setTitulo(''); setTipo('servico'); setDescricao('');
     setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
     setLinkGerado(''); setTemplateSelecionado(null);
+    setKycIncluido(false); setKycFotos({ selfie_rosto: null, doc_frente: null, selfie_doc: null });
     setStep(1);
   }
 
@@ -780,6 +784,8 @@ function ContratosTab() {
       titulo: titulo || 'Contrato',
       conteudo,
       tipo_contrato: tipo,
+      kyc_incluido: kycIncluido,
+      kyc_fotos: kycIncluido && (kycFotos.selfie_rosto || kycFotos.doc_frente || kycFotos.selfie_doc) ? kycFotos : null,
     }).select().single();
     setSavingLink(false);
     if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
@@ -911,6 +917,21 @@ function ContratosTab() {
               <div style={{ fontSize:13, color:'#0f172a', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{detalhe.conteudo}</div>
             </div>
 
+            {/* KYC fotos */}
+            {detalhe.kyc_incluido && detalhe.kyc_fotos && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Documentação KYC</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['selfie_rosto','doc_frente','selfie_doc'].filter(k => detalhe.kyc_fotos[k]).map(k => (
+                    <a key={k} href={detalhe.kyc_fotos[k]} target="_blank" rel="noopener noreferrer"
+                      style={{ flex: 1, display: 'block' }}>
+                      <img src={detalhe.kyc_fotos[k]} alt={k} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Assinatura (se assinado) */}
             {detalhe.status === 'assinado' && (
               <div style={{ background:'#dcfce7', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
@@ -1022,6 +1043,46 @@ function ContratosTab() {
                           <button onClick={() => setArquivos(prev => prev.filter((_, j) => j !== i))}
                             style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:0, marginLeft:2 }}>×</button>
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* KYC — opcional */}
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: kycIncluido ? 14 : 0 }}>
+                    <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#2563eb' }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Incluir documentação KYC ao final do contrato</div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Selfie, documento e selfie com documento serão exibidos na última página</div>
+                    </div>
+                  </label>
+
+                  {kycIncluido && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 12 }}>
+                      {[
+                        { key: 'selfie_rosto', label: '1. Selfie (rosto)', emoji: '🤳' },
+                        { key: 'doc_frente', label: '2. Documento (frente)', emoji: '🪪' },
+                        { key: 'selfie_doc', label: '3. Selfie + documento', emoji: '📋' },
+                      ].map(({ key, label, emoji }) => (
+                        <label key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 8px', border: `2px dashed ${kycFotos[key] ? '#22c55e' : '#e2e8f0'}`, borderRadius: 10, cursor: 'pointer', background: kycFotos[key] ? '#f0fdf4' : '#f8fafc', transition: 'all 0.15s' }}>
+                          {kycFotos[key] ? (
+                            <img src={kycFotos[key]} alt={label} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 6 }} />
+                          ) : (
+                            <>
+                              <span style={{ fontSize: 24 }}>{emoji}</span>
+                              <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>{label}</span>
+                            </>
+                          )}
+                          <input type="file" accept="image/*" style={{ display: 'none' }}
+                            onChange={e => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = ev => setKycFotos(p => ({ ...p, [key]: ev.target.result }));
+                              reader.readAsDataURL(file);
+                            }} />
+                        </label>
                       ))}
                     </div>
                   )}

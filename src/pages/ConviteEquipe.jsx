@@ -49,7 +49,31 @@ const PASSOS_BASE = [
   { key: 'cpf',      label: 'Qual é o seu CPF?',                  tipo: 'text',  placeholder: '000.000.000-00', mask: 'cpf' },
   { key: 'telefone', label: 'Qual é o seu WhatsApp / telefone?',  tipo: 'text',  placeholder: '(00) 00000-0000', mask: 'tel' },
 ];
-const PASSO_SELFIE   = { key: 'selfie',         label: 'Tire uma selfie segurando seu documento', tipo: 'selfie' };
+
+const PASSO_SELFIE_ROSTO = {
+  key: 'selfie_rosto',
+  label: 'Tire uma selfie — só o rosto, frente para a câmera',
+  tipo: 'foto',
+  instrucao: 'Olhe diretamente para a câmera. Boa iluminação, sem óculos escuros ou bonés.',
+  validacao_prompt: 'Esta imagem tem um rosto humano nítido e frontal, sem obstruções? Responda JSON: {"ok": true/false, "motivo": ""}',
+};
+
+const PASSO_DOC = {
+  key: 'doc_frente',
+  label: 'Fotografe seu documento — RG ou CNH (frente)',
+  tipo: 'foto',
+  instrucao: 'Coloque o documento em superfície plana com boa iluminação. Deve estar completamente visível e legível.',
+  validacao_prompt: 'Esta imagem mostra um documento de identidade brasileiro (RG ou CNH) com nome e CPF legíveis? Responda JSON: {"ok": true/false, "motivo": "", "nome_detectado": "", "cpf_detectado": ""}',
+};
+
+const PASSO_SELFIE_DOC = {
+  key: 'selfie_doc',
+  label: 'Selfie segurando o documento ao lado do rosto',
+  tipo: 'foto',
+  instrucao: 'Segure o documento aberto ao lado do rosto. Ambos devem estar nítidos e visíveis.',
+  validacao_prompt: 'Esta imagem mostra simultaneamente um rosto humano E um documento de identidade? Responda JSON: {"ok": true/false, "motivo": ""}',
+};
+
 const PASSO_SENHA    = { key: 'senha',           label: 'Crie uma senha de acesso',               tipo: 'password', placeholder: 'Mínimo 8 caracteres' };
 const PASSO_CONFIRMA = { key: 'confirma_senha',  label: 'Confirme sua senha',                     tipo: 'password', placeholder: 'Repita a senha' };
 
@@ -60,8 +84,8 @@ function maskTel(v) {
   return v.replace(/\D/g,'').slice(0,11).replace(/^(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d{4})$/,'$1-$2');
 }
 
-// ─── Componente de Selfie ────────────────────────────────────────────────────
-function PastoSelfie({ cor, onCapturada }) {
+// ─── Componente de Foto KYC ───────────────────────────────────────────────────
+function PastoFoto({ cor, instrucao, validacao_prompt, onCapturada }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -123,23 +147,21 @@ function PastoSelfie({ cor, onCapturada }) {
     setValidacaoOk(null);
     setMsgValidacao('');
     try {
-      // Envia para API que usa Claude Vision para verificar rosto + documento
       const res = await fetch('/api/validar-selfie', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imagem: dataUrl }),
+        body: JSON.stringify({ imagem: dataUrl, validacao_prompt }),
       });
       const data = await res.json();
       if (data.ok) {
         setValidacaoOk(true);
-        setMsgValidacao(data.mensagem || 'Identidade verificada com sucesso.');
+        setMsgValidacao(data.mensagem || 'Imagem verificada com sucesso.');
         onCapturada(dataUrl);
       } else {
         setValidacaoOk(false);
         setMsgValidacao(data.mensagem || 'Não foi possível verificar. Tente novamente.');
       }
     } catch {
-      // Se API falhar, aceita a foto mesmo assim (não bloqueia o cadastro)
       setValidacaoOk(true);
       setMsgValidacao('Foto recebida. Verificação manual será realizada pela equipe.');
       onCapturada(dataUrl);
@@ -156,10 +178,17 @@ function PastoSelfie({ cor, onCapturada }) {
 
   return (
     <div>
+      {/* Instrução */}
+      {instrucao && !foto && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#15803d', marginBottom: 14, lineHeight: 1.6 }}>
+          📋 {instrucao}
+        </div>
+      )}
+
       {/* Preview / câmera */}
       <div style={{ position: 'relative', background: '#0f172a', borderRadius: 16, overflow: 'hidden', aspectRatio: '4/3', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {foto ? (
-          <img src={foto} alt="selfie" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={foto} alt="foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : camAtiva ? (
           <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
         ) : (
@@ -174,17 +203,10 @@ function PastoSelfie({ cor, onCapturada }) {
         {validando && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <Loader2 size={32} color="white" style={{ animation: 'spin 1s linear infinite' }} />
-            <span style={{ color: 'white', fontSize: 14, fontWeight: 600 }}>Verificando identidade…</span>
+            <span style={{ color: 'white', fontSize: 14, fontWeight: 600 }}>Verificando…</span>
           </div>
         )}
       </div>
-
-      {/* Instrução */}
-      {!foto && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#15803d', marginBottom: 14, lineHeight: 1.6 }}>
-          📋 <strong>Instrução:</strong> Segure seu RG ou CNH ao lado do rosto e tire a foto com boa iluminação. Ambos devem estar visíveis e legíveis.
-        </div>
-      )}
 
       {/* Resultado da validação */}
       {msgValidacao && (
@@ -218,6 +240,24 @@ function PastoSelfie({ cor, onCapturada }) {
       </div>
     </div>
   );
+}
+
+// Comprime imagem para 800px max width a 80% quality
+async function comprimirImagem(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 800;
+      let w = img.width;
+      let h = img.height;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.src = dataUrl;
+  });
 }
 
 // ─── Página principal ─────────────────────────────────────────────────────────
@@ -276,7 +316,9 @@ export default function ConviteEquipe() {
   const passos = [
     ...PASSOS_BASE,
     ...cfg.passos_extras,
-    PASSO_SELFIE,
+    PASSO_SELFIE_ROSTO,
+    PASSO_DOC,
+    PASSO_SELFIE_DOC,
     PASSO_SENHA,
     PASSO_CONFIRMA,
   ];
@@ -293,9 +335,11 @@ export default function ConviteEquipe() {
     return v;
   };
 
+  const isFoto = passo.tipo === 'foto';
+
   const validarPasso = () => {
-    if (passo.tipo === 'selfie') {
-      return form.selfie ? '' : 'Capture ou envie uma foto com seu documento para continuar.';
+    if (isFoto) {
+      return form[passo.key] ? '' : 'Capture ou envie uma foto para continuar.';
     }
     const v = (form[passo.key] || '').trim();
     if (!v) return 'Preencha este campo para continuar.';
@@ -322,10 +366,15 @@ export default function ConviteEquipe() {
   const finalizarCadastro = async () => {
     setEnviando(true);
     try {
-      // Upload da selfie para Supabase Storage
+      // Comprimir as 3 fotos KYC
+      const selfie_rosto_compressed = form.selfie_rosto ? await comprimirImagem(form.selfie_rosto) : null;
+      const doc_frente_compressed   = form.doc_frente   ? await comprimirImagem(form.doc_frente)   : null;
+      const selfie_doc_compressed   = form.selfie_doc   ? await comprimirImagem(form.selfie_doc)   : null;
+
+      // Upload da primeira selfie para Supabase Storage (mantém URL para perfil)
       let selfieUrl = null;
-      if (form.selfie) {
-        const blob = await (await fetch(form.selfie)).blob();
+      if (form.selfie_rosto) {
+        const blob = await (await fetch(form.selfie_rosto)).blob();
         const path = `equipe/${Date.now()}_${form.cpf?.replace(/\D/g,'') || 'selfie'}.jpg`;
         const { data: up } = await supabase.storage.from('imoveis-fotos').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
         if (up?.path) {
@@ -361,6 +410,18 @@ export default function ConviteEquipe() {
         });
       }
 
+      // Salvar fotos KYC no registro do convite
+      if (selfie_rosto_compressed || doc_frente_compressed || selfie_doc_compressed) {
+        await supabase.from('convites_equipe').update({
+          kyc_fotos: {
+            selfie_rosto: selfie_rosto_compressed,
+            doc_frente: doc_frente_compressed,
+            selfie_doc: selfie_doc_compressed,
+            validado_em: new Date().toISOString(),
+          },
+        }).eq('token', token.toUpperCase());
+      }
+
       setConcluido(true);
     } catch (err) {
       setErroPasso(err.message || 'Erro ao criar conta. Tente novamente.');
@@ -368,7 +429,7 @@ export default function ConviteEquipe() {
     setEnviando(false);
   };
 
-  const handleKeyDown = (e) => { if (e.key === 'Enter' && passo.tipo !== 'selfie') avancar(); };
+  const handleKeyDown = (e) => { if (e.key === 'Enter' && !isFoto) avancar(); };
 
   if (concluido) return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -387,8 +448,7 @@ export default function ConviteEquipe() {
     </div>
   );
 
-  const isSelfie = passo.tipo === 'selfie';
-  const selfieOk = isSelfie && !!form.selfie;
+  const fotoOk = isFoto && !!form[passo.key];
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -398,7 +458,7 @@ export default function ConviteEquipe() {
         {cfg.emoji} {cfg.label}
       </div>
 
-      <div style={{ maxWidth: isSelfie ? 520 : 480, width: '100%' }}>
+      <div style={{ maxWidth: isFoto ? 520 : 480, width: '100%' }}>
 
         {/* Barra de progresso */}
         <div style={{ background: '#1e293b', borderRadius: 4, height: 4, marginBottom: 32, overflow: 'hidden' }}>
@@ -412,13 +472,18 @@ export default function ConviteEquipe() {
             {passoAtual + 1} de {totalPassos}
           </div>
 
-          <h2 style={{ fontSize: isSelfie ? 18 : 22, fontWeight: 900, color: '#0f172a', margin: '0 0 20px', lineHeight: 1.3 }}>
+          <h2 style={{ fontSize: isFoto ? 18 : 22, fontWeight: 900, color: '#0f172a', margin: '0 0 20px', lineHeight: 1.3 }}>
             {passo.label}
           </h2>
 
-          {/* Selfie */}
-          {isSelfie && (
-            <PastoSelfie cor={cfg.cor} onCapturada={(url) => setVal('selfie', url)} />
+          {/* Foto KYC */}
+          {isFoto && (
+            <PastoFoto
+              cor={cfg.cor}
+              instrucao={passo.instrucao}
+              validacao_prompt={passo.validacao_prompt}
+              onCapturada={(url) => setVal(passo.key, url)}
+            />
           )}
 
           {/* Select */}
@@ -463,7 +528,7 @@ export default function ConviteEquipe() {
                 ← Voltar
               </button>
             )}
-            {(!isSelfie || selfieOk) && (
+            {(!isFoto || fotoOk) && (
               <button onClick={avancar} disabled={enviando}
                 style={{ flex: 2, padding: '13px', background: enviando ? '#94a3b8' : cfg.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {enviando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta…</>
