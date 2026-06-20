@@ -38,7 +38,7 @@ export default function ImovelDetalhe() {
           estado: data.estado, cidade: data.cidade, bairro: data.bairro, endereco: data.endereco,
           valorAvaliacao: data.valor_avaliacao, valorMinimo: data.valor_minimo,
           descontoPercentual: data.desconto_percentual, areaM2: data.area_m2, descricao: data.descricao,
-          urlLote: data.url_lote || data.link_edital, linkEdital: data.link_edital,
+          urlLote: data.url_lote || data.link_edital, linkEdital: data.link_edital, linkMatricula: data.link_matricula,
           foto: data.link_foto, leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
           pagamento: [data.forma_pagamento], fonte: data.fonte,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
@@ -187,37 +187,53 @@ export default function ImovelDetalhe() {
             )}
 
             {/* Documentos */}
-            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital) && (
+            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula) && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileText size={18} color="#2563eb" /> Documentos e Referências
+                  <FileText size={18} color="#2563eb" /> Documentos
                 </h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {imovel.numeroEdital && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
-                      <span style={{ color: '#94a3b8', minWidth: 120 }}>Nº Edital:</span>
-                      <span style={{ fontWeight: 600, color: '#334155' }}>{imovel.numeroEdital}</span>
-                    </div>
-                  )}
-                  {imovel.numeroMatricula && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
-                      <span style={{ color: '#94a3b8', minWidth: 120 }}>Nº Matrícula:</span>
-                      <span style={{ fontWeight: 600, color: '#334155' }}>{imovel.numeroMatricula}</span>
-                    </div>
-                  )}
-                  {imovel.numeroProcesso && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
-                      <span style={{ color: '#94a3b8', minWidth: 120 }}>Nº Processo:</span>
-                      <span style={{ fontWeight: 600, color: '#334155' }}>{imovel.numeroProcesso}</span>
-                    </div>
-                  )}
-                  {imovel.linkEdital && (
-                    <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4, color: '#2563eb', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}>
-                      <ExternalLink size={14} /> Ver edital/matrícula completo
-                    </a>
-                  )}
-                </div>
+
+                {/* Números de referência */}
+                {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso) && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                    {imovel.numeroEdital && (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                        <span style={{ color: '#94a3b8', minWidth: 110 }}>Nº Edital:</span>
+                        <span style={{ fontWeight: 700, color: '#334155', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>{imovel.numeroEdital}</span>
+                      </div>
+                    )}
+                    {imovel.numeroMatricula && (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                        <span style={{ color: '#94a3b8', minWidth: 110 }}>Nº Matrícula:</span>
+                        <span style={{ fontWeight: 700, color: '#334155', background: '#f0fdf4', padding: '2px 8px', borderRadius: 6 }}>{imovel.numeroMatricula}</span>
+                      </div>
+                    )}
+                    {imovel.numeroProcesso && (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                        <span style={{ color: '#94a3b8', minWidth: 110 }}>Nº Processo:</span>
+                        <span style={{ fontWeight: 700, color: '#334155', background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>{imovel.numeroProcesso}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Botões de PDF */}
+                {(imovel.linkEdital || imovel.linkMatricula) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    {imovel.linkEdital && (
+                      <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#1e40af', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                        📄 Abrir Edital (PDF)
+                      </a>
+                    )}
+                    {imovel.linkMatricula && (
+                      <a href={imovel.linkMatricula} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                        📄 Abrir Matrícula (PDF)
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

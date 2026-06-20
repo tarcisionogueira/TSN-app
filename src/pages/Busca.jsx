@@ -144,6 +144,7 @@ export default function Busca() {
         descricao: im.descricao,
         urlLote: im.url_lote || im.link_edital,
         linkEdital: im.link_edital,
+        linkMatricula: im.link_matricula,
         foto: im.link_foto,
         leiloeiro: im.leiloeiro,
         dataLeilao: im.data_leilao,
