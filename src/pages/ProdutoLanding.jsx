@@ -60,11 +60,177 @@ const PLANOS_INFO = {
   },
 };
 
+/* ── WhatsApp mask helper ── */
+function maskWA(value) {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 2) return digits.length ? `(${digits}` : '';
+  if (digits.length <= 7) return `(${digits.slice(0,2)}) ${digits.slice(2)}`;
+  return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
+}
+
+/* ── Lead Capture (captura tipo) ── */
+function CapturaLanding({ id }) {
+  const [produto, setProduto] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ nome: '', whatsapp: '', email: '' });
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from('sdr_produtos')
+        .select('*')
+        .eq('id', id)
+        .single();
+      setProduto(data || null);
+      setLoading(false);
+    }
+    load();
+  }, [id]);
+
+  if (loading) return (
+    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 16 }}>
+      Carregando…
+    </div>
+  );
+
+  if (!produto) return (
+    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#94a3b8', gap: 16 }}>
+      <div style={{ fontSize: 40 }}>❌</div>
+      <div style={{ fontSize: 18, color: '#e2e8f0' }}>Produto não encontrado.</div>
+      <a href="/" style={{ color: '#60a5fa', textDecoration: 'none', fontSize: 14 }}>← Voltar ao site</a>
+    </div>
+  );
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErro('');
+    const wa = form.whatsapp.replace(/\D/g, '');
+    if (!form.nome.trim()) return setErro('Informe seu nome completo.');
+    if (wa.length < 10) return setErro('Informe um WhatsApp válido.');
+    setEnviando(true);
+    const { error } = await supabase.from('sdr_leads').insert({
+      produto_id: produto.id,
+      nome: form.nome.trim(),
+      whatsapp: wa,
+      email: form.email.trim() || null,
+      origem: window.location.href,
+    });
+    setEnviando(false);
+    if (error) return setErro('Erro ao enviar. Tente novamente.');
+    setSucesso(true);
+  }
+
+  if (sucesso) return (
+    <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+      <div style={{ borderBottom: '1px solid #1e293b', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontWeight: 900, fontSize: 18, color: 'white', letterSpacing: 1 }}>TSN <span style={{ color: '#f59e0b' }}>ATIVOS</span></div>
+      </div>
+      <div style={{ maxWidth: 560, margin: '0 auto', padding: '64px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: 'white', marginBottom: 12 }}>Acesso liberado!</h2>
+        <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.6, marginBottom: 32 }}>
+          Obrigado, <strong style={{ color: '#e2e8f0' }}>{form.nome.split(' ')[0]}</strong>! Seu acesso foi liberado. Clique abaixo para acessar o conteúdo.
+        </p>
+        {produto.conteudo_url ? (
+          <a href={produto.conteudo_url} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-block', padding: '14px 36px', background: '#059669', color: 'white', borderRadius: 12, fontWeight: 800, fontSize: 16, textDecoration: 'none' }}>
+            Acessar conteúdo →
+          </a>
+        ) : (
+          <p style={{ color: '#64748b', fontSize: 14 }}>Em breve você receberá o acesso via WhatsApp.</p>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+      {/* Header */}
+      <div style={{ borderBottom: '1px solid #1e293b', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontWeight: 900, fontSize: 18, color: 'white', letterSpacing: 1 }}>TSN <span style={{ color: '#f59e0b' }}>ATIVOS</span></div>
+        <a href="/" style={{ fontSize: 13, color: '#94a3b8', textDecoration: 'none' }}>← Voltar ao site</a>
+      </div>
+
+      <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 24px 80px' }}>
+        {/* Hero */}
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          {produto.imagem_url && (
+            <img src={produto.imagem_url} alt={produto.nome}
+              style={{ width: '100%', maxWidth: 400, borderRadius: 16, marginBottom: 24, objectFit: 'cover' }} />
+          )}
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>
+            {produto.tipo === 'ebook' ? 'eBook Gratuito' : produto.tipo === 'minicurso' ? 'Mini-curso Gratuito' : produto.tipo === 'webinar' ? 'Webinar Gratuito' : 'Conteúdo Gratuito'}
+          </div>
+          <h1 style={{ margin: '0 0 12px', fontSize: 32, fontWeight: 900, color: 'white', lineHeight: 1.2 }}>{produto.nome}</h1>
+          {produto.descricao && (
+            <p style={{ margin: '0 0 8px', fontSize: 16, color: '#94a3b8', lineHeight: 1.6 }}>{produto.descricao}</p>
+          )}
+        </div>
+
+        {/* Form */}
+        <div style={{ background: '#1e293b', borderRadius: 16, padding: '32px', border: '1px solid #334155' }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 20 }}>
+            Preencha para ter acesso gratuito
+          </div>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>Nome completo *</label>
+              <input
+                type="text"
+                value={form.nome}
+                onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
+                placeholder="Seu nome completo"
+                required
+                style={{ width: '100%', padding: '12px 14px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>WhatsApp *</label>
+              <input
+                type="tel"
+                value={form.whatsapp}
+                onChange={e => setForm(f => ({ ...f, whatsapp: maskWA(e.target.value) }))}
+                placeholder="(00) 00000-0000"
+                required
+                style={{ width: '100%', padding: '12px 14px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>E-mail (opcional)</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="seuemail@exemplo.com"
+                style={{ width: '100%', padding: '12px 14px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            {erro && <div style={{ background: '#450a0a', border: '1px solid #dc2626', borderRadius: 8, padding: '10px 14px', color: '#fca5a5', fontSize: 13 }}>{erro}</div>}
+            <button type="submit" disabled={enviando}
+              style={{ padding: '14px', background: enviando ? '#374151' : '#059669', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 16, cursor: enviando ? 'not-allowed' : 'pointer', marginTop: 4 }}>
+              {enviando ? 'Enviando…' : 'Quero acesso gratuito →'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProdutoLanding() {
   const { tipo, id } = useParams();
   const [searchParams] = useSearchParams();
   const nav = useNavigate();
   const { user, isLoggedIn } = useAuth();
+
+  // SDR lead capture flow
+  if (tipo === 'captura') {
+    return <CapturaLanding id={id} />;
+  }
+
 
   const ref = searchParams.get('ref') || '';
   const [produto, setProduto] = useState(null);
