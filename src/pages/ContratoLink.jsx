@@ -83,7 +83,7 @@ export default function ContratoLink() {
 
   useEffect(() => {
     if (!token) return;
-    supabase.from('contratos_link').select('id, titulo, conteudo, tipo_contrato, status, expira_em')
+    supabase.from('contratos_link').select('id, titulo, conteudo, tipo_contrato, status, expira_em, kyc_incluido, kyc_fotos')
       .eq('token', token).single()
       .then(({ data, error }) => {
         if (error || !data) setErro('Contrato não encontrado ou link inválido.');
@@ -209,6 +209,42 @@ export default function ContratoLink() {
           }}>
             {contrato.conteudo}
           </div>
+          {/* KYC section */}
+          {contrato.kyc_incluido && contrato.kyc_fotos && (
+            <div style={{ marginTop: 32 }}>
+              <div style={{ borderTop: '2px solid #1e293b', paddingTop: 24, marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
+                  Documentação KYC
+                </div>
+                <div style={{ fontSize: 13, color: '#64748b' }}>
+                  Identidade verificada e documentação fotográfica anexada a este instrumento contratual.
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+                {[
+                  { key: 'selfie_rosto', label: '1. Selfie — Identidade Visual', desc: 'Foto do signatário para identificação' },
+                  { key: 'doc_frente', label: '2. Documento de Identidade', desc: 'RG ou CNH — frente' },
+                  { key: 'selfie_doc', label: '3. Selfie com Documento', desc: 'Confirmação de posse do documento' },
+                ].filter(({ key }) => contrato.kyc_fotos[key]).map(({ key, label, desc }) => (
+                  <div key={key} style={{ background: '#1a2744', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
+                    <img
+                      src={contrato.kyc_fotos[key]}
+                      alt={label}
+                      style={{ width: '100%', display: 'block', aspectRatio: '4/3', objectFit: 'cover' }}
+                    />
+                    <div style={{ padding: '10px 14px' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1' }}>{label}</div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.2)', borderRadius: 8, fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
+                As imagens acima foram coletadas durante o processo de assinatura eletrônica e fazem parte integrante deste instrumento contratual para fins de identificação e verificação de autoria, conforme Lei 14.063/2020.
+              </div>
+            </div>
+          )}
+
           <div style={{ height:24 }} />
         </div>
 
