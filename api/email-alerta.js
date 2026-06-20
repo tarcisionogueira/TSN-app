@@ -1,6 +1,9 @@
 export const config = { runtime: 'edge' };
 
-function gerarEmailHTML(userName, imoveis, filtroDesc) {
+function gerarEmailHTML(userName, imoveis, filtroDesc, userId, baseUrl) {
+  const unsubToken = btoa(`${userId}:unsubscribe`);
+  const unsubLink = `${baseUrl}/#/cancelar-alertas?token=${unsubToken}`;
+  const prefLink = `${baseUrl}/#/buscar`;
   const formatBRL = (v) => v ? `R$ ${Number(v).toLocaleString('pt-BR')}` : '—';
 
   const cardsHTML = imoveis.slice(0, 5).map(im => {
@@ -62,10 +65,15 @@ function gerarEmailHTML(userName, imoveis, filtroDesc) {
       </div>
     </div>
     <!-- Footer -->
-    <div style="background:#f1f5f9;border-radius:0 0 16px 16px;padding:20px 32px;text-align:center;">
-      <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.6;">
-        Você recebe este email porque pesquisou imóveis em leilão na plataforma TSN Ativos.<br>
-        Para cancelar alertas, <a href="https://tsnativos.com.br/conta" style="color:#2563eb;text-decoration:none;">acesse sua conta</a>.
+    <div style="background:#f8fafc;padding:24px 32px;border-top:1px solid #e2e8f0;text-align:center;">
+      <p style="color:#94a3b8;font-size:12px;line-height:1.8;margin:0 0 12px;">
+        Você recebe este email porque pesquisou imóveis em leilão na plataforma TSN Ativos.
+        <br>TSN Ativos · Assessoria em Imóveis de Leilão · Brasil
+      </p>
+      <p style="margin:0;">
+        <a href="${prefLink}" style="color:#2563eb;font-size:12px;text-decoration:none;margin:0 12px;">Alterar preferências de busca</a>
+        &nbsp;·&nbsp;
+        <a href="${unsubLink}" style="color:#94a3b8;font-size:12px;text-decoration:none;margin:0 12px;">Cancelar recebimento</a>
       </p>
     </div>
   </div>
@@ -82,7 +90,8 @@ export default async function handler(req) {
   const { userId, userEmail, userName, imoveis, filtroDesc } = await req.json();
   if (!userEmail || !imoveis?.length) return new Response(JSON.stringify({ error: 'dados insuficientes' }), { status: 400 });
 
-  const html = gerarEmailHTML(userName || 'Investidor', imoveis, filtroDesc);
+  const baseUrl = process.env.APP_BASE_URL || 'https://tsnAtivos.com.br';
+  const html = gerarEmailHTML(userName || 'Investidor', imoveis, filtroDesc, userId, baseUrl);
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

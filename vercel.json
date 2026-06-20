@@ -10,6 +10,6 @@
     }
   ],
   "crons": [
-    { "path": "/api/enviar-alertas-cron", "schedule": "0 8 * * *" }
+    { "path": "/api/enviar-alertas-cron", "schedule": "0 8 * * 1" }
   ]
 }

@@ -10,7 +10,7 @@ export default async function handler(req) {
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supabaseUrl || !serviceKey) return new Response(JSON.stringify({ error: 'env not configured' }), { status: 500 });
 
-  const alertasRes = await fetch(`${supabaseUrl}/rest/v1/alertas_email?select=*,perfis(email,nome)&ativo=eq.true&or=(ultimo_envio.is.null,ultimo_envio.lt.${new Date(Date.now() - 24*60*60*1000).toISOString()})`, {
+  const alertasRes = await fetch(`${supabaseUrl}/rest/v1/alertas_email?select=*,perfis(email,nome)&ativo=eq.true&or=(ultimo_envio.is.null,ultimo_envio.lt.${new Date(Date.now() - 7*24*60*60*1000).toISOString()})`, {
     headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
   });
 
@@ -33,6 +33,15 @@ export default async function handler(req) {
         const userEmail = alerta.perfis?.email;
         const userName = alerta.perfis?.nome;
         if (!userEmail) continue;
+
+        // Check if user has enough search activity
+        const activityRes = await fetch(
+          `${supabaseUrl}/rest/v1/busca_historico?user_id=eq.${alerta.user_id}&criado_em=gte.${new Date(Date.now()-30*24*60*60*1000).toISOString()}&select=id`,
+          { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+        );
+        const activity = await activityRes.json();
+        // Only send if user has searched at least 3 times in last 30 days, or it's the first email
+        if ((activity?.length || 0) < 3 && (alerta.total_enviados || 0) > 0) continue;
 
         const host = new URL(req.url).origin;
         await fetch(`${host}/api/email-alerta`, {

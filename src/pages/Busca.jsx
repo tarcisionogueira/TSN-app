@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
@@ -41,6 +41,9 @@ export default function Busca() {
   const canAnalise = user && ROLES_ANALISE.includes(role);
   const FILTROS_INICIAL = { tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] };
   const [filtros, setFiltros] = useState(FILTROS_INICIAL);
+  const [filtrosSalvos, setFiltrosSalvos] = useState([]);
+  const [nomeFiltro, setNomeFiltro] = useState('');
+  const [showSalvarModal, setShowSalvarModal] = useState(false);
   const [buscaCidade, setBuscaCidade] = useState('');
   const [dropdownIndex, setDropdownIndex] = useState(-1);
   const [resultados, setResultados] = useState([]);
@@ -53,6 +56,12 @@ export default function Busca() {
   const [pagina, setPagina] = useState(1);
   const POR_PAGINA = 50;
 
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('filtros_salvos').select('*').eq('user_id', user.id).order('criado_em', { ascending: false })
+      .then(({ data }) => setFiltrosSalvos(data || []));
+  }, [user?.id]);
+
   const up = (name, val) => setFiltros(p => ({ ...p, [name]: val }));
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x=>x!==v) : [...filtros.pagamento, v]);
   const toggleSelecionado = (id) => setSelecionados(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
@@ -62,6 +71,20 @@ export default function Busca() {
   const PAGAMENTO_DB = { aVista: ['a_vista','aVista','À Vista'], financiado: ['financiado','Financiado'], hipotecado: ['hipotecado','Hipotecado'] };
 
   const limparFiltros = () => { setFiltros(FILTROS_INICIAL); setBuscaCidade(''); setSelecionados([]); setPagina(1); };
+
+  async function salvarFiltroAtual() {
+    if (!nomeFiltro.trim() || !user?.id) return;
+    const { data } = await supabase.from('filtros_salvos').insert({
+      user_id: user.id, nome: nomeFiltro.trim(), filtros,
+    }).select().single();
+    if (data) setFiltrosSalvos(p => [data, ...p]);
+    setNomeFiltro(''); setShowSalvarModal(false);
+  }
+
+  async function deletarFiltro(id) {
+    await supabase.from('filtros_salvos').delete().eq('id', id);
+    setFiltrosSalvos(p => p.filter(f => f.id !== id));
+  }
 
   const buscar = async () => {
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]); setPagina(1);
@@ -397,6 +420,34 @@ export default function Busca() {
 
       {/* CONTEÚDO PRINCIPAL */}
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* Filtros Salvos */}
+        {user?.id && (
+          <div style={{ background: 'white', borderRadius: 12, padding: '10px 14px', marginBottom: 0, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>Filtros salvos:</span>
+            {filtrosSalvos.map(filtro => (
+              <span key={filtro.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                <span onClick={() => setFiltros(filtro.filtros)}>{filtro.nome}</span>
+                <button onClick={() => deletarFiltro(filtro.id)} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center' }}>×</button>
+              </span>
+            ))}
+            {!showSalvarModal && (
+              <button onClick={() => setShowSalvarModal(true)} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                + Salvar filtros atuais
+              </button>
+            )}
+            {showSalvarModal && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input value={nomeFiltro} onChange={e => setNomeFiltro(e.target.value)}
+                  placeholder="Nome do filtro..." autoFocus
+                  onKeyDown={e => e.key === 'Enter' && salvarFiltroAtual()}
+                  style={{ padding: '4px 8px', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, outline: 'none', width: 140 }} />
+                <button onClick={salvarFiltroAtual} style={{ padding: '4px 10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Salvar</button>
+                <button onClick={() => { setShowSalvarModal(false); setNomeFiltro(''); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}>×</button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Header de resultados */}
         <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10 }}>
