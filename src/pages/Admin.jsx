@@ -1861,19 +1861,17 @@ function DashboardTab() {
           },
           {
             nome: 'Asaas', categoria: 'Gateway de Pagamento',
-            veredicto: dados.mrr >= 10000 ? 'AVALIAR TROCA' : 'MANTER',
-            cor: dados.mrr >= 10000 ? '#d97706' : '#10b981',
+            veredicto: dados.mrr >= 5000 ? 'PLANEJAR MIGRAÇÃO' : 'MANTER (temporário)',
+            cor: dados.mrr >= 5000 ? '#dc2626' : '#d97706',
             icone: '💳',
-            justificativa: dados.mrr >= 10000
-              ? `MRR de R$ ${fmt(dados.mrr)} já justifica avaliar alternativas. A taxa de 1% PIX representa R$ ${fmt(dados.taxaPix)}/mês — a diferença para o EFÍ (0,3%) seria R$ ${fmt(dados.taxaPix * 0.7)}/mês de economia.`
-              : 'Para o volume atual a taxa de 1% é aceitável e a integração já está funcionando. O Asaas tem suporte em PT-BR e API bem documentada.',
-            gatilhoTroca: 'MRR > R$ 10.000 (taxa PIX passa a ser custo relevante)',
-            atingiuGatilho: dados.mrr >= 10000,
+            justificativa: 'O modelo de consultores vendendo planos, cursos, ebooks e assessorias exige split automático por venda com múltiplos recebedores (subconta por consultor). O Asaas tem split básico, mas não foi projetado para marketplace com recorrência + avulso simultâneos. A migração deve ser planejada antes de ativar a rede de consultores em escala.',
+            gatilhoTroca: 'Antes de ativar consultores vendendo em escala (independente do MRR)',
+            atingiuGatilho: dados.mrr >= 5000,
             alternativa: {
-              nome: 'EFÍ (efipay.com.br) — PIX + Cartão + Split',
-              motivo: 'Banco homologado pelo Banco Central. PIX: 0,3%–0,99% (vs 1% Asaas). Cartão: ~2,99%. Split de pagamento nativo (repasse por porcentagem — ideal para o modelo de honorários). Fatura em BRL, sem dólar. API REST PT-BR com webhooks confiáveis. Stripe foi descartado: cobra 2,9% no PIX (3× mais caro) e fatura em USD. Pagar.me é alternativa se precisar de split mais elaborado (múltiplos recebedores), mas taxa PIX maior (~0,99%).',
-              custo: '0,3% PIX · ~2,99% cartão · BRL',
-              url: 'efipay.com.br',
+              nome: 'Pagar.me (Stone Group) — Marketplace nativo',
+              motivo: 'Líder BR para modelo marketplace com split. Cada consultor ganha uma subconta automática; o split por venda (% TSN + % consultor) é configurado por transação. Suporta recorrência (planos) e avulso (cursos, ebooks, assessoria) no mesmo contrato. PIX ~0,99%, cartão ~2,99%, BRL nativo, sem dólar. API REST madura com webhooks, relatório de repasses por recebedor e painel de comissões. Iugu é alternativa próxima com foco em assinatura. EFÍ tem menor taxa PIX (0,3%) mas split e subcontas menos maduros para marketplace multi-produto.',
+              custo: '0,99% PIX · 2,99% cartão · BRL',
+              url: 'pagar.me',
             },
           },
           {
@@ -1953,10 +1951,10 @@ function DashboardTab() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[
             {
-              gatilho: `MRR ≥ R$ 10.000`,
-              atingido: dados.mrr >= 10000,
-              titulo: 'Negociar taxa Asaas',
-              desc: 'Contatar comercial Asaas para reduzir taxa PIX de 1% para ~0,7%. Economia estimada: R$ 30+/mês.',
+              gatilho: 'Antes de escalar rede de consultores',
+              atingido: dados.mrr >= 5000,
+              titulo: 'Migrar gateway para Pagar.me (marketplace)',
+              desc: 'O modelo de consultores vendendo planos, cursos e assessorias exige split automático por venda com subconta por consultor. Pagar.me é o líder BR para isso: split % por transação, recorrência + avulso, relatório de repasse por recebedor. PIX 0,99%, cartão 2,99%, BRL. Planeje a migração antes de ativar vendas em escala — a integração leva ~2 semanas de desenvolvimento.',
               cor: '#d97706', icone: '💳',
             },
             {
