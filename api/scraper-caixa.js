@@ -7,15 +7,17 @@ const TODOS_ESTADOS = [
 ];
 
 function inferirTipo(descricao) {
-  const d = (descricao || '').toLowerCase();
+  const d = (descricao || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, ''); // remove acentos para comparação
   if (d.includes('apartamento') || d.includes('apto')) return 'apartamento';
-  if (d.includes('casa')) return 'casa';
-  if (d.includes('terreno') || d.includes('lote') || d.includes('area')) return 'terreno';
-  if (d.includes('sala') || d.includes('loja') || d.includes('conjunto') || d.includes('andar') || d.includes('escritório')) return 'sala';
-  if (d.includes('galpão') || d.includes('galpao') || d.includes('armazém') || d.includes('armazem')) return 'galpao';
-  if (d.includes('rural') || d.includes('sítio') || d.includes('sitio') || d.includes('chácara') || d.includes('chacara') || d.includes('fazenda')) return 'rural';
-  if (d.includes('vaga') || d.includes('garagem')) return 'vaga';
-  if (d.includes('comercial') || d.includes('prédio') || d.includes('predio')) return 'comercial';
+  if (d.includes('casa') || d.includes('sobrado') || d.includes('vila')) return 'casa';
+  if (d.includes('terreno') || d.includes('lote') || d.includes('area ') || d.includes('gleba')) return 'terreno';
+  if (d.includes('galp') || d.includes('armazem') || d.includes('deposito') || d.includes('barracão') || d.includes('barracao')) return 'galpao';
+  if (d.includes('rural') || d.includes('sitio') || d.includes('chacara') || d.includes('fazenda') || d.includes('stio')) return 'rural';
+  if (d.includes('vaga') || d.includes('box garage') || d.includes('vaga de garagem')) return 'vaga';
+  // Comercial — vem antes de 'sala' para pegar 'sala comercial', 'ponto comercial', etc.
+  if (d.includes('comercial') || d.includes('comercio') || d.includes('ponto com') || d.includes('predio') || d.includes('pavilh')) return 'comercial';
+  if (d.includes('sala') || d.includes('loja') || d.includes('conjunto') || d.includes('andar') || d.includes('escritorio') || d.includes('box ')) return 'sala';
   return 'imovel';
 }
 
@@ -131,7 +133,7 @@ function csvToImoveis(csv, uf) {
       link_foto: linkFoto.trim() || null,
       descricao: descricao.trim() || null,
       titulo: `${descricao.trim().slice(0, 80) || 'Imóvel'} — ${cidade.trim()}`,
-      forma_pagamento: 'a_vista',
+      forma_pagamento: normalizarModalidade(modalidade) === 'venda_direta' ? 'financiado' : 'a_vista',
       leiloeiro: 'Caixa Econômica Federal',
       ativo: true,
       atualizado_em: new Date().toISOString(),
