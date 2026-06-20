@@ -185,6 +185,7 @@ function mapearColunaCaixa(row) {
     numero_matricula: get('matricula', 'n da matricula', 'numero matricula', 'registro'),
     numero_processo:  get('processo', 'n do processo', 'numero processo'),
     situacao_ocup:    get('situacao ocup', 'ocupacao', 'ocupa'),
+    foto:             get('foto', 'link foto', 'imagem', 'figura', 'link da foto'),
   };
 }
 
@@ -237,7 +238,8 @@ async function scraperCEFcsv(uf) {
         area_m2: 0,
         descricao: descParts.join(' — ') || null,
         link_edital: linkDetalhe,
-        link_foto: null,
+        link_foto: m.foto?.trim() || null,
+        _foto_original: m.foto?.trim() || null,
         leiloeiro: 'Caixa Econômica Federal',
         data_leilao: null,
         forma_pagamento: isFinanciado ? 'financiado' : 'a_vista',
@@ -633,6 +635,49 @@ function parseMoeda(valor) {
   return parseFloat(String(valor).replace(/[^\d,]/g,'').replace(',','.')) || 0;
 }
 
+// ─── UPLOAD DE FOTOS PARA STORAGE ────────────────────────────────────────────
+
+const CEF_IMG_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Referer': 'https://venda-imoveis.caixa.gov.br/',
+  'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+};
+
+function fetchBinary(url) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.get(url, { headers: CEF_IMG_HEADERS, timeout: 12000 }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchBinary(res.headers.location).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) return resolve(null);
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve({ buffer: Buffer.concat(chunks), contentType: res.headers['content-type'] || 'image/jpeg' }));
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
+
+async function uploadFotoStorage(fotoUrl, fonteId) {
+  if (!fotoUrl) return null;
+  try {
+    const result = await fetchBinary(fotoUrl);
+    if (!result || result.buffer.length < 500) return null;
+    const ext = result.contentType.includes('png') ? 'png' : result.contentType.includes('webp') ? 'webp' : 'jpg';
+    const path = `cef/${fonteId}.${ext}`;
+    const { error } = await supabase.storage
+      .from('imoveis-fotos')
+      .upload(path, result.buffer, { contentType: result.contentType, upsert: true });
+    if (error) return null;
+    const { data } = supabase.storage.from('imoveis-fotos').getPublicUrl(path);
+    return data.publicUrl;
+  } catch {
+    return null;
+  }
+}
+
 // ─── SALVAR NO SUPABASE ───────────────────────────────────────────────────────
 
 async function salvarImoveis(imoveis) {
@@ -640,8 +685,18 @@ async function salvarImoveis(imoveis) {
 
   const comViabilidade = await Promise.all(imoveis.map(async (im) => {
     const v = await avaliarViabilidade({ valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
+
+    // Upload foto para Storage se for URL externa da CEF
+    let linkFoto = im.link_foto;
+    const fotoOriginal = im._foto_original || im.link_foto;
+    if (fotoOriginal && !fotoOriginal.includes(SUPABASE_URL)) {
+      const stored = await uploadFotoStorage(fotoOriginal, im.fonte_id);
+      if (stored) linkFoto = stored;
+    }
+
     return {
       ...im,
+      link_foto: linkFoto,
       viavel: v.viavel,
       score_viabilidade: v.score,
       motivo_viabilidade: v.motivo,
@@ -652,8 +707,8 @@ async function salvarImoveis(imoveis) {
     };
   }));
 
-  // Remove 'raw' field — not in schema
-  const rows = comViabilidade.map(({ raw: _raw, ...rest }) => rest);
+  // Remove campos internos não presentes no schema
+  const rows = comViabilidade.map(({ raw: _raw, _foto_original: _fo, ...rest }) => rest);
 
   const { error } = await supabase
     .from('imoveis_leilao')
