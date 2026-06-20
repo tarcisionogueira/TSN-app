@@ -1485,11 +1485,12 @@ function DashboardTab() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: perfis }, { count: inadimCount }, { count: novosCount }] = await Promise.all([
+      const [{ data: perfis }, { count: inadimCount }, { count: novosCount }, { data: dbSizeData }] = await Promise.all([
         supabase.from('perfis').select('role, plano, inadimplente_desde'),
         supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
         supabase.from('perfis').select('id', { count: 'exact', head: true })
           .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+        supabase.rpc('get_db_size_mb'),
       ]);
 
       const contagem = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
@@ -1507,6 +1508,7 @@ function DashboardTab() {
         liquido,
         inadimplentes: inadimCount || 0,
         novosMes: novosCount || 0,
+        dbSizeMB: dbSizeData ?? null,
       });
       setLoading(false);
     }
@@ -1675,26 +1677,135 @@ function DashboardTab() {
           {/* Infraestrutura */}
           <div style={S.card}>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
-            {[
-              { nome: 'Supabase', plano: `Free (${fmtN(dados.total)} usuários)`, custo: 'R$ 0/mês', alerta: dados.total > 40000, alertaMsg: 'Próximo do limite gratuito — migrar para Supabase Pro ($25/mês)' },
-              { nome: 'Vercel', plano: 'Free (Serverless)', custo: 'R$ 0/mês', alerta: false },
-              { nome: 'Anthropic (Claude)', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
-              { nome: 'Asaas Gateway', plano: '~1% por PIX', custo: `R$ ${fmt(dados.taxaPix)}/mês`, alerta: dados.mrr > 8000, alertaMsg: 'MRR acima de R$10k: contatar comercial Asaas para reduzir taxa' },
-            ].map(({ nome, plano, custo, alerta, alertaMsg }) => (
-              <div key={nome} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{nome}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{plano}</div>
+
+            {/* Supabase — DB size + usuários */}
+            {(() => {
+              const dbMB = dados.dbSizeMB ?? 0;
+              const limiteFreeMB = 500;
+              const limiteProMB = 8192;
+              const pctFree = Math.min(100, (dbMB / limiteFreeMB) * 100);
+              const planoAtivo = dados.total > 40000 || dbMB > 400 ? 'Pro' : 'Free';
+              const alertaDB = dbMB > 400 || dados.total > 40000;
+              const alertaUsuarios = dados.total > 40000;
+              const corDB = dbMB > 400 ? '#dc2626' : dbMB > 300 ? '#d97706' : '#10b981';
+              return (
+                <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Supabase (Banco de Dados)</div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>Plano {planoAtivo} · {fmtN(dados.total)} usuários de 50.000</div>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: planoAtivo === 'Pro' ? '#d97706' : '#10b981' }}>
+                      {planoAtivo === 'Pro' ? '~R$ 150/mês' : 'R$ 0/mês'}
+                    </div>
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: alerta ? '#d97706' : '#10b981' }}>{custo}</div>
+                  {/* Barra de uso do banco */}
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 3 }}>
+                      <span>Armazenamento: {dados.dbSizeMB !== null ? `${dbMB.toFixed(1)} MB de 500 MB gratuitos` : 'Carregando…'}</span>
+                      <span style={{ fontWeight: 700, color: corDB }}>{pctFree.toFixed(0)}%</span>
+                    </div>
+                    <div style={{ background: '#f1f5f9', borderRadius: 6, height: 7, overflow: 'hidden' }}>
+                      <div style={{ width: `${pctFree}%`, height: '100%', background: corDB, borderRadius: 6, transition: 'width 0.6s' }} />
+                    </div>
+                  </div>
+                  {/* Barra de usuários */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 3 }}>
+                      <span>Usuários ativos: {fmtN(dados.total)} de 50.000</span>
+                      <span style={{ fontWeight: 700, color: alertaUsuarios ? '#dc2626' : '#10b981' }}>{((dados.total / 50000) * 100).toFixed(1)}%</span>
+                    </div>
+                    <div style={{ background: '#f1f5f9', borderRadius: 6, height: 7, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, (dados.total / 50000) * 100)}%`, height: '100%', background: alertaUsuarios ? '#dc2626' : '#10b981', borderRadius: 6, transition: 'width 0.6s' }} />
+                    </div>
+                  </div>
+                  {alertaDB && (
+                    <div style={{ marginTop: 8, padding: '7px 10px', background: '#fef3c7', borderRadius: 7, fontSize: 11, color: '#92400e', fontWeight: 600 }}>
+                      ⚠️ Banco próximo de 500 MB. Upgrade para Pro ($25/mês ≈ R$ 150) — 8 GB de espaço, backups diários automáticos.
+                    </div>
+                  )}
+                  {alertaUsuarios && (
+                    <div style={{ marginTop: 6, padding: '7px 10px', background: '#fef2f2', borderRadius: 7, fontSize: 11, color: '#991b1b', fontWeight: 600 }}>
+                      🚨 Limite de usuários próximo. Faça upgrade antes de atingir 50.000.
+                    </div>
+                  )}
                 </div>
-                {alerta && <div style={{ marginTop: 6, fontSize: 11, color: '#d97706', fontWeight: 600 }}>⚠️ {alertaMsg}</div>}
+              );
+            })()}
+
+            {/* Egress (saída de dados) */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Supabase — Banda de Saída (Egress)</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Limite gratuito: 5 GB/mês · Monitore no painel Supabase</div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b' }}>Ver painel</div>
               </div>
-            ))}
-            <div style={{ marginTop: 14, padding: '10px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 13, color: '#166534', fontWeight: 600 }}>
-              💚 Custo base de infra: R$ 0/mês (planos gratuitos ativos)
+              <div style={{ marginTop: 6, padding: '7px 10px', background: '#eff6ff', borderRadius: 7, fontSize: 11, color: '#1e40af', lineHeight: 1.5 }}>
+                💡 Mantenha no Supabase apenas textos e lógica. Imagens, PDFs e vídeos devem ir para a Bunny.net — isso reduz drasticamente o egress e adia o upgrade.
+              </div>
             </div>
+
+            {/* Bunny.net */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Bunny.net (Vídeos & Arquivos)</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>CDN + Storage · $0,01/GB armazenado · $0,005/GB transferido</div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#10b981' }}>~R$ 1–5/mês</div>
+              </div>
+              <div style={{ marginTop: 5, fontSize: 11, color: '#64748b' }}>
+                Com o volume atual o custo de IOF+spread do cartão é menor que R$ 2. Confirme no painel Bunny a fatura do mês.
+              </div>
+            </div>
+
+            {/* Vercel */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Vercel (Hosting + Edge Functions)</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Plano Free · 100 GB egress · Serverless ilimitado</div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#10b981' }}>R$ 0/mês</div>
+              </div>
+            </div>
+
+            {/* Anthropic */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Anthropic — Laudos & KYC</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Pay-as-you-go · Haiku Vision por análise</div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#10b981' }}>~R$ 0,08/doc</div>
+              </div>
+            </div>
+
+            {/* Asaas */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Asaas Gateway (PIX)</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>~1% por transação PIX</div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: dados.mrr > 8000 ? '#d97706' : '#10b981' }}>R$ {fmt(dados.taxaPix)}/mês</div>
+              </div>
+              {dados.mrr > 8000 && <div style={{ marginTop: 6, fontSize: 11, color: '#d97706', fontWeight: 600 }}>⚠️ MRR acima de R$ 10k: contatar comercial Asaas para reduzir taxa para ~0,7%</div>}
+            </div>
+
+            {/* Total mensal */}
+            {(() => {
+              const totalMensal = (dados.dbSizeMB > 400 || dados.total > 40000 ? 150 : 0) + 3 + dados.taxaPix;
+              const cor = totalMensal > 200 ? '#d97706' : '#10b981';
+              return (
+                <div style={{ marginTop: 14, padding: '12px 14px', background: '#0f172a', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>Custo mensal estimado de infra</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: cor }}>R$ {fmt(totalMensal)}</div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1715,11 +1826,18 @@ function DashboardTab() {
               cor: '#d97706', icone: '💳',
             },
             {
+              gatilho: `DB > 400 MB ou > 40k usuários`,
+              atingido: (dados.dbSizeMB ?? 0) > 400 || dados.total > 40000,
+              titulo: 'Upgrade Supabase para o plano Pro',
+              desc: `Custo: $25/mês (~R$ 150). Você ganha 8 GB de banco (16× mais), backups diários automáticos e 100 GB egress. O tempo economizado em DevOps vale muito mais que R$ 150/mês.`,
+              cor: '#7c3aed', icone: '🗄️',
+            },
+            {
               gatilho: `MRR ≥ R$ 30.000`,
               atingido: dados.mrr >= 30000,
-              titulo: 'Migrar Supabase para plano Pro ou RDS AWS',
-              desc: 'Avaliar migração do banco para RDS na AWS São Paulo (sa-east-1) ou Supabase Pro. Mais performance, backups point-in-time e segurança reforçada.',
-              cor: '#7c3aed', icone: '🗄️',
+              titulo: 'Avaliar RDS AWS São Paulo (sa-east-1)',
+              desc: 'Com volume alto, avaliar migração para AWS São Paulo para melhor latência e SLA 99,99%. Custo estimado: ~$50–80/mês com suporte nativo em BRL via parceiro AWS.',
+              cor: '#6366f1', icone: '🏗️',
             },
             {
               gatilho: `MRR ≥ R$ 50.000`,
