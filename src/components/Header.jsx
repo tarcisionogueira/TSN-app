@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, Headphones } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
