@@ -276,12 +276,12 @@ export default function Header() {
             </button>
           )}
 
-          {/* Botão Tour */}
+          {/* Botão Suporte */}
           {user && (
-            <button onClick={() => { localStorage.removeItem(TOUR_KEY); setShowTour(true); }}
-              title="Ver guia rápido"
-              style={{ display: 'flex', alignItems: 'center', padding: '7px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: '#475569', cursor: 'pointer' }}>
-              <HelpCircle size={15} />
+            <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+              title="Suporte"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              <HelpCircle size={14} /> Suporte
             </button>
           )}
 

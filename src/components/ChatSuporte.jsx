@@ -33,6 +33,12 @@ export default function ChatSuporte() {
   useEffect(() => { if (isOpen && user) carregarTicket(); }, [isOpen, user?.id]);
 
   useEffect(() => {
+    const handler = () => setIsOpen(true);
+    window.addEventListener('tsn:open-chat', handler);
+    return () => window.removeEventListener('tsn:open-chat', handler);
+  }, []);
+
+  useEffect(() => {
     if (!ticket) return;
     const ch = supabase.channel(`chat-${ticket.id}`)
       .on('postgres_changes', {
