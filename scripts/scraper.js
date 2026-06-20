@@ -791,13 +791,14 @@ async function main() {
     await new Promise(r => setTimeout(r, 1500));
   }
 
-  // Marca imóveis antigos como expirados (não vistos há 7 dias)
-  const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // Desativa imóveis não arrematados sem atualização há 90 dias
+  const noventaDiasAtras = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   await supabase
     .from('imoveis_leilao')
     .update({ ativo: false })
-    .lt('atualizado_em', seteDiasAtras)
-    .eq('ativo', true);
+    .lt('atualizado_em', noventaDiasAtras)
+    .eq('ativo', true)
+    .eq('arrematado', false);
 
   console.log(`\n✅ Scraping concluído. ${total} imóveis processados.\n`);
 }
