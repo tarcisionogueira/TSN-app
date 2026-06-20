@@ -6,6 +6,30 @@ const TODOS_ESTADOS = [
   'RO','RR','RS','SC','SE','SP','TO',
 ];
 
+function inferirTipo(descricao) {
+  const d = (descricao || '').toLowerCase();
+  if (d.includes('apartamento') || d.includes('apto')) return 'apartamento';
+  if (d.includes('casa')) return 'casa';
+  if (d.includes('terreno') || d.includes('lote') || d.includes('area')) return 'terreno';
+  if (d.includes('sala') || d.includes('loja') || d.includes('conjunto') || d.includes('andar') || d.includes('escritório')) return 'sala';
+  if (d.includes('galpão') || d.includes('galpao') || d.includes('armazém') || d.includes('armazem')) return 'galpao';
+  if (d.includes('rural') || d.includes('sítio') || d.includes('sitio') || d.includes('chácara') || d.includes('chacara') || d.includes('fazenda')) return 'rural';
+  if (d.includes('vaga') || d.includes('garagem')) return 'vaga';
+  if (d.includes('comercial') || d.includes('prédio') || d.includes('predio')) return 'comercial';
+  return 'imovel';
+}
+
+function normalizarModalidade(modalidade) {
+  const m = (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (m.includes('1') && (m.includes('praca') || m.includes('leilao'))) return 'primeiro_leilao';
+  if (m.includes('2') && (m.includes('praca') || m.includes('leilao'))) return 'segundo_leilao';
+  if (m.includes('venda') && m.includes('direta')) return 'venda_direta';
+  if (m.includes('licitacao') || m.includes('licitaçao')) return 'licitacao_aberta';
+  if (m.includes('primeiro') || m.includes('1a') || m.includes('1ª')) return 'primeiro_leilao';
+  if (m.includes('segundo') || m.includes('2a') || m.includes('2ª')) return 'segundo_leilao';
+  return m || null;
+}
+
 function parseNumeric(str) {
   if (!str) return null;
   const s = String(str).replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.').trim();
@@ -98,15 +122,16 @@ function csvToImoveis(csv, uf) {
       cidade: cidade.trim(),
       bairro: bairro.trim(),
       endereco: endereco.trim(),
-      tipo: 'imovel',
+      tipo: inferirTipo(descricao),
       valor_avaliacao: valorAvaliacao,
       valor_minimo: valorMinimo,
       desconto_percentual: descontoPct != null ? Math.round(descontoPct) : null,
-      modalidade: modalidade.trim().toLowerCase() || null,
+      modalidade: normalizarModalidade(modalidade),
       link_edital: linkEdital.trim() || null,
       link_foto: linkFoto.trim() || null,
       descricao: descricao.trim() || null,
       titulo: `${descricao.trim().slice(0, 80) || 'Imóvel'} — ${cidade.trim()}`,
+      forma_pagamento: 'a_vista',
       leiloeiro: 'Caixa Econômica Federal',
       ativo: true,
       atualizado_em: new Date().toISOString(),

@@ -88,7 +88,7 @@ export default function ImovelDetalhe() {
             {/* Foto + badges */}
             <div style={{ borderRadius: 16, overflow: 'hidden', position: 'relative', background: '#1e293b', minHeight: 260 }}>
               {imovel.foto && !imgError ? (
-                <img src={imovel.foto} alt={imovel.titulo} onError={() => setImgError(true)}
+                <img src={imovel.foto} alt={imovel.titulo} referrerPolicy="no-referrer" crossOrigin="anonymous" onError={() => setImgError(true)}
                   style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }} />
               ) : (
                 <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#475569' }}>
