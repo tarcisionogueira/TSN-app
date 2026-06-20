@@ -1,0 +1,41 @@
+name: Fotos CEF — Download Diário
+
+on:
+  schedule:
+    - cron: '0 8 * * *'   # 5h BRT (8h UTC)
+  workflow_dispatch:
+
+jobs:
+  fotos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Download fotos CEF → Supabase Storage
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/foto-cef.mjs
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "Scraper de fotos falhou em $(date). Verifique os logs."
