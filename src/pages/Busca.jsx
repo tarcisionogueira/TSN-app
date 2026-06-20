@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
@@ -54,6 +54,7 @@ export default function Busca() {
   const [selecionados, setSelecionados] = useState([]);
   const [sortBy, setSortBy] = useState('desconto_desc');
   const [pagina, setPagina] = useState(1);
+  const [totalResultados, setTotalResultados] = useState(0);
   const POR_PAGINA = 50;
 
   useEffect(() => {
@@ -86,36 +87,42 @@ export default function Busca() {
     setFiltrosSalvos(p => p.filter(f => f.id !== id));
   }
 
-  const buscar = async () => {
-    setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]); setPagina(1);
-    const filtrosApi = { ...filtros, cidade: filtros.cidades.join(', ') };
-    saveBuscaRecente(filtrosApi);
+  const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo) => {
+    setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
+
+    const buildQuery = (base) => {
+      let q = base.eq('ativo', true);
+      if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
+      if (filtrosAtivos.cidades?.length > 0) {
+        const orParts = filtrosAtivos.cidades.map(c => `cidade.ilike.${c}`).join(',');
+        q = q.or(orParts);
+      }
+      if (filtrosAtivos.tipo) q = q.eq('tipo', filtrosAtivos.tipo);
+      if (filtrosAtivos.modalidade) q = q.eq('modalidade', filtrosAtivos.modalidade);
+      if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(filtrosAtivos.valorMin));
+      if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(filtrosAtivos.valorMax));
+      if (filtrosAtivos.pagamento?.length > 0) {
+        const dbVals = filtrosAtivos.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]);
+        q = q.in('forma_pagamento', dbVals);
+      }
+      return q;
+    };
+
+    const offset = (paginaAlvo - 1) * POR_PAGINA;
+    const [coluna, dir] = sortAtivo === 'desconto_desc' ? ['desconto_percentual', false]
+      : sortAtivo === 'desconto_asc' ? ['desconto_percentual', true]
+      : sortAtivo === 'valor_asc'    ? ['valor_minimo', true]
+      : ['valor_minimo', false];
+
     try {
-      // 1. Tenta buscar do banco Supabase (scraper diário)
-      let query = supabase
-        .from('imoveis_leilao')
-        .select('*')
-        .eq('ativo', true)
-        .order('desconto_percentual', { ascending: false })
-        .limit(2000);
+      const [{ count }, { data: dbData, error: dbError }] = await Promise.all([
+        buildQuery(supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true })),
+        buildQuery(supabase.from('imoveis_leilao').select('*'))
+          .order(coluna, { ascending: dir, nullsFirst: false })
+          .range(offset, offset + POR_PAGINA - 1),
+      ]);
 
-      if (filtros.estado) query = query.eq('estado', filtros.estado);
-      // ilike para cidades (case-insensitive)
-      if (filtros.cidades.length > 0) {
-        const orParts = filtros.cidades.map(c => `cidade.ilike.${c}`).join(',');
-        query = query.or(orParts);
-      }
-      if (filtros.tipo) query = query.eq('tipo', filtros.tipo);
-      if (filtros.modalidade) query = query.eq('modalidade', filtros.modalidade);
-      if (filtros.valorMin) query = query.gte('valor_minimo', Number(filtros.valorMin));
-      if (filtros.valorMax) query = query.lte('valor_minimo', Number(filtros.valorMax));
-      // Pagamento: OR entre todos os valores mapeados para os checkboxes selecionados
-      if (filtros.pagamento?.length > 0) {
-        const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]);
-        query = query.in('forma_pagamento', dbVals);
-      }
-
-      const { data: dbData, error: dbError } = await query;
+      setTotalResultados(count || 0);
 
       const mapeados = (!dbError && dbData) ? dbData.map(im => ({
         id: im.id,
@@ -149,32 +156,23 @@ export default function Busca() {
 
       // Silent tracking — fire and forget
       try {
+        const sid = sessionStorage.getItem('tsn_session_id') || (() => { const s = Math.random().toString(36).slice(2); sessionStorage.setItem('tsn_session_id', s); return s; })();
         supabase.from('busca_historico').insert({
-          user_id: user?.id || null,
-          session_id: sessionStorage.getItem('tsn_session_id') || (() => {
-            const sid = Math.random().toString(36).slice(2);
-            sessionStorage.setItem('tsn_session_id', sid);
-            return sid;
-          })(),
-          filtros: filtros,
-          resultados_count: mapeados.length,
-          cidade: filtros.cidades?.join(', ') || null,
-          estado: filtros.estado || null,
-          tipo_imovel: filtros.tipo || null,
-          valor_min: filtros.valorMin ? Number(filtros.valorMin) : null,
-          valor_max: filtros.valorMax ? Number(filtros.valorMax) : null,
-          pagamento_tipos: filtros.pagamento?.length > 0 ? filtros.pagamento : null,
-          sort_usado: null,
+          user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos,
+          resultados_count: count || 0, cidade: filtrosAtivos.cidades?.join(', ') || null,
+          estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipo || null,
+          valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
+          valor_max: filtrosAtivos.valorMax ? Number(filtrosAtivos.valorMax) : null,
+          pagamento_tipos: filtrosAtivos.pagamento?.length > 0 ? filtrosAtivos.pagamento : null,
+          sort_usado: sortAtivo,
         }).then(() => {}).catch(() => {});
       } catch (_) {}
 
-      // Atualiza preferência de alerta do usuário (silencioso)
-      if (user?.id && (filtros.estado || filtros.cidades?.length > 0)) {
+      if (user?.id && (filtrosAtivos.estado || filtrosAtivos.cidades?.length > 0)) {
         try {
           supabase.from('alertas_email').upsert({
-            user_id: user.id,
-            filtros: filtros,
-            descricao: [filtros.cidades?.join(', ') || filtros.estado, filtros.tipo].filter(Boolean).join(' · ') || 'Preferência geral',
+            user_id: user.id, filtros: filtrosAtivos,
+            descricao: [filtrosAtivos.cidades?.join(', ') || filtrosAtivos.estado, filtrosAtivos.tipo].filter(Boolean).join(' · ') || 'Preferência geral',
             ativo: true,
           }, { onConflict: 'user_id' }).then(() => {}).catch(() => {});
         } catch (_) {}
@@ -182,29 +180,14 @@ export default function Busca() {
     } catch (e) {
       setErro('Erro na busca. Tente novamente.');
       console.error(e);
-
-      // Silent tracking on error — fire and forget
-      try {
-        supabase.from('busca_historico').insert({
-          user_id: user?.id || null,
-          session_id: sessionStorage.getItem('tsn_session_id') || (() => {
-            const sid = Math.random().toString(36).slice(2);
-            sessionStorage.setItem('tsn_session_id', sid);
-            return sid;
-          })(),
-          filtros: filtros,
-          resultados_count: 0,
-          cidade: filtros.cidades?.join(', ') || null,
-          estado: filtros.estado || null,
-          tipo_imovel: filtros.tipo || null,
-          valor_min: filtros.valorMin ? Number(filtros.valorMin) : null,
-          valor_max: filtros.valorMax ? Number(filtros.valorMax) : null,
-          pagamento_tipos: filtros.pagamento?.length > 0 ? filtros.pagamento : null,
-          sort_usado: null,
-        }).then(() => {}).catch(() => {});
-      } catch (_) {}
     }
     setLoading(false);
+  };
+
+  const buscar = () => {
+    setPagina(1);
+    saveBuscaRecente({ ...filtros, cidade: filtros.cidades.join(', ') });
+    buscarPagina(1, filtros, sortBy);
   };
 
   const irParaAnalise = (im) => {
@@ -246,32 +229,10 @@ export default function Busca() {
     nav('/painel');
   };
 
-  // Filtro client-side + ordenação + paginação
-  const resultadosFiltrados = useMemo(() => {
-    let lista = resultados.filter(im => {
-      if (filtros.tipo && im.tipo !== filtros.tipo) return false;
-      if (filtros.modalidade && im.modalidade !== filtros.modalidade) return false;
-      if (filtros.valorMin && im.valorMinimo < Number(filtros.valorMin)) return false;
-      if (filtros.valorMax && im.valorMinimo > Number(filtros.valorMax)) return false;
-      if (filtros.pagamento?.length > 0) {
-        const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]);
-        if (!dbVals.some(v => im.pagamento?.includes(v))) return false;
-      }
-      return true;
-    });
-    // Ordenação client-side
-    lista = [...lista].sort((a, b) => {
-      if (sortBy === 'desconto_desc') return (b.descontoPercentual||0) - (a.descontoPercentual||0);
-      if (sortBy === 'desconto_asc')  return (a.descontoPercentual||0) - (b.descontoPercentual||0);
-      if (sortBy === 'valor_asc')  return (a.valorMinimo||0) - (b.valorMinimo||0);
-      if (sortBy === 'valor_desc') return (b.valorMinimo||0) - (a.valorMinimo||0);
-      return 0;
-    });
-    return lista;
-  }, [resultados, filtros, sortBy]);
-
-  const totalPaginas = Math.max(1, Math.ceil(resultadosFiltrados.length / POR_PAGINA));
-  const resultadosPagina = resultadosFiltrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+  // Resultados já chegam filtrados/ordenados/paginados do servidor
+  const resultadosFiltrados = resultados;
+  const resultadosPagina = resultados;
+  const totalPaginas = Math.max(1, Math.ceil(totalResultados / POR_PAGINA));
 
   const fmt0 = (v) => (v||0).toLocaleString('pt-BR', { minimumFractionDigits:0 });
   const desconto = (im) => im.valorAvaliacao>0 ? Math.round((1-im.valorMinimo/im.valorAvaliacao)*100) : 0;
@@ -455,13 +416,13 @@ export default function Busca() {
             <h1 style={{ margin:0, fontSize:18, fontWeight:900, color:'#0f172a' }}>Busca de Imóveis em Leilão</h1>
             <p style={{ margin:'4px 0 0', fontSize:12, color:'#64748b' }}>
               {loading ? 'Buscando leilões...'
-                : buscaFeita ? `${resultadosFiltrados.length} imóvel(is) encontrado(s) · página ${pagina} de ${totalPaginas}`
+                : buscaFeita ? `${totalResultados} imóvel(is) encontrado(s) · página ${pagina} de ${totalPaginas}`
                 : 'Configure os filtros e clique em Buscar Leilões'}
             </p>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
             {buscaFeita && !loading && (
-              <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); setPagina(1); }}
+              <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); setPagina(1); buscarPagina(1, filtros, e.target.value); }}
                 style={{ padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:600, color:'#334155', background:'white', cursor:'pointer' }}>
                 <option value="desconto_desc">Maior desconto primeiro</option>
                 <option value="desconto_asc">Menor desconto primeiro</option>
@@ -728,7 +689,7 @@ export default function Busca() {
         {/* Paginação */}
         {!loading && totalPaginas > 1 && (
           <div style={{ background:'white', borderRadius:12, border:'1px solid #e2e8f0', padding:'12px 18px', display:'flex', justifyContent:'center', alignItems:'center', gap:8 }}>
-            <button onClick={()=>setPagina(p=>Math.max(1,p-1))} disabled={pagina===1}
+            <button onClick={()=>{ const p=Math.max(1,pagina-1); setPagina(p); buscarPagina(p, filtros, sortBy); }} disabled={pagina===1}
               style={{ padding:'6px 14px', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:pagina===1?'not-allowed':'pointer', background:pagina===1?'#f8fafc':'white', color:pagina===1?'#cbd5e1':'#334155' }}>
               ← Anterior
             </button>
@@ -737,12 +698,12 @@ export default function Busca() {
               acc.push(n); return acc;
             },[]).map((n,i)=>
               n==='…' ? <span key={'e'+i} style={{color:'#94a3b8',fontSize:12}}>…</span>
-              : <button key={n} onClick={()=>setPagina(n)}
+              : <button key={n} onClick={()=>{ setPagina(n); buscarPagina(n, filtros, sortBy); }}
                   style={{ padding:'6px 11px', border:`1px solid ${n===pagina?'#2563eb':'#e2e8f0'}`, borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer', background:n===pagina?'#2563eb':'white', color:n===pagina?'white':'#334155' }}>
                   {n}
                 </button>
             )}
-            <button onClick={()=>setPagina(p=>Math.min(totalPaginas,p+1))} disabled={pagina===totalPaginas}
+            <button onClick={()=>{ const p=Math.min(totalPaginas,pagina+1); setPagina(p); buscarPagina(p, filtros, sortBy); }} disabled={pagina===totalPaginas}
               style={{ padding:'6px 14px', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:pagina===totalPaginas?'not-allowed':'pointer', background:pagina===totalPaginas?'#f8fafc':'white', color:pagina===totalPaginas?'#cbd5e1':'#334155' }}>
               Próxima →
             </button>
@@ -750,7 +711,7 @@ export default function Busca() {
         )}
 
         {/* Sem resultados */}
-        {buscaFeita && !loading && resultadosFiltrados.length===0 && !erro && (
+        {buscaFeita && !loading && totalResultados===0 && !erro && (
           <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:14, border:'1px solid #e2e8f0' }}>
             <Search size={40} color="#94a3b8" style={{ margin:'0 auto 16px' }}/>
             <h3 style={{ color:'#334155', fontWeight:800, margin:'0 0 8px' }}>Nenhum resultado</h3>

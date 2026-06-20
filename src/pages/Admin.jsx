@@ -1721,6 +1721,80 @@ function DashboardTab() {
           ))}
         </div>
       </div>
+      {/* ── Quadro de Configurações & Pendências ─────────────────────────────── */}
+      <SystemStatusCard />
+    </div>
+  );
+}
+
+function SystemStatusCard() {
+  const [status, setStatus] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    fetch('/api/system-status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+  const GRUPOS = {
+    geral:  { label: 'Geral', items: ['baseUrl', 'cron'] },
+    email:  { label: 'Alertas por Email', items: ['email', 'from'] },
+    banco:  { label: 'Banco de Dados', items: ['svcKey'] },
+    ads:    { label: 'Anúncios', items: ['googleAds', 'meta'] },
+  };
+  const DOMINIO_PENDENTE = [
+    { label: 'Definir nome e domínio da plataforma', desc: 'Necessário para email remetente e URL pública.' },
+    { label: 'Verificar domínio no Resend', desc: 'Adicionar registros DNS após definir o domínio.' },
+    { label: 'APP_FROM_EMAIL no Vercel', desc: 'Ex: "TSN Ativos <alertas@seudominio.com.br>"' },
+    { label: 'APP_BASE_URL no Vercel', desc: 'Ex: "https://seudominio.com.br"' },
+  ];
+  const totalOk = status ? Object.values(status).filter(v => v.ok).length : 0;
+  const total = status ? Object.values(status).length : 0;
+  const saude = total > 0 ? Math.round(totalOk / total * 100) : 0;
+  return (
+    <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>Configurações & Saúde do Sistema</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Variáveis de ambiente e integrações pendentes</div>
+        </div>
+        {!loading && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 28, fontWeight: 900, color: saude >= 80 ? '#059669' : saude >= 50 ? '#f59e0b' : '#dc2626' }}>{saude}%</div><div style={{ fontSize: 11, color: '#94a3b8' }}>configurado</div></div>}
+      </div>
+      {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Verificando…</div> : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 20 }}>
+          {Object.entries(GRUPOS).map(([key, grupo]) => (
+            <div key={key} style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{grupo.label}</div>
+              {grupo.items.map(itemKey => { const item = status?.[itemKey]; if (!item) return null; return (
+                <div key={itemKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: item.ok ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0, fontWeight: 700, color: item.ok ? '#166534' : '#dc2626' }}>{item.ok ? '✓' : '✗'}</div>
+                  <span style={{ fontSize: 13, color: item.ok ? '#0f172a' : '#94a3b8', flex: 1 }}>{item.label}</span>
+                  {!item.ok && <span style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', borderRadius: 6, padding: '1px 6px', fontWeight: 700 }}>Pendente</span>}
+                </div>
+              ); })}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>⏳ Aguardando definição do domínio</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
+          {DOMINIO_PENDENTE.map((item, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 12px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a' }}>
+              <span style={{ fontSize: 14, flexShrink: 0 }}>📋</span>
+              <div><div style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>{item.label}</div><div style={{ fontSize: 11, color: '#b45309', marginTop: 2, lineHeight: 1.4 }}>{item.desc}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#8b5cf6', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>🔮 Integrações futuras</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {[['Google Ads','GOOGLE_ADS_*'],['Meta Ads','META_ACCESS_TOKEN'],['RI Digital','RI_DIGITAL_KEY']].map(([nome, env]) => (
+            <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#e2e8f0' }} />
+              <div><div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{nome}</div><div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{env}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1919,6 +1993,176 @@ function ScrapersTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// SDR TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+const STATUS_COLORS = { novo: '#f59e0b', contatado: '#3b82f6', qualificado: '#8b5cf6', convertido: '#10b981', perdido: '#94a3b8' };
+const STATUS_LIST = ['novo', 'contatado', 'qualificado', 'convertido', 'perdido'];
+function defaultProdutoSDR() { return { nome: '', descricao: '', tipo: 'ebook', conteudo_url: '', imagem_url: '' }; }
+
+function SdrTab() {
+  const [produtos, setProdutos] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [loadingP, setLoadingP] = useState(true);
+  const [loadingL, setLoadingL] = useState(true);
+  const [modalProduto, setModalProduto] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [filterProduto, setFilterProduto] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [copiado, setCopiado] = useState('');
+
+  async function loadProdutos() { setLoadingP(true); const { data } = await supabase.from('sdr_produtos').select('*').order('criado_em', { ascending: false }); setProdutos(data || []); setLoadingP(false); }
+  async function loadLeads() { setLoadingL(true); const { data } = await supabase.from('sdr_leads').select('*, sdr_produtos(nome)').order('criado_em', { ascending: false }); setLeads(data || []); setLoadingL(false); }
+  useEffect(() => { loadProdutos(); loadLeads(); }, []);
+
+  async function saveProduto() {
+    setSaving(true);
+    const { id, ...fields } = modalProduto;
+    if (id) { await supabase.from('sdr_produtos').update(fields).eq('id', id); } else { await supabase.from('sdr_produtos').insert(fields); }
+    setSaving(false); setModalProduto(null); loadProdutos();
+  }
+  async function toggleAtivo(prod) { await supabase.from('sdr_produtos').update({ ativo: !prod.ativo }).eq('id', prod.id); loadProdutos(); }
+  async function deleteProduto(id) { if (!window.confirm('Excluir produto?')) return; await supabase.from('sdr_produtos').delete().eq('id', id); loadProdutos(); }
+  async function updateLeadStatus(leadId, status) { await supabase.from('sdr_leads').update({ status }).eq('id', leadId); setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l)); }
+  function copyLink(prodId) { navigator.clipboard.writeText(`${window.location.origin}/#/p/captura/${prodId}`); setCopiado(prodId); setTimeout(() => setCopiado(''), 1800); }
+  function exportCSV() {
+    const filtered = leads.filter(l => (!filterProduto || l.produto_id === filterProduto) && (!filterStatus || l.status === filterStatus));
+    const rows = [['Nome','WhatsApp','Email','Produto','Status','Data'], ...filtered.map(l => [l.nome, l.whatsapp, l.email||'', l.sdr_produtos?.nome||'', l.status, new Date(l.criado_em).toLocaleDateString('pt-BR')])];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'leads_sdr.csv'; a.click();
+  }
+  const statusCounts = STATUS_LIST.reduce((acc, s) => ({ ...acc, [s]: leads.filter(l => l.status === s).length }), {});
+  const filteredLeads = leads.filter(l => (!filterProduto || l.produto_id === filterProduto) && (!filterStatus || l.status === filterStatus));
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
+        {STATUS_LIST.map(s => (
+          <div key={s} style={{ background: '#fff', border: `2px solid ${STATUS_COLORS[s]}`, borderRadius: 10, padding: '8px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 90 }}>
+            <span style={{ fontSize: 20, fontWeight: 900, color: STATUS_COLORS[s] }}>{statusCounts[s]}</span>
+            <span style={{ fontSize: 11, color: '#64748b', textTransform: 'capitalize', marginTop: 2 }}>{s}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...S.card, borderRadius: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={S.sectionTitle}>Produtos de Captura</div>
+          <button style={S.btn('primary')} onClick={() => setModalProduto(defaultProdutoSDR())}>+ Novo Produto</button>
+        </div>
+        {loadingP ? <p style={{ color: '#94a3b8' }}>Carregando…</p> : (
+          <table style={S.table}><thead><tr><th style={S.th}>Nome</th><th style={S.th}>Tipo</th><th style={S.th}>Ativo</th><th style={S.th}>Link</th><th style={S.th}>Ações</th></tr></thead>
+            <tbody>{produtos.map(p => (
+              <tr key={p.id}>
+                <td style={S.td}>{p.nome}</td>
+                <td style={S.td}><span style={{ background: '#f1f5f9', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}>{p.tipo}</span></td>
+                <td style={S.td}><button onClick={() => toggleAtivo(p)} style={{ ...S.badge(p.ativo), cursor: 'pointer', border: 'none' }}>{p.ativo ? 'Ativo' : 'Inativo'}</button></td>
+                <td style={S.td}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{window.location.origin}/#/p/captura/{p.id}</span><button onClick={() => copyLink(p.id)} style={{ ...S.btn('outline'), fontSize: 11, padding: '3px 8px' }}>{copiado === p.id ? 'Copiado!' : 'Copiar'}</button></div></td>
+                <td style={S.td}><div style={{ display: 'flex', gap: 6 }}><button style={{ ...S.btn('outline'), fontSize: 12 }} onClick={() => setModalProduto({ ...p })}>Editar</button><button style={{ ...S.btn('danger'), fontSize: 12 }} onClick={() => deleteProduto(p.id)}>Excluir</button></div></td>
+              </tr>
+            ))}{produtos.length === 0 && <tr><td colSpan={5} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum produto cadastrado.</td></tr>}</tbody>
+          </table>
+        )}
+      </div>
+      <div style={{ ...S.card, borderRadius: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+          <div style={S.sectionTitle}>Leads Capturados</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={filterProduto} onChange={e => setFilterProduto(e.target.value)} style={{ ...S.input, width: 'auto', fontSize: 13 }}><option value="">Todos os produtos</option>{produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...S.input, width: 'auto', fontSize: 13 }}><option value="">Todos os status</option>{STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select>
+            <button style={S.btn('outline')} onClick={exportCSV}>⬇ CSV</button>
+          </div>
+        </div>
+        {loadingL ? <p style={{ color: '#94a3b8' }}>Carregando…</p> : (
+          <table style={S.table}><thead><tr><th style={S.th}>Nome</th><th style={S.th}>WhatsApp</th><th style={S.th}>Email</th><th style={S.th}>Produto</th><th style={S.th}>Status</th><th style={S.th}>Data</th></tr></thead>
+            <tbody>{filteredLeads.map(l => (
+              <tr key={l.id}>
+                <td style={S.td}>{l.nome}</td>
+                <td style={S.td}><div style={{ display: 'flex', gap: 6 }}>{l.whatsapp}<a href={`https://wa.me/55${l.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '2px 6px', textDecoration: 'none', fontWeight: 600 }}>WA</a></div></td>
+                <td style={S.td}>{l.email || '—'}</td>
+                <td style={S.td}>{l.sdr_produtos?.nome || '—'}</td>
+                <td style={S.td}><select value={l.status} onChange={e => updateLeadStatus(l.id, e.target.value)} style={{ background: STATUS_COLORS[l.status]+'22', color: STATUS_COLORS[l.status], border: `1px solid ${STATUS_COLORS[l.status]}`, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>{STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></td>
+                <td style={S.td}>{new Date(l.criado_em).toLocaleDateString('pt-BR')}</td>
+              </tr>
+            ))}{filteredLeads.length === 0 && <tr><td colSpan={6} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum lead encontrado.</td></tr>}</tbody>
+          </table>
+        )}
+      </div>
+      {modalProduto && (
+        <div style={S.overlay} onClick={() => setModalProduto(null)}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 20 }}>{modalProduto.id ? 'Editar Produto' : 'Novo Produto'}</div>
+            <div style={S.row}><div style={S.col}><label style={S.label}>Nome *</label><input style={S.input} value={modalProduto.nome} onChange={e => setModalProduto(m => ({ ...m, nome: e.target.value }))} /></div><div style={{ width: 140 }}><label style={S.label}>Tipo</label><select style={S.input} value={modalProduto.tipo} onChange={e => setModalProduto(m => ({ ...m, tipo: e.target.value }))}><option value="ebook">eBook</option><option value="minicurso">Mini-curso</option><option value="webinar">Webinar</option><option value="outro">Outro</option></select></div></div>
+            <div style={{ marginBottom: 14 }}><label style={S.label}>Descrição</label><textarea style={{ ...S.input, height: 72, resize: 'vertical' }} value={modalProduto.descricao || ''} onChange={e => setModalProduto(m => ({ ...m, descricao: e.target.value }))} /></div>
+            <div style={{ marginBottom: 14 }}><label style={S.label}>Link do Conteúdo</label><input style={S.input} value={modalProduto.conteudo_url || ''} onChange={e => setModalProduto(m => ({ ...m, conteudo_url: e.target.value }))} placeholder="https://..." /></div>
+            <div style={{ marginBottom: 20 }}><label style={S.label}>URL da Imagem (opcional)</label><input style={S.input} value={modalProduto.imagem_url || ''} onChange={e => setModalProduto(m => ({ ...m, imagem_url: e.target.value }))} placeholder="https://..." /></div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}><button style={S.btn('outline')} onClick={() => setModalProduto(null)}>Cancelar</button><button style={S.btn('primary')} onClick={saveProduto} disabled={saving || !modalProduto.nome?.trim()}>{saving ? 'Salvando…' : 'Salvar'}</button></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EQUIPE TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+const ROLE_BADGE_COLORS = { admin: { bg: '#fef3c7', color: '#92400e' }, analista: { bg: '#dbeafe', color: '#1e40af' }, consultor: { bg: '#d1fae5', color: '#065f46' }, advogado: { bg: '#ede9fe', color: '#5b21b6' } };
+
+function EquipeTab() {
+  const [membros, setMembros] = useState([]);
+  const [chamadosMap, setChamadosMap] = useState({});
+  const [finalizadosHoje, setFinalizadosHoje] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const { data: perfisData } = await supabase.from('perfis').select('*').in('role', ['admin','analista','consultor','advogado']);
+      const membrosData = perfisData || [];
+      setMembros(membrosData);
+      if (membrosData.length > 0) {
+        const ids = membrosData.map(m => m.id);
+        const { data: chamados } = await supabase.from('chamados').select('atendente_id, status').in('atendente_id', ids);
+        const map = {};
+        ids.forEach(id => { map[id] = { total: 0, finalizados: 0 }; });
+        (chamados || []).forEach(c => { if (map[c.atendente_id]) { map[c.atendente_id].total++; if (c.status === 'finalizado') map[c.atendente_id].finalizados++; } });
+        setChamadosMap(map);
+        const hoje = new Date().toISOString().slice(0, 10);
+        const { count } = await supabase.from('chamados').select('id', { count: 'exact', head: true }).eq('status', 'finalizado').gte('atualizado_em', hoje);
+        setFinalizadosHoje(count || 0);
+      }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  if (loading) return <p style={{ color: '#94a3b8' }}>Carregando…</p>;
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
+        {[['Total Equipe', membros.length, '#0f172a'], ['Analistas', membros.filter(m=>m.role==='analista').length, '#3b82f6'], ['Consultores', membros.filter(m=>m.role==='consultor').length, '#059669'], ['Finalizados Hoje', finalizadosHoje, '#f59e0b']].map(([l,v,c]) => (
+          <div key={l} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px 24px' }}>
+            <div style={{ fontSize: 32, fontWeight: 900, color: c }}>{v}</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...S.card, borderRadius: 16 }}>
+        <div style={S.sectionTitle}>Membros da Equipe</div>
+        <table style={S.table}><thead><tr><th style={S.th}>Membro</th><th style={S.th}>Role</th><th style={S.th}>Chamados Assumidos</th><th style={S.th}>Finalizados</th><th style={S.th}>Último Acesso</th></tr></thead>
+          <tbody>{membros.map(m => { const stats = chamadosMap[m.id] || { total:0, finalizados:0 }; const rs = ROLE_BADGE_COLORS[m.role] || { bg:'#f1f5f9', color:'#475569' }; return (
+            <tr key={m.id}><td style={S.td}><div style={{ fontWeight:600 }}>{m.nome||'—'}</div><div style={{ fontSize:12, color:'#94a3b8' }}>{m.email||''}</div></td>
+            <td style={S.td}><span style={{ background:rs.bg, color:rs.color, borderRadius:8, padding:'2px 10px', fontSize:12, fontWeight:700 }}>{m.role}</span></td>
+            <td style={S.td}>{stats.total}</td><td style={S.td}>{stats.finalizados}</td>
+            <td style={{ ...S.td, color:'#64748b', fontSize:13 }}>{m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'N/D'}</td>
+            </tr>);
+          })}{membros.length===0&&<tr><td colSpan={5} style={{ ...S.td, color:'#94a3b8', textAlign:'center', padding:24 }}>Nenhum membro encontrado.</td></tr>}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // MARKETING TAB — inteligência de buscas, demográficos, SDR e oportunidades
 // (visível APENAS para role === 'admin')
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2378,7 +2622,7 @@ function MarketingTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Scrapers', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -2429,6 +2673,8 @@ export default function Admin() {
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Tour'           && <TourTab />}
+        {tab === 'SDR / Leads'    && <SdrTab />}
+        {tab === 'Equipe'         && <EquipeTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}

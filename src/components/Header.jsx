@@ -312,7 +312,6 @@ export default function Header() {
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
                     { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
                     { path: '/planos', label: 'Minha Assinatura', icon: Tag },
-                    ...(role === 'admin' ? [{ path: '/admin', label: '⚙️ Admin', icon: null }] : []),
                   ].map(item => (
                     <button key={item.path} onClick={() => { nav(item.path); setShowUserMenu(false); }}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#334155', fontSize: 13, fontWeight: 600, borderRadius: 8, textAlign: 'left' }}

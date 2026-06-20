@@ -97,7 +97,7 @@ export default async function handler(req) {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: 'TSN Ativos <alertas@tsnAtivos.com.br>',
+      from: process.env.APP_FROM_EMAIL || 'TSN Ativos <alertas@tsnAtivos.com.br>',
       to: userEmail,
       subject: `${imoveis.length} oportunidade${imoveis.length > 1 ? 's' : ''} no seu perfil de busca`,
       html,
