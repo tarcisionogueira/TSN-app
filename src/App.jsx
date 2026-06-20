@@ -25,6 +25,7 @@ import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
 import Promo from './pages/Promo';
 import Convite from './pages/Convite';
+import ConviteEquipe from './pages/ConviteEquipe';
 import EbookPage from './pages/EbookPage';
 import ContratoLink from './pages/ContratoLink';
 import ProdutoLanding from './pages/ProdutoLanding';
@@ -146,6 +147,7 @@ export default function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/promo/:codigo" element={<Promo />} />
           <Route path="/convite/:codigo" element={<Convite />} />
+          <Route path="/convite-equipe/:token" element={<ConviteEquipe />} />
           <Route path="/c/:token" element={<ContratoLink />} />
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />
           <Route path="*" element={<MainLayout />} />
