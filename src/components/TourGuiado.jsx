@@ -5,22 +5,10 @@ const TOUR_KEY = 'tsn_tour_feito';
 
 const STEPS = [
   {
-    id: 'home',
-    icone: '🏠',
-    titulo: 'Página Inicial',
-    descricao: 'Visão geral da plataforma com destaques do mercado, resumo de oportunidades e novidades de leilões imobiliários.',
-  },
-  {
     id: 'leiloes',
     icone: '🔍',
     titulo: 'Busca de Leilões',
     descricao: 'Explore imóveis em leilão de todo o Brasil. Filtre por estado, tipo (casa, apto, terreno), valor e modalidade judicial ou extrajudicial.',
-  },
-  {
-    id: 'membros',
-    icone: '🎓',
-    titulo: 'Área de Membros',
-    descricao: 'Acesse cursos exclusivos, videoaulas e materiais de estudo para dominar o mercado de leilões e maximizar seus retornos.',
   },
   {
     id: 'calculadora',
@@ -29,22 +17,28 @@ const STEPS = [
     descricao: 'Simule o retorno antes de dar um lance. Calcule custos de arrematação, ITBI, comissões e margem de lucro esperada.',
   },
   {
+    id: 'membros',
+    icone: '🎓',
+    titulo: 'Área de Membros',
+    descricao: 'Acesse cursos exclusivos, videoaulas e materiais de estudo para dominar o mercado de leilões e maximizar seus retornos.',
+  },
+  {
     id: 'analise',
     icone: '📊',
     titulo: 'Fazer Análise',
-    descricao: 'Envie um imóvel específico para análise completa: riscos jurídicos, situação documental e potencial de valorização.',
+    descricao: 'Envie um imóvel específico para análise completa: riscos jurídicos, situação documental e potencial de valorização com IA.',
+  },
+  {
+    id: 'suporte',
+    icone: '💬',
+    titulo: 'Suporte e Chat',
+    descricao: 'Fale com nossa equipe pelo chat integrado ou abra um chamado. Estamos aqui para tirar suas dúvidas e ajudar em cada passo.',
   },
   {
     id: 'planos',
     icone: '💎',
-    titulo: 'Planos',
-    descricao: 'Conheça e faça upgrade do seu plano para desbloquear mais análises, relatórios exclusivos e suporte prioritário.',
-  },
-  {
-    id: 'conta',
-    icone: '👤',
-    titulo: 'Minha Conta',
-    descricao: 'Gerencie seu plano, acesse contratos digitais, acompanhe histórico de análises e atualize seus dados pessoais.',
+    titulo: 'Planos e Upgrade',
+    descricao: 'Conheça os planos disponíveis e faça upgrade para desbloquear análises ilimitadas, relatórios exclusivos e suporte prioritário.',
   },
 ];
 

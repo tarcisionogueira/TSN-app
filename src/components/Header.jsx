@@ -308,6 +308,7 @@ export default function Header() {
                     )}
                   </div>
                   {[
+                    { path: '/perfil', label: 'Meu Perfil', icon: User },
                     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
                     { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
