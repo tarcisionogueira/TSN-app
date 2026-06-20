@@ -324,34 +324,37 @@ export default function Analise() {
     setSaved(true); showMsg('Imóvel salvo no portfólio!');
     setTimeout(()=>setSaved(false), 2500);
 
-    // Salva/atualiza no banco (relatorios)
+    // Salva/atualiza no banco (relatorios) — falha silenciosa não afeta o portfólio local
     if (user) {
-      const isArrematado = d.status === 'arrematado';
-      const expiraEm = isArrematado ? null : new Date(Date.now() + 90*24*60*60*1000).toISOString();
-      const payload = {
-        user_id: user.id,
-        imovel_id: imovelInicial?.id || d.id,
-        imovel_nome: d.nome,
-        imovel_cidade: d.cidade,
-        imovel_estado: d.estado,
-        valor_minimo: d.valorArrematacao || null,
-        valor_avaliacao: d.valorAvaliacao || null,
-        desconto_percentual: d.valorAvaliacao > 0 ? Math.round((1 - d.valorArrematacao / d.valorAvaliacao) * 100) : null,
-        status: d.status || 'analise',
-        dados: { ...d, mercado },
-        parecer: parecer || null,
-        arrematado: isArrematado,
-        data_arrematacao: isArrematado ? (d.dataArrematacao || new Date().toISOString()) : null,
-        expira_em: expiraEm,
-      };
-      // Tenta encontrar relatório existente com mesmo imovel_id + user_id
-      const { data: existing } = await supabase.from('relatorios')
-        .select('id').eq('user_id', user.id).eq('imovel_id', payload.imovel_id).maybeSingle();
-      if (existing?.id) {
-        await supabase.from('relatorios').update(payload).eq('id', existing.id);
-      } else {
-        await supabase.from('relatorios').insert(payload);
-      }
+      try {
+        const isArrematado = d.status === 'arrematado';
+        const expiraEm = isArrematado ? null : new Date(Date.now() + 90*24*60*60*1000).toISOString();
+        const payload = {
+          user_id: user.id,
+          imovel_id: imovelInicial?.id || d.id,
+          imovel_nome: d.nome,
+          imovel_cidade: d.cidade,
+          imovel_estado: d.estado,
+          valor_minimo: d.valorArrematacao || null,
+          valor_avaliacao: d.valorAvaliacao || null,
+          desconto_percentual: d.valorAvaliacao > 0 ? Math.round((1 - d.valorArrematacao / d.valorAvaliacao) * 100) : null,
+          status: d.status || 'analise',
+          dados: { ...d, mercado },
+          parecer: parecer || null,
+          arrematado: isArrematado,
+          data_arrematacao: isArrematado ? (d.dataArrematacao || new Date().toISOString()) : null,
+          expira_em: expiraEm,
+        };
+        const { data: existing, error: existErr } = await supabase.from('relatorios')
+          .select('id').eq('user_id', user.id).eq('imovel_id', payload.imovel_id).maybeSingle();
+        if (!existErr) {
+          if (existing?.id) {
+            await supabase.from('relatorios').update(payload).eq('id', existing.id);
+          } else {
+            await supabase.from('relatorios').insert(payload);
+          }
+        }
+      } catch { /* portfólio local já foi salvo — erro de rede não bloqueia o usuário */ }
     }
 
     // Contabiliza análise para top1 (só conta ao salvar pela primeira vez)

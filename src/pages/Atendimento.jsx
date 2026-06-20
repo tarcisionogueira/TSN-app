@@ -85,10 +85,11 @@ export default function Atendimento() {
   async function enviarMensagem() {
     if ((!texto.trim() && !anexos.length) || !chamadoAtivo) return;
     setEnviando(true);
-    const { data: msg } = await supabase.from('chamados_mensagens').insert({
+    const { data: msg, error: msgErr } = await supabase.from('chamados_mensagens').insert({
       chamado_id: chamadoAtivo.id, autor_id: user.id, autor_nome: nomeAtendente,
       autor_tipo: 'atendente', conteudo: texto || '[anexo]', anexos,
     }).select().single();
+    if (msgErr) { alert('Erro ao enviar mensagem. Tente novamente.'); setEnviando(false); return; }
     if (msg) setMensagens(prev => [...prev, msg]);
     await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
     setTexto(''); setAnexos([]);
