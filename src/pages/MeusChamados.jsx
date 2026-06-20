@@ -257,7 +257,9 @@ export default function MeusChamados() {
                   <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 5 }}>{c.titulo}</div>
                   <div style={{ fontSize: 12, color: '#94a3b8' }}>
                     Aberto em {fmtData(c.criado_em)}
-                    {c.atendente_nome && <> · Atendente: <strong style={{ color: '#64748b' }}>{c.atendente_nome}</strong></>}
+                    {c.atendente_nome && !['Auto-resolvido','Sistema (inatividade)'].includes(c.atendente_nome) && (
+                      <> · Atendido por: <strong style={{ color: '#64748b' }}>{c.atendente_nome}</strong></>
+                    )}
                   </div>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: s.bg, color: s.cor, whiteSpace: 'nowrap', marginLeft: 14 }}>{s.label}</span>

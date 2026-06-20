@@ -51,11 +51,12 @@ export default function Atendimento() {
     let q = supabase.from('chamados').select('*').order('criado_em', { ascending: true });
     if (filtro === 'pendentes') q = q.in('status', ['aberto', 'em_atendimento']);
     else if (filtro !== 'todos') q = q.eq('status', filtro);
-    const { data } = await q;
-    // Ordena: aberto → em_atendimento → finalizado
-    const ordem = { aberto: 0, em_atendimento: 1, finalizado: 2 };
-    const sorted = (data || []).sort((a, b) => (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9));
-    setChamados(sorted);
+    const { data, error } = await q;
+    if (!error) {
+      const ordem = { aberto: 0, em_atendimento: 1, finalizado: 2 };
+      const sorted = (data || []).sort((a, b) => (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9));
+      setChamados(sorted);
+    }
     setLoading(false);
   }
 

@@ -76,7 +76,7 @@ export default function ChatSuporte() {
 
   useEffect(() => {
     return () => { clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current); };
-  }, []);
+  }, [ticket?.id]);
 
   if (!isLoggedIn || STAFF_ROLES.includes(role)) return null;
 
@@ -156,7 +156,14 @@ export default function ChatSuporte() {
           await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', tk.id);
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      await supabase.from('chamados_mensagens').insert({
+        chamado_id: tk.id, autor_tipo: 'ia', autor_nome: 'TSN Assistente',
+        conteudo: 'Não consegui processar sua mensagem no momento. Um membro da equipe irá atendê-lo em breve.',
+        anexos: [],
+      });
+      setPrecisaAtendente(true);
+    }
     setLoadingIA(false);
   }
 
@@ -174,7 +181,7 @@ export default function ChatSuporte() {
   async function encerrarAtendimento() {
     if (!ticket) return;
     await supabase.from('chamados').update({
-      status: 'finalizado', atendente_nome: 'IA (resolvido)',
+      status: 'finalizado', atendente_nome: 'Auto-resolvido',
       atualizado_em: new Date().toISOString(),
     }).eq('id', ticket.id);
     await supabase.from('chamados_mensagens').insert({
@@ -182,7 +189,7 @@ export default function ChatSuporte() {
       conteudo: 'Ótimo! Fico feliz em ter ajudado. Este atendimento foi encerrado. Se tiver mais dúvidas, estarei por aqui.',
       anexos: [],
     });
-    setTicket(p => ({ ...p, status: 'finalizado' }));
+    setTicket(p => p ? { ...p, status: 'finalizado' } : p);
     clearTimeout(avisoTimer.current);
     clearTimeout(fecharTimer.current);
   }
