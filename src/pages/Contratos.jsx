@@ -195,7 +195,7 @@ export default function Contratos() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {contratos.map(c => {
             const si = STATUS_INFO[c.status] || STATUS_INFO.rascunho;
-            const aguardando = c.status === 'aguardando';
+            const aguardando = c.status === 'aguardando' || c.status === 'aguardando_assinatura';
             return (
               <div key={c.id} style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: isMobile ? '14px 16px' : '18px 20px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 12 : 16, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>

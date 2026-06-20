@@ -142,7 +142,7 @@ export default async function handler(req, res) {
 
         const invoices = await asaasGet(`/subscriptions/${subscription.id}/payments`);
         const primeiraFatura = invoices.data?.[0];
-        linkPagamento = primeiraFatura?.invoiceUrl || primeiraFatura?.bankSlipUrl;
+        linkPagamento = primeiraFatura?.invoiceUrl || primeiraFatura?.bankSlipUrl || null;
       }
 
       return res.status(200).json({
