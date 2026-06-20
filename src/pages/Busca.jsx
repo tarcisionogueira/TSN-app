@@ -518,7 +518,7 @@ export default function Busca() {
                     {/* Thumbnail */}
                     <div style={{ width: isMobile ? '100%' : 160, height: isMobile ? 160 : 110, flexShrink:0, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', position:'relative' }}>
                       {im.foto
-                        ? <img src={`/api/img-proxy?url=${encodeURIComponent(im.foto)}`} alt="foto" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} onError={e=>{ e.currentTarget.style.display='none'; e.currentTarget.nextSibling.style.display='flex'; }}/>
+                        ? <img src={im.foto} alt="foto" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} onError={e=>{ e.currentTarget.style.display='none'; e.currentTarget.nextSibling.style.display='flex'; }}/>
                         : null}
                       <div style={{ display: im.foto ? 'none' : 'flex', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', color:'#cbd5e1', flexDirection:'column', gap:4 }}>
                         <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6M12 4.5v.01"/></svg>

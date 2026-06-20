@@ -1,4 +1,4 @@
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const TODOS_ESTADOS = [
   'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA',
@@ -142,6 +142,49 @@ function csvToImoveis(csv, uf) {
   return imoveis;
 }
 
+const STORAGE_BUCKET = 'imoveis-fotos';
+
+async function uploadFoto(fotoUrl, fonteId, supabaseUrl, serviceKey) {
+  if (!fotoUrl) return null;
+  // Already stored in our Supabase
+  if (fotoUrl.includes(supabaseUrl)) return fotoUrl;
+
+  try {
+    const res = await fetch(fotoUrl, {
+      headers: {
+        ...CAIXA_HEADERS,
+        Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return null;
+
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+    const body = await res.arrayBuffer();
+    if (body.byteLength < 500) return null; // invalid image
+
+    const path = `cef/${fonteId}.${ext}`;
+    const uploadRes = await fetch(
+      `${supabaseUrl}/storage/v1/object/${STORAGE_BUCKET}/${path}`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          'Content-Type': contentType,
+          'x-upsert': 'true',
+        },
+        body,
+      }
+    );
+    if (!uploadRes.ok) return null;
+    return `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
+  } catch {
+    return null;
+  }
+}
+
 async function upsertBatch(rows, supabaseUrl, serviceKey) {
   const res = await fetch(
     `${supabaseUrl}/rest/v1/imoveis_leilao?on_conflict=fonte,fonte_id`,
@@ -183,6 +226,11 @@ export default async function handler(req, res) {
   const estadosErro = [];
   const erros = [];
   let totalProcessados = 0;
+  let fotosProcessadas = 0;
+  const MAX_FOTOS_POR_RUN = 200;
+
+  // Collect all imoveis first, then upsert, then upload photos
+  const todosImoveis = [];
 
   for (const uf of estados) {
     try {
@@ -197,12 +245,12 @@ export default async function handler(req, res) {
         estadosOk.push(uf);
         continue;
       }
-      // Batch in chunks of 100
       for (let i = 0; i < imoveis.length; i += 100) {
         const chunk = imoveis.slice(i, i + 100);
         await upsertBatch(chunk, supabaseUrl, serviceKey);
       }
       totalProcessados += imoveis.length;
+      todosImoveis.push(...imoveis);
       estadosOk.push(uf);
     } catch (e) {
       estadosErro.push(uf);
@@ -210,8 +258,35 @@ export default async function handler(req, res) {
     }
   }
 
+  // Upload photos for properties that have a CEF foto URL (not yet stored)
+  for (const im of todosImoveis) {
+    if (fotosProcessadas >= MAX_FOTOS_POR_RUN) break;
+    const originalFoto = im.link_foto;
+    if (!originalFoto || originalFoto.includes(supabaseUrl)) continue;
+
+    const storedUrl = await uploadFoto(originalFoto, im.fonte_id, supabaseUrl, serviceKey);
+    if (storedUrl) {
+      // Update DB row with the stored photo URL
+      await fetch(
+        `${supabaseUrl}/rest/v1/imoveis_leilao?fonte_id=eq.${encodeURIComponent(im.fonte_id)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify({ link_foto: storedUrl }),
+        }
+      );
+      fotosProcessadas++;
+    }
+  }
+
   return res.status(200).json({
     processados: totalProcessados,
+    fotos_salvas: fotosProcessadas,
     estados_ok: estadosOk,
     estados_erro: estadosErro,
     erros,
