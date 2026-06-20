@@ -1,0 +1,41 @@
+name: Leiloeiros — Scraper Puppeteer Diário
+
+on:
+  schedule:
+    - cron: '0 10 * * *'   # 7h BRT (10h UTC) — após o scraper CEF das 9h
+  workflow_dispatch:
+
+jobs:
+  scraper-puppeteer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Run Puppeteer scraper
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/scraper-puppeteer.mjs
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "Scraper Puppeteer falhou em $(date). Verifique os logs."
