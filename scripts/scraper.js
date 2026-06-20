@@ -565,6 +565,362 @@ async function scraperSuperbidAlt(pageNumber = 1) {
   }
 }
 
+// ─── SCRAPER MEGA LEILÕES ─────────────────────────────────────────────────────
+
+async function scraperMegaLeiloes(uf) {
+  console.log(`  Mega Leilões ${uf}...`);
+  try {
+    const url = `https://www.megaleiloes.com.br/imoveis/${uf}`;
+    const html = await fetchHtml(url);
+    const imoveis = [];
+    const seen = new Set();
+
+    // Mega usa cards com classe "product-item" ou similar
+    const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:product|lote|item|card)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+    let m;
+    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 50) {
+      const card = m[1];
+      const href = card.match(/href="([^"]*(?:lote|imovel|produto)[^"]*)"/i)?.[1] || '';
+      if (!href || seen.has(href)) continue;
+      seen.add(href);
+
+      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const valorMatch = card.match(/R\$\s*([\d.,]+)/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+      if (!valor) continue;
+
+      const avalMatch = card.match(/(?:avalia[çc][aã]o|avaliado)[^\d]*([\d.,]+)/i);
+      const aval = avalMatch ? parseFloat(avalMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+      const foto = card.match(/<img[^>]*(?:src|data-src)="([^"]+(?:jpg|jpeg|png|webp)[^"]*)"/i)?.[1] || null;
+      const areaMatch = card.match(/(\d+[\.,]?\d*)\s*m[²2]/i);
+      const area = areaMatch ? parseFloat(areaMatch[1].replace(',','.')) : 0;
+      const id = href.split('/').filter(Boolean).pop().split('?')[0];
+
+      const cidadeMatch = card.match(/(?:cidade|localiza[çc][aã]o)[^>]*>[^<]*([A-Z][a-zÀ-ú]+(?:\s[A-Z][a-zÀ-ú]+)*)/i);
+      const cidade = cidadeMatch?.[1] || '';
+
+      imoveis.push({
+        fonte: 'MEGA',
+        fonte_id: `mega_${id}`,
+        titulo: titulo.slice(0, 120) || `Imóvel Mega Leilões ${uf}`,
+        tipo: normalizarTipo(titulo),
+        modalidade: titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+        estado: uf,
+        cidade,
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: aval,
+        valor_minimo: valor,
+        area_m2: area,
+        descricao: titulo.slice(0, 300),
+        link_edital: href.startsWith('http') ? href : `https://www.megaleiloes.com.br${href}`,
+        link_foto: foto?.startsWith('http') ? foto : (foto ? `https://www.megaleiloes.com.br${foto}` : null),
+        leiloeiro: 'Mega Leilões',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+
+    // Fallback: extrai por link com regex mais simples
+    if (imoveis.length === 0) {
+      const linkRegex = /href="(\/(?:lote|imovel)\/[^"?]+)"/gi;
+      const valorInline = /R\$\s*([\d.]+,\d{2})/g;
+      const links = [...html.matchAll(linkRegex)].map(x => x[1]);
+      const valores = [...html.matchAll(valorInline)].map(x => parseFloat(x[1].replace(/\./g,'').replace(',','.')));
+      for (let i = 0; i < Math.min(links.length, valores.length, 30); i++) {
+        if (!links[i] || !valores[i] || seen.has(links[i])) continue;
+        seen.add(links[i]);
+        const id = links[i].split('/').filter(Boolean).pop();
+        imoveis.push({
+          fonte: 'MEGA',
+          fonte_id: `mega_${id}`,
+          titulo: `Imóvel Mega Leilões ${uf}`,
+          tipo: 'imovel',
+          modalidade: 'extrajudicial',
+          estado: uf,
+          cidade: '',
+          bairro: '',
+          endereco: '',
+          valor_avaliacao: 0,
+          valor_minimo: valores[i],
+          area_m2: 0,
+          descricao: '',
+          link_edital: `https://www.megaleiloes.com.br${links[i]}`,
+          link_foto: null,
+          leiloeiro: 'Mega Leilões',
+          data_leilao: null,
+          forma_pagamento: 'a_vista',
+        });
+      }
+    }
+
+    console.log(`    Mega Leilões ${uf}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro Mega Leilões ${uf}: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER SOLD LEILÕES ─────────────────────────────────────────────────────
+
+async function scraperSold(page = 1) {
+  console.log(`  Sold Leilões página ${page}...`);
+  try {
+    // Sold Leilões tem API JSON acessível via query params
+    const url = `https://www.sold.com.br/api/v1/lots?category_ids=1&status=open&page=${page}&per_page=50&order=relevance`;
+    const data = await fetchJson(url, {
+      headers: {
+        'Accept': 'application/json',
+        'Referer': 'https://www.sold.com.br/leiloes-de-imoveis',
+        'x-requested-with': 'XMLHttpRequest',
+      },
+    });
+
+    const lots = data?.lots || data?.data || data?.results || data?.items || [];
+    if (!lots.length) {
+      console.log(`    Sold p${page}: nenhum resultado. Keys: ${JSON.stringify(Object.keys(data || {})).slice(0,80)}`);
+      // Tenta HTML scraping como fallback
+      return await scraperSoldHtml(page);
+    }
+
+    const imoveis = lots.map(lot => {
+      const loc = lot.location || lot.address || {};
+      return {
+        fonte: 'SOLD',
+        fonte_id: `sold_${lot.id || lot.lot_id}`,
+        titulo: lot.title || lot.name || `Imóvel Sold ${lot.id}`,
+        tipo: normalizarTipo(lot.title || lot.category),
+        modalidade: (lot.judicial || lot.type === 'judicial') ? 'judicial' : 'extrajudicial',
+        estado: loc.state || lot.state || '',
+        cidade: loc.city || lot.city || '',
+        bairro: loc.neighborhood || lot.neighborhood || '',
+        endereco: loc.street || lot.address_street || '',
+        valor_avaliacao: parseFloat(lot.appraisal_value || lot.evaluation || 0),
+        valor_minimo: parseFloat(lot.minimum_bid || lot.initial_bid || lot.price || 0),
+        area_m2: parseFloat(lot.area || lot.useful_area || 0),
+        descricao: (lot.description || '').replace(/<[^>]+>/g,'').slice(0, 500),
+        link_edital: lot.url || `https://www.sold.com.br/lote/${lot.id}`,
+        link_foto: lot.image || lot.thumbnail || lot.photo || null,
+        leiloeiro: lot.auctioneer?.name || lot.company || 'Sold Leilões',
+        data_leilao: lot.end_date || lot.auction_date || null,
+        forma_pagamento: 'a_vista',
+      };
+    }).filter(im => im.valor_minimo > 0);
+
+    console.log(`    Sold p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch {
+    return await scraperSoldHtml(page);
+  }
+}
+
+async function scraperSoldHtml(page = 1) {
+  try {
+    const url = `https://www.sold.com.br/leiloes-de-imoveis?page=${page}`;
+    const html = await fetchHtml(url, {
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-Mode': 'navigate',
+        'Upgrade-Insecure-Requests': '1',
+      },
+    });
+
+    if (html.length < 500 || html.includes('403') || html.includes('Access Denied')) {
+      console.log(`    Sold HTML p${page}: bloqueado (${html.length} bytes)`);
+      return [];
+    }
+
+    const imoveis = [];
+    const seen = new Set();
+    const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:lot|card|product|item)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+    let m;
+    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 30) {
+      const card = m[1];
+      const href = card.match(/href="([^"]*(?:lote|lot)[^"]*)"/i)?.[1] || '';
+      if (!href || seen.has(href)) continue;
+      seen.add(href);
+      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const valorMatch = card.match(/R\$\s*([\d.,]+)/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+      if (!valor) continue;
+      const foto = card.match(/<img[^>]*(?:src|data-src)="([^"]+)"/i)?.[1] || null;
+      const id = href.split('/').filter(Boolean).pop().split('?')[0];
+      imoveis.push({
+        fonte: 'SOLD',
+        fonte_id: `sold_${id}`,
+        titulo: titulo.slice(0, 120) || `Imóvel Sold ${id}`,
+        tipo: normalizarTipo(titulo),
+        modalidade: titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+        estado: '',
+        cidade: '',
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valor,
+        area_m2: 0,
+        descricao: titulo.slice(0, 300),
+        link_edital: href.startsWith('http') ? href : `https://www.sold.com.br${href}`,
+        link_foto: foto?.startsWith('http') ? foto : null,
+        leiloeiro: 'Sold Leilões',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+    console.log(`    Sold HTML p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro Sold HTML p${page}: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER BANCO DO BRASIL (Seu Imóvel BB) ──────────────────────────────────
+
+async function scraperBancoBrasil(page = 0) {
+  console.log(`  Banco do Brasil página ${page + 1}...`);
+  try {
+    // API pública do Seu Imóvel BB (sem autenticação OAuth necessária para busca)
+    const url = `https://www42.bb.com.br/portalbb/imoveisRecurso/imoveis/listar,802,0,0.bbx?page=${page}&size=50&tipoOferta=1,2,3`;
+    const data = await fetchJson(url, {
+      headers: {
+        'Accept': 'application/json',
+        'Referer': 'https://www42.bb.com.br/portalbb/imoveis/',
+        'Origin': 'https://www42.bb.com.br',
+      },
+    });
+
+    const lista = data?.listaImoveis || data?.imoveis || data?.content || data?.data || data?.results || [];
+    if (!lista.length) {
+      // Tenta endpoint alternativo
+      return await scraperBancoBrasilAlt(page);
+    }
+
+    const imoveis = lista.map(im => {
+      const tipo = im.tipoImovel || im.descTipoImovel || '';
+      const modalidade = im.modalidadeVenda || im.descModalidade || '';
+      const preco = parseFloat(im.precoVenda || im.vlrVenda || im.valorVenda || im.preco || 0);
+      const aval = parseFloat(im.valorAvaliacao || im.vlrAvaliacao || 0);
+      return {
+        fonte: 'BB',
+        fonte_id: `bb_${im.codImovel || im.id || im.numeroImovel}`,
+        titulo: `${tipo} — ${im.bairro || ''} ${im.cidade || ''} ${im.uf || ''}`.trim(),
+        tipo: normalizarTipo(tipo),
+        modalidade: modalidade.toLowerCase().includes('leil') ? 'judicial' : 'extrajudicial',
+        estado: im.uf || im.estado || '',
+        cidade: toTitleCase(im.cidade || im.municipio || ''),
+        bairro: toTitleCase(im.bairro || ''),
+        endereco: toTitleCase(im.logradouro || im.endereco || ''),
+        valor_avaliacao: aval,
+        valor_minimo: preco,
+        area_m2: parseFloat(im.areaTotal || im.area || 0),
+        descricao: im.descricao || im.complemento || '',
+        link_edital: im.linkAcesso || im.urlImovel || `https://www42.bb.com.br/portalbb/imoveis/imovel/${im.codImovel}`,
+        link_foto: im.foto || im.urlFoto || im.imagemPrincipal || null,
+        leiloeiro: 'Banco do Brasil',
+        data_leilao: im.dataLeilao || im.dtLeilao || null,
+        forma_pagamento: normalizarPagamento(modalidade),
+      };
+    }).filter(im => im.valor_minimo > 0 && im.fonte_id !== 'bb_undefined');
+
+    console.log(`    Banco do Brasil p${page + 1}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch {
+    return await scraperBancoBrasilAlt(page);
+  }
+}
+
+async function scraperBancoBrasilAlt(page = 0) {
+  try {
+    // Endpoint alternativo - portal público BB imóveis
+    const offset = page * 50;
+    const url = `https://www42.bb.com.br/portalbb/imoveisRecurso/imoveis/listar,802,0,0.bbx?offset=${offset}&limit=50`;
+    const data = await fetchJson(url, {
+      headers: { 'Accept': 'application/json', 'Referer': 'https://www42.bb.com.br/portalbb/imoveis/' },
+    });
+    const lista = data?.listaImoveis || data?.imoveis || data?.content || [];
+    if (!lista.length) {
+      // Tenta scraping HTML do seuimovelbb.com.br
+      return await scraperSeuImovelBB(page);
+    }
+    return lista.map(im => ({
+      fonte: 'BB',
+      fonte_id: `bb_${im.codImovel || im.id}`,
+      titulo: `${im.tipoImovel || 'Imóvel'} BB — ${im.cidade || ''} ${im.uf || ''}`.trim(),
+      tipo: normalizarTipo(im.tipoImovel),
+      modalidade: 'extrajudicial',
+      estado: im.uf || '',
+      cidade: toTitleCase(im.cidade || ''),
+      bairro: toTitleCase(im.bairro || ''),
+      endereco: '',
+      valor_avaliacao: parseFloat(im.valorAvaliacao || 0),
+      valor_minimo: parseFloat(im.precoVenda || im.valorVenda || 0),
+      area_m2: parseFloat(im.areaTotal || 0),
+      descricao: im.descricao || '',
+      link_edital: `https://www42.bb.com.br/portalbb/imoveis/imovel/${im.codImovel}`,
+      link_foto: im.foto || null,
+      leiloeiro: 'Banco do Brasil',
+      data_leilao: null,
+      forma_pagamento: 'a_vista',
+    })).filter(im => im.valor_minimo > 0);
+  } catch {
+    return await scraperSeuImovelBB(page);
+  }
+}
+
+async function scraperSeuImovelBB(page = 0) {
+  try {
+    const url = `https://www.seuimovelbb.com.br/imoveis?pagina=${page + 1}`;
+    const html = await fetchHtml(url, {
+      headers: { 'Referer': 'https://www.seuimovelbb.com.br/' },
+    });
+    const imoveis = [];
+    const seen = new Set();
+    const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:card|item|produto|imovel)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+    let m;
+    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 30) {
+      const card = m[1];
+      const href = card.match(/href="([^"]*(?:imovel|lote|detalhe)[^"]*)"/i)?.[1] || '';
+      if (!href || seen.has(href)) continue;
+      seen.add(href);
+      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const valorMatch = card.match(/R\$\s*([\d.,]+)/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+      if (!valor) continue;
+      const foto = card.match(/<img[^>]*(?:src|data-src)="([^"]+)"/i)?.[1] || null;
+      const id = href.split('/').filter(Boolean).pop().split('?')[0];
+      imoveis.push({
+        fonte: 'BB',
+        fonte_id: `bb_${id}`,
+        titulo: titulo.slice(0, 120) || `Imóvel BB ${id}`,
+        tipo: normalizarTipo(titulo),
+        modalidade: 'extrajudicial',
+        estado: '',
+        cidade: '',
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valor,
+        area_m2: 0,
+        descricao: titulo.slice(0, 300),
+        link_edital: href.startsWith('http') ? href : `https://www.seuimovelbb.com.br${href}`,
+        link_foto: foto?.startsWith('http') ? foto : null,
+        leiloeiro: 'Banco do Brasil',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+    console.log(`    Seu Imóvel BB p${page + 1}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro BB: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
 // ─── SCRAPER ELEILÕES ─────────────────────────────────────────────────────────
 
 async function scraperELeiloes(page = 1) {
@@ -796,6 +1152,36 @@ async function main() {
   console.log('\n📋 Scraping eLeilões...');
   for (let page = 1; page <= 3; page++) {
     const imoveis = await scraperELeiloes(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 8. Mega Leilões (por UF principal)
+  console.log('\n📋 Scraping Mega Leilões...');
+  const ufsMega = ['SP','RJ','MG','PR','RS','SC','GO','DF','BA','PE'];
+  for (const uf of ufsMega) {
+    const imoveis = await scraperMegaLeiloes(uf);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    await new Promise(r => setTimeout(r, 1200));
+  }
+
+  // 9. Sold Leilões
+  console.log('\n📋 Scraping Sold Leilões...');
+  for (let page = 1; page <= 4; page++) {
+    const imoveis = await scraperSold(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 10. Banco do Brasil
+  console.log('\n📋 Scraping Banco do Brasil...');
+  for (let page = 0; page <= 4; page++) {
+    const imoveis = await scraperBancoBrasil(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
     if (imoveis.length === 0) break;
