@@ -1810,6 +1810,140 @@ function DashboardTab() {
         </div>
       </div>
 
+      {/* Guia de Decisão de Plataforma */}
+      {(() => {
+        const dbMB = dados.dbSizeMB ?? 0;
+        const plataformas = [
+          {
+            nome: 'Supabase', categoria: 'Banco de Dados & Auth',
+            veredicto: 'MANTER',
+            cor: '#10b981',
+            icone: '🗄️',
+            justificativa: 'É a escolha certa para o estágio atual. Oferece Postgres + Auth + RLS + Realtime + RPC em uma única plataforma. Migrar custaria semanas de desenvolvimento e quebraria a arquitetura atual sem ganho proporcional.',
+            gatilhoTroca: 'DB > 8 GB no plano Pro OU MRR > R$ 80.000',
+            atingiuGatilho: dbMB > 8192 || dados.mrr > 80000,
+            alternativa: {
+              nome: 'Neon (Serverless Postgres)',
+              motivo: 'Postgres puro (mesma sintaxe, sem refatorar SQL), escala a zero, cobra só o que usa. A partir de $19/mês com performance superior ao Supabase Pro para cargas variáveis. Auth pode migrar para Clerk ($25/mês) ou continuar no Supabase Auth separado.',
+              custo: '~$19–40/mês',
+              url: 'neon.tech',
+            },
+          },
+          {
+            nome: 'Bunny.net', categoria: 'Vídeos & CDN',
+            veredicto: 'MANTER',
+            cor: '#10b981',
+            icone: '🎥',
+            justificativa: 'Melhor custo-benefício do mercado para vídeo + CDN com PoPs no Brasil. $0,005/GB entregue e armazenamento barato. O custo em dólar no cartão é centavos — o IOF é irrelevante frente à performance.',
+            gatilhoTroca: 'Fatura Bunny > $50/mês OU necessidade de conformidade LGPD com dados em solo brasileiro',
+            atingiuGatilho: false,
+            alternativa: {
+              nome: 'Cloudflare Stream + R2',
+              motivo: 'Stream cobra $5/1.000 minutos armazenados + $1/1.000 minutos entregues. R2 (arquivos estáticos) tem egress zero. Ideal se já usa Cloudflare para DNS. Infraestrutura em solo BR via PoPs globais com latência excelente.',
+              custo: '~$10–30/mês',
+              url: 'cloudflare.com/developer-platform',
+            },
+          },
+          {
+            nome: 'Vercel', categoria: 'Hosting & Edge Functions',
+            veredicto: 'MANTER',
+            cor: '#10b981',
+            icone: '⚡',
+            justificativa: 'Plano gratuito cobre o estágio atual com folga. Deploy automático do Git, Edge Functions globais e preview por PR sem configuração adicional. Não há alternativa com melhor custo zero.',
+            gatilhoTroca: 'Edge Functions > 500k invocações/mês OU necessidade de servidor persistente (WebSockets)',
+            atingiuGatilho: false,
+            alternativa: {
+              nome: 'Railway',
+              motivo: 'Suporte a servidores Node.js persistentes (útil para WebSockets e filas). Cobra por uso de CPU/RAM. Plano Starter: $5/mês. Ideal se precisar de processos background (fila de laudos, WebSockets em tempo real).',
+              custo: '$5–20/mês',
+              url: 'railway.app',
+            },
+          },
+          {
+            nome: 'Asaas', categoria: 'Gateway de Pagamento',
+            veredicto: dados.mrr >= 10000 ? 'AVALIAR TROCA' : 'MANTER',
+            cor: dados.mrr >= 10000 ? '#d97706' : '#10b981',
+            icone: '💳',
+            justificativa: dados.mrr >= 10000
+              ? `MRR de R$ ${fmt(dados.mrr)} já justifica avaliar alternativas. A taxa de 1% PIX representa R$ ${fmt(dados.taxaPix)}/mês — a diferença para o EFÍ (0,3%) seria R$ ${fmt(dados.taxaPix * 0.7)}/mês de economia.`
+              : 'Para o volume atual a taxa de 1% é aceitável e a integração já está funcionando. O Asaas tem suporte em PT-BR e API bem documentada.',
+            gatilhoTroca: 'MRR > R$ 10.000 (taxa PIX passa a ser custo relevante)',
+            atingiuGatilho: dados.mrr >= 10000,
+            alternativa: {
+              nome: 'EFÍ (Gerencianet) — PIX direto',
+              motivo: 'Banco homologado pelo Banco Central para PIX. Taxa: 0,3% por transação (vs 1% Asaas). Para R$ 20k MRR a economia é R$ 140/mês. API REST bem documentada, webhook confiável, suporte em PT-BR. Plano mensal em BRL sem dólar.',
+              custo: '0,3% PIX + R$ 0/mês fixo',
+              url: 'efipay.com.br',
+            },
+          },
+          {
+            nome: 'Anthropic (Claude)', categoria: 'Laudos & Visão IA',
+            veredicto: 'MANTER',
+            cor: '#10b981',
+            icone: '🤖',
+            justificativa: 'Melhor modelo de visão do mercado para extração de documentos e laudos em português. O custo de ~R$ 0,08/doc é competitivo e o resultado é superior ao dos concorrentes para este caso de uso.',
+            gatilhoTroca: 'Volume > 10.000 laudos/mês (custo > R$ 800/mês)',
+            atingiuGatilho: false,
+            alternativa: {
+              nome: 'Google Gemini Flash 2.0',
+              motivo: 'Alternativa de menor custo para volume alto. Flash 2.0 tem visão excelente, processa PDFs nativamente e custa ~60% menos que o Haiku para prompts longos. Mantém a mesma API REST. Troca seria pontual no código.',
+              custo: '~R$ 0,03/doc',
+              url: 'ai.google.dev',
+            },
+          },
+        ];
+        return (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              🧭 Guia de Decisão de Plataforma
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Análise atual de cada serviço: manter ou substituir, e qual seria a melhor alternativa se precisar trocar.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {plataformas.map((p) => (
+                <div key={p.nome} style={{ background: 'white', borderRadius: 12, border: `1.5px solid ${p.atingiuGatilho ? '#f59e0b' : p.cor}30`, overflow: 'hidden' }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: p.atingiuGatilho ? '#fefce8' : p.cor === '#10b981' ? '#f0fdf4' : '#fff7ed', borderBottom: '1px solid #f1f5f9' }}>
+                    <span style={{ fontSize: 22 }}>{p.icone}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{p.nome}</div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>{p.categoria}</div>
+                    </div>
+                    <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 800, background: p.cor, color: 'white', letterSpacing: 0.5 }}>
+                      {p.veredicto}
+                    </span>
+                  </div>
+                  {/* Body */}
+                  <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>{p.justificativa}</div>
+                    {/* Gatilho de troca */}
+                    <div style={{ padding: '8px 10px', background: p.atingiuGatilho ? '#fef3c7' : '#f8fafc', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: 13 }}>{p.atingiuGatilho ? '🔔' : '⏳'}</span>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: p.atingiuGatilho ? '#92400e' : '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+                          {p.atingiuGatilho ? 'GATILHO ATINGIDO' : 'Gatilho para reavaliar'}
+                        </div>
+                        <div style={{ fontSize: 12, color: p.atingiuGatilho ? '#92400e' : '#64748b' }}>{p.gatilhoTroca}</div>
+                      </div>
+                    </div>
+                    {/* Alternativa */}
+                    <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                        Melhor substituta se precisar trocar
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 5 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.alternativa.nome}</div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{p.alternativa.custo}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>{p.alternativa.motivo}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Marcos de melhoria e sugestões de eficiência */}
       <div style={{ marginTop: 20 }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
