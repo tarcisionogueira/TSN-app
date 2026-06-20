@@ -92,8 +92,14 @@ function PrivateRoute({ children, roles }) {
 }
 
 function MainLayout() {
-  const { ativo, isLoggedIn, inadimplenteDias } = useAuth();
+  const { ativo, isLoggedIn, inadimplenteDias, role, loading } = useAuth();
+  const loc = useLocation();
   if (isLoggedIn && !ativo) return <ContaInativa />;
+  // Role-based home redirect
+  if (isLoggedIn && !loading) {
+    if (role === 'admin' && loc.pathname === '/') return <Navigate to="/admin" replace />;
+    if (['analista','consultor','advogado'].includes(role) && loc.pathname === '/') return <Navigate to="/atendimento" replace />;
+  }
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <Header />

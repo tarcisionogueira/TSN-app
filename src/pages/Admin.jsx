@@ -1369,61 +1369,89 @@ const FONTES_SCRAPER = [
 function ScrapersMonitor() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expandedErrors, setExpandedErrors] = useState({});
 
-  useEffect(() => {
+  const carregar = () => {
     supabase
       .from('scrapers_log')
       .select('*')
       .order('iniciado_em', { ascending: false })
       .limit(30)
       .then(({ data }) => { setLogs(data || []); setLoading(false); });
-  }, []);
+  };
 
-  // Último log por fonte
+  useEffect(() => { carregar(); }, []);
+
   const ultimoPorFonte = {};
   FONTES_SCRAPER.forEach(f => {
     ultimoPorFonte[f.key] = logs.find(l => l.fonte === f.key);
   });
 
   const erros = FONTES_SCRAPER.filter(f => ultimoPorFonte[f.key]?.status === 'erro');
-  const semDados = FONTES_SCRAPER.filter(f => ultimoPorFonte[f.key]?.status === 'sem_dados');
+
+  const toggleError = (key) => setExpandedErrors(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
 
   return (
-    <div style={S.card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Monitor de Scrapers</div>
-        {erros.length > 0 && (
-          <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
-            ⚠️ {erros.length} com erro
-          </span>
-        )}
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>Monitor de Scrapers</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {erros.length > 0 && (
+            <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
+              {erros.length} com erro
+            </span>
+          )}
+          <button onClick={carregar} style={{ padding: '5px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#475569' }}>
+            Atualizar
+          </button>
+        </div>
       </div>
-      {loading ? <p style={{ fontSize: 13, color: '#94a3b8' }}>Carregando...</p> : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
           {FONTES_SCRAPER.map(f => {
             const log = ultimoPorFonte[f.key];
             const ok = log?.status === 'ok';
             const erro = log?.status === 'erro';
             const semDado = log?.status === 'sem_dados';
             const nunca = !log;
-            const cor = ok ? '#10b981' : erro ? '#dc2626' : semDado ? '#d97706' : '#94a3b8';
-            const bg = ok ? '#f0fdf4' : erro ? '#fef2f2' : semDado ? '#fefce8' : '#f8fafc';
-            const icone = ok ? '✅' : erro ? '❌' : semDado ? '⚠️' : '⏸';
+            const dotColor = ok ? '#10b981' : erro ? '#dc2626' : nunca ? '#94a3b8' : '#d97706';
+            const cardBorder = ok ? '#bbf7d0' : erro ? '#fecaca' : '#e2e8f0';
             return (
-              <div key={f.key} style={{ padding: '10px 12px', background: bg, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: f.cor, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{f.label}</div>
-                    {log && <div style={{ fontSize: 11, color: '#64748b' }}>
-                      {log.imoveis_encontrados} imóveis · {new Date(log.iniciado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      {log.duracao_ms && ` · ${(log.duracao_ms / 1000).toFixed(1)}s`}
-                    </div>}
-                    {erro && log.erro_msg && <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{log.erro_msg}</div>}
-                    {nunca && <div style={{ fontSize: 11, color: '#94a3b8' }}>Nunca executado</div>}
+              <div key={f.key} style={{ background: 'white', border: `1px solid ${cardBorder}`, borderRadius: 12, padding: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor, flexShrink: 0, marginTop: 2 }} />
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{f.label}</div>
                   </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: ok ? '#dcfce7' : erro ? '#fee2e2' : semDado ? '#fefce8' : '#f1f5f9', color: ok ? '#166534' : erro ? '#dc2626' : semDado ? '#92400e' : '#64748b' }}>
+                    {ok ? 'OK' : erro ? 'Erro' : semDado ? 'Sem dados' : 'Nunca executado'}
+                  </span>
                 </div>
-                <span style={{ fontSize: 16 }}>{icone}</span>
+                {log ? (
+                  <div style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <div>Ultima exec.: <strong style={{ color: '#475569' }}>{fmtDate(log.iniciado_em)}</strong></div>
+                    {log.imoveis_encontrados != null && (
+                      <div>Registros: <strong style={{ color: '#0f172a' }}>{log.imoveis_encontrados.toLocaleString('pt-BR')}</strong></div>
+                    )}
+                    {log.duracao_ms && <div>Duração: {(log.duracao_ms / 1000).toFixed(1)}s</div>}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhuma execução registrada</div>
+                )}
+                {erro && log?.erro_msg && (
+                  <div style={{ marginTop: 8 }}>
+                    <button onClick={() => toggleError(f.key)} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                      {expandedErrors[f.key] ? '▲ Ocultar erro' : '▼ Ver erro'}
+                    </button>
+                    {expandedErrors[f.key] && (
+                      <div style={{ marginTop: 6, fontSize: 11, color: '#dc2626', background: '#fef2f2', borderRadius: 6, padding: '6px 8px', wordBreak: 'break-word' }}>{log.erro_msg}</div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1433,288 +1461,372 @@ function ScrapersMonitor() {
   );
 }
 
+const STATUS_CFG = {
+  aberto:         { bg: '#dbeafe', color: '#1e40af', label: 'Aberto' },
+  em_atendimento: { bg: '#fef9c3', color: '#854d0e', label: 'Em atendimento' },
+  resolvido:      { bg: '#dcfce7', color: '#166534', label: 'Resolvido' },
+  fechado:        { bg: '#f1f5f9', color: '#475569', label: 'Fechado' },
+};
+
+const ROLE_CFG = {
+  admin:       { bg: '#ede9fe', color: '#5b21b6', label: 'Admin' },
+  analista:    { bg: '#fef9c3', color: '#854d0e', label: 'Analista' },
+  consultor:   { bg: '#e0f2fe', color: '#0369a1', label: 'Consultor' },
+  advogado:    { bg: '#fee2e2', color: '#991b1b', label: 'Advogado' },
+  explorador:  { bg: '#f1f5f9', color: '#475569', label: 'Explorador' },
+  top1:        { bg: '#dbeafe', color: '#1e40af', label: 'Top1' },
+  top2:        { bg: '#2563eb', color: 'white',   label: 'Investidor' },
+  assessorado: { bg: '#fff7ed', color: '#c2410c', label: 'Assessorado' },
+  clube:       { bg: '#dcfce7', color: '#166534', label: 'Clube' },
+};
+
+function StatusBadge({ status }) {
+  const cfg = STATUS_CFG[status] || { bg: '#f1f5f9', color: '#475569', label: status };
+  return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>;
+}
+
+function RoleBadge({ role }) {
+  const cfg = ROLE_CFG[role] || { bg: '#f1f5f9', color: '#475569', label: role };
+  return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>;
+}
+
 function DashboardTab() {
-  const [dados, setDados] = useState(null);
-  const [asaasDados, setAsaasDados] = useState(null);
+  const [kpis, setKpis] = useState({ total: null, ativas: null, chamados: null, novos: null });
+  const [contagem, setContagem] = useState({});
+  const [chamadosRecentes, setChamadosRecentes] = useState([]);
+  const [ultimosCadastros, setUltimosCadastros] = useState([]);
+  const [equipe, setEquipe] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [asaasDados, setAsaasDados] = useState(null);
   const [asaasLoading, setAsaasLoading] = useState(true);
-
-  useEffect(() => {
-    async function load() {
-      const [{ data: perfis }, { count: inadimCount }, { count: novosCount }] = await Promise.all([
-        supabase.from('perfis').select('role, plano, inadimplente_desde'),
-        supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
-        supabase.from('perfis').select('id', { count: 'exact', head: true })
-          .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
-      ]);
-
-      const contagem = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
-      (perfis || []).forEach(p => { if (p.role in contagem) contagem[p.role]++; });
-
-      const mrr = (contagem.top1 * 49.90) + (contagem.top2 * 99.90) + (contagem.assessorado * 500) + (contagem.clube * 5000);
-      const taxaPix = mrr * 0.01;
-      const liquido = mrr - taxaPix;
-
-      setDados({
-        contagem,
-        total: Object.values(contagem).reduce((s, v) => s + v, 0),
-        mrr,
-        taxaPix,
-        liquido,
-        inadimplentes: inadimCount || 0,
-        novosMes: novosCount || 0,
-      });
-      setLoading(false);
-    }
-
-    async function loadAsaas() {
-      try {
-        const res = await fetch('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
-        if (res.ok) setAsaasDados(await res.json());
-      } catch (_) {}
-      setAsaasLoading(false);
-    }
-
-    load();
-    loadAsaas();
-  }, []);
-
-  function marcoAsaas(mrr) {
-    if (mrr >= 100000) return { cor: '#7c3aed', label: 'Tier Enterprise', desc: 'Exigir conta dedicada e taxa máxima de 0,3% no PIX' };
-    if (mrr >= 30000) return { cor: '#dc2626', label: 'Alto Volume', desc: 'Negociar taxa diferenciada — meta abaixo de 0,5%' };
-    if (mrr >= 10000) return { cor: '#d97706', label: 'Volume Médio', desc: 'Contatar comercial Asaas — redução de 1% para ~0,7% no PIX é possível' };
-    return { cor: '#10b981', label: 'Crescimento', desc: `Falta R$ ${Number(10000 - mrr).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MRR para negociar desconto de taxa com o Asaas` };
-  }
+  const [inadimplentes, setInadimplentes] = useState(0);
+  const [mrr, setMrr] = useState(0);
 
   const fmt = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtN = (v) => Number(v).toLocaleString('pt-BR');
+  const fmtDate = (d) => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>Carregando dashboard…</div>;
+  const carregar = useCallback(async () => {
+    const seteAtrasado = new Date();
+    seteAtrasado.setDate(seteAtrasado.getDate() - 7);
 
-  const marco = marcoAsaas(dados.mrr);
-  const proximo = dados.mrr < 10000 ? 10000 : dados.mrr < 30000 ? 30000 : dados.mrr < 100000 ? 100000 : null;
-  const progresso = proximo ? Math.min(100, (dados.mrr / proximo) * 100) : 100;
+    const [
+      { count: total },
+      { count: ativas },
+      { count: chamadosAbertos },
+      { count: novos },
+      { data: perfisData },
+      { data: chamadosData },
+      { data: cadastrosData },
+      { data: equipeData },
+      { count: inadimCount },
+    ] = await Promise.all([
+      supabase.from('perfis').select('id', { count: 'exact', head: true }),
+      supabase.from('perfis').select('id', { count: 'exact', head: true }).in('role', ['top1','top2','assessorado','clube']),
+      supabase.from('chamados').select('id', { count: 'exact', head: true }).in('status', ['aberto','em_atendimento']),
+      supabase.from('perfis').select('id', { count: 'exact', head: true }).gte('created_at', seteAtrasado.toISOString()),
+      supabase.from('perfis').select('role'),
+      supabase.from('chamados').select('id, titulo, status, criado_em, user_nome').order('criado_em', { ascending: false }).limit(8),
+      supabase.from('perfis').select('email, role, created_at, nome').order('created_at', { ascending: false }).limit(8),
+      supabase.from('perfis').select('email, role, nome, created_at').in('role', ['admin','analista','consultor','advogado']).order('created_at', { ascending: false }),
+      supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
+    ]);
 
-  const statCard = (label, value, sub, cor = '#2563eb') => (
-    <div style={{ background: '#0f172a', borderRadius: 12, padding: '20px 22px', flex: 1, minWidth: 160 }}>
-      <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 900, color: cor, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{sub}</div>}
-    </div>
-  );
+    const cnt = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
+    (perfisData || []).forEach(p => { if (p.role in cnt) cnt[p.role]++; });
+    const mrrCalc = (cnt.top1 * 49.90) + (cnt.top2 * 99.90) + (cnt.assessorado * 500) + (cnt.clube * 5000);
+
+    setKpis({ total, ativas, chamados: chamadosAbertos, novos });
+    setContagem(cnt);
+    setChamadosRecentes(chamadosData || []);
+    setUltimosCadastros(cadastrosData || []);
+    setEquipe(equipeData || []);
+    setInadimplentes(inadimCount || 0);
+    setMrr(mrrCalc);
+    setLastUpdate(new Date());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    carregar();
+
+    const interval = setInterval(() => { carregar(); }, 30000);
+
+    const channel = supabase
+      .channel('dashboard_chamados')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chamados' }, () => { carregar(); })
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [carregar]);
+
+  useEffect(() => {
+    fetch('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setAsaasDados(d); setAsaasLoading(false); })
+      .catch(() => setAsaasLoading(false));
+  }, []);
+
+  const cardStyle = { background: 'white', borderRadius: 16, padding: 20, border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' };
+
+  function marcoAsaas(m) {
+    if (m >= 100000) return { cor: '#7c3aed', label: 'Tier Enterprise', desc: 'Exigir conta dedicada e taxa máxima de 0,3% no PIX' };
+    if (m >= 30000)  return { cor: '#dc2626', label: 'Alto Volume', desc: 'Negociar taxa diferenciada — meta abaixo de 0,5%' };
+    if (m >= 10000)  return { cor: '#d97706', label: 'Volume Médio', desc: 'Contatar comercial Asaas — redução para ~0,7% no PIX possível' };
+    return { cor: '#10b981', label: 'Crescimento', desc: `Falta R$ ${fmt(10000 - m)} MRR para negociar desconto de taxa com o Asaas` };
+  }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8', fontSize: 14 }}>Carregando dashboard…</div>;
+
+  const marco = marcoAsaas(mrr);
+  const proximo = mrr < 10000 ? 10000 : mrr < 30000 ? 30000 : mrr < 100000 ? 100000 : null;
+  const progresso = proximo ? Math.min(100, (mrr / proximo) * 100) : 100;
+  const taxaPix = mrr * 0.01;
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Dashboard</h2>
-        <div style={{ fontSize: 12, color: '#94a3b8' }}>Atualizado agora · {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-      </div>
-
-      {/* Stat cards */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} este mês`, '#60a5fa')}
-        {statCard('MRR estimado', `R$ ${fmt(dados.mrr)}`, 'Receita mensal recorrente', '#10b981')}
-        {statCard('Taxas Asaas (est.)', `R$ ${fmt(dados.taxaPix)}`, '~1% PIX sobre MRR', '#f59e0b')}
-        {statCard('Líquido estimado', `R$ ${fmt(dados.liquido)}`, 'MRR − taxas estimadas', '#a78bfa')}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-
-        {/* Coluna esquerda: Usuários por plano */}
-        <div>
-          <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
-            {[
-              { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b' },
-              { key: 'top1',       label: 'Investidor (legado)',  cor: '#93c5fd' },
-              { key: 'top2',       label: 'Investidor',          cor: '#2563eb' },
-              { key: 'assessorado',label: 'Assessorado',         cor: '#d97706' },
-              { key: 'clube',      label: 'Clube de Negócios',   cor: '#059669' },
-            ].map(({ key, label, cor }) => {
-              const qtd = dados.contagem[key] || 0;
-              return (
-                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: cor }} />
-                    <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
-                  </div>
-                  <div style={{ fontSize: 17, fontWeight: 800, color: '#0f172a' }}>{qtd}</div>
-                </div>
-              );
-            })}
-            {dados.inadimplentes > 0 && (
-              <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', borderRadius: 8, fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
-                ⚠️ {dados.inadimplentes} usuário{dados.inadimplentes > 1 ? 's' : ''} inadimplente{dados.inadimplentes > 1 ? 's' : ''}
-              </div>
-            )}
-          </div>
-
-          <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Equipe interna</div>
-            {[
-              { key: 'consultor', label: 'Consultores', cor: '#0891b2' },
-              { key: 'analista',  label: 'Analistas',   cor: '#f59e0b' },
-              { key: 'advogado',  label: 'Advogados',   cor: '#dc2626' },
-              { key: 'admin',     label: 'Admins',      cor: '#7c3aed' },
-            ].map(({ key, label, cor }) => (
-              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: cor }} />
-                  <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
-                </div>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{dados.contagem[key] || 0}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Coluna direita: Taxas Asaas + Marco + Infraestrutura */}
-        <div>
-          {/* Taxas Asaas reais */}
-          <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
-            {asaasLoading ? (
-              <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
-            ) : asaasDados ? (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-                  {[
-                    { label: 'Saldo disponível', value: `R$ ${fmt(asaasDados.balance?.balance || 0)}`, cor: '#10b981' },
-                    { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#2563eb' },
-                    { label: 'Recebido no mês', value: `R$ ${fmt(asaasDados.statsMes?.revenue || 0)}`, cor: '#7c3aed' },
-                    { label: 'Taxas cobradas', value: `R$ ${fmt(asaasDados.statsMes?.fees || 0)}`, cor: '#f59e0b' },
-                  ].map(({ label, value, cor }) => (
-                    <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '12px 14px' }}>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>{label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: cor }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>
-                  Dados direto da API Asaas · atualizado agora
-                </div>
-              </>
-            ) : (
-              <p style={{ fontSize: 13, color: '#dc2626' }}>Não foi possível carregar dados do Asaas. Verifique a chave ASAAS_API_KEY.</p>
-            )}
-          </div>
-
-          {/* Marco comercial */}
-          <div style={{ ...S.card, border: `2px solid ${marco.cor}20` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Marco Comercial Asaas</div>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: marco.cor + '20', color: marco.cor }}>{marco.label}</span>
-            </div>
-            {proximo && (
-              <>
-                <div style={{ background: '#f1f5f9', borderRadius: 8, height: 10, overflow: 'hidden', marginBottom: 8 }}>
-                  <div style={{ height: '100%', width: `${progresso}%`, background: marco.cor, borderRadius: 8, transition: 'width 0.5s' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 12 }}>
-                  <span>MRR atual: R$ {fmt(dados.mrr)}</span>
-                  <span>Próximo marco: R$ {fmtN(proximo)}</span>
-                </div>
-              </>
-            )}
-            <div style={{ padding: '10px 12px', background: marco.cor + '10', borderRadius: 8, fontSize: 13, color: marco.cor, fontWeight: 600, lineHeight: 1.5 }}>
-              📞 {marco.desc}
-            </div>
-          </div>
-
-          {/* Monitor de Scrapers */}
-          <ScrapersMonitor />
-
-          {/* Infraestrutura */}
-          <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
-            {[
-              { nome: 'Supabase', plano: `Free (${fmtN(dados.total)} usuários)`, custo: 'R$ 0/mês', alerta: dados.total > 40000, alertaMsg: 'Próximo do limite gratuito — migrar para Supabase Pro ($25/mês)' },
-              { nome: 'Vercel', plano: 'Free (Serverless)', custo: 'R$ 0/mês', alerta: false },
-              { nome: 'Anthropic (Claude)', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
-              { nome: 'Asaas Gateway', plano: '~1% por PIX', custo: `R$ ${fmt(dados.taxaPix)}/mês`, alerta: dados.mrr > 8000, alertaMsg: 'MRR acima de R$10k: contatar comercial Asaas para reduzir taxa' },
-            ].map(({ nome, plano, custo, alerta, alertaMsg }) => (
-              <div key={nome} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{nome}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{plano}</div>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: alerta ? '#d97706' : '#10b981' }}>{custo}</div>
-                </div>
-                {alerta && <div style={{ marginTop: 6, fontSize: 11, color: '#d97706', fontWeight: 600 }}>⚠️ {alertaMsg}</div>}
-              </div>
-            ))}
-            <div style={{ marginTop: 14, padding: '10px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 13, color: '#166534', fontWeight: 600 }}>
-              💚 Custo base de infra: R$ 0/mês (planos gratuitos ativos)
-            </div>
-          </div>
+    <div style={{ fontFamily: "'Inter', sans-serif" }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Centro de Operações</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>
+            Atualizado às {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <button onClick={carregar} style={{ padding: '7px 16px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            Atualizar
+          </button>
         </div>
       </div>
 
-      {/* Marcos de melhoria e sugestões de eficiência */}
-      <div style={{ marginTop: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          🗺️ Marcos de Melhoria & Eficiência
-          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400 }}>— ações a executar quando os gatilhos forem atingidos</span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Row 1: KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
+        {[
+          { label: 'Usuários Totais', value: fmtN(kpis.total ?? 0), color: '#2563eb', border: '#2563eb' },
+          { label: 'Assinaturas Ativas', value: fmtN(kpis.ativas ?? 0), color: '#10b981', border: '#10b981' },
+          { label: 'Chamados Abertos', value: fmtN(kpis.chamados ?? 0), color: '#f59e0b', border: '#f59e0b' },
+          { label: 'Novos esta semana', value: fmtN(kpis.novos ?? 0), color: '#8b5cf6', border: '#8b5cf6' },
+        ].map(({ label, value, color, border }) => (
+          <div key={label} style={{ ...cardStyle, borderLeft: `4px solid ${border}` }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color, lineHeight: 1, marginBottom: 6 }}>{value}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Row 2: Usuários por plano */}
+      <div style={{ ...cardStyle, marginBottom: 20 }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {[
-            {
-              gatilho: `MRR ≥ R$ 10.000`,
-              atingido: dados.mrr >= 10000,
-              titulo: 'Negociar taxa Asaas',
-              desc: 'Contatar comercial Asaas para reduzir taxa PIX de 1% para ~0,7%. Economia estimada: R$ 30+/mês.',
-              cor: '#d97706', icone: '💳',
-            },
-            {
-              gatilho: `MRR ≥ R$ 30.000`,
-              atingido: dados.mrr >= 30000,
-              titulo: 'Migrar Supabase para plano Pro ou RDS AWS',
-              desc: 'Avaliar migração do banco para RDS na AWS São Paulo (sa-east-1) ou Supabase Pro. Mais performance, backups point-in-time e segurança reforçada.',
-              cor: '#7c3aed', icone: '🗄️',
-            },
-            {
-              gatilho: `MRR ≥ R$ 50.000`,
-              atingido: dados.mrr >= 50000,
-              titulo: 'Ativar CDN e cache de relatórios',
-              desc: 'Implementar cache de PDFs e imagens via Cloudflare R2 (S3 compatível) para reduzir latência dos laudos e custo de storage.',
-              cor: '#0891b2', icone: '⚡',
-            },
-            {
-              gatilho: `MRR ≥ R$ 100.000`,
-              atingido: dados.mrr >= 100000,
-              titulo: 'Infraestrutura dedicada + SLA',
-              desc: 'Contratar plano Enterprise Asaas (<0,3% PIX), mover para ECS Fargate ou EC2 dedicado, implementar monitoramento com Datadog/New Relic.',
-              cor: '#dc2626', icone: '🏢',
-            },
-            {
-              gatilho: '> 500 análises/mês',
-              atingido: false,
-              titulo: 'Fila assíncrona para relatórios',
-              desc: 'Implementar processamento de laudos em background (SQS ou Supabase Edge Functions) para evitar timeout nas funções serverless do Vercel.',
-              cor: '#059669', icone: '🔄',
-            },
-            {
-              gatilho: '> 50 contratos/mês',
-              atingido: false,
-              titulo: 'Assinatura digital via ICP-Brasil',
-              desc: 'Integrar com DocuSign ou ClickSign para validade jurídica reforçada com certificado digital. Custo: ~R$ 2-5/assinatura.',
-              cor: '#6366f1', icone: '📝',
-            },
-          ].map((m, i) => (
-            <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${m.cor}30`, background: m.atingido ? m.cor + '08' : 'white', alignItems: 'flex-start' }}>
-              <div style={{ fontSize: 24, flexShrink: 0 }}>{m.icone}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{m.titulo}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: m.atingido ? m.cor : '#f1f5f9', color: m.atingido ? 'white' : '#64748b' }}>
-                    {m.atingido ? '✅ Gatilho atingido!' : `Gatilho: ${m.gatilho}`}
-                  </span>
+            { key: 'explorador', label: 'Explorador', cor: '#64748b' },
+            { key: 'top1',       label: 'Investidor (legado)', cor: '#93c5fd' },
+            { key: 'top2',       label: 'Investidor', cor: '#2563eb' },
+            { key: 'assessorado',label: 'Assessorado', cor: '#d97706' },
+            { key: 'clube',      label: 'Clube', cor: '#059669' },
+          ].map(({ key, label, cor }) => {
+            const qtd = contagem[key] || 0;
+            const total = kpis.total || 1;
+            const pct = Math.round((qtd / total) * 100);
+            return (
+              <div key={key} style={{ flex: '1 1 180px', background: '#f8fafc', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: cor, flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{label}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    <div style={{ flex: 1, background: '#e2e8f0', borderRadius: 4, height: 5, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 4 }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: '#64748b', minWidth: 28, textAlign: 'right' }}>{pct}%</span>
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>{m.desc}</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', minWidth: 32, textAlign: 'right' }}>{qtd}</div>
               </div>
+            );
+          })}
+        </div>
+        {inadimplentes > 0 && (
+          <div style={{ marginTop: 12, padding: '8px 14px', background: '#fef2f2', borderRadius: 8, fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
+            {inadimplentes} usuário{inadimplentes > 1 ? 's' : ''} inadimplente{inadimplentes > 1 ? 's' : ''}
+          </div>
+        )}
+      </div>
+
+      {/* Row 3: Chamados recentes + Últimos cadastros */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Chamados recentes</div>
+          {chamadosRecentes.length === 0 ? (
+            <div style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>Nenhum chamado</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {chamadosRecentes.map(c => (
+                <div key={c.id} style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.titulo || '(sem título)'}</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{c.user_nome || 'Usuário'} · {fmtDate(c.criado_em)}</div>
+                  </div>
+                  <StatusBadge status={c.status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Últimos cadastros</div>
+          {ultimosCadastros.length === 0 ? (
+            <div style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>Nenhum cadastro</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {ultimosCadastros.map((u, i) => (
+                <div key={i} style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.nome || u.email || '-'}</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{fmtDate(u.created_at)}</div>
+                  </div>
+                  <RoleBadge role={u.role} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Row 4: Atividade da equipe */}
+      <div style={{ ...cardStyle, marginBottom: 20 }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Atividade da equipe</div>
+        {equipe.length === 0 ? (
+          <div style={{ fontSize: 13, color: '#94a3b8' }}>Nenhum membro de equipe encontrado.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  {['Membro', 'Função', 'Cadastro', 'Último acesso'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '2px solid #e2e8f0', color: '#64748b', fontWeight: 700, fontSize: 12 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {equipe.map((m, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 12px', color: '#0f172a', fontWeight: 600 }}>{m.nome || m.email || '-'}</td>
+                    <td style={{ padding: '10px 12px' }}><RoleBadge role={m.role} /></td>
+                    <td style={{ padding: '10px 12px', color: '#64748b' }}>{fmtDate(m.created_at)}</td>
+                    <td style={{ padding: '10px 12px', color: '#94a3b8', fontSize: 12 }}>N/D</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Row 5: Financeiro Asaas + Marco Comercial */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
+          {asaasLoading ? (
+            <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
+          ) : asaasDados ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                {[
+                  { label: 'Saldo disponível', value: `R$ ${fmt(asaasDados.balance?.balance || 0)}`, cor: '#10b981' },
+                  { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#2563eb' },
+                  { label: 'Recebido no mês', value: `R$ ${fmt(asaasDados.statsMes?.revenue || 0)}`, cor: '#7c3aed' },
+                  { label: 'Taxas cobradas', value: `R$ ${fmt(asaasDados.statsMes?.fees || 0)}`, cor: '#f59e0b' },
+                ].map(({ label, value, cor }) => (
+                  <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 3 }}>{label}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: cor }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>Dados direto da API Asaas</div>
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: '#dc2626' }}>Não foi possível carregar dados do Asaas.</p>
+          )}
+        </div>
+
+        <div style={{ ...cardStyle, border: `2px solid ${marco.cor}20` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>Marco Comercial</div>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: marco.cor + '20', color: marco.cor }}>{marco.label}</span>
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>R$ {fmt(mrr)}</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>MRR estimado — taxa est.: R$ {fmt(taxaPix)}</div>
+          {proximo && (
+            <>
+              <div style={{ background: '#f1f5f9', borderRadius: 6, height: 8, overflow: 'hidden', marginBottom: 6 }}>
+                <div style={{ height: '100%', width: `${progresso}%`, background: marco.cor, borderRadius: 6, transition: 'width 0.5s' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 12 }}>
+                <span>Atual: R$ {fmt(mrr)}</span>
+                <span>Próximo: R$ {fmtN(proximo)}</span>
+              </div>
+            </>
+          )}
+          <div style={{ padding: '10px 12px', background: marco.cor + '10', borderRadius: 8, fontSize: 12, color: marco.cor, fontWeight: 600, lineHeight: 1.5 }}>
+            {marco.desc}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 6: Monitor de Scrapers */}
+      <div style={{ ...cardStyle, marginBottom: 20 }}>
+        <ScrapersMonitor />
+      </div>
+
+      {/* Row 7: Infraestrutura & Marcos */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
+          {[
+            { nome: 'Supabase', plano: `Free (${fmtN(kpis.total || 0)} usuários)`, custo: 'R$ 0/mês', alerta: (kpis.total || 0) > 40000, alertaMsg: 'Próximo do limite gratuito' },
+            { nome: 'Vercel', plano: 'Free (Serverless)', custo: 'R$ 0/mês', alerta: false },
+            { nome: 'Anthropic (Claude)', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
+            { nome: 'Asaas Gateway', plano: '~1% por PIX', custo: `R$ ${fmt(taxaPix)}/mês`, alerta: mrr > 8000, alertaMsg: 'Contatar comercial Asaas para reduzir taxa' },
+          ].map(({ nome, plano, custo, alerta, alertaMsg }) => (
+            <div key={nome} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{nome}</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>{plano}</div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: alerta ? '#d97706' : '#10b981' }}>{custo}</div>
+              </div>
+              {alerta && <div style={{ marginTop: 4, fontSize: 11, color: '#d97706', fontWeight: 600 }}>⚠️ {alertaMsg}</div>}
             </div>
           ))}
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Marcos de Melhoria</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { gatilho: 'MRR ≥ R$ 10.000', atingido: mrr >= 10000, titulo: 'Negociar taxa Asaas', cor: '#d97706' },
+              { gatilho: 'MRR ≥ R$ 30.000', atingido: mrr >= 30000, titulo: 'Migrar Supabase Pro', cor: '#7c3aed' },
+              { gatilho: 'MRR ≥ R$ 50.000', atingido: mrr >= 50000, titulo: 'Ativar CDN e cache', cor: '#0891b2' },
+              { gatilho: 'MRR ≥ R$ 100.000', atingido: mrr >= 100000, titulo: 'Infra dedicada + SLA', cor: '#dc2626' },
+              { gatilho: '> 500 análises/mês', atingido: false, titulo: 'Fila assíncrona', cor: '#059669' },
+              { gatilho: '> 50 contratos/mês', atingido: false, titulo: 'Assinatura ICP-Brasil', cor: '#6366f1' },
+            ].map((m, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: m.atingido ? m.cor + '10' : '#f8fafc', border: `1px solid ${m.atingido ? m.cor + '30' : '#f1f5f9'}` }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.atingido ? m.cor : '#cbd5e1', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{m.titulo}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{m.gatilho}</div>
+                </div>
+                {m.atingido && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: m.cor, color: 'white' }}>Atingido</span>}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
