@@ -198,6 +198,14 @@ export default function Header() {
     };
   }, []);
 
+  // Fechar dropdown ao clicar fora
+  React.useEffect(() => {
+    if (!showUserMenu) return;
+    const handler = (e) => { if (!e.target.closest('[data-usermenu]')) setShowUserMenu(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showUserMenu]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setShowUserMenu(false);
@@ -263,31 +271,18 @@ export default function Header() {
             </button>
           )}
 
-          <button onClick={abrirFeedback} title="Enviar feedback"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-            <MessageSquare size={14} /> Feedback
-          </button>
-
+          {/* Botão Suporte abre chat */}
           {user && (
-            <button onClick={() => nav('/analise')}
-              data-tour="analise"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, padding: '8px 16px', border: 'none', borderRadius: 8, background: '#2563eb', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              Fazer Análise <ChevronRight size={14} />
-            </button>
-          )}
-
-          {/* Botão Tour */}
-          {user && (
-            <button onClick={() => { localStorage.removeItem(TOUR_KEY); setShowTour(true); }}
-              title="Ver guia rápido"
-              style={{ display: 'flex', alignItems: 'center', padding: '7px 10px', border: 'none', borderRadius: 8, background: 'transparent', color: '#475569', cursor: 'pointer' }}>
-              <HelpCircle size={15} />
+            <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+              title="Suporte"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              <MessageSquare size={14} /> Suporte
             </button>
           )}
 
           {/* Usuário */}
           {user ? (
-            <div style={{ position: 'relative', marginLeft: 4 }}>
+            <div data-usermenu="true" style={{ position: 'relative', marginLeft: 4 }}>
               <button onClick={() => setShowUserMenu(p => !p)}
                 data-tour="conta"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', border: '1px solid #334155', borderRadius: 8, background: 'transparent', color: 'white', cursor: 'pointer' }}>
@@ -297,7 +292,7 @@ export default function Header() {
                 <span style={{ fontSize: 12, fontWeight: 600, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomeUsuario}</span>
               </button>
               {showUserMenu && (
-                <div style={{ position: 'absolute', right: 0, top: '110%', background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '8px', minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 200 }}>
+                <div data-usermenu="true" style={{ position: 'absolute', right: 0, top: '110%', background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '8px', minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 200 }}>
                   <div style={{ padding: '8px 12px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
                     <div style={{ fontWeight: 700, color: '#0f172a' }}>{nomeUsuario}</div>
                     <div style={{ fontSize: 11 }}>{user.email}</div>
@@ -367,9 +362,9 @@ export default function Header() {
               ⚙️ Admin
             </button>
           )}
-          <button onClick={() => { abrirFeedback(); setOpen(false); }}
+          <button onClick={() => { window.dispatchEvent(new CustomEvent('tsn:open-chat')); setOpen(false); }}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-            <MessageSquare size={16} /> Feedback
+            <MessageSquare size={16} /> Suporte
           </button>
           {user
             ? <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#ef4444', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
