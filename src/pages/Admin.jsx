@@ -1721,6 +1721,80 @@ function DashboardTab() {
           ))}
         </div>
       </div>
+      {/* ── Quadro de Configurações & Pendências ─────────────────────────────── */}
+      <SystemStatusCard />
+    </div>
+  );
+}
+
+function SystemStatusCard() {
+  const [status, setStatus] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    fetch('/api/system-status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+  const GRUPOS = {
+    geral:  { label: 'Geral', items: ['baseUrl', 'cron'] },
+    email:  { label: 'Alertas por Email', items: ['email', 'from'] },
+    banco:  { label: 'Banco de Dados', items: ['svcKey'] },
+    ads:    { label: 'Anúncios', items: ['googleAds', 'meta'] },
+  };
+  const DOMINIO_PENDENTE = [
+    { label: 'Definir nome e domínio da plataforma', desc: 'Necessário para email remetente e URL pública.' },
+    { label: 'Verificar domínio no Resend', desc: 'Adicionar registros DNS após definir o domínio.' },
+    { label: 'APP_FROM_EMAIL no Vercel', desc: 'Ex: "TSN Ativos <alertas@seudominio.com.br>"' },
+    { label: 'APP_BASE_URL no Vercel', desc: 'Ex: "https://seudominio.com.br"' },
+  ];
+  const totalOk = status ? Object.values(status).filter(v => v.ok).length : 0;
+  const total = status ? Object.values(status).length : 0;
+  const saude = total > 0 ? Math.round(totalOk / total * 100) : 0;
+  return (
+    <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>Configurações & Saúde do Sistema</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Variáveis de ambiente e integrações pendentes</div>
+        </div>
+        {!loading && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 28, fontWeight: 900, color: saude >= 80 ? '#059669' : saude >= 50 ? '#f59e0b' : '#dc2626' }}>{saude}%</div><div style={{ fontSize: 11, color: '#94a3b8' }}>configurado</div></div>}
+      </div>
+      {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Verificando…</div> : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 20 }}>
+          {Object.entries(GRUPOS).map(([key, grupo]) => (
+            <div key={key} style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{grupo.label}</div>
+              {grupo.items.map(itemKey => { const item = status?.[itemKey]; if (!item) return null; return (
+                <div key={itemKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: item.ok ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0, fontWeight: 700, color: item.ok ? '#166534' : '#dc2626' }}>{item.ok ? '✓' : '✗'}</div>
+                  <span style={{ fontSize: 13, color: item.ok ? '#0f172a' : '#94a3b8', flex: 1 }}>{item.label}</span>
+                  {!item.ok && <span style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', borderRadius: 6, padding: '1px 6px', fontWeight: 700 }}>Pendente</span>}
+                </div>
+              ); })}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>⏳ Aguardando definição do domínio</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
+          {DOMINIO_PENDENTE.map((item, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 12px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a' }}>
+              <span style={{ fontSize: 14, flexShrink: 0 }}>📋</span>
+              <div><div style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>{item.label}</div><div style={{ fontSize: 11, color: '#b45309', marginTop: 2, lineHeight: 1.4 }}>{item.desc}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#8b5cf6', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>🔮 Integrações futuras</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {[['Google Ads','GOOGLE_ADS_*'],['Meta Ads','META_ACCESS_TOKEN'],['RI Digital','RI_DIGITAL_KEY']].map(([nome, env]) => (
+            <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#e2e8f0' }} />
+              <div><div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{nome}</div><div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{env}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1918,7 +1992,637 @@ function ScrapersTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Scrapers', 'Configurações'];
+// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// SDR TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+const STATUS_COLORS = { novo: '#f59e0b', contatado: '#3b82f6', qualificado: '#8b5cf6', convertido: '#10b981', perdido: '#94a3b8' };
+const STATUS_LIST = ['novo', 'contatado', 'qualificado', 'convertido', 'perdido'];
+function defaultProdutoSDR() { return { nome: '', descricao: '', tipo: 'ebook', conteudo_url: '', imagem_url: '' }; }
+
+function SdrTab() {
+  const [produtos, setProdutos] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [loadingP, setLoadingP] = useState(true);
+  const [loadingL, setLoadingL] = useState(true);
+  const [modalProduto, setModalProduto] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [filterProduto, setFilterProduto] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [copiado, setCopiado] = useState('');
+
+  async function loadProdutos() { setLoadingP(true); const { data } = await supabase.from('sdr_produtos').select('*').order('criado_em', { ascending: false }); setProdutos(data || []); setLoadingP(false); }
+  async function loadLeads() { setLoadingL(true); const { data } = await supabase.from('sdr_leads').select('*, sdr_produtos(nome)').order('criado_em', { ascending: false }); setLeads(data || []); setLoadingL(false); }
+  useEffect(() => { loadProdutos(); loadLeads(); }, []);
+
+  async function saveProduto() {
+    setSaving(true);
+    const { id, ...fields } = modalProduto;
+    if (id) { await supabase.from('sdr_produtos').update(fields).eq('id', id); } else { await supabase.from('sdr_produtos').insert(fields); }
+    setSaving(false); setModalProduto(null); loadProdutos();
+  }
+  async function toggleAtivo(prod) { await supabase.from('sdr_produtos').update({ ativo: !prod.ativo }).eq('id', prod.id); loadProdutos(); }
+  async function deleteProduto(id) { if (!window.confirm('Excluir produto?')) return; await supabase.from('sdr_produtos').delete().eq('id', id); loadProdutos(); }
+  async function updateLeadStatus(leadId, status) { await supabase.from('sdr_leads').update({ status }).eq('id', leadId); setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l)); }
+  function copyLink(prodId) { navigator.clipboard.writeText(`${window.location.origin}/#/p/captura/${prodId}`); setCopiado(prodId); setTimeout(() => setCopiado(''), 1800); }
+  function exportCSV() {
+    const filtered = leads.filter(l => (!filterProduto || l.produto_id === filterProduto) && (!filterStatus || l.status === filterStatus));
+    const rows = [['Nome','WhatsApp','Email','Produto','Status','Data'], ...filtered.map(l => [l.nome, l.whatsapp, l.email||'', l.sdr_produtos?.nome||'', l.status, new Date(l.criado_em).toLocaleDateString('pt-BR')])];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'leads_sdr.csv'; a.click();
+  }
+  const statusCounts = STATUS_LIST.reduce((acc, s) => ({ ...acc, [s]: leads.filter(l => l.status === s).length }), {});
+  const filteredLeads = leads.filter(l => (!filterProduto || l.produto_id === filterProduto) && (!filterStatus || l.status === filterStatus));
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
+        {STATUS_LIST.map(s => (
+          <div key={s} style={{ background: '#fff', border: `2px solid ${STATUS_COLORS[s]}`, borderRadius: 10, padding: '8px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 90 }}>
+            <span style={{ fontSize: 20, fontWeight: 900, color: STATUS_COLORS[s] }}>{statusCounts[s]}</span>
+            <span style={{ fontSize: 11, color: '#64748b', textTransform: 'capitalize', marginTop: 2 }}>{s}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...S.card, borderRadius: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={S.sectionTitle}>Produtos de Captura</div>
+          <button style={S.btn('primary')} onClick={() => setModalProduto(defaultProdutoSDR())}>+ Novo Produto</button>
+        </div>
+        {loadingP ? <p style={{ color: '#94a3b8' }}>Carregando…</p> : (
+          <table style={S.table}><thead><tr><th style={S.th}>Nome</th><th style={S.th}>Tipo</th><th style={S.th}>Ativo</th><th style={S.th}>Link</th><th style={S.th}>Ações</th></tr></thead>
+            <tbody>{produtos.map(p => (
+              <tr key={p.id}>
+                <td style={S.td}>{p.nome}</td>
+                <td style={S.td}><span style={{ background: '#f1f5f9', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}>{p.tipo}</span></td>
+                <td style={S.td}><button onClick={() => toggleAtivo(p)} style={{ ...S.badge(p.ativo), cursor: 'pointer', border: 'none' }}>{p.ativo ? 'Ativo' : 'Inativo'}</button></td>
+                <td style={S.td}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{window.location.origin}/#/p/captura/{p.id}</span><button onClick={() => copyLink(p.id)} style={{ ...S.btn('outline'), fontSize: 11, padding: '3px 8px' }}>{copiado === p.id ? 'Copiado!' : 'Copiar'}</button></div></td>
+                <td style={S.td}><div style={{ display: 'flex', gap: 6 }}><button style={{ ...S.btn('outline'), fontSize: 12 }} onClick={() => setModalProduto({ ...p })}>Editar</button><button style={{ ...S.btn('danger'), fontSize: 12 }} onClick={() => deleteProduto(p.id)}>Excluir</button></div></td>
+              </tr>
+            ))}{produtos.length === 0 && <tr><td colSpan={5} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum produto cadastrado.</td></tr>}</tbody>
+          </table>
+        )}
+      </div>
+      <div style={{ ...S.card, borderRadius: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+          <div style={S.sectionTitle}>Leads Capturados</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={filterProduto} onChange={e => setFilterProduto(e.target.value)} style={{ ...S.input, width: 'auto', fontSize: 13 }}><option value="">Todos os produtos</option>{produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...S.input, width: 'auto', fontSize: 13 }}><option value="">Todos os status</option>{STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select>
+            <button style={S.btn('outline')} onClick={exportCSV}>⬇ CSV</button>
+          </div>
+        </div>
+        {loadingL ? <p style={{ color: '#94a3b8' }}>Carregando…</p> : (
+          <table style={S.table}><thead><tr><th style={S.th}>Nome</th><th style={S.th}>WhatsApp</th><th style={S.th}>Email</th><th style={S.th}>Produto</th><th style={S.th}>Status</th><th style={S.th}>Data</th></tr></thead>
+            <tbody>{filteredLeads.map(l => (
+              <tr key={l.id}>
+                <td style={S.td}>{l.nome}</td>
+                <td style={S.td}><div style={{ display: 'flex', gap: 6 }}>{l.whatsapp}<a href={`https://wa.me/55${l.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '2px 6px', textDecoration: 'none', fontWeight: 600 }}>WA</a></div></td>
+                <td style={S.td}>{l.email || '—'}</td>
+                <td style={S.td}>{l.sdr_produtos?.nome || '—'}</td>
+                <td style={S.td}><select value={l.status} onChange={e => updateLeadStatus(l.id, e.target.value)} style={{ background: STATUS_COLORS[l.status]+'22', color: STATUS_COLORS[l.status], border: `1px solid ${STATUS_COLORS[l.status]}`, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>{STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></td>
+                <td style={S.td}>{new Date(l.criado_em).toLocaleDateString('pt-BR')}</td>
+              </tr>
+            ))}{filteredLeads.length === 0 && <tr><td colSpan={6} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum lead encontrado.</td></tr>}</tbody>
+          </table>
+        )}
+      </div>
+      {modalProduto && (
+        <div style={S.overlay} onClick={() => setModalProduto(null)}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 20 }}>{modalProduto.id ? 'Editar Produto' : 'Novo Produto'}</div>
+            <div style={S.row}><div style={S.col}><label style={S.label}>Nome *</label><input style={S.input} value={modalProduto.nome} onChange={e => setModalProduto(m => ({ ...m, nome: e.target.value }))} /></div><div style={{ width: 140 }}><label style={S.label}>Tipo</label><select style={S.input} value={modalProduto.tipo} onChange={e => setModalProduto(m => ({ ...m, tipo: e.target.value }))}><option value="ebook">eBook</option><option value="minicurso">Mini-curso</option><option value="webinar">Webinar</option><option value="outro">Outro</option></select></div></div>
+            <div style={{ marginBottom: 14 }}><label style={S.label}>Descrição</label><textarea style={{ ...S.input, height: 72, resize: 'vertical' }} value={modalProduto.descricao || ''} onChange={e => setModalProduto(m => ({ ...m, descricao: e.target.value }))} /></div>
+            <div style={{ marginBottom: 14 }}><label style={S.label}>Link do Conteúdo</label><input style={S.input} value={modalProduto.conteudo_url || ''} onChange={e => setModalProduto(m => ({ ...m, conteudo_url: e.target.value }))} placeholder="https://..." /></div>
+            <div style={{ marginBottom: 20 }}><label style={S.label}>URL da Imagem (opcional)</label><input style={S.input} value={modalProduto.imagem_url || ''} onChange={e => setModalProduto(m => ({ ...m, imagem_url: e.target.value }))} placeholder="https://..." /></div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}><button style={S.btn('outline')} onClick={() => setModalProduto(null)}>Cancelar</button><button style={S.btn('primary')} onClick={saveProduto} disabled={saving || !modalProduto.nome?.trim()}>{saving ? 'Salvando…' : 'Salvar'}</button></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EQUIPE TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+const ROLE_BADGE_COLORS = { admin: { bg: '#fef3c7', color: '#92400e' }, analista: { bg: '#dbeafe', color: '#1e40af' }, consultor: { bg: '#d1fae5', color: '#065f46' }, advogado: { bg: '#ede9fe', color: '#5b21b6' } };
+
+function EquipeTab() {
+  const [membros, setMembros] = useState([]);
+  const [chamadosMap, setChamadosMap] = useState({});
+  const [finalizadosHoje, setFinalizadosHoje] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const { data: perfisData } = await supabase.from('perfis').select('*').in('role', ['admin','analista','consultor','advogado']);
+      const membrosData = perfisData || [];
+      setMembros(membrosData);
+      if (membrosData.length > 0) {
+        const ids = membrosData.map(m => m.id);
+        const { data: chamados } = await supabase.from('chamados').select('atendente_id, status').in('atendente_id', ids);
+        const map = {};
+        ids.forEach(id => { map[id] = { total: 0, finalizados: 0 }; });
+        (chamados || []).forEach(c => { if (map[c.atendente_id]) { map[c.atendente_id].total++; if (c.status === 'finalizado') map[c.atendente_id].finalizados++; } });
+        setChamadosMap(map);
+        const hoje = new Date().toISOString().slice(0, 10);
+        const { count } = await supabase.from('chamados').select('id', { count: 'exact', head: true }).eq('status', 'finalizado').gte('atualizado_em', hoje);
+        setFinalizadosHoje(count || 0);
+      }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  if (loading) return <p style={{ color: '#94a3b8' }}>Carregando…</p>;
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
+        {[['Total Equipe', membros.length, '#0f172a'], ['Analistas', membros.filter(m=>m.role==='analista').length, '#3b82f6'], ['Consultores', membros.filter(m=>m.role==='consultor').length, '#059669'], ['Finalizados Hoje', finalizadosHoje, '#f59e0b']].map(([l,v,c]) => (
+          <div key={l} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px 24px' }}>
+            <div style={{ fontSize: 32, fontWeight: 900, color: c }}>{v}</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...S.card, borderRadius: 16 }}>
+        <div style={S.sectionTitle}>Membros da Equipe</div>
+        <table style={S.table}><thead><tr><th style={S.th}>Membro</th><th style={S.th}>Role</th><th style={S.th}>Chamados Assumidos</th><th style={S.th}>Finalizados</th><th style={S.th}>Último Acesso</th></tr></thead>
+          <tbody>{membros.map(m => { const stats = chamadosMap[m.id] || { total:0, finalizados:0 }; const rs = ROLE_BADGE_COLORS[m.role] || { bg:'#f1f5f9', color:'#475569' }; return (
+            <tr key={m.id}><td style={S.td}><div style={{ fontWeight:600 }}>{m.nome||'—'}</div><div style={{ fontSize:12, color:'#94a3b8' }}>{m.email||''}</div></td>
+            <td style={S.td}><span style={{ background:rs.bg, color:rs.color, borderRadius:8, padding:'2px 10px', fontSize:12, fontWeight:700 }}>{m.role}</span></td>
+            <td style={S.td}>{stats.total}</td><td style={S.td}>{stats.finalizados}</td>
+            <td style={{ ...S.td, color:'#64748b', fontSize:13 }}>{m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'N/D'}</td>
+            </tr>);
+          })}{membros.length===0&&<tr><td colSpan={5} style={{ ...S.td, color:'#94a3b8', textAlign:'center', padding:24 }}>Nenhum membro encontrado.</td></tr>}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// MARKETING TAB — inteligência de buscas, demográficos, SDR e oportunidades
+// (visível APENAS para role === 'admin')
+// ═══════════════════════════════════════════════════════════════════════════════
+function MarketingTab() {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [loading, setLoading] = useState(true);
+  const [buscas, setBuscas] = useState({ total: 0, unicos: 0, cidades: [], estados: [], tipos: [], pagamentos: [] });
+  const [perfisData, setPerfisData] = useState({ porRole: [], porEstado: [], semanas: [], ativos: 0, inativos: 0, total: 0 });
+  const [sdrData, setSdrData] = useState({ leadsStatus: {}, leadsPorProduto: [], semanas: [], total: 0, convertidos: 0 });
+  const [oportunidades, setOportunidades] = useState([]);
+  const [alertas, setAlertas] = useState([]);
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    try {
+      // ── Seção 1: Buscas ──
+      const [
+        { data: cidadesRaw },
+        { data: tiposRaw },
+        { data: estadosRaw },
+        { data: pagamentosRaw },
+        { data: totaisRaw },
+      ] = await Promise.all([
+        supabase.from('busca_historico').select('cidade').not('cidade', 'is', null).gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('tipo_imovel').not('tipo_imovel', 'is', null).gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('estado').not('estado', 'is', null).gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('pagamento_tipos').not('pagamento_tipos', 'is', null).gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('user_id, id').gte('criado_em', thirtyDaysAgo),
+      ]);
+
+      const countBy = (arr, key) => {
+        const map = {};
+        (arr || []).forEach(r => { const v = r[key]; if (v) map[v] = (map[v] || 0) + 1; });
+        return Object.entries(map).sort((a, b) => b[1] - a[1]);
+      };
+
+      const cidadesCount = countBy(cidadesRaw, 'cidade').slice(0, 10);
+      const estadosCount = countBy(estadosRaw, 'estado').slice(0, 10);
+      const tiposCount = countBy(tiposRaw, 'tipo_imovel');
+
+      const pagMap = {};
+      (pagamentosRaw || []).forEach(r => {
+        const v = r.pagamento_tipos;
+        if (Array.isArray(v)) v.forEach(p => { pagMap[p] = (pagMap[p] || 0) + 1; });
+        else if (v) pagMap[v] = (pagMap[v] || 0) + 1;
+      });
+      const pagamentosCount = Object.entries(pagMap).sort((a, b) => b[1] - a[1]);
+
+      const totalBuscas = (totaisRaw || []).length;
+      const unicosSet = new Set((totaisRaw || []).filter(r => r.user_id).map(r => r.user_id));
+
+      setBuscas({ total: totalBuscas, unicos: unicosSet.size, cidades: cidadesCount, estados: estadosCount, tipos: tiposCount, pagamentos: pagamentosCount });
+
+      // ── Seção 2: Perfis demográficos ──
+      const { data: perfisRaw } = await supabase.from('perfis').select('role, created_at, cidade, estado, ativo');
+      const roleMap = {};
+      const estadoPerfisMap = {};
+      let ativos = 0; let inativos = 0;
+      const semanaMap = {};
+      (perfisRaw || []).forEach(p => {
+        roleMap[p.role || 'explorador'] = (roleMap[p.role || 'explorador'] || 0) + 1;
+        if (p.estado) estadoPerfisMap[p.estado] = (estadoPerfisMap[p.estado] || 0) + 1;
+        if (p.ativo !== false) ativos++; else inativos++;
+        if (p.created_at) {
+          const diff = Math.floor((Date.now() - new Date(p.created_at)) / (7 * 24 * 60 * 60 * 1000));
+          if (diff < 12) { const semana = `S-${diff}`; semanaMap[semana] = (semanaMap[semana] || 0) + 1; }
+        }
+      });
+      const porRole = Object.entries(roleMap).sort((a, b) => b[1] - a[1]);
+      const porEstado = Object.entries(estadoPerfisMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      const semanas = Array.from({ length: 12 }, (_, i) => ({ label: `S${12 - i}`, count: semanaMap[`S-${11 - i}`] || 0 }));
+      setPerfisData({ porRole, porEstado, semanas, ativos, inativos, total: (perfisRaw || []).length });
+
+      // ── Seção 3: SDR ──
+      const [{ data: leadsRaw }, { data: produtosRaw }] = await Promise.all([
+        supabase.from('sdr_leads').select('status, criado_em, origem, produto_id'),
+        supabase.from('sdr_produtos').select('id, nome, tipo'),
+      ]);
+      const statusMap = {};
+      const prodLeadMap = {};
+      const sdrSemanaMap = {};
+      (leadsRaw || []).forEach(l => {
+        statusMap[l.status || 'novo'] = (statusMap[l.status || 'novo'] || 0) + 1;
+        if (l.produto_id) prodLeadMap[l.produto_id] = (prodLeadMap[l.produto_id] || 0) + 1;
+        if (l.criado_em) {
+          const diff = Math.floor((Date.now() - new Date(l.criado_em)) / (7 * 24 * 60 * 60 * 1000));
+          if (diff < 8) { const s = `S-${diff}`; sdrSemanaMap[s] = (sdrSemanaMap[s] || 0) + 1; }
+        }
+      });
+      const prodNomeMap = {};
+      (produtosRaw || []).forEach(p => { prodNomeMap[p.id] = p.nome || p.tipo || p.id; });
+      const leadsPorProduto = Object.entries(prodLeadMap).map(([id, count]) => ({ nome: prodNomeMap[id] || id, count })).sort((a, b) => b.count - a.count);
+      const sdrSemanas = Array.from({ length: 8 }, (_, i) => ({ label: `S${8 - i}`, count: sdrSemanaMap[`S-${7 - i}`] || 0 }));
+      const totalLeads = (leadsRaw || []).length;
+      const convertidos = statusMap['convertido'] || 0;
+      setSdrData({ leadsStatus: statusMap, leadsPorProduto, semanas: sdrSemanas, total: totalLeads, convertidos });
+
+      // ── Seção 4: Mapa de Oportunidades ──
+      const { data: imoveisRaw } = await supabase.from('imoveis_leilao').select('cidade, estado').eq('ativo', true);
+      const imovCidadeMap = {};
+      (imoveisRaw || []).forEach(im => { if (im.cidade) imovCidadeMap[im.cidade] = (imovCidadeMap[im.cidade] || 0) + 1; });
+      const oportsArr = cidadesCount.map(([cidade, buscasCount]) => ({
+        cidade, buscas: buscasCount, imoveis: imovCidadeMap[cidade] || 0,
+        ratio: imovCidadeMap[cidade] ? (buscasCount / imovCidadeMap[cidade]).toFixed(1) : buscasCount * 10,
+      })).sort((a, b) => b.ratio - a.ratio);
+      setOportunidades(oportsArr);
+
+      // ── Seção 5: Alertas ──
+      const { data: alertasRaw } = await supabase.from('alertas_email').select('*, perfis(email)').order('total_enviados', { ascending: false });
+      setAlertas(alertasRaw || []);
+
+    } catch (e) {
+      console.error('MarketingTab error:', e);
+    }
+    setLoading(false);
+  }, [thirtyDaysAgo]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  function exportarCSV() {
+    const d = new Date().toLocaleDateString('pt-BR');
+    const linhas = [
+      `Relatório de Marketing TSN Ativos - ${d}`, '',
+      '=== BUSCAS ===', 'Cidade,Total Buscas',
+      ...buscas.cidades.map(([c, n]) => `${c},${n}`), '',
+      'Estado,Total Buscas',
+      ...buscas.estados.map(([e, n]) => `${e},${n}`), '',
+      '=== PERFIL USUÁRIOS ===', 'Plano,Total',
+      ...perfisData.porRole.map(([r, n]) => `${r},${n}`), '',
+      '=== SDR LEADS ===', 'Produto,Total Leads',
+      ...sdrData.leadsPorProduto.map(l => `${l.nome},${l.count}`), '',
+      'Status,Total',
+      ...Object.entries(sdrData.leadsStatus).map(([s, c]) => `${s},${c}`), '',
+      '=== MAPA DE OPORTUNIDADES ===', 'Cidade,Buscas 30d,Imóveis Disponíveis,Ratio Demanda/Oferta',
+      ...oportunidades.map(o => `${o.cidade},${o.buscas},${o.imoveis},${o.ratio}`),
+    ];
+    const blob = new Blob([linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `marketing-tsn-${d.replace(/\//g, '-')}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const maxBar = (arr) => Math.max(...arr.map(([, c]) => c), 1);
+  const maxBarN = (arr, key) => Math.max(...arr.map(r => r[key] || 0), 1);
+  const kpiStyle = (color) => ({ fontSize: 28, fontWeight: 900, color });
+  const kpiLabel = { fontSize: 12, color: '#64748b', marginTop: 2 };
+  const sectionHeader = (title, sub) => (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{title}</div>
+      {sub && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>Carregando dados de marketing...</div>;
+
+  const FUNNEL_STEPS = ['novo', 'contatado', 'qualificado', 'convertido'];
+  const FUNNEL_COLORS = ['#2563eb', '#7c3aed', '#d97706', '#059669'];
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Inteligência de Marketing</h2>
+          <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Painel privado — somente admin</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button style={S.btn('outline')} onClick={carregar}>↻ Atualizar dados</button>
+          <button style={S.btn('primary')} onClick={exportarCSV}>⬇ Exportar Relatório</button>
+        </div>
+      </div>
+
+      {/* Seção 1: Buscas */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('Painel de Buscas', 'Dados dos últimos 30 dias')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Total de buscas', value: buscas.total, color: '#2563eb' },
+            { label: 'Usuários únicos buscadores', value: buscas.unicos, color: '#7c3aed' },
+            { label: 'Tipos de imóvel buscados', value: buscas.tipos.length, color: '#059669' },
+            { label: 'Buscas por usuário', value: buscas.unicos > 0 ? (buscas.total / buscas.unicos).toFixed(1) + 'x' : '—', color: '#d97706' },
+          ].map(k => (
+            <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
+              <div style={kpiStyle(k.color)}>{k.value}</div>
+              <div style={kpiLabel}>{k.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Cidades mais buscadas</div>
+            {buscas.cidades.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div> : buscas.cidades.map(([cidade, count]) => (
+              <div key={cidade} style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                  <span>{cidade}</span><span style={{ fontWeight: 700, color: '#2563eb' }}>{count}</span>
+                </div>
+                <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                  <div style={{ background: 'linear-gradient(90deg,#2563eb,#60a5fa)', borderRadius: 4, height: 8, width: `${(count / maxBar(buscas.cidades)) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Estados mais buscados</div>
+            {buscas.estados.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div> : buscas.estados.map(([estado, count]) => (
+              <div key={estado} style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                  <span>{estado}</span><span style={{ fontWeight: 700, color: '#059669' }}>{count}</span>
+                </div>
+                <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                  <div style={{ background: 'linear-gradient(90deg,#059669,#34d399)', borderRadius: 4, height: 8, width: `${(count / maxBar(buscas.estados)) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Tipos de imóvel buscados</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {buscas.tipos.length === 0 ? <span style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</span>
+              : buscas.tipos.map(([tipo, count]) => (
+                <span key={tipo} style={{ padding: '4px 14px', background: '#eff6ff', color: '#1e40af', borderRadius: 999, fontWeight: 700, fontSize: 13 }}>
+                  {tipo} <span style={{ color: '#2563eb' }}>({count})</span>
+                </span>
+              ))}
+          </div>
+        </div>
+        {buscas.pagamentos.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Filtros de pagamento</div>
+            {(() => {
+              const total = buscas.pagamentos.reduce((s, [, c]) => s + c, 0);
+              return buscas.pagamentos.map(([tipo, count]) => (
+                <div key={tipo} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{tipo}</span><span style={{ fontWeight: 700 }}>{count} ({total > 0 ? ((count / total) * 100).toFixed(0) : 0}%)</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                    <div style={{ background: 'linear-gradient(90deg,#d97706,#fbbf24)', borderRadius: 4, height: 8, width: `${total > 0 ? (count / total) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+        )}
+      </div>
+
+      {/* Seção 2: Perfil Demográfico */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('Perfil Demográfico dos Usuários', 'Dados dos últimos 30 dias')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Total de usuários', value: perfisData.total, color: '#0f172a' },
+            { label: 'Usuários ativos', value: perfisData.ativos, color: '#059669' },
+            { label: 'Usuários inativos', value: perfisData.inativos, color: '#dc2626' },
+            { label: 'Taxa de atividade', value: perfisData.total > 0 ? ((perfisData.ativos / perfisData.total) * 100).toFixed(0) + '%' : '—', color: '#2563eb' },
+          ].map(k => (
+            <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
+              <div style={kpiStyle(k.color)}>{k.value}</div>
+              <div style={kpiLabel}>{k.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Usuários por plano</div>
+            {perfisData.porRole.map(([role, count]) => {
+              const maxV = Math.max(...perfisData.porRole.map(([, c]) => c), 1);
+              return (
+                <div key={role} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{role}</span><span style={{ fontWeight: 700, color: '#7c3aed' }}>{count}</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                    <div style={{ background: 'linear-gradient(90deg,#7c3aed,#a78bfa)', borderRadius: 4, height: 8, width: `${(count / maxV) * 100}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Usuários por estado</div>
+            {perfisData.porEstado.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: 13 }}>N/D — coluna estado não preenchida</div>
+            ) : perfisData.porEstado.map(([estado, count]) => {
+              const maxV = Math.max(...perfisData.porEstado.map(([, c]) => c), 1);
+              return (
+                <div key={estado} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{estado}</span><span style={{ fontWeight: 700, color: '#0891b2' }}>{count}</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                    <div style={{ background: 'linear-gradient(90deg,#0891b2,#38bdf8)', borderRadius: 4, height: 8, width: `${(count / maxV) * 100}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Novos usuários por semana (últimas 12 semanas)</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
+            {(() => {
+              const maxV = Math.max(...perfisData.semanas.map(s => s.count), 1);
+              return perfisData.semanas.map(s => (
+                <div key={s.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ fontSize: 10, color: '#475569', fontWeight: 700 }}>{s.count > 0 ? s.count : ''}</div>
+                  <div style={{ width: '100%', background: s.count > 0 ? 'linear-gradient(180deg,#2563eb,#60a5fa)' : '#e2e8f0', borderRadius: 4, height: `${Math.max((s.count / maxV) * 56, s.count > 0 ? 8 : 4)}px` }} />
+                  <div style={{ fontSize: 9, color: '#94a3b8' }}>{s.label}</div>
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Seção 3: SDR Intelligence */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('SDR Intelligence', 'Dados dos últimos 30 dias')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Total de leads', value: sdrData.total, color: '#0f172a' },
+            { label: 'Convertidos', value: sdrData.convertidos, color: '#059669' },
+            { label: 'Taxa de conversão', value: sdrData.total > 0 ? ((sdrData.convertidos / sdrData.total) * 100).toFixed(1) + '%' : '—', color: '#2563eb' },
+            { label: 'Leads novos', value: sdrData.leadsStatus['novo'] || 0, color: '#d97706' },
+          ].map(k => (
+            <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
+              <div style={kpiStyle(k.color)}>{k.value}</div>
+              <div style={kpiLabel}>{k.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Funil de leads</div>
+            {FUNNEL_STEPS.map((step, i) => {
+              const count = sdrData.leadsStatus[step] || 0;
+              const pct = sdrData.total > 0 ? ((count / sdrData.total) * 100).toFixed(0) : 0;
+              return (
+                <div key={step} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span style={{ textTransform: 'capitalize' }}>{step}</span>
+                    <span style={{ fontWeight: 700, color: FUNNEL_COLORS[i] }}>{count} ({pct}%)</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 10 }}>
+                    <div style={{ background: FUNNEL_COLORS[i], borderRadius: 4, height: 10, width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Leads por produto</div>
+            {sdrData.leadsPorProduto.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div>
+              : sdrData.leadsPorProduto.map(l => (
+                <div key={l.nome} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{l.nome}</span><span style={{ fontWeight: 700, color: '#059669' }}>{l.count}</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                    <div style={{ background: 'linear-gradient(90deg,#059669,#34d399)', borderRadius: 4, height: 8, width: `${(l.count / maxBarN(sdrData.leadsPorProduto, 'count')) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Leads por semana (últimas 8 semanas)</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
+            {(() => {
+              const maxV = Math.max(...sdrData.semanas.map(s => s.count), 1);
+              return sdrData.semanas.map(s => (
+                <div key={s.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ fontSize: 10, color: '#475569', fontWeight: 700 }}>{s.count > 0 ? s.count : ''}</div>
+                  <div style={{ width: '100%', background: s.count > 0 ? 'linear-gradient(180deg,#059669,#34d399)' : '#e2e8f0', borderRadius: 4, height: `${Math.max((s.count / maxV) * 56, s.count > 0 ? 8 : 4)}px` }} />
+                  <div style={{ fontSize: 9, color: '#94a3b8' }}>{s.label}</div>
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Seção 4: Mapa de Oportunidades */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('Mapa de Oportunidades por Cidade', 'Mercados mais subatendidos primeiro — dados dos últimos 30 dias')}
+        {oportunidades.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados suficientes para análise.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Cidade</th>
+                  <th style={S.th}>Buscas (30d)</th>
+                  <th style={S.th}>Imóveis disponíveis</th>
+                  <th style={S.th}>Ratio Demanda/Oferta</th>
+                  <th style={S.th}>Oportunidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {oportunidades.map(o => {
+                  const ratio = Number(o.ratio);
+                  const opp = ratio >= 10 ? 'Alta' : ratio >= 3 ? 'Média' : 'Baixa';
+                  const oppColor = ratio >= 10 ? '#dc2626' : ratio >= 3 ? '#d97706' : '#059669';
+                  return (
+                    <tr key={o.cidade}>
+                      <td style={S.td}><strong>{o.cidade}</strong></td>
+                      <td style={{ ...S.td, fontWeight: 700, color: '#2563eb' }}>{o.buscas}</td>
+                      <td style={{ ...S.td, color: o.imoveis === 0 ? '#dc2626' : '#0f172a' }}>{o.imoveis === 0 ? '0 ⚠' : o.imoveis}</td>
+                      <td style={{ ...S.td, fontWeight: 700 }}>{o.ratio}</td>
+                      <td style={S.td}><span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: oppColor + '20', color: oppColor }}>{opp}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Seção 5: Alertas Configurados */}
+      <div style={{ ...S.card, borderRadius: 16 }}>
+        {sectionHeader('Alertas de E-mail Configurados', 'Usuários com buscas salvas ativas')}
+        {alertas.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhum alerta configurado.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Usuário</th>
+                  <th style={S.th}>Filtro</th>
+                  <th style={S.th}>Último envio</th>
+                  <th style={S.th}>Total enviados</th>
+                  <th style={S.th}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alertas.map(a => (
+                  <tr key={a.id}>
+                    <td style={{ ...S.td, fontSize: 13 }}>{a.perfis?.email || a.user_id || '—'}</td>
+                    <td style={{ ...S.td, fontSize: 12, color: '#475569', maxWidth: 200 }}>{JSON.stringify(a.filtros || a.filtro || {})}</td>
+                    <td style={{ ...S.td, fontSize: 12 }}>{a.ultimo_envio ? new Date(a.ultimo_envio).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td style={{ ...S.td, fontWeight: 700, color: '#2563eb' }}>{a.total_enviados || 0}</td>
+                    <td style={S.td}><span style={S.badge(a.ativo !== false)}>{a.ativo !== false ? 'Ativo' : 'Inativo'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -1956,6 +2660,9 @@ export default function Admin() {
           {TABS.map(t => (
             <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>{t}</button>
           ))}
+          {role === 'admin' && (
+            <button style={S.tab(tab === 'Marketing')} onClick={() => setTab('Marketing')}>Marketing</button>
+          )}
         </div>
 
         {tab === 'Dashboard'      && <DashboardTab />}
@@ -1966,8 +2673,11 @@ export default function Admin() {
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Tour'           && <TourTab />}
+        {tab === 'SDR / Leads'    && <SdrTab />}
+        {tab === 'Equipe'         && <EquipeTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Configurações'  && <ConfigTab />}
+        {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}
       </div>
     </div>
   );

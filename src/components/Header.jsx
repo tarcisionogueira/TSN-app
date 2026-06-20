@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -249,6 +249,13 @@ export default function Header() {
             </button>
           )}
 
+          {['analista','consultor','admin'].includes(role) && (
+            <button onClick={() => nav('/atendimento')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/atendimento') ? '#0891b2' : '#0891b222', color: '#67e8f9', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              <Headphones size={14} /> Atendimento
+            </button>
+          )}
+
           {role === 'admin' && (
             <button onClick={() => nav('/admin')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/admin') ? '#7c3aed' : '#7c3aed22', color: '#c4b5fd', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -303,8 +310,8 @@ export default function Header() {
                   {[
                     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
+                    { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
                     { path: '/planos', label: 'Minha Assinatura', icon: Tag },
-                    ...(role === 'admin' ? [{ path: '/admin', label: '⚙️ Admin', icon: null }] : []),
                   ].map(item => (
                     <button key={item.path} onClick={() => { nav(item.path); setShowUserMenu(false); }}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#334155', fontSize: 13, fontWeight: 600, borderRadius: 8, textAlign: 'left' }}

@@ -71,6 +71,9 @@ export default function Checkout() {
   const [pago, setPago] = useState(false); // tela de aprovado
   const [modalidade, setModalidade] = useState('mensal'); // 'mensal' | 'vista'
   const [aceitouTermos, setAceitouTermos] = useState(false);
+  const [asaasIds, setAsaasIds] = useState(null); // { subscriptionId, paymentId }
+  const [verificando, setVerificando] = useState(false);
+  const pollingRef = React.useRef(null);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
   const planoApiKey = temModalidade && modalidade === 'vista' ? `${planoKey}_vista` : planoKey;
@@ -90,6 +93,32 @@ export default function Checkout() {
   React.useEffect(() => {
     if (!plano || planoKey === 'explorador' || plano.preco === 0) nav('/');
   }, [planoKey]);
+
+  // Polling automático — verifica a cada 8s se o Asaas confirmou o pagamento
+  useEffect(() => {
+    if (!asaasIds || pago) return;
+    setVerificando(true);
+    const verificar = async () => {
+      try {
+        const res = await fetch('/api/verificar-pagamento', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(asaasIds),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.confirmado) {
+          clearInterval(pollingRef.current);
+          setVerificando(false);
+          confirmarPagamento();
+        }
+      } catch (_) {}
+    };
+    verificar(); // primeira verificação imediata
+    pollingRef.current = setInterval(verificar, 8000);
+    return () => clearInterval(pollingRef.current);
+  }, [asaasIds, pago]);
+
   if (!plano || planoKey === 'explorador' || plano.preco === 0) return null;
 
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
@@ -140,6 +169,9 @@ export default function Checkout() {
       await logAceite(planoApiKey, plano.preco, data);
       // Abre o link do Asaas em nova aba automaticamente
       if (link) window.open(link, '_blank', 'noopener');
+      // Salva IDs para polling de verificação
+      const ids = { subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null };
+      setAsaasIds(ids);
       // Salva o ID do customer Asaas no perfil
       if (data.customerId && user?.id) {
         supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id).then(() => {});
@@ -416,23 +448,15 @@ export default function Checkout() {
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px', background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box', marginBottom: 10 }}>
                 <ExternalLink size={15} /> Reabrir página de pagamento
               </a>
-              <button onClick={confirmarPagamento}
-                style={{ width: '100%', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                ✅ Paguei — confirmar
-              </button>
-              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10 }}>Seu plano será ativado automaticamente em até 5 minutos após o pagamento.</p>
-              <div style={{ marginTop: 12, padding: '12px 16px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12 }}>
-                <p style={{ fontSize: 13, color: '#166534', margin: '0 0 10px', fontWeight: 600 }}>
-                  ✅ Após confirmar o pagamento, assine o contrato do seu plano:
-                </p>
-                <button
-                  onClick={() => window.location.hash = '/contratos'}
-                  style={{ padding: '10px 20px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                  Ir para Meus Contratos →
-                </button>
+              <div style={{ width: '100%', padding: '14px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#166534', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                  Aguardando confirmação do pagamento…
+                </div>
+                <p style={{ fontSize: 12, color: '#4ade80', margin: 0 }}>Verificando automaticamente a cada 8 segundos</p>
               </div>
-              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>
-                Você pode cancelar a qualquer momento em <strong>Minha Conta → Cancelar plano</strong>
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10, textAlign: 'center' }}>
+                Assim que seu pagamento for processado, seu plano será ativado automaticamente.
               </p>
             </div>
           ) : (

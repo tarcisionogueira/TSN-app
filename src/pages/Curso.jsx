@@ -1,48 +1,128 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Play, Lock, CheckCircle2, Clock, BookOpen, ChevronLeft,
-  ChevronDown, ChevronUp, Award, Crown, ArrowRight, ArrowLeft,
+  ChevronDown, ChevronUp, Award, Crown, ArrowRight, ArrowLeft, ChevronRight,
 } from 'lucide-react';
+import { supabase } from '../utils/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { CURSOS, PLANOS } from '../data/cursos';
 
-function getProgresso() {
+// ── localStorage fallback ─────────────────────────────────────────────────────
+function getProgressoLocal() {
   try { return JSON.parse(localStorage.getItem('tsn_progresso') || '{}'); } catch { return {}; }
 }
-function salvarProgresso(id, feito) {
-  const p = getProgresso();
+function salvarProgressoLocal(id, feito) {
+  const p = getProgressoLocal();
   p[id] = feito;
   localStorage.setItem('tsn_progresso', JSON.stringify(p));
 }
-function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'gratuito'; }
+function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explorador'; }
+
+const PLANOS_PAGOS = ['top1','top2','assessorado','clube','analista','consultor','advogado','admin'];
 
 function podeAssistir(licao, plano) {
   if (licao.gratis) return true;
-  return plano === 'analista' || plano === 'gestor';
+  return PLANOS_PAGOS.includes(plano);
 }
 
 export default function Curso() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { user } = useAuth();
   const curso = CURSOS.find(c => c.id === id);
   const plano = getPlano();
-  const [progresso, setProgresso] = useState(getProgresso());
+
+  // progresso: { [aula_id]: true }
+  const [progresso, setProgresso] = useState(getProgressoLocal());
+  const [loadingProgresso, setLoadingProgresso] = useState(false);
   const [licaoAtiva, setLicaoAtiva] = useState(null);
   const [modulosAbertos, setModulosAbertos] = useState({ 0: true });
   const [showUpgrade, setShowUpgrade] = useState(false);
+
+  // Video progress simulation ref (tracks "watched" percentage)
+  const videoTimerRef = useRef(null);
+  const autoSavedRef = useRef(false); // tracks if 80% save already fired this session
+  const [videoProgress, setVideoProgress] = useState(0); // 0-100
+  const [videoPlaying, setVideoPlaying] = useState(false);
 
   const todasLicoes = curso ? curso.modulos.flatMap(m => m.licoes) : [];
   const concluidas = todasLicoes.filter(l => progresso[l.id]).length;
   const pct = todasLicoes.length > 0 ? Math.round(concluidas / todasLicoes.length * 100) : 0;
 
+  // ── Carregar progresso do Supabase ──────────────────────────────────────────
+  useEffect(() => {
+    if (!user || !id) return;
+    setLoadingProgresso(true);
+    supabase
+      .from('aula_progresso')
+      .select('aula_id, concluida')
+      .eq('user_id', user.id)
+      .eq('curso_id', id)
+      .then(({ data, error }) => {
+        if (!error && data) {
+          const map = {};
+          data.forEach(r => { if (r.concluida) map[r.aula_id] = true; });
+          // Merge with local (local wins if Supabase table doesn't exist yet)
+          const local = getProgressoLocal();
+          setProgresso({ ...local, ...map });
+        }
+        setLoadingProgresso(false);
+      })
+      .catch(() => setLoadingProgresso(false));
+  }, [user, id]);
+
+  // ── Salvar progresso no Supabase + localStorage ─────────────────────────────
+  const salvarProgresso = useCallback(async (aulaid, feito) => {
+    salvarProgressoLocal(aulaid, feito);
+    setProgresso(p => ({ ...p, [aulaid]: feito }));
+    if (!user) return;
+    try {
+      await supabase
+        .from('aula_progresso')
+        .upsert(
+          { user_id: user.id, aula_id: aulaid, curso_id: id, concluida: feito },
+          { onConflict: 'user_id,aula_id' }
+        );
+    } catch (_) { /* table may not exist yet, local fallback is fine */ }
+  }, [user, id]);
+
+  // ── Abrir na primeira aula disponível ──────────────────────────────────────
   useEffect(() => {
     if (curso) {
-      // Abre na primeira aula gratuita ou na última aula em progresso
-      const emProgresso = todasLicoes.find(l => !progresso[l.id] && (podeAssistir(l, plano)));
+      const emProgresso = todasLicoes.find(l => !progresso[l.id] && podeAssistir(l, plano));
       const primeiraGratis = todasLicoes.find(l => l.gratis);
       setLicaoAtiva(emProgresso || primeiraGratis || todasLicoes[0]);
+      setVideoProgress(0);
+      setVideoPlaying(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Reset autoSaved flag when changing lesson
+  useEffect(() => { autoSavedRef.current = false; setVideoProgress(0); setVideoPlaying(false); }, [licaoAtiva?.id]);
+
+  // ── Simulação de progresso de vídeo ────────────────────────────────────────
+  useEffect(() => {
+    if (!videoPlaying || !licaoAtiva) return;
+    videoTimerRef.current = setInterval(() => {
+      setVideoProgress(prev => {
+        const next = prev + 1;
+        // Auto-mark complete at 80% — use ref to avoid stale closure
+        if (next >= 80 && !autoSavedRef.current) {
+          autoSavedRef.current = true;
+          salvarProgresso(licaoAtiva.id, true);
+        }
+        if (next >= 100) {
+          clearInterval(videoTimerRef.current);
+          setVideoPlaying(false);
+          return 100;
+        }
+        return next;
+      });
+    }, 300);
+    return () => clearInterval(videoTimerRef.current);
+  }, [videoPlaying, licaoAtiva, salvarProgresso]);
 
   if (!curso) {
     return (
@@ -60,17 +140,22 @@ export default function Curso() {
 
   const marcarConcluida = (lid) => {
     salvarProgresso(lid, true);
-    setProgresso(p => ({ ...p, [lid]: true }));
-    // Avança automaticamente para a próxima aula
     const idx = todasLicoes.findIndex(l => l.id === lid);
     if (idx < todasLicoes.length - 1) {
-      setTimeout(() => setLicaoAtiva(todasLicoes[idx + 1]), 500);
+      setTimeout(() => {
+        setLicaoAtiva(todasLicoes[idx + 1]);
+        setVideoProgress(0);
+        setVideoPlaying(false);
+      }, 500);
     }
   };
 
   const irParaLicao = (lic) => {
     if (!podeAssistir(lic, plano)) { setShowUpgrade(true); return; }
     setLicaoAtiva(lic);
+    setVideoProgress(0);
+    setVideoPlaying(false);
+    clearInterval(videoTimerRef.current);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -81,7 +166,7 @@ export default function Curso() {
   return (
     <div style={{ maxWidth:1280, margin:'0 auto', padding:'20px', display:'grid', gridTemplateColumns:'360px 1fr', gap:20, alignItems:'start' }}>
 
-      {/* SIDEBAR — Sumário do curso */}
+      {/* SIDEBAR */}
       <div style={{ display:'flex', flexDirection:'column', gap:12, position:'sticky', top:82 }}>
 
         {/* Cabeçalho do curso */}
@@ -99,9 +184,9 @@ export default function Curso() {
           </div>
         </div>
 
-        {/* Progresso */}
+        {/* Barra de progresso geral */}
         <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 16px' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
             <span style={{ fontSize:12, fontWeight:700, color:'#334155' }}>Seu progresso</span>
             <span style={{ fontSize:13, fontWeight:900, color:curso.cor }}>{pct}%</span>
           </div>
@@ -131,7 +216,7 @@ export default function Curso() {
                 </div>
                 {modulosAbertos[mi] ? <ChevronUp size={14} color="#94a3b8"/> : <ChevronDown size={14} color="#94a3b8"/>}
               </button>
-              {modulosAbertos[mi] && mod.licoes.map((lic, li) => {
+              {modulosAbertos[mi] && mod.licoes.map((lic) => {
                 const ativa = licaoAtiva?.id === lic.id;
                 const feita = progresso[lic.id];
                 const pode = podeAssistir(lic, plano);
@@ -141,15 +226,17 @@ export default function Curso() {
                     onMouseEnter={e=>{ if(!ativa) e.currentTarget.style.background='#f8fafc'; }}
                     onMouseLeave={e=>{ if(!ativa) e.currentTarget.style.background='white'; }}>
                     <div style={{ flexShrink:0 }}>
-                      {feita ? <CheckCircle2 size={16} color="#10b981"/>
-                        : !pode ? <Lock size={14} color="#94a3b8"/>
-                        : <div style={{ width:16, height:16, borderRadius:'50%', border:`2px solid ${ativa?curso.cor:'#cbd5e1'}`, background:ativa?curso.cor:'transparent', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                            {ativa && <div style={{ width:6, height:6, background:'white', borderRadius:'50%' }}/>}
-                          </div>}
+                      {feita
+                        ? <CheckCircle2 size={16} color="#10b981"/>
+                        : !pode
+                          ? <Lock size={14} color="#94a3b8"/>
+                          : <div style={{ width:16, height:16, borderRadius:'50%', border:`2px solid ${ativa?curso.cor:'#cbd5e1'}`, background:ativa?curso.cor:'transparent', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                              {ativa && <div style={{ width:6, height:6, background:'white', borderRadius:'50%' }}/>}
+                            </div>}
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontSize:12, fontWeight:ativa?700:500, color:ativa?curso.cor:'#334155', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {lic.titulo}
+                        {feita && <span style={{ marginRight:4 }}>✅</span>}{lic.titulo}
                       </div>
                       <div style={{ fontSize:10, color:'#94a3b8', marginTop:2, display:'flex', gap:6 }}>
                         <span>{lic.duracao}</span>
@@ -167,31 +254,54 @@ export default function Curso() {
       {/* ÁREA DE CONTEÚDO */}
       <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
 
-        {/* Player de vídeo / Conteúdo */}
+        {/* Breadcrumb */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, color:'#94a3b8' }}>
+          <span style={{ cursor:'pointer', color:'#2563eb', fontWeight:600 }} onClick={()=>nav('/membros')}>Membros</span>
+          <ChevronRight size={13}/>
+          <span style={{ color:'#64748b' }}>{curso.titulo}</span>
+          {licaoAtiva && <><ChevronRight size={13}/><span style={{ color:'#64748b' }}>{licaoAtiva.titulo}</span></>}
+        </div>
+
         {licaoAtiva && (
           <>
             {podeVer ? (
               <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden' }}>
-                {/* Simulação de player */}
-                <div style={{ background:'#0f172a', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}>
+
+                {/* Player simulado com progresso */}
+                <div style={{ background:'#0f172a', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}
+                  onClick={() => { if (podeVer) setVideoPlaying(p => !p); }}>
                   <div style={{ position:'absolute', inset:0, background:`radial-gradient(circle at 30% 40%, ${curso.cor}30 0%, transparent 60%)` }}/>
                   <div style={{ fontSize:72, position:'relative' }}>{curso.emoji}</div>
                   <div style={{ position:'relative', textAlign:'center' }}>
                     <div style={{ fontSize:16, fontWeight:700, color:'white', marginBottom:8 }}>{licaoAtiva.titulo}</div>
                     <div style={{ fontSize:12, color:'#94a3b8' }}>{licaoAtiva.duracao}</div>
                   </div>
-                  <button style={{ position:'relative', width:64, height:64, borderRadius:'50%', background:curso.cor, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 0 8px ${curso.cor}40` }}>
+                  <button style={{ position:'relative', width:64, height:64, borderRadius:'50%', background:curso.cor, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 0 8px ${curso.cor}40` }}
+                    onClick={e => { e.stopPropagation(); setVideoPlaying(p => !p); }}>
                     <Play size={24} color="white" fill="white" style={{ marginLeft:3 }}/>
                   </button>
+                  {/* Barra de progresso de vídeo */}
                   <div style={{ position:'absolute', bottom:16, left:16, right:16, display:'flex', alignItems:'center', gap:10 }}>
-                    <div style={{ flex:1, height:4, background:'rgba(255,255,255,0.15)', borderRadius:4, cursor:'pointer' }}>
-                      <div style={{ width:'0%', height:4, background:curso.cor, borderRadius:4 }}/>
+                    <div style={{ flex:1, height:4, background:'rgba(255,255,255,0.15)', borderRadius:4, cursor:'pointer', position:'relative' }}>
+                      <div style={{ width:`${videoProgress}%`, height:4, background:curso.cor, borderRadius:4, transition:'width 0.3s' }}/>
                     </div>
-                    <span style={{ fontSize:11, color:'#94a3b8', flexShrink:0 }}>0:00 / {licaoAtiva.duracao}</span>
+                    <span style={{ fontSize:11, color:'#94a3b8', flexShrink:0 }}>
+                      {videoPlaying ? `${videoProgress}%` : '0:00'} / {licaoAtiva.duracao}
+                    </span>
                   </div>
+                  {videoPlaying && (
+                    <div style={{ position:'absolute', top:12, right:12, background:'rgba(0,0,0,0.6)', borderRadius:6, padding:'3px 8px', fontSize:10, color:'white', fontWeight:600 }}>
+                      ▶ Assistindo…
+                    </div>
+                  )}
+                  {videoProgress >= 80 && progresso[licaoAtiva.id] && !videoPlaying && (
+                    <div style={{ position:'absolute', top:12, right:12, background:'#10b981', borderRadius:6, padding:'3px 8px', fontSize:10, color:'white', fontWeight:600 }}>
+                      ✅ Concluída automaticamente
+                    </div>
+                  )}
                 </div>
 
-                {/* Conteúdo da aula */}
+                {/* Controles + título */}
                 <div style={{ padding:'22px 24px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14, flexWrap:'wrap', gap:10 }}>
                     <div>
@@ -200,7 +310,7 @@ export default function Curso() {
                       </div>
                       <h2 style={{ margin:0, fontSize:20, fontWeight:900, color:'#0f172a' }}>{licaoAtiva.titulo}</h2>
                     </div>
-                    <div style={{ display:'flex', gap:8 }}>
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                       {licaoAnterior && (
                         <button onClick={()=>irParaLicao(licaoAnterior)}
                           style={{ padding:'7px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', background:'white', color:'#475569', display:'flex', alignItems:'center', gap:5 }}>
@@ -231,7 +341,7 @@ export default function Curso() {
                     <p style={{ margin:0, fontSize:14, color:'#334155', lineHeight:1.8 }}>{licaoAtiva.descricao}</p>
                   </div>
 
-                  {/* Material de apoio simulado */}
+                  {/* Material de apoio */}
                   <div style={{ marginTop:16 }}>
                     <div style={{ fontSize:12, fontWeight:700, color:'#475569', textTransform:'uppercase', marginBottom:10 }}>Material de apoio</div>
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
@@ -267,11 +377,11 @@ export default function Curso() {
               </div>
             )}
 
-            {/* Outras aulas do mesmo módulo */}
+            {/* A seguir neste módulo */}
             <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'16px 20px' }}>
               <div style={{ fontSize:11, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:12 }}>A seguir neste módulo</div>
               <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                {todasLicoes.slice(licaoIdx+1, licaoIdx+4).map((lic,i) => (
+                {todasLicoes.slice(licaoIdx+1, licaoIdx+4).map((lic) => (
                   <button key={lic.id} onClick={()=>irParaLicao(lic)}
                     style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', border:'none', borderRadius:10, background:'#f8fafc', cursor:'pointer', textAlign:'left' }}
                     onMouseEnter={e=>e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e=>e.currentTarget.style.background='#f8fafc'}>

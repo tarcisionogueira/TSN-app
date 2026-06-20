@@ -4,7 +4,10 @@ import { useAuth, AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import TourGuia from './components/TourGuia';
+import ChatSuporte from './components/ChatSuporte';
 import Landing from './pages/Landing';
+import MeusChamados from './pages/MeusChamados';
+import Atendimento from './pages/Atendimento';
 import Termos from './pages/Termos';
 import Privacidade from './pages/Privacidade';
 import Busca from './pages/Busca';
@@ -24,6 +27,7 @@ import Convite from './pages/Convite';
 import EbookPage from './pages/EbookPage';
 import ContratoLink from './pages/ContratoLink';
 import ProdutoLanding from './pages/ProdutoLanding';
+import CancelarAlertas from './pages/CancelarAlertas';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -89,13 +93,20 @@ function PrivateRoute({ children, roles }) {
 }
 
 function MainLayout() {
-  const { ativo, isLoggedIn, inadimplenteDias } = useAuth();
+  const { ativo, isLoggedIn, inadimplenteDias, role, loading } = useAuth();
+  const loc = useLocation();
   if (isLoggedIn && !ativo) return <ContaInativa />;
+  // Role-based home redirect
+  if (isLoggedIn && !loading) {
+    if (role === 'admin' && loc.pathname === '/') return <Navigate to="/admin" replace />;
+    if (['analista','consultor','advogado'].includes(role) && loc.pathname === '/') return <Navigate to="/atendimento" replace />;
+  }
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <Header />
       {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
       {isLoggedIn && <TourGuia />}
+      <ChatSuporte />
       <main style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -109,8 +120,11 @@ function MainLayout() {
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
           <Route path="/membros/curso/:id" element={<PrivateRoute><Curso /></PrivateRoute>} />
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
+          <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
+          <Route path="/atendimento" element={<PrivateRoute roles={['analista','consultor','admin','advogado']}><Atendimento /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />
+          <Route path="/cancelar-alertas" element={<CancelarAlertas />} />
         </Routes>
       </main>
       <Footer />

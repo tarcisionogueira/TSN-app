@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, CheckCircle2, BookOpen, Star,
-  ChevronRight, Crown, Search,
+  ChevronRight, Crown, Search, AlertTriangle,
 } from 'lucide-react';
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
 import { supabase } from '../utils/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
-// Progresso salvo no localStorage
-function getProgresso() {
+// Progresso salvo no localStorage (fallback)
+function getProgressoLocal() {
   try { return JSON.parse(localStorage.getItem('tsn_progresso') || '{}'); } catch { return {}; }
 }
 
@@ -22,16 +23,42 @@ function podeAssistir(licao, planAtual) {
   return planAtual === 'assessorado' || planAtual === 'clube';
 }
 
+// Placeholder de capa de ebook com gradiente e inicial
+function EbookCover({ titulo }) {
+  const colors = [
+    ['#6366f1','#4f46e5'],
+    ['#0ea5e9','#0284c7'],
+    ['#10b981','#059669'],
+    ['#f59e0b','#d97706'],
+    ['#ef4444','#dc2626'],
+    ['#8b5cf6','#7c3aed'],
+  ];
+  const idx = titulo ? titulo.charCodeAt(0) % colors.length : 0;
+  const [c1, c2] = colors[idx];
+  const letra = titulo?.[0]?.toUpperCase() || '?';
+  return (
+    <div style={{ width:'100%', aspectRatio:'2/3', background:`linear-gradient(135deg,${c1},${c2})`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8 }}>
+      <div style={{ fontSize:48, fontWeight:900, color:'white', lineHeight:1 }}>{letra}</div>
+      <div style={{ fontSize:9, color:'rgba(255,255,255,0.7)', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>eBook</div>
+    </div>
+  );
+}
+
 export default function Membros() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const [categoria, setCategoria] = useState('Todos');
   const [busca, setBusca] = useState('');
-  const [progresso, setProgresso] = useState(getProgresso());
+  const [progresso, setProgresso] = useState(getProgressoLocal());
   const [plano, setPlano] = useState(getPlano());
   const [showPlanos, setShowPlanos] = useState(false);
+  const [showCancelar, setShowCancelar] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [cancelMsg, setCancelMsg] = useState('');
   const [cursos, setCursos] = useState([]);
   const [ebooks, setEbooks] = useState([]);
 
+  // Carregar cursos, aulas e ebooks
   useEffect(() => {
     async function fetchData() {
       const { data: cs } = await supabase.from('cursos_admin').select('*').eq('ativo', true).order('ordem');
@@ -55,6 +82,23 @@ export default function Membros() {
     fetchData();
   }, []);
 
+  // Carregar progresso do Supabase (merge com local)
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('aula_progresso')
+      .select('aula_id, concluida')
+      .eq('user_id', user.id)
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          const map = {};
+          data.forEach(r => { if (r.concluida) map[r.aula_id] = true; });
+          setProgresso(prev => ({ ...prev, ...map }));
+        }
+      })
+      .catch(() => {});
+  }, [user]);
+
   const cursosFiltrados = cursos.filter(c => {
     const matchCat = categoria === 'Todos' || c.categoria === categoria;
     const matchBusca = !busca || c.titulo.toLowerCase().includes(busca.toLowerCase()) || (c.descricao || '').toLowerCase().includes(busca.toLowerCase());
@@ -64,6 +108,17 @@ export default function Membros() {
   const totalAulas = cursos.reduce((s, c) => s + c.aulas, 0);
   const aulasConcluidas = Object.keys(progresso).filter(k => progresso[k]).length;
   const cursosDestaques = cursos.filter(c => c.destaque);
+
+  // Calcular pct por curso para "continuar assistindo"
+  const cursosComPct = cursos.map(c => {
+    const allLicoes = c.modulos.flatMap(m => m.licoes);
+    const total = allLicoes.length;
+    const feitas = allLicoes.filter(l => progresso[l.id]).length;
+    const pct = total > 0 ? Math.round(feitas / total * 100) : 0;
+    return { ...c, pct, feitas, totalLicoes: total };
+  });
+
+  const cursosEmProgresso = cursosComPct.filter(c => c.pct > 0 && c.pct < 100);
 
   const ativarPlano = (p) => {
     localStorage.setItem('tsn_plano_membro', p);
@@ -108,13 +163,52 @@ export default function Membros() {
                 </div>
               ))}
             </div>
-            <button onClick={()=>setShowPlanos(true)}
-              style={{ marginLeft:'auto', padding:'11px 22px', background:'#6366f1', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
-              <Crown size={15}/> {plano==='explorador'?'Fazer upgrade':'Gerenciar plano'}
-            </button>
+            <div style={{ marginLeft:'auto', display:'flex', gap:10, alignItems:'center' }}>
+              {plano !== 'explorador' && (
+                <button onClick={()=>setShowCancelar(true)}
+                  style={{ padding:'11px 16px', background:'transparent', color:'#ef4444', border:'1px solid #ef444460', borderRadius:10, fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                  Cancelar plano
+                </button>
+              )}
+              <button onClick={()=>setShowPlanos(true)}
+                style={{ padding:'11px 22px', background:'#6366f1', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
+                <Crown size={15}/> {plano==='explorador'?'Fazer upgrade':'Gerenciar plano'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* ── Continuar assistindo ─────────────────────────────────────────────── */}
+      {cursosEmProgresso.length > 0 && (
+        <div style={{ marginBottom:28 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:'#2563eb', textTransform:'uppercase', letterSpacing:1, marginBottom:14, display:'flex', alignItems:'center', gap:6 }}>
+            <Play size={13} fill="#2563eb"/> Continuar assistindo
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))', gap:14 }}>
+            {cursosEmProgresso.map(c => (
+              <div key={c.id} onClick={()=>nav(`/membros/curso/${c.id}`)}
+                style={{ background:'white', borderRadius:16, border:'1px solid #dbeafe', padding:'16px 18px', cursor:'pointer', display:'flex', gap:14, alignItems:'center', boxShadow:'0 2px 8px rgba(37,99,235,0.08)', transition:'all 0.2s' }}
+                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 8px 24px rgba(37,99,235,0.15)'; e.currentTarget.style.transform='translateY(-2px)'; }}
+                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.08)'; e.currentTarget.style.transform='none'; }}>
+                {/* Mini capa */}
+                <div style={{ width:56, height:56, borderRadius:12, background:`linear-gradient(135deg,${c.cor},${c.cor}cc)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, flexShrink:0 }}>
+                  {c.emoji}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:800, fontSize:14, color:'#0f172a', marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.titulo}</div>
+                  {/* Barra de progresso */}
+                  <div style={{ height:6, background:'#f1f5f9', borderRadius:6, overflow:'hidden', marginBottom:4 }}>
+                    <div style={{ height:6, background:c.cor, width:`${c.pct}%`, borderRadius:6, transition:'width 0.4s' }}/>
+                  </div>
+                  <div style={{ fontSize:11, color:'#64748b' }}>{c.pct}% concluído · {c.feitas} de {c.totalLicoes} aulas</div>
+                </div>
+                <ChevronRight size={16} color={c.cor}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Destaques */}
       {cursosDestaques.length > 0 && (
@@ -169,16 +263,16 @@ export default function Membros() {
       {/* Grade de cursos */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
         {cursosFiltrados.map(c => {
-          const totalLicoes = c.modulos.flatMap(m=>m.licoes).length;
-          const concluidas = c.modulos.flatMap(m=>m.licoes).filter(l=>progresso[l.id]).length;
-          const pct = totalLicoes > 0 ? Math.round(concluidas/totalLicoes*100) : 0;
+          const cp = cursosComPct.find(x => x.id === c.id) || c;
+          const pct = cp.pct ?? 0;
+          const concluidas = cp.feitas ?? 0;
           return (
             <div key={c.id} onClick={()=>nav(`/membros/curso/${c.id}`)}
               style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden', cursor:'pointer', transition:'all 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' }}
               onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.12)'; e.currentTarget.style.transform='translateY(-3px)'; }}
               onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.transform='none'; }}>
 
-              {/* Capa / Thumbnail */}
+              {/* Capa */}
               {c.capa_url ? (
                 <img src={c.capa_url} alt={c.titulo}
                   style={{ width:'100%', aspectRatio:'2/3', objectFit:'cover', display:'block', background:'#f1f5f9' }}
@@ -199,8 +293,11 @@ export default function Membros() {
 
               <div style={{ padding:'12px 14px' }}>
                 <div style={{ fontWeight:800, fontSize:13, color:'#0f172a', lineHeight:1.4 }}>{c.titulo}</div>
-                {concluidas > 0 && (
-                  <div style={{ fontSize:10, color:'#10b981', fontWeight:700, marginTop:4 }}>{pct}% concluído</div>
+                {concluidas > 0 && pct < 100 && (
+                  <div style={{ fontSize:10, color:'#2563eb', fontWeight:700, marginTop:4 }}>{pct}% concluído</div>
+                )}
+                {pct === 100 && (
+                  <div style={{ fontSize:10, color:'#10b981', fontWeight:700, marginTop:4 }}>✅ Concluído</div>
                 )}
               </div>
             </div>
@@ -223,9 +320,9 @@ export default function Membros() {
                 {eb.capa_url ? (
                   <img src={eb.capa_url} alt={eb.titulo}
                     style={{ width:'100%', aspectRatio:'2/3', objectFit:'cover', display:'block', background:'#f1f5f9' }}
-                    onError={e=>{ e.currentTarget.style.display='none'; }}/>
+                    onError={e=>{ e.currentTarget.style.display='none'; e.currentTarget.insertAdjacentHTML('afterend',''); }}/>
                 ) : (
-                  <div style={{ width:'100%', aspectRatio:'2/3', background:'linear-gradient(135deg,#6366f1,#4f46e5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:44 }}>📖</div>
+                  <EbookCover titulo={eb.titulo}/>
                 )}
                 <div style={{ padding:'10px 12px' }}>
                   <div style={{ fontWeight:800, fontSize:12, color:'#0f172a', lineHeight:1.4 }}>{eb.titulo}</div>
@@ -291,6 +388,57 @@ export default function Membros() {
             <p style={{ margin:'14px 0 0', fontSize:11, color:'#94a3b8', textAlign:'center' }}>
               Em produção, pagamentos serão processados via Asaas. Por ora, selecione para simular o acesso.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de cancelamento */}
+      {showCancelar && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={e => e.target === e.currentTarget && setShowCancelar(false)}>
+          <div style={{ background:'white', borderRadius:16, padding:28, width:'100%', maxWidth:440, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+            {cancelMsg ? (
+              <div style={{ textAlign:'center', padding:'20px 0' }}>
+                <div style={{ fontSize:36 }}>{cancelMsg.includes('Erro') ? '❌' : '✅'}</div>
+                <p style={{ fontWeight:700, color:'#0f172a', marginTop:12 }}>{cancelMsg}</p>
+                <button onClick={() => setShowCancelar(false)} style={{ marginTop:16, padding:'10px 24px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontWeight:700, cursor:'pointer' }}>Fechar</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <AlertTriangle size={24} color="#ef4444" />
+                  <h3 style={{ margin:0, fontSize:18, fontWeight:800, color:'#0f172a' }}>Cancelar plano</h3>
+                </div>
+                <p style={{ fontSize:14, color:'#475569', marginBottom:8, lineHeight:1.6 }}>
+                  Ao cancelar, você perde o acesso aos recursos do plano <strong>{PLANOS[plano]?.nome}</strong> ao final do período atual.
+                </p>
+                <p style={{ fontSize:13, color:'#64748b', marginBottom:20, lineHeight:1.6 }}>
+                  Tem certeza? Se preferir, pode fazer o downgrade para um plano menor.
+                </p>
+                <div style={{ display:'flex', gap:10 }}>
+                  <button onClick={() => setShowCancelar(false)}
+                    style={{ flex:1, padding:'11px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', color:'#475569', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                    Manter plano
+                  </button>
+                  <button disabled={cancelando} onClick={async () => {
+                    if (!user?.email) return;
+                    setCancelando(true);
+                    try {
+                      const r = await fetch('/api/asaas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'cancelar_assinatura', email: user.email }) });
+                      const d = await r.json();
+                      if (!r.ok) throw new Error(d.error || 'Erro ao cancelar');
+                      setCancelMsg('Plano cancelado com sucesso. Você mantém o acesso até o fim do período pago.');
+                    } catch(e) {
+                      setCancelMsg('Erro: ' + e.message);
+                    }
+                    setCancelando(false);
+                  }}
+                    style={{ flex:1, padding:'11px', border:'none', borderRadius:8, background:'#ef4444', color:'white', fontWeight:700, fontSize:13, cursor:'pointer', opacity: cancelando ? 0.6 : 1 }}>
+                    {cancelando ? 'Cancelando…' : 'Sim, cancelar'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

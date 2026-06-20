@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
@@ -39,7 +39,11 @@ export default function Busca() {
   const plano = role || 'explorador';
   const canSite    = user && ROLES_SITE.includes(role);
   const canAnalise = user && ROLES_ANALISE.includes(role);
-  const [filtros, setFiltros] = useState({ tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] });
+  const FILTROS_INICIAL = { tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] };
+  const [filtros, setFiltros] = useState(FILTROS_INICIAL);
+  const [filtrosSalvos, setFiltrosSalvos] = useState([]);
+  const [nomeFiltro, setNomeFiltro] = useState('');
+  const [showSalvarModal, setShowSalvarModal] = useState(false);
   const [buscaCidade, setBuscaCidade] = useState('');
   const [dropdownIndex, setDropdownIndex] = useState(-1);
   const [resultados, setResultados] = useState([]);
@@ -48,37 +52,77 @@ export default function Busca() {
   const [buscaFeita, setBuscaFeita] = useState(false);
   const [showFiltros, setShowFiltros] = useState(true);
   const [selecionados, setSelecionados] = useState([]);
+  const [sortBy, setSortBy] = useState('desconto_desc');
+  const [pagina, setPagina] = useState(1);
+  const [totalResultados, setTotalResultados] = useState(0);
+  const POR_PAGINA = 50;
+
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('filtros_salvos').select('*').eq('user_id', user.id).order('criado_em', { ascending: false })
+      .then(({ data }) => setFiltrosSalvos(data || []));
+  }, [user?.id]);
 
   const up = (name, val) => setFiltros(p => ({ ...p, [name]: val }));
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x=>x!==v) : [...filtros.pagamento, v]);
   const toggleSelecionado = (id) => setSelecionados(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
   const isSelecionado = (id) => selecionados.includes(id);
 
-  const buscar = async () => {
+  // Mapeamento: valor do checkbox → valor(es) no banco
+  const PAGAMENTO_DB = { aVista: ['a_vista','aVista','À Vista'], financiado: ['financiado','Financiado'], hipotecado: ['hipotecado','Hipotecado'] };
+
+  const limparFiltros = () => { setFiltros(FILTROS_INICIAL); setBuscaCidade(''); setSelecionados([]); setPagina(1); };
+
+  async function salvarFiltroAtual() {
+    if (!nomeFiltro.trim() || !user?.id) return;
+    const { data } = await supabase.from('filtros_salvos').insert({
+      user_id: user.id, nome: nomeFiltro.trim(), filtros,
+    }).select().single();
+    if (data) setFiltrosSalvos(p => [data, ...p]);
+    setNomeFiltro(''); setShowSalvarModal(false);
+  }
+
+  async function deletarFiltro(id) {
+    await supabase.from('filtros_salvos').delete().eq('id', id);
+    setFiltrosSalvos(p => p.filter(f => f.id !== id));
+  }
+
+  const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo) => {
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
-    const filtrosApi = { ...filtros, cidade: filtros.cidades.join(', ') };
-    saveBuscaRecente(filtrosApi);
-    try {
-      // 1. Tenta buscar do banco Supabase (scraper diário)
-      let query = supabase
-        .from('imoveis_leilao')
-        .select('*')
-        .eq('ativo', true)
-        .order('criado_em', { ascending: false })
-        .limit(50);
 
-      if (filtros.estado) query = query.eq('estado', filtros.estado);
-      // ilike para cidades (CEF armazena em maiúsculas, dropdown usa Title Case)
-      if (filtros.cidades.length > 0) {
-        query = query.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
+    const buildQuery = (base) => {
+      let q = base.eq('ativo', true);
+      if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
+      if (filtrosAtivos.cidades?.length > 0) {
+        const orParts = filtrosAtivos.cidades.map(c => `cidade.ilike.${c}`).join(',');
+        q = q.or(orParts);
       }
-      if (filtros.tipo) query = query.eq('tipo', filtros.tipo);
-      if (filtros.modalidade) query = query.eq('modalidade', filtros.modalidade);
-      if (filtros.valorMin) query = query.gte('valor_minimo', Number(filtros.valorMin));
-      if (filtros.valorMax) query = query.lte('valor_minimo', Number(filtros.valorMax));
-      if (filtros.pagamento?.length > 0) query = query.in('forma_pagamento', filtros.pagamento);
+      if (filtrosAtivos.tipo) q = q.eq('tipo', filtrosAtivos.tipo);
+      if (filtrosAtivos.modalidade) q = q.eq('modalidade', filtrosAtivos.modalidade);
+      if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(filtrosAtivos.valorMin));
+      if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(filtrosAtivos.valorMax));
+      if (filtrosAtivos.pagamento?.length > 0) {
+        const dbVals = filtrosAtivos.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]);
+        q = q.in('forma_pagamento', dbVals);
+      }
+      return q;
+    };
 
-      const { data: dbData, error: dbError } = await query;
+    const offset = (paginaAlvo - 1) * POR_PAGINA;
+    const [coluna, dir] = sortAtivo === 'desconto_desc' ? ['desconto_percentual', false]
+      : sortAtivo === 'desconto_asc' ? ['desconto_percentual', true]
+      : sortAtivo === 'valor_asc'    ? ['valor_minimo', true]
+      : ['valor_minimo', false];
+
+    try {
+      const [{ count }, { data: dbData, error: dbError }] = await Promise.all([
+        buildQuery(supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true })),
+        buildQuery(supabase.from('imoveis_leilao').select('*'))
+          .order(coluna, { ascending: dir, nullsFirst: false })
+          .range(offset, offset + POR_PAGINA - 1),
+      ]);
+
+      setTotalResultados(count || 0);
 
       const mapeados = (!dbError && dbData) ? dbData.map(im => ({
         id: im.id,
@@ -109,11 +153,41 @@ export default function Busca() {
         numeroProcesso: im.numero_processo,
       })) : [];
       setResultados(mapeados);
+
+      // Silent tracking — fire and forget
+      try {
+        const sid = sessionStorage.getItem('tsn_session_id') || (() => { const s = Math.random().toString(36).slice(2); sessionStorage.setItem('tsn_session_id', s); return s; })();
+        supabase.from('busca_historico').insert({
+          user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos,
+          resultados_count: count || 0, cidade: filtrosAtivos.cidades?.join(', ') || null,
+          estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipo || null,
+          valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
+          valor_max: filtrosAtivos.valorMax ? Number(filtrosAtivos.valorMax) : null,
+          pagamento_tipos: filtrosAtivos.pagamento?.length > 0 ? filtrosAtivos.pagamento : null,
+          sort_usado: sortAtivo,
+        }).then(() => {}).catch(() => {});
+      } catch (_) {}
+
+      if (user?.id && (filtrosAtivos.estado || filtrosAtivos.cidades?.length > 0)) {
+        try {
+          supabase.from('alertas_email').upsert({
+            user_id: user.id, filtros: filtrosAtivos,
+            descricao: [filtrosAtivos.cidades?.join(', ') || filtrosAtivos.estado, filtrosAtivos.tipo].filter(Boolean).join(' · ') || 'Preferência geral',
+            ativo: true,
+          }, { onConflict: 'user_id' }).then(() => {}).catch(() => {});
+        } catch (_) {}
+      }
     } catch (e) {
       setErro('Erro na busca. Tente novamente.');
       console.error(e);
     }
     setLoading(false);
+  };
+
+  const buscar = () => {
+    setPagina(1);
+    saveBuscaRecente({ ...filtros, cidade: filtros.cidades.join(', ') });
+    buscarPagina(1, filtros, sortBy);
   };
 
   const irParaAnalise = (im) => {
@@ -155,17 +229,10 @@ export default function Busca() {
     nav('/painel');
   };
 
-  // Filtro client-side sobre resultados
-  const resultadosFiltrados = useMemo(() => {
-    return resultados.filter(im => {
-      if (filtros.tipo && im.tipo !== filtros.tipo) return false;
-      if (filtros.modalidade && im.modalidade !== filtros.modalidade) return false;
-      if (filtros.valorMin && im.valorMinimo < Number(filtros.valorMin)) return false;
-      if (filtros.valorMax && im.valorMinimo > Number(filtros.valorMax)) return false;
-      if (filtros.pagamento?.length > 0 && !filtros.pagamento.some(p => im.pagamento?.includes(p))) return false;
-      return true;
-    });
-  }, [resultados, filtros]);
+  // Resultados já chegam filtrados/ordenados/paginados do servidor
+  const resultadosFiltrados = resultados;
+  const resultadosPagina = resultados;
+  const totalPaginas = Math.max(1, Math.ceil(totalResultados / POR_PAGINA));
 
   const fmt0 = (v) => (v||0).toLocaleString('pt-BR', { minimumFractionDigits:0 });
   const desconto = (im) => im.valorAvaliacao>0 ? Math.round((1-im.valorMinimo/im.valorAvaliacao)*100) : 0;
@@ -302,6 +369,10 @@ export default function Busca() {
                 style={{ width:'100%', padding:'11px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                 {loading ? <><Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...</> : <><Search size={14}/> Buscar Leilões</>}
               </button>
+              <button onClick={limparFiltros}
+                style={{ width:'100%', padding:'9px', background:'none', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                ✕ Limpar filtros
+              </button>
             </div>
           )}
         </div>
@@ -311,17 +382,54 @@ export default function Busca() {
       {/* CONTEÚDO PRINCIPAL */}
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
+        {/* Filtros Salvos */}
+        {user?.id && (
+          <div style={{ background: 'white', borderRadius: 12, padding: '10px 14px', marginBottom: 0, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>Filtros salvos:</span>
+            {filtrosSalvos.map(filtro => (
+              <span key={filtro.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                <span onClick={() => setFiltros(filtro.filtros)}>{filtro.nome}</span>
+                <button onClick={() => deletarFiltro(filtro.id)} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center' }}>×</button>
+              </span>
+            ))}
+            {!showSalvarModal && (
+              <button onClick={() => setShowSalvarModal(true)} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                + Salvar filtros atuais
+              </button>
+            )}
+            {showSalvarModal && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input value={nomeFiltro} onChange={e => setNomeFiltro(e.target.value)}
+                  placeholder="Nome do filtro..." autoFocus
+                  onKeyDown={e => e.key === 'Enter' && salvarFiltroAtual()}
+                  style={{ padding: '4px 8px', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, outline: 'none', width: 140 }} />
+                <button onClick={salvarFiltroAtual} style={{ padding: '4px 10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Salvar</button>
+                <button onClick={() => { setShowSalvarModal(false); setNomeFiltro(''); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}>×</button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Header de resultados */}
         <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10 }}>
           <div>
             <h1 style={{ margin:0, fontSize:18, fontWeight:900, color:'#0f172a' }}>Busca de Imóveis em Leilão</h1>
             <p style={{ margin:'4px 0 0', fontSize:12, color:'#64748b' }}>
               {loading ? 'Buscando leilões...'
-                : buscaFeita ? `${resultadosFiltrados.length} imóvel(is) encontrado(s)`
+                : buscaFeita ? `${totalResultados} imóvel(is) encontrado(s) · página ${pagina} de ${totalPaginas}`
                 : 'Configure os filtros e clique em Buscar Leilões'}
             </p>
           </div>
-          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+            {buscaFeita && !loading && (
+              <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); setPagina(1); buscarPagina(1, filtros, e.target.value); }}
+                style={{ padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:600, color:'#334155', background:'white', cursor:'pointer' }}>
+                <option value="desconto_desc">Maior desconto primeiro</option>
+                <option value="desconto_asc">Menor desconto primeiro</option>
+                <option value="valor_asc">Menor valor primeiro</option>
+                <option value="valor_desc">Maior valor primeiro</option>
+              </select>
+            )}
             {selecionados.length>0 && (
               <button onClick={()=>irParaAnalise(resultados.find(r=>r.id===selecionados[0]))}
                 style={{ padding:'8px 16px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
@@ -331,7 +439,7 @@ export default function Busca() {
             {buscaFeita&&!loading && (
               <button onClick={buscar}
                 style={{ padding:'7px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-                <RefreshCw size={12}/> Nova busca
+                <RefreshCw size={12}/> Atualizar
               </button>
             )}
             {loading && <Loader2 size={18} color="#2563eb" style={{animation:'spin 1s linear infinite'}}/>}
@@ -380,6 +488,7 @@ export default function Busca() {
         {/* Resultados em lista */}
         {!loading && resultadosFiltrados.length>0 && (
           <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden' }}>
+
             {/* Desktop: header tabela */}
             {!isMobile && (
               <div style={{ display:'grid', gridTemplateColumns:'36px 1fr 110px 120px 120px 72px 90px 190px', gap:0, background:'#f8fafc', borderBottom:'2px solid #e2e8f0', padding:'9px 16px', alignItems:'center' }}>
@@ -389,7 +498,7 @@ export default function Busca() {
               </div>
             )}
 
-            {resultadosFiltrados.map((im,i)=>{
+            {resultadosPagina.map((im,i)=>{
               const desc = desconto(im);
               const sel = isSelecionado(im.id);
 
@@ -577,8 +686,32 @@ export default function Busca() {
           </div>
         )}
 
+        {/* Paginação */}
+        {!loading && totalPaginas > 1 && (
+          <div style={{ background:'white', borderRadius:12, border:'1px solid #e2e8f0', padding:'12px 18px', display:'flex', justifyContent:'center', alignItems:'center', gap:8 }}>
+            <button onClick={()=>{ const p=Math.max(1,pagina-1); setPagina(p); buscarPagina(p, filtros, sortBy); }} disabled={pagina===1}
+              style={{ padding:'6px 14px', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:pagina===1?'not-allowed':'pointer', background:pagina===1?'#f8fafc':'white', color:pagina===1?'#cbd5e1':'#334155' }}>
+              ← Anterior
+            </button>
+            {Array.from({length:totalPaginas},(_,i)=>i+1).filter(n=>n===1||n===totalPaginas||Math.abs(n-pagina)<=2).reduce((acc,n,idx,arr)=>{
+              if(idx>0&&n-arr[idx-1]>1) acc.push('…');
+              acc.push(n); return acc;
+            },[]).map((n,i)=>
+              n==='…' ? <span key={'e'+i} style={{color:'#94a3b8',fontSize:12}}>…</span>
+              : <button key={n} onClick={()=>{ setPagina(n); buscarPagina(n, filtros, sortBy); }}
+                  style={{ padding:'6px 11px', border:`1px solid ${n===pagina?'#2563eb':'#e2e8f0'}`, borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer', background:n===pagina?'#2563eb':'white', color:n===pagina?'white':'#334155' }}>
+                  {n}
+                </button>
+            )}
+            <button onClick={()=>{ const p=Math.min(totalPaginas,pagina+1); setPagina(p); buscarPagina(p, filtros, sortBy); }} disabled={pagina===totalPaginas}
+              style={{ padding:'6px 14px', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:pagina===totalPaginas?'not-allowed':'pointer', background:pagina===totalPaginas?'#f8fafc':'white', color:pagina===totalPaginas?'#cbd5e1':'#334155' }}>
+              Próxima →
+            </button>
+          </div>
+        )}
+
         {/* Sem resultados */}
-        {buscaFeita && !loading && resultadosFiltrados.length===0 && !erro && (
+        {buscaFeita && !loading && totalResultados===0 && !erro && (
           <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:14, border:'1px solid #e2e8f0' }}>
             <Search size={40} color="#94a3b8" style={{ margin:'0 auto 16px' }}/>
             <h3 style={{ color:'#334155', fontWeight:800, margin:'0 0 8px' }}>Nenhum resultado</h3>

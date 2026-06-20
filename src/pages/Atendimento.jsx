@@ -1,0 +1,334 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { MessageCircle, CheckCircle2, Send, Paperclip, Bot, Loader2, UserCheck, RefreshCw, AlertCircle, Clock, User } from 'lucide-react';
+import { supabase } from '../utils/supabase';
+import { useAuth } from '../contexts/AuthContext';
+
+const STATUS_CFG = {
+  aberto:         { label: 'Aberto',         cor: '#10b981', bg: '#d1fae5' },
+  em_atendimento: { label: 'Em atendimento', cor: '#2563eb', bg: '#dbeafe' },
+  finalizado:     { label: 'Finalizado',     cor: '#64748b', bg: '#f1f5f9' },
+};
+
+export default function Atendimento() {
+  const { user } = useAuth();
+  const [chamados, setChamados] = useState([]);
+  const [filtro, setFiltro] = useState('pendentes');
+  const [chamadoAtivo, setChamadoAtivo] = useState(null);
+  const [mensagens, setMensagens] = useState([]);
+  const [texto, setTexto] = useState('');
+  const [anexos, setAnexos] = useState([]);
+  const [enviando, setEnviando] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState('');
+  const fileRef = useRef();
+  const msgEndRef = useRef();
+
+  const nomeAtendente = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Atendente';
+
+  useEffect(() => { carregarChamados(); }, [filtro]);
+  useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
+
+  // Realtime: novos chamados e atualizações
+  useEffect(() => {
+    const ch = supabase.channel('fila-suporte')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chamados' }, () => carregarChamados())
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [filtro]);
+
+  // Realtime: mensagens do chamado ativo
+  useEffect(() => {
+    if (!chamadoAtivo) return;
+    const ch = supabase.channel(`atend-msg-${chamadoAtivo.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chamados_mensagens', filter: `chamado_id=eq.${chamadoAtivo.id}` },
+        p => setMensagens(prev => prev.find(m => m.id === p.new.id) ? prev : [...prev, p.new]))
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [chamadoAtivo?.id]);
+
+  async function carregarChamados() {
+    setLoading(true);
+    let q = supabase.from('chamados').select('*').order('criado_em', { ascending: true });
+    if (filtro === 'pendentes') q = q.in('status', ['aberto', 'em_atendimento']);
+    else if (filtro !== 'todos') q = q.eq('status', filtro);
+    const { data, error } = await q;
+    if (!error) {
+      const ordem = { aberto: 0, em_atendimento: 1, finalizado: 2 };
+      const sorted = (data || []).sort((a, b) => (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9));
+      setChamados(sorted);
+    }
+    setLoading(false);
+  }
+
+  async function abrirChamado(c) {
+    setChamadoAtivo(c);
+    const { data } = await supabase.from('chamados_mensagens').select('*')
+      .eq('chamado_id', c.id).order('criado_em', { ascending: true });
+    setMensagens(data || []);
+  }
+
+  async function assumirChamado() {
+    if (!chamadoAtivo) return;
+    await supabase.from('chamados').update({
+      status: 'em_atendimento', atendente_id: user.id,
+      atendente_nome: nomeAtendente, atualizado_em: new Date().toISOString(),
+    }).eq('id', chamadoAtivo.id);
+    setChamadoAtivo(p => ({ ...p, status: 'em_atendimento', atendente_id: user.id, atendente_nome: nomeAtendente }));
+  }
+
+  async function finalizarChamado() {
+    if (!chamadoAtivo || !window.confirm(`Finalizar o chamado "${chamadoAtivo.titulo}"?`)) return;
+    await supabase.from('chamados').update({ status: 'finalizado', atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
+    setChamadoAtivo(p => ({ ...p, status: 'finalizado' }));
+  }
+
+  async function enviarMensagem() {
+    if ((!texto.trim() && !anexos.length) || !chamadoAtivo) return;
+    setEnviando(true);
+    const { data: msg } = await supabase.from('chamados_mensagens').insert({
+      chamado_id: chamadoAtivo.id, autor_id: user.id, autor_nome: nomeAtendente,
+      autor_tipo: 'atendente', conteudo: texto || '[anexo]', anexos,
+    }).select().single();
+    if (msg) setMensagens(prev => [...prev, msg]);
+    await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
+    setTexto(''); setAnexos([]);
+    setEnviando(false);
+  }
+
+  function handlePaste(e) {
+    for (const item of e.clipboardData?.items || []) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const reader = new FileReader();
+        reader.onload = ev => setAnexos(p => [...p, { tipo: 'imagem', url: ev.target.result, nome: 'screenshot.png' }]);
+        reader.readAsDataURL(item.getAsFile());
+      }
+    }
+  }
+
+  function handleFile(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setAnexos(p => [...p, { tipo: file.type.startsWith('image/') ? 'imagem' : 'arquivo', url: ev.target.result, nome: file.name }]);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  const fmtData = d => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+  const fmtHora = d => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const cont = s => chamados.filter(c => c.status === s).length;
+  const buscaLower = busca.toLowerCase();
+  const chamadosFiltrados = busca.trim()
+    ? chamados.filter(c =>
+        (c.user_nome || '').toLowerCase().includes(buscaLower) ||
+        (c.user_email || '').toLowerCase().includes(buscaLower) ||
+        (c.atendente_nome || '').toLowerCase().includes(buscaLower) ||
+        (c.titulo || '').toLowerCase().includes(buscaLower)
+      )
+    : chamados;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '310px 1fr', gap: 20, maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start' }}>
+
+      {/* ===== SIDEBAR — FILA ===== */}
+      <div>
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+
+          {/* Título */}
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>Fila de Atendimento</span>
+            <button onClick={carregarChamados} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4, display: 'flex' }} title="Atualizar">
+              <RefreshCw size={14} />
+            </button>
+          </div>
+
+          {/* Resumo por status */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #f1f5f9' }}>
+            {[['aberto', 'Abertos', '#10b981'], ['em_atendimento', 'Em at.', '#2563eb'], ['finalizado', 'Final.', '#94a3b8']].map(([s, l, c]) => (
+              <div key={s} style={{ padding: '10px 6px', textAlign: 'center', borderRight: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: c }}>{cont(s)}</div>
+                <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Filtros */}
+          <div style={{ padding: '8px 12px', display: 'flex', gap: 5, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+            {[['pendentes', 'Pendentes'], ['todos', 'Todos'], ['finalizado', 'Finalizados']].map(([k, l]) => (
+              <button key={k} onClick={() => setFiltro(k)}
+                style={{ padding: '4px 12px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: filtro === k ? '#0f172a' : '#f1f5f9', color: filtro === k ? 'white' : '#64748b' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {/* Busca por cliente ou atendente */}
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar por cliente ou atendente..."
+              style={{ width: '100%', padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          {/* Lista de chamados */}
+          <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+            {loading ? (
+              <div style={{ padding: 24, textAlign: 'center' }}>
+                <Loader2 size={20} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
+              </div>
+            ) : chamadosFiltrados.length === 0 ? (
+              <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Nenhum chamado</div>
+            ) : chamadosFiltrados.map(c => {
+              const s = STATUS_CFG[c.status] || STATUS_CFG.aberto;
+              const ativo = chamadoAtivo?.id === c.id;
+              return (
+                <button key={c.id} onClick={() => abrirChamado(c)}
+                  style={{ width: '100%', padding: '11px 14px', border: 'none', background: ativo ? '#eff6ff' : 'none', textAlign: 'left', cursor: 'pointer', borderBottom: '1px solid #f8fafc', borderLeft: ativo ? '3px solid #2563eb' : '3px solid transparent', transition: 'background 0.1s' }}
+                  onMouseEnter={e => { if (!ativo) e.currentTarget.style.background = '#f8fafc'; }}
+                  onMouseLeave={e => { if (!ativo) e.currentTarget.style.background = 'none'; }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', lineHeight: 1.3, flex: 1, marginRight: 6 }}>{c.titulo}</span>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: s.bg, color: s.cor, whiteSpace: 'nowrap' }}>{s.label}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>
+                    <User size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />
+                    {c.user_nome || c.user_email?.split('@')[0]}
+                    {' · '}{fmtData(c.criado_em)}
+                  </div>
+                  {c.atendente_nome && (
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Atend.: {c.atendente_nome}</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ===== PAINEL PRINCIPAL — CONVERSA ===== */}
+      {!chamadoAtivo ? (
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, padding: 60 }}>
+          <MessageCircle size={48} color="#e2e8f0" />
+          <p style={{ color: '#94a3b8', marginTop: 16, fontSize: 14 }}>Selecione um chamado na fila</p>
+        </div>
+      ) : (
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* Cabeçalho do chamado ativo */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{chamadoAtivo.titulo}</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                <User size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                {chamadoAtivo.user_nome || chamadoAtivo.user_email}
+                {chamadoAtivo.atendente_nome && <> · Atend.: <strong>{chamadoAtivo.atendente_nome}</strong></>}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(() => {
+                const s = STATUS_CFG[chamadoAtivo.status];
+                return (
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: s?.bg, color: s?.cor }}>{s?.label}</span>
+                );
+              })()}
+              {chamadoAtivo.status === 'aberto' && (
+                <button onClick={assumirChamado}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  <UserCheck size={14} /> Assumir
+                </button>
+              )}
+              {chamadoAtivo.status !== 'finalizado' && (
+                <button onClick={finalizarChamado}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  <CheckCircle2 size={14} /> Finalizar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Mensagens */}
+          <div style={{ padding: '20px', flex: 1, overflowY: 'auto', minHeight: 320, maxHeight: 460, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {mensagens.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: 20 }}>Sem mensagens ainda</div>
+            )}
+            {mensagens.map(m => (
+              <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: m.autor_tipo === 'cliente' ? 'flex-start' : 'flex-end' }}>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>
+                  {m.autor_tipo === 'ia' ? (
+                    <><Bot size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />TSN Assistente · {fmtHora(m.criado_em)}</>
+                  ) : m.autor_tipo === 'atendente' ? (
+                    <>{m.autor_nome || 'Atendente'} · {fmtHora(m.criado_em)}</>
+                  ) : (
+                    <><User size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.autor_nome || 'Cliente'} · {fmtHora(m.criado_em)}</>
+                  )}
+                </div>
+                <div style={{
+                  maxWidth: '76%', padding: '10px 14px', borderRadius: 12,
+                  background: m.autor_tipo === 'cliente' ? '#f8fafc' : m.autor_tipo === 'ia' ? '#eff6ff' : '#ecfdf5',
+                  color: '#0f172a', fontSize: 13, lineHeight: 1.6,
+                  border: `1px solid ${m.autor_tipo === 'cliente' ? '#e2e8f0' : m.autor_tipo === 'ia' ? '#bae6fd' : '#86efac'}`,
+                }}>
+                  {m.autor_tipo === 'ia' && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', marginBottom: 5 }}>Resposta automática</div>
+                  )}
+                  {m.conteudo}
+                  {(m.anexos || []).map((a, i) => a.tipo === 'imagem'
+                    ? <img key={i} src={a.url} alt={a.nome} style={{ maxWidth: 200, display: 'block', marginTop: 8, borderRadius: 8 }} />
+                    : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#2563eb' }}>{a.nome}</a>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div ref={msgEndRef} />
+          </div>
+
+          {/* Input de resposta */}
+          {chamadoAtivo.status !== 'finalizado' ? (
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+              {anexos.length > 0 && (
+                <div style={{ display: 'flex', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {anexos.map((a, i) => (
+                    <div key={i} style={{ position: 'relative' }}>
+                      {a.tipo === 'imagem'
+                        ? <img src={a.url} alt={a.nome} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '2px solid #e2e8f0' }} />
+                        : <div style={{ padding: '4px 8px', background: '#f1f5f9', borderRadius: 6, fontSize: 10, color: '#64748b', fontWeight: 600 }}>{a.nome.slice(0, 14)}</div>}
+                      <button onClick={() => setAnexos(p => p.filter((_, j) => j !== i))}
+                        style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 15, height: 15, fontSize: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 8, borderRadius: 8 }}>
+                  <Paperclip size={16} />
+                </button>
+                <textarea
+                  value={texto} onChange={e => setTexto(e.target.value)} onPaste={handlePaste}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensagem(); } }}
+                  placeholder="Responder ao cliente… (Ctrl+V para colar print · Enter para enviar)"
+                  rows={2}
+                  style={{ flex: 1, padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
+                />
+                <button onClick={enviarMensagem} disabled={(!texto.trim() && !anexos.length) || enviando}
+                  style={{ background: '#0f172a', color: 'white', border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1 }}>
+                  {enviando ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={15} />}
+                </button>
+                <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', fontSize: 13, color: '#64748b', textAlign: 'center', flexShrink: 0 }}>
+              <CheckCircle2 size={14} style={{ verticalAlign: 'middle', marginRight: 6, color: '#10b981' }} />
+              Chamado finalizado
+            </div>
+          )}
+        </div>
+      )}
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}

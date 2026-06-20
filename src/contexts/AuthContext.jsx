@@ -19,7 +19,7 @@ function isSessionExpired() {
 }
 
 async function fetchPerfil(userId) {
-  if (!userId) return { role: 'aluno', ativo: true, inadimplenteDias: 0 };
+  if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0 };
   const { data } = await supabase
     .from('perfis')
     .select('role, ativo, inadimplente_desde')
@@ -99,6 +99,12 @@ export function AuthProvider({ children }) {
       // inclusive no login Google onde o trigger não recebe o código.
       // Só tenta no sign-in real (não em token refresh, user_updated, etc.)
       if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        // Log de uso — prova de acesso para proteção contra chargeback
+        if (event === 'SIGNED_IN') {
+          try {
+            import('../utils/logUso').then(({ logUso }) => logUso(u.id, 'login'));
+          } catch (_) {}
+        }
         const ref = sessionStorage.getItem('tsn_ref_codigo');
         if (ref) {
           try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}
