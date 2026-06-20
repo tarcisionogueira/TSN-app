@@ -201,6 +201,7 @@ async function scraperCEFcsv(uf) {
     }
 
     const { headers, rows } = parseCSVCaixa(buffer);
+    if (uf === 'SP') console.log(`    CEF headers SP: ${JSON.stringify(headers)}`);
     if (rows.length === 0) {
       // Diagnóstico expandido: mostra as 8 primeiras linhas para identificar o formato
       const rawText = buffer.toString('latin1');
@@ -249,7 +250,12 @@ async function scraperCEFcsv(uf) {
       };
     }).filter(Boolean);
 
-    console.log(`    CEF CSV ${uf}: ${imoveis.length} imóveis`);
+    const comFoto = imoveis.filter(i => i._foto_original).length;
+    console.log(`    CEF CSV ${uf}: ${imoveis.length} imóveis, ${comFoto} com foto`);
+    if (uf === 'SP' && comFoto > 0) {
+      const sample = imoveis.find(i => i._foto_original);
+      console.log(`    Foto SP sample: ${sample._foto_original}`);
+    }
     return imoveis;
   } catch (err) {
     console.log(`    Erro CEF CSV ${uf}: ${err.message.slice(0, 100)}`);
