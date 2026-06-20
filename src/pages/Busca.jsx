@@ -101,12 +101,13 @@ export default function Busca() {
         const orParts = filtrosAtivos.cidades.map(c => `cidade.ilike.${c}`).join(',');
         q = q.or(orParts);
       }
-      if (filtrosAtivos.tipo) q = q.or(`tipo.eq.${filtrosAtivos.tipo},tipo.ilike.%${filtrosAtivos.tipo}%`);
+      if (filtrosAtivos.tipo) q = q.in('tipo', [filtrosAtivos.tipo, 'imovel']);
       if (filtrosAtivos.modalidade) q = q.eq('modalidade', filtrosAtivos.modalidade);
-      if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(filtrosAtivos.valorMin));
-      if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(filtrosAtivos.valorMax));
+      if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')));
+      if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')));
       if (filtrosAtivos.pagamento?.length > 0) {
-        const orParts = filtrosAtivos.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]).map(v => `forma_pagamento.ilike.${v}`).join(',');
+        const dbVals = filtrosAtivos.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]);
+        const orParts = dbVals.map(v => `forma_pagamento.ilike.${v}`).join(',');
         q = q.or(orParts);
       }
       return q;
@@ -357,8 +358,14 @@ export default function Busca() {
               <div>
                 <label style={lbl}>Valor de Lance (R$)</label>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-                  <input type="number" value={filtros.valorMin} onChange={e=>up('valorMin',e.target.value)} placeholder="Mínimo" style={inp}/>
-                  <input type="number" value={filtros.valorMax} onChange={e=>up('valorMax',e.target.value)} placeholder="Máximo" style={inp}/>
+                  <input type="text" inputMode="numeric"
+                    value={filtros.valorMin ? 'R$ ' + Number(String(filtros.valorMin).replace(/\D/g,'')).toLocaleString('pt-BR') : ''}
+                    onChange={e=>{ const n=e.target.value.replace(/\D/g,''); up('valorMin', n); }}
+                    placeholder="R$ Mínimo" style={inp}/>
+                  <input type="text" inputMode="numeric"
+                    value={filtros.valorMax ? 'R$ ' + Number(String(filtros.valorMax).replace(/\D/g,'')).toLocaleString('pt-BR') : ''}
+                    onChange={e=>{ const n=e.target.value.replace(/\D/g,''); up('valorMax', n); }}
+                    placeholder="R$ Máximo" style={inp}/>
                 </div>
               </div>
               <div>
