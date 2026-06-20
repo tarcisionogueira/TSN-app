@@ -2214,7 +2214,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
         <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          {sol.tipo && <span style={{ background: '#eff6ff', color: '#1e40af', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>{sol.tipo}</span>}
+          {sol.tipo && <span style={{ background: '#eff6ff', color: '#1e40af', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>{{ processual:'Processual', edital:'Edital', mercadologica:'Mercadológica', consulta:'Consulta com Especialista' }[sol.tipo] || sol.tipo}</span>}
           <span style={{ background: statusSol.bg, color: statusSol.color, borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>{statusSol.label}</span>
           {sol.tipo === 'processual' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>⏰ Prazo judicial</span>}
         </div>

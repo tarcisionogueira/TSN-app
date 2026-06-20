@@ -6,7 +6,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
-  Scale, Search, User, Calendar, ChevronRight, AlertCircle,
+  Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle,
 } from 'lucide-react';
 import { extrairDadosDocumento, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
@@ -194,6 +194,8 @@ export default function Analise() {
   const [loadParecer, setLoadParecer] = useState(false);
   const [saved, setSaved] = useState(false);
   const [msg, setMsg] = useState({ text:'', type:'' });
+  const [solicitando, setSolicitando] = useState(false);
+  const [solicitado, setSolicitado] = useState(false);
 
   // Controle de abertura por seção
   const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false });
@@ -363,6 +365,27 @@ export default function Analise() {
   };
 
   const imprimirPDF = () => gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer });
+
+  const solicitarAnalista = async () => {
+    if (!user || solicitando || solicitado) return;
+    setSolicitando(true);
+    const { error } = await supabase.from('solicitacoes').insert({
+      user_id: user.id,
+      imovel_ref: d.id || null,
+      imovel_nome: d.nome || d.endereco || 'Imóvel sem nome',
+      imovel_cidade: d.cidade || '',
+      tipo: 'consulta',
+      status: 'solicitado',
+      notas_analista: `Laudo gerado. Desconto: ${d.valorAvaliacao > 0 ? ((1 - d.valorArrematacao / d.valorAvaliacao) * 100).toFixed(1) : '?'}%. Pedido de revisão pelo cliente.`,
+    });
+    setSolicitando(false);
+    if (!error) {
+      setSolicitado(true);
+      showMsg('Solicitação enviada! Nossa equipe entrará em contato em breve.', 'success');
+    } else {
+      showMsg('Erro ao enviar solicitação. Tente novamente.', 'error');
+    }
+  };
 
   const descontoArremate = d.valorAvaliacao>0 ? ((1 - d.valorArrematacao/d.valorAvaliacao)*100) : 0;
 
@@ -1124,6 +1147,17 @@ export default function Analise() {
                 style={{ width:'100%', padding:'13px', background:'#2563eb', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                 <Printer size={16}/> Exportar Laudo Completo em PDF
               </button>
+              {user && !['analista','advogado','consultor','admin'].includes(role) && (
+                <button onClick={solicitarAnalista} disabled={solicitando || solicitado}
+                  style={{ width:'100%', padding:'13px', background: solicitado ? '#10b981' : '#0f172a', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor: solicitado ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, opacity: solicitando ? 0.7 : 1 }}>
+                  {solicitando
+                    ? <><Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Enviando...</>
+                    : solicitado
+                    ? <><CheckCircle2 size={16}/> Solicitação enviada! Nossa equipe entrará em contato.</>
+                    : <><MessageCircle size={16}/> Solicitar Revisão com Especialista</>
+                  }
+                </button>
+              )}
             </>
           )}
         </div>
