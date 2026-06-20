@@ -2633,7 +2633,7 @@ export default function Admin() {
     <div style={S.page}>
       <div style={S.header}>
         <span style={S.headerTitle}>TSN — Painel Administrativo</span>
-        <button style={{ ...S.btn('outline'), background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontSize: 13 }} onClick={() => navigate('/')}>
+        <button style={{ ...S.btn('outline'), background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontSize: 13 }} onClick={() => navigate('/buscar')}>
           ← Voltar ao app
         </button>
       </div>
