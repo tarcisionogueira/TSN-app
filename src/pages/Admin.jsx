@@ -1369,89 +1369,61 @@ const FONTES_SCRAPER = [
 function ScrapersMonitor() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [expandedErrors, setExpandedErrors] = useState({});
 
-  const carregar = () => {
+  useEffect(() => {
     supabase
       .from('scrapers_log')
       .select('*')
       .order('iniciado_em', { ascending: false })
       .limit(30)
       .then(({ data }) => { setLogs(data || []); setLoading(false); });
-  };
+  }, []);
 
-  useEffect(() => { carregar(); }, []);
-
+  // Último log por fonte
   const ultimoPorFonte = {};
   FONTES_SCRAPER.forEach(f => {
     ultimoPorFonte[f.key] = logs.find(l => l.fonte === f.key);
   });
 
   const erros = FONTES_SCRAPER.filter(f => ultimoPorFonte[f.key]?.status === 'erro');
-
-  const toggleError = (key) => setExpandedErrors(prev => ({ ...prev, [key]: !prev[key] }));
-
-  const fmtDate = (d) => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+  const semDados = FONTES_SCRAPER.filter(f => ultimoPorFonte[f.key]?.status === 'sem_dados');
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>Monitor de Scrapers</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {erros.length > 0 && (
-            <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
-              {erros.length} com erro
-            </span>
-          )}
-          <button onClick={carregar} style={{ padding: '5px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#475569' }}>
-            Atualizar
-          </button>
-        </div>
+    <div style={S.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Monitor de Scrapers</div>
+        {erros.length > 0 && (
+          <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
+            ⚠️ {erros.length} com erro
+          </span>
+        )}
       </div>
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+      {loading ? <p style={{ fontSize: 13, color: '#94a3b8' }}>Carregando...</p> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {FONTES_SCRAPER.map(f => {
             const log = ultimoPorFonte[f.key];
             const ok = log?.status === 'ok';
             const erro = log?.status === 'erro';
             const semDado = log?.status === 'sem_dados';
             const nunca = !log;
-            const dotColor = ok ? '#10b981' : erro ? '#dc2626' : nunca ? '#94a3b8' : '#d97706';
-            const cardBorder = ok ? '#bbf7d0' : erro ? '#fecaca' : '#e2e8f0';
+            const cor = ok ? '#10b981' : erro ? '#dc2626' : semDado ? '#d97706' : '#94a3b8';
+            const bg = ok ? '#f0fdf4' : erro ? '#fef2f2' : semDado ? '#fefce8' : '#f8fafc';
+            const icone = ok ? '✅' : erro ? '❌' : semDado ? '⚠️' : '⏸';
             return (
-              <div key={f.key} style={{ background: 'white', border: `1px solid ${cardBorder}`, borderRadius: 12, padding: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor, flexShrink: 0, marginTop: 2 }} />
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{f.label}</div>
+              <div key={f.key} style={{ padding: '10px 12px', background: bg, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: f.cor, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{f.label}</div>
+                    {log && <div style={{ fontSize: 11, color: '#64748b' }}>
+                      {log.imoveis_encontrados} imóveis · {new Date(log.iniciado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {log.duracao_ms && ` · ${(log.duracao_ms / 1000).toFixed(1)}s`}
+                    </div>}
+                    {erro && log.erro_msg && <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{log.erro_msg}</div>}
+                    {nunca && <div style={{ fontSize: 11, color: '#94a3b8' }}>Nunca executado</div>}
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: ok ? '#dcfce7' : erro ? '#fee2e2' : semDado ? '#fefce8' : '#f1f5f9', color: ok ? '#166534' : erro ? '#dc2626' : semDado ? '#92400e' : '#64748b' }}>
-                    {ok ? 'OK' : erro ? 'Erro' : semDado ? 'Sem dados' : 'Nunca executado'}
-                  </span>
                 </div>
-                {log ? (
-                  <div style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <div>Ultima exec.: <strong style={{ color: '#475569' }}>{fmtDate(log.iniciado_em)}</strong></div>
-                    {log.imoveis_encontrados != null && (
-                      <div>Registros: <strong style={{ color: '#0f172a' }}>{log.imoveis_encontrados.toLocaleString('pt-BR')}</strong></div>
-                    )}
-                    {log.duracao_ms && <div>Duração: {(log.duracao_ms / 1000).toFixed(1)}s</div>}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhuma execução registrada</div>
-                )}
-                {erro && log?.erro_msg && (
-                  <div style={{ marginTop: 8 }}>
-                    <button onClick={() => toggleError(f.key)} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
-                      {expandedErrors[f.key] ? '▲ Ocultar erro' : '▼ Ver erro'}
-                    </button>
-                    {expandedErrors[f.key] && (
-                      <div style={{ marginTop: 6, fontSize: 11, color: '#dc2626', background: '#fef2f2', borderRadius: 6, padding: '6px 8px', wordBreak: 'break-word' }}>{log.erro_msg}</div>
-                    )}
-                  </div>
-                )}
+                <span style={{ fontSize: 16 }}>{icone}</span>
               </div>
             );
           })}
@@ -1461,372 +1433,292 @@ function ScrapersMonitor() {
   );
 }
 
-const STATUS_CFG = {
-  aberto:         { bg: '#dbeafe', color: '#1e40af', label: 'Aberto' },
-  em_atendimento: { bg: '#fef9c3', color: '#854d0e', label: 'Em atendimento' },
-  resolvido:      { bg: '#dcfce7', color: '#166534', label: 'Resolvido' },
-  fechado:        { bg: '#f1f5f9', color: '#475569', label: 'Fechado' },
-};
-
-const ROLE_CFG = {
-  admin:       { bg: '#ede9fe', color: '#5b21b6', label: 'Admin' },
-  analista:    { bg: '#fef9c3', color: '#854d0e', label: 'Analista' },
-  consultor:   { bg: '#e0f2fe', color: '#0369a1', label: 'Consultor' },
-  advogado:    { bg: '#fee2e2', color: '#991b1b', label: 'Advogado' },
-  explorador:  { bg: '#f1f5f9', color: '#475569', label: 'Explorador' },
-  top1:        { bg: '#dbeafe', color: '#1e40af', label: 'Top1' },
-  top2:        { bg: '#2563eb', color: 'white',   label: 'Investidor' },
-  assessorado: { bg: '#fff7ed', color: '#c2410c', label: 'Assessorado' },
-  clube:       { bg: '#dcfce7', color: '#166534', label: 'Clube' },
-};
-
-function StatusBadge({ status }) {
-  const cfg = STATUS_CFG[status] || { bg: '#f1f5f9', color: '#475569', label: status };
-  return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>;
-}
-
-function RoleBadge({ role }) {
-  const cfg = ROLE_CFG[role] || { bg: '#f1f5f9', color: '#475569', label: role };
-  return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>;
-}
-
 function DashboardTab() {
-  const [kpis, setKpis] = useState({ total: null, ativas: null, chamados: null, novos: null });
-  const [contagem, setContagem] = useState({});
-  const [chamadosRecentes, setChamadosRecentes] = useState([]);
-  const [ultimosCadastros, setUltimosCadastros] = useState([]);
-  const [equipe, setEquipe] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [dados, setDados] = useState(null);
   const [asaasDados, setAsaasDados] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [asaasLoading, setAsaasLoading] = useState(true);
-  const [inadimplentes, setInadimplentes] = useState(0);
-  const [mrr, setMrr] = useState(0);
+
+  useEffect(() => {
+    async function load() {
+      const [{ data: perfis }, { count: inadimCount }, { count: novosCount }] = await Promise.all([
+        supabase.from('perfis').select('role, plano, inadimplente_desde'),
+        supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
+        supabase.from('perfis').select('id', { count: 'exact', head: true })
+          .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+      ]);
+
+      const contagem = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
+      (perfis || []).forEach(p => { if (p.role in contagem) contagem[p.role]++; });
+
+      const mrr = (contagem.top1 * 49.90) + (contagem.top2 * 99.90) + (contagem.assessorado * 500) + (contagem.clube * 5000);
+      const taxaPix = mrr * 0.01;
+      const liquido = mrr - taxaPix;
+
+      setDados({
+        contagem,
+        total: Object.values(contagem).reduce((s, v) => s + v, 0),
+        mrr,
+        taxaPix,
+        liquido,
+        inadimplentes: inadimCount || 0,
+        novosMes: novosCount || 0,
+      });
+      setLoading(false);
+    }
+
+    async function loadAsaas() {
+      try {
+        const res = await fetch('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
+        if (res.ok) setAsaasDados(await res.json());
+      } catch (_) {}
+      setAsaasLoading(false);
+    }
+
+    load();
+    loadAsaas();
+  }, []);
+
+  function marcoAsaas(mrr) {
+    if (mrr >= 100000) return { cor: '#7c3aed', label: 'Tier Enterprise', desc: 'Exigir conta dedicada e taxa máxima de 0,3% no PIX' };
+    if (mrr >= 30000) return { cor: '#dc2626', label: 'Alto Volume', desc: 'Negociar taxa diferenciada — meta abaixo de 0,5%' };
+    if (mrr >= 10000) return { cor: '#d97706', label: 'Volume Médio', desc: 'Contatar comercial Asaas — redução de 1% para ~0,7% no PIX é possível' };
+    return { cor: '#10b981', label: 'Crescimento', desc: `Falta R$ ${Number(10000 - mrr).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MRR para negociar desconto de taxa com o Asaas` };
+  }
 
   const fmt = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtN = (v) => Number(v).toLocaleString('pt-BR');
-  const fmtDate = (d) => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
 
-  const carregar = useCallback(async () => {
-    const seteAtrasado = new Date();
-    seteAtrasado.setDate(seteAtrasado.getDate() - 7);
+  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>Carregando dashboard…</div>;
 
-    const [
-      { count: total },
-      { count: ativas },
-      { count: chamadosAbertos },
-      { count: novos },
-      { data: perfisData },
-      { data: chamadosData },
-      { data: cadastrosData },
-      { data: equipeData },
-      { count: inadimCount },
-    ] = await Promise.all([
-      supabase.from('perfis').select('id', { count: 'exact', head: true }),
-      supabase.from('perfis').select('id', { count: 'exact', head: true }).in('role', ['top1','top2','assessorado','clube']),
-      supabase.from('chamados').select('id', { count: 'exact', head: true }).in('status', ['aberto','em_atendimento']),
-      supabase.from('perfis').select('id', { count: 'exact', head: true }).gte('created_at', seteAtrasado.toISOString()),
-      supabase.from('perfis').select('role'),
-      supabase.from('chamados').select('id, titulo, status, criado_em, user_nome').order('criado_em', { ascending: false }).limit(8),
-      supabase.from('perfis').select('email, role, created_at, nome').order('created_at', { ascending: false }).limit(8),
-      supabase.from('perfis').select('email, role, nome, created_at').in('role', ['admin','analista','consultor','advogado']).order('created_at', { ascending: false }),
-      supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
-    ]);
+  const marco = marcoAsaas(dados.mrr);
+  const proximo = dados.mrr < 10000 ? 10000 : dados.mrr < 30000 ? 30000 : dados.mrr < 100000 ? 100000 : null;
+  const progresso = proximo ? Math.min(100, (dados.mrr / proximo) * 100) : 100;
 
-    const cnt = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
-    (perfisData || []).forEach(p => { if (p.role in cnt) cnt[p.role]++; });
-    const mrrCalc = (cnt.top1 * 49.90) + (cnt.top2 * 99.90) + (cnt.assessorado * 500) + (cnt.clube * 5000);
-
-    setKpis({ total, ativas, chamados: chamadosAbertos, novos });
-    setContagem(cnt);
-    setChamadosRecentes(chamadosData || []);
-    setUltimosCadastros(cadastrosData || []);
-    setEquipe(equipeData || []);
-    setInadimplentes(inadimCount || 0);
-    setMrr(mrrCalc);
-    setLastUpdate(new Date());
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    carregar();
-
-    const interval = setInterval(() => { carregar(); }, 30000);
-
-    const channel = supabase
-      .channel('dashboard_chamados')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chamados' }, () => { carregar(); })
-      .subscribe();
-
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(channel);
-    };
-  }, [carregar]);
-
-  useEffect(() => {
-    fetch('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { setAsaasDados(d); setAsaasLoading(false); })
-      .catch(() => setAsaasLoading(false));
-  }, []);
-
-  const cardStyle = { background: 'white', borderRadius: 16, padding: 20, border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' };
-
-  function marcoAsaas(m) {
-    if (m >= 100000) return { cor: '#7c3aed', label: 'Tier Enterprise', desc: 'Exigir conta dedicada e taxa máxima de 0,3% no PIX' };
-    if (m >= 30000)  return { cor: '#dc2626', label: 'Alto Volume', desc: 'Negociar taxa diferenciada — meta abaixo de 0,5%' };
-    if (m >= 10000)  return { cor: '#d97706', label: 'Volume Médio', desc: 'Contatar comercial Asaas — redução para ~0,7% no PIX possível' };
-    return { cor: '#10b981', label: 'Crescimento', desc: `Falta R$ ${fmt(10000 - m)} MRR para negociar desconto de taxa com o Asaas` };
-  }
-
-  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8', fontSize: 14 }}>Carregando dashboard…</div>;
-
-  const marco = marcoAsaas(mrr);
-  const proximo = mrr < 10000 ? 10000 : mrr < 30000 ? 30000 : mrr < 100000 ? 100000 : null;
-  const progresso = proximo ? Math.min(100, (mrr / proximo) * 100) : 100;
-  const taxaPix = mrr * 0.01;
+  const statCard = (label, value, sub, cor = '#2563eb') => (
+    <div style={{ background: '#0f172a', borderRadius: 12, padding: '20px 22px', flex: 1, minWidth: 160 }}>
+      <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 900, color: cor, lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{sub}</div>}
+    </div>
+  );
 
   return (
-    <div style={{ fontFamily: "'Inter', sans-serif" }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Centro de Operações</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 12, color: '#94a3b8' }}>
-            Atualizado às {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-          </span>
-          <button onClick={carregar} style={{ padding: '7px 16px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            Atualizar
-          </button>
-        </div>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Dashboard</h2>
+        <div style={{ fontSize: 12, color: '#94a3b8' }}>Atualizado agora · {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
       </div>
 
-      {/* Row 1: KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
-        {[
-          { label: 'Usuários Totais', value: fmtN(kpis.total ?? 0), color: '#2563eb', border: '#2563eb' },
-          { label: 'Assinaturas Ativas', value: fmtN(kpis.ativas ?? 0), color: '#10b981', border: '#10b981' },
-          { label: 'Chamados Abertos', value: fmtN(kpis.chamados ?? 0), color: '#f59e0b', border: '#f59e0b' },
-          { label: 'Novos esta semana', value: fmtN(kpis.novos ?? 0), color: '#8b5cf6', border: '#8b5cf6' },
-        ].map(({ label, value, color, border }) => (
-          <div key={label} style={{ ...cardStyle, borderLeft: `4px solid ${border}` }}>
-            <div style={{ fontSize: 36, fontWeight: 900, color, lineHeight: 1, marginBottom: 6 }}>{value}</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>{label}</div>
-          </div>
-        ))}
+      {/* Stat cards */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} este mês`, '#60a5fa')}
+        {statCard('MRR estimado', `R$ ${fmt(dados.mrr)}`, 'Receita mensal recorrente', '#10b981')}
+        {statCard('Taxas Asaas (est.)', `R$ ${fmt(dados.taxaPix)}`, '~1% PIX sobre MRR', '#f59e0b')}
+        {statCard('Líquido estimado', `R$ ${fmt(dados.liquido)}`, 'MRR − taxas estimadas', '#a78bfa')}
       </div>
 
-      {/* Row 2: Usuários por plano */}
-      <div style={{ ...cardStyle, marginBottom: 20 }}>
-        <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {[
-            { key: 'explorador', label: 'Explorador', cor: '#64748b' },
-            { key: 'top1',       label: 'Investidor (legado)', cor: '#93c5fd' },
-            { key: 'top2',       label: 'Investidor', cor: '#2563eb' },
-            { key: 'assessorado',label: 'Assessorado', cor: '#d97706' },
-            { key: 'clube',      label: 'Clube', cor: '#059669' },
-          ].map(({ key, label, cor }) => {
-            const qtd = contagem[key] || 0;
-            const total = kpis.total || 1;
-            const pct = Math.round((qtd / total) * 100);
-            return (
-              <div key={key} style={{ flex: '1 1 180px', background: '#f8fafc', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 12, height: 12, borderRadius: '50%', background: cor, flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{label}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                    <div style={{ flex: 1, background: '#e2e8f0', borderRadius: 4, height: 5, overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 4 }} />
-                    </div>
-                    <span style={{ fontSize: 11, color: '#64748b', minWidth: 28, textAlign: 'right' }}>{pct}%</span>
-                  </div>
-                </div>
-                <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', minWidth: 32, textAlign: 'right' }}>{qtd}</div>
-              </div>
-            );
-          })}
-        </div>
-        {inadimplentes > 0 && (
-          <div style={{ marginTop: 12, padding: '8px 14px', background: '#fef2f2', borderRadius: 8, fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
-            {inadimplentes} usuário{inadimplentes > 1 ? 's' : ''} inadimplente{inadimplentes > 1 ? 's' : ''}
-          </div>
-        )}
-      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
-      {/* Row 3: Chamados recentes + Últimos cadastros */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Chamados recentes</div>
-          {chamadosRecentes.length === 0 ? (
-            <div style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>Nenhum chamado</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {chamadosRecentes.map(c => (
-                <div key={c.id} style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.titulo || '(sem título)'}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{c.user_nome || 'Usuário'} · {fmtDate(c.criado_em)}</div>
-                  </div>
-                  <StatusBadge status={c.status} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Últimos cadastros</div>
-          {ultimosCadastros.length === 0 ? (
-            <div style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>Nenhum cadastro</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {ultimosCadastros.map((u, i) => (
-                <div key={i} style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.nome || u.email || '-'}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{fmtDate(u.created_at)}</div>
-                  </div>
-                  <RoleBadge role={u.role} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Row 4: Atividade da equipe */}
-      <div style={{ ...cardStyle, marginBottom: 20 }}>
-        <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Atividade da equipe</div>
-        {equipe.length === 0 ? (
-          <div style={{ fontSize: 13, color: '#94a3b8' }}>Nenhum membro de equipe encontrado.</div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr>
-                  {['Membro', 'Função', 'Cadastro', 'Último acesso'].map(h => (
-                    <th key={h} style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '2px solid #e2e8f0', color: '#64748b', fontWeight: 700, fontSize: 12 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {equipe.map((m, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 12px', color: '#0f172a', fontWeight: 600 }}>{m.nome || m.email || '-'}</td>
-                    <td style={{ padding: '10px 12px' }}><RoleBadge role={m.role} /></td>
-                    <td style={{ padding: '10px 12px', color: '#64748b' }}>{fmtDate(m.created_at)}</td>
-                    <td style={{ padding: '10px 12px', color: '#94a3b8', fontSize: 12 }}>N/D</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Row 5: Financeiro Asaas + Marco Comercial */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
-          {asaasLoading ? (
-            <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
-          ) : asaasDados ? (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                {[
-                  { label: 'Saldo disponível', value: `R$ ${fmt(asaasDados.balance?.balance || 0)}`, cor: '#10b981' },
-                  { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#2563eb' },
-                  { label: 'Recebido no mês', value: `R$ ${fmt(asaasDados.statsMes?.revenue || 0)}`, cor: '#7c3aed' },
-                  { label: 'Taxas cobradas', value: `R$ ${fmt(asaasDados.statsMes?.fees || 0)}`, cor: '#f59e0b' },
-                ].map(({ label, value, cor }) => (
-                  <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 3 }}>{label}</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: cor }}>{value}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>Dados direto da API Asaas</div>
-            </>
-          ) : (
-            <p style={{ fontSize: 13, color: '#dc2626' }}>Não foi possível carregar dados do Asaas.</p>
-          )}
-        </div>
-
-        <div style={{ ...cardStyle, border: `2px solid ${marco.cor}20` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>Marco Comercial</div>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: marco.cor + '20', color: marco.cor }}>{marco.label}</span>
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>R$ {fmt(mrr)}</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>MRR estimado — taxa est.: R$ {fmt(taxaPix)}</div>
-          {proximo && (
-            <>
-              <div style={{ background: '#f1f5f9', borderRadius: 6, height: 8, overflow: 'hidden', marginBottom: 6 }}>
-                <div style={{ height: '100%', width: `${progresso}%`, background: marco.cor, borderRadius: 6, transition: 'width 0.5s' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 12 }}>
-                <span>Atual: R$ {fmt(mrr)}</span>
-                <span>Próximo: R$ {fmtN(proximo)}</span>
-              </div>
-            </>
-          )}
-          <div style={{ padding: '10px 12px', background: marco.cor + '10', borderRadius: 8, fontSize: 12, color: marco.cor, fontWeight: 600, lineHeight: 1.5 }}>
-            {marco.desc}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 6: Monitor de Scrapers */}
-      <div style={{ ...cardStyle, marginBottom: 20 }}>
-        <ScrapersMonitor />
-      </div>
-
-      {/* Row 7: Infraestrutura & Marcos */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
-          {[
-            { nome: 'Supabase', plano: `Free (${fmtN(kpis.total || 0)} usuários)`, custo: 'R$ 0/mês', alerta: (kpis.total || 0) > 40000, alertaMsg: 'Próximo do limite gratuito' },
-            { nome: 'Vercel', plano: 'Free (Serverless)', custo: 'R$ 0/mês', alerta: false },
-            { nome: 'Anthropic (Claude)', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
-            { nome: 'Asaas Gateway', plano: '~1% por PIX', custo: `R$ ${fmt(taxaPix)}/mês`, alerta: mrr > 8000, alertaMsg: 'Contatar comercial Asaas para reduzir taxa' },
-          ].map(({ nome, plano, custo, alerta, alertaMsg }) => (
-            <div key={nome} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{nome}</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>{plano}</div>
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: alerta ? '#d97706' : '#10b981' }}>{custo}</div>
-              </div>
-              {alerta && <div style={{ marginTop: 4, fontSize: 11, color: '#d97706', fontWeight: 600 }}>⚠️ {alertaMsg}</div>}
-            </div>
-          ))}
-        </div>
-
-        <div style={cardStyle}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Marcos de Melhoria</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Coluna esquerda: Usuários por plano */}
+        <div>
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
             {[
-              { gatilho: 'MRR ≥ R$ 10.000', atingido: mrr >= 10000, titulo: 'Negociar taxa Asaas', cor: '#d97706' },
-              { gatilho: 'MRR ≥ R$ 30.000', atingido: mrr >= 30000, titulo: 'Migrar Supabase Pro', cor: '#7c3aed' },
-              { gatilho: 'MRR ≥ R$ 50.000', atingido: mrr >= 50000, titulo: 'Ativar CDN e cache', cor: '#0891b2' },
-              { gatilho: 'MRR ≥ R$ 100.000', atingido: mrr >= 100000, titulo: 'Infra dedicada + SLA', cor: '#dc2626' },
-              { gatilho: '> 500 análises/mês', atingido: false, titulo: 'Fila assíncrona', cor: '#059669' },
-              { gatilho: '> 50 contratos/mês', atingido: false, titulo: 'Assinatura ICP-Brasil', cor: '#6366f1' },
-            ].map((m, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: m.atingido ? m.cor + '10' : '#f8fafc', border: `1px solid ${m.atingido ? m.cor + '30' : '#f1f5f9'}` }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.atingido ? m.cor : '#cbd5e1', flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{m.titulo}</div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{m.gatilho}</div>
+              { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
+              { key: 'top1',       label: 'Investidor (R$49,90)',     cor: '#2563eb', preco: 49.90 },
+              { key: 'top2',       label: 'Investidor Pro (R$99,90)', cor: '#7c3aed', preco: 99.90 },
+              { key: 'assessorado',label: 'Assessorado (R$500×12)', cor: '#d97706', preco: 500 },
+              { key: 'clube',      label: 'Clube de Negócios (R$5k/mês)', cor: '#059669', preco: 5000 },
+            ].map(({ key, label, cor, preco }) => {
+              const qtd = dados.contagem[key] || 0;
+              const receita = qtd * preco;
+              return (
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: cor }} />
+                    <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{qtd}</div>
+                    {preco > 0 && <div style={{ fontSize: 11, color: '#64748b' }}>R$ {fmt(receita)}/mês</div>}
+                  </div>
                 </div>
-                {m.atingido && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: m.cor, color: 'white' }}>Atingido</span>}
+              );
+            })}
+            {dados.inadimplentes > 0 && (
+              <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', borderRadius: 8, fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
+                ⚠️ {dados.inadimplentes} usuário{dados.inadimplentes > 1 ? 's' : ''} inadimplente{dados.inadimplentes > 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
+
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Equipe interna</div>
+            {[
+              { key: 'consultor', label: 'Consultores', cor: '#0891b2' },
+              { key: 'analista',  label: 'Analistas',   cor: '#f59e0b' },
+              { key: 'advogado',  label: 'Advogados',   cor: '#dc2626' },
+              { key: 'admin',     label: 'Admins',      cor: '#7c3aed' },
+            ].map(({ key, label, cor }) => (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: cor }} />
+                  <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
+                </div>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{dados.contagem[key] || 0}</span>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Coluna direita: Taxas Asaas + Marco + Infraestrutura */}
+        <div>
+          {/* Taxas Asaas reais */}
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
+            {asaasLoading ? (
+              <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
+            ) : asaasDados ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  {[
+                    { label: 'Saldo disponível', value: `R$ ${fmt(asaasDados.balance?.balance || 0)}`, cor: '#10b981' },
+                    { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#2563eb' },
+                    { label: 'Recebido no mês', value: `R$ ${fmt(asaasDados.statsMes?.revenue || 0)}`, cor: '#7c3aed' },
+                    { label: 'Taxas cobradas', value: `R$ ${fmt(asaasDados.statsMes?.fees || 0)}`, cor: '#f59e0b' },
+                  ].map(({ label, value, cor }) => (
+                    <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: cor }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>
+                  Dados direto da API Asaas · atualizado agora
+                </div>
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: '#dc2626' }}>Não foi possível carregar dados do Asaas. Verifique a chave ASAAS_API_KEY.</p>
+            )}
+          </div>
+
+          {/* Marco comercial */}
+          <div style={{ ...S.card, border: `2px solid ${marco.cor}20` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Marco Comercial Asaas</div>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: marco.cor + '20', color: marco.cor }}>{marco.label}</span>
+            </div>
+            {proximo && (
+              <>
+                <div style={{ background: '#f1f5f9', borderRadius: 8, height: 10, overflow: 'hidden', marginBottom: 8 }}>
+                  <div style={{ height: '100%', width: `${progresso}%`, background: marco.cor, borderRadius: 8, transition: 'width 0.5s' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 12 }}>
+                  <span>MRR atual: R$ {fmt(dados.mrr)}</span>
+                  <span>Próximo marco: R$ {fmtN(proximo)}</span>
+                </div>
+              </>
+            )}
+            <div style={{ padding: '10px 12px', background: marco.cor + '10', borderRadius: 8, fontSize: 13, color: marco.cor, fontWeight: 600, lineHeight: 1.5 }}>
+              📞 {marco.desc}
+            </div>
+          </div>
+
+          {/* Monitor de Scrapers */}
+          <ScrapersMonitor />
+
+          {/* Infraestrutura */}
+          <div style={S.card}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
+            {[
+              { nome: 'Supabase', plano: `Free (${fmtN(dados.total)} usuários)`, custo: 'R$ 0/mês', alerta: dados.total > 40000, alertaMsg: 'Próximo do limite gratuito — migrar para Supabase Pro ($25/mês)' },
+              { nome: 'Vercel', plano: 'Free (Serverless)', custo: 'R$ 0/mês', alerta: false },
+              { nome: 'Anthropic (Claude)', plano: 'Pay-as-you-go', custo: '~R$ 0,08/doc', alerta: false },
+              { nome: 'Asaas Gateway', plano: '~1% por PIX', custo: `R$ ${fmt(dados.taxaPix)}/mês`, alerta: dados.mrr > 8000, alertaMsg: 'MRR acima de R$10k: contatar comercial Asaas para reduzir taxa' },
+            ].map(({ nome, plano, custo, alerta, alertaMsg }) => (
+              <div key={nome} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{nome}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{plano}</div>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: alerta ? '#d97706' : '#10b981' }}>{custo}</div>
+                </div>
+                {alerta && <div style={{ marginTop: 6, fontSize: 11, color: '#d97706', fontWeight: 600 }}>⚠️ {alertaMsg}</div>}
+              </div>
+            ))}
+            <div style={{ marginTop: 14, padding: '10px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 13, color: '#166534', fontWeight: 600 }}>
+              💚 Custo base de infra: R$ 0/mês (planos gratuitos ativos)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Marcos de melhoria e sugestões de eficiência */}
+      <div style={{ marginTop: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          🗺️ Marcos de Melhoria & Eficiência
+          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400 }}>— ações a executar quando os gatilhos forem atingidos</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[
+            {
+              gatilho: `MRR ≥ R$ 10.000`,
+              atingido: dados.mrr >= 10000,
+              titulo: 'Negociar taxa Asaas',
+              desc: 'Contatar comercial Asaas para reduzir taxa PIX de 1% para ~0,7%. Economia estimada: R$ 30+/mês.',
+              cor: '#d97706', icone: '💳',
+            },
+            {
+              gatilho: `MRR ≥ R$ 30.000`,
+              atingido: dados.mrr >= 30000,
+              titulo: 'Migrar Supabase para plano Pro ou RDS AWS',
+              desc: 'Avaliar migração do banco para RDS na AWS São Paulo (sa-east-1) ou Supabase Pro. Mais performance, backups point-in-time e segurança reforçada.',
+              cor: '#7c3aed', icone: '🗄️',
+            },
+            {
+              gatilho: `MRR ≥ R$ 50.000`,
+              atingido: dados.mrr >= 50000,
+              titulo: 'Ativar CDN e cache de relatórios',
+              desc: 'Implementar cache de PDFs e imagens via Cloudflare R2 (S3 compatível) para reduzir latência dos laudos e custo de storage.',
+              cor: '#0891b2', icone: '⚡',
+            },
+            {
+              gatilho: `MRR ≥ R$ 100.000`,
+              atingido: dados.mrr >= 100000,
+              titulo: 'Infraestrutura dedicada + SLA',
+              desc: 'Contratar plano Enterprise Asaas (<0,3% PIX), mover para ECS Fargate ou EC2 dedicado, implementar monitoramento com Datadog/New Relic.',
+              cor: '#dc2626', icone: '🏢',
+            },
+            {
+              gatilho: '> 500 análises/mês',
+              atingido: false,
+              titulo: 'Fila assíncrona para relatórios',
+              desc: 'Implementar processamento de laudos em background (SQS ou Supabase Edge Functions) para evitar timeout nas funções serverless do Vercel.',
+              cor: '#059669', icone: '🔄',
+            },
+            {
+              gatilho: '> 50 contratos/mês',
+              atingido: false,
+              titulo: 'Assinatura digital via ICP-Brasil',
+              desc: 'Integrar com DocuSign ou ClickSign para validade jurídica reforçada com certificado digital. Custo: ~R$ 2-5/assinatura.',
+              cor: '#6366f1', icone: '📝',
+            },
+          ].map((m, i) => (
+            <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${m.cor}30`, background: m.atingido ? m.cor + '08' : 'white', alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 24, flexShrink: 0 }}>{m.icone}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{m.titulo}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: m.atingido ? m.cor : '#f1f5f9', color: m.atingido ? 'white' : '#64748b' }}>
+                    {m.atingido ? '✅ Gatilho atingido!' : `Gatilho: ${m.gatilho}`}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>{m.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -2027,404 +1919,466 @@ function ScrapersTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SDR TAB
+// MARKETING TAB — inteligência de buscas, demográficos, SDR e oportunidades
+// (visível APENAS para role === 'admin')
 // ═══════════════════════════════════════════════════════════════════════════════
-const STATUS_COLORS = {
-  novo: '#f59e0b',
-  contatado: '#3b82f6',
-  qualificado: '#8b5cf6',
-  convertido: '#10b981',
-  perdido: '#94a3b8',
-};
-const STATUS_LIST = ['novo', 'contatado', 'qualificado', 'convertido', 'perdido'];
+function MarketingTab() {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-function defaultProdutoSDR() {
-  return { nome: '', descricao: '', tipo: 'ebook', conteudo_url: '', imagem_url: '' };
-}
+  const [loading, setLoading] = useState(true);
+  const [buscas, setBuscas] = useState({ total: 0, unicos: 0, cidades: [], estados: [], tipos: [], pagamentos: [] });
+  const [perfisData, setPerfisData] = useState({ porRole: [], porEstado: [], semanas: [], ativos: 0, inativos: 0, total: 0 });
+  const [sdrData, setSdrData] = useState({ leadsStatus: {}, leadsPorProduto: [], semanas: [], total: 0, convertidos: 0 });
+  const [oportunidades, setOportunidades] = useState([]);
+  const [alertas, setAlertas] = useState([]);
 
-function SdrTab() {
-  const [produtos, setProdutos] = useState([]);
-  const [leads, setLeads] = useState([]);
-  const [loadingP, setLoadingP] = useState(true);
-  const [loadingL, setLoadingL] = useState(true);
-  const [modalProduto, setModalProduto] = useState(null); // null=closed, {}=new/edit
-  const [saving, setSaving] = useState(false);
-  const [filterProduto, setFilterProduto] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [copiado, setCopiado] = useState('');
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    try {
+      // ── Seção 1: Buscas ──
+      const [
+        { data: cidadesRaw },
+        { data: tiposRaw },
+        { data: estadosRaw },
+        { data: pagamentosRaw },
+        { data: totaisRaw },
+      ] = await Promise.all([
+        supabase.from('busca_historico').select('cidade').not('cidade', 'is', null).gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('tipo_imovel').not('tipo_imovel', 'is', null).gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('estado').not('estado', 'is', null).gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('pagamento_tipos').not('pagamento_tipos', 'is', null).gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('user_id, id').gte('criado_em', thirtyDaysAgo),
+      ]);
 
-  async function loadProdutos() {
-    setLoadingP(true);
-    const { data } = await supabase.from('sdr_produtos').select('*').order('criado_em', { ascending: false });
-    setProdutos(data || []);
-    setLoadingP(false);
-  }
+      const countBy = (arr, key) => {
+        const map = {};
+        (arr || []).forEach(r => { const v = r[key]; if (v) map[v] = (map[v] || 0) + 1; });
+        return Object.entries(map).sort((a, b) => b[1] - a[1]);
+      };
 
-  async function loadLeads() {
-    setLoadingL(true);
-    const { data } = await supabase.from('sdr_leads').select('*, sdr_produtos(nome)').order('criado_em', { ascending: false });
-    setLeads(data || []);
-    setLoadingL(false);
-  }
+      const cidadesCount = countBy(cidadesRaw, 'cidade').slice(0, 10);
+      const estadosCount = countBy(estadosRaw, 'estado').slice(0, 10);
+      const tiposCount = countBy(tiposRaw, 'tipo_imovel');
 
-  useEffect(() => { loadProdutos(); loadLeads(); }, []);
+      const pagMap = {};
+      (pagamentosRaw || []).forEach(r => {
+        const v = r.pagamento_tipos;
+        if (Array.isArray(v)) v.forEach(p => { pagMap[p] = (pagMap[p] || 0) + 1; });
+        else if (v) pagMap[v] = (pagMap[v] || 0) + 1;
+      });
+      const pagamentosCount = Object.entries(pagMap).sort((a, b) => b[1] - a[1]);
 
-  async function saveProduto() {
-    setSaving(true);
-    const { id, ...fields } = modalProduto;
-    if (id) {
-      await supabase.from('sdr_produtos').update(fields).eq('id', id);
-    } else {
-      await supabase.from('sdr_produtos').insert(fields);
+      const totalBuscas = (totaisRaw || []).length;
+      const unicosSet = new Set((totaisRaw || []).filter(r => r.user_id).map(r => r.user_id));
+
+      setBuscas({ total: totalBuscas, unicos: unicosSet.size, cidades: cidadesCount, estados: estadosCount, tipos: tiposCount, pagamentos: pagamentosCount });
+
+      // ── Seção 2: Perfis demográficos ──
+      const { data: perfisRaw } = await supabase.from('perfis').select('role, created_at, cidade, estado, ativo');
+      const roleMap = {};
+      const estadoPerfisMap = {};
+      let ativos = 0; let inativos = 0;
+      const semanaMap = {};
+      (perfisRaw || []).forEach(p => {
+        roleMap[p.role || 'explorador'] = (roleMap[p.role || 'explorador'] || 0) + 1;
+        if (p.estado) estadoPerfisMap[p.estado] = (estadoPerfisMap[p.estado] || 0) + 1;
+        if (p.ativo !== false) ativos++; else inativos++;
+        if (p.created_at) {
+          const diff = Math.floor((Date.now() - new Date(p.created_at)) / (7 * 24 * 60 * 60 * 1000));
+          if (diff < 12) { const semana = `S-${diff}`; semanaMap[semana] = (semanaMap[semana] || 0) + 1; }
+        }
+      });
+      const porRole = Object.entries(roleMap).sort((a, b) => b[1] - a[1]);
+      const porEstado = Object.entries(estadoPerfisMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      const semanas = Array.from({ length: 12 }, (_, i) => ({ label: `S${12 - i}`, count: semanaMap[`S-${11 - i}`] || 0 }));
+      setPerfisData({ porRole, porEstado, semanas, ativos, inativos, total: (perfisRaw || []).length });
+
+      // ── Seção 3: SDR ──
+      const [{ data: leadsRaw }, { data: produtosRaw }] = await Promise.all([
+        supabase.from('sdr_leads').select('status, criado_em, origem, produto_id'),
+        supabase.from('sdr_produtos').select('id, nome, tipo'),
+      ]);
+      const statusMap = {};
+      const prodLeadMap = {};
+      const sdrSemanaMap = {};
+      (leadsRaw || []).forEach(l => {
+        statusMap[l.status || 'novo'] = (statusMap[l.status || 'novo'] || 0) + 1;
+        if (l.produto_id) prodLeadMap[l.produto_id] = (prodLeadMap[l.produto_id] || 0) + 1;
+        if (l.criado_em) {
+          const diff = Math.floor((Date.now() - new Date(l.criado_em)) / (7 * 24 * 60 * 60 * 1000));
+          if (diff < 8) { const s = `S-${diff}`; sdrSemanaMap[s] = (sdrSemanaMap[s] || 0) + 1; }
+        }
+      });
+      const prodNomeMap = {};
+      (produtosRaw || []).forEach(p => { prodNomeMap[p.id] = p.nome || p.tipo || p.id; });
+      const leadsPorProduto = Object.entries(prodLeadMap).map(([id, count]) => ({ nome: prodNomeMap[id] || id, count })).sort((a, b) => b.count - a.count);
+      const sdrSemanas = Array.from({ length: 8 }, (_, i) => ({ label: `S${8 - i}`, count: sdrSemanaMap[`S-${7 - i}`] || 0 }));
+      const totalLeads = (leadsRaw || []).length;
+      const convertidos = statusMap['convertido'] || 0;
+      setSdrData({ leadsStatus: statusMap, leadsPorProduto, semanas: sdrSemanas, total: totalLeads, convertidos });
+
+      // ── Seção 4: Mapa de Oportunidades ──
+      const { data: imoveisRaw } = await supabase.from('imoveis_leilao').select('cidade, estado').eq('ativo', true);
+      const imovCidadeMap = {};
+      (imoveisRaw || []).forEach(im => { if (im.cidade) imovCidadeMap[im.cidade] = (imovCidadeMap[im.cidade] || 0) + 1; });
+      const oportsArr = cidadesCount.map(([cidade, buscasCount]) => ({
+        cidade, buscas: buscasCount, imoveis: imovCidadeMap[cidade] || 0,
+        ratio: imovCidadeMap[cidade] ? (buscasCount / imovCidadeMap[cidade]).toFixed(1) : buscasCount * 10,
+      })).sort((a, b) => b.ratio - a.ratio);
+      setOportunidades(oportsArr);
+
+      // ── Seção 5: Alertas ──
+      const { data: alertasRaw } = await supabase.from('alertas_email').select('*, perfis(email)').order('total_enviados', { ascending: false });
+      setAlertas(alertasRaw || []);
+
+    } catch (e) {
+      console.error('MarketingTab error:', e);
     }
-    setSaving(false);
-    setModalProduto(null);
-    loadProdutos();
-  }
+    setLoading(false);
+  }, [thirtyDaysAgo]);
 
-  async function toggleAtivo(prod) {
-    await supabase.from('sdr_produtos').update({ ativo: !prod.ativo }).eq('id', prod.id);
-    loadProdutos();
-  }
+  useEffect(() => { carregar(); }, [carregar]);
 
-  async function deleteProduto(id) {
-    if (!window.confirm('Excluir produto? Os leads associados serão mantidos.')) return;
-    await supabase.from('sdr_produtos').delete().eq('id', id);
-    loadProdutos();
-  }
-
-  async function updateLeadStatus(leadId, status) {
-    await supabase.from('sdr_leads').update({ status }).eq('id', leadId);
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l));
-  }
-
-  function copyLink(prodId) {
-    const link = `${window.location.origin}/#/p/captura/${prodId}`;
-    navigator.clipboard.writeText(link);
-    setCopiado(prodId);
-    setTimeout(() => setCopiado(''), 1800);
-  }
-
-  function exportCSV() {
-    const filtered = leads.filter(l =>
-      (!filterProduto || l.produto_id === filterProduto) &&
-      (!filterStatus || l.status === filterStatus)
-    );
-    const header = ['Nome', 'WhatsApp', 'Email', 'Produto', 'Status', 'Data'];
-    const rows = filtered.map(l => [
-      l.nome, l.whatsapp, l.email || '', l.sdr_produtos?.nome || '', l.status,
-      new Date(l.criado_em).toLocaleDateString('pt-BR'),
-    ]);
-    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+  function exportarCSV() {
+    const d = new Date().toLocaleDateString('pt-BR');
+    const linhas = [
+      `Relatório de Marketing TSN Ativos - ${d}`, '',
+      '=== BUSCAS ===', 'Cidade,Total Buscas',
+      ...buscas.cidades.map(([c, n]) => `${c},${n}`), '',
+      'Estado,Total Buscas',
+      ...buscas.estados.map(([e, n]) => `${e},${n}`), '',
+      '=== PERFIL USUÁRIOS ===', 'Plano,Total',
+      ...perfisData.porRole.map(([r, n]) => `${r},${n}`), '',
+      '=== SDR LEADS ===', 'Produto,Total Leads',
+      ...sdrData.leadsPorProduto.map(l => `${l.nome},${l.count}`), '',
+      'Status,Total',
+      ...Object.entries(sdrData.leadsStatus).map(([s, c]) => `${s},${c}`), '',
+      '=== MAPA DE OPORTUNIDADES ===', 'Cidade,Buscas 30d,Imóveis Disponíveis,Ratio Demanda/Oferta',
+      ...oportunidades.map(o => `${o.cidade},${o.buscas},${o.imoveis},${o.ratio}`),
+    ];
+    const blob = new Blob([linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'leads_sdr.csv'; a.click();
+    const a = document.createElement('a');
+    a.href = url; a.download = `marketing-tsn-${d.replace(/\//g, '-')}.csv`; a.click();
     URL.revokeObjectURL(url);
   }
 
-  const statusCounts = STATUS_LIST.reduce((acc, s) => ({ ...acc, [s]: leads.filter(l => l.status === s).length }), {});
-  const filteredLeads = leads.filter(l =>
-    (!filterProduto || l.produto_id === filterProduto) &&
-    (!filterStatus || l.status === filterStatus)
-  );
-
-  return (
-    <div>
-      {/* Status badges */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
-        {STATUS_LIST.map(s => (
-          <div key={s} style={{ background: '#fff', border: `2px solid ${STATUS_COLORS[s]}`, borderRadius: 10, padding: '8px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 90 }}>
-            <span style={{ fontSize: 20, fontWeight: 900, color: STATUS_COLORS[s] }}>{statusCounts[s]}</span>
-            <span style={{ fontSize: 11, color: '#64748b', textTransform: 'capitalize', marginTop: 2 }}>{s}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Produtos section */}
-      <div style={{ ...S.card, borderRadius: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={S.sectionTitle}>Produtos de Captura</div>
-          <button style={S.btn('primary')} onClick={() => setModalProduto(defaultProdutoSDR())}>+ Novo Produto</button>
-        </div>
-        {loadingP ? <p style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</p> : (
-          <table style={S.table}>
-            <thead>
-              <tr>
-                <th style={S.th}>Nome</th>
-                <th style={S.th}>Tipo</th>
-                <th style={S.th}>Ativo</th>
-                <th style={S.th}>Link de Compartilhamento</th>
-                <th style={S.th}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {produtos.map(p => (
-                <tr key={p.id}>
-                  <td style={S.td}>{p.nome}</td>
-                  <td style={S.td}><span style={{ background: '#f1f5f9', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}>{p.tipo}</span></td>
-                  <td style={S.td}>
-                    <button onClick={() => toggleAtivo(p)} style={{ ...S.badge(p.ativo), cursor: 'pointer', border: 'none' }}>
-                      {p.ativo ? 'Ativo' : 'Inativo'}
-                    </button>
-                  </td>
-                  <td style={S.td}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12, color: '#64748b', fontFamily: 'monospace', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {window.location.origin}/#/p/captura/{p.id}
-                      </span>
-                      <button onClick={() => copyLink(p.id)} style={{ ...S.btn('outline'), fontSize: 12, padding: '4px 10px' }}>
-                        {copiado === p.id ? 'Copiado!' : 'Copiar'}
-                      </button>
-                    </div>
-                  </td>
-                  <td style={S.td}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button style={{ ...S.btn('outline'), fontSize: 12 }} onClick={() => setModalProduto({ ...p })}>Editar</button>
-                      <button style={{ ...S.btn('danger'), fontSize: 12 }} onClick={() => deleteProduto(p.id)}>Excluir</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {produtos.length === 0 && (
-                <tr><td colSpan={5} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum produto cadastrado.</td></tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Leads section */}
-      <div style={{ ...S.card, borderRadius: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-          <div style={S.sectionTitle}>Leads Capturados</div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <select value={filterProduto} onChange={e => setFilterProduto(e.target.value)}
-              style={{ ...S.input, width: 'auto', fontSize: 13 }}>
-              <option value="">Todos os produtos</option>
-              {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              style={{ ...S.input, width: 'auto', fontSize: 13 }}>
-              <option value="">Todos os status</option>
-              {STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button style={S.btn('outline')} onClick={exportCSV}>⬇ Exportar CSV</button>
-          </div>
-        </div>
-        {loadingL ? <p style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</p> : (
-          <table style={S.table}>
-            <thead>
-              <tr>
-                <th style={S.th}>Nome</th>
-                <th style={S.th}>WhatsApp</th>
-                <th style={S.th}>Email</th>
-                <th style={S.th}>Produto</th>
-                <th style={S.th}>Status</th>
-                <th style={S.th}>Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLeads.map(l => (
-                <tr key={l.id}>
-                  <td style={S.td}>{l.nome}</td>
-                  <td style={S.td}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{l.whatsapp}</span>
-                      <a href={`https://wa.me/55${l.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '2px 6px', textDecoration: 'none', fontWeight: 600 }}>WA</a>
-                    </div>
-                  </td>
-                  <td style={S.td}>{l.email || '—'}</td>
-                  <td style={S.td}>{l.sdr_produtos?.nome || '—'}</td>
-                  <td style={S.td}>
-                    <select value={l.status} onChange={e => updateLeadStatus(l.id, e.target.value)}
-                      style={{ background: STATUS_COLORS[l.status] + '22', color: STATUS_COLORS[l.status], border: `1px solid ${STATUS_COLORS[l.status]}`, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>
-                      {STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </td>
-                  <td style={S.td}>{new Date(l.criado_em).toLocaleDateString('pt-BR')}</td>
-                </tr>
-              ))}
-              {filteredLeads.length === 0 && (
-                <tr><td colSpan={6} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum lead encontrado.</td></tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Modal de produto */}
-      {modalProduto && (
-        <div style={S.overlay} onClick={() => setModalProduto(null)}>
-          <div style={S.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 20 }}>{modalProduto.id ? 'Editar Produto' : 'Novo Produto'}</div>
-            <div style={S.row}>
-              <div style={S.col}>
-                <label style={S.label}>Nome *</label>
-                <input style={S.input} value={modalProduto.nome} onChange={e => setModalProduto(m => ({ ...m, nome: e.target.value }))} placeholder="Nome do produto" />
-              </div>
-              <div style={{ width: 140 }}>
-                <label style={S.label}>Tipo</label>
-                <select style={S.input} value={modalProduto.tipo} onChange={e => setModalProduto(m => ({ ...m, tipo: e.target.value }))}>
-                  <option value="ebook">eBook</option>
-                  <option value="minicurso">Mini-curso</option>
-                  <option value="webinar">Webinar</option>
-                  <option value="outro">Outro</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>Descrição</label>
-              <textarea style={{ ...S.input, height: 72, resize: 'vertical' }} value={modalProduto.descricao || ''} onChange={e => setModalProduto(m => ({ ...m, descricao: e.target.value }))} placeholder="Descrição breve do produto" />
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>Link do Conteúdo (URL do ebook, vídeo etc)</label>
-              <input style={S.input} value={modalProduto.conteudo_url || ''} onChange={e => setModalProduto(m => ({ ...m, conteudo_url: e.target.value }))} placeholder="https://..." />
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={S.label}>URL da Imagem (opcional)</label>
-              <input style={S.input} value={modalProduto.imagem_url || ''} onChange={e => setModalProduto(m => ({ ...m, imagem_url: e.target.value }))} placeholder="https://..." />
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button style={S.btn('outline')} onClick={() => setModalProduto(null)}>Cancelar</button>
-              <button style={S.btn('primary')} onClick={saveProduto} disabled={saving || !modalProduto.nome.trim()}>
-                {saving ? 'Salvando…' : 'Salvar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+  const maxBar = (arr) => Math.max(...arr.map(([, c]) => c), 1);
+  const maxBarN = (arr, key) => Math.max(...arr.map(r => r[key] || 0), 1);
+  const kpiStyle = (color) => ({ fontSize: 28, fontWeight: 900, color });
+  const kpiLabel = { fontSize: 12, color: '#64748b', marginTop: 2 };
+  const sectionHeader = (title, sub) => (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{title}</div>
+      {sub && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
     </div>
   );
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// EQUIPE TAB
-// ═══════════════════════════════════════════════════════════════════════════════
-const ROLE_BADGE_COLORS = {
-  admin: { bg: '#fef3c7', color: '#92400e' },
-  analista: { bg: '#dbeafe', color: '#1e40af' },
-  consultor: { bg: '#d1fae5', color: '#065f46' },
-  advogado: { bg: '#ede9fe', color: '#5b21b6' },
-};
+  if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>Carregando dados de marketing...</div>;
 
-function EquipeTab() {
-  const [membros, setMembros] = useState([]);
-  const [chamadosMap, setChamadosMap] = useState({});
-  const [finalizadosHoje, setFinalizadosHoje] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const { data: perfisData } = await supabase
-        .from('perfis')
-        .select('*')
-        .in('role', ['admin', 'analista', 'consultor', 'advogado']);
-      const membrosData = perfisData || [];
-      setMembros(membrosData);
-
-      // chamados por membro
-      if (membrosData.length > 0) {
-        const ids = membrosData.map(m => m.id);
-        const { data: chamados } = await supabase
-          .from('chamados')
-          .select('atendente_id, status')
-          .in('atendente_id', ids);
-        const map = {};
-        ids.forEach(id => { map[id] = { total: 0, finalizados: 0 }; });
-        (chamados || []).forEach(c => {
-          if (map[c.atendente_id]) {
-            map[c.atendente_id].total++;
-            if (c.status === 'finalizado') map[c.atendente_id].finalizados++;
-          }
-        });
-        setChamadosMap(map);
-
-        // finalizados hoje
-        const hoje = new Date().toISOString().slice(0, 10);
-        const { count } = await supabase
-          .from('chamados')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'finalizado')
-          .gte('updated_at', hoje);
-        setFinalizadosHoje(count || 0);
-      }
-      setLoading(false);
-    }
-    load();
-  }, []);
-
-  const totalEquipe = membros.length;
-  const analistas = membros.filter(m => m.role === 'analista').length;
-  const consultores = membros.filter(m => m.role === 'consultor').length;
-
-  if (loading) return <p style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</p>;
+  const FUNNEL_STEPS = ['novo', 'contatado', 'qualificado', 'convertido'];
+  const FUNNEL_COLORS = ['#2563eb', '#7c3aed', '#d97706', '#059669'];
 
   return (
     <div>
-      {/* Cards overview */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-        {[
-          { label: 'Total Equipe', value: totalEquipe, color: '#0f172a' },
-          { label: 'Analistas Ativos', value: analistas, color: '#3b82f6' },
-          { label: 'Consultores Ativos', value: consultores, color: '#059669' },
-          { label: 'Finalizados Hoje', value: finalizadosHoje, color: '#f59e0b' },
-        ].map(c => (
-          <div key={c.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px 24px' }}>
-            <div style={{ fontSize: 32, fontWeight: 900, color: c.color }}>{c.value}</div>
-            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{c.label}</div>
-          </div>
-        ))}
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Inteligência de Marketing</h2>
+          <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Painel privado — somente admin</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button style={S.btn('outline')} onClick={carregar}>↻ Atualizar dados</button>
+          <button style={S.btn('primary')} onClick={exportarCSV}>⬇ Exportar Relatório</button>
+        </div>
       </div>
 
-      {/* Staff table */}
-      <div style={{ ...S.card, borderRadius: 16 }}>
-        <div style={S.sectionTitle}>Membros da Equipe</div>
-        <table style={S.table}>
-          <thead>
-            <tr>
-              <th style={S.th}>Membro</th>
-              <th style={S.th}>Role</th>
-              <th style={S.th}>Chamados Assumidos</th>
-              <th style={S.th}>Chamados Finalizados</th>
-              <th style={S.th}>Último Acesso</th>
-            </tr>
-          </thead>
-          <tbody>
-            {membros.map(m => {
-              const stats = chamadosMap[m.id] || { total: 0, finalizados: 0 };
-              const roleStyle = ROLE_BADGE_COLORS[m.role] || { bg: '#f1f5f9', color: '#475569' };
+      {/* Seção 1: Buscas */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('Painel de Buscas', 'Dados dos últimos 30 dias')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Total de buscas', value: buscas.total, color: '#2563eb' },
+            { label: 'Usuários únicos buscadores', value: buscas.unicos, color: '#7c3aed' },
+            { label: 'Tipos de imóvel buscados', value: buscas.tipos.length, color: '#059669' },
+            { label: 'Buscas por usuário', value: buscas.unicos > 0 ? (buscas.total / buscas.unicos).toFixed(1) + 'x' : '—', color: '#d97706' },
+          ].map(k => (
+            <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
+              <div style={kpiStyle(k.color)}>{k.value}</div>
+              <div style={kpiLabel}>{k.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Cidades mais buscadas</div>
+            {buscas.cidades.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div> : buscas.cidades.map(([cidade, count]) => (
+              <div key={cidade} style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                  <span>{cidade}</span><span style={{ fontWeight: 700, color: '#2563eb' }}>{count}</span>
+                </div>
+                <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                  <div style={{ background: 'linear-gradient(90deg,#2563eb,#60a5fa)', borderRadius: 4, height: 8, width: `${(count / maxBar(buscas.cidades)) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Estados mais buscados</div>
+            {buscas.estados.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div> : buscas.estados.map(([estado, count]) => (
+              <div key={estado} style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                  <span>{estado}</span><span style={{ fontWeight: 700, color: '#059669' }}>{count}</span>
+                </div>
+                <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                  <div style={{ background: 'linear-gradient(90deg,#059669,#34d399)', borderRadius: 4, height: 8, width: `${(count / maxBar(buscas.estados)) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Tipos de imóvel buscados</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {buscas.tipos.length === 0 ? <span style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</span>
+              : buscas.tipos.map(([tipo, count]) => (
+                <span key={tipo} style={{ padding: '4px 14px', background: '#eff6ff', color: '#1e40af', borderRadius: 999, fontWeight: 700, fontSize: 13 }}>
+                  {tipo} <span style={{ color: '#2563eb' }}>({count})</span>
+                </span>
+              ))}
+          </div>
+        </div>
+        {buscas.pagamentos.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Filtros de pagamento</div>
+            {(() => {
+              const total = buscas.pagamentos.reduce((s, [, c]) => s + c, 0);
+              return buscas.pagamentos.map(([tipo, count]) => (
+                <div key={tipo} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{tipo}</span><span style={{ fontWeight: 700 }}>{count} ({total > 0 ? ((count / total) * 100).toFixed(0) : 0}%)</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                    <div style={{ background: 'linear-gradient(90deg,#d97706,#fbbf24)', borderRadius: 4, height: 8, width: `${total > 0 ? (count / total) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+        )}
+      </div>
+
+      {/* Seção 2: Perfil Demográfico */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('Perfil Demográfico dos Usuários', 'Dados dos últimos 30 dias')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Total de usuários', value: perfisData.total, color: '#0f172a' },
+            { label: 'Usuários ativos', value: perfisData.ativos, color: '#059669' },
+            { label: 'Usuários inativos', value: perfisData.inativos, color: '#dc2626' },
+            { label: 'Taxa de atividade', value: perfisData.total > 0 ? ((perfisData.ativos / perfisData.total) * 100).toFixed(0) + '%' : '—', color: '#2563eb' },
+          ].map(k => (
+            <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
+              <div style={kpiStyle(k.color)}>{k.value}</div>
+              <div style={kpiLabel}>{k.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Usuários por plano</div>
+            {perfisData.porRole.map(([role, count]) => {
+              const maxV = Math.max(...perfisData.porRole.map(([, c]) => c), 1);
               return (
-                <tr key={m.id}>
-                  <td style={S.td}>
-                    <div style={{ fontWeight: 600 }}>{m.nome || m.name || '—'}</div>
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>{m.email || ''}</div>
-                  </td>
-                  <td style={S.td}>
-                    <span style={{ background: roleStyle.bg, color: roleStyle.color, borderRadius: 8, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>
-                      {m.role}
-                    </span>
-                  </td>
-                  <td style={S.td}>{stats.total}</td>
-                  <td style={S.td}>{stats.finalizados}</td>
-                  <td style={{ ...S.td, color: '#64748b', fontSize: 13 }}>
-                    {m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'N/D'}
-                  </td>
-                </tr>
+                <div key={role} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{role}</span><span style={{ fontWeight: 700, color: '#7c3aed' }}>{count}</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                    <div style={{ background: 'linear-gradient(90deg,#7c3aed,#a78bfa)', borderRadius: 4, height: 8, width: `${(count / maxV) * 100}%` }} />
+                  </div>
+                </div>
               );
             })}
-            {membros.length === 0 && (
-              <tr><td colSpan={5} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum membro encontrado.</td></tr>
-            )}
-          </tbody>
-        </table>
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Usuários por estado</div>
+            {perfisData.porEstado.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: 13 }}>N/D — coluna estado não preenchida</div>
+            ) : perfisData.porEstado.map(([estado, count]) => {
+              const maxV = Math.max(...perfisData.porEstado.map(([, c]) => c), 1);
+              return (
+                <div key={estado} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{estado}</span><span style={{ fontWeight: 700, color: '#0891b2' }}>{count}</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                    <div style={{ background: 'linear-gradient(90deg,#0891b2,#38bdf8)', borderRadius: 4, height: 8, width: `${(count / maxV) * 100}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Novos usuários por semana (últimas 12 semanas)</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
+            {(() => {
+              const maxV = Math.max(...perfisData.semanas.map(s => s.count), 1);
+              return perfisData.semanas.map(s => (
+                <div key={s.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ fontSize: 10, color: '#475569', fontWeight: 700 }}>{s.count > 0 ? s.count : ''}</div>
+                  <div style={{ width: '100%', background: s.count > 0 ? 'linear-gradient(180deg,#2563eb,#60a5fa)' : '#e2e8f0', borderRadius: 4, height: `${Math.max((s.count / maxV) * 56, s.count > 0 ? 8 : 4)}px` }} />
+                  <div style={{ fontSize: 9, color: '#94a3b8' }}>{s.label}</div>
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Seção 3: SDR Intelligence */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('SDR Intelligence', 'Dados dos últimos 30 dias')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Total de leads', value: sdrData.total, color: '#0f172a' },
+            { label: 'Convertidos', value: sdrData.convertidos, color: '#059669' },
+            { label: 'Taxa de conversão', value: sdrData.total > 0 ? ((sdrData.convertidos / sdrData.total) * 100).toFixed(1) + '%' : '—', color: '#2563eb' },
+            { label: 'Leads novos', value: sdrData.leadsStatus['novo'] || 0, color: '#d97706' },
+          ].map(k => (
+            <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
+              <div style={kpiStyle(k.color)}>{k.value}</div>
+              <div style={kpiLabel}>{k.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Funil de leads</div>
+            {FUNNEL_STEPS.map((step, i) => {
+              const count = sdrData.leadsStatus[step] || 0;
+              const pct = sdrData.total > 0 ? ((count / sdrData.total) * 100).toFixed(0) : 0;
+              return (
+                <div key={step} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span style={{ textTransform: 'capitalize' }}>{step}</span>
+                    <span style={{ fontWeight: 700, color: FUNNEL_COLORS[i] }}>{count} ({pct}%)</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 10 }}>
+                    <div style={{ background: FUNNEL_COLORS[i], borderRadius: 4, height: 10, width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Leads por produto</div>
+            {sdrData.leadsPorProduto.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div>
+              : sdrData.leadsPorProduto.map(l => (
+                <div key={l.nome} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
+                    <span>{l.nome}</span><span style={{ fontWeight: 700, color: '#059669' }}>{l.count}</span>
+                  </div>
+                  <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
+                    <div style={{ background: 'linear-gradient(90deg,#059669,#34d399)', borderRadius: 4, height: 8, width: `${(l.count / maxBarN(sdrData.leadsPorProduto, 'count')) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Leads por semana (últimas 8 semanas)</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
+            {(() => {
+              const maxV = Math.max(...sdrData.semanas.map(s => s.count), 1);
+              return sdrData.semanas.map(s => (
+                <div key={s.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ fontSize: 10, color: '#475569', fontWeight: 700 }}>{s.count > 0 ? s.count : ''}</div>
+                  <div style={{ width: '100%', background: s.count > 0 ? 'linear-gradient(180deg,#059669,#34d399)' : '#e2e8f0', borderRadius: 4, height: `${Math.max((s.count / maxV) * 56, s.count > 0 ? 8 : 4)}px` }} />
+                  <div style={{ fontSize: 9, color: '#94a3b8' }}>{s.label}</div>
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Seção 4: Mapa de Oportunidades */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('Mapa de Oportunidades por Cidade', 'Mercados mais subatendidos primeiro — dados dos últimos 30 dias')}
+        {oportunidades.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados suficientes para análise.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Cidade</th>
+                  <th style={S.th}>Buscas (30d)</th>
+                  <th style={S.th}>Imóveis disponíveis</th>
+                  <th style={S.th}>Ratio Demanda/Oferta</th>
+                  <th style={S.th}>Oportunidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {oportunidades.map(o => {
+                  const ratio = Number(o.ratio);
+                  const opp = ratio >= 10 ? 'Alta' : ratio >= 3 ? 'Média' : 'Baixa';
+                  const oppColor = ratio >= 10 ? '#dc2626' : ratio >= 3 ? '#d97706' : '#059669';
+                  return (
+                    <tr key={o.cidade}>
+                      <td style={S.td}><strong>{o.cidade}</strong></td>
+                      <td style={{ ...S.td, fontWeight: 700, color: '#2563eb' }}>{o.buscas}</td>
+                      <td style={{ ...S.td, color: o.imoveis === 0 ? '#dc2626' : '#0f172a' }}>{o.imoveis === 0 ? '0 ⚠' : o.imoveis}</td>
+                      <td style={{ ...S.td, fontWeight: 700 }}>{o.ratio}</td>
+                      <td style={S.td}><span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: oppColor + '20', color: oppColor }}>{opp}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Seção 5: Alertas Configurados */}
+      <div style={{ ...S.card, borderRadius: 16 }}>
+        {sectionHeader('Alertas de E-mail Configurados', 'Usuários com buscas salvas ativas')}
+        {alertas.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhum alerta configurado.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Usuário</th>
+                  <th style={S.th}>Filtro</th>
+                  <th style={S.th}>Último envio</th>
+                  <th style={S.th}>Total enviados</th>
+                  <th style={S.th}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alertas.map(a => (
+                  <tr key={a.id}>
+                    <td style={{ ...S.td, fontSize: 13 }}>{a.perfis?.email || a.user_id || '—'}</td>
+                    <td style={{ ...S.td, fontSize: 12, color: '#475569', maxWidth: 200 }}>{JSON.stringify(a.filtros || a.filtro || {})}</td>
+                    <td style={{ ...S.td, fontSize: 12 }}>{a.ultimo_envio ? new Date(a.ultimo_envio).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td style={{ ...S.td, fontWeight: 700, color: '#2563eb' }}>{a.total_enviados || 0}</td>
+                    <td style={S.td}><span style={S.badge(a.ativo !== false)}>{a.ativo !== false ? 'Ativo' : 'Inativo'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Scrapers', 'Configurações'];
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -2462,6 +2416,9 @@ export default function Admin() {
           {TABS.map(t => (
             <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>{t}</button>
           ))}
+          {role === 'admin' && (
+            <button style={S.tab(tab === 'Marketing')} onClick={() => setTab('Marketing')}>Marketing</button>
+          )}
         </div>
 
         {tab === 'Dashboard'      && <DashboardTab />}
@@ -2471,11 +2428,10 @@ export default function Admin() {
         {tab === 'Promoções'      && <PromoTab />}
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
-        {tab === 'SDR / Leads'    && <SdrTab />}
-        {tab === 'Equipe'         && <EquipeTab />}
         {tab === 'Tour'           && <TourTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Configurações'  && <ConfigTab />}
+        {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}
       </div>
     </div>
   );
