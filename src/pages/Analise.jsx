@@ -114,8 +114,8 @@ export default function Analise() {
       .select('analises_mes, analises_count')
       .eq('id', user.id)
       .single()
-      .then(({ data }) => {
-        if (!data) return;
+      .then(({ data, error }) => {
+        if (error || !data) return;
         const mes = data.analises_mes;
         const count = data.analises_count || 0;
         if (mes === mesAtual()) {

@@ -273,6 +273,7 @@ export default function ConviteEquipe() {
   const [showSenha, setShowSenha] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [concluido, setConcluido] = useState(false);
+  const [precisaConfirmarEmail, setPrecisaConfirmarEmail] = useState(false);
   const [erroPasso, setErroPasso] = useState('');
 
   useEffect(() => {
@@ -402,6 +403,7 @@ export default function ConviteEquipe() {
         },
       });
       if (signUpError) throw signUpError;
+      if (signUpData?.user?.confirmation_sent_at) setPrecisaConfirmarEmail(true);
 
       if (signUpData?.user?.id) {
         await supabase.rpc('usar_convite_equipe', {
@@ -410,16 +412,17 @@ export default function ConviteEquipe() {
         });
       }
 
-      // Salvar fotos KYC no registro do convite
+      // Salvar fotos KYC via função SECURITY DEFINER (RLS não permite UPDATE direto)
       if (selfie_rosto_compressed || doc_frente_compressed || selfie_doc_compressed) {
-        await supabase.from('convites_equipe').update({
-          kyc_fotos: {
+        await supabase.rpc('salvar_kyc_equipe', {
+          p_token: token.toUpperCase(),
+          p_fotos: {
             selfie_rosto: selfie_rosto_compressed,
             doc_frente: doc_frente_compressed,
             selfie_doc: selfie_doc_compressed,
             validado_em: new Date().toISOString(),
           },
-        }).eq('token', token.toUpperCase());
+        });
       }
 
       setConcluido(true);
@@ -438,7 +441,10 @@ export default function ConviteEquipe() {
         <h1 style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: '0 0 12px' }}>Cadastro concluído!</h1>
         <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.7, marginBottom: 32 }}>
           Bem-vindo à equipe TSN Ativos como <strong style={{ color: 'white' }}>{cfg.label}</strong>.<br />
-          Verifique seu email para confirmar o cadastro e faça login para acessar a plataforma.
+          Seu cadastro foi concluído. Faça login para acessar a plataforma.
+          {precisaConfirmarEmail && (
+            <><br /><span style={{ fontSize: 13, color: '#94a3b8' }}>Verifique também seu e-mail para confirmar o acesso.</span></>
+          )}
         </p>
         <button onClick={() => nav('/login')}
           style={{ padding: '14px 32px', background: cfg.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
