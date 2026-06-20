@@ -8,5 +8,8 @@
         { "key": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" }
       ]
     }
+  ],
+  "crons": [
+    { "path": "/api/enviar-alertas-cron", "schedule": "0 8 * * *" }
   ]
 }

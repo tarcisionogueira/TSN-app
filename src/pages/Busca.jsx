@@ -123,9 +123,63 @@ export default function Busca() {
         numeroProcesso: im.numero_processo,
       })) : [];
       setResultados(mapeados);
+
+      // Silent tracking — fire and forget
+      try {
+        supabase.from('busca_historico').insert({
+          user_id: user?.id || null,
+          session_id: sessionStorage.getItem('tsn_session_id') || (() => {
+            const sid = Math.random().toString(36).slice(2);
+            sessionStorage.setItem('tsn_session_id', sid);
+            return sid;
+          })(),
+          filtros: filtros,
+          resultados_count: mapeados.length,
+          cidade: filtros.cidades?.join(', ') || null,
+          estado: filtros.estado || null,
+          tipo_imovel: filtros.tipo || null,
+          valor_min: filtros.valorMin ? Number(filtros.valorMin) : null,
+          valor_max: filtros.valorMax ? Number(filtros.valorMax) : null,
+          pagamento_tipos: filtros.pagamento?.length > 0 ? filtros.pagamento : null,
+          sort_usado: null,
+        }).then(() => {}).catch(() => {});
+      } catch (_) {}
+
+      // Atualiza preferência de alerta do usuário (silencioso)
+      if (user?.id && (filtros.estado || filtros.cidades?.length > 0)) {
+        try {
+          supabase.from('alertas_email').upsert({
+            user_id: user.id,
+            filtros: filtros,
+            descricao: [filtros.cidades?.join(', ') || filtros.estado, filtros.tipo].filter(Boolean).join(' · ') || 'Preferência geral',
+            ativo: true,
+          }, { onConflict: 'user_id' }).then(() => {}).catch(() => {});
+        } catch (_) {}
+      }
     } catch (e) {
       setErro('Erro na busca. Tente novamente.');
       console.error(e);
+
+      // Silent tracking on error — fire and forget
+      try {
+        supabase.from('busca_historico').insert({
+          user_id: user?.id || null,
+          session_id: sessionStorage.getItem('tsn_session_id') || (() => {
+            const sid = Math.random().toString(36).slice(2);
+            sessionStorage.setItem('tsn_session_id', sid);
+            return sid;
+          })(),
+          filtros: filtros,
+          resultados_count: 0,
+          cidade: filtros.cidades?.join(', ') || null,
+          estado: filtros.estado || null,
+          tipo_imovel: filtros.tipo || null,
+          valor_min: filtros.valorMin ? Number(filtros.valorMin) : null,
+          valor_max: filtros.valorMax ? Number(filtros.valorMax) : null,
+          pagamento_tipos: filtros.pagamento?.length > 0 ? filtros.pagamento : null,
+          sort_usado: null,
+        }).then(() => {}).catch(() => {});
+      } catch (_) {}
     }
     setLoading(false);
   };
