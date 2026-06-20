@@ -6,6 +6,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
+  Scale, Search, User, Calendar, ChevronRight, AlertCircle,
 } from 'lucide-react';
 import { extrairDadosDocumento, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
@@ -143,6 +144,43 @@ export default function Analise() {
 
   const [textoDoc, setTextoDoc] = useState('');
   const [textoMatricula, setTextoMatricula] = useState('');
+
+  // CNJ DataJud
+  const [cnjNumero, setCnjNumero] = useState('');
+  const [cnjNome, setCnjNome] = useState('');
+  const [cnjResultados, setCnjResultados] = useState(null);
+  const [loadCnj, setLoadCnj] = useState(false);
+  const [cnjErro, setCnjErro] = useState('');
+
+  const cenario_role_pro = ['top2', 'assessorado', 'clube', 'analista', 'advogado', 'admin'];
+
+  const buscarCNJ = async () => {
+    if (!cnjNumero.trim() && !cnjNome.trim()) return;
+    if (!d.estado) { setCnjErro('Preencha o Estado do imóvel (Etapa 2) para determinar o tribunal.'); return; }
+    setLoadCnj(true); setCnjErro(''); setCnjResultados(null);
+    try {
+      const res = await fetch('/api/cnj-datajud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numero_processo: cnjNumero.trim(), nome_parte: cnjNome.trim(), uf: d.estado }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro na consulta');
+      setCnjResultados(data);
+      if (data.processos?.length > 0) {
+        // Adiciona riscos jurídicos automaticamente se detectados
+        const novosRiscos = [];
+        data.processos.forEach(p => {
+          if (p.tem_penhora) novosRiscos.push({ id: Date.now()+Math.random(), texto: `Penhora detectada no processo ${p.numero}`, tipo: 'bloqueante' });
+          if (p.tem_arresto) novosRiscos.push({ id: Date.now()+Math.random(), texto: `Arresto detectado no processo ${p.numero}`, tipo: 'bloqueante' });
+          if (p.tem_leilao) novosRiscos.push({ id: Date.now()+Math.random(), texto: `Hasta pública / leilão registrado no processo ${p.numero}`, tipo: 'alerta' });
+        });
+        if (novosRiscos.length) up('riscos', [...(d.riscos || []), ...novosRiscos]);
+      }
+    } catch (err) { setCnjErro(err.message); }
+    setLoadCnj(false);
+  };
+
   const [cenario, setCenario] = useState('financiado');
   const [mercado, setMercado] = useState(null);
   const [parecer, setParecer] = useState('');
@@ -153,7 +191,7 @@ export default function Analise() {
   const [msg, setMsg] = useState({ text:'', type:'' });
 
   // Controle de abertura por seção
-  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false });
+  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false });
   const toggleSec = (k) => setOpenSec(p => ({ ...p, [k]: !p[k] }));
 
   const up = useCallback((name, val) => setD(p => ({ ...p, [name]: val })), []);
@@ -388,6 +426,160 @@ export default function Analise() {
           </div>
         </Section>
       )}
+
+      {/* ── ETAPA 1C: CONSULTA JURÍDICA CNJ ── */}
+      <Section step="1C" title="Consulta Jurídica — CNJ DataJud" icon={Scale} color="#dc2626"
+        open={openSec.cnj ?? false} onToggle={() => toggleSec('cnj')}
+        badge={cenario_role_pro.includes(role) ? 'Investidor Pro' : '🔒 Investidor Pro'}>
+
+        {!cenario_role_pro.includes(role) ? (
+          /* Tela de bloqueio para planos abaixo do Investidor Pro */
+          <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: '#fef2f2', border: '2px solid #fca5a5', borderRadius: 14, padding: '22px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, textAlign: 'center' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Lock size={26} color="#dc2626" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 16, color: '#b91c1c', marginBottom: 6 }}>Consulta Jurídica disponível no Investidor Pro</div>
+                <div style={{ fontSize: 13, color: '#dc2626', lineHeight: 1.7, maxWidth: 420 }}>
+                  Busque o processo judicial pelo número CNJ ou nome da parte diretamente no tribunal. Identifica penhoras, arrestos, hastas públicas e todas as movimentações processuais em tempo real.
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 360 }}>
+                {[
+                  'Busca por número do processo (CNJ)',
+                  'Busca por nome da parte / executado',
+                  'Detecção automática de penhoras e arrestos',
+                  'Histórico completo de movimentações',
+                  'Adição automática de riscos jurídicos',
+                ].map(item => (
+                  <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#334155' }}>
+                    <CheckCircle2 size={14} color="#dc2626" /> {item}
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => nav('/planos')}
+                style={{ padding: '11px 28px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                Conhecer o Investidor Pro
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Funcionalidade completa para Investidor Pro+ */
+          <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#b91c1c', lineHeight: 1.6 }}>
+              <strong>DataJud — CNJ:</strong> Busca o processo diretamente no tribunal do estado informado na Etapa 2. Penhoras e arrestos são adicionados automaticamente como riscos jurídicos.
+            </div>
+
+            {/* Formulário de busca */}
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>Número do Processo (CNJ)</label>
+                <input value={cnjNumero} onChange={e => setCnjNumero(e.target.value)}
+                  placeholder="0000000-00.0000.8.26.0000"
+                  style={{ width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, background: 'white', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>Nome da Parte / Executado</label>
+                <input value={cnjNome} onChange={e => setCnjNome(e.target.value)}
+                  placeholder="Nome completo ou CPF/CNPJ"
+                  style={{ width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, background: 'white', boxSizing: 'border-box' }} />
+              </div>
+            </div>
+
+            <button onClick={buscarCNJ} disabled={loadCnj || (!cnjNumero.trim() && !cnjNome.trim())}
+              style={{ width: '100%', padding: '11px', background: loadCnj ? '#fca5a5' : '#dc2626', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              {loadCnj ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Consultando DataJud...</> : <><Search size={15} /> Buscar no CNJ DataJud</>}
+            </button>
+
+            {cnjErro && (
+              <div style={{ padding: '10px 14px', background: '#fee2e2', borderRadius: 8, fontSize: 12, color: '#dc2626', display: 'flex', gap: 8 }}>
+                <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} /> {cnjErro}
+              </div>
+            )}
+
+            {/* Resultados */}
+            {cnjResultados && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+                  {cnjResultados.total === 0
+                    ? `Nenhum processo encontrado no ${cnjResultados.tribunal?.toUpperCase()}`
+                    : `${cnjResultados.total} processo(s) encontrado(s) — Tribunal: ${cnjResultados.tribunal?.toUpperCase()}`}
+                </div>
+
+                {cnjResultados.processos?.map((proc, idx) => (
+                  <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
+                    {/* Cabeçalho do processo */}
+                    <div style={{ background: (proc.tem_penhora || proc.tem_arresto) ? '#fef2f2' : '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <Scale size={14} color="#dc2626" />
+                        <span style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>{proc.numero}</span>
+                        {proc.tem_penhora && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fee2e2', color: '#dc2626' }}>⚠ PENHORA</span>}
+                        {proc.tem_arresto && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fee2e2', color: '#dc2626' }}>⚠ ARRESTO</span>}
+                        {proc.tem_leilao && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>HASTA PÚBLICA</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                        {proc.classe}{proc.assunto ? ` — ${proc.assunto}` : ''}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {/* Infos básicas */}
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 8 }}>
+                        {[
+                          ['Órgão Julgador', proc.orgao],
+                          ['Data Ajuizamento', proc.data_ajuizamento],
+                          ['Última Atualização', proc.ultima_atualizacao],
+                        ].map(([l, v]) => v ? (
+                          <div key={l} style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px' }}>
+                            <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>{l}</div>
+                            <div style={{ fontSize: 12, color: '#334155', fontWeight: 600 }}>{v}</div>
+                          </div>
+                        ) : null)}
+                      </div>
+
+                      {/* Partes */}
+                      {proc.partes?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', marginBottom: 6 }}>Partes</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {proc.partes.map((parte, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 8, padding: '6px 10px', background: '#f8fafc', borderRadius: 6, fontSize: 12 }}>
+                                <User size={12} color="#64748b" style={{ flexShrink: 0, marginTop: 1 }} />
+                                <span style={{ fontWeight: 700, color: '#0f172a' }}>{parte.nome}</span>
+                                {parte.tipo && <span style={{ color: '#94a3b8' }}>({parte.tipo})</span>}
+                                {parte.representante && <span style={{ color: '#64748b', fontSize: 11 }}>Adv: {parte.representante}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Movimentações */}
+                      {proc.movimentos?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', marginBottom: 6 }}>Últimas Movimentações</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {proc.movimentos.map((mov, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 10, padding: '6px 10px', background: i % 2 === 0 ? '#f8fafc' : 'white', borderRadius: 6, fontSize: 11 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, color: '#94a3b8' }}>
+                                  <Calendar size={11} />{mov.data}
+                                </div>
+                                <ChevronRight size={11} color="#e2e8f0" style={{ flexShrink: 0, marginTop: 1 }} />
+                                <span style={{ color: '#334155' }}>{mov.descricao}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Section>
 
       {/* ── ETAPA 2: DADOS DO IMÓVEL ── */}
       <Section step="2" title="Dados do Imóvel" icon={Home} color="#0f172a" open={openSec.dados} onToggle={()=>toggleSec('dados')}
