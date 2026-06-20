@@ -1869,7 +1869,7 @@ function DashboardTab() {
             atingiuGatilho: dados.mrr >= 5000,
             alternativa: {
               nome: 'Pagar.me (Stone Group) — Marketplace nativo',
-              motivo: 'Líder BR para modelo marketplace com split. Cada consultor ganha uma subconta automática; o split por venda (% TSN + % consultor) é configurado por transação. Suporta recorrência (planos) e avulso (cursos, ebooks, assessoria) no mesmo contrato. PIX ~0,99%, cartão ~2,99%, BRL nativo, sem dólar. API REST madura com webhooks, relatório de repasses por recebedor e painel de comissões. Iugu é alternativa próxima com foco em assinatura. EFÍ tem menor taxa PIX (0,3%) mas split e subcontas menos maduros para marketplace multi-produto.',
+              motivo: 'Líder BR para modelo marketplace com split. Cada consultor ganha uma subconta automática; o split por venda (% TSN + % consultor) é configurado por transação. Suporta recorrência (planos) e avulso (cursos, ebooks, assessoria) no mesmo contrato. PIX ~0,99%, cartão ~2,99%, BRL nativo, sem dólar. API REST moderna com webhooks e relatório de repasses por recebedor. — Cielo: válida para grandes varejistas com POS físico e faturamento >R$500k/mês (taxas negociadas), mas foco enterprise com API mais antiga e complexidade extra sem ganho para SaaS online. — EFÍ: menor taxa PIX (0,3%) mas split menos maduro para marketplace multi-produto. — Stripe: descartado (PIX a 2,9% + USD).',
               custo: '0,99% PIX · 2,99% cartão · BRL',
               url: 'pagar.me',
             },
