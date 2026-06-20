@@ -167,15 +167,20 @@ export default function Analise() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro na consulta');
       setCnjResultados(data);
+      // Adiciona riscos automaticamente ao perfil da análise
       if (data.processos?.length > 0) {
-        // Adiciona riscos jurídicos automaticamente se detectados
-        const novosRiscos = [];
+        const existentes = new Set((d.riscos || []).map(r => r.texto));
+        const novos = [];
         data.processos.forEach(p => {
-          if (p.tem_penhora) novosRiscos.push({ id: Date.now()+Math.random(), texto: `Penhora detectada no processo ${p.numero}`, tipo: 'bloqueante' });
-          if (p.tem_arresto) novosRiscos.push({ id: Date.now()+Math.random(), texto: `Arresto detectado no processo ${p.numero}`, tipo: 'bloqueante' });
-          if (p.tem_leilao) novosRiscos.push({ id: Date.now()+Math.random(), texto: `Hasta pública / leilão registrado no processo ${p.numero}`, tipo: 'alerta' });
+          p.riscos?.forEach(r => {
+            const txt = `[CNJ ${p.tribunal}] ${r.descricao} — ${p.numero}`;
+            if (!existentes.has(txt)) {
+              novos.push({ id: Date.now() + Math.random(), texto: txt, tipo: r.severidade });
+              existentes.add(txt);
+            }
+          });
         });
-        if (novosRiscos.length) up('riscos', [...(d.riscos || []), ...novosRiscos]);
+        if (novos.length) up('riscos', [...(d.riscos || []), ...novos]);
       }
     } catch (err) { setCnjErro(err.message); }
     setLoadCnj(false);
@@ -500,55 +505,104 @@ export default function Analise() {
 
             {/* Resultados */}
             {cnjResultados && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-                  {cnjResultados.total === 0
-                    ? `Nenhum processo encontrado no ${cnjResultados.tribunal?.toUpperCase()}`
-                    : `${cnjResultados.total} processo(s) encontrado(s) — Tribunal: ${cnjResultados.tribunal?.toUpperCase()}`}
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                {/* Parecer consolidado */}
+                {(() => {
+                  const p = cnjResultados.parecer;
+                  const cores = { vermelho: ['#fef2f2','#dc2626','#fee2e2'], amarelo: ['#fefce8','#d97706','#fef3c7'], verde: ['#f0fdf4','#16a34a','#dcfce7'] };
+                  const [bg, cor, borda] = cores[p?.nivel] || cores.verde;
+                  return (
+                    <div style={{ background: bg, border: `2px solid ${borda}`, borderRadius: 12, padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        {p?.nivel === 'vermelho' ? <ShieldAlert size={18} color={cor} /> : p?.nivel === 'amarelo' ? <AlertTriangle size={18} color={cor} /> : <CheckCircle2 size={18} color={cor} />}
+                        <span style={{ fontWeight: 900, fontSize: 13, color: cor }}>
+                          {p?.nivel === 'vermelho' ? 'RISCO ALTO — ATENÇÃO ANTES DE ARREMATAR' : p?.nivel === 'amarelo' ? 'RISCOS A MONITORAR' : 'VIABILIDADE JURÍDICA PRELIMINAR FAVORÁVEL'}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12, color: cor, lineHeight: 1.7 }}>{p?.texto}</p>
+                      {p?.recomendacao && <p style={{ margin: '8px 0 0', fontSize: 11, color: cor, fontStyle: 'italic', lineHeight: 1.6 }}>→ {p.recomendacao}</p>}
+                      <div style={{ marginTop: 10, fontSize: 11, color: '#94a3b8' }}>
+                        Tribunais consultados: {cnjResultados.tribunais_consultados?.map(t => t.toUpperCase()).join(', ')} · {cnjResultados.total} processo(s) encontrado(s)
+                        {cnjResultados.erros?.length > 0 && <span style={{ color: '#f59e0b' }}> · {cnjResultados.erros.length} tribunal(is) indisponível(is)</span>}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {cnjResultados.total === 0 && (
+                  <div style={{ padding: '16px', background: '#f8fafc', borderRadius: 10, fontSize: 12, color: '#64748b', textAlign: 'center' }}>
+                    Nenhum processo encontrado nos tribunais consultados. Verifique também no cartório de registro de imóveis.
+                  </div>
+                )}
 
                 {cnjResultados.processos?.map((proc, idx) => (
-                  <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
-                    {/* Cabeçalho do processo */}
-                    <div style={{ background: (proc.tem_penhora || proc.tem_arresto) ? '#fef2f2' : '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <Scale size={14} color="#dc2626" />
+                  <div key={idx} style={{ border: `2px solid ${proc.tem_bloqueante ? '#fca5a5' : proc.riscos?.length > 0 ? '#fde68a' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden' }}>
+
+                    {/* Header do processo */}
+                    <div style={{ background: proc.tem_bloqueante ? '#fef2f2' : proc.riscos?.length > 0 ? '#fefce8' : '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <Scale size={13} color={proc.tem_bloqueante ? '#dc2626' : '#64748b'} />
                         <span style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>{proc.numero}</span>
-                        {proc.tem_penhora && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fee2e2', color: '#dc2626' }}>⚠ PENHORA</span>}
-                        {proc.tem_arresto && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fee2e2', color: '#dc2626' }}>⚠ ARRESTO</span>}
-                        {proc.tem_leilao && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>HASTA PÚBLICA</span>}
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#e2e8f0', color: '#475569' }}>{proc.tribunal}</span>
+                        {proc.riscos?.filter(r => r.severidade === 'bloqueante').map(r => (
+                          <span key={r.categoria} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fee2e2', color: '#dc2626' }}>⛔ {r.categoria}</span>
+                        ))}
+                        {proc.riscos?.filter(r => r.severidade === 'alerta').map(r => (
+                          <span key={r.categoria} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>⚠ {r.categoria}</span>
+                        ))}
                       </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                        {proc.classe}{proc.assunto ? ` — ${proc.assunto}` : ''}
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        {proc.classe}{proc.assuntos ? ` — ${proc.assuntos}` : ''} · Fase: <strong>{proc.fase}</strong>
                       </div>
                     </div>
 
-                    <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {/* Infos básicas */}
-                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 8 }}>
+                    <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+                      {/* KPIs do processo */}
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 8 }}>
                         {[
                           ['Órgão Julgador', proc.orgao],
-                          ['Data Ajuizamento', proc.data_ajuizamento],
-                          ['Última Atualização', proc.ultima_atualizacao],
-                        ].map(([l, v]) => v ? (
+                          ['Ajuizado em', proc.data_ajuizamento],
+                          ['Última mov.', proc.ultima_atualizacao],
+                          proc.valor_causa ? ['Valor da Causa', `R$ ${Number(proc.valor_causa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`] : null,
+                        ].filter(Boolean).map(([l, v]) => (
                           <div key={l} style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px' }}>
                             <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>{l}</div>
-                            <div style={{ fontSize: 12, color: '#334155', fontWeight: 600 }}>{v}</div>
+                            <div style={{ fontSize: 11, color: '#334155', fontWeight: 600 }}>{v || '—'}</div>
                           </div>
-                        ) : null)}
+                        ))}
                       </div>
+
+                      {/* Score de risco */}
+                      {proc.score_risco > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 700, flexShrink: 0 }}>Score de risco:</span>
+                          <div style={{ flex: 1, height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${proc.score_risco}%`, background: proc.score_risco >= 70 ? '#dc2626' : proc.score_risco >= 35 ? '#f59e0b' : '#10b981', borderRadius: 4, transition: 'width 0.5s' }} />
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: proc.score_risco >= 70 ? '#dc2626' : proc.score_risco >= 35 ? '#f59e0b' : '#10b981', flexShrink: 0 }}>{proc.score_risco}/100</span>
+                        </div>
+                      )}
 
                       {/* Partes */}
                       {proc.partes?.length > 0 && (
                         <div>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', marginBottom: 6 }}>Partes</div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', marginBottom: 6, letterSpacing: 0.5 }}>Partes Processuais</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {proc.partes.map((parte, i) => (
-                              <div key={i} style={{ display: 'flex', gap: 8, padding: '6px 10px', background: '#f8fafc', borderRadius: 6, fontSize: 12 }}>
+                              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '7px 10px', background: i % 2 === 0 ? '#f8fafc' : 'white', borderRadius: 6, fontSize: 12 }}>
                                 <User size={12} color="#64748b" style={{ flexShrink: 0, marginTop: 1 }} />
-                                <span style={{ fontWeight: 700, color: '#0f172a' }}>{parte.nome}</span>
-                                {parte.tipo && <span style={{ color: '#94a3b8' }}>({parte.tipo})</span>}
-                                {parte.representante && <span style={{ color: '#64748b', fontSize: 11 }}>Adv: {parte.representante}</span>}
+                                <div style={{ flex: 1 }}>
+                                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{parte.nome}</span>
+                                  {parte.tipo && <span style={{ color: '#94a3b8', marginLeft: 6, fontSize: 11 }}>({parte.tipo})</span>}
+                                  {parte.documento && <span style={{ color: '#64748b', marginLeft: 6, fontSize: 10 }}>{parte.documento}</span>}
+                                  {parte.advogados?.length > 0 && (
+                                    <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>
+                                      Adv: {parte.advogados.map(a => `${a.nome}${a.oab ? ` (OAB ${a.oab})` : ''}`).join(', ')}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -558,15 +612,14 @@ export default function Analise() {
                       {/* Movimentações */}
                       {proc.movimentos?.length > 0 && (
                         <div>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', marginBottom: 6 }}>Últimas Movimentações</div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', marginBottom: 6, letterSpacing: 0.5 }}>Movimentações Recentes ({proc.movimentos.length})</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 280, overflowY: 'auto' }}>
                             {proc.movimentos.map((mov, i) => (
-                              <div key={i} style={{ display: 'flex', gap: 10, padding: '6px 10px', background: i % 2 === 0 ? '#f8fafc' : 'white', borderRadius: 6, fontSize: 11 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, color: '#94a3b8' }}>
-                                  <Calendar size={11} />{mov.data}
-                                </div>
-                                <ChevronRight size={11} color="#e2e8f0" style={{ flexShrink: 0, marginTop: 1 }} />
-                                <span style={{ color: '#334155' }}>{mov.descricao}</span>
+                              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 10px', background: mov.risco === 'bloqueante' ? '#fef2f2' : mov.risco === 'alerta' ? '#fefce8' : i % 2 === 0 ? '#f8fafc' : 'white', borderRadius: 6, fontSize: 11 }}>
+                                <div style={{ flexShrink: 0, color: '#94a3b8', fontSize: 10, paddingTop: 1, minWidth: 76 }}>{mov.data}</div>
+                                <span style={{ color: mov.risco === 'bloqueante' ? '#dc2626' : mov.risco === 'alerta' ? '#92400e' : '#334155', lineHeight: 1.5 }}>
+                                  {mov.risco && <strong>[{mov.risco === 'bloqueante' ? '⛔' : '⚠'}] </strong>}{mov.descricao}
+                                </span>
                               </div>
                             ))}
                           </div>
