@@ -2091,57 +2091,473 @@ function SdrTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 const ROLE_BADGE_COLORS = { admin: { bg: '#fef3c7', color: '#92400e' }, analista: { bg: '#dbeafe', color: '#1e40af' }, consultor: { bg: '#d1fae5', color: '#065f46' }, advogado: { bg: '#ede9fe', color: '#5b21b6' } };
 
+const CHECKLIST_ITEMS = [
+  { key: 'leiloeiro_habilitado',  label: 'Leiloeiro habilitado verificado (JUCESP/CRA)' },
+  { key: 'matricula_analisada',   label: 'Matrícula do imóvel analisada' },
+  { key: 'edital_analisado',      label: 'Edital analisado' },
+  { key: 'processo_cnj',          label: 'Processo judicial consultado (CNJ)' },
+  { key: 'debitos_verificados',   label: 'Débitos verificados (IPTU, condomínio, taxas)' },
+  { key: 'ocupacao_verificada',   label: 'Ocupação/posse verificada' },
+  { key: 'avaliacao_mercado',     label: 'Avaliação de mercado realizada' },
+  { key: 'viabilidade_financeira',label: 'Viabilidade financeira calculada' },
+  { key: 'laudo_emitido',         label: 'Laudo técnico emitido' },
+];
+
+const STATUS_SOL_COLORS = {
+  solicitado:   { bg: '#fef9c3', color: '#854d0e', label: 'Solicitado' },
+  em_andamento: { bg: '#dbeafe', color: '#1e40af', label: 'Em Andamento' },
+  concluido:    { bg: '#d1fae5', color: '#065f46', label: 'Concluído' },
+};
+
+function RoleBadge({ role }) {
+  const rc = ROLE_BADGE_COLORS[role] || { bg: '#f1f5f9', color: '#475569' };
+  return <span style={{ background: rc.bg, color: rc.color, borderRadius: 8, padding: '2px 10px', fontSize: 12, fontWeight: 700, display: 'inline-block', marginRight: 4 }}>{role}</span>;
+}
+
+function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
+  const [checklist, setChecklist] = useState(sol.checklist || {});
+  const [notas, setNotas] = useState(sol.notas_analista || '');
+  const [meetLink, setMeetLink] = useState(sol.google_meet_link || '');
+  const [status, setStatus] = useState(sol.status || 'solicitado');
+  const [saving, setSaving] = useState(false);
+  const [clienteEmail, setClienteEmail] = useState('');
+
+  useEffect(() => {
+    if (sol.user_id) {
+      supabase.from('perfis').select('email').eq('id', sol.user_id).single()
+        .then(({ data }) => { if (data?.email) setClienteEmail(data.email); });
+    }
+  }, [sol.user_id]);
+
+  const analista = membros.find(m => m.id === sol.analista_id);
+
+  async function salvar() {
+    setSaving(true);
+    await supabase.from('solicitacoes').update({
+      checklist,
+      notas_analista: notas,
+      google_meet_link: meetLink,
+      status,
+    }).eq('id', sol.id);
+    setSaving(false);
+    onSaved();
+  }
+
+  const meetCreateUrl = `https://calendar.google.com/calendar/r/eventedit?text=Reuni%C3%A3o+TSN+Ativos+-+${encodeURIComponent(sol.imovel_nome || 'Im%C3%B3vel')}&details=An%C3%A1lise+de+im%C3%B3vel+em+leil%C3%A3o${clienteEmail ? '&add=' + encodeURIComponent(clienteEmail) : ''}`;
+
+  const statusSol = STATUS_SOL_COLORS[sol.status] || STATUS_SOL_COLORS.solicitado;
+
+  return (
+    <div style={S.overlay} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 32, width: '100%', maxWidth: 920, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }} onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {sol.tipo && <span style={{ background: '#eff6ff', color: '#1e40af', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>{sol.tipo}</span>}
+          <span style={{ background: statusSol.bg, color: statusSol.color, borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>{statusSol.label}</span>
+          {sol.tipo === 'processual' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>⏰ Prazo judicial</span>}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+          {/* LEFT — Info */}
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a', marginBottom: 16 }}>Informações do Imóvel</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+              {[['Imóvel', sol.imovel_nome || '—'], ['Cidade', sol.imovel_cidade || '—'], ['Referência', sol.imovel_ref || '—'], ['Analista', analista?.nome || 'Não atribuído']].map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ fontSize: 13, color: '#64748b', minWidth: 80 }}>{k}:</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Contato com cliente</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+              {clienteEmail && (
+                <a href={`mailto:${clienteEmail}?subject=Análise TSN Ativos — ${sol.imovel_nome || 'Imóvel'}`}
+                  style={{ padding: '8px 14px', background: '#eff6ff', color: '#1e40af', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  ✉️ Enviar e-mail
+                </a>
+              )}
+              <a href={meetCreateUrl} target="_blank" rel="noreferrer"
+                style={{ padding: '8px 14px', background: '#f0fdf4', color: '#065f46', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                📅 Agendar Google Meet
+              </a>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={S.label}>URL do Google Meet (após agendar)</label>
+              <input style={S.input} value={meetLink} onChange={e => setMeetLink(e.target.value)} placeholder="https://meet.google.com/..." />
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={S.label}>Status</label>
+              <select style={{ ...S.input, fontWeight: 700 }} value={status} onChange={e => setStatus(e.target.value)}>
+                <option value="solicitado">Solicitado</option>
+                <option value="em_andamento">Em Andamento</option>
+                <option value="concluido">Concluído</option>
+              </select>
+            </div>
+
+            <button style={{ ...S.btn('primary'), width: '100%', marginTop: 8 }} onClick={salvar} disabled={saving}>
+              {saving ? 'Salvando…' : 'Salvar alterações'}
+            </button>
+          </div>
+
+          {/* RIGHT — Checklist */}
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a', marginBottom: 16 }}>Checklist de Análise</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+              {CHECKLIST_ITEMS.map(item => (
+                <label key={item.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '8px 12px', background: checklist[item.key] ? '#f0fdf4' : '#f8fafc', borderRadius: 8, border: `1px solid ${checklist[item.key] ? '#bbf7d0' : '#e2e8f0'}` }}>
+                  <input type="checkbox" checked={!!checklist[item.key]}
+                    onChange={e => setChecklist(p => ({ ...p, [item.key]: e.target.checked }))}
+                    style={{ marginTop: 2, accentColor: '#059669', width: 16, height: 16, flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: checklist[item.key] ? '#065f46' : '#374151', fontWeight: checklist[item.key] ? 700 : 400 }}>
+                    {item.label}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div>
+              <label style={S.label}>Notas do analista</label>
+              <textarea style={{ ...S.input, height: 100, resize: 'vertical', fontFamily: 'inherit' }}
+                value={notas} onChange={e => setNotas(e.target.value)}
+                placeholder="Observações, conclusões, pontos de atenção..." />
+            </div>
+
+            {/* Performance do analista */}
+            {analista && (
+              <div style={{ marginTop: 16, padding: 12, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Performance — {analista.nome}</div>
+                <AnalistaPerf analistaId={analista.id} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalistaPerf({ analistaId }) {
+  const [perf, setPerf] = useState(null);
+  useEffect(() => {
+    const mesInicio = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+    Promise.all([
+      supabase.from('solicitacoes').select('id', { count: 'exact', head: true }).eq('analista_id', analistaId).eq('status', 'em_andamento'),
+      supabase.from('solicitacoes').select('id', { count: 'exact', head: true }).eq('analista_id', analistaId).eq('status', 'concluido').gte('updated_at', mesInicio),
+    ]).then(([{ count: andamento }, { count: concluido }]) => {
+      setPerf({ andamento: andamento || 0, concluido: concluido || 0 });
+    });
+  }, [analistaId]);
+  if (!perf) return <span style={{ fontSize: 12, color: '#94a3b8' }}>Carregando...</span>;
+  return (
+    <div style={{ display: 'flex', gap: 16 }}>
+      <div><div style={{ fontSize: 20, fontWeight: 900, color: '#2563eb' }}>{perf.andamento}</div><div style={{ fontSize: 11, color: '#64748b' }}>Em andamento</div></div>
+      <div><div style={{ fontSize: 20, fontWeight: 900, color: '#059669' }}>{perf.concluido}</div><div style={{ fontSize: 11, color: '#64748b' }}>Concluídos (mês)</div></div>
+    </div>
+  );
+}
+
 function EquipeTab() {
+  const { user } = useAuth();
+
+  // Section A state
   const [membros, setMembros] = useState([]);
   const [chamadosMap, setChamadosMap] = useState({});
   const [finalizadosHoje, setFinalizadosHoje] = useState(0);
+  const [convitesEquipe, setConvitesEquipe] = useState([]);
+  const [copiado, setCopiado] = useState('');
+  const [modalMulti, setModalMulti] = useState(false);
+  const [multiRoles, setMultiRoles] = useState([]);
+  const [gerandoConvite, setGerandoConvite] = useState(false);
+  const [linkGerado, setLinkGerado] = useState(null);
+
+  // Section B state
+  const [solicitacoes, setSolicitacoes] = useState([]);
+  const [filtroStatus, setFiltroStatus] = useState('todas');
+  const [solModal, setSolModal] = useState(null);
+  const [distribuindo, setDistribuindo] = useState(false);
+
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const { data: perfisData } = await supabase.from('perfis').select('*').in('role', ['admin','analista','consultor','advogado']);
-      const membrosData = perfisData || [];
-      setMembros(membrosData);
-      if (membrosData.length > 0) {
-        const ids = membrosData.map(m => m.id);
-        const { data: chamados } = await supabase.from('chamados').select('atendente_id, status').in('atendente_id', ids);
-        const map = {};
-        ids.forEach(id => { map[id] = { total: 0, finalizados: 0 }; });
-        (chamados || []).forEach(c => { if (map[c.atendente_id]) { map[c.atendente_id].total++; if (c.status === 'finalizado') map[c.atendente_id].finalizados++; } });
-        setChamadosMap(map);
-        const hoje = new Date().toISOString().slice(0, 10);
-        const { count } = await supabase.from('chamados').select('id', { count: 'exact', head: true }).eq('status', 'finalizado').gte('atualizado_em', hoje);
-        setFinalizadosHoje(count || 0);
-      }
-      setLoading(false);
+  const carregarTudo = useCallback(async () => {
+    setLoading(true);
+    // Members
+    const { data: perfisData } = await supabase.from('perfis').select('*').in('role', ['admin','analista','consultor','advogado']);
+    const membrosData = perfisData || [];
+    setMembros(membrosData);
+    if (membrosData.length > 0) {
+      const ids = membrosData.map(m => m.id);
+      const { data: chamados } = await supabase.from('chamados').select('atendente_id, status').in('atendente_id', ids);
+      const map = {};
+      ids.forEach(id => { map[id] = { total: 0, finalizados: 0 }; });
+      (chamados || []).forEach(c => { if (map[c.atendente_id]) { map[c.atendente_id].total++; if (c.status === 'finalizado') map[c.atendente_id].finalizados++; } });
+      setChamadosMap(map);
+      const hoje = new Date().toISOString().slice(0, 10);
+      const { count } = await supabase.from('chamados').select('id', { count: 'exact', head: true }).eq('status', 'finalizado').gte('atualizado_em', hoje);
+      setFinalizadosHoje(count || 0);
     }
-    load();
+    // Team invites
+    const { data: convitesData } = await supabase.from('convites_equipe').select('*').order('criado_em', { ascending: false }).limit(20);
+    setConvitesEquipe(convitesData || []);
+    // Solicitacoes
+    const { data: solData } = await supabase.from('solicitacoes').select('*').order('criado_em', { ascending: false });
+    setSolicitacoes(solData || []);
+    setLoading(false);
   }, []);
 
+  useEffect(() => { carregarTudo(); }, [carregarTudo]);
+
+  async function gerarConvite(roles) {
+    setGerandoConvite(true);
+    const token = crypto.randomUUID();
+    const { data: novo } = await supabase.from('convites_equipe').insert({
+      token, roles, criado_por: user.id,
+    }).select().single();
+    const link = `${window.location.origin}/#/convite/${token}`;
+    setLinkGerado({ token, link, roles });
+    navigator.clipboard.writeText(link).catch(() => {});
+    await carregarTudo();
+    setGerandoConvite(false);
+  }
+
+  function copiarLink(token) {
+    const link = `${window.location.origin}/#/convite/${token}`;
+    navigator.clipboard.writeText(link);
+    setCopiado(token);
+    setTimeout(() => setCopiado(''), 2000);
+  }
+
+  function statusConvite(c) {
+    if (c.usado_em) return { label: 'Usado', bg: '#f3f4f6', color: '#6b7280' };
+    if (c.expira_em && new Date(c.expira_em) < new Date()) return { label: 'Expirado', bg: '#fee2e2', color: '#dc2626' };
+    if (c.ativo) return { label: 'Ativo', bg: '#d1fae5', color: '#065f46' };
+    return { label: 'Inativo', bg: '#fee2e2', color: '#dc2626' };
+  }
+
+  async function distribuirAutomaticamente() {
+    setDistribuindo(true);
+    const analistas = membros.filter(m => m.role === 'analista');
+    if (analistas.length === 0) { alert('Nenhum analista disponível.'); setDistribuindo(false); return; }
+    const pendentes = solicitacoes.filter(s => s.status === 'solicitado' && !s.analista_id);
+    if (pendentes.length === 0) { alert('Nenhuma solicitação aguardando distribuição.'); setDistribuindo(false); return; }
+    // Count em_andamento per analyst
+    const counts = {};
+    analistas.forEach(a => { counts[a.id] = solicitacoes.filter(s => s.analista_id === a.id && s.status === 'em_andamento').length; });
+    for (const sol of pendentes) {
+      const analistaId = analistas.reduce((min, a) => (counts[a.id] < counts[min.id] ? a : min)).id;
+      await supabase.from('solicitacoes').update({ analista_id: analistaId, status: 'em_andamento' }).eq('id', sol.id);
+      counts[analistaId]++;
+    }
+    await carregarTudo();
+    setDistribuindo(false);
+  }
+
+  const solFiltradas = filtroStatus === 'todas' ? solicitacoes
+    : filtroStatus === 'aguardando' ? solicitacoes.filter(s => s.status === 'solicitado')
+    : filtroStatus === 'andamento' ? solicitacoes.filter(s => s.status === 'em_andamento')
+    : solicitacoes.filter(s => s.status === 'concluido');
+
   if (loading) return <p style={{ color: '#94a3b8' }}>Carregando…</p>;
+
+  const INVITE_BTNS = [
+    { label: '🔍 Convidar Analista',   roles: ['analista'],  bg: '#2563eb' },
+    { label: '⚖️ Convidar Advogado',   roles: ['advogado'],  bg: '#7c3aed' },
+    { label: '🤝 Convidar Consultor',  roles: ['consultor'], bg: '#059669' },
+  ];
+
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
-        {[['Total Equipe', membros.length, '#0f172a'], ['Analistas', membros.filter(m=>m.role==='analista').length, '#3b82f6'], ['Consultores', membros.filter(m=>m.role==='consultor').length, '#059669'], ['Finalizados Hoje', finalizadosHoje, '#f59e0b']].map(([l,v,c]) => (
-          <div key={l} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '20px 24px' }}>
-            <div style={{ fontSize: 32, fontWeight: 900, color: c }}>{v}</div>
-            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{l}</div>
+      {/* ── SECTION A ─────────────────────────────────────────────────────────── */}
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginBottom: 24 }}>
+        {[
+          ['Total Equipe', membros.length, '#0f172a'],
+          ['Analistas', membros.filter(m=>m.role==='analista').length, '#2563eb'],
+          ['Advogados', membros.filter(m=>m.role==='advogado').length, '#7c3aed'],
+          ['Consultores', membros.filter(m=>m.role==='consultor').length, '#059669'],
+          ['Finalizados Hoje', finalizadosHoje, '#f59e0b'],
+        ].map(([l,v,c]) => (
+          <div key={l} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px' }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: c }}>{v}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{l}</div>
           </div>
         ))}
       </div>
-      <div style={{ ...S.card, borderRadius: 16 }}>
+
+      {/* Invite buttons */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+        {INVITE_BTNS.map(b => (
+          <button key={b.roles[0]} disabled={gerandoConvite}
+            style={{ padding: '9px 18px', background: b.bg, color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: gerandoConvite ? 0.7 : 1 }}
+            onClick={() => gerarConvite(b.roles)}>
+            {b.label}
+          </button>
+        ))}
+        <button disabled={gerandoConvite}
+          style={{ padding: '9px 18px', background: '#6b7280', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: gerandoConvite ? 0.7 : 1 }}
+          onClick={() => setModalMulti(true)}>
+          👤 Multi-função
+        </button>
+      </div>
+
+      {/* Generated link banner */}
+      {linkGerado && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#065f46', marginBottom: 4 }}>
+              ✅ Link gerado — {linkGerado.roles.join(', ')}
+            </div>
+            <div style={{ fontSize: 12, color: '#374151', wordBreak: 'break-all' }}>{linkGerado.link}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => { navigator.clipboard.writeText(linkGerado.link); }}
+              style={{ padding: '6px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              Copiar link
+            </button>
+            <button onClick={() => setLinkGerado(null)}
+              style={{ padding: '6px 12px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Recent convites_equipe list */}
+      <div style={{ ...S.card, borderRadius: 14, marginBottom: 24 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Convites de Equipe Recentes</div>
+        {convitesEquipe.length === 0 ? (
+          <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 16 }}>Nenhum convite gerado ainda.</p>
+        ) : convitesEquipe.map(c => {
+          const st = statusConvite(c);
+          return (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#475569', marginBottom: 4 }}>{c.token.slice(0, 18)}…</div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {(c.roles || []).map(r => { const rc = ROLE_BADGE_COLORS[r] || { bg: '#f1f5f9', color: '#475569' }; return <span key={r} style={{ background: rc.bg, color: rc.color, borderRadius: 6, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>{r}</span>; })}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(c.criado_em).toLocaleDateString('pt-BR')}</div>
+              <span style={{ background: st.bg, color: st.color, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>{st.label}</span>
+              {!c.usado_em && c.ativo && (
+                <button onClick={() => copiarLink(c.token)}
+                  style={{ padding: '4px 10px', background: copiado === c.token ? '#d1fae5' : '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', color: copiado === c.token ? '#065f46' : '#374151' }}>
+                  {copiado === c.token ? '✓ Copiado' : 'Copiar link'}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Members table */}
+      <div style={{ ...S.card, borderRadius: 14, marginBottom: 32 }}>
         <div style={S.sectionTitle}>Membros da Equipe</div>
-        <table style={S.table}><thead><tr><th style={S.th}>Membro</th><th style={S.th}>Role</th><th style={S.th}>Chamados Assumidos</th><th style={S.th}>Finalizados</th><th style={S.th}>Último Acesso</th></tr></thead>
-          <tbody>{membros.map(m => { const stats = chamadosMap[m.id] || { total:0, finalizados:0 }; const rs = ROLE_BADGE_COLORS[m.role] || { bg:'#f1f5f9', color:'#475569' }; return (
-            <tr key={m.id}><td style={S.td}><div style={{ fontWeight:600 }}>{m.nome||'—'}</div><div style={{ fontSize:12, color:'#94a3b8' }}>{m.email||''}</div></td>
-            <td style={S.td}><span style={{ background:rs.bg, color:rs.color, borderRadius:8, padding:'2px 10px', fontSize:12, fontWeight:700 }}>{m.role}</span></td>
-            <td style={S.td}>{stats.total}</td><td style={S.td}>{stats.finalizados}</td>
-            <td style={{ ...S.td, color:'#64748b', fontSize:13 }}>{m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'N/D'}</td>
-            </tr>);
-          })}{membros.length===0&&<tr><td colSpan={5} style={{ ...S.td, color:'#94a3b8', textAlign:'center', padding:24 }}>Nenhum membro encontrado.</td></tr>}</tbody>
+        <table style={S.table}>
+          <thead><tr><th style={S.th}>Membro</th><th style={S.th}>Role</th><th style={S.th}>Chamados</th><th style={S.th}>Finalizados</th><th style={S.th}>Último Acesso</th></tr></thead>
+          <tbody>
+            {membros.map(m => { const stats = chamadosMap[m.id] || { total:0, finalizados:0 }; return (
+              <tr key={m.id}>
+                <td style={S.td}><div style={{ fontWeight:600 }}>{m.nome||'—'}</div><div style={{ fontSize:12, color:'#94a3b8' }}>{m.email||''}</div></td>
+                <td style={S.td}><RoleBadge role={m.role} /></td>
+                <td style={S.td}>{stats.total}</td>
+                <td style={S.td}>{stats.finalizados}</td>
+                <td style={{ ...S.td, color:'#64748b', fontSize:13 }}>{m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'N/D'}</td>
+              </tr>
+            ); })}
+            {membros.length===0&&<tr><td colSpan={5} style={{ ...S.td, color:'#94a3b8', textAlign:'center', padding:24 }}>Nenhum membro encontrado.</td></tr>}
+          </tbody>
         </table>
       </div>
+
+      {/* ── SECTION B ─────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>Solicitações de Análise</h2>
+        <button disabled={distribuindo} onClick={distribuirAutomaticamente}
+          style={{ padding: '9px 18px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: distribuindo ? 0.7 : 1 }}>
+          {distribuindo ? 'Distribuindo…' : '⚡ Distribuir automaticamente'}
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {[['todas','Todas'], ['aguardando','Aguardando'], ['andamento','Em Andamento'], ['concluidas','Concluídas']].map(([k,l]) => (
+          <button key={k} onClick={() => setFiltroStatus(k)}
+            style={{ padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: filtroStatus === k ? '#0f172a' : '#f1f5f9', color: filtroStatus === k ? '#fff' : '#475569' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ ...S.card, borderRadius: 14, overflowX: 'auto' }}>
+        <table style={S.table}>
+          <thead><tr>
+            <th style={S.th}>Imóvel</th>
+            <th style={S.th}>Tipo</th>
+            <th style={S.th}>Cidade</th>
+            <th style={S.th}>Data</th>
+            <th style={S.th}>Analista</th>
+            <th style={S.th}>Status</th>
+            <th style={S.th}></th>
+          </tr></thead>
+          <tbody>
+            {solFiltradas.map(s => {
+              const st = STATUS_SOL_COLORS[s.status] || STATUS_SOL_COLORS.solicitado;
+              const analista = membros.find(m => m.id === s.analista_id);
+              return (
+                <tr key={s.id}>
+                  <td style={S.td}><div style={{ fontWeight:600, maxWidth:180 }}>{s.imovel_nome||'—'}</div></td>
+                  <td style={S.td}><span style={{ fontSize:12, background:'#eff6ff', color:'#1e40af', borderRadius:6, padding:'2px 8px', fontWeight:700 }}>{s.tipo||'—'}</span></td>
+                  <td style={{ ...S.td, fontSize:13, color:'#475569' }}>{s.imovel_cidade||'—'}</td>
+                  <td style={{ ...S.td, fontSize:12, color:'#94a3b8' }}>{s.criado_em ? new Date(s.criado_em).toLocaleDateString('pt-BR') : '—'}</td>
+                  <td style={{ ...S.td, fontSize:13 }}>{analista?.nome || <span style={{ color:'#94a3b8' }}>Não atribuído</span>}</td>
+                  <td style={S.td}><span style={{ background:st.bg, color:st.color, borderRadius:6, padding:'2px 10px', fontSize:12, fontWeight:700 }}>{st.label}</span></td>
+                  <td style={S.td}><button onClick={() => setSolModal(s)} style={{ padding:'4px 10px', background:'#0f172a', color:'white', border:'none', borderRadius:6, fontSize:12, fontWeight:700, cursor:'pointer' }}>Ver</button></td>
+                </tr>
+              );
+            })}
+            {solFiltradas.length===0&&<tr><td colSpan={7} style={{ ...S.td, color:'#94a3b8', textAlign:'center', padding:32 }}>Nenhuma solicitação encontrada.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Multi-role modal */}
+      {modalMulti && (
+        <div style={S.overlay} onClick={() => setModalMulti(false)}>
+          <div style={{ ...S.modal, maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:16 }}>Selecionar funções do convite</div>
+            {['analista','advogado','consultor','admin'].map(r => {
+              const rc = ROLE_BADGE_COLORS[r] || { bg:'#f1f5f9', color:'#475569' };
+              return (
+                <label key={r} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background: multiRoles.includes(r) ? rc.bg : '#f8fafc', borderRadius:8, marginBottom:8, cursor:'pointer', border:`1px solid ${multiRoles.includes(r) ? '#cbd5e1' : '#e2e8f0'}` }}>
+                  <input type="checkbox" checked={multiRoles.includes(r)} onChange={e => setMultiRoles(p => e.target.checked ? [...p,r] : p.filter(x=>x!==r))} style={{ accentColor:'#0f172a' }} />
+                  <span style={{ fontWeight:700, color:rc.color }}>{r}</span>
+                </label>
+              );
+            })}
+            <div style={{ display:'flex', gap:10, marginTop:16, justifyContent:'flex-end' }}>
+              <button style={S.btn('outline')} onClick={() => { setModalMulti(false); setMultiRoles([]); }}>Cancelar</button>
+              <button style={S.btn('primary')} disabled={multiRoles.length===0||gerandoConvite} onClick={async () => { await gerarConvite(multiRoles); setModalMulti(false); setMultiRoles([]); }}>
+                {gerandoConvite ? 'Gerando…' : 'Gerar convite'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Solicitacao detail modal */}
+      {solModal && (
+        <SolicitacaoModal
+          sol={solModal}
+          membros={membros}
+          onClose={() => setSolModal(null)}
+          onSaved={() => { setSolModal(null); carregarTudo(); }}
+        />
+      )}
     </div>
   );
 }

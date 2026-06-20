@@ -26,11 +26,38 @@ export default function Login() {
     return refParam || stored;
   });
 
+  const conviteEquipeParam = params.get('convite_equipe') || '';
+
   // Persiste o ref e convite em sessionStorage
   useEffect(() => {
     if (refParam) sessionStorage.setItem('tsn_ref_codigo', refParam);
     if (conviteParam) sessionStorage.setItem('tsn_convite_codigo', conviteParam);
-  }, [refParam, conviteParam]);
+    if (conviteEquipeParam) sessionStorage.setItem('tsn_convite_equipe', conviteEquipeParam);
+  }, [refParam, conviteParam, conviteEquipeParam]);
+
+  // Processa convite de equipe após autenticação
+  async function processarConviteEquipe(userId) {
+    const token = sessionStorage.getItem('tsn_convite_equipe');
+    if (!token) return;
+    try {
+      const { data: convite } = await supabase
+        .from('convites_equipe')
+        .select('*')
+        .eq('token', token)
+        .eq('ativo', true)
+        .single();
+      if (!convite) return;
+      if (convite.expira_em && new Date(convite.expira_em) < new Date()) return;
+      const primaryRole = convite.roles?.[0];
+      if (primaryRole) {
+        await supabase.from('perfis').update({ role: primaryRole }).eq('id', userId);
+      }
+      await supabase.from('convites_equipe').update({ usado_em: new Date().toISOString(), usado_por: userId, ativo: false }).eq('token', token);
+      sessionStorage.removeItem('tsn_convite_equipe');
+    } catch (e) {
+      console.error('Erro ao processar convite de equipe:', e);
+    }
+  }
 
   const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso'
   const [loading, setLoading] = useState(false);
@@ -61,8 +88,10 @@ export default function Login() {
     e.preventDefault();
     setErro(''); setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.senha });
+      const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.senha });
       if (error) throw error;
+      // Processa convite de equipe se existir
+      if (signInData?.user) await processarConviteEquipe(signInData.user.id);
       // Verifica plano no sessionStorage (definido durante cadastro) ou na URL
       const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
       sessionStorage.removeItem('tsn_plano_pendente');
@@ -122,10 +151,16 @@ export default function Login() {
             ✅ Plano <strong style={{ textTransform: 'capitalize' }}>{planoEscolhido}</strong> selecionado — crie sua conta para continuar
           </div>
         )}
-        {/* Banner convite */}
-        {conviteParam && !planoEscolhido && (
+        {/* Banner convite cliente */}
+        {conviteParam && !planoEscolhido && !conviteEquipeParam && (
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#15803d', fontWeight: 600 }}>
             🎯 Você foi convidado — crie sua conta ou entre para continuar
+          </div>
+        )}
+        {/* Banner convite equipe */}
+        {conviteEquipeParam && !planoEscolhido && (
+          <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#5b21b6', fontWeight: 600 }}>
+            🏢 Convite de equipe TSN Ativos — entre ou crie sua conta para aceitar
           </div>
         )}
 
