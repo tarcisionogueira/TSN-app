@@ -79,9 +79,10 @@ export default function Busca() {
 
   async function salvarFiltroAtual() {
     if (!nomeFiltro.trim() || !user?.id) return;
-    const { data } = await supabase.from('filtros_salvos').insert({
+    const { data, error } = await supabase.from('filtros_salvos').insert({
       user_id: user.id, nome: nomeFiltro.trim(), filtros,
     }).select().single();
+    if (error) { alert('Erro ao salvar filtro. Tente novamente.'); return; }
     if (data) setFiltrosSalvos(p => [data, ...p]);
     setNomeFiltro(''); setShowSalvarModal(false);
   }

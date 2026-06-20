@@ -190,9 +190,7 @@ export default async function handler(req, res) {
       await supabase.from('perfis').update({
         pagamento_erro: motivo,
         pagamento_erro_data: new Date().toISOString(),
-      }).eq('id', cliente.id).then(() => {});
-      // Nota: a coluna pagamento_erro requer migração SQL (schema_pagamento_erro.sql)
-      // Se a coluna não existir, este update falha silenciosamente sem impacto.
+      }).eq('id', cliente.id);
     }
     return res.status(200).json({ ok: true, event: 'refused' });
   }

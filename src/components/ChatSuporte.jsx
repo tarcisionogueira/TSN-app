@@ -67,16 +67,18 @@ export default function ChatSuporte() {
     }, AVISO_MS);
 
     fecharTimer.current = setTimeout(async () => {
-      await supabase.from('chamados').update({
+      const { error: errFim } = await supabase.from('chamados').update({
         status: 'finalizado', atendente_nome: 'Sistema (inatividade)',
         atualizado_em: new Date().toISOString(),
       }).eq('id', ticket.id).in('status', ['aberto', 'em_atendimento']);
-      await supabase.from('chamados_mensagens').insert({
-        chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'TSN Assistente',
-        conteudo: 'Este atendimento foi encerrado por inatividade. Se precisar de mais ajuda, abra um novo chamado.',
-        anexos: [],
-      });
-      setTicket(p => p ? { ...p, status: 'finalizado' } : p);
+      if (!errFim) {
+        await supabase.from('chamados_mensagens').insert({
+          chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'TSN Assistente',
+          conteudo: 'Este atendimento foi encerrado por inatividade. Se precisar de mais ajuda, abra um novo chamado.',
+          anexos: [],
+        });
+        setTicket(p => p ? { ...p, status: 'finalizado' } : p);
+      }
     }, FECHAR_MS);
   }, [ticket?.id]);
 

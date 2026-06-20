@@ -69,7 +69,8 @@ export default function Perfil() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20)
-      .then(({ data }) => { setRelatorios(data || []); setLoadRelatorios(false); });
+      .then(({ data }) => { setRelatorios(data || []); setLoadRelatorios(false); })
+      .catch(() => setLoadRelatorios(false));
   }, [user?.id]);
 
   async function salvar(e) {
