@@ -1585,6 +1585,48 @@ function DashboardTab() {
   const [loading, setLoading] = useState(true);
   const [asaasLoading, setAsaasLoading] = useState(true);
   const [usuariosDetalhe, setUsuariosDetalhe] = useState(false);
+  const [healthLogs, setHealthLogs] = useState([]);
+  const [healthOpen, setHealthOpen] = useState(false);
+  const [equipeDetalhe, setEquipeDetalhe] = useState(null); // key clicked
+  const [equipeMembros, setEquipeMembros] = useState([]);
+  const [equipeMetrics, setEquipeMetrics] = useState({});
+
+  async function loadHealth() {
+    const { data } = await supabase.from('health_check_logs').select('*').order('executado_em', { ascending: false }).limit(30);
+    setHealthLogs(data || []);
+  }
+
+  async function loadEquipeDetalhe(roleKey) {
+    setEquipeDetalhe(roleKey);
+    const { data: membros } = await supabase.from('perfis').select('id, nome, email, created_at').eq('role', roleKey);
+    setEquipeMembros(membros || []);
+    if (!membros?.length) { setEquipeMetrics({}); return; }
+    const ids = membros.map(m => m.id);
+    const [{ data: chamados }, { data: comissoes }, { data: leadsSDR }, { data: reunioes }] = await Promise.all([
+      supabase.from('chamados').select('atendente_id, status').in('atendente_id', ids),
+      supabase.from('comissoes').select('beneficiario_id, valor_comissao, status').in('beneficiario_id', ids),
+      supabase.from('sdr_leads').select('consultor_id, status').in('consultor_id', ids),
+      supabase.from('solicitacoes').select('analista_id, status').in('analista_id', ids),
+    ]);
+    const m = {};
+    ids.forEach(id => {
+      m[id] = {
+        chamados: (chamados || []).filter(c => c.atendente_id === id).length,
+        chamadosFin: (chamados || []).filter(c => c.atendente_id === id && c.status === 'finalizado').length,
+        comissao: (comissoes || []).filter(c => c.beneficiario_id === id && c.status !== 'cancelado').reduce((s, c) => s + Number(c.valor_comissao), 0),
+        leadsSDR: (leadsSDR || []).filter(l => l.consultor_id === id).length,
+        leadsConv: (leadsSDR || []).filter(l => l.consultor_id === id && l.status === 'convertido').length,
+        analises: (reunioes || []).filter(r => r.analista_id === id).length,
+        analisesOk: (reunioes || []).filter(r => r.analista_id === id && r.status === 'concluido').length,
+      };
+    });
+    setEquipeMetrics(m);
+  }
+
+  async function rodarHealthCheck() {
+    await fetch('/api/health-check', { method: 'POST' });
+    loadHealth();
+  }
 
   useEffect(() => {
     async function load() {
@@ -1626,6 +1668,7 @@ function DashboardTab() {
 
     load();
     loadAsaas();
+    loadHealth();
   }, []);
 
   function marcoAsaas(mrr) {
@@ -1652,8 +1695,69 @@ function DashboardTab() {
     </div>
   );
 
+  const hcLast = healthLogs[0];
+  const hcCor = { ok: '#059669', aviso: '#d97706', erro: '#dc2626' };
+  const hcBg  = { ok: '#f0fdf4', aviso: '#fffbeb', erro: '#fef2f2' };
+  const hcBorder = { ok: '#bbf7d0', aviso: '#fde68a', erro: '#fecaca' };
+  const hcIcon = { ok: '✅', aviso: '⚠️', erro: '🔴' };
+
   return (
     <div>
+      {/* ── Health Check Banner ── */}
+      {hcLast && (
+        <div onClick={() => setHealthOpen(o => !o)}
+          style={{ cursor: 'pointer', background: hcBg[hcLast.status], border: `1px solid ${hcBorder[hcLast.status]}`, borderRadius: 10, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16 }}>{hcIcon[hcLast.status]}</span>
+            <div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: hcCor[hcLast.status] }}>Automação de saúde — última execução: </span>
+              <span style={{ fontSize: 13, color: '#374151' }}>{hcLast.resumo}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(hcLast.executado_em).toLocaleString('pt-BR')}</span>
+            <button onClick={e => { e.stopPropagation(); rodarHealthCheck(); }}
+              style={{ fontSize: 11, padding: '3px 10px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>▶ Rodar agora</button>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>{healthOpen ? '▲' : '▼'}</span>
+          </div>
+        </div>
+      )}
+      {!hcLast && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: '#64748b' }}>🔧 Automação de saúde — nenhuma execução ainda</span>
+          <button onClick={rodarHealthCheck} style={{ fontSize: 12, padding: '4px 12px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>▶ Rodar agora</button>
+        </div>
+      )}
+      {/* Histórico de health check */}
+      {healthOpen && (
+        <div style={{ background: '#0f172a', borderRadius: 12, padding: '16px 20px', marginBottom: 16, maxHeight: 420, overflowY: 'auto' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#60a5fa', marginBottom: 12 }}>Histórico de execuções ({healthLogs.length})</div>
+          {healthLogs.map((log, i) => (
+            <div key={log.id} style={{ borderBottom: i < healthLogs.length - 1 ? '1px solid #1e293b' : 'none', paddingBottom: 12, marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 12 }}>{hcIcon[log.status]}</span>
+                <span style={{ fontSize: 12, color: hcCor[log.status], fontWeight: 700 }}>{new Date(log.executado_em).toLocaleString('pt-BR')}</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>· {log.duracao_ms}ms</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>{log.resumo}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {(log.itens || []).map((item, j) => (
+                  <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                    <span style={{ color: item.status === 'ok' ? '#34d399' : item.status === 'aviso' ? '#fbbf24' : '#f87171' }}>
+                      {item.status === 'ok' ? '✓' : item.status === 'aviso' ? '⚠' : '✗'}
+                    </span>
+                    <span style={{ color: '#cbd5e1', fontWeight: 600 }}>{item.nome}</span>
+                    <span style={{ color: '#64748b' }}>— {item.detalhe}</span>
+                    {item.corrigido && <span style={{ color: '#34d399', fontWeight: 700 }}>AUTO-CORRIGIDO</span>}
+                    <span style={{ color: '#475569', marginLeft: 'auto' }}>{item.ms}ms</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Dashboard</h2>
         <div style={{ fontSize: 12, color: '#94a3b8' }}>Atualizado agora · {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
@@ -1710,21 +1814,65 @@ function DashboardTab() {
           </div>
 
           <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Equipe interna</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              Equipe interna
+              {equipeDetalhe && <button onClick={() => setEquipeDetalhe(null)} style={{ fontSize: 11, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>← Voltar</button>}
+            </div>
             {[
               { key: 'consultor', label: 'Consultores', cor: '#0891b2' },
               { key: 'analista',  label: 'Analistas',   cor: '#f59e0b' },
               { key: 'advogado',  label: 'Advogados',   cor: '#dc2626' },
               { key: 'admin',     label: 'Admins',      cor: '#7c3aed' },
             ].map(({ key, label, cor }) => (
-              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div key={key}
+                onClick={() => loadEquipeDetalhe(key)}
+                style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 10px', borderRadius: 8, marginBottom: 2, cursor: 'pointer' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: cor }} />
                   <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
                 </div>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{dados.contagem[key] || 0}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{dados.contagem[key] || 0}</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>→</span>
+                </div>
               </div>
             ))}
+            {/* Detalhe por membro */}
+            {equipeDetalhe && equipeMembros.length > 0 && (
+              <div style={{ marginTop: 12, borderTop: '2px solid #f1f5f9', paddingTop: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Indicadores por membro</div>
+                {equipeMembros.map(m => {
+                  const met = equipeMetrics[m.id] || {};
+                  const isConsultor = equipeDetalhe === 'consultor';
+                  const isAnalista  = equipeDetalhe === 'analista';
+                  return (
+                    <div key={m.id} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 6 }}>{m.nome || m.email}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {isConsultor && <>
+                          <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>👥 {met.leadsSDR || 0} leads</span>
+                          <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>🎯 {met.leadsConv || 0} convertidos</span>
+                          <span style={{ fontSize: 11, background: '#fef9c3', color: '#92400e', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💰 R$ {Number(met.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}</span>
+                          <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamados || 0} atend.</span>
+                        </>}
+                        {isAnalista && <>
+                          <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>📋 {met.analises || 0} análises</span>
+                          <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>✅ {met.analisesOk || 0} concluídas</span>
+                          <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamadosFin || 0} tickets</span>
+                        </>}
+                        {!isConsultor && !isAnalista && <>
+                          <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamados || 0} atend.</span>
+                          <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>✅ {met.chamadosFin || 0} finalizados</span>
+                        </>}
+                        <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 'auto', alignSelf: 'center' }}>desde {new Date(m.created_at).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

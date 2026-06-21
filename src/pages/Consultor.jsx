@@ -39,6 +39,7 @@ export default function Consultor() {
   const [comissoes, setComissoes] = useState([]);
   const [cursos, setCursos] = useState([]);
   const [planosConfig, setPlanosConfig] = useState([]);
+  const [sdrProdutos, setSdrProdutos] = useState([]);
   const [linksPromo, setLinksPromo] = useState([]);
   const [novoPromo, setNovoPromo] = useState({ produto: 'top1', desconto_pct: '', descricao_condicoes: '' });
   const [salvandoPromo, setSalvandoPromo] = useState(false);
@@ -65,7 +66,7 @@ export default function Consultor() {
   useEffect(() => {
     if (!user || !podeVer) { setLoading(false); return; }
     async function load() {
-      const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: lp }, { data: lc }, { data: pc }] = await Promise.all([
+      const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: lp }, { data: lc }, { data: pc }, { data: sdrProd }] = await Promise.all([
         supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', user.id).single(),
         supabase.from('perfis').select('id, nome, email, whatsapp, telefone, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
         supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
@@ -73,12 +74,14 @@ export default function Consultor() {
         supabase.from('links_promo').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
         supabase.from('links_convite').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
         supabase.from('planos_config').select('plano_key,nome,preco,preco_vista').eq('ativo', true),
+        supabase.from('sdr_produtos').select('id, nome, tipo').eq('ativo', true).order('criado_em', { ascending: false }),
       ]);
       setPerfil(p || null);
       setCarteira(cli || []);
       setComissoes(com || []);
       setCursos(cs || []);
       setPlanosConfig(pc || []);
+      setSdrProdutos(sdrProd || []);
       setLinksPromo(lp || []);
       setLinksConvite(lc || []);
       setLoading(false);
@@ -289,45 +292,46 @@ export default function Consultor() {
         {/* === MATERIAL DE DIVULGAÇÃO === */}
         {aba==='material' && (
           <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
-            {!codigo ? (
-              <div style={{ textAlign:'center', padding:'30px' }}>
-                <Link2 size={40} color="#cbd5e1" style={{ margin:'0 auto 12px' }}/>
-                <p style={{ color:'#64748b', marginBottom:16 }}>Você ainda não tem um código de indicação.</p>
-                <button onClick={gerarCodigo} style={{ padding:'10px 22px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
-                  Gerar meu código
-                </button>
-              </div>
-            ) : (
               <>
-                {/* Seu código */}
-                <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:12, padding:'16px 18px' }}>
-                  <div style={{ fontSize:11, fontWeight:800, color:'#059669', textTransform:'uppercase', marginBottom:4 }}>Seu código de indicação</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                    <span style={{ fontSize:26, fontWeight:900, color:'#0f172a', letterSpacing:2 }}>{codigo}</span>
-                    <span style={{ fontSize:12, color:'#64748b' }}>Comissão de <strong>{pct}%</strong> sobre produtos e assinaturas, enquanto o cliente pagar.</span>
+                {/* Código (se tiver) */}
+                {codigo && (
+                  <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:12, padding:'14px 18px' }}>
+                    <div style={{ fontSize:11, fontWeight:800, color:'#059669', textTransform:'uppercase', marginBottom:4 }}>Seu código de indicação</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                      <span style={{ fontSize:24, fontWeight:900, color:'#0f172a', letterSpacing:2 }}>{codigo}</span>
+                      <span style={{ fontSize:12, color:'#64748b' }}>Comissão de <strong>{pct}%</strong> sobre produtos e assinaturas.</span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* ── Kit da Consulta ── */}
                 <div style={{ background:'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius:14, padding:'18px 20px' }}>
-                  <div style={{ fontSize:12, fontWeight:800, color:'#60a5fa', textTransform:'uppercase', letterSpacing:1, marginBottom:4 }}>🛒 Kit da Consulta</div>
-                  <p style={{ fontSize:12, color:'#94a3b8', margin:'0 0 14px' }}>Use estes links durante o atendimento para converter o cliente na hora.</p>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:8 }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:'#60a5fa', textTransform:'uppercase', letterSpacing:1, marginBottom:4 }}>🛒 Links para Compartilhar</div>
+                  <p style={{ fontSize:12, color:'#94a3b8', margin:'0 0 14px' }}>Todos os produtos e links disponíveis para enviar ao cliente durante o atendimento.</p>
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     {[
-                      { label:'Página de Planos', url:`${origin}/#/planos${codigo?`?ref=${codigo}`:''}`, emoji:'📋' },
+                      { label:'Calculadora de Lances', sub:'Ferramenta gratuita', url:`${origin}/#/calculadora`, emoji:'🧮' },
+                      { label:'Página de Planos', sub:'Todos os planos', url:`${origin}/#/planos${codigo?`?ref=${codigo}`:''}`, emoji:'📋' },
                       ...planosVenda.map(pl=>({ label:pl.nome, sub:pl.precoLabel, url:`${origin}/#/p/plano/${pl.key}${codigo?`?ref=${codigo}`:''}`, emoji:'⭐' })),
-                      ...cursos.map(c=>({ label:c.titulo, sub:'Curso', url:`${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`, emoji:c.emoji||'🎓' })),
+                      ...cursos.map(c=>({ label:c.titulo, sub:`Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Gratuito'}`, url:`${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`, emoji:c.emoji||'🎓' })),
+                      ...sdrProdutos.map(s=>({ label:s.nome, sub:`${s.tipo||'Conteúdo'} · Acesso gratuito`, url:`${origin}/#/p/captura/${s.id}`, emoji: s.tipo==='ebook'?'📖':s.tipo==='curso'?'🎓':s.tipo==='calculadora'?'🧮':'🎁' })),
                     ].map((item,i)=>(
-                      <div key={i} style={{ background:'rgba(255,255,255,0.07)', borderRadius:10, padding:'10px 12px', display:'flex', alignItems:'center', gap:10 }}>
-                        <span style={{ fontSize:18 }}>{item.emoji}</span>
+                      <div key={i} style={{ background:'rgba(255,255,255,0.07)', borderRadius:10, padding:'10px 14px', display:'flex', alignItems:'center', gap:10 }}>
+                        <span style={{ fontSize:18, flexShrink:0 }}>{item.emoji}</span>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:12, fontWeight:700, color:'white', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.label}</div>
+                          <div style={{ fontSize:13, fontWeight:700, color:'white', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.label}</div>
                           {item.sub && <div style={{ fontSize:11, color:'#60a5fa' }}>{item.sub}</div>}
                         </div>
-                        <button onClick={()=>navigator.clipboard.writeText(item.url)}
-                          style={{ padding:'4px 10px', background:'#2563eb', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}>
-                          Copiar
-                        </button>
+                        <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                          <a href={item.url} target="_blank" rel="noreferrer"
+                            style={{ padding:'4px 10px', background:'rgba(255,255,255,0.1)', color:'#94a3b8', border:'none', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none', cursor:'pointer' }}>
+                            Ver
+                          </a>
+                          <button onClick={()=>navigator.clipboard.writeText(item.url)}
+                            style={{ padding:'4px 10px', background:'#2563eb', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                            Copiar
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -342,161 +346,7 @@ export default function Consultor() {
                   </div>
                 </div>
 
-                {/* Planos */}
-                <div>
-                  <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:10 }}>📋 Planos</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))', gap:12 }}>
-                    {planosVenda.map(pl => {
-                      const link = `${origin}/#/p/plano/${pl.key}?ref=${codigo}`;
-                      return (
-                        <div key={pl.key} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:12, padding:16 }}>
-                          <div style={{ fontWeight:700, color:'#0f172a', fontSize:14, marginBottom:4 }}>{pl.nome}</div>
-                          <div style={{ fontSize:13, color:'#2563eb', fontWeight:600, marginBottom:12 }}>{pl.precoLabel}</div>
-                          <div style={{ display:'flex', gap:8 }}>
-                            <CopyBtn texto={link}/>
-                            <a href={link} target="_blank" rel="noreferrer"
-                              style={{ padding:'8px 12px', border:'1px solid #2563eb', color:'#2563eb', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', whiteSpace:'nowrap' }}>
-                              Ver página
-                            </a>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Cursos */}
-                <div>
-                  <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:10 }}>🎓 Cursos</div>
-                  {cursos.length === 0 ? (
-                    <p style={{ fontSize:13, color:'#94a3b8' }}>Nenhum curso disponível no momento.</p>
-                  ) : (
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))', gap:12 }}>
-                      {cursos.map(c => {
-                        const link = `${origin}/#/p/curso/${c.id}?ref=${codigo}`;
-                        return (
-                          <div key={c.id} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:12, padding:16 }}>
-                            <div style={{ fontWeight:700, color:'#0f172a', fontSize:14, marginBottom:4 }}>
-                              {c.emoji ? `${c.emoji} ` : ''}{c.titulo}
-                            </div>
-                            <div style={{ fontSize:13, color:'#2563eb', fontWeight:600, marginBottom:12 }}>
-                              {Number(c.preco) > 0 ? `R$ ${fmt(Number(c.preco), 0)}` : 'Gratuito'}
-                            </div>
-                            <div style={{ display:'flex', gap:8 }}>
-                              <CopyBtn texto={link}/>
-                              <a href={link} target="_blank" rel="noreferrer"
-                                style={{ padding:'8px 12px', border:'1px solid #2563eb', color:'#2563eb', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', whiteSpace:'nowrap' }}>
-                                Ver página
-                              </a>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Links de convite */}
-                <div>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase' }}>
-                      🎯 Links de convite
-                    </div>
-                    <button onClick={gerarConvite} style={{ padding:'5px 12px', background:'#0f172a', color:'white', border:'none', borderRadius:6, fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                      + Gerar convite
-                    </button>
-                  </div>
-                  <p style={{ fontSize:12, color:'#94a3b8', marginBottom:8 }}>Convites vinculam o novo usuário a você como indicador.</p>
-                  {linksConvite.length === 0 ? (
-                    <p style={{ fontSize:13, color:'#94a3b8' }}>Nenhum convite gerado ainda.</p>
-                  ) : (
-                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                      {linksConvite.map(c => {
-                        const convUrl = `${origin}/#/convite/${c.codigo}`;
-                        return (
-                          <div key={c.id} style={{ padding:'12px 14px', border:`1px solid ${c.ativo?'#e2e8f0':'#fecaca'}`, borderRadius:10, background:c.ativo?'white':'#fff5f5' }}>
-                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                              <div>
-                                <span style={{ fontFamily:'monospace', fontWeight:900, fontSize:14, color:'#0f172a', marginRight:8 }}>{c.codigo}</span>
-                                <span style={{ fontSize:12, color:'#64748b' }}>{c.usos} uso{c.usos!==1?'s':''}</span>
-                                {!c.ativo && <span style={{ fontSize:11, color:'#dc2626', fontWeight:700, marginLeft:6 }}>INATIVO</span>}
-                              </div>
-                              <div style={{ display:'flex', gap:6 }}>
-                                <button onClick={() => copiarConvite(c.codigo)} style={{ padding:'5px 10px', background:copiandoConvite===c.codigo?'#dcfce7':'#f1f5f9', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', color:copiandoConvite===c.codigo?'#166534':'#374151' }}>
-                                  {copiandoConvite===c.codigo?'✓ Copiado':'Copiar link'}
-                                </button>
-                                <button onClick={() => toggleConvite(c)} style={{ padding:'5px 10px', background:c.ativo?'#fee2e2':'#dcfce7', border:'none', borderRadius:6, fontSize:11, fontWeight:700, color:c.ativo?'#dc2626':'#166534', cursor:'pointer' }}>
-                                  {c.ativo?'Desativar':'Ativar'}
-                                </button>
-                              </div>
-                            </div>
-                            <div style={{ marginTop:4, fontSize:11, color:'#94a3b8', fontFamily:'monospace', wordBreak:'break-all' }}>{convUrl}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Links Promocionais */}
-                <div style={{ borderTop:'2px solid #e2e8f0', paddingTop:18 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:12 }}>
-                    <Tag size={13}/> Links Promocionais com Desconto
-                  </div>
-
-                  <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'14px 16px', marginBottom:14 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:'#475569', marginBottom:10 }}>Criar novo link promocional</div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-                      <select value={novoPromo.produto} onChange={e => setNovoPromo(p=>({...p, produto:e.target.value}))}
-                        style={{ padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, color:'#0f172a', background:'white' }}>
-                        {Object.entries(PRODUTOS_NOME).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-                      </select>
-                      <input type="number" value={novoPromo.desconto_pct} onChange={e => setNovoPromo(p=>({...p,desconto_pct:e.target.value}))}
-                        placeholder="Desconto %" min="0" max="100"
-                        style={{ padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, color:'#0f172a' }} />
-                    </div>
-                    <textarea value={novoPromo.descricao_condicoes} onChange={e => setNovoPromo(p=>({...p,descricao_condicoes:e.target.value}))}
-                      placeholder="Condições promocionais (ex: '30% de desconto no 1º mês para novos clientes indicados por você')"
-                      rows={2} style={{ width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, color:'#0f172a', resize:'vertical', boxSizing:'border-box', marginBottom:10 }}/>
-                    <button onClick={criarLinkPromo} disabled={salvandoPromo}
-                      style={{ padding:'8px 20px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer' }}>
-                      {salvandoPromo ? 'Gerando…' : '+ Gerar link'}
-                    </button>
-                  </div>
-
-                  {linksPromo.length === 0 ? (
-                    <p style={{ fontSize:13, color:'#94a3b8' }}>Nenhum link promocional criado ainda.</p>
-                  ) : (
-                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                      {linksPromo.map(lp => {
-                        const lpUrl = `${origin}/#/promo/${lp.codigo}`;
-                        return (
-                          <div key={lp.id} style={{ padding:'12px 14px', border:`1px solid ${lp.ativo?'#e2e8f0':'#fecaca'}`, borderRadius:10, background:lp.ativo?'white':'#fff5f5' }}>
-                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
-                              <div>
-                                <span style={{ fontFamily:'monospace', fontWeight:900, fontSize:14, color:'#0f172a', marginRight:8 }}>{lp.codigo}</span>
-                                <span style={{ fontSize:12, color:'#2563eb', fontWeight:700 }}>{PRODUTOS_NOME[lp.produto]}</span>
-                                {lp.desconto_pct > 0 && <span style={{ fontSize:12, color:'#059669', fontWeight:700, marginLeft:6 }}>{lp.desconto_pct}% off</span>}
-                                {!lp.ativo && <span style={{ fontSize:11, color:'#dc2626', fontWeight:700, marginLeft:6 }}>INATIVO</span>}
-                              </div>
-                              <div style={{ display:'flex', gap:6 }}>
-                                <CopyBtn texto={lpUrl}/>
-                                <button onClick={() => togglePromo(lp)}
-                                  style={{ padding:'5px 10px', background:lp.ativo?'#fee2e2':'#dcfce7', border:'none', borderRadius:6, fontSize:11, fontWeight:700, color:lp.ativo?'#dc2626':'#166534', cursor:'pointer' }}>
-                                  {lp.ativo?'Desativar':'Ativar'}
-                                </button>
-                              </div>
-                            </div>
-                            {lp.descricao_condicoes && <div style={{ marginTop:6, fontSize:12, color:'#64748b' }}>📋 {lp.descricao_condicoes}</div>}
-                            <div style={{ marginTop:4, fontSize:11, color:'#94a3b8', fontFamily:'monospace', wordBreak:'break-all' }}>{lpUrl}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               </>
-            )}
           </div>
         )}
 
