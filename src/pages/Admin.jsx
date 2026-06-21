@@ -11,6 +11,35 @@ const ROLES_DISPONIVEIS = [
 ];
 
 // ─── styles ──────────────────────────────────────────────────────────────────
+// Máscara R$ — usa centavos internamente, exibe formatado
+function maskBRL(raw) {
+  const digits = String(raw).replace(/\D/g, '').replace(/^0+/, '') || '0';
+  const cents = digits.padStart(3, '0');
+  const reais = cents.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `R$ ${reais},${cents.slice(-2)}`;
+}
+function parseBRL(masked) {
+  return parseFloat(String(masked).replace(/[R$\s.]/g, '').replace(',', '.')) || 0;
+}
+function InputBRL({ value, onChange, disabled, placeholder, style }) {
+  const display = value === '' || value == null ? '' : maskBRL(Math.round(Number(value) * 100));
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      disabled={disabled}
+      placeholder={placeholder || 'R$ 0,00'}
+      style={style}
+      value={display}
+      onChange={e => {
+        const digits = e.target.value.replace(/\D/g, '');
+        const num = digits ? parseFloat((parseInt(digits, 10) / 100).toFixed(2)) : '';
+        onChange(num);
+      }}
+    />
+  );
+}
+
 const S = {
   page: { minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif" },
   header: { background: '#0f172a', color: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 },
@@ -228,7 +257,7 @@ function CursosTab() {
               </div>
               <div style={S.col}>
                 <label style={S.label}>Preço (R$)</label>
-                <input style={S.input} value={form.preco} disabled={form.gratuito} onChange={e => setForm({ ...form, preco: e.target.value })} placeholder="0,00" />
+                <InputBRL style={S.input} value={form.preco} disabled={form.gratuito} onChange={v => setForm({ ...form, preco: v })} />
               </div>
             </div>
 
@@ -408,7 +437,7 @@ function EbooksTab() {
             </div>
             <div style={{ marginBottom: 20 }}>
               <label style={S.label}>Preço (R$) — deixe 0 ou em branco para gratuito</label>
-              <input style={S.input} type="number" min="0" step="0.01" value={form.preco ?? ''} onChange={e => setForm({ ...form, preco: e.target.value })} placeholder="0,00" />
+              <InputBRL style={S.input} value={form.preco ?? ''} onChange={v => setForm({ ...form, preco: v })} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button style={S.btn('outline')} onClick={() => setModal(null)}>Cancelar</button>
@@ -626,12 +655,12 @@ function ConfigTab() {
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$</div>
-                  <input type="number" step="0.01" value={p.preco} onChange={e => updatePlano(p.plano_key, 'preco', e.target.value)}
+                  <InputBRL value={p.preco} onChange={v => updatePlano(p.plano_key, 'preco', v)}
                     style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (opcional)</div>
-                  <input type="number" step="0.01" value={p.preco_vista ?? ''} onChange={e => updatePlano(p.plano_key, 'preco_vista', e.target.value || null)}
+                  <InputBRL value={p.preco_vista ?? ''} onChange={v => updatePlano(p.plano_key, 'preco_vista', v || null)}
                     placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
                 </div>
                 <div style={{ textAlign: 'center' }}>
@@ -1273,7 +1302,7 @@ function PromoTab() {
             </div>
             <div>
               <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>DESCONTO R$</label>
-              <input type="number" value={form.desconto_valor} onChange={e => up('desconto_valor', e.target.value)} placeholder="ex: 20" style={S.input} min="0" />
+              <InputBRL value={form.desconto_valor} onChange={v => up('desconto_valor', v)} style={S.input} />
             </div>
           </div>
           <textarea value={form.descricao_condicoes} onChange={e => up('descricao_condicoes', e.target.value)}
