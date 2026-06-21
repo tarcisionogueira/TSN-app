@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Shield, Zap, Users, Star, ChevronDown, ChevronUp } from 'lucide-react';
-import { PLANOS } from '../data/cursos';
+import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { fetchPlanosComConfig } from '../utils/planosConfig';
 
 const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
 
@@ -18,10 +19,15 @@ const FAQS = [
 export default function Planos() {
   const nav = useNavigate();
   const { user, role } = useAuth();
+  const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   const planoAtualPreco = PLANOS[role]?.preco ?? -1;
   const [promosPublicas, setPromosPublicas] = useState({});
   const [faqAberto, setFaqAberto] = useState(null);
   const [anual, setAnual] = useState(false);
+
+  useEffect(() => {
+    fetchPlanosComConfig().then(setPLANOS);
+  }, []);
 
   useEffect(() => {
     supabase

@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw } from 'lucide-react';
-import { PLANOS } from '../data/cursos';
+import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
+import { fetchPlanosComConfig } from '../utils/planosConfig';
 
 const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
 
@@ -62,7 +63,12 @@ export default function Checkout() {
   const planoKey = params.get('plano');
   const promoCode = params.get('promo')?.toUpperCase() || '';
   const refCode = params.get('ref') || '';
+  const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   const plano = PLANOS[planoKey];
+
+  useEffect(() => {
+    fetchPlanosComConfig().then(setPLANOS);
+  }, []);
 
   // Persiste o código de referência do consultor
   useEffect(() => {
@@ -480,7 +486,7 @@ export default function Checkout() {
                     <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% off</span>
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-                    Total de <strong>R$ 449,00/ano</strong>. Pague em até 12× no cartão ou à vista com desconto. Contratação anual — não é renovação automática mensal.
+                    Total de <strong>{plano?.precoAnualLabel || 'R$ 449,90'}/ano</strong>. Pague em até 12× no cartão ou à vista. Contratação anual — não é renovação automática mensal.
                   </div>
                 </>
               )}
@@ -605,7 +611,7 @@ export default function Checkout() {
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
                 {temToggleAnual && modalidade === 'anual'
-                  ? 'Pagamento anual único (R$ 449,00) via PIX, boleto ou em até 12× no cartão · Contratação anual sem renovação automática mensal'
+                  ? `Pagamento anual único (${plano?.precoAnualLabel || 'R$ 449,90'}) via PIX, boleto ou em até 12× no cartão · Contratação anual sem renovação automática mensal`
                   : 'Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser'}
               </p>
             </>

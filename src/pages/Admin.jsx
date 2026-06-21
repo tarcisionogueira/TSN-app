@@ -934,13 +934,17 @@ function ConfigTab() {
   const [contratoPlano, setContratoPlano] = useState(null); // plano_key para abrir modal contrato
 
   async function salvarPlano(p) {
+    const pct = Number(p.desconto_vista_pct || 0);
+    const total12 = Number(p.preco || 0) * 12;
+    const vistaCalc = pct > 0 ? total12 * (1 - pct / 100) : (p.preco_vista ? Number(p.preco_vista) : null);
     const { error } = await supabase.from('planos_config').update({
       preco: Number(p.preco) || 0,
-      preco_vista: p.preco_vista ? Number(p.preco_vista) : null,
+      preco_vista: vistaCalc,
       preco_anual: p.preco_anual ? Number(p.preco_anual) : null,
       cobrar: p.cobrar,
       ativo: p.ativo,
       comissao_pct: Number(p.comissao_pct) || 0,
+      desconto_vista_pct: pct,
       atualizado_em: new Date().toISOString(),
     }).eq('plano_key', p.plano_key);
     if (!error) {
@@ -982,8 +986,8 @@ function ConfigTab() {
       <div style={S.card}>
         <p style={S.subTitle}>Preços dos Planos</p>
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-          Altere os valores aqui. O sistema usa esses preços na cobrança e exibição para o cliente.
-          Campos à vista: apenas para Assessorado e Clube. Coluna "Cobrar": desative para planos operacionais gratuitos.
+          Altere os valores aqui. Alterações valem para novas contratações — assinantes existentes mantêm o preço atual até o vencimento do período.
+          "Desconto à vista %" auto-calcula o preço à vista (preço mensal × 12 × desconto). "Cobrar": desative para planos operacionais gratuitos.
         </p>
         <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#1e40af' }}>
           ℹ️ <strong>Renovação automática:</strong> Planos anuais são renovados automaticamente ao final do período de 12 meses. O cliente é informado desta condição no momento da contratação, na página de planos, e por email 7 dias antes da renovação.
@@ -994,13 +998,19 @@ function ConfigTab() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 80px 80px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
-              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Preço Anual', 'Cobrar?', 'Ativo?', 'Comissão %', 'Contrato'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '150px 110px 130px 110px 75px 65px 80px 80px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
+              {['Plano', 'Preço mensal', 'Desc. à vista % → valor', 'Preço Anual', 'Cobrar?', 'Ativo?', 'Comissão %', 'Contrato'].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
-            {planos.map(p => (
-              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 80px 80px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9', background: dirtyPlanos.has(p.plano_key) ? '#fffbeb' : 'transparent' }}>
+            {planos.map(p => {
+              const total12 = Number(p.preco || 0) * 12;
+              const pct = Number(p.desconto_vista_pct || 0);
+              const vistaCalc = pct > 0 ? total12 * (1 - pct / 100) : (p.preco_vista ?? null);
+              const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—';
+              const temVista = ['assessorado', 'clube'].includes(p.plano_key);
+              return (
+              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '150px 110px 130px 110px 75px 65px 80px 80px', gap: 10, alignItems: 'start', padding: '10px 0', borderBottom: '1px solid #f1f5f9', background: dirtyPlanos.has(p.plano_key) ? '#fffbeb' : 'transparent' }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.nome}</div>
                   <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.plano_key}</div>
@@ -1011,9 +1021,27 @@ function ConfigTab() {
                     style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (opcional)</div>
-                  <InputBRL value={p.preco_vista ?? ''} onChange={v => updatePlano(p.plano_key, 'preco_vista', v || null)}
-                    placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  {temVista ? (
+                    <>
+                      <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>% desconto</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input type="number" min="0" max="100" step="0.5"
+                          value={pct}
+                          onChange={e => {
+                            const v = e.target.value;
+                            updatePlano(p.plano_key, 'desconto_vista_pct', v);
+                            const calc = total12 * (1 - Number(v) / 100);
+                            updatePlano(p.plano_key, 'preco_vista', calc > 0 ? calc : null);
+                          }}
+                          style={{ ...S.input, padding: '6px 6px', fontSize: 13, width: 52 }} />
+                        <span style={{ fontSize: 10, color: '#64748b' }}>% →</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{fmtBRL(vistaCalc)}</span>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>12× {fmtBRL(p.preco)} = {fmtBRL(total12)}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 11, color: '#cbd5e1', paddingTop: 18 }}>—</div>
+                  )}
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (anual)</div>
@@ -1044,7 +1072,8 @@ function ConfigTab() {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
