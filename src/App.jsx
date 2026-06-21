@@ -166,7 +166,7 @@ function MainLayout() {
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
           <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin']}><Consultor /></PrivateRoute>} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
-          <Route path="/calculadora" element={<PrivateRoute><Calculadora /></PrivateRoute>} />
+          <Route path="/calculadora" element={<Calculadora />} />
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
           <Route path="/membros/curso/:id" element={<PrivateRoute><Curso /></PrivateRoute>} />
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />

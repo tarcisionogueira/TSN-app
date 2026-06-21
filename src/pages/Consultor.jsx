@@ -168,9 +168,9 @@ export default function Consultor() {
   const PLANOS_VENDA = [
     { key: 'top1',              nome: 'Plano Pago',                   precoLabel: 'R$ 49,90/mês' },
     { key: 'assessorado',       nome: 'Assessoria',                   precoLabel: 'R$ 6.000' },
-    { key: 'assessorado_vista', nome: 'Assessoria (À Vista)',          precoLabel: 'R$ 5.400' },
+    { key: 'assessorado_vista', nome: 'Assessoria (À Vista)',          precoLabel: 'R$ 5.000 (20% off)' },
     { key: 'clube',             nome: 'Clube de Negócios',             precoLabel: 'R$ 60.000/ano' },
-    { key: 'clube_vista',       nome: 'Clube de Negócios (À Vista)',  precoLabel: 'R$ 54.000' },
+    { key: 'clube_vista',       nome: 'Clube de Negócios (À Vista)',  precoLabel: 'R$ 48.000 (20% off)' },
   ];
 
   const PLANOS_CLIENTE_KEYS = ['explorador', 'top1', 'top2', 'assessorado', 'assessorado_vista', 'clube', 'clube_vista'];

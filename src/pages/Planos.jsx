@@ -269,10 +269,16 @@ export default function Planos() {
                     <div style={{ fontSize: 13, color: '#94a3b8' }}>{key === 'assessorado' ? '× 12 parcelas' : '/mês'}</div>
                   </div>
                   {key === 'assessorado' && (
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>ou R$ 5.000 à vista</div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>ou R$ 5.000 à vista <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '1px 7px', marginLeft: 4 }}>20% off</span></div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Parcelado: juros do cliente a partir da 4ª parcela</div>
+                    </div>
                   )}
                   {key === 'clube' && (
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>12 meses · ou R$ 48.000 à vista</div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>ou R$ 48.000 à vista <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '1px 7px', marginLeft: 4 }}>20% off</span></div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Parcelado: juros do cliente a partir da 4ª parcela</div>
+                    </div>
                   )}
                   <div style={{ display: 'inline-block', background: plano.bg, color: plano.cor, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 8, marginBottom: 16 }}>
                     + 10% de honorários sobre a arrematação

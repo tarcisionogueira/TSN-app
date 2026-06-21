@@ -108,6 +108,44 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* CALCULADORA CTA */}
+      <section style={{ padding: '64px 20px', background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 48, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#10b98122', border: '1px solid #10b98144', borderRadius: 20, padding: '6px 14px', fontSize: 11, color: '#34d399', fontWeight: 800, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 }}>
+              Ferramenta gratuita
+            </div>
+            <h2 style={{ fontSize: 30, fontWeight: 900, color: 'white', margin: '0 0 14px', lineHeight: 1.2 }}>
+              Calcule o teto máximo de lance antes de arrematar
+            </h2>
+            <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.8, margin: '0 0 24px' }}>
+              Insira o valor do imóvel, débitos assumidos, reforma estimada e o ROI desejado. Nossa calculadora mostra quanto você pode pagar no leilão — e ainda lucrar.
+            </p>
+            <button onClick={() => nav('/calculadora')}
+              style={{ padding: '13px 28px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              🧮 Usar a Calculadora de Lances
+            </button>
+          </div>
+          <div style={{ flex: 1, minWidth: 220, background: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: '24px 22px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            {[
+              ['Valor de arrematação', 'R$ 280.000'],
+              ['Débitos + reforma', 'R$ 32.000'],
+              ['Valor de mercado', 'R$ 450.000'],
+              ['ROI desejado', '30%'],
+            ].map(([l, v]) => (
+              <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.07)', fontSize: 13 }}>
+                <span style={{ color: '#94a3b8' }}>{l}</span>
+                <span style={{ color: 'white', fontWeight: 700 }}>{v}</span>
+              </div>
+            ))}
+            <div style={{ marginTop: 14, padding: '12px 14px', background: '#10b98122', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#34d399', fontWeight: 800, fontSize: 13 }}>Teto máximo de lance</span>
+              <span style={{ color: '#34d399', fontWeight: 900, fontSize: 20 }}>R$ 314.769</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* RECURSOS */}
       <section style={{ padding: '80px 20px', background: 'white' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>

@@ -1234,9 +1234,9 @@ function ContratosTab() {
 const PRODUTOS_PROMO = [
   { key: 'top1', label: 'Plano Pago — R$ 49,90/mês' },
   { key: 'assessorado', label: 'Assessoria — R$ 6.000 (12× R$ 500)' },
-  { key: 'assessorado_vista', label: 'Assessoria À Vista — R$ 5.400' },
-  { key: 'clube', label: 'Clube de Negócios — R$ 60.000/ano' },
-  { key: 'clube_vista', label: 'Clube de Negócios À Vista — R$ 54.000' },
+  { key: 'assessorado_vista', label: 'Assessoria À Vista — R$ 5.000 (20% off)' },
+  { key: 'clube', label: 'Clube de Negócios — R$ 60.000/ano (12× R$ 5.000)' },
+  { key: 'clube_vista', label: 'Clube de Negócios À Vista — R$ 48.000 (20% off)' },
 ];
 
 const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', beneficios: '', ativo: true });
@@ -1276,6 +1276,7 @@ function PromoTab() {
       descricao_condicoes: form.descricao_condicoes,
       desconto_pct: Number(form.desconto_pct) || 0,
       desconto_valor: Number(form.desconto_valor) || 0,
+      beneficios: form.beneficios || null,
       ativo: form.ativo,
       criado_por: user.id,
     };

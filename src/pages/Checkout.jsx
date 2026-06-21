@@ -405,7 +405,7 @@ export default function Checkout() {
           </div>
 
           <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 13, color: '#475569' }}>
-            <strong>Conta:</strong> {user?.email}
+            <strong>Conta:</strong> {user?.email ? (() => { const [u, d] = user.email.split('@'); return u.slice(0,3) + '***@' + d; })() : ''}
             {ehMudanca && planoAtual && <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>Plano atual: <strong>{planoAtual.nome}</strong> ({planoAtual.precoLabel})</div>}
           </div>
           {/* Aviso LGPD — CPF e nome são enviados ao processador de pagamento */}
