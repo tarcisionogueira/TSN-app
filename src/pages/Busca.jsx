@@ -51,6 +51,13 @@ export default function Busca() {
   const plano = role || 'explorador';
   const canSite    = user && ROLES_SITE.includes(role);
   const canAnalise = user && ROLES_ANALISE.includes(role);
+  const [analisesBonus, setAnalisesBonus] = useState(null);
+
+  useEffect(() => {
+    if (role !== 'explorador' || !user?.id) return;
+    supabase.from('perfis').select('analises_bonus').eq('id', user.id).single()
+      .then(({ data }) => { if (data) setAnalisesBonus(data.analises_bonus || 0); });
+  }, [role, user?.id]);
   const FILTROS_INICIAL = { tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] };
   const [filtros, setFiltros] = useState(FILTROS_INICIAL);
   const [filtrosSalvos, setFiltrosSalvos] = useState([]);
@@ -353,6 +360,13 @@ export default function Busca() {
   const desconto = (im) => im.descontoPercentual ? Math.round(im.descontoPercentual) : (im.valorAvaliacao>0 ? Math.round((1-im.valorMinimo/im.valorAvaliacao)*100) : 0);
 
   return (
+    <div style={{ position:'relative' }}>
+    {/* Badge fixo de análises bônus para explorador */}
+    {role === 'explorador' && analisesBonus !== null && (
+      <div style={{ position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)', zIndex:1000, background: analisesBonus > 0 ? '#2563eb' : '#dc2626', color:'white', borderRadius:999, padding:'8px 20px', fontSize:13, fontWeight:700, boxShadow:'0 4px 20px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap' }}>
+        {analisesBonus > 0 ? `🎁 ${analisesBonus} análise${analisesBonus !== 1 ? 's' : ''} bônus disponível${analisesBonus !== 1 ? 'is' : ''}` : '🔒 Análises bônus esgotadas'}
+      </div>
+    )}
     <div style={{ maxWidth:1280, margin:'0 auto', padding: isMobile ? '16px 12px' : '24px 20px', display:'grid', gridTemplateColumns: isMobile ? '1fr' : '280px 1fr', gap:20, alignItems:'start' }}>
 
       {/* SIDEBAR */}
@@ -824,6 +838,7 @@ export default function Busca() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
       `}</style>
+    </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { supabase } from './utils/supabase';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -54,6 +55,41 @@ function ContaInativa() {
   );
 }
 
+function PopupBonusAnalises({ userId, onFechar }) {
+  const [fechado, setFechado] = React.useState(false);
+  if (fechado) return null;
+
+  function fechar() {
+    setFechado(true);
+    // Marca como exibido para não mostrar de novo
+    import('./utils/supabase').then(({ supabase }) => {
+      supabase.from('perfis').update({ bonus_exibido: true }).eq('id', userId);
+    });
+    if (onFechar) onFechar();
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: 'white', borderRadius: 20, padding: 36, maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', position: 'relative' }}>
+        <button onClick={fechar} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+        <div style={{ fontSize: 56, marginBottom: 12 }}>🎁</div>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 10px' }}>Bônus de boas-vindas!</h2>
+        <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.6, margin: '0 0 24px' }}>
+          Você ganhou <strong style={{ color: '#2563eb' }}>5 análises gratuitas</strong> para explorar a plataforma e conhecer o potencial de imóveis em leilão.
+        </p>
+        <div style={{ background: '#eff6ff', borderRadius: 12, padding: '14px 20px', marginBottom: 24 }}>
+          <div style={{ fontSize: 36, fontWeight: 900, color: '#2563eb' }}>5</div>
+          <div style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>análises disponíveis</div>
+        </div>
+        <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 20px' }}>Faça upgrade para o plano Investidor Pro e ganhe 20 análises mensais com relatório jurídico completo.</p>
+        <button onClick={fechar} style={{ width: '100%', padding: '13px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+          Começar a explorar →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PopupInadimplente({ dias }) {
   const [fechado, setFechado] = React.useState(false);
   if (fechado) return null;
@@ -96,10 +132,19 @@ function PrivateRoute({ children, roles }) {
 }
 
 function MainLayout() {
-  const { ativo, isLoggedIn, inadimplenteDias, role, loading } = useAuth();
+  const { ativo, isLoggedIn, inadimplenteDias, role, loading, user } = useAuth();
   const loc = useLocation();
+  const [showBonus, setShowBonus] = useState(false);
+
+  useEffect(() => {
+    if (!isLoggedIn || role !== 'explorador' || !user?.id) return;
+    supabase.from('perfis').select('analises_bonus, bonus_exibido').eq('id', user.id).single()
+      .then(({ data }) => {
+        if (data?.analises_bonus > 0 && !data?.bonus_exibido) setShowBonus(true);
+      });
+  }, [isLoggedIn, role, user?.id]);
+
   if (isLoggedIn && !ativo) return <ContaInativa />;
-  // Role-based home redirect
   if (isLoggedIn && !loading) {
     if (role === 'admin' && loc.pathname === '/') return <Navigate to="/admin" replace />;
     if (['analista','consultor','advogado'].includes(role) && loc.pathname === '/') return <Navigate to="/atendimento" replace />;
@@ -108,6 +153,7 @@ function MainLayout() {
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <Header />
       {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
+      {showBonus && <PopupBonusAnalises userId={user.id} onFechar={() => setShowBonus(false)} />}
       {isLoggedIn && <TourGuia />}
       <ChatSuporte />
       <main style={{ flex: 1 }}>

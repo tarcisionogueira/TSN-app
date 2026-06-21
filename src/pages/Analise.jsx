@@ -93,8 +93,10 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
   );
 }
 
-const LIMITE_ANALISES_TOP1 = 10;
-const mesAtual = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+const LIMITE_POR_ROLE = { explorador: 0, top1: 20, top2: 20 }; // 0 = usa bônus
+const mesAtual = () => new Date().toISOString().slice(0, 7);
+const ROLES_SEM_LIMITE = ['assessorado','clube','analista','advogado','admin'];
+const ROLES_COM_CNJ   = ['top1','top2','assessorado','clube','analista','advogado','admin'];
 
 export default function Analise() {
   const location = useLocation();
@@ -103,31 +105,40 @@ export default function Analise() {
   const { user, role } = useAuth();
   const imovelInicial = location.state?.imovel;
 
-  // Controle de limite (top1)
+  const temCNJ = ROLES_COM_CNJ.includes(role);
+  const semLimite = ROLES_SEM_LIMITE.includes(role);
+
   const [analisesBloqueado, setAnalisesBloqueado] = useState(false);
   const [analisesUsadas, setAnalisesUsadas] = useState(0);
+  const [analisesBonus, setAnalisesBonus] = useState(0);
+  const limiteRole = LIMITE_POR_ROLE[role] || 0;
 
   useEffect(() => {
-    if (role !== 'top1' || !user) return;
-    supabase
-      .from('perfis')
-      .select('analises_mes, analises_count')
-      .eq('id', user.id)
-      .single()
+    if (!user || semLimite) return;
+    const col = role === 'explorador'
+      ? 'analises_mes, analises_count, analises_bonus'
+      : 'analises_mes, analises_count';
+    supabase.from('perfis').select(col).eq('id', user.id).single()
       .then(({ data, error }) => {
         if (error || !data) return;
-        const mes = data.analises_mes;
-        const count = data.analises_count || 0;
-        if (mes === mesAtual()) {
-          setAnalisesUsadas(count);
-          if (count >= LIMITE_ANALISES_TOP1) setAnalisesBloqueado(true);
-        } else {
-          supabase.from('perfis').update({ analises_mes: mesAtual(), analises_count: 0 }).eq('id', user.id);
+        if (role === 'explorador') {
+          const bonus = data.analises_bonus || 0;
+          setAnalisesBonus(bonus);
           setAnalisesUsadas(0);
-          setAnalisesBloqueado(false);
+          setAnalisesBloqueado(bonus <= 0);
+        } else {
+          const count = data.analises_count || 0;
+          if (data.analises_mes === mesAtual()) {
+            setAnalisesUsadas(count);
+            setAnalisesBloqueado(count >= limiteRole);
+          } else {
+            supabase.from('perfis').update({ analises_mes: mesAtual(), analises_count: 0 }).eq('id', user.id);
+            setAnalisesUsadas(0);
+            setAnalisesBloqueado(false);
+          }
         }
       });
-  }, [role, user]);
+  }, [role, user, semLimite, limiteRole]);
 
   const [d, setD] = useState(() => {
     if (imovelInicial) return {
@@ -361,9 +372,16 @@ export default function Analise() {
     if (role === 'top1' && user && isNovo) {
       const mes = mesAtual();
       const novoCount = analisesUsadas + 1;
-      await supabase.from('perfis').update({ analises_mes: mes, analises_count: novoCount }).eq('id', user.id);
-      setAnalisesUsadas(novoCount);
-      if (novoCount >= LIMITE_ANALISES_TOP1) setAnalisesBloqueado(true);
+      if (role === 'explorador') {
+        const novoBonus = Math.max(0, analisesBonus - 1);
+        await supabase.from('perfis').update({ analises_bonus: novoBonus }).eq('id', user.id);
+        setAnalisesBonus(novoBonus);
+        if (novoBonus <= 0) setAnalisesBloqueado(true);
+      } else {
+        await supabase.from('perfis').update({ analises_mes: mes, analises_count: novoCount }).eq('id', user.id);
+        setAnalisesUsadas(novoCount);
+        if (novoCount >= limiteRole) setAnalisesBloqueado(true);
+      }
     }
   };
 
@@ -418,12 +436,16 @@ export default function Analise() {
         </div>
       </div>
 
-      {/* Limite de análises — plano Investidor */}
-      {role === 'top1' && (
-        <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+      {/* Contador de análises por role */}
+      {!semLimite && (
+        <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : role === 'explorador' ? '#eff6ff' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : role === 'explorador' ? '#1e40af' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <span>{analisesBloqueado
-            ? `🔒 Limite de ${LIMITE_ANALISES_TOP1} análises mensais atingido. Faça upgrade para o plano Investidor Pro para análises ilimitadas.`
-            : `📊 Análises utilizadas este mês: ${analisesUsadas}/${LIMITE_ANALISES_TOP1}`
+            ? (role === 'explorador'
+                ? '🔒 Suas análises bônus foram utilizadas. Faça upgrade para continuar.'
+                : `🔒 Limite de ${limiteRole} análises mensais atingido.`)
+            : role === 'explorador'
+              ? `🎁 Análises bônus disponíveis: ${analisesBonus}`
+              : `📊 Análises este mês: ${analisesUsadas}/${limiteRole}`
           }</span>
           {analisesBloqueado && (
             <button onClick={() => nav('/planos')} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
@@ -488,10 +510,17 @@ export default function Analise() {
         </Section>
       )}
 
-      {/* ── ETAPA 1C: CONSULTA JURÍDICA CNJ ── */}
-      <Section step="1C" title="Consulta Jurídica — CNJ DataJud" icon={Scale} color="#dc2626"
+      {/* ── ETAPA 1C: CONSULTA JURÍDICA CNJ — apenas roles com CNJ ── */}
+      {!temCNJ && (
+        <div style={{ padding:'12px 16px', borderRadius:10, background:'#f8fafc', border:'1px solid #e2e8f0', fontSize:13, color:'#64748b', display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+          <Lock size={15} color="#94a3b8"/>
+          <span>Consulta Jurídica CNJ disponível a partir do plano <strong>Investidor Pro</strong>.</span>
+          <button onClick={() => nav('/planos')} style={{ marginLeft:'auto', padding:'5px 12px', background:'#2563eb', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer' }}>Ver planos</button>
+        </div>
+      )}
+      {temCNJ && <Section step="1C" title="Consulta Jurídica — CNJ DataJud" icon={Scale} color="#dc2626"
         open={openSec.cnj ?? false} onToggle={() => toggleSec('cnj')}
-        badge={cenario_role_pro.includes(role) ? 'Investidor Pro' : '🔒 Investidor Pro'}>
+        badge="Investidor Pro">
 
         {!cenario_role_pro.includes(role) ? (
           /* Tela de bloqueio para planos abaixo do Investidor Pro */
@@ -688,7 +717,7 @@ export default function Analise() {
             )}
           </div>
         )}
-      </Section>
+      </Section>}
 
       {/* ── ETAPA 2: DADOS DO IMÓVEL ── */}
       <Section step="2" title="Dados do Imóvel" icon={Home} color="#0f172a" open={openSec.dados} onToggle={()=>toggleSec('dados')}
