@@ -113,7 +113,7 @@ export default function Analise() {
       .select('analises_mes, analises_count')
       .eq('id', user.id)
       .single()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!data) return;
         const mes = data.analises_mes;
         const count = data.analises_count || 0;
@@ -121,7 +121,6 @@ export default function Analise() {
           setAnalisesUsadas(count);
           if (count >= LIMITE_ANALISES_TOP1) setAnalisesBloqueado(true);
         } else {
-          // Novo mês: reinicia contador no banco
           await supabase.from('perfis').update({ analises_mes: mesAtual(), analises_count: 0 }).eq('id', user.id);
           setAnalisesUsadas(0);
           setAnalisesBloqueado(false);

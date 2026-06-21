@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
-import useIsMobile from '../utils/useIsMobile';
+import { useIsMobile } from '../utils/useIsMobile';
 
 const ROLES_COM_COMISSAO = ['admin', 'consultor', 'analista', 'advogado'];
 

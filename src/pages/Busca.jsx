@@ -194,7 +194,7 @@ export default function Busca() {
   };
 
   const irParaAnalise = (im) => {
-    nav('/analise', { state: { imovel: im } });
+    nav('/caso', { state: { imovel: im } });
   };
 
   const marcarArrematado = (im) => {

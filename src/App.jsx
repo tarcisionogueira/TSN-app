@@ -30,6 +30,7 @@ import ProdutoLanding from './pages/ProdutoLanding';
 import CancelarAlertas from './pages/CancelarAlertas';
 import Perfil from './pages/Perfil';
 import Comissoes from './pages/Comissoes';
+import Caso from './pages/Caso';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -115,6 +116,8 @@ function MainLayout() {
           <Route path="/planos" element={<Planos />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
           <Route path="/analise" element={<PrivateRoute><Analise /></PrivateRoute>} />
+          <Route path="/caso" element={<PrivateRoute><Caso /></PrivateRoute>} />
+          <Route path="/caso/:id" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
           <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin']}><Consultor /></PrivateRoute>} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />

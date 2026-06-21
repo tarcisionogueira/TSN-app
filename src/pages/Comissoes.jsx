@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
-import useIsMobile from '../utils/useIsMobile';
+import { useIsMobile } from '../utils/useIsMobile';
 import { DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 
 const ROLES_ELEGÍVEIS = ['admin', 'consultor', 'analista', 'advogado'];
