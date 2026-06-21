@@ -572,6 +572,300 @@ function UsuariosTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIGURAÇÕES TAB
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONTRATO MODAL — elaborar, visualizar, aprovar e editar com IA
+// ═══════════════════════════════════════════════════════════════════════════════
+const DESCRICOES_PADRAO = {
+  assessorado: 'Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.',
+  clube: 'Adesão ao Clube de Negócios TSN Ativos: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.',
+  consultor: 'Contratação de consultor/afiliado para divulgação dos serviços TSN Ativos e captação de novos clientes. Remuneração por comissão conforme acordo. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.',
+  analista: 'Contratação de analista para elaboração de relatórios de viabilidade econômico-financeira e análise de editais. Remuneração por laudo emitido, a combinar. Sigilo total. Prazo indeterminado, rescisão com aviso de 30 dias.',
+  advogado: 'Parceria jurídica para análise de matrícula, edital, processo e certidões. Remuneração por parecer emitido, a combinar. Total sigilo. Prazo indeterminado, rescisão com aviso de 30 dias.',
+  top1: 'Assinatura Investidor Pro — acesso à plataforma TSN Ativos, cursos e ebooks incluídos. Valor: R$49,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
+  top2: 'Assinatura Investidor Pro — acesso à plataforma TSN Ativos, cursos e ebooks incluídos. Valor: R$99,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
+};
+
+function ContratoModal({ chave, planos, onClose }) {
+  // chave: 'assessorado' | 'curso:uuid:titulo' | 'ebook:uuid:titulo'
+  const partes = chave.split(':');
+  const isProduto = partes[0] === 'curso' || partes[0] === 'ebook';
+  const produtoTitulo = isProduto ? partes.slice(2).join(':') : null;
+  const planoObj = isProduto ? null : planos.find(p => p.plano_key === chave);
+  const nomeContrato = isProduto
+    ? `${partes[0] === 'curso' ? 'Curso' : 'eBook'} — ${produtoTitulo}`
+    : planoObj?.nome || chave;
+  const descPadrao = isProduto
+    ? `Contrato de aquisição: ${nomeContrato}. Produto digital disponível na plataforma TSN Ativos. Acesso individual e intransferível. Valor conforme acordado.`
+    : (DESCRICOES_PADRAO[chave] || '');
+
+  // Etapas: 'dados' | 'gerando' | 'revisar' | 'aprovado'
+  const [etapa, setEtapa] = useState('dados');
+  const [contratoExistente, setContratoExistente] = useState(null); // contrato já salvo
+  const [loadingExistente, setLoadingExistente] = useState(true);
+
+  // Campos do cliente
+  const [nomeCliente, setNomeCliente] = useState('');
+  const [cpfCliente, setCpfCliente] = useState('');
+  const [emailCliente, setEmailCliente] = useState('');
+  const [desc, setDesc] = useState(descPadrao);
+
+  // Conteúdo gerado / editável
+  const [conteudo, setConteudo] = useState('');
+  const [editando, setEditando] = useState(false);
+  const [instrucaoIA, setInstrucaoIA] = useState('');
+  const [reescrevendo, setReescrevendo] = useState(false);
+
+  // Link final
+  const [linkGerado, setLinkGerado] = useState('');
+  const [copiado, setCopiado] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+
+  // Carrega contrato existente para este produto/plano (se houver)
+  useEffect(() => {
+    const tituloBase = `Contrato — ${nomeContrato}`;
+    supabase.from('contratos_link')
+      .select('*').ilike('titulo', `${tituloBase}%`)
+      .neq('status', 'cancelado').order('criado_em', { ascending: false }).limit(1)
+      .then(({ data }) => {
+        if (data?.length) {
+          setContratoExistente(data[0]);
+          setConteudo(data[0].conteudo || '');
+          setEtapa('aprovado');
+        }
+        setLoadingExistente(false);
+      });
+  }, [chave]);
+
+  async function gerarComIA() {
+    if (!nomeCliente.trim()) { alert('Informe o nome do cliente.'); return; }
+    setEtapa('gerando');
+    try {
+      const descFull = `Cliente: ${nomeCliente}${cpfCliente ? ` · CPF: ${cpfCliente}` : ''}${emailCliente ? ` · E-mail: ${emailCliente}` : ''}\n\n${desc}`;
+      const r = await fetch('/api/gerar-contrato', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ titulo: `Contrato — ${nomeContrato}`, tipo: 'servico', descricao: descFull, arquivos: [] }),
+      });
+      const d = await r.json();
+      if (d.conteudo) { setConteudo(d.conteudo); setEtapa('revisar'); }
+      else { alert(d.error || 'Erro ao gerar.'); setEtapa('dados'); }
+    } catch { alert('Erro de conexão.'); setEtapa('dados'); }
+  }
+
+  async function reescreverComIA() {
+    if (!instrucaoIA.trim()) return;
+    setReescrevendo(true);
+    try {
+      const r = await fetch('/api/gerar-contrato', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          titulo: `Contrato — ${nomeContrato}`,
+          tipo: 'servico',
+          descricao: `Revise o contrato abaixo conforme a instrução: "${instrucaoIA}"\n\nCONTRATO ATUAL:\n${conteudo}`,
+          arquivos: [],
+        }),
+      });
+      const d = await r.json();
+      if (d.conteudo) { setConteudo(d.conteudo); setInstrucaoIA(''); }
+      else alert(d.error || 'Erro ao reescrever.');
+    } catch { alert('Erro de conexão.'); }
+    setReescrevendo(false);
+  }
+
+  async function aprovar() {
+    if (!conteudo.trim()) return;
+    setSalvando(true);
+    try {
+      const tituloFinal = `Contrato — ${nomeContrato}`;
+      let saved;
+      if (contratoExistente) {
+        const { data } = await supabase.from('contratos_link')
+          .update({ conteudo, titulo: tituloFinal, status: 'pendente' })
+          .eq('id', contratoExistente.id).select().single();
+        saved = data;
+      } else {
+        const { data } = await supabase.from('contratos_link')
+          .insert({ titulo: tituloFinal, tipo_contrato: 'servico', conteudo, status: 'pendente',
+            criado_por: (await supabase.auth.getUser()).data?.user?.id })
+          .select().single();
+        saved = data;
+      }
+      if (saved) {
+        setContratoExistente(saved);
+        const base = window.location.href.split('#')[0];
+        setLinkGerado(`${base}#/c/${saved.token}`);
+        setEtapa('aprovado');
+      }
+    } catch { alert('Erro ao salvar contrato.'); }
+    setSalvando(false);
+  }
+
+  const inp = { border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, padding:'9px 12px', width:'100%', boxSizing:'border-box', fontFamily:'inherit', color:'#0f172a' };
+
+  if (loadingExistente) return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ background:'white', borderRadius:16, padding:32, fontSize:14, color:'#64748b' }}>Carregando…</div>
+    </div>
+  );
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background:'white', borderRadius:18, width:'100%', maxWidth:660, maxHeight:'92vh', overflowY:'auto', display:'flex', flexDirection:'column' }}>
+
+        {/* Cabeçalho */}
+        <div style={{ padding:'24px 28px 16px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+          <div>
+            <div style={{ fontWeight:900, fontSize:16, color:'#0f172a' }}>📄 {nomeContrato}</div>
+            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
+              {etapa === 'dados' && 'Preencha os dados para gerar o contrato com IA'}
+              {etapa === 'gerando' && 'Gerando contrato com inteligência artificial…'}
+              {etapa === 'revisar' && 'Revise, edite e aprove antes de enviar ao cliente'}
+              {etapa === 'aprovado' && (contratoExistente?.status === 'assinado' ? '✅ Assinado pelo cliente' : '✅ Contrato aprovado — link disponível para envio')}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>✕</button>
+        </div>
+
+        <div style={{ padding:'24px 28px', flex:1 }}>
+
+          {/* ETAPA: dados */}
+          {etapa === 'dados' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              <div>
+                <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>NOME COMPLETO DO CLIENTE *</label>
+                <input value={nomeCliente} onChange={e=>setNomeCliente(e.target.value)} placeholder="Ex: João da Silva" style={inp} />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>CPF</label>
+                  <input value={cpfCliente} onChange={e=>setCpfCliente(e.target.value)} placeholder="000.000.000-00" style={inp} />
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>E-MAIL</label>
+                  <input value={emailCliente} onChange={e=>setEmailCliente(e.target.value)} placeholder="cliente@email.com" style={inp} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>ESCOPO / CONDIÇÕES DO CONTRATO</label>
+                <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={5} style={{ ...inp, resize:'vertical' }} />
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:3 }}>Pré-preenchido conforme o produto. Ajuste se necessário antes de gerar.</div>
+              </div>
+              <div style={{ display:'flex', gap:10, marginTop:6 }}>
+                <button onClick={onClose} style={{ flex:1, padding:'11px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>Cancelar</button>
+                <button onClick={gerarComIA} style={{ flex:2, padding:'11px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:800, cursor:'pointer' }}>
+                  🤖 Gerar contrato com IA →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ETAPA: gerando */}
+          {etapa === 'gerando' && (
+            <div style={{ textAlign:'center', padding:'40px 0' }}>
+              <div style={{ fontSize:40, marginBottom:16 }}>⏳</div>
+              <div style={{ fontWeight:700, fontSize:15, color:'#0f172a', marginBottom:8 }}>Elaborando o contrato…</div>
+              <div style={{ fontSize:13, color:'#64748b' }}>A IA está redigindo as cláusulas. Aguarde alguns segundos.</div>
+            </div>
+          )}
+
+          {/* ETAPA: revisar */}
+          {etapa === 'revisar' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              {/* Toolbar edição */}
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <span style={{ fontSize:12, fontWeight:700, color:'#475569' }}>CONTRATO GERADO</span>
+                <button onClick={() => setEditando(e=>!e)}
+                  style={{ marginLeft:'auto', padding:'5px 12px', background:editando?'#fef3c7':'#f1f5f9', color:editando?'#92400e':'#374151', border:`1px solid ${editando?'#fcd34d':'#e2e8f0'}`, borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                  {editando ? '✏️ Editando' : '✏️ Editar'}
+                </button>
+              </div>
+
+              {editando ? (
+                <textarea value={conteudo} onChange={e=>setConteudo(e.target.value)} rows={16}
+                  style={{ ...inp, resize:'vertical', fontSize:12, lineHeight:1.7 }} />
+              ) : (
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 18px', fontSize:13, lineHeight:1.8, color:'#1e293b', whiteSpace:'pre-wrap', maxHeight:340, overflowY:'auto' }}>
+                  {conteudo}
+                </div>
+              )}
+
+              {/* Instrução para IA reescrever */}
+              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'14px 16px' }}>
+                <div style={{ fontSize:11, fontWeight:800, color:'#1e40af', marginBottom:8 }}>🤖 Pedir alteração à IA</div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <input value={instrucaoIA} onChange={e=>setInstrucaoIA(e.target.value)}
+                    placeholder="Ex: Adicione cláusula de confidencialidade · Ajuste o prazo para 6 meses"
+                    style={{ ...inp, flex:1 }} onKeyDown={e=>e.key==='Enter'&&reescreverComIA()} />
+                  <button onClick={reescreverComIA} disabled={reescrevendo || !instrucaoIA.trim()}
+                    style={{ padding:'9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap', opacity:reescrevendo?0.7:1 }}>
+                    {reescrevendo ? '…' : 'Aplicar'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display:'flex', gap:10 }}>
+                <button onClick={() => setEtapa('dados')} style={{ flex:1, padding:'11px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>← Voltar</button>
+                <button onClick={aprovar} disabled={salvando}
+                  style={{ flex:2, padding:'11px', background:'#10b981', color:'white', border:'none', borderRadius:10, fontWeight:800, cursor:'pointer', opacity:salvando?0.7:1 }}>
+                  {salvando ? 'Salvando…' : '✅ Aprovar e gerar link →'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ETAPA: aprovado */}
+          {etapa === 'aprovado' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              {/* Status badge */}
+              <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+                {contratoExistente?.status === 'assinado' ? (
+                  <span style={{ background:'#dcfce7', color:'#166534', padding:'4px 12px', borderRadius:20, fontWeight:700, fontSize:12 }}>✅ Assinado em {contratoExistente.assinado_em ? new Date(contratoExistente.assinado_em).toLocaleDateString('pt-BR') : '—'}</span>
+                ) : (
+                  <span style={{ background:'#fef9c3', color:'#92400e', padding:'4px 12px', borderRadius:20, fontWeight:700, fontSize:12 }}>⏳ Aguardando assinatura</span>
+                )}
+                <button onClick={() => { setEditando(false); setEtapa('revisar'); }}
+                  style={{ marginLeft:'auto', padding:'5px 12px', background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                  ✏️ Editar contrato
+                </button>
+              </div>
+
+              {/* Preview do conteúdo */}
+              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 18px', fontSize:13, lineHeight:1.8, color:'#1e293b', whiteSpace:'pre-wrap', maxHeight:260, overflowY:'auto' }}>
+                {conteudo || contratoExistente?.conteudo || '—'}
+              </div>
+
+              {/* Link */}
+              {(linkGerado || contratoExistente?.token) && (
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:6 }}>LINK PARA O CLIENTE ASSINAR</div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <div style={{ flex:1, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#2563eb', wordBreak:'break-all' }}>
+                      {linkGerado || `${window.location.href.split('#')[0]}#/c/${contratoExistente?.token}`}
+                    </div>
+                    <button onClick={() => { const l = linkGerado || `${window.location.href.split('#')[0]}#/c/${contratoExistente?.token}`; navigator.clipboard.writeText(l); setCopiado(true); setTimeout(()=>setCopiado(false),2000); }}
+                      style={{ padding:'9px 14px', background:copiado?'#10b981':'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                      {copiado ? '✓ Copiado' : '📋 Copiar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Novo contrato para outro cliente */}
+              <button onClick={() => { setContratoExistente(null); setConteudo(''); setNomeCliente(''); setCpfCliente(''); setEmailCliente(''); setLinkGerado(''); setEtapa('dados'); }}
+                style={{ padding:'10px', background:'#f8fafc', color:'#374151', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer' }}>
+                + Gerar para outro cliente
+              </button>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ConfigTab() {
   const [email, setEmail] = useState(() => localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL);
   const [saved, setSaved] = useState(false);
@@ -800,145 +1094,13 @@ function ConfigTab() {
         </div>
       )}
 
-      {/* ── Modal de geração de contrato por plano / produto ── */}
-      {contratoPlano && (() => {
-        // contratoPlano pode ser 'assessorado' (plano) ou 'curso:id:titulo' ou 'ebook:id:titulo'
-        const partes = contratoPlano.split(':');
-        const isProduto = partes[0] === 'curso' || partes[0] === 'ebook';
-        const produtoTitulo = isProduto ? partes.slice(2).join(':') : null;
-        const planoObj = isProduto ? null : planos.find(p => p.plano_key === contratoPlano);
-        const nomeModal = isProduto
-          ? `${partes[0] === 'curso' ? 'Curso' : 'eBook'} — ${produtoTitulo}`
-          : planoObj?.nome || contratoPlano;
-
-        const DESCRICOES = {
-          assessorado: 'Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.',
-          clube: 'Adesão ao Clube de Negócios TSN Ativos: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.',
-          consultor: 'Contratação de consultor/afiliado para divulgação dos serviços TSN Ativos e captação de novos clientes. Remuneração por comissão de ' + (planoObj?.comissao_pct || 0) + '% sobre cada cliente ativo indicado. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.',
-          analista: 'Contratação de analista para elaboração de relatórios de viabilidade econômico-financeira e análise de editais de imóveis em leilão judicial e extrajudicial. Remuneração por laudo emitido, a combinar. Sigilo sobre todos os dados dos clientes e imóveis analisados. Prazo indeterminado, rescisão com aviso de 30 dias.',
-          advogado: 'Parceria com advogado para análise jurídica de matrícula, edital, processo e certidões de imóveis em leilão, emissão de parecer jurídico por operação. Remuneração por parecer emitido, a combinar. Total sigilo sobre dados dos clientes. Prazo indeterminado, rescisão com aviso de 30 dias. Escritório parceiro independente.',
-          top1: 'Assinatura do plano Investidor Pro — acesso à plataforma TSN Ativos, ferramentas de análise, cursos e ebooks incluídos. Valor: R$49,90/mês, cobrança recorrente mensal. Cancelamento a qualquer momento.',
-          top2: 'Assinatura do plano Investidor Pro — acesso à plataforma TSN Ativos, ferramentas de análise, cursos e ebooks incluídos. Valor: R$99,90/mês, cobrança recorrente mensal. Cancelamento a qualquer momento.',
-        };
-        const descProduto = isProduto
-          ? `Contrato de aquisição: ${nomeModal}. Produto digital disponível na plataforma TSN Ativos. Acesso individual e intransferível. Valor conforme combinado.`
-          : (DESCRICOES[contratoPlano] || '');
-        const [nomeCliente, setNomeCliente] = useState('');
-        const [cpfCliente, setCpfCliente] = useState('');
-        const [emailCliente, setEmailCliente] = useState('');
-        const [descContrato, setDescContrato] = useState(descProduto);
-        const [gerando, setGerando] = useState(false);
-        const [linkGerado, setLinkGerado] = useState('');
-        const [copiado, setCopiado] = useState(false);
-
-        async function gerarContrato() {
-          if (!nomeCliente.trim()) { alert('Informe o nome do cliente.'); return; }
-          setGerando(true);
-          try {
-            const descFull = `Cliente: ${nomeCliente}${cpfCliente ? ` · CPF: ${cpfCliente}` : ''}${emailCliente ? ` · Email: ${emailCliente}` : ''}\n\n${descContrato}`;
-            const r = await fetch('/api/gerar-contrato', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({
-                titulo: `Contrato — ${nomeModal}`,
-                tipo: 'servico',
-                descricao: descFull,
-                arquivos: [],
-              }),
-            });
-            const d = await r.json();
-            if (d.conteudo) {
-              // Salva o contrato no banco
-              const { data: saved } = await supabase.from('contratos_link').insert({
-                titulo: `Contrato — ${nomeModal}`,
-                tipo: 'servico',
-                conteudo: d.conteudo,
-                status: 'pendente',
-                criado_por: (await supabase.auth.getUser()).data?.user?.id,
-              }).select().single();
-              if (saved) {
-                const link = `${window.location.origin}${window.location.pathname}#/contrato/${saved.id}`;
-                setLinkGerado(link);
-              }
-            }
-          } catch (e) { alert('Erro ao gerar contrato.'); }
-          setGerando(false);
-        }
-
-        return (
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
-            onClick={e => { if (e.target === e.currentTarget) { setContratoPlano(null); setLinkGerado(''); } }}>
-            <div style={{ background:'white', borderRadius:16, padding:32, width:'100%', maxWidth:540, maxHeight:'90vh', overflowY:'auto' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-                <div>
-                  <div style={{ fontWeight:900, fontSize:16, color:'#0f172a' }}>📄 Contrato — {nomeModal}</div>
-                  <div style={{ fontSize:12, color:'#64748b' }}>Preencha os dados do cliente para gerar o contrato pré-preenchido.</div>
-                </div>
-                <button onClick={() => { setContratoPlano(null); setLinkGerado(''); }} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
-              </div>
-
-              {!linkGerado ? (
-                <>
-                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                    <div>
-                      <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>NOME COMPLETO DO CLIENTE *</label>
-                      <input value={nomeCliente} onChange={e=>setNomeCliente(e.target.value)} placeholder="Ex: João da Silva"
-                        style={{ ...S.input, width:'100%', padding:'10px 12px' }} />
-                    </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>CPF</label>
-                        <input value={cpfCliente} onChange={e=>setCpfCliente(e.target.value)} placeholder="000.000.000-00"
-                          style={{ ...S.input, width:'100%', padding:'10px 12px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>EMAIL</label>
-                        <input value={emailCliente} onChange={e=>setEmailCliente(e.target.value)} placeholder="cliente@email.com"
-                          style={{ ...S.input, width:'100%', padding:'10px 12px' }} />
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>DESCRIÇÃO DO CONTRATO</label>
-                      <textarea value={descContrato} onChange={e=>setDescContrato(e.target.value)} rows={6}
-                        style={{ ...S.input, width:'100%', padding:'10px 12px', resize:'vertical', fontFamily:'inherit' }} />
-                      <div style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>Pré-preenchido conforme o produto. Edite se necessário.</div>
-                    </div>
-                  </div>
-                  <div style={{ display:'flex', gap:10, marginTop:20 }}>
-                    <button onClick={() => { setContratoPlano(null); }}
-                      style={{ flex:1, padding:'11px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
-                      Cancelar
-                    </button>
-                    <button onClick={gerarContrato} disabled={gerando}
-                      style={{ flex:2, padding:'11px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:800, cursor:'pointer', opacity:gerando?0.7:1 }}>
-                      {gerando ? '⏳ Gerando…' : '🤖 Gerar contrato com IA →'}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div style={{ textAlign:'center' }}>
-                  <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
-                  <div style={{ fontWeight:800, fontSize:16, color:'#0f172a', marginBottom:6 }}>Contrato gerado!</div>
-                  <div style={{ fontSize:13, color:'#64748b', marginBottom:20 }}>Envie o link abaixo para o cliente assinar digitalmente.</div>
-                  <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'12px 14px', fontSize:13, color:'#2563eb', wordBreak:'break-all', marginBottom:16 }}>
-                    {linkGerado}
-                  </div>
-                  <div style={{ display:'flex', gap:8 }}>
-                    <button onClick={() => { navigator.clipboard.writeText(linkGerado); setCopiado(true); setTimeout(()=>setCopiado(false),2000); }}
-                      style={{ flex:1, padding:'10px', background:copiado?'#10b981':'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
-                      {copiado ? '✓ Copiado!' : '📋 Copiar link'}
-                    </button>
-                    <button onClick={() => { setContratoPlano(null); setLinkGerado(''); }}
-                      style={{ flex:1, padding:'10px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
-                      Fechar
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      {contratoPlano && (
+        <ContratoModal
+          chave={contratoPlano}
+          planos={planos}
+          onClose={() => setContratoPlano(null)}
+        />
+      )}
 
     </div>
   );
