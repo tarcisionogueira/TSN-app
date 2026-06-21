@@ -7,8 +7,7 @@ const fmt = (v, decimais = 2) =>
 /** Calcula preco_vista a partir do desconto % ou retorna o valor salvo no DB. */
 function calcVista(cfg) {
   if (cfg.desconto_vista_pct > 0) {
-    const total12 = Number(cfg.preco) * 12;
-    return total12 * (1 - Number(cfg.desconto_vista_pct) / 100);
+    return Number(cfg.preco) * (1 - Number(cfg.desconto_vista_pct) / 100);
   }
   return cfg.preco_vista ?? null;
 }

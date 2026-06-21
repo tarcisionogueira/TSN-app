@@ -1073,9 +1073,8 @@ function ConfigTab() {
       const dirtyRows = rows.filter(r => dirtyIds.has(`${r._tipo}:${r._id}`));
       await Promise.all(dirtyRows.map(async p => {
         if (p._tipo === 'plano') {
-          const total12 = Number(p.preco) * 12;
           const vistaCalc = Number(p.desconto_vista_pct) > 0
-            ? total12 * (1 - Number(p.desconto_vista_pct) / 100)
+            ? Number(p.preco) * (1 - Number(p.desconto_vista_pct) / 100)
             : (p.preco_vista ?? null);
           await supabase.from('planos_config').update({
             preco: Number(p.preco) || 0,
@@ -1148,9 +1147,8 @@ function ConfigTab() {
             </div>
 
             {rows.map(r => {
-              const total12 = Number(r.preco) * 12;
               const pct = Number(r.desconto_vista_pct || 0);
-              const vistaCalc = pct > 0 ? total12 * (1 - pct / 100) : null;
+              const vistaCalc = pct > 0 ? Number(r.preco) * (1 - pct / 100) : null;
               const temVista = !r.assinatura && Number(r.preco) > 0;
               const isDirtyRow = dirtyIds.has(`${r._tipo}:${r._id}`);
               const tipoBadge = r._tipo === 'plano'
