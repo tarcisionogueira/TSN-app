@@ -46,7 +46,7 @@ export default function Consultor() {
   const [linksConvite, setLinksConvite] = useState([]);
   const [copiandoConvite, setCopiandoConvite] = useState('');
   const [aba, setAba] = useState('material'); // 'material' | 'carteira' | 'comissoes' | 'leads'
-  const [filtroCarteira, setFiltroCarteira] = useState('todos'); // 'todos' | 'pagantes'
+  const [filtroCarteira, setFiltroCarteira] = useState('todos'); // 'todos' | 'pagantes' | 'nao_pagantes'
   const [filtroComissao, setFiltroComissao] = useState('todos'); // 'todos' | 'pendente' | 'pago'
   const [leadsSDR, setLeadsSDR] = useState([]);
   const [leadDetalhe, setLeadDetalhe] = useState(null);
@@ -353,7 +353,11 @@ export default function Consultor() {
 
         {/* === CARTEIRA === */}
         {aba==='carteira' && (() => {
-          const listaClientes = filtroCarteira === 'pagantes' ? carteira.filter(c => c.plano && c.plano !== 'gratuito') : carteira;
+          const listaClientes = filtroCarteira === 'pagantes'
+            ? carteira.filter(c => c.plano && c.plano !== 'gratuito' && c.plano !== 'explorador')
+            : filtroCarteira === 'nao_pagantes'
+            ? carteira.filter(c => !c.plano || c.plano === 'gratuito' || c.plano === 'explorador')
+            : carteira;
           function ContatoCard({ nome, email, whatsapp, userId, plano, data, badge, badgeColor, badgeBg, onVerRespostas, tipo }) {
             const tel = (whatsapp || '').replace(/\D/g,'');
             const telFmt = whatsapp || '';
@@ -410,7 +414,7 @@ export default function Consultor() {
             <div>
               {/* Filtro clientes indicados */}
               <div style={{ display:'flex', gap:8, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
-                {[['todos','Todos os clientes'],['pagantes','Só pagantes']].map(([v,l])=>(
+                {[['todos','Todos'],['pagantes','Pagantes'],['nao_pagantes','Não pagantes']].map(([v,l])=>(
                   <button key={v} onClick={()=>setFiltroCarteira(v)}
                     style={{ padding:'5px 14px', border:'none', borderRadius:20, fontWeight:700, fontSize:12, cursor:'pointer', background:filtroCarteira===v?'#0f172a':'#f1f5f9', color:filtroCarteira===v?'white':'#475569' }}>
                     {l}
@@ -422,7 +426,7 @@ export default function Consultor() {
               {listaClientes.length === 0 && leadsSDR.length === 0 ? (
                 <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
                   <Users size={40} color="#cbd5e1" style={{ margin:'0 auto 12px' }}/>
-                  <p>{filtroCarteira==='pagantes' ? 'Nenhum cliente pagante ainda.' : 'Nenhum cliente ainda. Compartilhe seu link de indicação para começar.'}</p>
+                  <p>{filtroCarteira==='pagantes' ? 'Nenhum cliente pagante ainda.' : filtroCarteira==='nao_pagantes' ? 'Nenhum cliente gratuito.' : 'Nenhum cliente ainda. Compartilhe seu link de indicação para começar.'}</p>
                 </div>
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
