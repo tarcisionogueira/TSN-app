@@ -2480,8 +2480,8 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
   }
 
   async function salvarENotificar() {
-    if (!reuniaoEm || !meetLink) {
-      alert('Preencha a data/hora e a URL do Google Meet antes de notificar.');
+    if (!reuniaoEm) {
+      alert('Preencha a data/hora antes de agendar.');
       return;
     }
     if (!clienteEmail) {
@@ -2489,10 +2489,28 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
       return;
     }
     setNotificando(true);
+
+    // Cria sala Daily.co com transcrição forçada
+    let linkFinal = meetLink;
+    try {
+      const r = await fetch('/api/criar-sala-reuniao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ solicitacaoId: sol.id, reuniaoEm, duracaoMin: reuniaoDuracao }),
+      });
+      if (r.ok) {
+        const { meetLink: novoLink } = await r.json();
+        linkFinal = novoLink;
+        setMeetLink(novoLink);
+      }
+    } catch (e) {
+      console.error('Erro ao criar sala Daily:', e);
+    }
+
     await supabase.from('solicitacoes').update({
       checklist,
       notas_analista: notas,
-      google_meet_link: meetLink,
+      google_meet_link: linkFinal,
       status,
       reuniao_em: new Date(reuniaoEm).toISOString(),
       reuniao_duracao_min: reuniaoDuracao,
@@ -2509,16 +2527,24 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
           imovelCidade: sol.imovel_cidade || '',
           reuniaoEm,
           reuniaoDuracao,
-          meetLink,
+          meetLink: linkFinal,
           calendarUrl: buildMeetCreateUrl(),
         }),
       });
-      alert('Reunião salva e cliente notificado por e-mail!');
+      alert('Sala criada, reunião salva e cliente notificado!');
     } catch {
-      alert('Reunião salva, mas houve erro ao enviar e-mail.');
+      alert('Sala criada e reunião salva, mas houve erro ao enviar e-mail.');
     }
     setNotificando(false);
     onSaved();
+  }
+
+  async function prorrogarReuniao() {
+    if (!meetLink) { alert('Nenhuma sala ativa para prorrogar.'); return; }
+    const novasDuracao = reuniaoDuracao + 30;
+    setReuniaoDuracao(novasDuracao);
+    await supabase.from('solicitacoes').update({ reuniao_duracao_min: novasDuracao }).eq('id', sol.id);
+    alert(`Reunião estendida para ${novasDuracao} minutos.`);
   }
 
   const meetCreateUrl = buildMeetCreateUrl();
@@ -2597,12 +2623,17 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
                 {saving ? 'Salvando…' : 'Salvar'}
               </button>
               <button style={{ ...S.btn('primary'), flex: 2, background: '#059669' }} onClick={salvarENotificar} disabled={saving || notificando}>
-                {notificando ? 'Enviando…' : '📧 Salvar e Notificar Cliente'}
+                {notificando ? 'Criando sala…' : '📹 Agendar e Notificar Cliente'}
               </button>
             </div>
+            {meetLink && (
+              <button style={{ ...S.btn('outline'), width: '100%', marginTop: 8, color: '#7c3aed', borderColor: '#c4b5fd' }} onClick={prorrogarReuniao}>
+                ⏱ +30 min na reunião atual
+              </button>
+            )}
           </div>
 
-          {/* RIGHT — Checklist */}
+          {/* RIGHT — Checklist + Transcrições */}
           <div>
             <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a', marginBottom: 16 }}>Checklist de Análise</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -2632,9 +2663,53 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
                 <AnalistaPerf analistaId={analista.id} />
               </div>
             )}
+
+            {/* Transcrições da reunião */}
+            <TranscricoesReuniao solicitacaoId={sol.id} />
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function TranscricoesReuniao({ solicitacaoId }) {
+  const [lista, setLista] = useState([]);
+  const [expandido, setExpandido] = useState(null);
+
+  useEffect(() => {
+    if (!solicitacaoId) return;
+    supabase.from('transcricoes_reuniao')
+      .select('id, transcricao, duracao_seg, created_at')
+      .eq('solicitacao_id', solicitacaoId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setLista(data || []));
+  }, [solicitacaoId]);
+
+  if (lista.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 16, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        📝 Transcrições ({lista.length})
+      </div>
+      {lista.map(t => (
+        <div key={t.id} style={{ background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', marginBottom: 8, overflow: 'hidden' }}>
+          <button onClick={() => setExpandido(expandido === t.id ? null : t.id)}
+            style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
+              {new Date(t.created_at).toLocaleString('pt-BR')}
+              {t.duracao_seg && <span style={{ marginLeft: 8, fontSize: 11, color: '#94a3b8' }}>{Math.round(t.duracao_seg / 60)} min</span>}
+            </span>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>{expandido === t.id ? '▲ fechar' : '▼ ver'}</span>
+          </button>
+          {expandido === t.id && (
+            <div style={{ padding: '0 14px 14px', fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto' }}>
+              {t.transcricao || <em style={{ color: '#94a3b8' }}>Transcrição não disponível.</em>}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
