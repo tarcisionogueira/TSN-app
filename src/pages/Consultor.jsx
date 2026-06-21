@@ -173,14 +173,8 @@ export default function Consultor() {
     { key: 'clube_vista',       nome: 'Clube de Negócios (À Vista)',  precoLabel: 'R$ 48.000 (20% off)' },
   ];
 
-  const PLANOS_CLIENTE_KEYS = ['explorador', 'top1', 'top2', 'assessorado', 'assessorado_vista', 'clube', 'clube_vista'];
-  const planosVenda = planosConfig.length > 0
-    ? planosConfig.filter(p => PLANOS_CLIENTE_KEYS.includes(p.plano_key)).map(p => ({
-        key: p.plano_key,
-        nome: p.nome,
-        precoLabel: p.preco ? `R$ ${Number(p.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : (PLANOS_VENDA.find(x => x.key === p.plano_key)?.precoLabel || ''),
-    }))
-    : PLANOS_VENDA.filter(p => PLANOS_CLIENTE_KEYS.includes(p.key));
+  // Nome e preço sempre do hardcoded — banco pode ter nomes/preços antigos
+  const planosVenda = PLANOS_VENDA;
 
   const codigo = perfil?.codigo_indicacao;
   const origin = window.location.origin;
