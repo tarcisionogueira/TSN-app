@@ -588,6 +588,9 @@ export default function Checkout() {
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
                 Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser
+                {temToggleAnual && modalidade === 'anual' && (
+                  <><br />Plano anual cobrado em uma parcela ou <strong>em até 12x no cartão</strong></>
+                )}
               </p>
             </>
           )}

@@ -318,14 +318,14 @@ export default function Consultor() {
                         emoji: '🧮',
                         label: 'Calculadora de Lances',
                         sub: 'Ferramenta gratuita · com chamada para a plataforma',
-                        url: `${origin}/#/calculadora`,
+                        url: `${origin}/#/calculadora${codigo?`?ref=${codigo}`:''}`,
                         comissao: null,
                       },
                       {
                         emoji: '🎁',
                         label: 'Assinatura Explorador',
                         sub: 'Acesso gratuito · sem cartão',
-                        url: `${origin}/#/login?modo=cadastro${codigo?`&ref=${codigo}`:''}`,
+                        url: `${origin}/#/checkout?plano=explorador${codigo?`&ref=${codigo}`:''}`,
                         comissao: null,
                       },
                       {
