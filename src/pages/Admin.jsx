@@ -451,6 +451,9 @@ function UsuariosTab() {
   const [editingId, setEditingId] = useState(null);
   const [newRole, setNewRole] = useState('');
   const [busca, setBusca] = useState('');
+  const [auditoriaUser, setAuditoriaUser] = useState(null);
+  const [auditoriaData, setAuditoriaData] = useState(null);
+  const [auditoriaLoading, setAuditoriaLoading] = useState(false);
 
   const verComo = (u) => {
     iniciarSuporte({ id: u.id, nome: u.nome || u.cpf, role: u.role || 'explorador' });
@@ -475,15 +478,39 @@ function UsuariosTab() {
   async function toggleAtivo(u) {
     const estaAtivo = u.ativo !== false;
     if (estaAtivo) {
-      // Inativar: salva role atual para restaurar depois
       await supabase.from('perfis').update({ ativo: false, role_anterior: u.role }).eq('id', u.id);
       setUsers(users.map(x => x.id === u.id ? { ...x, ativo: false, role_anterior: u.role } : x));
     } else {
-      // Reativar: restaura role anterior (se existir)
       const roleRestaurado = u.role_anterior || u.role;
       await supabase.from('perfis').update({ ativo: true, role: roleRestaurado, role_anterior: null }).eq('id', u.id);
       setUsers(users.map(x => x.id === u.id ? { ...x, ativo: true, role: roleRestaurado, role_anterior: null } : x));
     }
+  }
+
+  async function loadAuditoria(userId) {
+    setAuditoriaLoading(true);
+    try {
+      const [aceiteRes, contratoRes, compraRes] = await Promise.all([
+        supabase.from('aceites_plano').select('*').eq('user_id', userId).order('aceito_em', { ascending: false }),
+        supabase.from('contratos_pendentes').select('*').eq('user_id', userId).order('criado_em', { ascending: false }),
+        supabase.from('compras_produtos').select('*').eq('user_id', userId).order('criado_em', { ascending: false }),
+      ]);
+      setAuditoriaData({
+        aceites: aceiteRes.data || [],
+        contratos: contratoRes.data || [],
+        compras: compraRes.data || [],
+      });
+    } catch (e) {
+      setAuditoriaData({ aceites: [], contratos: [], compras: [] });
+    } finally {
+      setAuditoriaLoading(false);
+    }
+  }
+
+  function abrirAuditoria(u) {
+    setAuditoriaUser(u);
+    setAuditoriaData(null);
+    loadAuditoria(u.id);
   }
 
   const filtered = users.filter(u => {
@@ -493,6 +520,7 @@ function UsuariosTab() {
   });
 
   const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top1: '#2563eb', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626' };
+  const fmtData = v => v ? new Date(v).toLocaleDateString('pt-BR') : '—';
 
   return (
     <div>
@@ -546,13 +574,18 @@ function UsuariosTab() {
                               <button style={S.btn('outline')} onClick={() => setEditingId(null)}>✕</button>
                             </div>
                           ) : (
-                            <div style={{ display: 'flex', gap: 6 }}>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar role</button>
                               <button style={S.btn('outline')} onClick={() => verComo(u)} title="Entrar na conta do usuário (modo suporte)">👁 Ver como</button>
                               <button
                                 style={{ padding: '5px 10px', background: ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}
                                 onClick={() => toggleAtivo(u)}>
                                 {ativo ? 'Inativar' : 'Reativar'}
+                              </button>
+                              <button
+                                style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#2563eb', cursor: 'pointer' }}
+                                onClick={() => abrirAuditoria(u)}>
+                                🔍 Auditoria
                               </button>
                             </div>
                           )}
@@ -565,6 +598,116 @@ function UsuariosTab() {
             </div>
           )}
       </div>
+
+      {/* Modal de Auditoria */}
+      {auditoriaUser && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={e => { if (e.target === e.currentTarget) setAuditoriaUser(null); }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 700, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                Auditoria — {auditoriaUser.nome || auditoriaUser.cpf || auditoriaUser.id}
+              </h3>
+              <button onClick={() => setAuditoriaUser(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+            </div>
+
+            {auditoriaLoading ? (
+              <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando auditoria...</p>
+            ) : auditoriaData && (
+              <>
+                {/* Aceites de Termos */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Aceites de Termos</div>
+                  {auditoriaData.aceites.length === 0 ? (
+                    <p style={{ fontSize: 13, color: '#94a3b8' }}>Nenhum registro.</p>
+                  ) : (
+                    <table style={{ ...S.table, fontSize: 12 }}>
+                      <thead><tr>
+                        <th style={S.th}>Data</th>
+                        <th style={S.th}>Plano</th>
+                        <th style={S.th}>Valor</th>
+                        <th style={S.th}>Versão Termos</th>
+                        <th style={S.th}>ID Asaas</th>
+                      </tr></thead>
+                      <tbody>
+                        {auditoriaData.aceites.map((a, i) => (
+                          <tr key={i}>
+                            <td style={S.td}>{fmtData(a.aceito_em)}</td>
+                            <td style={S.td}>{a.plano_key || a.plano || '—'}</td>
+                            <td style={S.td}>{a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</td>
+                            <td style={S.td}>{a.versao_termos || a.termos_versao || '—'}</td>
+                            <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.asaas_customer_id || a.asaas_id || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* Contratos */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Contratos</div>
+                  {auditoriaData.contratos.length === 0 ? (
+                    <p style={{ fontSize: 13, color: '#94a3b8' }}>Nenhum registro.</p>
+                  ) : (
+                    <table style={{ ...S.table, fontSize: 12 }}>
+                      <thead><tr>
+                        <th style={S.th}>Data</th>
+                        <th style={S.th}>Produto</th>
+                        <th style={S.th}>Status</th>
+                        <th style={S.th}>Expira em</th>
+                      </tr></thead>
+                      <tbody>
+                        {auditoriaData.contratos.map((c, i) => {
+                          const stBg = c.status === 'assinado' ? '#dcfce7' : c.status === 'expirado' ? '#fee2e2' : '#fef9c3';
+                          const stColor = c.status === 'assinado' ? '#166534' : c.status === 'expirado' ? '#991b1b' : '#92400e';
+                          return (
+                            <tr key={i}>
+                              <td style={S.td}>{fmtData(c.criado_em)}</td>
+                              <td style={S.td}>{c.produto_tipo} / {c.produto_id}</td>
+                              <td style={S.td}>
+                                <span style={{ background: stBg, color: stColor, padding: '2px 8px', borderRadius: 999, fontWeight: 700, fontSize: 11 }}>{c.status}</span>
+                              </td>
+                              <td style={S.td}>{fmtData(c.expira_em)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* Compras de Produtos */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Compras de Produtos</div>
+                  {auditoriaData.compras.length === 0 ? (
+                    <p style={{ fontSize: 13, color: '#94a3b8' }}>Nenhum registro.</p>
+                  ) : (
+                    <table style={{ ...S.table, fontSize: 12 }}>
+                      <thead><tr>
+                        <th style={S.th}>Data</th>
+                        <th style={S.th}>Produto</th>
+                        <th style={S.th}>Valor</th>
+                        <th style={S.th}>Status</th>
+                      </tr></thead>
+                      <tbody>
+                        {auditoriaData.compras.map((cp, i) => (
+                          <tr key={i}>
+                            <td style={S.td}>{fmtData(cp.criado_em)}</td>
+                            <td style={S.td}>{cp.produto_tipo || '—'} / {cp.produto_id || '—'}</td>
+                            <td style={S.td}>{cp.valor != null ? `R$ ${Number(cp.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</td>
+                            <td style={S.td}>{cp.status || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -869,282 +1012,283 @@ function ContratoModal({ chave, planos, onClose }) {
 function ConfigTab() {
   const [email, setEmail] = useState(() => localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL);
   const [saved, setSaved] = useState(false);
-  const [planos, setPlanos] = useState([]);
-  const [planosLoading, setPlanosLoading] = useState(true);
-  const [planosSaved, setPlanosSaved] = useState({});
-  const [planosErr, setPlanosErr] = useState('');
-
-  // Cursos e eBooks na mesma tela
-  const [cursosCfg, setCursosCfg] = useState([]);
-  const [ebooksCfg, setEbooksCfg] = useState([]);
-  const [produtosSaved, setProdutosSaved] = useState({});
-
-  // Dirty tracking para botão flutuante
-  const [dirtyPlanos, setDirtyPlanos] = useState(new Set());
-  const [dirtyCursos, setDirtyCursos] = useState(new Set());
-  const [dirtyEbooks, setDirtyEbooks] = useState(new Set());
+  const [rows, setRows] = useState([]);
+  const [loadingRows, setLoadingRows] = useState(true);
+  const [dirtyIds, setDirtyIds] = useState(new Set());
   const [salvandoTudo, setSalvandoTudo] = useState(false);
   const [tudoSalvo, setTudoSalvo] = useState(false);
-  const isDirty = dirtyPlanos.size > 0 || dirtyCursos.size > 0 || dirtyEbooks.size > 0;
+  const [contratoAberto, setContratoAberto] = useState(null);
+  // planos kept for ContratoModal compatibility
+  const [planos, setPlanos] = useState([]);
+  const isDirty = dirtyIds.size > 0;
 
   useEffect(() => {
-    supabase.from('cursos_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('titulo')
-      .then(({ data }) => setCursosCfg(data || []));
-    supabase.from('ebooks_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('titulo')
-      .then(({ data }) => setEbooksCfg(data || []));
+    async function loadAll() {
+      try {
+        const [planosRes, cursosRes, ebooksRes] = await Promise.all([
+          supabase.from('planos_config').select('*').order('preco', { ascending: true }),
+          supabase.from('cursos_admin').select('*').order('titulo'),
+          supabase.from('ebooks_admin').select('*').order('titulo'),
+        ]);
+        const planosData = planosRes.data || [];
+        const cursosData = cursosRes.data || [];
+        const ebooksData = ebooksRes.data || [];
+        setPlanos(planosData);
+        const normalized = [
+          ...planosData.map(p => ({
+            _tipo: 'plano', _id: p.plano_key,
+            nome: p.nome || p.plano_key,
+            preco: p.preco ?? 0,
+            desconto_vista_pct: p.desconto_vista_pct ?? 0,
+            preco_vista: p.preco_vista ?? null,
+            assinatura: p.cobrar ?? true,
+            ativo: p.ativo ?? true,
+            comissao_pct: p.comissao_pct ?? 0,
+            requer_contrato: p.requer_contrato ?? false,
+            _raw: p,
+          })),
+          ...cursosData.map(c => ({
+            _tipo: 'curso', _id: c.id,
+            nome: c.titulo,
+            preco: c.preco ?? 0,
+            desconto_vista_pct: c.desconto_vista_pct ?? 0,
+            assinatura: c.assinatura ?? false,
+            ativo: c.ativo ?? true,
+            comissao_pct: c.comissao_pct ?? 0,
+            requer_contrato: c.requer_contrato ?? false,
+            _raw: c,
+          })),
+          ...ebooksData.map(e => ({
+            _tipo: 'ebook', _id: e.id,
+            nome: e.titulo,
+            preco: e.preco ?? 0,
+            desconto_vista_pct: e.desconto_vista_pct ?? 0,
+            assinatura: e.assinatura ?? false,
+            ativo: e.ativo ?? true,
+            comissao_pct: e.comissao_pct ?? 0,
+            requer_contrato: false,
+            _raw: e,
+          })),
+        ];
+        setRows(normalized);
+      } catch (err) {
+        console.error('Erro ao carregar config:', err);
+      } finally {
+        setLoadingRows(false);
+      }
+    }
+    loadAll();
   }, []);
 
-  async function salvarProduto(tipo, item) {
-    const tabela = tipo === 'curso' ? 'cursos_admin' : 'ebooks_admin';
-    const payload = tipo === 'curso'
-      ? { preco: Number(item.preco) || 0, comissao_pct: Number(item.comissao_pct) || 0 }
-      : { preco: Number(item.preco) || 0, comissao_pct: Number(item.comissao_pct) || 0 };
-    const { error } = await supabase.from(tabela).update(payload).eq('id', item.id);
-    if (!error) {
-      const k = `${tipo}_${item.id}`;
-      setProdutosSaved(prev => ({ ...prev, [k]: true }));
-      setTimeout(() => setProdutosSaved(prev => ({ ...prev, [k]: false })), 2000);
+  function updateRow(id, tipo, field, value) {
+    setRows(prev => prev.map(r => (r._id === id && r._tipo === tipo) ? { ...r, [field]: value } : r));
+    setDirtyIds(prev => new Set([...prev, `${tipo}:${id}`]));
+  }
+
+  async function salvarTudo() {
+    setSalvandoTudo(true);
+    try {
+      const dirtyRows = rows.filter(r => dirtyIds.has(`${r._tipo}:${r._id}`));
+      await Promise.all(dirtyRows.map(async p => {
+        if (p._tipo === 'plano') {
+          const total12 = Number(p.preco) * 12;
+          const vistaCalc = Number(p.desconto_vista_pct) > 0
+            ? total12 * (1 - Number(p.desconto_vista_pct) / 100)
+            : (p.preco_vista ?? null);
+          await supabase.from('planos_config').update({
+            preco: Number(p.preco) || 0,
+            desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
+            preco_vista: vistaCalc,
+            cobrar: p.assinatura,
+            ativo: p.ativo,
+            comissao_pct: Number(p.comissao_pct) || 0,
+            requer_contrato: p.requer_contrato,
+            atualizado_em: new Date().toISOString(),
+          }).eq('plano_key', p._id);
+        } else if (p._tipo === 'curso') {
+          await supabase.from('cursos_admin').update({
+            preco: Number(p.preco) || 0,
+            desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
+            assinatura: p.assinatura,
+            ativo: p.ativo,
+            comissao_pct: Number(p.comissao_pct) || 0,
+            requer_contrato: p.requer_contrato,
+          }).eq('id', p._id);
+        } else if (p._tipo === 'ebook') {
+          await supabase.from('ebooks_admin').update({
+            preco: Number(p.preco) || 0,
+            desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
+            assinatura: p.assinatura,
+            ativo: p.ativo,
+            comissao_pct: Number(p.comissao_pct) || 0,
+          }).eq('id', p._id);
+        }
+      }));
+      setDirtyIds(new Set());
+      setTudoSalvo(true);
+      setTimeout(() => setTudoSalvo(false), 2500);
+    } catch (err) {
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      setSalvandoTudo(false);
     }
   }
 
-  function updateCurso(id, field, value) {
-    setCursosCfg(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
-    setDirtyCursos(prev => new Set([...prev, id]));
-  }
-  function updateEbook(id, field, value) {
-    setEbooksCfg(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
-    setDirtyEbooks(prev => new Set([...prev, id]));
-  }
-
-  useEffect(() => {
-    supabase.from('planos_config').select('*').order('preco', { ascending: true })
-      .then(({ data, error }) => {
-        if (!error && data) setPlanos(data);
-        else setPlanosErr('Erro ao carregar planos. Rode o SQL schema_planos_config.sql no Supabase.');
-        setPlanosLoading(false);
-      });
-  }, []);
-
-  function salvar() {
+  function salvarEmail() {
     localStorage.setItem(FEEDBACK_KEY, email.trim() || DEFAULT_FEEDBACK_EMAIL);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
 
-  const [contratoPlano, setContratoPlano] = useState(null); // plano_key para abrir modal contrato
-
-  async function salvarPlano(p) {
-    const pct = Number(p.desconto_vista_pct || 0);
-    const total12 = Number(p.preco || 0) * 12;
-    const vistaCalc = pct > 0 ? total12 * (1 - pct / 100) : (p.preco_vista ? Number(p.preco_vista) : null);
-    const { error } = await supabase.from('planos_config').update({
-      preco: Number(p.preco) || 0,
-      preco_vista: vistaCalc,
-      preco_anual: p.preco_anual ? Number(p.preco_anual) : null,
-      cobrar: p.cobrar,
-      ativo: p.ativo,
-      comissao_pct: Number(p.comissao_pct) || 0,
-      desconto_vista_pct: pct,
-      atualizado_em: new Date().toISOString(),
-    }).eq('plano_key', p.plano_key);
-    if (!error) {
-      setPlanosSaved(prev => ({ ...prev, [p.plano_key]: true }));
-      setTimeout(() => setPlanosSaved(prev => ({ ...prev, [p.plano_key]: false })), 2000);
-    }
-  }
-
-  function updatePlano(key, field, value) {
-    setPlanos(prev => prev.map(p => p.plano_key === key ? { ...p, [field]: value } : p));
-    setDirtyPlanos(prev => new Set([...prev, key]));
-  }
-
-  async function salvarTudo() {
-    setSalvandoTudo(true);
-    const planosParaSalvar = planos.filter(p => dirtyPlanos.has(p.plano_key));
-    const cursosParaSalvar = cursosCfg.filter(c => dirtyCursos.has(c.id));
-    const ebooksParaSalvar = ebooksCfg.filter(e => dirtyEbooks.has(e.id));
-    await Promise.all([
-      ...planosParaSalvar.map(p => salvarPlano(p)),
-      ...cursosParaSalvar.map(c => salvarProduto('curso', c)),
-      ...ebooksParaSalvar.map(e => salvarProduto('ebook', e)),
-    ]);
-    setDirtyPlanos(new Set());
-    setDirtyCursos(new Set());
-    setDirtyEbooks(new Set());
-    setSalvandoTudo(false);
-    setTudoSalvo(true);
-    setTimeout(() => setTudoSalvo(false), 2500);
-  }
-
-  const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+  const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—';
+  const COLS = '2fr 110px 140px 90px 70px 80px 90px';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Configurações</h2>
 
-      {/* Preços dos Planos */}
+      {/* Tabela unificada */}
       <div style={S.card}>
-        <p style={S.subTitle}>Preços dos Planos</p>
+        <p style={S.subTitle}>Produtos — Preços, Assinatura e Contratos</p>
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-          Altere os valores aqui. Alterações valem para novas contratações — assinantes existentes mantêm o preço atual até o vencimento do período.
-          "Desconto à vista %" auto-calcula o preço à vista (preço mensal × 12 × desconto). "Cobrar": desative para planos operacionais gratuitos.
+          Planos, cursos e eBooks unificados. "Assinatura" = cobrança recorrente; desmarcado = venda única parcelável em 12×. Preço à vista calculado automaticamente pelo desconto %.
         </p>
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#1e40af' }}>
-          ℹ️ <strong>Renovação automática:</strong> Planos anuais são renovados automaticamente ao final do período de 12 meses. O cliente é informado desta condição no momento da contratação, na página de planos, e por email 7 dias antes da renovação.
-        </div>
-        {planosErr && <div style={{ background: '#fee2e2', color: '#dc2626', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{planosErr}</div>}
-        {planosLoading ? (
-          <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
+
+        {loadingRows ? (
+          <div style={{ color: '#94a3b8', fontSize: 13, padding: 20 }}>Carregando...</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ overflowX: 'auto' }}>
             {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '150px 110px 130px 110px 75px 65px 80px 80px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
-              {['Plano', 'Preço mensal', 'Desc. à vista % → valor', 'Preço Anual', 'Cobrar?', 'Ativo?', 'Comissão %', 'Contrato'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 8px', borderBottom: '2px solid #e2e8f0', minWidth: 700 }}>
+              {['Produto', 'Valor R$', 'Desc. à vista %', 'Assinatura', 'Ativo', 'Comissão %', 'Contrato'].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
-            {planos.map(p => {
-              const total12 = Number(p.preco || 0) * 12;
-              const pct = Number(p.desconto_vista_pct || 0);
-              const vistaCalc = pct > 0 ? total12 * (1 - pct / 100) : (p.preco_vista ?? null);
-              const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—';
-              const temVista = ['assessorado', 'clube'].includes(p.plano_key);
+
+            {rows.map(r => {
+              const total12 = Number(r.preco) * 12;
+              const pct = Number(r.desconto_vista_pct || 0);
+              const vistaCalc = pct > 0 ? total12 * (1 - pct / 100) : null;
+              const temVista = r._tipo === 'plano'
+                ? ['assessorado', 'clube'].includes(r._id)
+                : (r._tipo === 'curso' || r._tipo === 'ebook') && Number(r.preco) > 0;
+              const isDirtyRow = dirtyIds.has(`${r._tipo}:${r._id}`);
+              const tipoBadge = r._tipo === 'plano'
+                ? { text: '📋 plano', bg: '#eff6ff', color: '#1d4ed8' }
+                : r._tipo === 'curso'
+                  ? { text: '🎓 curso', bg: '#f5f3ff', color: '#7c3aed' }
+                  : { text: '📖 ebook', bg: '#f0fdf4', color: '#166534' };
+
               return (
-              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '150px 110px 130px 110px 75px 65px 80px 80px', gap: 10, alignItems: 'start', padding: '10px 0', borderBottom: '1px solid #f1f5f9', background: dirtyPlanos.has(p.plano_key) ? '#fffbeb' : 'transparent' }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.nome}</div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.plano_key}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$</div>
-                  <InputBRL value={p.preco} onChange={v => updatePlano(p.plano_key, 'preco', v)}
-                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                </div>
-                <div>
-                  {temVista ? (
-                    <>
-                      <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>% desconto</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div key={`${r._tipo}:${r._id}`} style={{
+                  display: 'grid', gridTemplateColumns: COLS, gap: 8,
+                  alignItems: 'start', padding: '10px 8px',
+                  borderBottom: '1px solid #f1f5f9',
+                  background: isDirtyRow ? '#fffbeb' : 'transparent',
+                  minWidth: 700,
+                }}>
+                  {/* Col 1: Produto */}
+                  <div>
+                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: tipoBadge.bg, color: tipoBadge.color, marginBottom: 4 }}>
+                      {tipoBadge.text}
+                    </span>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{r.nome}</div>
+                  </div>
+
+                  {/* Col 2: Valor R$ */}
+                  <div>
+                    <InputBRL value={r.preco} onChange={v => updateRow(r._id, r._tipo, 'preco', v)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  </div>
+
+                  {/* Col 3: Desc. à vista % */}
+                  <div>
+                    {temVista ? (
+                      <>
                         <input type="number" min="0" max="100" step="0.5"
                           value={pct}
-                          onChange={e => {
-                            const v = e.target.value;
-                            updatePlano(p.plano_key, 'desconto_vista_pct', v);
-                            const calc = total12 * (1 - Number(v) / 100);
-                            updatePlano(p.plano_key, 'preco_vista', calc > 0 ? calc : null);
-                          }}
-                          style={{ ...S.input, padding: '6px 6px', fontSize: 13, width: 52 }} />
-                        <span style={{ fontSize: 10, color: '#64748b' }}>% →</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{fmtBRL(vistaCalc)}</span>
-                      </div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>12× {fmtBRL(p.preco)} = {fmtBRL(total12)}</div>
-                    </>
-                  ) : (
-                    <div style={{ fontSize: 11, color: '#cbd5e1', paddingTop: 18 }}>—</div>
-                  )}
+                          onChange={e => updateRow(r._id, r._tipo, 'desconto_vista_pct', e.target.value)}
+                          style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                        {pct > 0 && (
+                          <div style={{ fontSize: 10, color: '#059669', marginTop: 3, fontWeight: 600 }}>
+                            {fmtBRL(vistaCalc)} à vista
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 11, color: '#cbd5e1', paddingTop: 8 }}>—</div>
+                    )}
+                  </div>
+
+                  {/* Col 4: Assinatura */}
+                  <div style={{ textAlign: 'center' }}>
+                    <input type="checkbox" checked={!!r.assinatura}
+                      onChange={e => updateRow(r._id, r._tipo, 'assinatura', e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
+                    <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>
+                      {r.assinatura ? 'Recorrente' : 'Único 12×'}
+                    </div>
+                  </div>
+
+                  {/* Col 5: Ativo */}
+                  <div style={{ textAlign: 'center' }}>
+                    <input type="checkbox" checked={!!r.ativo}
+                      onChange={e => updateRow(r._id, r._tipo, 'ativo', e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#10b981' }} />
+                  </div>
+
+                  {/* Col 6: Comissão % */}
+                  <div>
+                    <input type="number" min="0" max="100" step="0.5"
+                      value={r.comissao_pct ?? 0}
+                      onChange={e => updateRow(r._id, r._tipo, 'comissao_pct', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  </div>
+
+                  {/* Col 7: Contrato */}
+                  <div>
+                    <button
+                      onClick={() => {
+                        if (r._tipo === 'plano') setContratoAberto(r._id);
+                        else setContratoAberto(`${r._tipo}:${r._id}:${r.nome}`);
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        background: r.requer_contrato ? '#2563eb' : '#f8fafc',
+                        color: r.requer_contrato ? '#fff' : '#374151',
+                        border: r.requer_contrato ? 'none' : '1px solid #e2e8f0',
+                        borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%',
+                      }}>
+                      📄 Contrato
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (anual)</div>
-                  <InputBRL value={p.preco_anual ?? ''} onChange={v => updatePlano(p.plano_key, 'preco_anual', v || null)}
-                    placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <input type="checkbox" checked={p.cobrar} onChange={e => updatePlano(p.plano_key, 'cobrar', e.target.checked)}
-                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <input type="checkbox" checked={p.ativo} onChange={e => updatePlano(p.plano_key, 'ativo', e.target.checked)}
-                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#10b981' }} />
-                </div>
-                {/* Comissão % */}
-                <div>
-                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>%</div>
-                  <input type="number" min="0" max="100" step="0.5"
-                    value={p.comissao_pct ?? 0}
-                    onChange={e => updatePlano(p.plano_key, 'comissao_pct', e.target.value)}
-                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                </div>
-                {/* Botão Contrato */}
-                <div>
-                  <button onClick={() => setContratoPlano(p.plano_key)}
-                    style={{ padding: '6px 10px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
-                    📄 Contrato
-                  </button>
-                </div>
-              </div>
               );
             })}
           </div>
         )}
       </div>
 
-      {/* ── Cursos e eBooks — preços, comissões e contratos ── */}
-      {(cursosCfg.length > 0 || ebooksCfg.length > 0) && (
-        <div style={S.card}>
-          <p style={S.subTitle}>Cursos e eBooks — Preços, Comissões e Contratos</p>
-          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-            Gerencie preços e comissões dos produtos digitais em um só lugar. Valor 0 = incluído na assinatura.
-          </p>
-
-          {/* Cursos */}
-          {cursosCfg.length > 0 && (
-            <>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Cursos</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
-                {['Título', 'Preço (R$)', 'Comissão %', 'Contrato'].map(h => (
-                  <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>{h}</div>
-                ))}
-              </div>
-              {cursosCfg.map(c => (
-                <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc', background: dirtyCursos.has(c.id) ? '#fffbeb' : 'transparent' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>🎓 {c.titulo}</div>
-                  <InputBRL value={c.preco ?? 0} onChange={v => updateCurso(c.id, 'preco', v)}
-                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                  <input type="number" min="0" max="100" step="0.5" value={c.comissao_pct ?? 0}
-                    onChange={e => updateCurso(c.id, 'comissao_pct', e.target.value)}
-                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                  <button onClick={() => setContratoPlano(`curso:${c.id}:${c.titulo}`)}
-                    style={{ padding: '6px 8px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
-                    📄 Contrato
-                  </button>
-                </div>
-              ))}
-            </>
-          )}
-
-          {/* eBooks */}
-          {ebooksCfg.length > 0 && (
-            <div style={{ marginTop: cursosCfg.length > 0 ? 20 : 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>eBooks</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
-                {['Título', 'Preço (R$)', 'Comissão %', 'Contrato'].map(h => (
-                  <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>{h}</div>
-                ))}
-              </div>
-              {ebooksCfg.map(e => (
-                <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc', background: dirtyEbooks.has(e.id) ? '#fffbeb' : 'transparent' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>📖 {e.titulo}</div>
-                  <InputBRL value={e.preco ?? 0} onChange={v => updateEbook(e.id, 'preco', v)}
-                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                  <input type="number" min="0" max="100" step="0.5" value={e.comissao_pct ?? 0}
-                    onChange={ev => updateEbook(e.id, 'comissao_pct', ev.target.value)}
-                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                  <button onClick={() => setContratoPlano(`ebook:${e.id}:${e.titulo}`)}
-                    style={{ padding: '6px 8px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
-                    📄 Contrato
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* E-mail de Feedback */}
+      <div style={S.card}>
+        <p style={S.subTitle}>E-mail de Feedback</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+          E-mail que recebe as notificações de feedback dos usuários.
+        </p>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <input value={email} onChange={e => setEmail(e.target.value)}
+            style={{ ...S.input, maxWidth: 360 }} placeholder={DEFAULT_FEEDBACK_EMAIL} />
+          <button onClick={salvarEmail} style={S.btn('primary')}>
+            {saved ? '✅ Salvo' : 'Salvar'}
+          </button>
         </div>
-      )}
+      </div>
 
-      {contratoPlano && (
+      {contratoAberto && (
         <ContratoModal
-          chave={contratoPlano}
+          chave={contratoAberto}
           planos={planos}
-          onClose={() => setContratoPlano(null)}
+          onClose={() => setContratoAberto(null)}
         />
       )}
 
@@ -1157,7 +1301,6 @@ function ConfigTab() {
           </button>
         </div>
       )}
-
     </div>
   );
 }

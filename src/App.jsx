@@ -5,6 +5,7 @@ import { useAuth, AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import TourGuia from './components/TourGuia';
+import ContratoObrigatorio from './components/ContratoObrigatorio';
 import ChatSuporte from './components/ChatSuporte';
 import Landing from './pages/Landing';
 import MeusChamados from './pages/MeusChamados';
@@ -156,6 +157,7 @@ function MainLayout() {
       {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
       {showBonus && <PopupBonusAnalises userId={user.id} onFechar={() => setShowBonus(false)} />}
       {isLoggedIn && <TourGuia />}
+      {user && <ContratoObrigatorio userId={user.id} />}
       <ChatSuporte />
       <main style={{ flex: 1 }}>
         <Routes>
