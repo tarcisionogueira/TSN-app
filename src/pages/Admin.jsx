@@ -746,10 +746,6 @@ function ContratoModal({ chave, planos, onClose }) {
   const [contratoExistente, setContratoExistente] = useState(null); // contrato já salvo
   const [loadingExistente, setLoadingExistente] = useState(true);
 
-  // Campos do cliente
-  const [nomeCliente, setNomeCliente] = useState('');
-  const [cpfCliente, setCpfCliente] = useState('');
-  const [emailCliente, setEmailCliente] = useState('');
   const [desc, setDesc] = useState(descPadrao);
 
   // Conteúdo gerado / editável
@@ -780,10 +776,9 @@ function ContratoModal({ chave, planos, onClose }) {
   }, [chave]);
 
   async function gerarComIA() {
-    if (!nomeCliente.trim()) { alert('Informe o nome do cliente.'); return; }
     setEtapa('gerando');
     try {
-      const descFull = `Cliente: ${nomeCliente}${cpfCliente ? ` · CPF: ${cpfCliente}` : ''}${emailCliente ? ` · E-mail: ${emailCliente}` : ''}\n\n${desc}`;
+      const descFull = desc;
       const r = await fetch('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -876,20 +871,6 @@ function ContratoModal({ chave, planos, onClose }) {
           {/* ETAPA: dados */}
           {etapa === 'dados' && (
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              <div>
-                <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>NOME COMPLETO DO CLIENTE *</label>
-                <input value={nomeCliente} onChange={e=>setNomeCliente(e.target.value)} placeholder="Ex: João da Silva" style={inp} />
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                <div>
-                  <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>CPF</label>
-                  <input value={cpfCliente} onChange={e=>setCpfCliente(e.target.value)} placeholder="000.000.000-00" style={inp} />
-                </div>
-                <div>
-                  <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>E-MAIL</label>
-                  <input value={emailCliente} onChange={e=>setEmailCliente(e.target.value)} placeholder="cliente@email.com" style={inp} />
-                </div>
-              </div>
               <div>
                 <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>ESCOPO / CONDIÇÕES DO CONTRATO</label>
                 <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={5} style={{ ...inp, resize:'vertical' }} />
@@ -1169,9 +1150,7 @@ function ConfigTab() {
               const total12 = Number(r.preco) * 12;
               const pct = Number(r.desconto_vista_pct || 0);
               const vistaCalc = pct > 0 ? total12 * (1 - pct / 100) : null;
-              const temVista = r._tipo === 'plano'
-                ? ['assessorado', 'clube'].includes(r._id)
-                : (r._tipo === 'curso' || r._tipo === 'ebook') && Number(r.preco) > 0;
+              const temVista = !r.assinatura && Number(r.preco) > 0;
               const isDirtyRow = dirtyIds.has(`${r._tipo}:${r._id}`);
               const tipoBadge = r._tipo === 'plano'
                 ? { text: '📋 plano', bg: '#eff6ff', color: '#1d4ed8' }
@@ -1226,7 +1205,7 @@ function ConfigTab() {
                       onChange={e => updateRow(r._id, r._tipo, 'assinatura', e.target.checked)}
                       style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
                     <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>
-                      {r.assinatura ? 'Recorrente' : 'Único 12×'}
+                      {r.assinatura ? 'Recorrente' : 'em até 12×'}
                     </div>
                   </div>
 
@@ -1267,21 +1246,6 @@ function ConfigTab() {
             })}
           </div>
         )}
-      </div>
-
-      {/* E-mail de Feedback */}
-      <div style={S.card}>
-        <p style={S.subTitle}>E-mail de Feedback</p>
-        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
-          E-mail que recebe as notificações de feedback dos usuários.
-        </p>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <input value={email} onChange={e => setEmail(e.target.value)}
-            style={{ ...S.input, maxWidth: 360 }} placeholder={DEFAULT_FEEDBACK_EMAIL} />
-          <button onClick={salvarEmail} style={S.btn('primary')}>
-            {saved ? '✅ Salvo' : 'Salvar'}
-          </button>
-        </div>
       </div>
 
       {contratoAberto && (
