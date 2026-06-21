@@ -592,7 +592,7 @@ function ConfigTab() {
   useEffect(() => {
     supabase.from('cursos_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('titulo')
       .then(({ data }) => setCursosCfg(data || []));
-    supabase.from('ebooks_admin').select('id, titulo, preco').eq('ativo', true).order('titulo')
+    supabase.from('ebooks_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('titulo')
       .then(({ data }) => setEbooksCfg(data || []));
   }, []);
 
@@ -600,7 +600,7 @@ function ConfigTab() {
     const tabela = tipo === 'curso' ? 'cursos_admin' : 'ebooks_admin';
     const payload = tipo === 'curso'
       ? { preco: Number(item.preco) || 0, comissao_pct: Number(item.comissao_pct) || 0 }
-      : { preco: Number(item.preco) || 0 };
+      : { preco: Number(item.preco) || 0, comissao_pct: Number(item.comissao_pct) || 0 };
     const { error } = await supabase.from(tabela).update(payload).eq('id', item.id);
     if (!error) {
       const k = `${tipo}_${item.id}`;
@@ -776,15 +776,18 @@ function ConfigTab() {
           {ebooksCfg.length > 0 && (
             <div style={{ marginTop: cursosCfg.length > 0 ? 20 : 0 }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>eBooks</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 80px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
-                {['Título', 'Preço (R$)', 'Contrato', ''].map(h => (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px 80px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
+                {['Título', 'Preço (R$)', 'Comissão %', 'Contrato', ''].map(h => (
                   <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>{h}</div>
                 ))}
               </div>
               {ebooksCfg.map(e => (
-                <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 80px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+                <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px 80px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>📖 {e.titulo}</div>
                   <InputBRL value={e.preco ?? 0} onChange={v => updateEbook(e.id, 'preco', v)}
+                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  <input type="number" min="0" max="100" step="0.5" value={e.comissao_pct ?? 0}
+                    onChange={ev => updateEbook(e.id, 'comissao_pct', ev.target.value)}
                     style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
                   <button onClick={() => setContratoPlano(`ebook:${e.id}:${e.titulo}`)}
                     style={{ padding: '6px 8px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
