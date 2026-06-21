@@ -44,7 +44,11 @@ export default function Consultor() {
   const [salvandoPromo, setSalvandoPromo] = useState(false);
   const [linksConvite, setLinksConvite] = useState([]);
   const [copiandoConvite, setCopiandoConvite] = useState('');
-  const [aba, setAba] = useState('material'); // 'material' | 'carteira' | 'comissoes'
+  const [aba, setAba] = useState('material'); // 'material' | 'carteira' | 'comissoes' | 'leads'
+  const [filtroCarteira, setFiltroCarteira] = useState('todos'); // 'todos' | 'pagantes'
+  const [filtroComissao, setFiltroComissao] = useState('todos'); // 'todos' | 'pendente' | 'pago'
+  const [leadsSDR, setLeadsSDR] = useState([]);
+  const [leadDetalhe, setLeadDetalhe] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -69,6 +73,12 @@ export default function Consultor() {
       setLoading(false);
     }
     load();
+  }, [user, podeVer]);
+
+  useEffect(() => {
+    if (!user || !podeVer) return;
+    supabase.from('sdr_leads').select('*, sdr_produtos(nome, perguntas)').eq('consultor_id', user.id).order('criado_em', { ascending: false })
+      .then(({ data }) => setLeadsSDR(data || []));
   }, [user, podeVer]);
 
   const gerarCodigo = async () => {
@@ -186,22 +196,26 @@ export default function Consultor() {
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:10, marginBottom:20 }}>
         {[
-          { l:'Clientes na carteira', v: carteira.length, c:'#2563eb', bg:'#eff6ff', icon:Users },
-          { l:'Clientes pagantes', v: clientesPagantes, c:'#8b5cf6', bg:'#ede9fe', icon:TrendingUp },
-          { l:'Comissão pendente', v:`R$ ${fmt(totalPendente,0)}`, c:'#f59e0b', bg:'#fffbeb', icon:Clock },
-          { l:'Comissão recebida', v:`R$ ${fmt(totalPago,0)}`, c:'#10b981', bg:'#f0fdf4', icon:CheckCircle2 },
+          { l:'Clientes na carteira', v: carteira.length, c:'#2563eb', bg:'#eff6ff', icon:Users, onClick:()=>{ setFiltroCarteira('todos'); setAba('carteira'); } },
+          { l:'Clientes pagantes', v: clientesPagantes, c:'#8b5cf6', bg:'#ede9fe', icon:TrendingUp, onClick:()=>{ setFiltroCarteira('pagantes'); setAba('carteira'); } },
+          { l:'Comissão pendente', v:`R$ ${fmt(totalPendente,0)}`, c:'#f59e0b', bg:'#fffbeb', icon:Clock, onClick:()=>{ setFiltroComissao('pendente'); setAba('comissoes'); } },
+          { l:'Comissão recebida', v:`R$ ${fmt(totalPago,0)}`, c:'#10b981', bg:'#f0fdf4', icon:CheckCircle2, onClick:()=>{ setFiltroComissao('pago'); setAba('comissoes'); } },
         ].map(k=>(
-          <div key={k.l} style={{ background:k.bg, borderRadius:12, padding:'14px 16px', border:`1px solid ${k.c}20` }}>
+          <div key={k.l} onClick={k.onClick}
+            style={{ background:k.bg, borderRadius:12, padding:'14px 16px', border:`1px solid ${k.c}40`, cursor:'pointer', transition:'box-shadow 0.15s', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}
+            onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 4px 12px ${k.c}30`}
+            onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)'}>
             <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, color:k.c, textTransform:'uppercase', marginBottom:6 }}>
               <k.icon size={13}/> {k.l}
             </div>
             <div style={{ fontSize:20, fontWeight:900, color:'#0f172a' }}>{k.v}</div>
+            <div style={{ fontSize:10, color:k.c, marginTop:4, fontWeight:600 }}>clique para ver →</div>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0' }}>
+      <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0', flexWrap:'wrap' }}>
         {tabBtn('material', '🔗 Material de Divulgação')}
         {tabBtn('carteira', `👥 Carteira (${carteira.length})`)}
         {tabBtn('comissoes', `💰 Comissões (${comissoes.length})`)}
@@ -399,80 +413,215 @@ export default function Consultor() {
         )}
 
         {/* === CARTEIRA === */}
-        {aba==='carteira' && (
-          carteira.length === 0 ? (
-            <div style={{ textAlign:'center', padding:'50px', color:'#94a3b8' }}>
-              <Users size={40} color="#cbd5e1" style={{ margin:'0 auto 12px' }}/>
-              <p>Nenhum cliente na sua carteira ainda. Compartilhe seu link de indicação para começar.</p>
+        {aba==='carteira' && (() => {
+          const lista = filtroCarteira === 'pagantes' ? carteira.filter(c => c.plano && c.plano !== 'gratuito') : carteira;
+          return (
+            <div>
+              <div style={{ display:'flex', gap:8, marginBottom:14, alignItems:'center', flexWrap:'wrap' }}>
+                {[['todos','Todos os clientes'],['pagantes','Só pagantes']].map(([v,l])=>(
+                  <button key={v} onClick={()=>setFiltroCarteira(v)}
+                    style={{ padding:'5px 14px', border:'none', borderRadius:20, fontWeight:700, fontSize:12, cursor:'pointer', background:filtroCarteira===v?'#0f172a':'#f1f5f9', color:filtroCarteira===v?'white':'#475569' }}>
+                    {l}
+                  </button>
+                ))}
+                <span style={{ fontSize:12, color:'#94a3b8', marginLeft:4 }}>{lista.length} cliente{lista.length!==1?'s':''}</span>
+              </div>
+              {lista.length === 0 && filtroCarteira !== 'pagantes' ? (
+                <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>
+                  <Users size={40} color="#cbd5e1" style={{ margin:'0 auto 12px' }}/>
+                  <p>Nenhum cliente na sua carteira ainda. Compartilhe seu link de indicação para começar.</p>
+                </div>
+              ) : lista.length === 0 ? (
+                <p style={{ textAlign:'center', color:'#94a3b8', padding:'30px 0' }}>Nenhum cliente pagante ainda.</p>
+              ) : (
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                    <thead>
+                      <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
+                        {['Cliente','Plano','Cadastro'].map(h=>(
+                          <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lista.map((c,i)=>(
+                        <tr key={c.id} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
+                          <td style={{ padding:'12px 14px', fontWeight:700, color:'#0f172a' }}>{c.nome||'—'}</td>
+                          <td style={{ padding:'12px 14px' }}>
+                            <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, background: c.plano&&c.plano!=='gratuito'?'#d1fae5':'#f1f5f9', color: c.plano&&c.plano!=='gratuito'?'#059669':'#64748b', textTransform:'uppercase' }}>
+                              {c.plano || 'gratuito'}
+                            </span>
+                          </td>
+                          <td style={{ padding:'12px 14px', color:'#64748b' }}>{fmtData(c.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Leads captados via SDR */}
+              {leadsSDR.length > 0 && (
+                <div style={{ marginTop:28 }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:12, borderTop:'2px solid #f1f5f9', paddingTop:20, display:'flex', alignItems:'center', gap:8 }}>
+                    🎯 Leads captados <span style={{ background:'#fef3c7', color:'#92400e', borderRadius:20, padding:'1px 10px', fontSize:11, fontWeight:700 }}>{leadsSDR.length}</span>
+                    <span style={{ fontSize:11, color:'#94a3b8', fontWeight:400, textTransform:'none' }}>— não pagantes, aguardando contato</span>
+                  </div>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                      <thead>
+                        <tr style={{ background:'#fffbeb', borderBottom:'2px solid #fde68a' }}>
+                          {['Nome','E-mail','WhatsApp','Produto','Data',''].map(h=>(
+                            <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#92400e', fontSize:11, textTransform:'uppercase' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leadsSDR.map((l,i)=>(
+                          <tr key={l.id} style={{ borderBottom:'1px solid #fef9c3', background:i%2===0?'white':'#fffbeb88' }}>
+                            <td style={{ padding:'11px 14px', fontWeight:700, color:'#0f172a' }}>{l.nome}</td>
+                            <td style={{ padding:'11px 14px', color:'#475569' }}>{l.email||'—'}</td>
+                            <td style={{ padding:'11px 14px' }}>
+                              <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                                {l.whatsapp}
+                                {l.whatsapp && (
+                                  <a href={`https://wa.me/55${l.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                                    style={{ fontSize:11, background:'#dcfce7', color:'#166534', borderRadius:6, padding:'2px 7px', textDecoration:'none', fontWeight:700 }}>WA</a>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ padding:'11px 14px', color:'#64748b', fontSize:12 }}>{l.sdr_produtos?.nome||'—'}</td>
+                            <td style={{ padding:'11px 14px', color:'#64748b', fontSize:12 }}>{fmtData(l.criado_em)}</td>
+                            <td style={{ padding:'11px 14px' }}>
+                              <div style={{ display:'flex', gap:6 }}>
+                                <button onClick={()=>setLeadDetalhe(l)}
+                                  style={{ padding:'4px 10px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', color:'#374151' }}>
+                                  Ver respostas
+                                </button>
+                                {l.email && (
+                                  <a href={`mailto:${l.email}`}
+                                    style={{ padding:'4px 10px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', color:'#1d4ed8', textDecoration:'none' }}>
+                                    E-mail
+                                  </a>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal respostas lead */}
+              {leadDetalhe && (
+                <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+                  onClick={()=>setLeadDetalhe(null)}>
+                  <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:520, maxHeight:'80vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}
+                    onClick={e=>e.stopPropagation()}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+                      <div style={{ fontSize:16, fontWeight:800, color:'#0f172a' }}>{leadDetalhe.nome}</div>
+                      <button onClick={()=>setLeadDetalhe(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:4, fontSize:13, color:'#475569', marginBottom:16 }}>
+                      <div>📧 {leadDetalhe.email||'—'}</div>
+                      <div>📱 {leadDetalhe.whatsapp||'—'}</div>
+                      <div>📦 {leadDetalhe.sdr_produtos?.nome||'—'}</div>
+                      <div>📅 {fmtData(leadDetalhe.criado_em)}</div>
+                    </div>
+                    {leadDetalhe.respostas && Object.keys(leadDetalhe.respostas).length > 0 ? (
+                      <div>
+                        <div style={{ fontSize:12, fontWeight:800, color:'#374151', textTransform:'uppercase', marginBottom:10, borderTop:'1px solid #e2e8f0', paddingTop:12 }}>Respostas do questionário</div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                          {(leadDetalhe.sdr_produtos?.perguntas||[]).map(p=>{
+                            const r = leadDetalhe.respostas[p.id];
+                            return r ? (
+                              <div key={p.id} style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px' }}>
+                                <div style={{ fontSize:12, color:'#64748b', marginBottom:4 }}>{p.texto}</div>
+                                <div style={{ fontSize:14, fontWeight:700, color:'#0f172a' }}>{r}</div>
+                              </div>
+                            ) : null;
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ color:'#94a3b8', fontSize:13, textAlign:'center', padding:'12px 0' }}>Sem respostas de questionário.</div>
+                    )}
+                    <div style={{ marginTop:16, display:'flex', gap:8, flexWrap:'wrap' }}>
+                      {leadDetalhe.whatsapp && (
+                        <a href={`https://wa.me/55${leadDetalhe.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                          style={{ flex:1, textAlign:'center', padding:'10px', background:'#dcfce7', color:'#166534', borderRadius:8, fontWeight:700, fontSize:13, textDecoration:'none' }}>
+                          📱 Abrir WhatsApp
+                        </a>
+                      )}
+                      {leadDetalhe.email && (
+                        <a href={`mailto:${leadDetalhe.email}`}
+                          style={{ flex:1, textAlign:'center', padding:'10px', background:'#eff6ff', color:'#1d4ed8', borderRadius:8, fontWeight:700, fontSize:13, textDecoration:'none' }}>
+                          ✉️ Enviar e-mail
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : (
-            <div style={{ overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                <thead>
-                  <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
-                    {['Cliente','Plano','Cadastro'].map(h=>(
-                      <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {carteira.map((c,i)=>(
-                    <tr key={c.id} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
-                      <td style={{ padding:'12px 14px', fontWeight:700, color:'#0f172a' }}>{c.nome||'—'}</td>
-                      <td style={{ padding:'12px 14px' }}>
-                        <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, background: c.plano&&c.plano!=='gratuito'?'#d1fae5':'#f1f5f9', color: c.plano&&c.plano!=='gratuito'?'#059669':'#64748b', textTransform:'uppercase' }}>
-                          {c.plano || 'gratuito'}
-                        </span>
-                      </td>
-                      <td style={{ padding:'12px 14px', color:'#64748b' }}>{fmtData(c.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
+          );
+        })()}
 
         {/* === COMISSÕES === */}
-        {aba==='comissoes' && (
-          comissoes.length === 0 ? (
-            <div style={{ textAlign:'center', padding:'50px', color:'#94a3b8' }}>
-              <DollarSign size={40} color="#cbd5e1" style={{ margin:'0 auto 12px' }}/>
-              <p>Nenhuma comissão registrada ainda. Elas aparecem aqui quando seus clientes pagam produtos ou assinaturas.</p>
+        {aba==='comissoes' && (() => {
+          const lista = filtroComissao === 'todos' ? comissoes : comissoes.filter(c => c.status === filtroComissao);
+          return (
+            <div>
+              <div style={{ display:'flex', gap:8, marginBottom:14, alignItems:'center', flexWrap:'wrap' }}>
+                {[['todos','Todas'],['pendente','Pendentes'],['pago','Recebidas'],['cancelado','Canceladas']].map(([v,l])=>(
+                  <button key={v} onClick={()=>setFiltroComissao(v)}
+                    style={{ padding:'5px 14px', border:'none', borderRadius:20, fontWeight:700, fontSize:12, cursor:'pointer', background:filtroComissao===v?'#0f172a':'#f1f5f9', color:filtroComissao===v?'white':'#475569' }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              {lista.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'50px', color:'#94a3b8' }}>
+                  <DollarSign size={40} color="#cbd5e1" style={{ margin:'0 auto 12px' }}/>
+                  <p>Nenhuma comissão {filtroComissao!=='todos'?`com status "${filtroComissao}"`:''} registrada ainda.</p>
+                </div>
+              ) : (
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                    <thead>
+                      <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
+                        {['Origem','Referência','Base','%','Comissão','Competência','Status'].map(h=>(
+                          <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lista.map((c,i)=>(
+                        <tr key={c.id} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
+                          <td style={{ padding:'10px 14px', textTransform:'capitalize' }}>{c.origem}</td>
+                          <td style={{ padding:'10px 14px', color:'#475569' }}>{c.referencia||'—'}</td>
+                          <td style={{ padding:'10px 14px' }}>R$ {fmt(Number(c.valor_base),0)}</td>
+                          <td style={{ padding:'10px 14px' }}>{Number(c.percentual)}%</td>
+                          <td style={{ padding:'10px 14px', fontWeight:800, color:'#10b981' }}>R$ {fmt(Number(c.valor_comissao),0)}</td>
+                          <td style={{ padding:'10px 14px', color:'#64748b' }}>{c.competencia?fmtData(c.competencia):'—'}</td>
+                          <td style={{ padding:'10px 14px' }}>
+                            <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20,
+                              background: c.status==='pago'?'#d1fae5':c.status==='cancelado'?'#fee2e2':'#fef3c7',
+                              color: c.status==='pago'?'#059669':c.status==='cancelado'?'#dc2626':'#92400e' }}>
+                              {c.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          ) : (
-            <div style={{ overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                <thead>
-                  <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
-                    {['Origem','Referência','Base','%','Comissão','Competência','Status'].map(h=>(
-                      <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {comissoes.map((c,i)=>(
-                    <tr key={c.id} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
-                      <td style={{ padding:'10px 14px', textTransform:'capitalize' }}>{c.origem}</td>
-                      <td style={{ padding:'10px 14px', color:'#475569' }}>{c.referencia||'—'}</td>
-                      <td style={{ padding:'10px 14px' }}>R$ {fmt(Number(c.valor_base),0)}</td>
-                      <td style={{ padding:'10px 14px' }}>{Number(c.percentual)}%</td>
-                      <td style={{ padding:'10px 14px', fontWeight:800, color:'#10b981' }}>R$ {fmt(Number(c.valor_comissao),0)}</td>
-                      <td style={{ padding:'10px 14px', color:'#64748b' }}>{c.competencia?fmtData(c.competencia):'—'}</td>
-                      <td style={{ padding:'10px 14px' }}>
-                        <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20,
-                          background: c.status==='pago'?'#d1fae5':c.status==='cancelado'?'#fee2e2':'#fef3c7',
-                          color: c.status==='pago'?'#059669':c.status==='cancelado'?'#dc2626':'#92400e' }}>
-                          {c.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
+          );
+        })()}
       </div>
     </div>
   );

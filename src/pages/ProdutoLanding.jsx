@@ -84,6 +84,7 @@ function CapturaLanding({ id }) {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
   const [verSenha, setVerSenha] = useState(false);
+  const [qIdx, setQIdx] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -170,7 +171,7 @@ function CapturaLanding({ id }) {
             </div>
           </div>
 
-          <button onClick={() => setStep(temPerguntas ? 'perguntas' : 'cadastro')}
+          <button onClick={() => { setQIdx(0); setStep(temPerguntas ? 'perguntas' : 'cadastro'); }}
             style={{ width: '100%', padding: '16px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 17, cursor: 'pointer', letterSpacing: 0.3 }}>
             Quero acesso gratuito →
           </button>
@@ -182,51 +183,72 @@ function CapturaLanding({ id }) {
 
   /* ── Step: PERGUNTAS ── */
   if (step === 'perguntas') {
-    const todasRespondidas = perguntas.every(p => p.tipo === 'texto' ? (respostas[p.id] || '').trim().length > 0 : !!respostas[p.id]);
+    const p = perguntas[qIdx];
+    const isLast = qIdx === perguntas.length - 1;
+    const respondida = p ? (p.tipo === 'texto' ? (respostas[p.id] || '').trim().length > 0 : !!respostas[p.id]) : false;
+    const handleNext = () => {
+      if (isLast) {
+        setStep('cadastro');
+      } else {
+        setQIdx(i => i + 1);
+      }
+    };
+    const handleBack = () => {
+      if (qIdx === 0) {
+        setQIdx(0);
+        setStep('hero');
+      } else {
+        setQIdx(i => i - 1);
+      }
+    };
     return (
       <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
         <Header />
         <div style={{ maxWidth: 560, margin: '0 auto', padding: '40px 24px 80px' }}>
           <div style={{ marginBottom: 24 }}>
-            <button onClick={() => setStep('hero')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 16 }}>← Voltar</button>
+            <button onClick={handleBack} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 16 }}>← Voltar</button>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6 }}>Quase lá!</div>
-            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: 'white' }}>Responda rapidinho para liberar seu acesso</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: 'white' }}>Responda rapidinho</h2>
+              <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>Pergunta {qIdx + 1} de {perguntas.length}</span>
+            </div>
+            <div style={{ background: '#1e293b', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+              <div style={{ width: `${((qIdx + 1) / perguntas.length) * 100}%`, background: '#059669', height: '100%', borderRadius: 99, transition: 'width 0.3s ease' }} />
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {perguntas.map((p, i) => (
-              <div key={p.id} style={{ background: '#1e293b', borderRadius: 12, padding: '16px 20px', border: '1px solid #334155' }}>
-                <label style={{ display: 'block', fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginBottom: 10 }}>{i + 1}. {p.texto}</label>
-                {p.tipo === 'texto' && (
-                  <textarea value={respostas[p.id] || ''} onChange={e => setRespostas(r => ({ ...r, [p.id]: e.target.value }))}
-                    placeholder="Sua resposta…"
-                    style={{ ...inputStyle, height: 72, resize: 'vertical', fontSize: 14 }} />
-                )}
-                {p.tipo === 'sim_nao' && (
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    {['Sim', 'Não'].map(opt => (
-                      <button key={opt} onClick={() => setRespostas(r => ({ ...r, [p.id]: opt }))}
-                        style={{ flex: 1, padding: '10px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#0f172a', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {p.tipo === 'multipla' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {(p.opcoes || '').split(',').map(opt => opt.trim()).filter(Boolean).map(opt => (
-                      <button key={opt} onClick={() => setRespostas(r => ({ ...r, [p.id]: opt }))}
-                        style={{ padding: '10px 14px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#0f172a', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-                        {respostas[p.id] === opt ? '● ' : '○ '}{opt}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          <button onClick={() => setStep('cadastro')} disabled={!todasRespondidas}
-            style={{ width: '100%', marginTop: 24, padding: '14px', background: todasRespondidas ? '#059669' : '#1e293b', color: todasRespondidas ? 'white' : '#64748b', border: `1px solid ${todasRespondidas ? '#059669' : '#334155'}`, borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: todasRespondidas ? 'pointer' : 'not-allowed' }}>
-            Continuar →
+          {p && (
+            <div style={{ background: '#1e293b', borderRadius: 12, padding: '24px 20px', border: '1px solid #334155', marginBottom: 24 }}>
+              <label style={{ display: 'block', fontSize: 15, fontWeight: 700, color: '#e2e8f0', marginBottom: 16, textAlign: 'center' }}>{p.texto}</label>
+              {p.tipo === 'texto' && (
+                <textarea value={respostas[p.id] || ''} onChange={e => setRespostas(r => ({ ...r, [p.id]: e.target.value }))}
+                  placeholder="Sua resposta…"
+                  style={{ ...inputStyle, height: 72, resize: 'vertical', fontSize: 14 }} />
+              )}
+              {p.tipo === 'sim_nao' && (
+                <div style={{ display: 'flex', gap: 10 }}>
+                  {['Sim', 'Não'].map(opt => (
+                    <button key={opt} onClick={() => setRespostas(r => ({ ...r, [p.id]: opt }))}
+                      style={{ flex: 1, padding: '10px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#0f172a', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {p.tipo === 'multipla' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(p.opcoes || '').split(',').map(opt => opt.trim()).filter(Boolean).map(opt => (
+                    <button key={opt} onClick={() => setRespostas(r => ({ ...r, [p.id]: opt }))}
+                      style={{ padding: '10px 14px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#0f172a', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+                      {respostas[p.id] === opt ? '● ' : '○ '}{opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button onClick={handleNext} disabled={!respondida}
+            style={{ width: '100%', padding: '14px', background: respondida ? '#059669' : '#1e293b', color: respondida ? 'white' : '#64748b', border: `1px solid ${respondida ? '#059669' : '#334155'}`, borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: respondida ? 'pointer' : 'not-allowed' }}>
+            {isLast ? 'Continuar →' : 'Próxima →'}
           </button>
         </div>
       </div>
