@@ -6,6 +6,8 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  // Daily.co envia GET para validar o endpoint ao registrar
+  if (req.method === 'GET') return res.status(200).json({ ok: true });
   if (req.method !== 'POST') return res.status(405).end();
 
   const event = req.body;
