@@ -444,18 +444,10 @@ export default function Calculadora() {
                 <p style={{ color: '#93c5fd', fontSize: 13, lineHeight: 1.7, margin: '0 0 18px' }}>
                   Relatório de viabilidade, análise jurídica do edital e matrícula, consulta processual integrada e análises ilimitadas — tudo em uma plataforma.
                 </p>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button onClick={irAssinar}
-                    style={{ padding: '12px 24px', background: 'white', color: '#1e40af', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    Assinar Investidor Pro →
-                  </button>
-                  {!user && (
-                    <button onClick={() => nav(`/checkout?plano=explorador${refAtivo ? `&ref=${refAtivo}` : ''}`)}
-                      style={{ padding: '12px 20px', background: 'rgba(255,255,255,0.12)', color: 'white', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      Começar grátis
-                    </button>
-                  )}
-                </div>
+                <button onClick={irAssinar}
+                  style={{ padding: '12px 24px', background: 'white', color: '#1e40af', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
+                  Assinar Investidor Pro →
+                </button>
               </div>
 
               {/* Destaques do plano */}
