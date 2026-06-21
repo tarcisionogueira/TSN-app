@@ -43,18 +43,26 @@ export default function Comissoes() {
     carregar();
   }, [role]);
 
+  const [cfinConfig, setCfinConfig] = useState({});  // config financeira por gateway
+
   const carregar = useCallback(async () => {
     setLoading(true);
-    const [{ data: c }, { data: s }, { data: p }] = await Promise.all([
+    const [{ data: c }, { data: s }, { data: p }, { data: cf }] = await Promise.all([
       supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
       supabase.from('saques').select('*').eq('usuario_id', user.id).order('criado_em', { ascending: false }),
       supabase.from('perfis').select('pix_key').eq('id', user.id).maybeSingle(),
+      supabase.from('config_financeira').select('*'),
     ]);
     setComissoes(c || []);
     setSaques(s || []);
     const k = p?.pix_key || '';
     setPixKey(k);
     setPixKeySalva(k);
+    if (cf) {
+      const m = {};
+      cf.forEach(r => { m[r.gateway] = r; });
+      setCfinConfig(m);
+    }
     setLoading(false);
   }, [user.id]);
 
@@ -261,28 +269,64 @@ export default function Comissoes() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                      {['Data', 'Referência', 'Valor base', 'Percentual', 'Comissão', 'Status'].map(h => (
-                        <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                      {['Data', 'Referência', 'Gateway', 'Valor base', '% Comissão', 'Comissão bruta', 'Taxa crédito', 'Taxa antecip.', 'Comissão líquida', 'Prazo', 'Status'].map(h => (
+                        <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: 10, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {comissoes.map(c => (
-                      <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmtData(c.created_at)}</td>
-                        <td style={{ padding: '8px 10px', color: '#0f172a', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.referencia || c.origem}</td>
-                        <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmt(c.valor_base)}</td>
-                        <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{Number(c.percentual).toFixed(1)}%</td>
-                        <td style={{ padding: '8px 10px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{fmt(c.valor_comissao)}</td>
-                        <td style={{ padding: '8px 10px' }}>
-                          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: STATUS_COLOR[c.status] + '22', color: STATUS_COLOR[c.status] }}>
-                            {STATUS_LABEL[c.status] || c.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {comissoes.map(c => {
+                      // Detecta gateway pela estrutura do payment_id
+                      const gw = c.asaas_payment_id
+                        ? (c.asaas_payment_id.startsWith('pay_') ? 'pagarme' : 'asaas')
+                        : null;
+                      const cfg = gw ? (cfinConfig[gw] || {}) : {};
+                      const taxaCredito = Number(cfg.taxa_credito_pct || 0);
+                      const taxaAntecip = cfg.antecipacao_ativa ? Number(cfg.antecipacao_pct_mes || 0) : 0;
+                      const prazo = cfg.prazo_recebimento_dias || (gw === 'pagarme' ? 30 : 32);
+
+                      // Taxas aplicadas sobre a comissão bruta
+                      const comissaoBruta = Number(c.valor_comissao);
+                      const descontoCredito = comissaoBruta * taxaCredito / 100;
+                      // Taxa de antecipação: taxa mensal aplicada sobre o período (prazo / 30 meses)
+                      const descontoAntecip = cfg.antecipacao_ativa
+                        ? comissaoBruta * (taxaAntecip / 100) * (prazo / 30)
+                        : 0;
+                      const comissaoLiquida = comissaoBruta - descontoCredito - descontoAntecip;
+
+                      return (
+                        <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmtData(c.created_at)}</td>
+                          <td style={{ padding: '8px 10px', color: '#0f172a', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.referencia || c.origem}</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{gw || '—'}</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmt(c.valor_base)}</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{Number(c.percentual).toFixed(1)}%</td>
+                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap' }}>{fmt(comissaoBruta)}</td>
+                          <td style={{ padding: '8px 10px', color: taxaCredito > 0 ? '#ef4444' : '#94a3b8', whiteSpace: 'nowrap' }}>
+                            {taxaCredito > 0 ? `−${fmt(descontoCredito)} (${taxaCredito}%)` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: cfg.antecipacao_ativa ? '#d97706' : '#94a3b8', whiteSpace: 'nowrap' }}>
+                            {cfg.antecipacao_ativa ? `−${fmt(descontoAntecip)} (${taxaAntecip}%/mês)` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px', fontWeight: 700, color: '#16a34a', whiteSpace: 'nowrap' }}>{gw ? fmt(comissaoLiquida) : '—'}</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{gw ? `D+${prazo}` : '—'}</td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: STATUS_COLOR[c.status] + '22', color: STATUS_COLOR[c.status] }}>
+                              {STATUS_LABEL[c.status] || c.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+                {/* Legenda */}
+                <div style={{ marginTop: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 11, color: '#64748b', lineHeight: 1.7 }}>
+                  <strong style={{ color: '#334155' }}>Legenda:</strong><br/>
+                  <strong>Taxa crédito</strong> = MDR do gateway aplicado sobre a comissão bruta (configurável em Admin → Configurações).<br/>
+                  <strong>Taxa antecipação</strong> = custo de antecipar o recebível antes do prazo padrão (Asaas D+32 · Pagar.me D+30). Ativa quando habilitada no admin.<br/>
+                  <strong>Comissão líquida</strong> = valor estimado após descontar as taxas. Valores reais podem variar por contrato.
+                </div>
               </div>
             )}
           </div>

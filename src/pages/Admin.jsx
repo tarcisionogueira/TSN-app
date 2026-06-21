@@ -561,6 +561,8 @@ function ConfigTab() {
   const [planosSaved, setPlanosSaved] = useState({});
   const [planosErr, setPlanosErr] = useState('');
   const [comissoesExpanded, setComissoesExpanded] = useState({});
+  const [cfin, setCfin] = useState({});   // config_financeira por gateway
+  const [cfinSaved, setCfinSaved] = useState({});
 
   useEffect(() => {
     supabase.from('planos_config').select('*').order('preco', { ascending: true })
@@ -569,7 +571,36 @@ function ConfigTab() {
         else setPlanosErr('Erro ao carregar planos. Rode o SQL schema_planos_config.sql no Supabase.');
         setPlanosLoading(false);
       });
+    supabase.from('config_financeira').select('*')
+      .then(({ data }) => {
+        if (data) {
+          const m = {};
+          data.forEach(r => { m[r.gateway] = r; });
+          setCfin(m);
+        }
+      });
   }, []);
+
+  function updateCfin(gateway, field, value) {
+    setCfin(prev => ({ ...prev, [gateway]: { ...(prev[gateway] || { gateway }), [field]: value } }));
+  }
+
+  async function salvarCfin(gateway) {
+    const r = cfin[gateway] || { gateway };
+    const { error } = await supabase.from('config_financeira').upsert({
+      gateway,
+      taxa_credito_pct:      Number(r.taxa_credito_pct) || 0,
+      taxa_debito_pct:       Number(r.taxa_debito_pct) || 0,
+      antecipacao_ativa:     r.antecipacao_ativa || false,
+      antecipacao_pct_mes:   Number(r.antecipacao_pct_mes) || 0,
+      prazo_recebimento_dias: Number(r.prazo_recebimento_dias) || 30,
+      atualizado_em: new Date().toISOString(),
+    });
+    if (!error) {
+      setCfinSaved(prev => ({ ...prev, [gateway]: true }));
+      setTimeout(() => setCfinSaved(prev => ({ ...prev, [gateway]: false })), 2000);
+    }
+  }
 
   function salvar() {
     localStorage.setItem(FEEDBACK_KEY, email.trim() || DEFAULT_FEEDBACK_EMAIL);
@@ -724,6 +755,88 @@ function ConfigTab() {
             })}
           </div>
         )}
+      </div>
+
+      {/* Taxas Financeiras por Gateway */}
+      <div style={S.card}>
+        <p style={S.subTitle}>Taxas Financeiras por Gateway</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Configure as taxas cobradas por cada gateway. Usadas para exibir o breakdown financeiro no analítico de comissões.
+          <br/>As taxas reais do seu contrato devem ser verificadas diretamente nos painéis Asaas e Pagar.me.
+        </p>
+        {['asaas', 'pagarme'].map(gw => {
+          const r = cfin[gw] || {};
+          const gwLabel = gw === 'pagarme' ? 'Pagar.me' : 'Asaas';
+          const prazoPadrao = gw === 'pagarme' ? 30 : 32;
+          return (
+            <div key={gw} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 12 }}>{gwLabel}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA CRÉDITO (MDR) %</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="number" step="0.001" min="0" max="10" value={r.taxa_credito_pct ?? 2.49}
+                      onChange={e => updateCfin(gw, 'taxa_credito_pct', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
+                    <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>ex: 2,49%</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA DÉBITO (MDR) %</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="number" step="0.001" min="0" max="10" value={r.taxa_debito_pct ?? 0}
+                      onChange={e => updateCfin(gw, 'taxa_debito_pct', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
+                    <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>PRAZO PADRÃO (D+X)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 12, color: '#64748b' }}>D+</span>
+                    <input type="number" step="1" min="1" max="60" value={r.prazo_recebimento_dias ?? prazoPadrao}
+                      onChange={e => updateCfin(gw, 'prazo_recebimento_dias', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 60 }} />
+                    <span style={{ fontSize: 12, color: '#64748b' }}>dias</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{gw === 'pagarme' ? 'padrão D+30' : 'padrão D+32'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>ANTECIPAÇÃO HABILITADA</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                    <input type="checkbox" checked={r.antecipacao_ativa || false}
+                      onChange={e => updateCfin(gw, 'antecipacao_ativa', e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
+                    <span style={{ fontSize: 12, color: '#334155' }}>Ativa</span>
+                  </div>
+                </div>
+                {r.antecipacao_ativa && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA ANTECIPAÇÃO % / MÊS</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <input type="number" step="0.01" min="0" max="5" value={r.antecipacao_pct_mes ?? 1.25}
+                        onChange={e => updateCfin(gw, 'antecipacao_pct_mes', e.target.value)}
+                        style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
+                      <span style={{ fontSize: 12, color: '#64748b' }}>% a.m.</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                      {gw === 'asaas' ? 'Asaas: a partir 1,25% a.m.' : 'Varia por contrato Stone'}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button onClick={() => salvarCfin(gw)}
+                style={{ marginTop: 14, padding: '7px 18px', background: cfinSaved[gw] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                {cfinSaved[gw] ? '✓ Salvo' : `Salvar ${gwLabel}`}
+              </button>
+            </div>
+          );
+        })}
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+          Asaas: crédito D+32 · antecipação a partir de 1,25% ao mês · recebe em até 2 dias úteis · sem IOF<br/>
+          Pagar.me: crédito D+30 · taxa de antecipação negociada por contrato com Stone · cálculo proporcional por dias
+        </div>
       </div>
 
     </div>
