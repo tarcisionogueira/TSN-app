@@ -255,10 +255,6 @@ function CursosTab() {
                   {['Fundamentos','Mercado','Jurídico','Estratégia','Gestão'].map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
-              <div style={S.col}>
-                <label style={S.label}>Preço (R$)</label>
-                <InputBRL style={S.input} value={form.preco} disabled={form.gratuito} onChange={v => setForm({ ...form, preco: v })} />
-              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
@@ -268,10 +264,9 @@ function CursosTab() {
               <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, color: '#374151' }}>
                 <input type="checkbox" checked={form.destaque || false} onChange={e => setForm({ ...form, destaque: e.target.checked })} /> Destaque
               </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ fontSize: 14, color: '#374151' }}>Comissão %</label>
-                <input style={{ ...S.input, width: 70 }} type="number" value={form.comissao_pct || 30} onChange={e => setForm({ ...form, comissao_pct: e.target.value })} />
-              </div>
+            </div>
+            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#1e40af', marginBottom:14 }}>
+              💡 Preço e comissão são configurados na aba <strong>Configurações</strong>.
             </div>
 
             <div style={{ marginTop: 20, marginBottom: 12 }}>
@@ -435,9 +430,8 @@ function EbooksTab() {
               <label style={S.label}>URL do arquivo (PDF) — abre no leitor estilo Kindle</label>
               <input style={S.input} value={form.arquivo_url || ''} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} placeholder="https://... (link do PDF no Drive)" />
             </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={S.label}>Preço (R$) — deixe 0 ou em branco para gratuito</label>
-              <InputBRL style={S.input} value={form.preco ?? ''} onChange={v => setForm({ ...form, preco: v })} />
+            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#1e40af', marginBottom:20 }}>
+              💡 Preço é configurado na aba <strong>Configurações</strong>.
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button style={S.btn('outline')} onClick={() => setModal(null)}>Cancelar</button>
@@ -590,6 +584,38 @@ function ConfigTab() {
   const [planosSaved, setPlanosSaved] = useState({});
   const [planosErr, setPlanosErr] = useState('');
 
+  // Cursos e eBooks na mesma tela
+  const [cursosCfg, setCursosCfg] = useState([]);
+  const [ebooksCfg, setEbooksCfg] = useState([]);
+  const [produtosSaved, setProdutosSaved] = useState({});
+
+  useEffect(() => {
+    supabase.from('cursos_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('titulo')
+      .then(({ data }) => setCursosCfg(data || []));
+    supabase.from('ebooks_admin').select('id, titulo, preco').eq('ativo', true).order('titulo')
+      .then(({ data }) => setEbooksCfg(data || []));
+  }, []);
+
+  async function salvarProduto(tipo, item) {
+    const tabela = tipo === 'curso' ? 'cursos_admin' : 'ebooks_admin';
+    const payload = tipo === 'curso'
+      ? { preco: Number(item.preco) || 0, comissao_pct: Number(item.comissao_pct) || 0 }
+      : { preco: Number(item.preco) || 0 };
+    const { error } = await supabase.from(tabela).update(payload).eq('id', item.id);
+    if (!error) {
+      const k = `${tipo}_${item.id}`;
+      setProdutosSaved(prev => ({ ...prev, [k]: true }));
+      setTimeout(() => setProdutosSaved(prev => ({ ...prev, [k]: false })), 2000);
+    }
+  }
+
+  function updateCurso(id, field, value) {
+    setCursosCfg(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+  }
+  function updateEbook(id, field, value) {
+    setEbooksCfg(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  }
+
   useEffect(() => {
     supabase.from('planos_config').select('*').order('preco', { ascending: true })
       .then(({ data, error }) => {
@@ -605,6 +631,8 @@ function ConfigTab() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  const [contratoPlano, setContratoPlano] = useState(null); // plano_key para abrir modal contrato
+
   async function salvarPlano(p) {
     const { error } = await supabase.from('planos_config').update({
       preco: Number(p.preco) || 0,
@@ -612,6 +640,7 @@ function ConfigTab() {
       preco_anual: p.preco_anual ? Number(p.preco_anual) : null,
       cobrar: p.cobrar,
       ativo: p.ativo,
+      comissao_pct: Number(p.comissao_pct) || 0,
       atualizado_em: new Date().toISOString(),
     }).eq('plano_key', p.plano_key);
     if (!error) {
@@ -646,13 +675,13 @@ function ConfigTab() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 85px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
-              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Preço Anual', 'Cobrar?', 'Ativo?', ''].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 80px 80px 90px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
+              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Preço Anual', 'Cobrar?', 'Ativo?', 'Comissão %', 'Contrato', ''].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
             {planos.map(p => (
-              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 85px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 80px 80px 90px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.nome}</div>
                   <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.plano_key}</div>
@@ -680,6 +709,21 @@ function ConfigTab() {
                   <input type="checkbox" checked={p.ativo} onChange={e => updatePlano(p.plano_key, 'ativo', e.target.checked)}
                     style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#10b981' }} />
                 </div>
+                {/* Comissão % */}
+                <div>
+                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>%</div>
+                  <input type="number" min="0" max="100" step="0.5"
+                    value={p.comissao_pct ?? 0}
+                    onChange={e => updatePlano(p.plano_key, 'comissao_pct', e.target.value)}
+                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                </div>
+                {/* Botão Contrato */}
+                <div>
+                  <button onClick={() => setContratoPlano(p.plano_key)}
+                    style={{ padding: '6px 10px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
+                    📄 Contrato
+                  </button>
+                </div>
                 <button onClick={() => salvarPlano(p)}
                   style={{ padding: '7px 14px', background: planosSaved[p.plano_key] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                   {planosSaved[p.plano_key] ? '✓ Salvo' : 'Salvar'}
@@ -689,6 +733,213 @@ function ConfigTab() {
           </div>
         )}
       </div>
+
+      {/* ── Cursos e eBooks — preços, comissões e contratos ── */}
+      {(cursosCfg.length > 0 || ebooksCfg.length > 0) && (
+        <div style={S.card}>
+          <p style={S.subTitle}>Cursos e eBooks — Preços, Comissões e Contratos</p>
+          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+            Gerencie preços e comissões dos produtos digitais em um só lugar. Valor 0 = incluído na assinatura.
+          </p>
+
+          {/* Cursos */}
+          {cursosCfg.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Cursos</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px 80px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
+                {['Título', 'Preço (R$)', 'Comissão %', 'Contrato', ''].map(h => (
+                  <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>{h}</div>
+                ))}
+              </div>
+              {cursosCfg.map(c => (
+                <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px 80px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>🎓 {c.titulo}</div>
+                  <InputBRL value={c.preco ?? 0} onChange={v => updateCurso(c.id, 'preco', v)}
+                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  <input type="number" min="0" max="100" step="0.5" value={c.comissao_pct ?? 0}
+                    onChange={e => updateCurso(c.id, 'comissao_pct', e.target.value)}
+                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  <button onClick={() => setContratoPlano(`curso:${c.id}:${c.titulo}`)}
+                    style={{ padding: '6px 8px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
+                    📄 Contrato
+                  </button>
+                  <button onClick={() => salvarProduto('curso', c)}
+                    style={{ padding: '7px 10px', background: produtosSaved[`curso_${c.id}`] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    {produtosSaved[`curso_${c.id}`] ? '✓' : 'Salvar'}
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* eBooks */}
+          {ebooksCfg.length > 0 && (
+            <div style={{ marginTop: cursosCfg.length > 0 ? 20 : 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>eBooks</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 80px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
+                {['Título', 'Preço (R$)', 'Contrato', ''].map(h => (
+                  <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>{h}</div>
+                ))}
+              </div>
+              {ebooksCfg.map(e => (
+                <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 80px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>📖 {e.titulo}</div>
+                  <InputBRL value={e.preco ?? 0} onChange={v => updateEbook(e.id, 'preco', v)}
+                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  <button onClick={() => setContratoPlano(`ebook:${e.id}:${e.titulo}`)}
+                    style={{ padding: '6px 8px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
+                    📄 Contrato
+                  </button>
+                  <button onClick={() => salvarProduto('ebook', e)}
+                    style={{ padding: '7px 10px', background: produtosSaved[`ebook_${e.id}`] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    {produtosSaved[`ebook_${e.id}`] ? '✓' : 'Salvar'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Modal de geração de contrato por plano / produto ── */}
+      {contratoPlano && (() => {
+        // contratoPlano pode ser 'assessorado' (plano) ou 'curso:id:titulo' ou 'ebook:id:titulo'
+        const partes = contratoPlano.split(':');
+        const isProduto = partes[0] === 'curso' || partes[0] === 'ebook';
+        const produtoTitulo = isProduto ? partes.slice(2).join(':') : null;
+        const planoObj = isProduto ? null : planos.find(p => p.plano_key === contratoPlano);
+        const nomeModal = isProduto
+          ? `${partes[0] === 'curso' ? 'Curso' : 'eBook'} — ${produtoTitulo}`
+          : planoObj?.nome || contratoPlano;
+
+        const DESCRICOES = {
+          assessorado: 'Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.',
+          clube: 'Adesão ao Clube de Negócios TSN Ativos: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.',
+          consultor: 'Contratação de consultor/afiliado para divulgação dos serviços TSN Ativos e captação de novos clientes. Remuneração por comissão de ' + (planoObj?.comissao_pct || 0) + '% sobre cada cliente ativo indicado. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.',
+          analista: 'Contratação de analista para elaboração de relatórios de viabilidade econômico-financeira e análise de editais de imóveis em leilão judicial e extrajudicial. Remuneração por laudo emitido, a combinar. Sigilo sobre todos os dados dos clientes e imóveis analisados. Prazo indeterminado, rescisão com aviso de 30 dias.',
+          advogado: 'Parceria com advogado para análise jurídica de matrícula, edital, processo e certidões de imóveis em leilão, emissão de parecer jurídico por operação. Remuneração por parecer emitido, a combinar. Total sigilo sobre dados dos clientes. Prazo indeterminado, rescisão com aviso de 30 dias. Escritório parceiro independente.',
+          top1: 'Assinatura do plano Investidor Pro — acesso à plataforma TSN Ativos, ferramentas de análise, cursos e ebooks incluídos. Valor: R$49,90/mês, cobrança recorrente mensal. Cancelamento a qualquer momento.',
+          top2: 'Assinatura do plano Investidor Pro — acesso à plataforma TSN Ativos, ferramentas de análise, cursos e ebooks incluídos. Valor: R$99,90/mês, cobrança recorrente mensal. Cancelamento a qualquer momento.',
+        };
+        const descProduto = isProduto
+          ? `Contrato de aquisição: ${nomeModal}. Produto digital disponível na plataforma TSN Ativos. Acesso individual e intransferível. Valor conforme combinado.`
+          : (DESCRICOES[contratoPlano] || '');
+        const [nomeCliente, setNomeCliente] = useState('');
+        const [cpfCliente, setCpfCliente] = useState('');
+        const [emailCliente, setEmailCliente] = useState('');
+        const [descContrato, setDescContrato] = useState(descProduto);
+        const [gerando, setGerando] = useState(false);
+        const [linkGerado, setLinkGerado] = useState('');
+        const [copiado, setCopiado] = useState(false);
+
+        async function gerarContrato() {
+          if (!nomeCliente.trim()) { alert('Informe o nome do cliente.'); return; }
+          setGerando(true);
+          try {
+            const descFull = `Cliente: ${nomeCliente}${cpfCliente ? ` · CPF: ${cpfCliente}` : ''}${emailCliente ? ` · Email: ${emailCliente}` : ''}\n\n${descContrato}`;
+            const r = await fetch('/api/gerar-contrato', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                titulo: `Contrato — ${nomeModal}`,
+                tipo: 'servico',
+                descricao: descFull,
+                arquivos: [],
+              }),
+            });
+            const d = await r.json();
+            if (d.conteudo) {
+              // Salva o contrato no banco
+              const { data: saved } = await supabase.from('contratos_link').insert({
+                titulo: `Contrato — ${nomeModal}`,
+                tipo: 'servico',
+                conteudo: d.conteudo,
+                status: 'pendente',
+                criado_por: (await supabase.auth.getUser()).data?.user?.id,
+              }).select().single();
+              if (saved) {
+                const link = `${window.location.origin}${window.location.pathname}#/contrato/${saved.id}`;
+                setLinkGerado(link);
+              }
+            }
+          } catch (e) { alert('Erro ao gerar contrato.'); }
+          setGerando(false);
+        }
+
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+            onClick={e => { if (e.target === e.currentTarget) { setContratoPlano(null); setLinkGerado(''); } }}>
+            <div style={{ background:'white', borderRadius:16, padding:32, width:'100%', maxWidth:540, maxHeight:'90vh', overflowY:'auto' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+                <div>
+                  <div style={{ fontWeight:900, fontSize:16, color:'#0f172a' }}>📄 Contrato — {nomeModal}</div>
+                  <div style={{ fontSize:12, color:'#64748b' }}>Preencha os dados do cliente para gerar o contrato pré-preenchido.</div>
+                </div>
+                <button onClick={() => { setContratoPlano(null); setLinkGerado(''); }} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+              </div>
+
+              {!linkGerado ? (
+                <>
+                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                    <div>
+                      <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>NOME COMPLETO DO CLIENTE *</label>
+                      <input value={nomeCliente} onChange={e=>setNomeCliente(e.target.value)} placeholder="Ex: João da Silva"
+                        style={{ ...S.input, width:'100%', padding:'10px 12px' }} />
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>CPF</label>
+                        <input value={cpfCliente} onChange={e=>setCpfCliente(e.target.value)} placeholder="000.000.000-00"
+                          style={{ ...S.input, width:'100%', padding:'10px 12px' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>EMAIL</label>
+                        <input value={emailCliente} onChange={e=>setEmailCliente(e.target.value)} placeholder="cliente@email.com"
+                          style={{ ...S.input, width:'100%', padding:'10px 12px' }} />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>DESCRIÇÃO DO CONTRATO</label>
+                      <textarea value={descContrato} onChange={e=>setDescContrato(e.target.value)} rows={6}
+                        style={{ ...S.input, width:'100%', padding:'10px 12px', resize:'vertical', fontFamily:'inherit' }} />
+                      <div style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>Pré-preenchido conforme o produto. Edite se necessário.</div>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:10, marginTop:20 }}>
+                    <button onClick={() => { setContratoPlano(null); }}
+                      style={{ flex:1, padding:'11px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
+                      Cancelar
+                    </button>
+                    <button onClick={gerarContrato} disabled={gerando}
+                      style={{ flex:2, padding:'11px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:800, cursor:'pointer', opacity:gerando?0.7:1 }}>
+                      {gerando ? '⏳ Gerando…' : '🤖 Gerar contrato com IA →'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ textAlign:'center' }}>
+                  <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
+                  <div style={{ fontWeight:800, fontSize:16, color:'#0f172a', marginBottom:6 }}>Contrato gerado!</div>
+                  <div style={{ fontSize:13, color:'#64748b', marginBottom:20 }}>Envie o link abaixo para o cliente assinar digitalmente.</div>
+                  <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'12px 14px', fontSize:13, color:'#2563eb', wordBreak:'break-all', marginBottom:16 }}>
+                    {linkGerado}
+                  </div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={() => { navigator.clipboard.writeText(linkGerado); setCopiado(true); setTimeout(()=>setCopiado(false),2000); }}
+                      style={{ flex:1, padding:'10px', background:copiado?'#10b981':'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
+                      {copiado ? '✓ Copiado!' : '📋 Copiar link'}
+                    </button>
+                    <button onClick={() => { setContratoPlano(null); setLinkGerado(''); }}
+                      style={{ flex:1, padding:'10px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
