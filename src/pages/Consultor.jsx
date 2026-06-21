@@ -38,6 +38,7 @@ export default function Consultor() {
   const [carteira, setCarteira] = useState([]);
   const [comissoes, setComissoes] = useState([]);
   const [cursos, setCursos] = useState([]);
+  const [ebooks, setEbooks] = useState([]);
   const [planosConfig, setPlanosConfig] = useState([]);
   const [sdrProdutos, setSdrProdutos] = useState([]);
   const [linksPromo, setLinksPromo] = useState([]);
@@ -66,11 +67,12 @@ export default function Consultor() {
   useEffect(() => {
     if (!user || !podeVer) { setLoading(false); return; }
     async function load() {
-      const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: lp }, { data: lc }, { data: pc }, { data: sdrProd }] = await Promise.all([
+      const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: eb }, { data: lp }, { data: lc }, { data: pc }, { data: sdrProd }] = await Promise.all([
         supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', user.id).single(),
         supabase.from('perfis').select('id, nome, email, whatsapp, telefone, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
         supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
         supabase.from('cursos_admin').select('id, titulo, subtitulo, preco, emoji, cor').eq('ativo', true).order('ordem'),
+        supabase.from('ebooks_admin').select('id, titulo, preco').eq('ativo', true).order('criado_em', { ascending: false }),
         supabase.from('links_promo').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
         supabase.from('links_convite').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
         supabase.from('planos_config').select('plano_key,nome,preco,preco_vista').eq('ativo', true),
@@ -80,6 +82,7 @@ export default function Consultor() {
       setCarteira(cli || []);
       setComissoes(com || []);
       setCursos(cs || []);
+      setEbooks(eb || []);
       setPlanosConfig(pc || []);
       setSdrProdutos(sdrProd || []);
       setLinksPromo(lp || []);
@@ -313,33 +316,39 @@ export default function Consultor() {
                       },
                       {
                         emoji: '🎁',
-                        label: 'Assinatura Explorador',
-                        sub: 'Acesso gratuito · cadastro direto',
+                        label: 'Acesso Gratuito (Explorador)',
+                        sub: 'Cadastro grátis · sem cartão',
                         url: `${origin}/#/login?modo=cadastro${codigo?`&ref=${codigo}`:''}`,
                       },
                       {
                         emoji: '⭐',
-                        label: 'Assinatura Investidor Pro',
-                        sub: 'R$ 49,90/mês · checkout direto',
-                        url: `${origin}/#/checkout?plano=top1${codigo?`&ref=${codigo}`:''}`,
+                        label: 'Investidor Pro',
+                        sub: 'R$ 49,90/mês · ver plano e assinar',
+                        url: `${origin}/#/planos${codigo?`?ref=${codigo}`:''}`,
                       },
                       {
                         emoji: '🏅',
                         label: 'Assessoria',
-                        sub: 'R$ 6.000 parcelado · R$ 5.000 à vista · checkout direto',
-                        url: `${origin}/#/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
+                        sub: 'R$ 6.000 parcelado · R$ 5.000 à vista · ver plano e contratar',
+                        url: `${origin}/#/planos${codigo?`?ref=${codigo}`:''}`,
                       },
                       {
                         emoji: '🏛️',
                         label: 'Clube de Negócios',
-                        sub: 'R$ 60.000/ano · R$ 48.000 à vista · checkout direto',
-                        url: `${origin}/#/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
+                        sub: 'R$ 60.000/ano · R$ 48.000 à vista · ver plano e contratar',
+                        url: `${origin}/#/planos${codigo?`?ref=${codigo}`:''}`,
                       },
                       ...cursos.map(c=>({
                         emoji: c.emoji||'🎓',
                         label: c.titulo,
                         sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Gratuito'}`,
                         url: `${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`,
+                      })),
+                      ...ebooks.map(e=>({
+                        emoji: '📖',
+                        label: e.titulo,
+                        sub: `eBook${Number(e.preco)>0?` · R$ ${Number(e.preco).toFixed(0)}`:'· Gratuito'}`,
+                        url: `${origin}/#/membros/ebook/${e.id}`,
                       })),
                       ...sdrProdutos.map(s=>({
                         emoji: s.tipo==='ebook'?'📖':s.tipo==='curso'?'🎓':s.tipo==='calculadora'?'🧮':'🎁',

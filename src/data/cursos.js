@@ -295,15 +295,15 @@ export const PLANOS = {
   },
   top1: {
     id: 'top1',
-    nome: 'Investidor',
+    nome: 'Investidor Pro',
     preco: 49.90,
     precoLabel: 'R$ 49,90',
     periodicidade: '/mês',
     cor: '#2563eb',
     bg: '#dbeafe',
-    homepage: false, // unificado no top2
+    homepage: true,
     destaque: false,
-    descricao: 'Plano legado — use Investidor Pro',
+    descricao: 'Plano de assinatura mensal para investidores ativos em leilões imobiliários.',
     recursos: [],
     limite_analises: -1,
     relatorio: true,
@@ -311,7 +311,7 @@ export const PLANOS = {
   },
   top2: {
     id: 'top2',
-    nome: 'Investidor',
+    nome: 'Investidor Pro',
     preco: 99.90,
     precoLabel: 'R$ 99,90',
     precoAnual: 797,
@@ -340,7 +340,7 @@ export const PLANOS = {
   },
   assessorado: {
     id: 'assessorado',
-    nome: 'Assessorado',
+    nome: 'Assessoria',
     preco: 500,
     precoLabel: 'R$ 500',
     precoVista: 5000,

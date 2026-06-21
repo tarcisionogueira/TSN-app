@@ -343,8 +343,8 @@ export default function Checkout() {
           {temModalidade && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
               {[
-                { key: 'mensal', label: planoKey === 'assessorado' ? '12× R$ 500' : 'Mensal R$ 5.000' },
-                { key: 'vista',  label: planoKey === 'assessorado' ? 'À vista R$ 5.000' : 'À vista R$ 48.000' },
+                { key: 'mensal', label: planoKey === 'assessorado' ? '12× R$ 500 (total R$ 6.000)' : '12× R$ 5.000 (total R$ 60.000)' },
+                { key: 'vista',  label: planoKey === 'assessorado' ? 'À vista R$ 5.000 (20% off)' : 'À vista R$ 48.000 (20% off)' },
               ].map(({ key, label }) => (
                 <button key={key} onClick={() => setModalidade(key)}
                   style={{ flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
