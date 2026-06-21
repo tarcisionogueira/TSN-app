@@ -30,9 +30,10 @@ function podeAssistir(licao, plano, comprouAvulso = false) {
 export default function Curso() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const curso = CURSOS.find(c => c.id === id);
-  const plano = getPlano();
+  // Role from auth takes precedence over localStorage fallback
+  const plano = role || getPlano();
 
   // progresso: { [aula_id]: true }
   const [progresso, setProgresso] = useState(getProgressoLocal());
@@ -146,7 +147,7 @@ export default function Curso() {
     );
   }
 
-  const podeVer = licaoAtiva ? podeAssistir(licaoAtiva, plano) : false;
+  const podeVer = licaoAtiva ? podeAssistir(licaoAtiva, plano, comprouAvulso) : false;
 
   const marcarConcluida = (lid) => {
     salvarProgresso(lid, true);
@@ -161,7 +162,7 @@ export default function Curso() {
   };
 
   const irParaLicao = (lic) => {
-    if (!podeAssistir(lic, plano)) { setShowUpgrade(true); return; }
+    if (!podeAssistir(lic, plano, comprouAvulso)) { setShowUpgrade(true); return; }
     setLicaoAtiva(lic);
     setVideoProgress(0);
     setVideoPlaying(false);

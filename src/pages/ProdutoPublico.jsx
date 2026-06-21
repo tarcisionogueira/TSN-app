@@ -12,11 +12,20 @@ export default function ProdutoPublico({ tipo }) {
   const [produto, setProduto] = useState(null);
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [comprouAvulso, setComprouAvulso] = useState(false);
 
   // Persiste código de referência do consultor
   useEffect(() => {
     if (ref) sessionStorage.setItem('tsn_ref_codigo', ref);
   }, [ref]);
+
+  // Verifica compra avulsa para produtos pagos
+  useEffect(() => {
+    if (!user || !id || !produto || Number(produto.preco || 0) === 0) return;
+    supabase.from('compras_produtos')
+      .select('id').eq('user_id', user.id).eq('produto_tipo', tipo).eq('produto_id', id).eq('status', 'ativo')
+      .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
+  }, [user, id, produto, tipo]);
 
   useEffect(() => {
     async function load() {
@@ -39,7 +48,8 @@ export default function ProdutoPublico({ tipo }) {
   if (loading) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Carregando…</div>;
   if (!produto) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Produto não encontrado.</div>;
 
-  const temAcesso = user && ['top1','top2','assessorado','clube','analista','advogado','admin'].includes(role);
+  const temPlano = user && ['top1','top2','assessorado','clube','analista','advogado','admin'].includes(role);
+  const temAcesso = temPlano || comprouAvulso;
   const isPago = Number(produto.preco) > 0;
   const cor = produto.cor || '#2563eb';
   const bgCor = cor + '20';
@@ -140,7 +150,7 @@ export default function ProdutoPublico({ tipo }) {
                   style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
                   {isPago ? 'Comprar agora →' : 'Criar conta e acessar →'}
                 </button>
-                <button onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top1`}`)}
+                <button onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top1`}${ref ? `&ref=${ref}` : ''}`)}
                   style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
                   Já tenho conta — Entrar
                 </button>
