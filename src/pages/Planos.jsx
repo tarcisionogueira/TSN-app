@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, X, Shield, Zap, Users, Star, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, X, Shield, Zap, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -23,7 +23,6 @@ export default function Planos() {
   const planoAtualPreco = PLANOS[role]?.preco ?? -1;
   const [promosPublicas, setPromosPublicas] = useState({});
   const [faqAberto, setFaqAberto] = useState(null);
-  const [anual, setAnual] = useState(false);
 
   useEffect(() => {
     fetchPlanosComConfig().then(setPLANOS);
@@ -46,11 +45,11 @@ export default function Planos() {
       });
   }, []);
 
-  const irParaCheckout = (key, plano) => {
+  const irParaCheckout = (key, plano, ciclo) => {
     if (key === role && user) return;
     if (plano.preco === 0) { nav(user ? '/membros' : '/login'); return; }
     const params = new URLSearchParams({ plano: key });
-    if (anual && plano.precoAnual) params.set('ciclo', 'anual');
+    if (ciclo === 'anual' && plano.precoAnual) params.set('ciclo', 'anual');
     nav(user ? `/checkout?${params}` : `/login?${params}`);
   };
 
@@ -117,19 +116,7 @@ export default function Planos() {
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 80px' }}>
 
-        {/* Toggle mensal / anual */}
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 32, marginBottom: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: !anual ? '#0f172a' : '#94a3b8' }}>Mensal</span>
-          <div onClick={() => setAnual(a => !a)} style={{ width: 48, height: 26, borderRadius: 99, background: anual ? '#2563eb' : '#e2e8f0', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
-            <div style={{ position: 'absolute', top: 3, left: anual ? 25 : 3, width: 20, height: 20, borderRadius: '50%', background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
-          </div>
-          <span style={{ fontSize: 14, fontWeight: 600, color: anual ? '#0f172a' : '#94a3b8' }}>
-            Anual
-            <span style={{ marginLeft: 8, background: '#dcfce7', color: '#16a34a', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99 }}>2 meses grátis</span>
-          </span>
-        </div>
-
-        {/* Cards principais — sobrepostos no hero */}
+        {/* Cards principais */}
         <div style={{ marginTop: -40, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20, maxWidth: 820, margin: '-40px auto 0' }} className="planos-grid-2">
 
           {/* Explorador */}
@@ -166,56 +153,41 @@ export default function Planos() {
             );
           })()}
 
-          {/* Investidor (top2) */}
+          {/* Investidor Pro (top2) */}
           {(() => {
             const [key, plano] = planosHome.find(([k]) => k === 'top2') || [];
             if (!plano) return null;
             const atual = ehPlanoAtual(key);
             const promo = promosPublicas[key];
+            const temAnual = !!plano.precoAnual;
+            const economia = temAnual ? (plano.preco * 12 - plano.precoAnual) : 0;
+            const fmtVal = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return (
               <div style={{ background: 'linear-gradient(145deg, #1e40af 0%, #1d4ed8 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 28px', boxShadow: '0 8px 32px rgba(37,99,235,0.35)', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-                <div style={{ position: 'absolute', top: 16, right: 16, background: '#fbbf24', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>
-                  ⭐ Mais popular
-                </div>
+                <div style={{ position: 'absolute', top: 16, right: 16, background: '#fbbf24', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>⭐ Mais popular</div>
                 {atual && <div style={{ background: 'rgba(255,255,255,0.2)', color: 'white', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16, display: 'inline-block', alignSelf: 'flex-start' }}>Seu plano</div>}
-                <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>Investidor</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>Investidor Pro</div>
 
+                {/* Preço mensal */}
                 {promo?.desconto_pct > 0 ? (
-                  <div style={{ marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                      <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{plano.precoLabel}</div>
-                      <div style={{ fontSize: 16, color: '#93c5fd', textDecoration: 'line-through' }}>{plano.precoOriginalLabel || plano.precoLabel}</div>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#86efac', fontWeight: 700, marginBottom: 4 }}>🎁 {promo.descricao_condicoes}</div>
-                  </div>
-                ) : plano.precoOriginal ? (
-                  <div style={{ marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                      <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{plano.precoLabel}</div>
-                      <div style={{ fontSize: 16, color: '#93c5fd', textDecoration: 'line-through' }}>{plano.precoOriginalLabel}</div>
-                    </div>
-                    <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.2)', border: '1px solid #86efac', color: '#86efac', fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 20, marginBottom: 4 }}>OFERTA DE LANÇAMENTO</div>
-                  </div>
-                ) : anual && plano.precoAnual ? (
-                  <div style={{ marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                      <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{plano.precoMensalAnualLabel}</div>
-                      <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
-                    </div>
-                    <div style={{ fontSize: 12, color: '#86efac', fontWeight: 700 }}>
-                      {plano.precoAnualLabel}/ano · economia de R$ {(plano.preco * 12 - plano.precoAnual).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+                    <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{plano.precoLabel}</div>
+                    <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
                   </div>
                 ) : (
-                  <div style={{ fontSize: 42, fontWeight: 900, color: 'white', marginBottom: 4 }}>{plano.precoLabel}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+                    <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>R$ {fmtVal(plano.preco)}</div>
+                    <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
+                  </div>
                 )}
+                <div style={{ fontSize: 12, color: '#93c5fd', marginBottom: 20 }}>cobrança recorrente · cancele quando quiser</div>
 
-                <div style={{ fontSize: 13, color: '#93c5fd', marginBottom: 20 }}>{anual && plano.precoAnual ? `cobrado anualmente · ${plano.precoAnualLabel}/ano` : 'por mês · cancele quando quiser'}</div>
-                <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 24, lineHeight: 1.6 }}>
+                <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 20, lineHeight: 1.6 }}>
                   Relatório completo gerado por IA + análise jurídica documental. Tudo que você precisa para arrematar com segurança.
                 </p>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
+
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
                   {recursosInvestidor.map(({ txt }) => (
                     <div key={txt} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(134,239,172,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={12} color="#86efac" /></div>
@@ -223,10 +195,26 @@ export default function Planos() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => irParaCheckout(key, plano)} disabled={atual}
-                  style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual ? 'rgba(255,255,255,0.15)' : 'white', color: atual ? '#93c5fd' : '#1e40af', fontWeight: 800, fontSize: 15, cursor: atual ? 'default' : 'pointer', boxShadow: atual ? 'none' : '0 4px 14px rgba(0,0,0,0.2)', transition: 'all 0.15s' }}>
-                  {labelBotao(key, plano)}
-                </button>
+
+                {/* CTAs */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Botão mensal */}
+                  <button onClick={() => irParaCheckout(key, plano, 'mensal')} disabled={atual}
+                    style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual ? 'rgba(255,255,255,0.15)' : 'white', color: atual ? '#93c5fd' : '#1e40af', fontWeight: 800, fontSize: 15, cursor: atual ? 'default' : 'pointer', boxShadow: atual ? 'none' : '0 4px 14px rgba(0,0,0,0.2)' }}>
+                    {atual ? 'Seu plano atual' : `Assinar mensal — R$ ${fmtVal(plano.preco)}/mês`}
+                  </button>
+
+                  {/* Botão anual — só aparece se não for plano atual e tiver preço anual */}
+                  {!atual && temAnual && (
+                    <button onClick={() => irParaCheckout(key, plano, 'anual')}
+                      style={{ width: '100%', padding: '12px', border: '1px solid rgba(134,239,172,0.5)', borderRadius: 12, background: 'rgba(134,239,172,0.1)', color: '#86efac', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <span>Anual — R$ {fmtVal(plano.precoAnual)}/ano</span>
+                      <span style={{ background: 'rgba(134,239,172,0.25)', borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 800 }}>
+                        25% off · economize R$ {fmtVal(economia)}
+                      </span>
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })()}
