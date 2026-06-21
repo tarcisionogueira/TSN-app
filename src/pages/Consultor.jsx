@@ -305,10 +305,48 @@ export default function Consultor() {
                   <p style={{ fontSize:12, color:'#94a3b8', margin:'0 0 14px' }}>Todos os produtos e links disponíveis para enviar ao cliente durante o atendimento.</p>
                   <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     {[
-                      { label:'Calculadora de Lances', sub:'Ferramenta gratuita', url:`${origin}/#/calculadora`, emoji:'🧮' },
-                      ...planosVenda.map(pl=>({ label:pl.nome, sub:pl.precoLabel, url:`${origin}/#/p/plano/${pl.key}${codigo?`?ref=${codigo}`:''}`, emoji:'⭐' })),
-                      ...cursos.map(c=>({ label:c.titulo, sub:`Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Gratuito'}`, url:`${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`, emoji:c.emoji||'🎓' })),
-                      ...sdrProdutos.map(s=>({ label:s.nome, sub:`${s.tipo||'Conteúdo'} · Acesso gratuito`, url:`${origin}/#/p/captura/${s.id}`, emoji: s.tipo==='ebook'?'📖':s.tipo==='curso'?'🎓':s.tipo==='calculadora'?'🧮':'🎁' })),
+                      {
+                        emoji: '🧮',
+                        label: 'Calculadora de Lances',
+                        sub: 'Ferramenta gratuita · com chamada para a plataforma',
+                        url: `${origin}/#/calculadora`,
+                      },
+                      {
+                        emoji: '🎁',
+                        label: 'Assinatura Explorador',
+                        sub: 'Acesso gratuito · cadastro direto',
+                        url: `${origin}/#/login?modo=cadastro${codigo?`&ref=${codigo}`:''}`,
+                      },
+                      {
+                        emoji: '⭐',
+                        label: 'Assinatura Investidor Pro',
+                        sub: 'R$ 49,90/mês · checkout direto',
+                        url: `${origin}/#/checkout?plano=top1${codigo?`&ref=${codigo}`:''}`,
+                      },
+                      {
+                        emoji: '🏅',
+                        label: 'Assessoria',
+                        sub: 'R$ 6.000 parcelado · R$ 5.000 à vista · checkout direto',
+                        url: `${origin}/#/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
+                      },
+                      {
+                        emoji: '🏛️',
+                        label: 'Clube de Negócios',
+                        sub: 'R$ 60.000/ano · R$ 48.000 à vista · checkout direto',
+                        url: `${origin}/#/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
+                      },
+                      ...cursos.map(c=>({
+                        emoji: c.emoji||'🎓',
+                        label: c.titulo,
+                        sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Gratuito'}`,
+                        url: `${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`,
+                      })),
+                      ...sdrProdutos.map(s=>({
+                        emoji: s.tipo==='ebook'?'📖':s.tipo==='curso'?'🎓':s.tipo==='calculadora'?'🧮':'🎁',
+                        label: s.nome,
+                        sub: `${s.tipo||'Conteúdo'} · Acesso gratuito`,
+                        url: `${origin}/#/p/captura/${s.id}`,
+                      })),
                     ].map((item,i)=>(
                       <div key={i} style={{ background:'rgba(255,255,255,0.07)', borderRadius:10, padding:'10px 14px', display:'flex', alignItems:'center', gap:10 }}>
                         <span style={{ fontSize:18, flexShrink:0 }}>{item.emoji}</span>
@@ -328,16 +366,6 @@ export default function Consultor() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                  <p style={{ fontSize:11, color:'#60a5fa', margin:'10px 0 0', lineHeight:1.5 }}>💡 O sistema informa ao cliente automaticamente se já tem acesso ao conteúdo durante o atendimento.</p>
-                </div>
-
-                {/* Link geral */}
-                <div>
-                  <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', marginBottom:8 }}>Link geral de indicação</div>
-                  <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-                    <input readOnly value={linkBase} style={{ flex:1, minWidth:240, padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, color:'#334155', background:'#f8fafc' }}/>
-                    <CopyBtn texto={linkBase}/>
                   </div>
                 </div>
 
