@@ -600,7 +600,12 @@ export default function Checkout() {
               {!linkPagamento && (
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
                   <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
-                  <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#2563eb' }}>Termos de Uso</a> e autorizo a cobrança recorrente conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma.</span>
+                  <span>
+                    Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#2563eb' }}>Termos de Uso</a>.{' '}
+                    {temToggleAnual && modalidade === 'anual'
+                      ? `Estou ciente de que esta é uma contratação anual de valor único (${plano?.precoAnualLabel || 'R$ 449,90'}), podendo ser paga em até 12× no cartão. Não há renovação automática — o acesso é válido por 12 meses a partir da confirmação do pagamento.`
+                      : 'Autorizo a cobrança recorrente mensal conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma sem multa.'}
+                  </span>
                 </label>
               )}
               <button onClick={ehMudanca ? mudarPlano : gerarLink} disabled={loading || !aceitouTermos}
