@@ -609,6 +609,7 @@ function ConfigTab() {
     const { error } = await supabase.from('planos_config').update({
       preco: Number(p.preco) || 0,
       preco_vista: p.preco_vista ? Number(p.preco_vista) : null,
+      preco_anual: p.preco_anual ? Number(p.preco_anual) : null,
       cobrar: p.cobrar,
       ativo: p.ativo,
       atualizado_em: new Date().toISOString(),
@@ -636,19 +637,22 @@ function ConfigTab() {
           Altere os valores aqui. O sistema usa esses preços na cobrança e exibição para o cliente.
           Campos à vista: apenas para Assessorado e Clube. Coluna "Cobrar": desative para planos operacionais gratuitos.
         </p>
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#1e40af' }}>
+          ℹ️ <strong>Renovação automática:</strong> Planos anuais são renovados automaticamente ao final do período de 12 meses. O cliente é informado desta condição no momento da contratação, na página de planos, e por email 7 dias antes da renovação.
+        </div>
         {planosErr && <div style={{ background: '#fee2e2', color: '#dc2626', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{planosErr}</div>}
         {planosLoading ? (
           <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '160px 130px 130px 80px 70px 90px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
-              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Cobrar?', 'Ativo?', ''].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 85px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
+              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Preço Anual', 'Cobrar?', 'Ativo?', ''].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
             {planos.map(p => (
-              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '160px 130px 130px 80px 70px 90px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 85px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.nome}</div>
                   <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.plano_key}</div>
@@ -661,6 +665,11 @@ function ConfigTab() {
                 <div>
                   <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (opcional)</div>
                   <InputBRL value={p.preco_vista ?? ''} onChange={v => updatePlano(p.plano_key, 'preco_vista', v || null)}
+                    placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (anual)</div>
+                  <InputBRL value={p.preco_anual ?? ''} onChange={v => updatePlano(p.plano_key, 'preco_anual', v || null)}
                     placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
                 </div>
                 <div style={{ textAlign: 'center' }}>
@@ -1506,11 +1515,76 @@ function ScrapersMonitor() {
   );
 }
 
+function UsuariosPlanoDetalhe({ planoKey }) {
+  const [usuarios, setUsuarios] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const LABEL = { explorador: 'Explorador (Grátis)', top1: 'Investidor (R$49,90)', top2: 'Investidor Pro (R$99,90)', assessorado: 'Assessorado (R$500×12)', clube: 'Clube de Negócios (R$5k/mês)' };
+  const PRECO = { explorador: 0, top1: 49.90, top2: 99.90, assessorado: 500, clube: 5000 };
+  const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  React.useEffect(() => {
+    supabase.from('perfis')
+      .select('id, nome, email, created_at, inadimplente_desde, plano_ciclo, plano_vencimento')
+      .eq('role', planoKey)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { setUsuarios(data || []); setLoading(false); });
+  }, [planoKey]);
+
+  if (loading) return <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 20 }}>Carregando...</div>;
+
+  const preco = PRECO[planoKey] || 0;
+  const mrr = usuarios.filter(u => !u.inadimplente_desde).length * preco;
+  const inadimplentes = usuarios.filter(u => u.inadimplente_desde).length;
+
+  return (
+    <div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>{LABEL[planoKey]}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+        {[
+          { label: 'Total', value: usuarios.length, cor: '#2563eb' },
+          { label: 'Ativos', value: usuarios.length - inadimplentes, cor: '#10b981' },
+          { label: preco > 0 ? 'MRR estimado' : '—', value: preco > 0 ? `R$ ${fmt(mrr)}` : '—', cor: '#7c3aed' },
+        ].map(({ label, value, cor }) => (
+          <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: cor }}>{value}</div>
+          </div>
+        ))}
+      </div>
+      {inadimplentes > 0 && (
+        <div style={{ background: '#fef2f2', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#dc2626', fontWeight: 600, marginBottom: 12 }}>
+          ⚠️ {inadimplentes} inadimplente{inadimplentes > 1 ? 's' : ''}
+        </div>
+      )}
+      <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {usuarios.map(u => (
+          <div key={u.id} style={{ padding: '8px 10px', background: u.inadimplente_desde ? '#fef2f2' : '#f8fafc', borderRadius: 8, border: `1px solid ${u.inadimplente_desde ? '#fca5a5' : '#e2e8f0'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{u.nome || '—'}</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{u.email}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>Desde {new Date(u.created_at).toLocaleDateString('pt-BR')}</div>
+                {u.inadimplente_desde && <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 700 }}>Inadimplente</div>}
+                {u.plano_ciclo === 'anual' && <div style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700 }}>Anual</div>}
+              </div>
+            </div>
+          </div>
+        ))}
+        {usuarios.length === 0 && <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 20 }}>Nenhum usuário neste plano.</div>}
+      </div>
+    </div>
+  );
+}
+
 function DashboardTab() {
   const [dados, setDados] = useState(null);
   const [asaasDados, setAsaasDados] = useState(null);
   const [loading, setLoading] = useState(true);
   const [asaasLoading, setAsaasLoading] = useState(true);
+  const [usuariosDetalhe, setUsuariosDetalhe] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -1598,33 +1672,40 @@ function DashboardTab() {
         {/* Coluna esquerda: Usuários por plano */}
         <div>
           <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16 }}>Usuários por plano</div>
-            {[
-              { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b', preco: 0 },
-              { key: 'top1',       label: 'Investidor (R$49,90)',     cor: '#2563eb', preco: 49.90 },
-              { key: 'top2',       label: 'Investidor Pro (R$99,90)', cor: '#7c3aed', preco: 99.90 },
-              { key: 'assessorado',label: 'Assessorado (R$500×12)', cor: '#d97706', preco: 500 },
-              { key: 'clube',      label: 'Clube de Negócios (R$5k/mês)', cor: '#059669', preco: 5000 },
-            ].map(({ key, label, cor, preco }) => {
-              const qtd = dados.contagem[key] || 0;
-              const receita = qtd * preco;
-              return (
-                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: cor }} />
-                    <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              Usuários por plano
+              {usuariosDetalhe && <button onClick={() => setUsuariosDetalhe(false)} style={{ fontSize: 12, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>← Voltar</button>}
+            </div>
+
+            {!usuariosDetalhe ? (
+              // Vista resumida — só quantidade, clicável
+              [
+                { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b' },
+                { key: 'top1',       label: 'Investidor',          cor: '#2563eb' },
+                { key: 'top2',       label: 'Investidor Pro',      cor: '#7c3aed' },
+                { key: 'assessorado',label: 'Assessorado',         cor: '#d97706' },
+                { key: 'clube',      label: 'Clube de Negócios',   cor: '#059669' },
+              ].map(({ key, label, cor }) => {
+                const qtd = dados.contagem[key] || 0;
+                return (
+                  <div key={key} onClick={() => setUsuariosDetalhe(key)}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: 8, marginBottom: 4, cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: cor }} />
+                      <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{qtd}</span>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>→</span>
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{qtd}</div>
-                    {preco > 0 && <div style={{ fontSize: 11, color: '#64748b' }}>R$ {fmt(receita)}/mês</div>}
-                  </div>
-                </div>
-              );
-            })}
-            {dados.inadimplentes > 0 && (
-              <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', borderRadius: 8, fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
-                ⚠️ {dados.inadimplentes} usuário{dados.inadimplentes > 1 ? 's' : ''} inadimplente{dados.inadimplentes > 1 ? 's' : ''}
-              </div>
+                );
+              })
+            ) : (
+              // Vista analítica — lista completa de usuários do plano selecionado
+              <UsuariosPlanoDetalhe planoKey={usuariosDetalhe} />
             )}
           </div>
 
@@ -3676,76 +3757,81 @@ function RegistrosTab() {
 }
 
 function CnjTab() {
-  // CNJ search state
-  const [form, setForm] = React.useState({ numero: '', nome: '', uf: '' });
-  const [buscando, setBuscando] = React.useState(false);
-  const [resultado, setResultado] = React.useState(null);
-  const [erroBusca, setErroBusca] = React.useState('');
-
-  // Admin chat state — sempre aberto, independente da busca CNJ
   const [chat, setChat] = React.useState([]);
   const [pergunta, setPergunta] = React.useState('');
   const [perguntando, setPerguntando] = React.useState(false);
   const [gerarRelatorio, setGerarRelatorio] = React.useState(false);
-
-  // Contexto de conversas de usuários
   const [modalConv, setModalConv] = React.useState(false);
   const [filtroConv, setFiltroConv] = React.useState({ tipo: 'ultimos', valor: '10', chamado_id: '' });
-  const [contextoConv, setContextoConv] = React.useState(null); // filtro_chamados ativo
-  const [loadingConv, setLoadingConv] = React.useState(false);
-
+  const [contextoConv, setContextoConv] = React.useState(null);
+  const [resultadoCnj, setResultadoCnj] = React.useState(null);
   const chatRef = React.useRef(null);
 
-  const NIVEL_COR = { verde: '#16a34a', amarelo: '#d97706', vermelho: '#dc2626' };
-  const NIVEL_BG  = { verde: '#f0fdf4', amarelo: '#fffbeb', vermelho: '#fef2f2' };
-  const SEV_COR   = { bloqueante: '#dc2626', alerta: '#d97706' };
-
-  async function buscar() {
-    if (!form.numero && !form.nome) { setErroBusca('Informe o número do processo ou nome da parte.'); return; }
-    if (!form.uf) { setErroBusca('UF é obrigatória.'); return; }
-    setBuscando(true); setErroBusca(''); setResultado(null);
-    try {
-      const r = await fetch('/api/cnj-datajud', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ numero_processo: form.numero, nome_parte: form.nome, uf: form.uf }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Erro na consulta');
-      setResultado(data);
-    } catch (e) { setErroBusca(e.message); }
-    finally { setBuscando(false); }
+  // Detecta se a mensagem é uma busca CNJ
+  function detectarCNJ(texto) {
+    const num = texto.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/);
+    if (num) return { numero_processo: num[0], uf: (texto.match(/\b([A-Z]{2})\b/) || [])[1] || 'BA' };
+    const parteMatch = texto.match(/(?:nome(?:\s+da\s+parte)?|parte|devedor|proprietário)[:\s]+([^,\n]+)/i);
+    const ufMatch = texto.match(/\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/i);
+    if (parteMatch && ufMatch) return { nome_parte: parteMatch[1].trim(), uf: ufMatch[1].toUpperCase() };
+    return null;
   }
 
   async function aplicarContextoConv() {
-    setLoadingConv(true);
     let filtro = {};
     if (filtroConv.tipo === 'chamado') filtro = { chamado_id: filtroConv.chamado_id };
     else if (filtroConv.tipo === 'usuario') filtro = { usuario_id: filtroConv.valor };
     else filtro = { ultimos_n: Number(filtroConv.valor) || 10 };
     setContextoConv(filtro);
-    setLoadingConv(false);
     setModalConv(false);
   }
 
   async function enviarPergunta() {
     if (!pergunta.trim()) return;
-    const novaMensagem = { role: 'user', content: pergunta };
-    const novoChat = [...chat, novaMensagem];
-    setChat(novoChat); setPergunta(''); setPerguntando(true);
+    const texto = pergunta.trim();
+    const novaMensagem = { role: 'user', content: texto };
+    setChat(prev => [...prev, novaMensagem]);
+    setPergunta('');
+    setPerguntando(true);
+
+    let cnj = resultadoCnj;
+
+    // Tenta busca automática no CNJ se a mensagem contiver número ou nome de parte
+    const params = detectarCNJ(texto);
+    if (params) {
+      setChat(prev => [...prev, { role: 'assistant', content: `🔍 Consultando DataJud com os dados encontrados na sua pergunta...` }]);
+      try {
+        const r = await fetch('/api/cnj-datajud', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
+        const data = await r.json();
+        if (r.ok) {
+          cnj = data;
+          setResultadoCnj(data);
+          const n = data.processos?.length || 0;
+          setChat(prev => {
+            const sem = prev.filter(m => !m.content.startsWith('🔍'));
+            return [...sem, { role: 'assistant', content: `📋 Encontrei ${n} processo${n !== 1 ? 's' : ''} no DataJud. ${data.parecer?.texto || ''}` }];
+          });
+        }
+      } catch (_) {}
+    }
+
     try {
       const r = await fetch('/api/admin-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mensagem: pergunta,
-          historico: chat,
-          contexto_cnj: resultado || undefined,
+          mensagem: texto,
+          historico: chat.filter(m => !m.content.startsWith('🔍') && !m.content.startsWith('📋')),
+          contexto_cnj: cnj || undefined,
           filtro_chamados: contextoConv || undefined,
           gerar_relatorio: gerarRelatorio,
         }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Erro');
-      setChat(prev => [...prev, { role: 'assistant', content: data.resposta }]);
+      setChat(prev => {
+        const sem = prev.filter(m => !m.content.startsWith('🔍') && !m.content.startsWith('📋'));
+        return [...sem, { role: 'user', content: texto }, { role: 'assistant', content: data.resposta }];
+      });
       if (gerarRelatorio) setGerarRelatorio(false);
     } catch (e) {
       setChat(prev => [...prev, { role: 'assistant', content: `Erro: ${e.message}` }]);
@@ -3757,221 +3843,130 @@ function CnjTab() {
 
   function imprimirRelatorio() {
     const w = window.open('', '_blank');
-    w.document.write(`<html><head><title>Relatório Admin — ${new Date().toLocaleDateString('pt-BR')}</title><style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:800px;margin:0 auto}h1,h2{color:#0f172a}pre{white-space:pre-wrap;font-size:12px;background:#f8fafc;padding:12px;border-radius:6px}.msg{margin-bottom:16px;padding:12px;border-radius:8px}.user{background:#eff6ff}.assistant{background:#f8fafc}</style></head><body>`);
-    w.document.write(`<h1>Relatório Administrativo</h1><p style="color:#64748b">${new Date().toLocaleString('pt-BR')}</p>`);
-    if (resultado) w.document.write(`<h2>Processos CNJ (${resultado.processos?.length || 0})</h2><pre>${JSON.stringify(resultado.processos?.map(p => ({ numero: p.numero, tribunal: p.tribunal, parecer: p.riscos })), null, 2)}</pre>`);
-    if (contextoConv) w.document.write(`<h2>Contexto de atendimentos</h2><pre>${JSON.stringify(contextoConv, null, 2)}</pre>`);
-    w.document.write('<h2>Chat</h2>');
-    chat.forEach(m => w.document.write(`<div class="msg ${m.role}"><strong>${m.role === 'user' ? 'Admin' : 'Assistente'}:</strong><br>${m.content.replace(/\n/g, '<br>')}</div>`));
+    w.document.write(`<html><head><title>Relatório — ${new Date().toLocaleDateString('pt-BR')}</title><style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:800px;margin:0 auto}.user{background:#eff6ff;padding:12px;border-radius:8px;margin:8px 0}.assistant{background:#f8fafc;padding:12px;border-radius:8px;margin:8px 0}</style></head><body>`);
+    w.document.write(`<h1>Relatório Administrativo — ${new Date().toLocaleString('pt-BR')}</h1>`);
+    chat.forEach(m => w.document.write(`<div class="${m.role}"><strong>${m.role === 'user' ? 'Admin' : 'Assistente'}:</strong><br>${m.content.replace(/\n/g, '<br>')}</div>`));
     w.document.write('</body></html>'); w.document.close(); w.print();
   }
 
-  const processos = resultado?.processos || [];
-  const parecer   = resultado?.parecer;
-
   return (
-    <div style={{ padding: '24px 0', display: 'grid', gridTemplateColumns: '1fr 420px', gap: 20, alignItems: 'start' }}>
+    <div style={{ padding: '24px 0', height: 'calc(100vh - 200px)', minHeight: 500, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'white', borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', flex: 1 }}>
 
-      {/* COLUNA ESQUERDA — CNJ Search */}
-      <div>
-        <div style={{ background: 'white', borderRadius: 16, padding: 24, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>Consulta CNJ — DataJud</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <input value={form.numero} onChange={e => setForm(p => ({ ...p, numero: e.target.value }))}
-              placeholder="Número do processo (0000000-00.0000.0.00.0000)"
-              style={{ padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, width: '100%', boxSizing: 'border-box' }} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
-              <input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))}
-                placeholder="Nome da parte (CPF/CNPJ ou nome)"
-                style={{ padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13 }} />
-              <select value={form.uf} onChange={e => setForm(p => ({ ...p, uf: e.target.value }))}
-                style={{ padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13 }}>
-                <option value="">UF *</option>
-                {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(u => <option key={u}>{u}</option>)}
-              </select>
-            </div>
+        {/* Header */}
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>🧠 Inteligência Admin</div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>CNJ DataJud · Atendimentos de usuários · Análises gerenciais</div>
           </div>
-          {erroBusca && <div style={{ marginTop: 8, color: '#dc2626', fontSize: 12 }}>{erroBusca}</div>}
-          <button onClick={buscar} disabled={buscando}
-            style={{ marginTop: 12, width: '100%', padding: '10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: buscando ? 0.7 : 1 }}>
-            {buscando ? 'Consultando DataJud...' : 'Consultar'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {chat.length > 0 && <button onClick={imprimirRelatorio} style={{ padding: '6px 12px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>📄 Exportar</button>}
+            {chat.length > 0 && <button onClick={() => { setChat([]); setResultadoCnj(null); }} style={{ padding: '6px 12px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 12, color: '#94a3b8', cursor: 'pointer' }}>Limpar</button>}
+          </div>
         </div>
 
-        {parecer && (
-          <div style={{ background: NIVEL_BG[parecer.nivel] || '#f8fafc', border: `2px solid ${NIVEL_COR[parecer.nivel] || '#94a3b8'}`, borderRadius: 14, padding: 18, marginBottom: 16 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: NIVEL_COR[parecer.nivel] || '#334155', marginBottom: 6 }}>
-              {parecer.nivel === 'verde' ? '✅' : parecer.nivel === 'amarelo' ? '⚠️' : '🚫'} Parecer: {parecer.texto}
-            </div>
-            {parecer.recomendacao && <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>{parecer.recomendacao}</div>}
-          </div>
-        )}
+        {/* Chips de contexto + carregar conversas */}
+        <div style={{ padding: '10px 20px', display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0, borderBottom: '1px solid #f8fafc', alignItems: 'center' }}>
+          {resultadoCnj && (
+            <span style={{ fontSize: 11, background: '#eff6ff', color: '#2563eb', padding: '3px 10px', borderRadius: 99, fontWeight: 600, cursor: 'pointer' }} onClick={() => setResultadoCnj(null)}>
+              📋 CNJ: {resultadoCnj.processos?.length || 0} processo(s) ✕
+            </span>
+          )}
+          {contextoConv && (
+            <span style={{ fontSize: 11, background: '#f0fdf4', color: '#16a34a', padding: '3px 10px', borderRadius: 99, fontWeight: 600, cursor: 'pointer' }} onClick={() => setContextoConv(null)}>
+              💬 Atendimentos carregados ✕
+            </span>
+          )}
+          <button onClick={() => setModalConv(true)} style={{ fontSize: 11, background: 'none', border: '1px dashed #cbd5e1', color: '#64748b', padding: '3px 10px', borderRadius: 99, cursor: 'pointer', fontWeight: 600 }}>
+            + Carregar conversas de usuários
+          </button>
+          <span style={{ fontSize: 11, color: '#cbd5e1' }}>|</span>
+          <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Dica: cole o número do processo ou escreva "nome da parte: João Silva, BA" para busca automática</span>
+        </div>
 
-        {processos.map((p, i) => (
-          <div key={i} style={{ background: 'white', border: `1.5px solid ${p.tem_bloqueante ? '#fca5a5' : '#e2e8f0'}`, borderRadius: 12, padding: 18, marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.numero || '—'}</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: 99 }}>{p.tribunal}</span>
-                {p.score_risco > 0 && <span style={{ fontSize: 11, background: p.score_risco >= 35 ? '#fee2e2' : '#fef3c7', color: p.score_risco >= 35 ? '#dc2626' : '#d97706', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>Risco {p.score_risco}</span>}
+        {/* Mensagens */}
+        <div ref={chatRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {chat.length === 0 && (
+            <div style={{ color: '#94a3b8', fontSize: 14, textAlign: 'center', padding: '60px 20px', lineHeight: 1.8 }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🧠</div>
+              <div style={{ fontWeight: 700, color: '#475569', marginBottom: 8 }}>Como posso ajudar?</div>
+              <div style={{ maxWidth: 480, margin: '0 auto', fontSize: 13 }}>
+                Pergunte sobre processos judiciais, usuários da plataforma, análises gerenciais ou qualquer dado do sistema.<br/><br/>
+                <strong>Exemplos:</strong><br/>
+                "Qual a situação do processo 1234567-89.2023.8.05.0001?"<br/>
+                "Nome da parte: Maria Santos, BA — há penhora?"<br/>
+                "Quais os últimos 10 atendimentos de suporte?"<br/>
+                "Gere um relatório dos usuários inadimplentes"
               </div>
             </div>
-            <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>{p.classe}{p.fase ? ` · ${p.fase}` : ''}{p.orgao ? ` · ${p.orgao}` : ''}</div>
-            {p.riscos?.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                {p.riscos.map((r, j) => (
-                  <span key={j} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: r.severidade === 'bloqueante' ? '#fee2e2' : '#fef3c7', color: SEV_COR[r.severidade] }}>
-                    {r.severidade === 'bloqueante' ? '🚫' : '⚠️'} {r.categoria}
-                  </span>
-                ))}
+          )}
+          {chat.map((m, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div style={{ maxWidth: '80%', padding: '12px 16px', borderRadius: 14, background: m.role === 'user' ? '#2563eb' : m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#f0fdf4' : '#f8fafc', color: m.role === 'user' ? 'white' : '#1e293b', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', border: m.role === 'user' ? 'none' : `1px solid ${m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#bbf7d0' : '#e2e8f0'}` }}>
+                {m.content}
               </div>
-            )}
-            {p.partes?.map((parte, j) => (
-              <div key={j} style={{ fontSize: 12, color: '#334155' }}>
-                <span style={{ fontWeight: 600 }}>{parte.tipo?.toUpperCase()}:</span> {parte.nome}
-              </div>
-            ))}
-          </div>
-        ))}
-
-        {resultado && processos.length === 0 && (
-          <div style={{ background: 'white', borderRadius: 12, padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-            Nenhum processo encontrado.
-          </div>
-        )}
-      </div>
-
-      {/* COLUNA DIREITA — Chat Admin Intelligence */}
-      <div style={{ position: 'sticky', top: 20 }}>
-        <div style={{ background: 'white', borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 180px)', minHeight: 500 }}>
-
-          {/* Header do chat */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>🧠 Inteligência Admin</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>CNJ · Atendimentos · APIs integradas</div>
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {chat.length > 0 && (
-                <button onClick={imprimirRelatorio}
-                  style={{ padding: '5px 10px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 11, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
-                  📄 Exportar
-                </button>
-              )}
-              {chat.length > 0 && (
-                <button onClick={() => setChat([])}
-                  style={{ padding: '5px 10px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 11, color: '#94a3b8', cursor: 'pointer' }}>
-                  Limpar
-                </button>
-              )}
+          ))}
+          {perguntando && (
+            <div style={{ display: 'flex' }}>
+              <div style={{ padding: '12px 16px', borderRadius: 14, background: '#f8fafc', color: '#94a3b8', fontSize: 14, border: '1px solid #e2e8f0' }}>Analisando...</div>
             </div>
-          </div>
+          )}
+        </div>
 
-          {/* Chips de contexto ativo */}
-          <div style={{ padding: '10px 16px', display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0, borderBottom: '1px solid #f8fafc' }}>
-            {resultado && (
-              <span style={{ fontSize: 11, background: '#eff6ff', color: '#2563eb', padding: '3px 10px', borderRadius: 99, fontWeight: 600 }}>
-                📋 CNJ: {processos.length} processo{processos.length !== 1 ? 's' : ''}
-              </span>
-            )}
-            {contextoConv && (
-              <span style={{ fontSize: 11, background: '#f0fdf4', color: '#16a34a', padding: '3px 10px', borderRadius: 99, fontWeight: 600, cursor: 'pointer' }}
-                onClick={() => setContextoConv(null)}>
-                💬 Atendimentos carregados ✕
-              </span>
-            )}
-            <button onClick={() => setModalConv(true)}
-              style={{ fontSize: 11, background: '#fafafa', border: '1px dashed #e2e8f0', color: '#64748b', padding: '3px 10px', borderRadius: 99, cursor: 'pointer', fontWeight: 600 }}>
-              + Carregar conversas
+        {/* Input */}
+        <div style={{ padding: '12px 20px 16px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 12, color: '#64748b', cursor: 'pointer' }}>
+            <input type="checkbox" checked={gerarRelatorio} onChange={e => setGerarRelatorio(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+            Gerar relatório formal estruturado
+          </label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <textarea value={pergunta} onChange={e => setPergunta(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), enviarPergunta())}
+              placeholder="Digite sua pergunta... ou cole um número de processo para busca automática no CNJ"
+              rows={2}
+              style={{ flex: 1, padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }} />
+            <button onClick={enviarPergunta} disabled={perguntando || !pergunta.trim()}
+              style={{ padding: '10px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: (perguntando || !pergunta.trim()) ? 0.5 : 1, alignSelf: 'flex-end' }}>
+              ↑
             </button>
           </div>
-
-          {/* Mensagens */}
-          <div ref={chatRef} style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {chat.length === 0 && (
-              <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '40px 20px', lineHeight: 1.6 }}>
-                <div style={{ fontSize: 28, marginBottom: 10 }}>🧠</div>
-                Faça qualquer pergunta sobre processos CNJ, conversas de usuários, ou análises gerenciais.<br/>
-                <span style={{ fontSize: 11 }}>Carregue contextos usando os botões acima.</span>
-              </div>
-            )}
-            {chat.map((m, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                <div style={{ maxWidth: '88%', padding: '10px 13px', borderRadius: 12, background: m.role === 'user' ? '#2563eb' : '#f8fafc', color: m.role === 'user' ? 'white' : '#1e293b', fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap', border: m.role === 'user' ? 'none' : '1px solid #e2e8f0' }}>
-                  {m.content}
-                </div>
-              </div>
-            ))}
-            {perguntando && (
-              <div style={{ display: 'flex' }}>
-                <div style={{ padding: '10px 13px', borderRadius: 12, background: '#f8fafc', color: '#94a3b8', fontSize: 13, border: '1px solid #e2e8f0' }}>Analisando...</div>
-              </div>
-            )}
-          </div>
-
-          {/* Opção relatório + input */}
-          <div style={{ padding: '10px 14px 14px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 12, color: '#64748b', cursor: 'pointer' }}>
-              <input type="checkbox" checked={gerarRelatorio} onChange={e => setGerarRelatorio(e.target.checked)} style={{ accentColor: '#2563eb' }} />
-              Gerar relatório formal estruturado
-            </label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <textarea value={pergunta} onChange={e => setPergunta(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), enviarPergunta())}
-                placeholder="Pergunte sobre processos, usuários, atendimentos..."
-                rows={2}
-                style={{ flex: 1, padding: '9px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, resize: 'none', fontFamily: 'inherit', lineHeight: 1.4 }} />
-              <button onClick={enviarPergunta} disabled={perguntando || !pergunta.trim()}
-                style={{ padding: '9px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: (perguntando || !pergunta.trim()) ? 0.5 : 1, alignSelf: 'flex-end' }}>
-                ↑
-              </button>
-            </div>
-          </div>
         </div>
+      </div>
 
-        {/* Modal de seleção de conversas */}
-        {modalConv && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div style={{ background: 'white', borderRadius: 16, padding: 28, width: '100%', maxWidth: 420 }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Carregar conversas de usuários</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                  <input type="radio" name="tipo" value="ultimos" checked={filtroConv.tipo === 'ultimos'} onChange={e => setFiltroConv(p => ({ ...p, tipo: e.target.value }))} />
-                  Últimos atendimentos
-                  {filtroConv.tipo === 'ultimos' && (
+      {/* Modal carregar conversas */}
+      {modalConv && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 28, width: '100%', maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Carregar conversas de usuários</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[
+                { tipo: 'ultimos', label: 'Últimos atendimentos' },
+                { tipo: 'chamado', label: 'Chamado específico (ID)' },
+                { tipo: 'usuario', label: 'Usuário específico (ID)' },
+              ].map(({ tipo, label }) => (
+                <label key={tipo} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                  <input type="radio" name="tipo" value={tipo} checked={filtroConv.tipo === tipo} onChange={() => setFiltroConv(p => ({ ...p, tipo }))} />
+                  {label}
+                  {filtroConv.tipo === tipo && tipo === 'ultimos' && (
                     <input type="number" value={filtroConv.valor} onChange={e => setFiltroConv(p => ({ ...p, valor: e.target.value }))} min={1} max={20}
                       style={{ width: 60, padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }} />
                   )}
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                  <input type="radio" name="tipo" value="chamado" checked={filtroConv.tipo === 'chamado'} onChange={e => setFiltroConv(p => ({ ...p, tipo: e.target.value }))} />
-                  Chamado específico (ID)
-                  {filtroConv.tipo === 'chamado' && (
-                    <input value={filtroConv.chamado_id} onChange={e => setFiltroConv(p => ({ ...p, chamado_id: e.target.value }))}
-                      placeholder="UUID do chamado"
-                      style={{ flex: 1, padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12 }} />
+                  {filtroConv.tipo === tipo && tipo !== 'ultimos' && (
+                    <input value={filtroConv.tipo === 'chamado' ? filtroConv.chamado_id : filtroConv.valor}
+                      onChange={e => setFiltroConv(p => tipo === 'chamado' ? { ...p, chamado_id: e.target.value } : { ...p, valor: e.target.value })}
+                      placeholder="UUID" style={{ flex: 1, padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12 }} />
                   )}
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                  <input type="radio" name="tipo" value="usuario" checked={filtroConv.tipo === 'usuario'} onChange={e => setFiltroConv(p => ({ ...p, tipo: e.target.value }))} />
-                  Usuário específico (ID)
-                  {filtroConv.tipo === 'usuario' && (
-                    <input value={filtroConv.valor} onChange={e => setFiltroConv(p => ({ ...p, valor: e.target.value }))}
-                      placeholder="UUID do usuário"
-                      style={{ flex: 1, padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12 }} />
-                  )}
-                </label>
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-                <button onClick={() => setModalConv(false)} style={{ flex: 1, padding: 10, background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, color: '#475569' }}>Cancelar</button>
-                <button onClick={aplicarContextoConv} disabled={loadingConv} style={{ flex: 2, padding: 10, background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
-                  {loadingConv ? 'Carregando...' : 'Aplicar contexto'}
-                </button>
-              </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+              <button onClick={() => setModalConv(false)} style={{ flex: 1, padding: 10, background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, color: '#475569' }}>Cancelar</button>
+              <button onClick={aplicarContextoConv} style={{ flex: 2, padding: 10, background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Aplicar</button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
