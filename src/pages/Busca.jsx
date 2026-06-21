@@ -103,14 +103,10 @@ export default function Busca() {
   const POR_PAGINA = 20;
 
   // Radius search state
-  const [raioQuery, setRaioQuery] = useState('');
   const [raioKmAtivo, setRaioKmAtivo] = useState(50);
   const [raioAtivo, setRaioAtivo] = useState(false);
-  const [geocodingLoading, setGeocodingLoading] = useState(false);
-  const [geocodingErro, setGeocodingErro] = useState('');
   const [centroRaio, setCentroRaio] = useState(null); // { lat, lng, label }
   const [distancias, setDistancias] = useState({}); // id -> km
-  const geocodingTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -131,44 +127,27 @@ export default function Busca() {
     setBuscaCidade('');
     setSelecionados([]);
     setPagina(1);
-    setRaioQuery('');
     setRaioAtivo(false);
     setCentroRaio(null);
     setDistancias({});
     setGeocodingErro('');
   };
 
-  const geocodificar = async (query) => {
-    if (!query || query.trim().length < 3) return;
-    setGeocodingLoading(true);
-    setGeocodingErro('');
+  const geocodificarCidade = async (cidade, estado) => {
+    if (!cidade) return;
+    const query = estado ? `${cidade}, ${estado}, Brasil` : `${cidade}, Brasil`;
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query.trim())}&format=json&limit=1&countrycodes=br`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`;
       const res = await fetch(url, { headers: { 'User-Agent': 'TSN-Ativos/1.0' } });
       const data = await res.json();
       if (data && data.length > 0) {
-        const { lat, lon, display_name } = data[0];
-        setCentroRaio({ lat: parseFloat(lat), lng: parseFloat(lon), label: display_name });
-        setGeocodingErro('');
+        const { lat, lon } = data[0];
+        setCentroRaio({ lat: parseFloat(lat), lng: parseFloat(lon), label: cidade });
       } else {
-        setGeocodingErro('Local não encontrado. Tente outro CEP ou cidade.');
         setCentroRaio(null);
       }
-    } catch (e) {
-      setGeocodingErro('Erro ao buscar localização. Verifique sua conexão.');
+    } catch {
       setCentroRaio(null);
-    }
-    setGeocodingLoading(false);
-  };
-
-  const handleRaioQueryChange = (e) => {
-    const val = e.target.value;
-    setRaioQuery(val);
-    setCentroRaio(null);
-    setGeocodingErro('');
-    if (geocodingTimeoutRef.current) clearTimeout(geocodingTimeoutRef.current);
-    if (val.trim().length >= 3) {
-      geocodingTimeoutRef.current = setTimeout(() => geocodificar(val), 800);
     }
   };
 
@@ -176,10 +155,11 @@ export default function Busca() {
     const next = !raioAtivo;
     setRaioAtivo(next);
     if (next) {
-      // Raio ativo: limita a no máximo 1 cidade
       if (filtros.cidades.length > 1) up('cidades', [filtros.cidades[0]]);
+      const cidade = filtros.cidades[0] || filtros.cidades[0];
+      if (cidade) geocodificarCidade(cidade, filtros.estado);
     } else {
-      setCentroRaio(null); setDistancias({}); setGeocodingErro('');
+      setCentroRaio(null); setDistancias({});
     }
   };
 
@@ -335,10 +315,13 @@ export default function Busca() {
     setLoading(false);
   };
 
-  const buscar = () => {
-    if (raioAtivo && !centroRaio) {
-      setGeocodingErro('Informe um CEP ou cidade válido para busca por raio.');
+  const buscar = async () => {
+    if (raioAtivo && !filtros.cidades.length) {
+      setErro('Selecione uma cidade para usar a busca por raio.');
       return;
+    }
+    if (raioAtivo && filtros.cidades[0] && !centroRaio) {
+      await geocodificarCidade(filtros.cidades[0], filtros.estado);
     }
     if (!filtros.estado) { setErro('Selecione um estado para buscar.'); return; }
     setErro('');
@@ -478,9 +461,9 @@ export default function Busca() {
                       e.preventDefault();
                       const cidade = cidadesFiltradas[dropdownIndex >= 0 ? dropdownIndex : 0];
                       if (cidade) {
-                        // Se raio ativo, substituir cidade (só 1 permitida)
                         const novas = raioAtivo ? [cidade] : [...filtros.cidades, cidade];
                         up('cidades', novas); setBuscaCidade(''); setDropdownIndex(-1);
+                        if (raioAtivo) geocodificarCidade(cidade, filtros.estado);
                       }
                     } else if (e.key === 'Escape') {
                       setBuscaCidade(''); setDropdownIndex(-1);
@@ -529,32 +512,14 @@ export default function Busca() {
                 </label>
                 {raioAtivo && (
                   <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                    {/* Se cidade selecionada, usa ela como centro — sem precisar de CEP */}
                     {filtros.cidades.length > 0 ? (
                       <div style={{ fontSize:10, color:'#16a34a', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:6, padding:'6px 8px', display:'flex', alignItems:'center', gap:4 }}>
                         <MapPin size={10}/> Centro: <strong>{filtros.cidades[0]}{filtros.estado ? ` — ${filtros.estado}` : ''}</strong>
                       </div>
                     ) : (
-                    <div style={{ position:'relative' }}>
-                      <input
-                        type="text"
-                        value={raioQuery}
-                        onChange={handleRaioQueryChange}
-                        placeholder="CEP ou cidade (ex: 01310-100 ou São Paulo)"
-                        style={{ ...inp, paddingRight: geocodingLoading ? 30 : 10 }}
-                      />
-                      {geocodingLoading && (
-                        <Loader2 size={13} style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', animation:'spin 1s linear infinite', color:'#94a3b8' }}/>
-                      )}
-                    </div>
-                    )} {/* fim do else (sem cidade selecionada) */}
-                    {centroRaio && (
-                      <div style={{ fontSize:10, color:'#16a34a', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:6, padding:'5px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
-                        <MapPin size={10} style={{ flexShrink:0, marginTop:1 }}/> <span style={{ lineHeight:1.3 }}>{centroRaio.label}</span>
+                      <div style={{ fontSize:10, color:'#92400e', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'6px 8px' }}>
+                        Selecione uma cidade acima para usar o raio.
                       </div>
-                    )}
-                    {geocodingErro && (
-                      <div style={{ fontSize:10, color:'#dc2626', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:6, padding:'5px 8px' }}>{geocodingErro}</div>
                     )}
                     <div>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
