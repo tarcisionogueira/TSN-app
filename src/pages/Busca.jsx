@@ -93,7 +93,57 @@ export default function Busca() {
   // Mapeamento: valor do checkbox → valor(es) no banco
   const PAGAMENTO_DB = { aVista: ['a_vista','aVista','À Vista'], financiado: ['financiado','Financiado'], hipotecado: ['hipotecado','Hipotecado'] };
 
-  const limparFiltros = () => { setFiltros(FILTROS_INICIAL); setBuscaCidade(''); setSelecionados([]); setPagina(1); };
+  const limparFiltros = () => {
+    setFiltros(FILTROS_INICIAL);
+    setBuscaCidade('');
+    setSelecionados([]);
+    setPagina(1);
+    setRaioQuery('');
+    setRaioAtivo(false);
+    setCentroRaio(null);
+    setDistancias({});
+    setGeocodingErro('');
+  };
+
+  const geocodificar = async (query) => {
+    if (!query || query.trim().length < 3) return;
+    setGeocodingLoading(true);
+    setGeocodingErro('');
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query.trim())}&format=json&limit=1&countrycodes=br`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'TSN-Ativos/1.0' } });
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const { lat, lon, display_name } = data[0];
+        setCentroRaio({ lat: parseFloat(lat), lng: parseFloat(lon), label: display_name });
+        setGeocodingErro('');
+      } else {
+        setGeocodingErro('Local não encontrado. Tente outro CEP ou cidade.');
+        setCentroRaio(null);
+      }
+    } catch (e) {
+      setGeocodingErro('Erro ao buscar localização. Verifique sua conexão.');
+      setCentroRaio(null);
+    }
+    setGeocodingLoading(false);
+  };
+
+  const handleRaioQueryChange = (e) => {
+    const val = e.target.value;
+    setRaioQuery(val);
+    setCentroRaio(null);
+    setGeocodingErro('');
+    if (geocodingTimeoutRef.current) clearTimeout(geocodingTimeoutRef.current);
+    if (val.trim().length >= 3) {
+      geocodingTimeoutRef.current = setTimeout(() => geocodificar(val), 800);
+    }
+  };
+
+  const toggleRaio = () => {
+    const next = !raioAtivo;
+    setRaioAtivo(next);
+    if (!next) { setCentroRaio(null); setDistancias({}); setGeocodingErro(''); }
+  };
 
   async function salvarFiltroAtual() {
     if (!nomeFiltro.trim() || !user?.id) return;
@@ -110,7 +160,7 @@ export default function Busca() {
     setFiltrosSalvos(p => p.filter(f => f.id !== id));
   }
 
-  const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo) => {
+  const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo, centro = centroRaio, raioAtivoBusca = raioAtivo, raioKmBusca = raioKmAtivo) => {
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
 
     const buildQuery = (base) => {
@@ -132,23 +182,34 @@ export default function Busca() {
       return q;
     };
 
-    const offset = (paginaAlvo - 1) * POR_PAGINA;
     const [coluna, dir] = sortAtivo === 'desconto_desc' ? ['desconto_percentual', false]
       : sortAtivo === 'desconto_asc' ? ['desconto_percentual', true]
       : sortAtivo === 'valor_asc'    ? ['valor_minimo', true]
       : ['valor_minimo', false];
 
     try {
-      const [{ count }, { data: dbData, error: dbError }] = await Promise.all([
-        buildQuery(supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true })),
-        buildQuery(supabase.from('imoveis_leilao').select('*'))
-          .order(coluna, { ascending: dir, nullsFirst: false })
-          .range(offset, offset + POR_PAGINA - 1),
-      ]);
+      let dbData, dbError;
 
-      setTotalResultados(count || 0);
+      if (raioAtivoBusca && centro) {
+        // Fetch all records (no pagination at DB level) for client-side radius filter
+        const { data, error } = await buildQuery(supabase.from('imoveis_leilao').select('*'))
+          .order(coluna, { ascending: dir, nullsFirst: false });
+        dbData = data;
+        dbError = error;
+      } else {
+        const offset = (paginaAlvo - 1) * POR_PAGINA;
+        const [{ count }, { data, error }] = await Promise.all([
+          buildQuery(supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true })),
+          buildQuery(supabase.from('imoveis_leilao').select('*'))
+            .order(coluna, { ascending: dir, nullsFirst: false })
+            .range(offset, offset + POR_PAGINA - 1),
+        ]);
+        dbData = data;
+        dbError = error;
+        setTotalResultados(count || 0);
+      }
 
-      const mapeados = (!dbError && dbData) ? dbData.map(im => ({
+      let mapeados = (!dbError && dbData) ? dbData.map(im => ({
         id: im.id,
         titulo: im.titulo,
         tipo: im.tipo,
@@ -176,7 +237,33 @@ export default function Busca() {
         numeroEdital: im.numero_edital,
         numeroMatricula: im.numero_matricula,
         numeroProcesso: im.numero_processo,
+        latitude: im.latitude,
+        longitude: im.longitude,
       })) : [];
+
+      // Apply radius filter client-side
+      if (raioAtivoBusca && centro) {
+        const novasDistancias = {};
+        mapeados = mapeados.filter(im => {
+          if (im.latitude == null || im.longitude == null) return false;
+          const dist = haversine(centro.lat, centro.lng, Number(im.latitude), Number(im.longitude));
+          if (dist <= raioKmBusca) {
+            novasDistancias[im.id] = Math.round(dist);
+            return true;
+          }
+          return false;
+        });
+        // Sort by distance after radius filter
+        mapeados.sort((a, b) => (novasDistancias[a.id] || 0) - (novasDistancias[b.id] || 0));
+        setDistancias(novasDistancias);
+        setTotalResultados(mapeados.length);
+        // Paginate client-side
+        const offset = (paginaAlvo - 1) * POR_PAGINA;
+        mapeados = mapeados.slice(offset, offset + POR_PAGINA);
+      } else {
+        setDistancias({});
+      }
+
       setResultados(mapeados);
 
       // Silent tracking — fire and forget
@@ -210,9 +297,13 @@ export default function Busca() {
   };
 
   const buscar = () => {
+    if (raioAtivo && !centroRaio) {
+      setGeocodingErro('Informe um CEP ou cidade válido para busca por raio.');
+      return;
+    }
     setPagina(1);
     saveBuscaRecente({ ...filtros, cidade: filtros.cidades.join(', ') });
-    buscarPagina(1, filtros, sortBy);
+    buscarPagina(1, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo);
   };
 
   const irParaAnalise = (im) => {
@@ -368,11 +459,70 @@ export default function Busca() {
                   );
                 })()}
               </div>
-              <div style={{ opacity: 0.5, pointerEvents: 'none' }} title="Em breve">
-                <label style={lbl}>Raio de distância <span style={{ fontSize:9, background:'#e2e8f0', padding:'1px 5px', borderRadius:4 }}>Em breve</span></label>
-                <select value={filtros.raioKm} onChange={e=>up('raioKm', Number(e.target.value))} style={inp} disabled>
-                  {RAIOS_KM.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
+              {/* Radius search */}
+              <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:12 }}>
+                <label style={{ ...lbl, display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:5 }}><MapPin size={11}/> Buscar por raio</span>
+                  <button
+                    onClick={toggleRaio}
+                    style={{ background: raioAtivo ? '#2563eb' : '#e2e8f0', border:'none', borderRadius:20, width:36, height:20, cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
+                    <span style={{ position:'absolute', top:2, left: raioAtivo ? 18 : 2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left 0.2s', display:'block' }}/>
+                  </button>
+                </label>
+                {raioAtivo && (
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    <div style={{ position:'relative' }}>
+                      <input
+                        type="text"
+                        value={raioQuery}
+                        onChange={handleRaioQueryChange}
+                        placeholder="CEP ou cidade (ex: 01310-100 ou São Paulo)"
+                        style={{ ...inp, paddingRight: geocodingLoading ? 30 : 10 }}
+                      />
+                      {geocodingLoading && (
+                        <Loader2 size={13} style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', animation:'spin 1s linear infinite', color:'#94a3b8' }}/>
+                      )}
+                    </div>
+                    {centroRaio && (
+                      <div style={{ fontSize:10, color:'#16a34a', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:6, padding:'5px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
+                        <MapPin size={10} style={{ flexShrink:0, marginTop:1 }}/> <span style={{ lineHeight:1.3 }}>{centroRaio.label}</span>
+                      </div>
+                    )}
+                    {geocodingErro && (
+                      <div style={{ fontSize:10, color:'#dc2626', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:6, padding:'5px 8px' }}>{geocodingErro}</div>
+                    )}
+                    <div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                        <span style={{ fontSize:10, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.5 }}>Raio</span>
+                        <span style={{ fontSize:12, fontWeight:800, color:'#2563eb' }}>{raioKmAtivo} km</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={10} max={200} step={1}
+                        value={raioKmAtivo}
+                        onChange={e => setRaioKmAtivo(Number(e.target.value))}
+                        style={{ width:'100%', accentColor:'#2563eb', cursor:'pointer' }}
+                      />
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:'#94a3b8', marginTop:2 }}>
+                        <span>10 km</span>
+                        <span>50</span>
+                        <span>100</span>
+                        <span>200 km</span>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                      {[10, 25, 50, 100, 200].map(r => (
+                        <button key={r} onClick={() => setRaioKmAtivo(r)}
+                          style={{ padding:'4px 10px', border:`1px solid ${raioKmAtivo===r?'#2563eb':'#e2e8f0'}`, borderRadius:20, fontSize:10, fontWeight:700, cursor:'pointer', background: raioKmAtivo===r?'#eff6ff':'white', color: raioKmAtivo===r?'#1d4ed8':'#64748b', transition:'all 0.1s' }}>
+                          {r} km
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize:9, color:'#94a3b8', lineHeight:1.4 }}>
+                      Imóveis sem localização cadastrada serão excluídos dos resultados.
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <label style={lbl}>Valor de Lance (R$)</label>
@@ -454,7 +604,7 @@ export default function Busca() {
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
             {buscaFeita && !loading && (
-              <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); setPagina(1); buscarPagina(1, filtros, e.target.value); }}
+              <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); setPagina(1); buscarPagina(1, filtros, e.target.value, centroRaio, raioAtivo, raioKmAtivo); }}
                 style={{ padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:600, color:'#334155', background:'white', cursor:'pointer' }}>
                 <option value="desconto_desc">Maior desconto primeiro</option>
                 <option value="desconto_asc">Menor desconto primeiro</option>
@@ -469,7 +619,7 @@ export default function Busca() {
               </button>
             )}
             {buscaFeita&&!loading && (
-              <button onClick={buscar}
+              <button onClick={() => buscarPagina(pagina, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo)}
                 style={{ padding:'7px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
                 <RefreshCw size={12}/> Atualizar
               </button>
@@ -570,6 +720,11 @@ export default function Busca() {
                       {/* Location */}
                       <div style={{ fontSize:11, color:'#64748b', display:'flex', alignItems:'center', gap:4, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
                         <MapPin size={10} style={{ flexShrink:0 }}/> {[im.endereco, im.bairro, im.cidade, im.estado].filter(Boolean).join(', ')||'—'}
+                        {distancias[im.id] != null && (
+                          <span style={{ marginLeft:4, flexShrink:0, fontSize:10, fontWeight:700, background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', borderRadius:10, padding:'1px 7px', whiteSpace:'nowrap' }}>
+                            a {distancias[im.id]} km
+                          </span>
+                        )}
                       </div>
 
                       {/* Lance + Avaliação + Desconto */}
@@ -631,7 +786,7 @@ export default function Busca() {
         {/* Paginação */}
         {!loading && totalPaginas > 1 && (
           <div style={{ background:'white', borderRadius:12, border:'1px solid #e2e8f0', padding:'12px 18px', display:'flex', justifyContent:'center', alignItems:'center', gap:8 }}>
-            <button onClick={()=>{ const p=Math.max(1,pagina-1); setPagina(p); buscarPagina(p, filtros, sortBy); }} disabled={pagina===1}
+            <button onClick={()=>{ const p=Math.max(1,pagina-1); setPagina(p); buscarPagina(p, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo); }} disabled={pagina===1}
               style={{ padding:'6px 14px', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:pagina===1?'not-allowed':'pointer', background:pagina===1?'#f8fafc':'white', color:pagina===1?'#cbd5e1':'#334155' }}>
               ← Anterior
             </button>
@@ -640,12 +795,12 @@ export default function Busca() {
               acc.push(n); return acc;
             },[]).map((n,i)=>
               n==='…' ? <span key={'e'+i} style={{color:'#94a3b8',fontSize:12}}>…</span>
-              : <button key={n} onClick={()=>{ setPagina(n); buscarPagina(n, filtros, sortBy); }}
+              : <button key={n} onClick={()=>{ setPagina(n); buscarPagina(n, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo); }}
                   style={{ padding:'6px 11px', border:`1px solid ${n===pagina?'#2563eb':'#e2e8f0'}`, borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer', background:n===pagina?'#2563eb':'white', color:n===pagina?'white':'#334155' }}>
                   {n}
                 </button>
             )}
-            <button onClick={()=>{ const p=Math.min(totalPaginas,pagina+1); setPagina(p); buscarPagina(p, filtros, sortBy); }} disabled={pagina===totalPaginas}
+            <button onClick={()=>{ const p=Math.min(totalPaginas,pagina+1); setPagina(p); buscarPagina(p, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo); }} disabled={pagina===totalPaginas}
               style={{ padding:'6px 14px', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:pagina===totalPaginas?'not-allowed':'pointer', background:pagina===totalPaginas?'#f8fafc':'white', color:pagina===totalPaginas?'#cbd5e1':'#334155' }}>
               Próxima →
             </button>
