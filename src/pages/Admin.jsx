@@ -563,6 +563,9 @@ function ConfigTab() {
   const [comissoesExpanded, setComissoesExpanded] = useState({});
   const [cfin, setCfin] = useState({});   // config_financeira por gateway
   const [cfinSaved, setCfinSaved] = useState({});
+  const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 4.5, analista_pct: 1 });
+  const [honorariosSaved, setHonorariosSaved] = useState(false);
+  const [honorariosErr, setHonorariosErr] = useState('');
 
   useEffect(() => {
     supabase.from('planos_config').select('*').order('preco', { ascending: true })
@@ -579,6 +582,8 @@ function ConfigTab() {
           setCfin(m);
         }
       });
+    supabase.from('config_honorarios').select('*').eq('id', 1).maybeSingle()
+      .then(({ data }) => { if (data) setHonorarios(data); });
   }, []);
 
   function updateCfin(gateway, field, value) {
@@ -600,6 +605,26 @@ function ConfigTab() {
       setCfinSaved(prev => ({ ...prev, [gateway]: true }));
       setTimeout(() => setCfinSaved(prev => ({ ...prev, [gateway]: false })), 2000);
     }
+  }
+
+  async function salvarHonorarios() {
+    setHonorariosErr('');
+    const total = Number(honorarios.total_pct) || 0;
+    const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
+    if (Math.abs(soma - total) > 0.01) {
+      setHonorariosErr(`A soma dos percentuais (${soma.toFixed(2)}%) deve ser igual ao total (${total.toFixed(2)}%).`);
+      return;
+    }
+    const { error } = await supabase.from('config_honorarios').upsert({
+      id: 1,
+      total_pct:    total,
+      admin_pct:    Number(honorarios.admin_pct) || 0,
+      advogado_pct: Number(honorarios.advogado_pct) || 0,
+      analista_pct: Number(honorarios.analista_pct) || 0,
+      atualizado_em: new Date().toISOString(),
+    });
+    if (!error) { setHonorariosSaved(true); setTimeout(() => setHonorariosSaved(false), 2500); }
+    else setHonorariosErr('Erro ao salvar: ' + error.message);
   }
 
   function salvar() {
@@ -755,6 +780,82 @@ function ConfigTab() {
             })}
           </div>
         )}
+      </div>
+
+      {/* Honorários de Êxito na Arrematação */}
+      <div style={S.card}>
+        <p style={S.subTitle}>Honorários de Êxito — Arrematação</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Percentual cobrado sobre o valor arrematado quando o cliente finaliza uma compra com apoio da equipe.
+          O total deve ser distribuído integralmente entre Admin, Advogado e Analista.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
+          {/* Total */}
+          <div style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 18px', minWidth: 150 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 6 }}>TOTAL HONORÁRIO %</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="number" step="0.1" min="0" max="100"
+                value={honorarios.total_pct}
+                onChange={e => setHonorarios(h => ({ ...h, total_pct: e.target.value }))}
+                style={{ ...S.input, padding: '7px 10px', fontSize: 15, width: 70, fontWeight: 900, color: '#0f172a' }} />
+              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 700 }}>%</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>padrão 10%</div>
+          </div>
+
+          {/* Seta divisória */}
+          <div style={{ display: 'flex', alignItems: 'center', paddingTop: 28, color: '#94a3b8', fontSize: 18 }}>→</div>
+
+          {/* Distribuição por papel */}
+          {[
+            { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação' },
+            { key: 'advogado_pct', label: 'Advogado', cor: '#2563eb', desc: 'análise jurídica' },
+            { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica' },
+          ].map(({ key, label, cor, desc }) => (
+            <div key={key} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 18px', minWidth: 140, border: `1px solid ${cor}22` }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: cor, marginBottom: 6, textTransform: 'uppercase' }}>{label}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="number" step="0.1" min="0" max="100"
+                  value={honorarios[key]}
+                  onChange={e => setHonorarios(h => ({ ...h, [key]: e.target.value }))}
+                  style={{ ...S.input, padding: '7px 10px', fontSize: 15, width: 70, fontWeight: 700, color: '#0f172a' }} />
+                <span style={{ fontSize: 14, color: '#64748b', fontWeight: 700 }}>%</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{desc}</div>
+            </div>
+          ))}
+
+          {/* Totalizador visual */}
+          <div style={{ display: 'flex', alignItems: 'center', paddingTop: 28 }}>
+            {(() => {
+              const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
+              const total = Number(honorarios.total_pct) || 0;
+              const ok = Math.abs(soma - total) <= 0.01;
+              return (
+                <div style={{ padding: '6px 14px', borderRadius: 20, background: ok ? '#f0fdf4' : '#fef2f2', color: ok ? '#16a34a' : '#ef4444', fontWeight: 700, fontSize: 13 }}>
+                  {soma.toFixed(1)}% / {total.toFixed(1)}%
+                  <span style={{ marginLeft: 6 }}>{ok ? '✓' : '✗'}</span>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        {honorariosErr && (
+          <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', color: '#ef4444', borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+            {honorariosErr}
+          </div>
+        )}
+
+        <button onClick={salvarHonorarios}
+          style={{ marginTop: 16, padding: '9px 22px', background: honorariosSaved ? '#10b981' : '#0f172a', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          {honorariosSaved ? '✓ Salvo' : 'Salvar Honorários'}
+        </button>
+
+        <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8' }}>
+          Esses valores são usados para calcular o repasse de cada papel no êxito de uma arrematação.<br/>
+          A soma Admin + Advogado + Analista deve ser igual ao total configurado.
+        </div>
       </div>
 
       {/* Taxas Financeiras por Gateway */}
