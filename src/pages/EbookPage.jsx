@@ -14,6 +14,7 @@ export default function EbookPage() {
   const [reading, setReading] = useState(false);
   const [dark, setDark] = useState(false);
   const [fontSize, setFontSize] = useState(17);
+  const [comprouAvulso, setComprouAvulso] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -21,10 +22,17 @@ export default function EbookPage() {
       .then(({ data }) => { setEbook(data); setLoading(false); });
   }, [id]);
 
-  const podeAcessar = user && (
-    ['top1','top2','assessorado','clube','consultor','analista','advogado','admin'].includes(role)
-    || (ebook && (!ebook.preco || Number(ebook.preco) === 0))
-  );
+  // Verifica compra avulsa para ebooks pagos
+  useEffect(() => {
+    if (!user || !id || !ebook || Number(ebook.preco || 0) === 0) return;
+    supabase.from('compras_produtos')
+      .select('id').eq('user_id', user.id).eq('produto_tipo', 'ebook').eq('produto_id', id).eq('status', 'ativo')
+      .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
+  }, [user, id, ebook]);
+
+  const temPlano = user && ['top1','top2','assessorado','clube','consultor','analista','advogado','admin'].includes(role);
+  const ehGratuito = ebook && Number(ebook.preco || 0) === 0;
+  const podeAcessar = user && (temPlano || ehGratuito || comprouAvulso);
 
   // Prefer pdf_url over arquivo_url
   const pdfUrl = ebook?.pdf_url || ebook?.arquivo_url;

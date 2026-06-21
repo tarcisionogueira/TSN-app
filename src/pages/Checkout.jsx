@@ -61,7 +61,13 @@ export default function Checkout() {
   const { user, role } = useAuth();
   const planoKey = params.get('plano');
   const promoCode = params.get('promo')?.toUpperCase() || '';
+  const refCode = params.get('ref') || '';
   const plano = PLANOS[planoKey];
+
+  // Persiste o código de referência do consultor
+  useEffect(() => {
+    if (refCode) sessionStorage.setItem('tsn_ref_codigo', refCode);
+  }, [refCode]);
 
   const [loading, setLoading] = useState(false);
   const [promoInfo, setPromoInfo] = useState(null);
@@ -163,7 +169,7 @@ export default function Checkout() {
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px', marginBottom: 24, fontSize: 13, color: '#166534', fontWeight: 600 }}>
               ✅ Acesso imediato após o cadastro
             </div>
-            <button onClick={() => nav('/login?modo=cadastro')}
+            <button onClick={() => nav(`/login?modo=cadastro${refCode ? `&ref=${refCode}` : ''}`)}
               style={{ width: '100%', padding: '15px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', marginBottom: 12 }}>
               Criar conta grátis →
             </button>

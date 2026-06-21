@@ -13,6 +13,11 @@ export default function ProdutoPublico({ tipo }) {
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Persiste código de referência do consultor
+  useEffect(() => {
+    if (ref) sessionStorage.setItem('tsn_ref_codigo', ref);
+  }, [ref]);
+
   useEffect(() => {
     async function load() {
       if (tipo === 'curso') {

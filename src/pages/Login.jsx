@@ -351,17 +351,18 @@ export default function Login() {
               </label>
               {/* Aviso CPF já cadastrado */}
               {cpfChecking && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>Verificando CPF…</div>}
-              {cpfCheck?.temConta && cpfCheck.temAcesso && (
+
+              {/* CPF com conta + produto é benefício da assinatura + já tem acesso → bloqueia */}
+              {cpfCheck?.temConta && cpfCheck.temAcesso && cpfCheck.ehBeneficio && (
                 <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '14px 16px' }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginBottom: 6 }}>
-                    🚫 Este CPF já possui uma conta com acesso a este produto.
+                    🚫 Este conteúdo já está incluído na sua assinatura.
                   </div>
                   <div style={{ fontSize: 12, color: '#7f1d1d', marginBottom: 12, lineHeight: 1.5 }}>
-                    Você não precisa comprar novamente. Entre na sua conta para acessar o conteúdo.
+                    Você não precisa comprar novamente. Entre na sua conta para acessar.
                   </div>
                   <button type="button"
                     onClick={() => {
-                      // Após login redireciona para o produto
                       if (produtoParam) {
                         const [t, pid] = produtoParam.split(':');
                         sessionStorage.setItem('tsn_redirect_produto', `/${t === 'curso' ? 'membros/curso' : t === 'ebook' ? 'membros/ebook' : 'checkout?plano'}/${pid}`);
@@ -373,18 +374,51 @@ export default function Login() {
                   </button>
                 </div>
               )}
+
+              {/* CPF com conta + produto pago avulso + já comprou → bloqueia */}
+              {cpfCheck?.temConta && cpfCheck.temAcesso && !cpfCheck.ehBeneficio && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginBottom: 6 }}>
+                    🚫 Você já adquiriu este produto.
+                  </div>
+                  <div style={{ fontSize: 12, color: '#7f1d1d', marginBottom: 12, lineHeight: 1.5 }}>
+                    Entre na sua conta para acessar o conteúdo.
+                  </div>
+                  <button type="button"
+                    onClick={() => {
+                      if (produtoParam) {
+                        const [t, pid] = produtoParam.split(':');
+                        sessionStorage.setItem('tsn_redirect_produto', `/${t === 'curso' ? 'membros/curso' : t === 'ebook' ? 'membros/ebook' : 'checkout?plano'}/${pid}`);
+                      }
+                      setModo('login'); setErro('');
+                    }}
+                    style={{ width: '100%', padding: '10px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                    Entrar e acessar →
+                  </button>
+                </div>
+              )}
+
+              {/* CPF com conta + sem acesso ainda → pode comprar, mas sugere login */}
               {cpfCheck?.temConta && !cpfCheck.temAcesso && (
                 <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
                     ⚠️ Este CPF já tem uma conta TSN Ativos.
                   </div>
                   <div style={{ fontSize: 12, color: '#78350f', marginBottom: 10 }}>
-                    Entre na sua conta existente para continuar com a compra.
+                    {cpfCheck.ehBeneficio
+                      ? 'Entre na sua conta e faça upgrade do plano para acessar este conteúdo.'
+                      : 'Entre na sua conta para concluir a compra e vincular o produto ao seu acesso.'}
                   </div>
                   <button type="button"
-                    onClick={() => { setModo('login'); setErro(''); }}
+                    onClick={() => {
+                      if (produtoParam) {
+                        const [t, pid] = produtoParam.split(':');
+                        sessionStorage.setItem('tsn_redirect_produto', `/${t === 'curso' ? 'membros/curso' : t === 'ebook' ? 'membros/ebook' : 'checkout?plano'}/${pid}`);
+                      }
+                      setModo('login'); setErro('');
+                    }}
                     style={{ width: '100%', padding: '9px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                    Fazer login →
+                    Fazer login para continuar →
                   </button>
                 </div>
               )}

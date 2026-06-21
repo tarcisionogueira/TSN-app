@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Calculator, Gavel, TrendingUp, Target, Lock, Share2, Copy, Check, Info } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -76,7 +76,14 @@ function Linha({ label, valor, destaque, cor, sublabel }) {
 
 export default function Calculadora() {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, role, effectiveRole, loading: authLoading } = useAuth();
+
+  // Captura e persiste o código de referência do consultor
+  useEffect(() => {
+    const refFromUrl = searchParams.get('ref');
+    if (refFromUrl) sessionStorage.setItem('tsn_ref_codigo', refFromUrl);
+  }, []);
 
   const [origem, setOrigem] = useState('extrajudicial');
   const [pagamento, setPagamento] = useState('a_vista');
@@ -377,6 +384,8 @@ export default function Calculadora() {
         if (isPago) return null; // top1/top2 already paid, no upsell
         // Not logged in OR explorador OR SDR lead
         const isExplorador = user && (r === 'explorador');
+        const refAtivo = searchParams.get('ref') || sessionStorage.getItem('tsn_ref_codigo') || '';
+        const refSufixo = refAtivo ? `&ref=${refAtivo}` : '';
         return (
           <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius: 16, padding: '24px 28px', color: 'white' }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
@@ -392,11 +401,11 @@ export default function Calculadora() {
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {!user && (
-                <button onClick={() => nav('/login?modo=cadastro')} style={{ padding: '11px 22px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+                <button onClick={() => nav(`/login?modo=cadastro${refSufixo}`)} style={{ padding: '11px 22px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
                   Criar conta gratuita
                 </button>
               )}
-              <button onClick={() => nav('/checkout?plano=top1')} style={{ padding: '11px 22px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+              <button onClick={() => nav(`/checkout?plano=top1${refSufixo}`)} style={{ padding: '11px 22px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
                 {isExplorador ? 'Assinar Investidor Pro — R$ 49,90/mês →' : 'Conhecer os planos →'}
               </button>
             </div>

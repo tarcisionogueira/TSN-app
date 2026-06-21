@@ -21,8 +21,9 @@ function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explor
 
 const PLANOS_PAGOS = ['top1','top2','assessorado','clube','analista','consultor','advogado','admin'];
 
-function podeAssistir(licao, plano) {
+function podeAssistir(licao, plano, comprouAvulso = false) {
   if (licao.gratis) return true;
+  if (comprouAvulso) return true;
   return PLANOS_PAGOS.includes(plano);
 }
 
@@ -39,6 +40,15 @@ export default function Curso() {
   const [licaoAtiva, setLicaoAtiva] = useState(null);
   const [modulosAbertos, setModulosAbertos] = useState({ 0: true });
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [comprouAvulso, setComprouAvulso] = useState(false);
+
+  // Verifica compra avulsa (curso pago standalone)
+  useEffect(() => {
+    if (!user || !id || PLANOS_PAGOS.includes(plano)) return;
+    supabase.from('compras_produtos')
+      .select('id').eq('user_id', user.id).eq('produto_tipo', 'curso').eq('produto_id', id).eq('status', 'ativo')
+      .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
+  }, [user, id, plano]);
 
   // Video progress simulation ref (tracks "watched" percentage)
   const videoTimerRef = useRef(null);
@@ -90,7 +100,7 @@ export default function Curso() {
   // ── Abrir na primeira aula disponível ──────────────────────────────────────
   useEffect(() => {
     if (curso) {
-      const emProgresso = todasLicoes.find(l => !progresso[l.id] && podeAssistir(l, plano));
+      const emProgresso = todasLicoes.find(l => !progresso[l.id] && podeAssistir(l, plano, comprouAvulso));
       const primeiraGratis = todasLicoes.find(l => l.gratis);
       setLicaoAtiva(emProgresso || primeiraGratis || todasLicoes[0]);
       setVideoProgress(0);
