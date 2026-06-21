@@ -4,7 +4,7 @@ export const config = { runtime: 'edge' };
 // GET /api/setup-daily-webhook (somente admin)
 export default async function handler(req) {
   const DAILY_KEY = process.env.DAILY_API_KEY;
-  const BASE_URL = process.env.APP_BASE_URL || 'https://tsnativos.com.br';
+  const BASE_URL = process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app';
 
   if (!DAILY_KEY) return new Response(JSON.stringify({ error: 'DAILY_API_KEY não configurada' }), { status: 500 });
 
