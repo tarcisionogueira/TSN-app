@@ -3523,7 +3523,7 @@ function MarketingTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Registros', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Registros', 'CNJ', 'Configurações'];
 
 function RegistrosTab() {
   const [transcricoes, setTranscricoes] = useState([]);
@@ -3645,6 +3645,230 @@ function RegistrosTab() {
   );
 }
 
+function CnjTab() {
+  const [form, setForm] = React.useState({ numero: '', nome: '', uf: '' });
+  const [buscando, setBuscando] = React.useState(false);
+  const [resultado, setResultado] = React.useState(null);
+  const [erro, setErro] = React.useState('');
+  const [chat, setChat] = React.useState([]);
+  const [pergunta, setPergunta] = React.useState('');
+  const [perguntando, setPerguntando] = React.useState(false);
+  const chatRef = React.useRef(null);
+
+  async function buscar() {
+    if (!form.numero && !form.nome) { setErro('Informe o número do processo ou nome da parte.'); return; }
+    if (!form.uf) { setErro('UF é obrigatória.'); return; }
+    setBuscando(true); setErro(''); setResultado(null); setChat([]);
+    try {
+      const r = await fetch('/api/cnj-datajud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numero_processo: form.numero, nome_parte: form.nome, uf: form.uf }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro na consulta');
+      setResultado(data);
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  async function enviarPergunta() {
+    if (!pergunta.trim() || !resultado) return;
+    const novaMensagem = { role: 'user', content: pergunta };
+    const novoChat = [...chat, novaMensagem];
+    setChat(novoChat); setPergunta(''); setPerguntando(true);
+    try {
+      const r = await fetch('/api/cnj-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagem: pergunta, contexto: resultado, historico: chat }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Erro');
+      setChat(prev => [...prev, { role: 'assistant', content: data.resposta }]);
+    } catch (e) {
+      setChat(prev => [...prev, { role: 'assistant', content: `Erro: ${e.message}` }]);
+    } finally {
+      setPerguntando(false);
+      setTimeout(() => chatRef.current?.scrollTo({ top: 9999, behavior: 'smooth' }), 100);
+    }
+  }
+
+  function imprimir() {
+    const w = window.open('', '_blank');
+    w.document.write(`<html><head><title>Relatório CNJ</title><style>body{font-family:sans-serif;padding:32px;color:#0f172a}h1{font-size:20px}pre{white-space:pre-wrap;font-size:13px;background:#f8fafc;padding:16px;border-radius:8px}</style></head><body>`);
+    w.document.write(`<h1>Relatório CNJ — ${new Date().toLocaleDateString('pt-BR')}</h1>`);
+    if (form.numero) w.document.write(`<p><strong>Número:</strong> ${form.numero}</p>`);
+    if (form.nome) w.document.write(`<p><strong>Parte:</strong> ${form.nome}</p>`);
+    if (form.uf) w.document.write(`<p><strong>UF:</strong> ${form.uf}</p>`);
+    w.document.write(`<pre>${JSON.stringify(resultado, null, 2)}</pre>`);
+    if (chat.length > 0) {
+      w.document.write('<h2>Análise</h2>');
+      chat.forEach(m => w.document.write(`<p><strong>${m.role === 'user' ? 'Pergunta' : 'Resposta'}:</strong> ${m.content}</p>`));
+    }
+    w.document.write('</body></html>'); w.document.close(); w.print();
+  }
+
+  const processos = resultado?.processos || [];
+  const parecer = resultado?.parecer;
+  const NIVEL_COR = { verde: '#16a34a', amarelo: '#d97706', vermelho: '#dc2626' };
+  const NIVEL_BG = { verde: '#f0fdf4', amarelo: '#fffbeb', vermelho: '#fef2f2' };
+  const SEV_COR = { bloqueante: '#dc2626', alerta: '#d97706' };
+
+  return (
+    <div style={{ padding: '24px 0' }}>
+      <div style={{ background: 'white', borderRadius: 16, padding: 28, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 20 }}>Consulta CNJ — DataJud</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>Número do processo</div>
+            <input value={form.numero} onChange={e => setForm(p => ({ ...p, numero: e.target.value }))}
+              placeholder="0000000-00.0000.0.00.0000"
+              style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>Nome da parte</div>
+            <input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))}
+              placeholder="Nome completo ou razão social"
+              style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>UF *</div>
+            <select value={form.uf} onChange={e => setForm(p => ({ ...p, uf: e.target.value }))}
+              style={{ padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 14 }}>
+              <option value="">Selecione</option>
+              {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(u => <option key={u}>{u}</option>)}
+            </select>
+          </div>
+        </div>
+        {erro && <div style={{ marginTop: 12, color: '#dc2626', fontSize: 13 }}>{erro}</div>}
+        <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+          <button onClick={buscar} disabled={buscando}
+            style={{ padding: '10px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: buscando ? 0.7 : 1 }}>
+            {buscando ? 'Consultando...' : 'Consultar'}
+          </button>
+          {resultado && (
+            <button onClick={imprimir}
+              style={{ padding: '10px 20px', background: '#f1f5f9', color: '#475569', border: '1.5px solid #e2e8f0', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              Imprimir / Exportar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {parecer && (
+        <div style={{ background: NIVEL_BG[parecer.nivel] || '#f8fafc', border: `2px solid ${NIVEL_COR[parecer.nivel] || '#94a3b8'}`, borderRadius: 16, padding: 20, marginBottom: 20 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: NIVEL_COR[parecer.nivel] || '#334155', marginBottom: 6 }}>
+            {parecer.nivel === 'verde' ? '✅' : parecer.nivel === 'amarelo' ? '⚠️' : '🚫'} Parecer de risco
+          </div>
+          <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.6, marginBottom: parecer.recomendacao ? 8 : 0 }}>{parecer.texto}</div>
+          {parecer.recomendacao && <div style={{ fontSize: 13, color: '#64748b', fontStyle: 'italic' }}>{parecer.recomendacao}</div>}
+        </div>
+      )}
+
+      {processos.length > 0 && (
+        <div style={{ background: 'white', borderRadius: 16, padding: 28, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>
+            {processos.length} processo{processos.length !== 1 ? 's' : ''} encontrado{processos.length !== 1 ? 's' : ''}
+          </div>
+          {processos.map((p, i) => (
+            <div key={i} style={{ border: `1.5px solid ${p.tem_bloqueante ? '#fca5a5' : '#e2e8f0'}`, borderRadius: 12, padding: 20, marginBottom: 12, background: p.tem_bloqueante ? '#fff5f5' : 'white' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{p.numero || '—'}</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: 99 }}>{p.tribunal}</span>
+                  {p.score_risco > 0 && <span style={{ fontSize: 11, background: p.score_risco >= 35 ? '#fee2e2' : '#fef3c7', color: p.score_risco >= 35 ? '#dc2626' : '#d97706', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>Risco {p.score_risco}/100</span>}
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>{p.data_ajuizamento}</span>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
+                {p.classe && <div><span style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>Classe</span><span style={{ fontSize: 13, color: '#334155' }}>{p.classe}</span></div>}
+                {p.fase && <div><span style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>Fase</span><span style={{ fontSize: 13, color: '#334155' }}>{p.fase}</span></div>}
+                {p.orgao && <div><span style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>Órgão</span><span style={{ fontSize: 13, color: '#334155' }}>{p.orgao}</span></div>}
+                {p.assuntos && <div><span style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>Assunto</span><span style={{ fontSize: 13, color: '#334155' }}>{p.assuntos}</span></div>}
+              </div>
+              {p.riscos?.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                  {p.riscos.map((r, j) => (
+                    <span key={j} style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: r.severidade === 'bloqueante' ? '#fee2e2' : '#fef3c7', color: SEV_COR[r.severidade] || '#64748b' }}>
+                      {r.severidade === 'bloqueante' ? '🚫' : '⚠️'} {r.categoria}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {p.partes?.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Partes</div>
+                  {p.partes.map((parte, j) => (
+                    <div key={j} style={{ fontSize: 13, color: '#334155', marginBottom: 2 }}>
+                      <span style={{ fontWeight: 600 }}>{parte.tipo?.toUpperCase()}:</span> {parte.nome}
+                      {parte.advogados?.length > 0 && <span style={{ color: '#64748b' }}> — Adv: {parte.advogados.map(a => a.nome).join(', ')}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {p.movimentos?.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Últimos movimentos</div>
+                  {p.movimentos.slice(0, 5).map((m, j) => (
+                    <div key={j} style={{ fontSize: 12, color: m.risco ? SEV_COR[m.risco] : '#334155', marginBottom: 2 }}>
+                      <span style={{ color: '#94a3b8' }}>{m.data}</span> — {m.descricao}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {resultado && processos.length === 0 && (
+        <div style={{ background: 'white', borderRadius: 16, padding: 28, marginBottom: 20, textAlign: 'center', color: '#94a3b8', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+          Nenhum processo encontrado para os filtros informados.
+        </div>
+      )}
+
+      {resultado && (
+        <div style={{ background: 'white', borderRadius: 16, padding: 28, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>Análise dos resultados</div>
+          <div ref={chatRef} style={{ maxHeight: 340, overflowY: 'auto', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {chat.length === 0 && (
+              <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 20 }}>
+                Faça uma pergunta sobre os processos encontrados para obter uma análise detalhada.
+              </div>
+            )}
+            {chat.map((m, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                <div style={{ maxWidth: '80%', padding: '10px 14px', borderRadius: 12, background: m.role === 'user' ? '#2563eb' : '#f1f5f9', color: m.role === 'user' ? 'white' : '#1e293b', fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {perguntando && (
+              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <div style={{ padding: '10px 14px', borderRadius: 12, background: '#f1f5f9', color: '#94a3b8', fontSize: 14 }}>Analisando...</div>
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={pergunta} onChange={e => setPergunta(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && enviarPergunta()}
+              placeholder="Ex: Qual é a situação atual? Há risco de penhora?"
+              style={{ flex: 1, padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 14 }} />
+            <button onClick={enviarPergunta} disabled={perguntando || !pergunta.trim()}
+              style={{ padding: '10px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: (perguntando || !pergunta.trim()) ? 0.5 : 1 }}>
+              Enviar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const { role, loading } = useAuth();
   const navigate = useNavigate();
@@ -3698,6 +3922,7 @@ export default function Admin() {
         {tab === 'Equipe'         && <EquipeTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Registros'      && <RegistrosTab />}
+        {tab === 'CNJ'            && <CnjTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}
       </div>

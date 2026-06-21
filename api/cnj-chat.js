@@ -1,0 +1,44 @@
+export const config = { runtime: 'edge' };
+
+export default async function handler(req) {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const { mensagem, contexto, historico = [] } = await req.json();
+
+  const apiKey = process.env.CLAUDE_KEY;
+  if (!apiKey) return new Response(JSON.stringify({ error: 'CLAUDE_KEY não configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+
+  const systemPrompt = `Você é um especialista em direito imobiliário e análise de processos judiciais brasileiros com foco em leilões de imóveis.
+Analise os dados dos processos do CNJ DataJud fornecidos no contexto e responda às perguntas do usuário de forma objetiva e técnica.
+Foque em: riscos à arrematação, penhoras, gravames, capacidade de imissão de posse, e recomendações práticas.
+Seja direto e use linguagem acessível mas precisa. Não mencione IA ou sistemas internos.`;
+
+  const contextStr = JSON.stringify(contexto, null, 2).slice(0, 8000);
+
+  const messages = [
+    ...historico.map(m => ({ role: m.role, content: m.content })),
+    { role: 'user', content: `Contexto dos processos consultados:\n\`\`\`json\n${contextStr}\n\`\`\`\n\nPergunta: ${mensagem}` },
+  ];
+
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error?.message || 'Erro na API');
+    return new Response(JSON.stringify({ resposta: data.content[0].text }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+}
