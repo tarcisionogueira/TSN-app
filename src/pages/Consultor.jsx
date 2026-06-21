@@ -57,7 +57,9 @@ export default function Consultor() {
   const [reuniaoModal, setReuniaoModal] = useState(null); // { nome, email }
   const [reuniaoForm, setReuniaoForm] = useState({ data: '', hora: '10:00', duracao: 30 });
   const [criandoReuniao, setCriandoReuniao] = useState(false);
-  const [reuniaoLink, setReuniaoLink] = useState('');
+  const [reuniaoInfo, setReuniaoInfo] = useState(null); // { link, roomName, expiracao }
+  const [estendendo, setEstendendo] = useState(false);
+  const [estendeuMsg, setEstendeuMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -206,7 +208,8 @@ export default function Consultor() {
   async function criarReuniao() {
     if (!reuniaoForm.data) return;
     setCriandoReuniao(true);
-    setReuniaoLink('');
+    setReuniaoInfo(null);
+    setEstendeuMsg('');
     const reuniaoEm = `${reuniaoForm.data}T${reuniaoForm.hora}:00`;
     const fakeId = `consultor-${user.id.slice(0,8)}-${Date.now()}`;
     try {
@@ -216,9 +219,27 @@ export default function Consultor() {
         body: JSON.stringify({ solicitacaoId: fakeId, reuniaoEm, duracaoMin: Number(reuniaoForm.duracao) }),
       });
       const data = await res.json();
-      setReuniaoLink(data.url || data.link || '');
-    } catch (_) { setReuniaoLink(''); }
+      if (data.meetLink) setReuniaoInfo({ link: data.meetLink, roomName: data.roomName });
+    } catch (_) {}
     setCriandoReuniao(false);
+  }
+
+  async function estenderReuniao(min) {
+    if (!reuniaoInfo?.roomName) return;
+    setEstendendo(true);
+    setEstendeuMsg('');
+    try {
+      const res = await fetch('/api/estender-reuniao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName: reuniaoInfo.roomName, minutosExtras: min }),
+      });
+      const data = await res.json();
+      if (data.ok) setEstendeuMsg(`+${min} min adicionados. Nova expiração: ${data.novaExpiracao}`);
+      else setEstendeuMsg('Erro ao estender. Tente novamente.');
+    } catch (_) { setEstendeuMsg('Erro ao estender.'); }
+    setEstendendo(false);
+    setTimeout(() => setEstendeuMsg(''), 4000);
   }
 
   const tabBtn = (id, label) => (
@@ -724,12 +745,12 @@ export default function Consultor() {
       {/* === MODAL: AGENDAR REUNIÃO === */}
       {reuniaoModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
-          onClick={()=>{ setReuniaoModal(null); setReuniaoLink(''); }}>
-          <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:460, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
+          onClick={()=>{ setReuniaoModal(null); setReuniaoInfo(null); }}>
+          <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:500, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
             onClick={e=>e.stopPropagation()}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
               <div style={{ fontSize:16, fontWeight:800, color:'#0f172a' }}>Agendar reunião — {reuniaoModal.nome}</div>
-              <button onClick={()=>{ setReuniaoModal(null); setReuniaoLink(''); }} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+              <button onClick={()=>{ setReuniaoModal(null); setReuniaoInfo(null); }} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
               <div style={{ display:'flex', gap:10 }}>
@@ -760,27 +781,46 @@ export default function Consultor() {
                 {criandoReuniao ? 'Criando sala…' : '📅 Gerar link da reunião'}
               </button>
             </div>
-            {reuniaoLink && (
-              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'14px 16px' }}>
-                <div style={{ fontSize:12, fontWeight:700, color:'#15803d', marginBottom:8 }}>✅ Sala criada! Envie este link ao cliente:</div>
-                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                  <input readOnly value={reuniaoLink} style={{ flex:1, padding:'8px 10px', border:'1px solid #bbf7d0', borderRadius:8, fontSize:12, background:'white', color:'#0f172a', outline:'none' }} />
-                  <button onClick={()=>navigator.clipboard.writeText(reuniaoLink)}
-                    style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
-                    Copiar
-                  </button>
-                </div>
-                <div style={{ marginTop:8, display:'flex', gap:8 }}>
-                  {reuniaoModal.email && (
-                    <button onClick={()=>{ setReuniaoModal(null); setReuniaoLink(''); setMsgModal({ nome:reuniaoModal.nome, email:reuniaoModal.email }); setMsgForm({ assunto:'Convite para reunião TSN', conteudo:`Olá ${reuniaoModal.nome}! Segue o link para nossa reunião:\n\n${reuniaoLink}\n\nData: ${reuniaoForm.data} às ${reuniaoForm.hora}\n\nAté lá!` }); }}
-                      style={{ flex:1, padding:'8px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'center' }}>
-                      ✉ Enviar por mensagem
+            {reuniaoInfo && (
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {/* Link da sala */}
+                <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'14px 16px' }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#15803d', marginBottom:8 }}>✅ Sala criada! Envie este link ao cliente:</div>
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <input readOnly value={reuniaoInfo.link} style={{ flex:1, padding:'8px 10px', border:'1px solid #bbf7d0', borderRadius:8, fontSize:12, background:'white', color:'#0f172a', outline:'none' }} />
+                    <button onClick={()=>navigator.clipboard.writeText(reuniaoInfo.link)}
+                      style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                      Copiar
                     </button>
+                  </div>
+                  <div style={{ marginTop:8, display:'flex', gap:8 }}>
+                    {reuniaoModal.email && (
+                      <button onClick={()=>{ setReuniaoModal(null); setReuniaoInfo(null); setMsgModal({ nome:reuniaoModal.nome, email:reuniaoModal.email }); setMsgForm({ assunto:'Convite para reunião TSN', conteudo:`Olá ${reuniaoModal.nome}! Segue o link para nossa reunião:\n\n${reuniaoInfo.link}\n\nData: ${reuniaoForm.data} às ${reuniaoForm.hora}\n\nAté lá!` }); }}
+                        style={{ flex:1, padding:'8px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'center' }}>
+                        ✉ Enviar por mensagem
+                      </button>
+                    )}
+                    <a href={reuniaoInfo.link} target="_blank" rel="noreferrer"
+                      style={{ flex:1, padding:'8px', background:'#0f172a', color:'white', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', textAlign:'center' }}>
+                      Entrar na sala →
+                    </a>
+                  </div>
+                </div>
+                {/* Estender tempo */}
+                <div style={{ background:'#fef9c3', border:'1px solid #fde68a', borderRadius:10, padding:'12px 14px' }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#92400e', marginBottom:8 }}>⏱ Estender duração da sala</div>
+                  <p style={{ fontSize:11, color:'#a16207', margin:'0 0 10px' }}>Use enquanto estiver na reunião para adicionar tempo sem interromper a chamada.</p>
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                    {[15, 30, 60].map(min => (
+                      <button key={min} onClick={()=>estenderReuniao(min)} disabled={estendendo}
+                        style={{ padding:'7px 16px', background: estendendo?'#d1d5db':'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:estendendo?'not-allowed':'pointer' }}>
+                        +{min} min
+                      </button>
+                    ))}
+                  </div>
+                  {estendeuMsg && (
+                    <div style={{ marginTop:8, fontSize:12, color:'#15803d', fontWeight:600 }}>✅ {estendeuMsg}</div>
                   )}
-                  <a href={reuniaoLink} target="_blank" rel="noreferrer"
-                    style={{ flex:1, padding:'8px', background:'#0f172a', color:'white', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', textAlign:'center' }}>
-                    Entrar na sala →
-                  </a>
                 </div>
               </div>
             )}
