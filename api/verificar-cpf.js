@@ -9,7 +9,20 @@ export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   if (!SUPABASE_SERVICE_KEY) return new Response(JSON.stringify({ error: 'Configuração interna ausente' }), { status: 500 });
 
-  const { cpf, produto } = await req.json();
+  const { cpf, email, produto } = await req.json();
+
+  // Verificação de email único
+  if (email && !cpf) {
+    const re = await fetch(
+      `${SUPABASE_URL}/rest/v1/perfis?email=eq.${encodeURIComponent(email)}&select=id`,
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+    );
+    const rows = await re.json();
+    const existe = Array.isArray(rows) && rows.length > 0;
+    return new Response(JSON.stringify({ temConta: existe, campo: 'email' }),
+      { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
+
   if (!cpf) return new Response(JSON.stringify({ temConta: false }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
   const cpfLimpo = cpf.replace(/\D/g, '');

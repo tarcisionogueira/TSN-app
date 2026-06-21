@@ -66,12 +66,26 @@ export default function Login() {
   const [showSenha, setShowSenha] = useState(false);
   const [cpfCheck, setCpfCheck] = useState(null); // null | { temConta, temAcesso, role }
   const [cpfChecking, setCpfChecking] = useState(false);
+  const [emailDuplicado, setEmailDuplicado] = useState(false);
 
   const [aceite, setAceite] = useState(false);
 
   const [form, setForm] = useState({
     email: '', senha: '', nome: '', cpf: '', telefone: '', endereco: '',
   });
+
+  async function checarEmail(email) {
+    if (!email || !email.includes('@')) return;
+    try {
+      const res = await fetch('/api/verificar-cpf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      setEmailDuplicado(data.temConta);
+    } catch (_) {}
+  }
 
   async function checarCPF(cpf) {
     const cpfLimpo = cpf.replace(/\D/g, '');
@@ -284,7 +298,20 @@ export default function Login() {
               </div>
               <div>
                 <label style={lbl}>Email *</label>
-                <input type="email" value={form.email} onChange={e => up('email', e.target.value)} placeholder="seu@email.com" required style={inp} />
+                <input type="email" value={form.email}
+                  onChange={e => { up('email', e.target.value); setEmailDuplicado(false); }}
+                  onBlur={e => checarEmail(e.target.value)}
+                  placeholder="seu@email.com" required
+                  style={{ ...inp, borderColor: emailDuplicado ? '#dc2626' : undefined }} />
+                {emailDuplicado && (
+                  <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626', fontWeight: 600 }}>
+                    ⚠️ Este email já está cadastrado.{' '}
+                    <button type="button" onClick={() => { setModo('login'); setErro(''); }}
+                      style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0 }}>
+                      Fazer login →
+                    </button>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
@@ -362,7 +389,7 @@ export default function Login() {
                 </div>
               )}
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
-              <button type="submit" disabled={loading || !aceite || cpfCheck?.temConta}
+              <button type="submit" disabled={loading || !aceite || cpfCheck?.temConta || emailDuplicado}
                 style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</>
