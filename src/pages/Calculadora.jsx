@@ -408,88 +408,92 @@ export default function Calculadora() {
         </div>
       </div>
 
-      {/* ── Upsell contextual ── */}
+      {/* ── Upsell Investidor Pro ── */}
       {(() => {
         const r = effectiveRole || role;
-        const isPago = ['top1','top2','assessorado','clube','consultor','analista','advogado','admin'].includes(r);
+        const isPago = ['top2','assessorado','clube','consultor','analista','advogado','admin'].includes(r);
         const refAtivo = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
         const temRef = !!refAtivo;
 
-        // Com ref de consultor: sempre mostra (mesmo logado) — consultor pode estar apresentando ao cliente
-        // Sem ref: só mostra para não-logados ou explorador
-        if (!temRef) {
-          if (['assessorado','clube'].includes(r)) return null;
-          if (isPago) return null;
-        }
+        if (!temRef && isPago) return null;
 
         const isExplorador = user && r === 'explorador';
+        const checkoutUrl = `/checkout?plano=top2${refAtivo ? `&ref=${refAtivo}` : ''}`;
+        const irAssinar = () => nav(user ? checkoutUrl : `/login?plano=top2${refAtivo ? `&ref=${refAtivo}` : ''}`);
 
-        // Quando vem de link de consultor → formulário CPF + email
-        if (temRef) return (
-          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#2563eb', borderRadius: 20, padding: '4px 14px', fontSize: 11, fontWeight: 800, letterSpacing: 1, marginBottom: 14 }}>
-              🎯 ACESSO EXCLUSIVO PELO SEU CONSULTOR
-            </div>
-            <h3 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 900, lineHeight: 1.25 }}>
-              Gostou da calculadora? Acesse a plataforma completa.
-            </h3>
-            <p style={{ color: '#93c5fd', fontSize: 14, lineHeight: 1.7, margin: '0 0 22px' }}>
-              Análises de viabilidade, lotes selecionados, suporte de especialistas e muito mais. Comece gratuitamente — sem cartão de crédito.
-            </p>
-            <form onSubmit={submeterLead} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#93c5fd', marginBottom: 4, textTransform: 'uppercase' }}>CPF</div>
-                  <input value={leadCpf} onChange={e => setLeadCpf(e.target.value)} placeholder="000.000.000-00"
-                    style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: 14, boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#93c5fd', marginBottom: 4, textTransform: 'uppercase' }}>E-mail *</div>
-                  <input required type="email" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} placeholder="seu@email.com"
-                    style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: 14, boxSizing: 'border-box' }} />
-                </div>
-              </div>
-              {leadMsg && <div style={{ fontSize: 12, color: '#fca5a5' }}>{leadMsg}</div>}
-              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                <button type="submit" disabled={leadEnviando}
-                  style={{ flex: 2, padding: '13px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: 'pointer', opacity: leadEnviando ? 0.7 : 1 }}>
-                  {leadEnviando ? 'Verificando…' : 'Quero acessar a plataforma →'}
-                </button>
-                <button type="button" onClick={() => nav(`/planos${refAtivo ? `?ref=${refAtivo}` : ''}`)}
-                  style={{ flex: 1, padding: '13px', background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                  Ver planos
-                </button>
-              </div>
-            </form>
-          </div>
-        );
-
-        // Sem ref → banner simples para visitantes externos
         return (
-          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius: 16, padding: '28px 32px', color: 'white' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-              {isExplorador ? '🚀 Desbloqueie o potencial completo' : '🏆 Invista com mais segurança e inteligência'}
+          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
+            {temRef && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#2563eb', borderRadius: 20, padding: '4px 14px', fontSize: 11, fontWeight: 800, letterSpacing: 1, marginBottom: 14 }}>
+                🎯 ACESSO EXCLUSIVO PELO SEU CONSULTOR
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+                  ⭐ Investidor Pro — R$ 49,90/mês
+                </div>
+                <h3 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>
+                  {isExplorador
+                    ? 'Desbloqueie análises completas com o Investidor Pro'
+                    : temRef
+                      ? 'Gostou da calculadora? Acesse a plataforma completa.'
+                      : 'Invista com mais segurança e inteligência'}
+                </h3>
+                <p style={{ color: '#93c5fd', fontSize: 13, lineHeight: 1.7, margin: '0 0 18px' }}>
+                  Relatório de viabilidade, análise jurídica do edital e matrícula, consulta processual integrada e análises ilimitadas — tudo em uma plataforma.
+                </p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button onClick={irAssinar}
+                    style={{ padding: '12px 24px', background: 'white', color: '#1e40af', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    Assinar Investidor Pro →
+                  </button>
+                  {!user && (
+                    <button onClick={() => nav(`/checkout?plano=explorador${refAtivo ? `&ref=${refAtivo}` : ''}`)}
+                      style={{ padding: '12px 20px', background: 'rgba(255,255,255,0.12)', color: 'white', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Começar grátis
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Destaques do plano */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
+                {[
+                  'Relatório de viabilidade completo',
+                  'Análise jurídica de edital e matrícula',
+                  'Consulta processual (Jusbrasil/CNJ)',
+                  'Alertas de risco automáticos',
+                  'Análises ilimitadas por mês',
+                ].map(f => (
+                  <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#bfdbfe' }}>
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(134,239,172,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="9" height="9" viewBox="0 0 9 9"><polyline points="1,5 3.5,7.5 8,1.5" stroke="#86efac" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                    {f}
+                  </div>
+                ))}
+              </div>
             </div>
-            <h3 style={{ margin: '0 0 10px', fontSize: 22, fontWeight: 900, lineHeight: 1.25 }}>
-              {isExplorador ? 'Seu acesso gratuito está ativo. Quer ir mais fundo?' : 'Gostou da calculadora? Conheça a plataforma completa.'}
-            </h3>
-            <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.75, margin: '0 0 22px' }}>
-              {isExplorador
-                ? 'Com o Plano Investidor Pro você acessa análises detalhadas, suporte especializado e usa esta calculadora sem limitações.'
-                : 'A TSN Ativos conecta investidores a leilões judiciais e extrajudiciais com curadoria especializada. Acesse lotes selecionados, análises de viabilidade e suporte de especialistas.'}
-            </p>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {!user && (
-                <button onClick={() => nav('/login?modo=cadastro')}
-                  style={{ padding: '12px 24px', background: 'white', color: '#1e40af', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
-                  Criar conta gratuita
+
+            {/* Formulário lead — apenas quando vem de link de consultor */}
+            {temRef && (
+              <form onSubmit={submeterLead} style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd', marginBottom: 2 }}>Ou deixe seu contato para receber mais informações:</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <input value={leadCpf} onChange={e => setLeadCpf(e.target.value)} placeholder="CPF (opcional)"
+                    style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 13, boxSizing: 'border-box' }} />
+                  <input required type="email" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} placeholder="seu@email.com *"
+                    style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 13, boxSizing: 'border-box' }} />
+                </div>
+                {leadMsg && <div style={{ fontSize: 12, color: '#fca5a5' }}>{leadMsg}</div>}
+                <button type="submit" disabled={leadEnviando}
+                  style={{ padding: '11px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: leadEnviando ? 0.7 : 1 }}>
+                  {leadEnviando ? 'Enviando…' : 'Quero receber mais informações →'}
                 </button>
-              )}
-              <button onClick={() => nav('/planos')}
-                style={{ padding: '12px 24px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
-                {isExplorador ? 'Ver planos e assinar →' : 'Conhecer os planos →'}
-              </button>
-            </div>
+              </form>
+            )}
           </div>
         );
       })()}
