@@ -13,15 +13,17 @@ function dentroFaixa(valor, alvo, tol = 1) {
 function mapearPorValor(valor, descricao) {
   const v = Number(valor) || 0;
   const desc = (descricao || '').toLowerCase();
-  if (dentroFaixa(v, 49.9))   return { plano: 'top1',        role: 'top1'        };
+  if (dentroFaixa(v, 49.9))   return { plano: 'top2',        role: 'top2'        };
   if (dentroFaixa(v, 99.9))   return { plano: 'top2',        role: 'top2'        };
   if (dentroFaixa(v, 499.9))  return { plano: 'assessorado', role: 'assessorado' };
-  if (dentroFaixa(v, 5000)) {
-    return desc.includes('assessorado')
+  if (dentroFaixa(v, 6000, 10)) {
+    return desc.includes('assessorado') || true
       ? { plano: 'assessorado', role: 'assessorado' }
-      : { plano: 'clube',       role: 'clube'       };
+      : null;
   }
-  if (dentroFaixa(v, 48000, 50)) return { plano: 'clube',    role: 'clube'       };
+  if (dentroFaixa(v, 5000))   return { plano: 'assessorado', role: 'assessorado' };
+  if (dentroFaixa(v, 60000, 100)) return { plano: 'clube',   role: 'clube'       };
+  if (dentroFaixa(v, 48000, 50))  return { plano: 'clube',   role: 'clube'       };
   return null;
 }
 
@@ -134,6 +136,18 @@ export default async function handler(req, res) {
     if (error) {
       console.error('Webhook Supabase error:', error.message);
       return res.status(500).json({ error: error.message });
+    }
+
+    // ── Grava preço contratado (trava de 12 meses) ──
+    if (mapeado) {
+      try {
+        await supabase.rpc('registrar_preco_contratado', {
+          p_user_id:   cliente.id,
+          p_plano_key: mapeado.plano,
+        });
+      } catch (e) {
+        console.error('registrar_preco_contratado error:', e.message);
+      }
     }
 
     // ── Comissão de afiliado (consultor) ──
