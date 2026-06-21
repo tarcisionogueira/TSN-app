@@ -201,11 +201,6 @@ export default function Planos() {
                   style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual ? 'rgba(255,255,255,0.15)' : 'white', color: atual ? '#93c5fd' : '#1e40af', fontWeight: 800, fontSize: 15, cursor: atual ? 'default' : 'pointer', boxShadow: atual ? 'none' : '0 4px 14px rgba(0,0,0,0.2)' }}>
                   {atual ? 'Seu plano atual' : 'Assinar →'}
                 </button>
-                {!atual && temAnual && (
-                  <div style={{ textAlign: 'center', marginTop: 10, fontSize: 12, color: '#86efac' }}>
-                    Mensal ou anual com 25% off — escolha na próxima tela
-                  </div>
-                )}
               </div>
             );
           })()}
