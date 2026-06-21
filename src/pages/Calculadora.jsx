@@ -415,7 +415,7 @@ export default function Calculadora() {
         const refAtivo = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
         const temRef = !!refAtivo;
 
-        if (!temRef && isPago) return null;
+        if (isPago) return null;
 
         const isExplorador = user && r === 'explorador';
         const checkoutUrl = `/checkout?plano=top2${refAtivo ? `&ref=${refAtivo}` : ''}`;
