@@ -59,16 +59,40 @@ export default function Login() {
     }
   }
 
+  const produtoParam = params.get('produto') || ''; // tipo:id ex: curso:abc123
   const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [showSenha, setShowSenha] = useState(false);
+  const [cpfCheck, setCpfCheck] = useState(null); // null | { temConta, temAcesso, role }
+  const [cpfChecking, setCpfChecking] = useState(false);
 
   const [aceite, setAceite] = useState(false);
 
   const [form, setForm] = useState({
     email: '', senha: '', nome: '', cpf: '', telefone: '', endereco: '',
   });
+
+  async function checarCPF(cpf) {
+    const cpfLimpo = cpf.replace(/\D/g, '');
+    if (cpfLimpo.length < 11) { setCpfCheck(null); return; }
+    setCpfChecking(true);
+    try {
+      const produto = planoEscolhido
+        ? { tipo: 'plano', planoKey: planoEscolhido }
+        : produtoParam
+        ? { tipo: produtoParam.split(':')[0], id: produtoParam.split(':')[1] }
+        : null;
+      const res = await fetch('/api/verificar-cpf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf: cpfLimpo, produto }),
+      });
+      const data = await res.json();
+      setCpfCheck(data);
+    } catch (_) { setCpfCheck(null); }
+    setCpfChecking(false);
+  }
 
   const up = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -93,11 +117,15 @@ export default function Login() {
       // Processa convite de equipe se existir
       if (signInData?.user) await processarConviteEquipe(signInData.user.id);
       // Verifica plano no sessionStorage (definido durante cadastro) ou na URL
+      const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');
+      sessionStorage.removeItem('tsn_redirect_produto');
       const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
       sessionStorage.removeItem('tsn_plano_pendente');
       const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
       sessionStorage.removeItem('tsn_promo_pendente');
-      if (planoPendente) {
+      if (produtoRedirect) {
+        nav(produtoRedirect);
+      } else if (planoPendente) {
         nav(`/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`);
       } else if (nextParam) {
         nav(decodeURIComponent(nextParam));
@@ -261,7 +289,11 @@ export default function Login() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={lbl}>CPF</label>
-                  <input value={form.cpf} onChange={e => up('cpf', e.target.value)} placeholder="000.000.000-00" style={inp} />
+                  <input value={form.cpf}
+                    onChange={e => { up('cpf', e.target.value); setCpfCheck(null); }}
+                    onBlur={e => checarCPF(e.target.value)}
+                    placeholder="000.000.000-00"
+                    style={{ ...inp, borderColor: cpfCheck?.temConta ? (cpfCheck.temAcesso ? '#dc2626' : '#d97706') : undefined }} />
                 </div>
                 <div>
                   <label style={lbl}>Telefone</label>
@@ -290,8 +322,47 @@ export default function Login() {
                   Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#2563eb', fontWeight: 700 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#2563eb', fontWeight: 700 }}>Política de Privacidade</a>, e autorizo o tratamento dos meus dados conforme a LGPD.
                 </span>
               </label>
+              {/* Aviso CPF já cadastrado */}
+              {cpfChecking && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>Verificando CPF…</div>}
+              {cpfCheck?.temConta && cpfCheck.temAcesso && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginBottom: 6 }}>
+                    🚫 Este CPF já possui uma conta com acesso a este produto.
+                  </div>
+                  <div style={{ fontSize: 12, color: '#7f1d1d', marginBottom: 12, lineHeight: 1.5 }}>
+                    Você não precisa comprar novamente. Entre na sua conta para acessar o conteúdo.
+                  </div>
+                  <button type="button"
+                    onClick={() => {
+                      // Após login redireciona para o produto
+                      if (produtoParam) {
+                        const [t, pid] = produtoParam.split(':');
+                        sessionStorage.setItem('tsn_redirect_produto', `/${t === 'curso' ? 'membros/curso' : t === 'ebook' ? 'membros/ebook' : 'checkout?plano'}/${pid}`);
+                      }
+                      setModo('login'); setErro('');
+                    }}
+                    style={{ width: '100%', padding: '10px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                    Entrar e acessar o conteúdo →
+                  </button>
+                </div>
+              )}
+              {cpfCheck?.temConta && !cpfCheck.temAcesso && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
+                    ⚠️ Este CPF já tem uma conta TSN Ativos.
+                  </div>
+                  <div style={{ fontSize: 12, color: '#78350f', marginBottom: 10 }}>
+                    Entre na sua conta existente para continuar com a compra.
+                  </div>
+                  <button type="button"
+                    onClick={() => { setModo('login'); setErro(''); }}
+                    style={{ width: '100%', padding: '9px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                    Fazer login →
+                  </button>
+                </div>
+              )}
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
-              <button type="submit" disabled={loading || !aceite}
+              <button type="submit" disabled={loading || !aceite || cpfCheck?.temConta}
                 style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</>

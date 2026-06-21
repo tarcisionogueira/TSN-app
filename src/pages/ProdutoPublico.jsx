@@ -131,11 +131,11 @@ export default function ProdutoPublico({ tipo }) {
                     ? '📦 Adquira o acesso a este conteúdo'
                     : '⭐ Disponível para assinantes Investidor Pro'}
                 </div>
-                <button onClick={() => nav(`/login?modo=cadastro${isPago ? '' : `&plano=top1`}${refParam ? '&' + refParam.slice(1) : ''}`)}
+                <button onClick={() => nav(`/login?modo=cadastro&produto=${tipo}:${id}${isPago ? '' : `&plano=top1`}${ref ? `&ref=${ref}` : ''}`)}
                   style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
                   {isPago ? 'Comprar agora →' : 'Criar conta e acessar →'}
                 </button>
-                <button onClick={() => nav(`/login${isPago ? '' : `?plano=top1`}`)}
+                <button onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top1`}`)}
                   style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
                   Já tenho conta — Entrar
                 </button>
