@@ -30,15 +30,15 @@ export default async function handler(req) {
       privacy: 'private',
       properties: {
         exp: expiracaoTs,
-        // Transcrição forçada — não pode ser desativada pelo participante
         transcription_enabled_default: true,
-        // Máximo de 2 participantes (analista + cliente)
         max_participants: 2,
         lang: 'pt',
-        // Redireciona ao sair
-        redirect_on_meeting_exit: process.env.APP_BASE_URL || 'https://tsnativos.com.br',
-        // Webhook para receber transcrição ao final
+        redirect_on_meeting_exit: process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app',
         advanced_chat: false,
+        // Tela de entrada com aviso legal de transcrição (Lei 9.296/1996 Art. 10 + LGPD Art. 7º, I)
+        enable_prejoin_ui: true,
+        prejoin_ui_title: 'Reunião TSN Ativos',
+        prejoin_ui_description: '⚠️ Esta reunião é automaticamente transcrita para fins de qualidade e auditoria interna. Ao entrar, você declara ciência da transcrição, conforme Lei 9.296/1996, Art. 10 e LGPD (Lei 13.709/2018), Art. 7º, I.',
       },
     }),
   });

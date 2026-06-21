@@ -21,6 +21,7 @@ export default function ChatSuporte() {
   const [anexos, setAnexos] = useState([]);
   const [novoTicket, setNovoTicket] = useState(false);
   const [precisaAtendente, setPrecisaAtendente] = useState(false);
+  const [memoriaIA, setMemoriaIA] = useState('');
   const fileRef = useRef();
   const msgEndRef = useRef();
   const avisoTimer = useRef(null);
@@ -30,7 +31,13 @@ export default function ChatSuporte() {
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Cliente';
 
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
-  useEffect(() => { if (isOpen && user) carregarTicket(); }, [isOpen, user?.id]);
+  useEffect(() => {
+    if (isOpen && user) {
+      carregarTicket();
+      supabase.from('perfis').select('memoria_ia').eq('id', user.id).single()
+        .then(({ data }) => { if (data?.memoria_ia) setMemoriaIA(data.memoria_ia); });
+    }
+  }, [isOpen, user?.id]);
 
   useEffect(() => {
     const handler = () => setIsOpen(true);
@@ -150,7 +157,7 @@ export default function ChatSuporte() {
     try {
       const res = await fetch('/api/chat-suporte', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagens: msgs }),
+        body: JSON.stringify({ mensagens: msgs, memoria: memoriaIA }),
       });
       const { resposta, escalar } = await res.json();
       if (resposta) {
@@ -200,6 +207,8 @@ export default function ChatSuporte() {
     setTicket(p => p ? { ...p, status: 'finalizado' } : p);
     clearTimeout(avisoTimer.current);
     clearTimeout(fecharTimer.current);
+    // Gera resumo em background para memória futura
+    if (user?.id) fetch('/api/resumir-ticket', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticketId: ticket.id, userId: user.id }) });
   }
 
   function handlePaste(e) {

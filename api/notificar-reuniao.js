@@ -49,8 +49,8 @@ export default async function handler(req) {
         </a>
       </div>
 
-      <div style="background:#fef3c7;border-radius:10px;padding:14px 18px;font-size:13px;color:#78350f;">
-        <strong>Importante:</strong> Esta reunião será gravada para fins de qualidade e conformidade. A gravação não pode ser desativada.
+      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:14px 18px;font-size:13px;color:#78350f;line-height:1.6;">
+        <strong>⚠️ Aviso de transcrição:</strong> Esta reunião é automaticamente transcrita para fins de qualidade e auditoria interna. Ao entrar na sala, você declara ciência e concordância com a transcrição, em conformidade com a <strong>Lei 9.296/1996, Art. 10</strong> e a <strong>LGPD (Lei 13.709/2018), Art. 7º, I</strong>.
       </div>
 
       <p style="margin:24px 0 0;font-size:13px;color:#94a3b8;text-align:center;">

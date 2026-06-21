@@ -47,7 +47,7 @@ export default async function handler(req) {
     status: 500, headers: { 'Content-Type': 'application/json' },
   });
 
-  const { mensagens } = await req.json();
+  const { mensagens, memoria } = await req.json();
   if (!mensagens?.length) return new Response(JSON.stringify({ error: 'mensagens obrigatório' }), {
     status: 400, headers: { 'Content-Type': 'application/json' },
   });
@@ -75,7 +75,7 @@ export default async function handler(req) {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system: SYSTEM, messages }),
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system: memoria ? `${SYSTEM}\n\n## Histórico deste cliente (use como contexto, não mencione diretamente ao cliente):\n${memoria}` : SYSTEM, messages }),
     });
     data = await res.json();
   } catch (_) {
