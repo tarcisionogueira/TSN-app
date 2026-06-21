@@ -49,6 +49,7 @@ export default function Consultor() {
   const [filtroComissao, setFiltroComissao] = useState('todos'); // 'todos' | 'pendente' | 'pago'
   const [leadsSDR, setLeadsSDR] = useState([]);
   const [leadDetalhe, setLeadDetalhe] = useState(null);
+  const [clienteDetalhe, setClienteDetalhe] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -56,7 +57,7 @@ export default function Consultor() {
     async function load() {
       const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: lp }, { data: lc }, { data: pc }] = await Promise.all([
         supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', user.id).single(),
-        supabase.from('perfis').select('id, nome, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
+        supabase.from('perfis').select('id, nome, email, whatsapp, telefone, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
         supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
         supabase.from('cursos_admin').select('id, titulo, subtitulo, preco, emoji, cor').eq('ativo', true).order('ordem'),
         supabase.from('links_promo').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
@@ -414,154 +415,177 @@ export default function Consultor() {
 
         {/* === CARTEIRA === */}
         {aba==='carteira' && (() => {
-          const lista = filtroCarteira === 'pagantes' ? carteira.filter(c => c.plano && c.plano !== 'gratuito') : carteira;
+          const listaClientes = filtroCarteira === 'pagantes' ? carteira.filter(c => c.plano && c.plano !== 'gratuito') : carteira;
+          // Helper: render contact card (shared between clients and SDR leads)
+          function ContatoCard({ nome, email, whatsapp, plano, data, badge, badgeColor, badgeBg, onVerRespostas, tipo }) {
+            const tel = whatsapp || '';
+            const telDigits = tel.replace(/\D/g,'');
+            return (
+              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 18px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+                {/* Avatar */}
+                <div style={{ width:40, height:40, borderRadius:20, background: tipo==='lead'?'#fef3c7':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>
+                  {tipo==='lead' ? '🎯' : '👤'}
+                </div>
+                {/* Info */}
+                <div style={{ flex:1, minWidth:160 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:3 }}>
+                    <span style={{ fontWeight:800, fontSize:14, color:'#0f172a' }}>{nome||'—'}</span>
+                    <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20, background:badgeBg||'#f1f5f9', color:badgeColor||'#64748b', textTransform:'uppercase' }}>
+                      {badge}
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'#64748b' }}>
+                    {email && <span>📧 {email}</span>}
+                    {tel && <span>📱 {tel}</span>}
+                    {data && <span>📅 {fmtData(data)}</span>}
+                  </div>
+                </div>
+                {/* Actions */}
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', flexShrink:0 }}>
+                  {telDigits && (
+                    <a href={`https://wa.me/55${telDigits}`} target="_blank" rel="noreferrer"
+                      style={{ padding:'6px 12px', background:'#dcfce7', color:'#166534', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', whiteSpace:'nowrap' }}>
+                      WhatsApp
+                    </a>
+                  )}
+                  {email && (
+                    <a href={`mailto:${email}`}
+                      style={{ padding:'6px 12px', background:'#eff6ff', color:'#1d4ed8', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', whiteSpace:'nowrap' }}>
+                      E-mail
+                    </a>
+                  )}
+                  <button onClick={() => setClienteDetalhe({ nome, email, whatsapp: tel, plano, data, tipo, onVerRespostas })}
+                    style={{ padding:'6px 12px', background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                    Ver perfil
+                  </button>
+                  {onVerRespostas && (
+                    <button onClick={onVerRespostas}
+                      style={{ padding:'6px 12px', background:'#fef9c3', color:'#92400e', border:'1px solid #fde68a', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                      Respostas
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div>
-              <div style={{ display:'flex', gap:8, marginBottom:14, alignItems:'center', flexWrap:'wrap' }}>
+              {/* Filtro clientes indicados */}
+              <div style={{ display:'flex', gap:8, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
                 {[['todos','Todos os clientes'],['pagantes','Só pagantes']].map(([v,l])=>(
                   <button key={v} onClick={()=>setFiltroCarteira(v)}
                     style={{ padding:'5px 14px', border:'none', borderRadius:20, fontWeight:700, fontSize:12, cursor:'pointer', background:filtroCarteira===v?'#0f172a':'#f1f5f9', color:filtroCarteira===v?'white':'#475569' }}>
                     {l}
                   </button>
                 ))}
-                <span style={{ fontSize:12, color:'#94a3b8', marginLeft:4 }}>{lista.length} cliente{lista.length!==1?'s':''}</span>
+                <span style={{ fontSize:12, color:'#94a3b8', marginLeft:4 }}>{listaClientes.length} cliente{listaClientes.length!==1?'s':''}</span>
               </div>
-              {lista.length === 0 && filtroCarteira !== 'pagantes' ? (
-                <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>
+
+              {listaClientes.length === 0 && leadsSDR.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
                   <Users size={40} color="#cbd5e1" style={{ margin:'0 auto 12px' }}/>
-                  <p>Nenhum cliente na sua carteira ainda. Compartilhe seu link de indicação para começar.</p>
+                  <p>{filtroCarteira==='pagantes' ? 'Nenhum cliente pagante ainda.' : 'Nenhum cliente ainda. Compartilhe seu link de indicação para começar.'}</p>
                 </div>
-              ) : lista.length === 0 ? (
-                <p style={{ textAlign:'center', color:'#94a3b8', padding:'30px 0' }}>Nenhum cliente pagante ainda.</p>
               ) : (
-                <div style={{ overflowX:'auto' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                    <thead>
-                      <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
-                        {['Cliente','Plano','Cadastro'].map(h=>(
-                          <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#475569', fontSize:11, textTransform:'uppercase' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lista.map((c,i)=>(
-                        <tr key={c.id} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
-                          <td style={{ padding:'12px 14px', fontWeight:700, color:'#0f172a' }}>{c.nome||'—'}</td>
-                          <td style={{ padding:'12px 14px' }}>
-                            <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, background: c.plano&&c.plano!=='gratuito'?'#d1fae5':'#f1f5f9', color: c.plano&&c.plano!=='gratuito'?'#059669':'#64748b', textTransform:'uppercase' }}>
-                              {c.plano || 'gratuito'}
-                            </span>
-                          </td>
-                          <td style={{ padding:'12px 14px', color:'#64748b' }}>{fmtData(c.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  {listaClientes.map(c => (
+                    <ContatoCard key={c.id}
+                      nome={c.nome} email={c.email} whatsapp={c.whatsapp||c.telefone}
+                      plano={c.plano} data={c.created_at} tipo="cliente"
+                      badge={c.plano && c.plano !== 'gratuito' ? c.plano : 'gratuito'}
+                      badgeBg={c.plano && c.plano !== 'gratuito' ? '#d1fae5' : '#f1f5f9'}
+                      badgeColor={c.plano && c.plano !== 'gratuito' ? '#059669' : '#64748b'}
+                    />
+                  ))}
                 </div>
               )}
 
-              {/* Leads captados via SDR */}
+              {/* Leads SDR */}
               {leadsSDR.length > 0 && (
-                <div style={{ marginTop:28 }}>
-                  <div style={{ fontSize:13, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:12, borderTop:'2px solid #f1f5f9', paddingTop:20, display:'flex', alignItems:'center', gap:8 }}>
-                    🎯 Leads captados <span style={{ background:'#fef3c7', color:'#92400e', borderRadius:20, padding:'1px 10px', fontSize:11, fontWeight:700 }}>{leadsSDR.length}</span>
-                    <span style={{ fontSize:11, color:'#94a3b8', fontWeight:400, textTransform:'none' }}>— não pagantes, aguardando contato</span>
+                <div style={{ marginTop:24 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12, paddingTop:20, borderTop:'2px solid #f1f5f9' }}>
+                    <span style={{ fontSize:13, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5 }}>🎯 Leads captados</span>
+                    <span style={{ background:'#fef3c7', color:'#92400e', borderRadius:20, padding:'1px 10px', fontSize:11, fontWeight:700 }}>{leadsSDR.length}</span>
+                    <span style={{ fontSize:11, color:'#94a3b8' }}>aguardando contato</span>
                   </div>
-                  <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                      <thead>
-                        <tr style={{ background:'#fffbeb', borderBottom:'2px solid #fde68a' }}>
-                          {['Nome','E-mail','WhatsApp','Produto','Data',''].map(h=>(
-                            <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#92400e', fontSize:11, textTransform:'uppercase' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {leadsSDR.map((l,i)=>(
-                          <tr key={l.id} style={{ borderBottom:'1px solid #fef9c3', background:i%2===0?'white':'#fffbeb88' }}>
-                            <td style={{ padding:'11px 14px', fontWeight:700, color:'#0f172a' }}>{l.nome}</td>
-                            <td style={{ padding:'11px 14px', color:'#475569' }}>{l.email||'—'}</td>
-                            <td style={{ padding:'11px 14px' }}>
-                              <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                                {l.whatsapp}
-                                {l.whatsapp && (
-                                  <a href={`https://wa.me/55${l.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
-                                    style={{ fontSize:11, background:'#dcfce7', color:'#166534', borderRadius:6, padding:'2px 7px', textDecoration:'none', fontWeight:700 }}>WA</a>
-                                )}
-                              </div>
-                            </td>
-                            <td style={{ padding:'11px 14px', color:'#64748b', fontSize:12 }}>{l.sdr_produtos?.nome||'—'}</td>
-                            <td style={{ padding:'11px 14px', color:'#64748b', fontSize:12 }}>{fmtData(l.criado_em)}</td>
-                            <td style={{ padding:'11px 14px' }}>
-                              <div style={{ display:'flex', gap:6 }}>
-                                <button onClick={()=>setLeadDetalhe(l)}
-                                  style={{ padding:'4px 10px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', color:'#374151' }}>
-                                  Ver respostas
-                                </button>
-                                {l.email && (
-                                  <a href={`mailto:${l.email}`}
-                                    style={{ padding:'4px 10px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', color:'#1d4ed8', textDecoration:'none' }}>
-                                    E-mail
-                                  </a>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {leadsSDR.map(l => (
+                      <ContatoCard key={l.id}
+                        nome={l.nome} email={l.email} whatsapp={l.whatsapp}
+                        data={l.criado_em} tipo="lead"
+                        badge={l.sdr_produtos?.nome || 'Lead'}
+                        badgeBg="#fef3c7" badgeColor="#92400e"
+                        onVerRespostas={() => setLeadDetalhe(l)}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* Modal respostas lead */}
+              {/* Modal: Ver perfil simplificado */}
+              {clienteDetalhe && (
+                <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+                  onClick={()=>setClienteDetalhe(null)}>
+                  <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:420, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}
+                    onClick={e=>e.stopPropagation()}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+                      <div style={{ fontSize:16, fontWeight:800 }}>{clienteDetalhe.nome}</div>
+                      <button onClick={()=>setClienteDetalhe(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:20 }}>
+                      {clienteDetalhe.email && <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px', fontSize:13 }}>📧 <strong>E-mail:</strong> {clienteDetalhe.email}</div>}
+                      {clienteDetalhe.whatsapp && <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px', fontSize:13 }}>📱 <strong>WhatsApp:</strong> {clienteDetalhe.whatsapp}</div>}
+                      {clienteDetalhe.plano && <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px', fontSize:13 }}>📋 <strong>Plano:</strong> {clienteDetalhe.plano}</div>}
+                      {clienteDetalhe.data && <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px', fontSize:13 }}>📅 <strong>Cadastro:</strong> {fmtData(clienteDetalhe.data)}</div>}
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {clienteDetalhe.whatsapp && (
+                        <a href={`https://wa.me/55${clienteDetalhe.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                          style={{ padding:'11px', background:'#dcfce7', color:'#166534', borderRadius:10, fontWeight:700, fontSize:14, textDecoration:'none', textAlign:'center' }}>
+                          📱 Abrir WhatsApp
+                        </a>
+                      )}
+                      {clienteDetalhe.email && (
+                        <a href={`mailto:${clienteDetalhe.email}`}
+                          style={{ padding:'11px', background:'#eff6ff', color:'#1d4ed8', borderRadius:10, fontWeight:700, fontSize:14, textDecoration:'none', textAlign:'center' }}>
+                          ✉️ Enviar e-mail
+                        </a>
+                      )}
+                      <button onClick={()=>{ setClienteDetalhe(null); window.location.hash='/reuniao'; }}
+                        style={{ padding:'11px', background:'#0f172a', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer' }}>
+                        📅 Agendar reunião
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal: Respostas lead SDR */}
               {leadDetalhe && (
                 <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
                   onClick={()=>setLeadDetalhe(null)}>
                   <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:520, maxHeight:'80vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}
                     onClick={e=>e.stopPropagation()}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-                      <div style={{ fontSize:16, fontWeight:800, color:'#0f172a' }}>{leadDetalhe.nome}</div>
+                      <div style={{ fontSize:16, fontWeight:800 }}>Respostas — {leadDetalhe.nome}</div>
                       <button onClick={()=>setLeadDetalhe(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#94a3b8' }}>✕</button>
                     </div>
-                    <div style={{ display:'flex', flexDirection:'column', gap:4, fontSize:13, color:'#475569', marginBottom:16 }}>
-                      <div>📧 {leadDetalhe.email||'—'}</div>
-                      <div>📱 {leadDetalhe.whatsapp||'—'}</div>
-                      <div>📦 {leadDetalhe.sdr_produtos?.nome||'—'}</div>
-                      <div>📅 {fmtData(leadDetalhe.criado_em)}</div>
-                    </div>
                     {leadDetalhe.respostas && Object.keys(leadDetalhe.respostas).length > 0 ? (
-                      <div>
-                        <div style={{ fontSize:12, fontWeight:800, color:'#374151', textTransform:'uppercase', marginBottom:10, borderTop:'1px solid #e2e8f0', paddingTop:12 }}>Respostas do questionário</div>
-                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                          {(leadDetalhe.sdr_produtos?.perguntas||[]).map(p=>{
-                            const r = leadDetalhe.respostas[p.id];
-                            return r ? (
-                              <div key={p.id} style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px' }}>
-                                <div style={{ fontSize:12, color:'#64748b', marginBottom:4 }}>{p.texto}</div>
-                                <div style={{ fontSize:14, fontWeight:700, color:'#0f172a' }}>{r}</div>
-                              </div>
-                            ) : null;
-                          })}
-                        </div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                        {(leadDetalhe.sdr_produtos?.perguntas||[]).map(p=>{
+                          const r = leadDetalhe.respostas[p.id];
+                          return r ? (
+                            <div key={p.id} style={{ background:'#f8fafc', borderRadius:8, padding:'12px 14px' }}>
+                              <div style={{ fontSize:12, color:'#64748b', marginBottom:4 }}>{p.texto}</div>
+                              <div style={{ fontSize:14, fontWeight:700, color:'#0f172a' }}>{r}</div>
+                            </div>
+                          ) : null;
+                        })}
                       </div>
                     ) : (
-                      <div style={{ color:'#94a3b8', fontSize:13, textAlign:'center', padding:'12px 0' }}>Sem respostas de questionário.</div>
+                      <div style={{ color:'#94a3b8', fontSize:13, textAlign:'center', padding:'20px 0' }}>Sem respostas de questionário registradas.</div>
                     )}
-                    <div style={{ marginTop:16, display:'flex', gap:8, flexWrap:'wrap' }}>
-                      {leadDetalhe.whatsapp && (
-                        <a href={`https://wa.me/55${leadDetalhe.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
-                          style={{ flex:1, textAlign:'center', padding:'10px', background:'#dcfce7', color:'#166534', borderRadius:8, fontWeight:700, fontSize:13, textDecoration:'none' }}>
-                          📱 Abrir WhatsApp
-                        </a>
-                      )}
-                      {leadDetalhe.email && (
-                        <a href={`mailto:${leadDetalhe.email}`}
-                          style={{ flex:1, textAlign:'center', padding:'10px', background:'#eff6ff', color:'#1d4ed8', borderRadius:8, fontWeight:700, fontSize:13, textDecoration:'none' }}>
-                          ✉️ Enviar e-mail
-                        </a>
-                      )}
-                    </div>
                   </div>
                 </div>
               )}
