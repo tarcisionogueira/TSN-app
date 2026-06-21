@@ -517,8 +517,8 @@ export default function Busca() {
                   );
                 })()}
               </div>
-              {/* Radius search — oculto quando cidade selecionada sem raio ativo */}
-              <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:12, display: filtros.cidades.length > 0 && !raioAtivo ? 'none' : 'block' }}>
+              {/* Radius search — toggle sempre visível */}
+              <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:12 }}>
                 <label style={{ ...lbl, display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
                   <span style={{ display:'flex', alignItems:'center', gap:5 }}><MapPin size={11}/> Buscar por raio</span>
                   <button
@@ -529,6 +529,12 @@ export default function Busca() {
                 </label>
                 {raioAtivo && (
                   <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {/* Se cidade selecionada, usa ela como centro — sem precisar de CEP */}
+                    {filtros.cidades.length > 0 ? (
+                      <div style={{ fontSize:10, color:'#16a34a', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:6, padding:'6px 8px', display:'flex', alignItems:'center', gap:4 }}>
+                        <MapPin size={10}/> Centro: <strong>{filtros.cidades[0]}{filtros.estado ? ` — ${filtros.estado}` : ''}</strong>
+                      </div>
+                    ) : (
                     <div style={{ position:'relative' }}>
                       <input
                         type="text"
@@ -541,6 +547,7 @@ export default function Busca() {
                         <Loader2 size={13} style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', animation:'spin 1s linear infinite', color:'#94a3b8' }}/>
                       )}
                     </div>
+                    )} {/* fim do else (sem cidade selecionada) */}
                     {centroRaio && (
                       <div style={{ fontSize:10, color:'#16a34a', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:6, padding:'5px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
                         <MapPin size={10} style={{ flexShrink:0, marginTop:1 }}/> <span style={{ lineHeight:1.3 }}>{centroRaio.label}</span>
