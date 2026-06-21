@@ -30,6 +30,7 @@ import ConviteEquipe from './pages/ConviteEquipe';
 import EbookPage from './pages/EbookPage';
 import ContratoLink from './pages/ContratoLink';
 import ProdutoLanding from './pages/ProdutoLanding';
+import ProdutoPublico from './pages/ProdutoPublico';
 import CancelarAlertas from './pages/CancelarAlertas';
 import Perfil from './pages/Perfil';
 
@@ -167,6 +168,8 @@ function MainLayout() {
           <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin']}><Consultor /></PrivateRoute>} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
           <Route path="/calculadora" element={<Calculadora />} />
+          <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
+          <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
           <Route path="/membros/curso/:id" element={<PrivateRoute><Curso /></PrivateRoute>} />
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />

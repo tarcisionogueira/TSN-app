@@ -341,14 +341,14 @@ export default function Consultor() {
                       ...cursos.map(c=>({
                         emoji: c.emoji||'🎓',
                         label: c.titulo,
-                        sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Gratuito'}`,
+                        sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Incluído na assinatura'}`,
                         url: `${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`,
                       })),
                       ...ebooks.map(e=>({
                         emoji: '📖',
                         label: e.titulo,
-                        sub: `eBook${Number(e.preco)>0?` · R$ ${Number(e.preco).toFixed(0)}`:'· Gratuito'}`,
-                        url: `${origin}/#/membros/ebook/${e.id}`,
+                        sub: `eBook${Number(e.preco)>0?` · R$ ${Number(e.preco).toFixed(0)}`:'· Incluído na assinatura'}`,
+                        url: `${origin}/#/p/ebook/${e.id}${codigo?`?ref=${codigo}`:''}`,
                       })),
                       ...sdrProdutos.map(s=>({
                         emoji: s.tipo==='ebook'?'📖':s.tipo==='curso'?'🎓':s.tipo==='calculadora'?'🧮':'🎁',
