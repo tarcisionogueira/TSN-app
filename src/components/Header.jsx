@@ -154,7 +154,8 @@ export default function Header() {
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
     ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
-  const links = user
+  // Enquanto auth carrega: mostra links públicos para evitar flash
+  const links = (!loading && user)
     ? [linksPublicos[0], ...linksPrivados, linksPublicos[2]]
     : linksPublicos;
 

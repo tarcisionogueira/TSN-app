@@ -305,7 +305,7 @@ export const PLANOS = {
     periodicidade: '/mês',
     cor: '#2563eb',
     bg: '#dbeafe',
-    homepage: true,
+    homepage: false,
     destaque: false,
     descricao: 'Plano de assinatura mensal para investidores ativos em leilões imobiliários.',
     recursos: [],
