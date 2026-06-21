@@ -21,6 +21,7 @@ export default function Planos() {
   const planoAtualPreco = PLANOS[role]?.preco ?? -1;
   const [promosPublicas, setPromosPublicas] = useState({});
   const [faqAberto, setFaqAberto] = useState(null);
+  const [anual, setAnual] = useState(false);
 
   useEffect(() => {
     supabase
@@ -42,7 +43,9 @@ export default function Planos() {
   const irParaCheckout = (key, plano) => {
     if (key === role && user) return;
     if (plano.preco === 0) { nav(user ? '/membros' : '/login'); return; }
-    nav(user ? `/checkout?plano=${key}` : `/login?plano=${key}`);
+    const params = new URLSearchParams({ plano: key });
+    if (anual && plano.precoAnual) params.set('ciclo', 'anual');
+    nav(user ? `/checkout?${params}` : `/login?${params}`);
   };
 
   const labelBotao = (key, plano) => {
@@ -107,6 +110,18 @@ export default function Planos() {
       </div>
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 80px' }}>
+
+        {/* Toggle mensal / anual */}
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 32, marginBottom: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: !anual ? '#0f172a' : '#94a3b8' }}>Mensal</span>
+          <div onClick={() => setAnual(a => !a)} style={{ width: 48, height: 26, borderRadius: 99, background: anual ? '#2563eb' : '#e2e8f0', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+            <div style={{ position: 'absolute', top: 3, left: anual ? 25 : 3, width: 20, height: 20, borderRadius: '50%', background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 600, color: anual ? '#0f172a' : '#94a3b8' }}>
+            Anual
+            <span style={{ marginLeft: 8, background: '#dcfce7', color: '#16a34a', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99 }}>2 meses grátis</span>
+          </span>
+        </div>
 
         {/* Cards principais — sobrepostos no hero */}
         <div style={{ marginTop: -40, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20, maxWidth: 820, margin: '-40px auto 0' }} className="planos-grid-2">
@@ -176,11 +191,21 @@ export default function Planos() {
                     </div>
                     <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.2)', border: '1px solid #86efac', color: '#86efac', fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 20, marginBottom: 4 }}>OFERTA DE LANÇAMENTO</div>
                   </div>
+                ) : anual && plano.precoAnual ? (
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                      <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{plano.precoMensalAnualLabel}</div>
+                      <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#86efac', fontWeight: 700 }}>
+                      {plano.precoAnualLabel}/ano · economia de R$ {(plano.preco * 12 - plano.precoAnual).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                    </div>
+                  </div>
                 ) : (
                   <div style={{ fontSize: 42, fontWeight: 900, color: 'white', marginBottom: 4 }}>{plano.precoLabel}</div>
                 )}
 
-                <div style={{ fontSize: 13, color: '#93c5fd', marginBottom: 20 }}>por mês · cancele quando quiser</div>
+                <div style={{ fontSize: 13, color: '#93c5fd', marginBottom: 20 }}>{anual && plano.precoAnual ? `cobrado anualmente · ${plano.precoAnualLabel}/ano` : 'por mês · cancele quando quiser'}</div>
                 <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 24, lineHeight: 1.6 }}>
                   Relatório completo gerado por IA + análise jurídica documental. Tudo que você precisa para arrematar com segurança.
                 </p>
