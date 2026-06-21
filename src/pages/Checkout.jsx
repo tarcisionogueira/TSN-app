@@ -410,13 +410,13 @@ export default function Checkout() {
 
           {/* Toggle mensal/anual — top1 */}
           {temToggleAnual && (
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
               {[
-                { key: 'mensal', label: 'Mensal — R$ 49,90/mês' },
-                { key: 'anual', label: 'Anual — R$ 39,90/mês · 20% off' },
+                { key: 'mensal', label: 'Mensal' },
+                { key: 'anual',  label: 'Anual' },
               ].map(({ key, label }) => (
                 <button key={key} onClick={() => setModalidade(key)}
-                  style={{ flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                  style={{ flex: 1, padding: '9px 4px', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer',
                     background: modalidade === key ? plano.cor : 'transparent',
                     color: modalidade === key ? 'white' : '#64748b' }}>
                   {label}
@@ -462,18 +462,35 @@ export default function Checkout() {
                 </div>
               </div>
             );
-          })() : (
+          })() : temToggleAnual ? (
+            <div style={{ marginBottom: 20 }}>
+              {modalidade === 'mensal' ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                    <strong style={{ color: '#0f172a', fontSize: 32 }}>12× {plano.precoLabel}</strong>
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
+                    Cobrança recorrente mensal de <strong>R$ 49,90</strong>. Cancele a qualquer momento pela plataforma. Sem multa ou fidelidade.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                    <strong style={{ color: '#0f172a', fontSize: 32 }}>12× {plano.precoMensalAnualLabel}</strong>
+                    <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% off</span>
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
+                    Total de <strong>R$ 478,80/ano</strong>. Pague em até 12× no cartão ou à vista com desconto. Contratação anual — não é renovação automática mensal.
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
             <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: 15 }}>
               {temModalidade && modalidade === 'vista' ? (
                 <>
                   <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoVistaLabel}</strong>
                   {' '}à vista · sem renovação automática
-                </>
-              ) : temToggleAnual && modalidade === 'anual' ? (
-                <>
-                  <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoMensalAnualLabel}</strong>
-                  <span style={{ color: '#64748b', fontSize: 15 }}>/mês · cobrado anualmente ({plano.precoAnualLabel}/ano)</span>
-                  <span style={{ marginLeft: 8, background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 20 }}>20% off</span>
                 </>
               ) : (
                 <>
@@ -587,10 +604,9 @@ export default function Checkout() {
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
-                Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser
-                {temToggleAnual && modalidade === 'anual' && (
-                  <><br />Plano anual cobrado em uma parcela ou <strong>em até 12x no cartão</strong></>
-                )}
+                {temToggleAnual && modalidade === 'anual'
+                  ? 'Pagamento anual único (R$ 478,80) via PIX, boleto ou em até 12× no cartão · Contratação anual sem renovação automática mensal'
+                  : 'Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser'}
               </p>
             </>
           )}
