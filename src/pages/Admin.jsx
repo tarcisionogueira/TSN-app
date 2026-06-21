@@ -1590,23 +1590,43 @@ function DashboardTab() {
   const [equipeDetalhe, setEquipeDetalhe] = useState(null); // key clicked
   const [equipeMembros, setEquipeMembros] = useState([]);
   const [equipeMetrics, setEquipeMetrics] = useState({});
+  const [periodo, setPeriodo] = useState('mes');
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
+
+  function getRange(p, ini, fim) {
+    const now = new Date();
+    if (p === 'hoje') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      return { inicio: start, fim: now.toISOString() };
+    }
+    if (p === '7d') {
+      return { inicio: new Date(now - 7 * 24 * 3600 * 1000).toISOString(), fim: now.toISOString() };
+    }
+    if (p === 'custom' && ini && fim) {
+      return { inicio: new Date(ini).toISOString(), fim: new Date(fim + 'T23:59:59').toISOString() };
+    }
+    // mes (default)
+    return { inicio: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), fim: now.toISOString() };
+  }
 
   async function loadHealth() {
     const { data } = await supabase.from('health_check_logs').select('*').order('executado_em', { ascending: false }).limit(30);
     setHealthLogs(data || []);
   }
 
-  async function loadEquipeDetalhe(roleKey) {
+  async function loadEquipeDetalhe(roleKey, p, ini, fim) {
     setEquipeDetalhe(roleKey);
     const { data: membros } = await supabase.from('perfis').select('id, nome, email, created_at').eq('role', roleKey);
     setEquipeMembros(membros || []);
     if (!membros?.length) { setEquipeMetrics({}); return; }
     const ids = membros.map(m => m.id);
+    const range = getRange(p || periodo, ini ?? dataInicio, fim ?? dataFim);
     const [{ data: chamados }, { data: comissoes }, { data: leadsSDR }, { data: reunioes }] = await Promise.all([
-      supabase.from('chamados').select('atendente_id, status').in('atendente_id', ids),
-      supabase.from('comissoes').select('beneficiario_id, valor_comissao, status').in('beneficiario_id', ids),
-      supabase.from('sdr_leads').select('consultor_id, status').in('consultor_id', ids),
-      supabase.from('solicitacoes').select('analista_id, status').in('analista_id', ids),
+      supabase.from('chamados').select('atendente_id, status').in('atendente_id', ids).gte('criado_em', range.inicio).lte('criado_em', range.fim),
+      supabase.from('comissoes').select('beneficiario_id, valor_comissao, status').in('beneficiario_id', ids).gte('criado_em', range.inicio).lte('criado_em', range.fim),
+      supabase.from('sdr_leads').select('consultor_id, status').in('consultor_id', ids).gte('criado_em', range.inicio).lte('criado_em', range.fim),
+      supabase.from('solicitacoes').select('analista_id, status').in('analista_id', ids).gte('criado_em', range.inicio).lte('criado_em', range.fim),
     ]);
     const m = {};
     ids.forEach(id => {
@@ -1629,12 +1649,14 @@ function DashboardTab() {
   }
 
   useEffect(() => {
+    if (periodo === 'custom' && (!dataInicio || !dataFim)) return;
+    const range = getRange(periodo, dataInicio, dataFim);
     async function load() {
       const [{ data: perfis }, { count: inadimCount }, { count: novosCount }, { data: dbSizeData }] = await Promise.all([
         supabase.from('perfis').select('role, plano, inadimplente_desde'),
         supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
         supabase.from('perfis').select('id', { count: 'exact', head: true })
-          .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+          .gte('created_at', range.inicio).lte('created_at', range.fim),
         supabase.rpc('get_db_size_mb'),
       ]);
 
@@ -1669,7 +1691,8 @@ function DashboardTab() {
     load();
     loadAsaas();
     loadHealth();
-  }, []);
+    if (equipeDetalhe) loadEquipeDetalhe(equipeDetalhe, periodo, dataInicio, dataFim);
+  }, [periodo, dataInicio, dataFim]);
 
   function marcoAsaas(mrr) {
     if (mrr >= 100000) return { cor: '#7c3aed', label: 'Tier Enterprise', desc: 'Exigir conta dedicada e taxa máxima de 0,3% no PIX' };
@@ -1758,6 +1781,34 @@ function DashboardTab() {
         </div>
       )}
 
+      {/* ── Filtro de período ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Período:</span>
+        {[
+          { key: 'hoje', label: 'Hoje' },
+          { key: '7d',   label: 'Últimos 7 dias' },
+          { key: 'mes',  label: 'Este mês' },
+          { key: 'custom', label: 'Personalizado' },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => setPeriodo(key)}
+            style={{ fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 20, border: '2px solid', cursor: 'pointer',
+              borderColor: periodo === key ? '#2563eb' : '#e2e8f0',
+              background: periodo === key ? '#eff6ff' : 'white',
+              color: periodo === key ? '#2563eb' : '#64748b' }}>
+            {label}
+          </button>
+        ))}
+        {periodo === 'custom' && (
+          <>
+            <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 10px', border: '2px solid #e2e8f0', borderRadius: 8, color: '#0f172a', outline: 'none' }} />
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>até</span>
+            <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 10px', border: '2px solid #e2e8f0', borderRadius: 8, color: '#0f172a', outline: 'none' }} />
+          </>
+        )}
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Dashboard</h2>
         <div style={{ fontSize: 12, color: '#94a3b8' }}>Atualizado agora · {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
@@ -1765,7 +1816,7 @@ function DashboardTab() {
 
       {/* Stat cards */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} este mês`, '#60a5fa')}
+        {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} ${periodo === 'hoje' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : periodo === 'custom' ? 'no período' : 'este mês'}`, '#60a5fa')}
         {statCard('MRR estimado', `R$ ${fmt(dados.mrr)}`, 'Receita mensal recorrente', '#10b981')}
         {statCard('Taxas Asaas (est.)', `R$ ${fmt(dados.taxaPix)}`, '~1% PIX sobre MRR', '#f59e0b')}
         {statCard('Líquido estimado', `R$ ${fmt(dados.liquido)}`, 'MRR − taxas estimadas', '#a78bfa')}
@@ -1825,7 +1876,7 @@ function DashboardTab() {
               { key: 'admin',     label: 'Admins',      cor: '#7c3aed' },
             ].map(({ key, label, cor }) => (
               <div key={key}
-                onClick={() => loadEquipeDetalhe(key)}
+                onClick={() => loadEquipeDetalhe(key, periodo, dataInicio, dataFim)}
                 style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 10px', borderRadius: 8, marginBottom: 2, cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -1842,7 +1893,12 @@ function DashboardTab() {
             {/* Detalhe por membro */}
             {equipeDetalhe && equipeMembros.length > 0 && (
               <div style={{ marginTop: 12, borderTop: '2px solid #f1f5f9', paddingTop: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Indicadores por membro</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Indicadores por membro</span>
+                  <span style={{ fontSize: 10, color: '#94a3b8', fontStyle: 'italic' }}>
+                    {periodo === 'hoje' ? 'hoje' : periodo === '7d' ? 'últimos 7 dias' : periodo === 'custom' ? `${dataInicio} – ${dataFim}` : 'este mês'}
+                  </span>
+                </div>
                 {equipeMembros.map(m => {
                   const met = equipeMetrics[m.id] || {};
                   const isConsultor = equipeDetalhe === 'consultor';
