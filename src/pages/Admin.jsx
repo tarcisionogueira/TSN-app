@@ -2402,7 +2402,7 @@ function ScrapersTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 const STATUS_COLORS = { novo: '#f59e0b', contatado: '#3b82f6', qualificado: '#8b5cf6', convertido: '#10b981', perdido: '#94a3b8' };
 const STATUS_LIST = ['novo', 'contatado', 'qualificado', 'convertido', 'perdido'];
-function defaultProdutoSDR() { return { nome: '', descricao: '', tipo: 'ebook', conteudo_url: '', imagem_url: '' }; }
+function defaultProdutoSDR() { return { nome: '', descricao: '', tipo: 'ebook', conteudo_url: '', imagem_url: '', plano_liberado: 'explorador', mensagem_boas_vindas: '', perguntas: [] }; }
 
 function SdrTab() {
   const [produtos, setProdutos] = useState([]);
@@ -2414,9 +2414,10 @@ function SdrTab() {
   const [filterProduto, setFilterProduto] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [copiado, setCopiado] = useState('');
+  const [leadDetalhe, setLeadDetalhe] = useState(null);
 
   async function loadProdutos() { setLoadingP(true); const { data } = await supabase.from('sdr_produtos').select('*').order('criado_em', { ascending: false }); setProdutos(data || []); setLoadingP(false); }
-  async function loadLeads() { setLoadingL(true); const { data } = await supabase.from('sdr_leads').select('*, sdr_produtos(nome)').order('criado_em', { ascending: false }); setLeads(data || []); setLoadingL(false); }
+  async function loadLeads() { setLoadingL(true); const { data } = await supabase.from('sdr_leads').select('*, sdr_produtos(nome, perguntas)').order('criado_em', { ascending: false }); setLeads(data || []); setLoadingL(false); }
   useEffect(() => { loadProdutos(); loadLeads(); }, []);
 
   async function saveProduto() {
@@ -2477,7 +2478,7 @@ function SdrTab() {
           </div>
         </div>
         {loadingL ? <p style={{ color: '#94a3b8' }}>Carregando…</p> : (
-          <table style={S.table}><thead><tr><th style={S.th}>Nome</th><th style={S.th}>WhatsApp</th><th style={S.th}>Email</th><th style={S.th}>Produto</th><th style={S.th}>Status</th><th style={S.th}>Data</th></tr></thead>
+          <table style={S.table}><thead><tr><th style={S.th}>Nome</th><th style={S.th}>WhatsApp</th><th style={S.th}>Email</th><th style={S.th}>Produto</th><th style={S.th}>Status</th><th style={S.th}>Data</th><th style={S.th}></th></tr></thead>
             <tbody>{filteredLeads.map(l => (
               <tr key={l.id}>
                 <td style={S.td}>{l.nome}</td>
@@ -2486,20 +2487,148 @@ function SdrTab() {
                 <td style={S.td}>{l.sdr_produtos?.nome || '—'}</td>
                 <td style={S.td}><select value={l.status} onChange={e => updateLeadStatus(l.id, e.target.value)} style={{ background: STATUS_COLORS[l.status]+'22', color: STATUS_COLORS[l.status], border: `1px solid ${STATUS_COLORS[l.status]}`, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>{STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></td>
                 <td style={S.td}>{new Date(l.criado_em).toLocaleDateString('pt-BR')}</td>
+                <td style={S.td}><button style={{ ...S.btn('outline'), fontSize: 11, padding: '3px 8px' }} onClick={() => setLeadDetalhe(l)}>Ver</button></td>
               </tr>
-            ))}{filteredLeads.length === 0 && <tr><td colSpan={6} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum lead encontrado.</td></tr>}</tbody>
+            ))}{filteredLeads.length === 0 && <tr><td colSpan={7} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum lead encontrado.</td></tr>}</tbody>
           </table>
         )}
       </div>
+      {leadDetalhe && (
+        <div style={S.overlay} onClick={() => setLeadDetalhe(null)}>
+          <div style={{ ...S.modal, maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Lead: {leadDetalhe.nome}</div>
+              <button style={S.btn('outline')} onClick={() => setLeadDetalhe(null)}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16, fontSize: 13 }}>
+              <div><span style={{ color: '#64748b', fontWeight: 600 }}>Produto:</span> {leadDetalhe.sdr_produtos?.nome || '—'}</div>
+              <div><span style={{ color: '#64748b', fontWeight: 600 }}>E-mail:</span> {leadDetalhe.email || '—'}</div>
+              <div><span style={{ color: '#64748b', fontWeight: 600 }}>WhatsApp:</span> {leadDetalhe.whatsapp} <a href={`https://wa.me/55${(leadDetalhe.whatsapp||'').replace(/\D/g,'')}`} target="_blank" rel="noreferrer" style={{ color: '#059669', fontWeight: 700, textDecoration: 'none', fontSize: 11 }}>Abrir WA</a></div>
+              <div><span style={{ color: '#64748b', fontWeight: 600 }}>Data:</span> {new Date(leadDetalhe.criado_em).toLocaleString('pt-BR')}</div>
+            </div>
+            {leadDetalhe.respostas && Object.keys(leadDetalhe.respostas).length > 0 && (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 10, borderTop: '1px solid #e2e8f0', paddingTop: 12 }}>Respostas do questionário</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(leadDetalhe.sdr_produtos?.perguntas || []).map(p => {
+                    const resp = leadDetalhe.respostas[p.id];
+                    if (!resp) return null;
+                    return (
+                      <div key={p.id} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{p.texto}</div>
+                        <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 600 }}>{resp}</div>
+                      </div>
+                    );
+                  })}
+                  {/* Fallback: show raw if no perguntas meta */}
+                  {!(leadDetalhe.sdr_produtos?.perguntas?.length) && Object.entries(leadDetalhe.respostas).map(([k, v]) => (
+                    <div key={k} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px' }}>
+                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Pergunta ID: {k}</div>
+                      <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 600 }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(!leadDetalhe.respostas || Object.keys(leadDetalhe.respostas).length === 0) && (
+              <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Nenhuma resposta de questionário registrada.</div>
+            )}
+          </div>
+        </div>
+      )}
       {modalProduto && (
         <div style={S.overlay} onClick={() => setModalProduto(null)}>
-          <div style={S.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 20 }}>{modalProduto.id ? 'Editar Produto' : 'Novo Produto'}</div>
-            <div style={S.row}><div style={S.col}><label style={S.label}>Nome *</label><input style={S.input} value={modalProduto.nome} onChange={e => setModalProduto(m => ({ ...m, nome: e.target.value }))} /></div><div style={{ width: 140 }}><label style={S.label}>Tipo</label><select style={S.input} value={modalProduto.tipo} onChange={e => setModalProduto(m => ({ ...m, tipo: e.target.value }))}><option value="ebook">eBook</option><option value="minicurso">Mini-curso</option><option value="webinar">Webinar</option><option value="outro">Outro</option></select></div></div>
-            <div style={{ marginBottom: 14 }}><label style={S.label}>Descrição</label><textarea style={{ ...S.input, height: 72, resize: 'vertical' }} value={modalProduto.descricao || ''} onChange={e => setModalProduto(m => ({ ...m, descricao: e.target.value }))} /></div>
-            <div style={{ marginBottom: 14 }}><label style={S.label}>Link do Conteúdo</label><input style={S.input} value={modalProduto.conteudo_url || ''} onChange={e => setModalProduto(m => ({ ...m, conteudo_url: e.target.value }))} placeholder="https://..." /></div>
-            <div style={{ marginBottom: 20 }}><label style={S.label}>URL da Imagem (opcional)</label><input style={S.input} value={modalProduto.imagem_url || ''} onChange={e => setModalProduto(m => ({ ...m, imagem_url: e.target.value }))} placeholder="https://..." /></div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}><button style={S.btn('outline')} onClick={() => setModalProduto(null)}>Cancelar</button><button style={S.btn('primary')} onClick={saveProduto} disabled={saving || !modalProduto.nome?.trim()}>{saving ? 'Salvando…' : 'Salvar'}</button></div>
+          <div style={{ ...S.modal, maxWidth: 740 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 20 }}>{modalProduto.id ? 'Editar Produto SDR' : 'Novo Produto SDR'}</div>
+            {/* Nome + Tipo */}
+            <div style={S.row}>
+              <div style={S.col}><label style={S.label}>Nome *</label><input style={S.input} value={modalProduto.nome} onChange={e => setModalProduto(m => ({ ...m, nome: e.target.value }))} /></div>
+              <div style={{ width: 160 }}><label style={S.label}>Tipo de Produto</label>
+                <select style={S.input} value={modalProduto.tipo} onChange={e => setModalProduto(m => ({ ...m, tipo: e.target.value }))}>
+                  <option value="ebook">eBook</option>
+                  <option value="curso">Curso</option>
+                  <option value="calculadora">Calculadora</option>
+                  <option value="plataforma">Acesso Plataforma</option>
+                  <option value="minicurso">Mini-curso</option>
+                  <option value="webinar">Webinar</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
+            </div>
+            {/* Descrição */}
+            <div style={{ marginBottom: 14 }}><label style={S.label}>Descrição (aparece na landing)</label><textarea style={{ ...S.input, height: 64, resize: 'vertical' }} value={modalProduto.descricao || ''} onChange={e => setModalProduto(m => ({ ...m, descricao: e.target.value }))} /></div>
+            {/* Mensagem de boas-vindas */}
+            <div style={{ marginBottom: 14 }}><label style={S.label}>Mensagem de boas-vindas (após cadastro)</label><textarea style={{ ...S.input, height: 56, resize: 'vertical' }} value={modalProduto.mensagem_boas_vindas || ''} onChange={e => setModalProduto(m => ({ ...m, mensagem_boas_vindas: e.target.value }))} placeholder="Ex: Seu acesso foi liberado! Todo o conteúdo está dentro da plataforma TSN Ativos." /></div>
+            {/* Conteúdo + Plano + Imagem */}
+            <div style={S.row}>
+              <div style={S.col}><label style={S.label}>Link do Conteúdo</label><input style={S.input} value={modalProduto.conteudo_url || ''} onChange={e => setModalProduto(m => ({ ...m, conteudo_url: e.target.value }))} placeholder="https://..." /></div>
+              <div style={{ width: 160 }}><label style={S.label}>Plano Liberado</label>
+                <select style={S.input} value={modalProduto.plano_liberado || 'explorador'} onChange={e => setModalProduto(m => ({ ...m, plano_liberado: e.target.value }))}>
+                  <option value="explorador">Explorador (Grátis)</option>
+                  <option value="top1">Investidor</option>
+                  <option value="top2">Investidor Pro</option>
+                  <option value="assessorado">Assessorado</option>
+                  <option value="clube">Clube de Negócios</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ marginBottom: 18 }}><label style={S.label}>URL da Imagem (opcional)</label><input style={S.input} value={modalProduto.imagem_url || ''} onChange={e => setModalProduto(m => ({ ...m, imagem_url: e.target.value }))} placeholder="https://..." /></div>
+
+            {/* Perguntas personalizadas */}
+            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16, marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>Perguntas do Formulário</div>
+                <button style={{ ...S.btn('outline'), fontSize: 12 }}
+                  onClick={() => setModalProduto(m => ({ ...m, perguntas: [...(m.perguntas || []), { id: Date.now(), texto: '', tipo: 'texto', opcoes: '' }] }))}>
+                  + Adicionar pergunta
+                </button>
+              </div>
+              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>
+                💡 Além das suas perguntas, o formulário sempre coleta automaticamente: <strong>nome, e-mail, WhatsApp e senha</strong> para criar a conta na plataforma.
+              </div>
+              {(modalProduto.perguntas || []).length === 0 && (
+                <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Nenhuma pergunta personalizada. O formulário usará apenas os campos básicos de cadastro.</div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {(modalProduto.perguntas || []).map((p, i) => (
+                  <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px' }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <input style={{ ...S.input, marginBottom: 6 }} value={p.texto} placeholder={`Pergunta ${i + 1}`}
+                          onChange={e => setModalProduto(m => ({ ...m, perguntas: m.perguntas.map((q, j) => j === i ? { ...q, texto: e.target.value } : q) }))} />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <select style={{ ...S.input, width: 130, fontSize: 12 }} value={p.tipo}
+                            onChange={e => setModalProduto(m => ({ ...m, perguntas: m.perguntas.map((q, j) => j === i ? { ...q, tipo: e.target.value } : q) }))}>
+                            <option value="texto">Texto livre</option>
+                            <option value="multipla">Múltipla escolha</option>
+                            <option value="sim_nao">Sim / Não</option>
+                          </select>
+                          {p.tipo === 'multipla' && (
+                            <input style={{ ...S.input, flex: 1, fontSize: 12 }} value={p.opcoes || ''} placeholder="Opções separadas por vírgula"
+                              onChange={e => setModalProduto(m => ({ ...m, perguntas: m.perguntas.map((q, j) => j === i ? { ...q, opcoes: e.target.value } : q) }))} />
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <button style={{ ...S.btn('outline'), fontSize: 11, padding: '3px 8px' }}
+                          disabled={i === 0}
+                          onClick={() => setModalProduto(m => { const arr = [...m.perguntas]; [arr[i-1], arr[i]] = [arr[i], arr[i-1]]; return { ...m, perguntas: arr }; })}>↑</button>
+                        <button style={{ ...S.btn('outline'), fontSize: 11, padding: '3px 8px' }}
+                          disabled={i === (modalProduto.perguntas || []).length - 1}
+                          onClick={() => setModalProduto(m => { const arr = [...m.perguntas]; [arr[i], arr[i+1]] = [arr[i+1], arr[i]]; return { ...m, perguntas: arr }; })}>↓</button>
+                        <button style={{ ...S.btn('danger'), fontSize: 11, padding: '3px 8px' }}
+                          onClick={() => setModalProduto(m => ({ ...m, perguntas: m.perguntas.filter((_, j) => j !== i) }))}>✕</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+              <button style={S.btn('outline')} onClick={() => setModalProduto(null)}>Cancelar</button>
+              <button style={S.btn('primary')} onClick={saveProduto} disabled={saving || !modalProduto.nome?.trim()}>{saving ? 'Salvando…' : 'Salvar Produto'}</button>
+            </div>
           </div>
         </div>
       )}

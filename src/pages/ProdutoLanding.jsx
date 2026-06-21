@@ -68,22 +68,26 @@ function maskWA(value) {
   return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
 }
 
-/* ── Lead Capture (captura tipo) ── */
+const TIPO_LABELS = { ebook: 'eBook', curso: 'Curso', calculadora: 'Calculadora', plataforma: 'Acesso à Plataforma', minicurso: 'Mini-curso', webinar: 'Webinar', outro: 'Conteúdo' };
+
+const inputStyle = { width: '100%', padding: '12px 14px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' };
+const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 };
+
+/* ── Lead Capture (captura tipo) — multi-step funnel ── */
 function CapturaLanding({ id }) {
   const [produto, setProduto] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ nome: '', whatsapp: '', email: '' });
+  // step: 'hero' | 'perguntas' | 'cadastro' | 'sucesso'
+  const [step, setStep] = useState('hero');
+  const [respostas, setRespostas] = useState({});
+  const [form, setForm] = useState({ nome: '', email: '', whatsapp: '', senha: '' });
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
-  const [sucesso, setSucesso] = useState(false);
+  const [verSenha, setVerSenha] = useState(false);
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('sdr_produtos')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const { data } = await supabase.from('sdr_produtos').select('*').eq('id', id).single();
       setProduto(data || null);
       setLoading(false);
     }
@@ -91,9 +95,7 @@ function CapturaLanding({ id }) {
   }, [id]);
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 16 }}>
-      Carregando…
-    </div>
+    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 16 }}>Carregando…</div>
   );
 
   if (!produto) return (
@@ -104,117 +106,219 @@ function CapturaLanding({ id }) {
     </div>
   );
 
-  async function handleSubmit(e) {
+  const perguntas = Array.isArray(produto.perguntas) ? produto.perguntas : [];
+  const temPerguntas = perguntas.length > 0;
+  const tipoLabel = TIPO_LABELS[produto.tipo] || 'Conteúdo';
+
+  const Header = () => (
+    <div style={{ borderBottom: '1px solid #1e293b', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ fontWeight: 900, fontSize: 18, color: 'white', letterSpacing: 1 }}>TSN <span style={{ color: '#f59e0b' }}>ATIVOS</span></div>
+      <a href="/" style={{ fontSize: 13, color: '#94a3b8', textDecoration: 'none' }}>← Voltar ao site</a>
+    </div>
+  );
+
+  /* ── Step: SUCESSO ── */
+  if (step === 'sucesso') {
+    const msg = produto.mensagem_boas_vindas || `Seu acesso foi liberado! Todo o conteúdo está disponível dentro da plataforma TSN Ativos.`;
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+        <Header />
+        <div style={{ maxWidth: 560, margin: '0 auto', padding: '64px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
+          <h2 style={{ fontSize: 28, fontWeight: 900, color: 'white', marginBottom: 12 }}>Acesso liberado!</h2>
+          <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.6, marginBottom: 32 }}>
+            Olá, <strong style={{ color: '#e2e8f0' }}>{form.nome.split(' ')[0]}</strong>! {msg}
+          </p>
+          <a href="/#/buscar"
+            style={{ display: 'inline-block', padding: '14px 36px', background: '#059669', color: 'white', borderRadius: 12, fontWeight: 800, fontSize: 16, textDecoration: 'none', marginBottom: 16 }}>
+            Acessar a plataforma →
+          </a>
+          {produto.conteudo_url && (
+            <div style={{ marginTop: 12 }}>
+              <a href={produto.conteudo_url} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-block', padding: '12px 28px', background: '#1e293b', color: '#60a5fa', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', border: '1px solid #334155' }}>
+                Acessar {tipoLabel} diretamente →
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Step: HERO ── */
+  if (step === 'hero') {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+        <Header />
+        <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 24px 80px' }}>
+          {produto.imagem_url && (
+            <img src={produto.imagem_url} alt={produto.nome} style={{ width: '100%', maxWidth: 400, borderRadius: 16, marginBottom: 24, objectFit: 'cover', display: 'block', margin: '0 auto 24px' }} />
+          )}
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>{tipoLabel} Gratuito</div>
+            <h1 style={{ margin: '0 0 12px', fontSize: 32, fontWeight: 900, color: 'white', lineHeight: 1.2 }}>{produto.nome}</h1>
+            {produto.descricao && <p style={{ margin: '0 0 20px', fontSize: 16, color: '#94a3b8', lineHeight: 1.6 }}>{produto.descricao}</p>}
+          </div>
+
+          {/* Commercial message */}
+          <div style={{ background: 'linear-gradient(135deg, #065f46 0%, #0f2032 100%)', border: '1px solid #059669', borderRadius: 14, padding: '20px 24px', marginBottom: 28, textAlign: 'center' }}>
+            <div style={{ fontSize: 22, marginBottom: 8 }}>🎁</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#34d399', marginBottom: 6 }}>Seu acesso é 100% gratuito</div>
+            <div style={{ fontSize: 14, color: '#a7f3d0', lineHeight: 1.6 }}>
+              O {tipoLabel.toLowerCase()} fica disponível <strong>dentro da plataforma TSN Ativos</strong> — sem custo, sem cartão de crédito. Basta criar sua conta gratuita em menos de 1 minuto.
+            </div>
+          </div>
+
+          <button onClick={() => setStep(temPerguntas ? 'perguntas' : 'cadastro')}
+            style={{ width: '100%', padding: '16px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 17, cursor: 'pointer', letterSpacing: 0.3 }}>
+            Quero acesso gratuito →
+          </button>
+          <div style={{ textAlign: 'center', marginTop: 10, fontSize: 12, color: '#475569' }}>Cadastro rápido · Sem spam · Cancele quando quiser</div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Step: PERGUNTAS ── */
+  if (step === 'perguntas') {
+    const todasRespondidas = perguntas.every(p => p.tipo === 'texto' ? (respostas[p.id] || '').trim().length > 0 : !!respostas[p.id]);
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+        <Header />
+        <div style={{ maxWidth: 560, margin: '0 auto', padding: '40px 24px 80px' }}>
+          <div style={{ marginBottom: 24 }}>
+            <button onClick={() => setStep('hero')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 16 }}>← Voltar</button>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6 }}>Quase lá!</div>
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: 'white' }}>Responda rapidinho para liberar seu acesso</h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {perguntas.map((p, i) => (
+              <div key={p.id} style={{ background: '#1e293b', borderRadius: 12, padding: '16px 20px', border: '1px solid #334155' }}>
+                <label style={{ display: 'block', fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginBottom: 10 }}>{i + 1}. {p.texto}</label>
+                {p.tipo === 'texto' && (
+                  <textarea value={respostas[p.id] || ''} onChange={e => setRespostas(r => ({ ...r, [p.id]: e.target.value }))}
+                    placeholder="Sua resposta…"
+                    style={{ ...inputStyle, height: 72, resize: 'vertical', fontSize: 14 }} />
+                )}
+                {p.tipo === 'sim_nao' && (
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {['Sim', 'Não'].map(opt => (
+                      <button key={opt} onClick={() => setRespostas(r => ({ ...r, [p.id]: opt }))}
+                        style={{ flex: 1, padding: '10px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#0f172a', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {p.tipo === 'multipla' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {(p.opcoes || '').split(',').map(opt => opt.trim()).filter(Boolean).map(opt => (
+                      <button key={opt} onClick={() => setRespostas(r => ({ ...r, [p.id]: opt }))}
+                        style={{ padding: '10px 14px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#0f172a', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+                        {respostas[p.id] === opt ? '● ' : '○ '}{opt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setStep('cadastro')} disabled={!todasRespondidas}
+            style={{ width: '100%', marginTop: 24, padding: '14px', background: todasRespondidas ? '#059669' : '#1e293b', color: todasRespondidas ? 'white' : '#64748b', border: `1px solid ${todasRespondidas ? '#059669' : '#334155'}`, borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: todasRespondidas ? 'pointer' : 'not-allowed' }}>
+            Continuar →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Step: CADASTRO ── */
+  async function handleCadastro(e) {
     e.preventDefault();
     setErro('');
     const wa = form.whatsapp.replace(/\D/g, '');
     if (!form.nome.trim()) return setErro('Informe seu nome completo.');
+    if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) return setErro('Informe um e-mail válido.');
     if (wa.length < 10) return setErro('Informe um WhatsApp válido.');
+    if (form.senha.length < 6) return setErro('A senha deve ter pelo menos 6 caracteres.');
     setEnviando(true);
-    const { error } = await supabase.from('sdr_leads').insert({
-      produto_id: produto.id,
-      nome: form.nome.trim(),
-      whatsapp: wa,
-      email: form.email.trim() || null,
-      origem: window.location.href,
-    });
+    try {
+      // Create Supabase auth account
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: form.email.trim(),
+        password: form.senha,
+        options: { data: { nome: form.nome.trim(), whatsapp: wa } },
+      });
+      if (authErr) {
+        if (authErr.message?.includes('already registered')) {
+          setErro('Esse e-mail já tem uma conta. Acesse a plataforma normalmente.');
+        } else {
+          setErro(authErr.message || 'Erro ao criar conta. Tente novamente.');
+        }
+        setEnviando(false);
+        return;
+      }
+      const userId = authData?.user?.id;
+      // Insert lead
+      await supabase.from('sdr_leads').insert({
+        produto_id: produto.id,
+        nome: form.nome.trim(),
+        whatsapp: wa,
+        email: form.email.trim(),
+        origem: window.location.href,
+        respostas: respostas,
+        user_id: userId || null,
+      });
+      setStep('sucesso');
+    } catch (_) {
+      setErro('Erro inesperado. Tente novamente.');
+    }
     setEnviando(false);
-    if (error) return setErro('Erro ao enviar. Tente novamente.');
-    setSucesso(true);
   }
-
-  if (sucesso) return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
-      <div style={{ borderBottom: '1px solid #1e293b', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 900, fontSize: 18, color: 'white', letterSpacing: 1 }}>TSN <span style={{ color: '#f59e0b' }}>ATIVOS</span></div>
-      </div>
-      <div style={{ maxWidth: 560, margin: '0 auto', padding: '64px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: 'white', marginBottom: 12 }}>Acesso liberado!</h2>
-        <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.6, marginBottom: 32 }}>
-          Obrigado, <strong style={{ color: '#e2e8f0' }}>{form.nome.split(' ')[0]}</strong>! Seu acesso foi liberado. Clique abaixo para acessar o conteúdo.
-        </p>
-        {produto.conteudo_url ? (
-          <a href={produto.conteudo_url} target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-block', padding: '14px 36px', background: '#059669', color: 'white', borderRadius: 12, fontWeight: 800, fontSize: 16, textDecoration: 'none' }}>
-            Acessar conteúdo →
-          </a>
-        ) : (
-          <p style={{ color: '#64748b', fontSize: 14 }}>Em breve você receberá o acesso via WhatsApp.</p>
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
-      {/* Header */}
-      <div style={{ borderBottom: '1px solid #1e293b', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 900, fontSize: 18, color: 'white', letterSpacing: 1 }}>TSN <span style={{ color: '#f59e0b' }}>ATIVOS</span></div>
-        <a href="/" style={{ fontSize: 13, color: '#94a3b8', textDecoration: 'none' }}>← Voltar ao site</a>
-      </div>
-
-      <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 24px 80px' }}>
-        {/* Hero */}
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          {produto.imagem_url && (
-            <img src={produto.imagem_url} alt={produto.nome}
-              style={{ width: '100%', maxWidth: 400, borderRadius: 16, marginBottom: 24, objectFit: 'cover' }} />
-          )}
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>
-            {produto.tipo === 'ebook' ? 'eBook Gratuito' : produto.tipo === 'minicurso' ? 'Mini-curso Gratuito' : produto.tipo === 'webinar' ? 'Webinar Gratuito' : 'Conteúdo Gratuito'}
-          </div>
-          <h1 style={{ margin: '0 0 12px', fontSize: 32, fontWeight: 900, color: 'white', lineHeight: 1.2 }}>{produto.nome}</h1>
-          {produto.descricao && (
-            <p style={{ margin: '0 0 8px', fontSize: 16, color: '#94a3b8', lineHeight: 1.6 }}>{produto.descricao}</p>
-          )}
+      <Header />
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '40px 24px 80px' }}>
+        <button onClick={() => setStep(temPerguntas ? 'perguntas' : 'hero')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 20 }}>← Voltar</button>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6 }}>Último passo</div>
+          <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 900, color: 'white' }}>Crie sua conta gratuita</h2>
+          <p style={{ margin: 0, fontSize: 14, color: '#64748b' }}>Seu {tipoLabel.toLowerCase()} estará disponível dentro da plataforma assim que você entrar.</p>
         </div>
-
-        {/* Form */}
-        <div style={{ background: '#1e293b', borderRadius: 16, padding: '32px', border: '1px solid #334155' }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 20 }}>
-            Preencha para ter acesso gratuito
+        <form onSubmit={handleCadastro} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={labelStyle}>Nome completo *</label>
+            <input type="text" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Seu nome completo" required style={inputStyle} />
           </div>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>Nome completo *</label>
-              <input
-                type="text"
-                value={form.nome}
-                onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-                placeholder="Seu nome completo"
-                required
-                style={{ width: '100%', padding: '12px 14px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
-              />
+          <div>
+            <label style={labelStyle}>E-mail *</label>
+            <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="seuemail@exemplo.com" required style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>WhatsApp *</label>
+            <input type="tel" value={form.whatsapp} onChange={e => setForm(f => ({ ...f, whatsapp: maskWA(e.target.value) }))} placeholder="(00) 00000-0000" required style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Senha *</label>
+            <div style={{ position: 'relative' }}>
+              <input type={verSenha ? 'text' : 'password'} value={form.senha} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} placeholder="Mínimo 6 caracteres" required style={{ ...inputStyle, paddingRight: 48 }} />
+              <button type="button" onClick={() => setVerSenha(v => !v)}
+                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13 }}>
+                {verSenha ? 'Ocultar' : 'Ver'}
+              </button>
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>WhatsApp *</label>
-              <input
-                type="tel"
-                value={form.whatsapp}
-                onChange={e => setForm(f => ({ ...f, whatsapp: maskWA(e.target.value) }))}
-                placeholder="(00) 00000-0000"
-                required
-                style={{ width: '100%', padding: '12px 14px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>E-mail (opcional)</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="seuemail@exemplo.com"
-                style={{ width: '100%', padding: '12px 14px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
-              />
-            </div>
-            {erro && <div style={{ background: '#450a0a', border: '1px solid #dc2626', borderRadius: 8, padding: '10px 14px', color: '#fca5a5', fontSize: 13 }}>{erro}</div>}
-            <button type="submit" disabled={enviando}
-              style={{ padding: '14px', background: enviando ? '#374151' : '#059669', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 16, cursor: enviando ? 'not-allowed' : 'pointer', marginTop: 4 }}>
-              {enviando ? 'Enviando…' : 'Quero acesso gratuito →'}
-            </button>
-          </form>
-        </div>
+          </div>
+          {erro && <div style={{ background: '#450a0a', border: '1px solid #dc2626', borderRadius: 8, padding: '10px 14px', color: '#fca5a5', fontSize: 13 }}>{erro}</div>}
+          <button type="submit" disabled={enviando}
+            style={{ padding: '14px', background: enviando ? '#374151' : '#059669', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 16, cursor: enviando ? 'not-allowed' : 'pointer', marginTop: 4 }}>
+            {enviando ? 'Criando conta…' : 'Criar conta e liberar acesso →'}
+          </button>
+          <div style={{ textAlign: 'center', fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
+            Ao se cadastrar você concorda com os Termos de Uso da TSN Ativos. Acesso gratuito, sem cobranças automáticas.
+          </div>
+        </form>
       </div>
     </div>
   );
