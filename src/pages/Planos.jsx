@@ -70,9 +70,10 @@ export default function Planos() {
     { ok: true,  txt: 'Busca de leilões em todo o Brasil' },
     { ok: true,  txt: 'Acesso aos cursos gratuitos inclusos' },
     { ok: true,  txt: 'Direcionamento ao site do leiloeiro' },
+    { ok: true,  txt: 'Calculadora de Arrematação' },
     { ok: false, txt: 'Relatório de viabilidade' },
     { ok: false, txt: 'Análise de edital e matrícula' },
-    { ok: false, txt: 'Calculadora de Arrematação' },
+    { ok: false, txt: 'Consulta processual (Jusbrasil/CNJ)' },
   ];
 
   const recursosInvestidor = [
