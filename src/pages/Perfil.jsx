@@ -24,6 +24,8 @@ const STATUS_BG = {
   concluido: '#f0fdf4', reprovado: '#fef2f2',
 };
 
+const ROLES_COM_COMISSAO = ['admin', 'consultor', 'analista', 'advogado'];
+
 const ROLE_LABELS = {
   admin: 'Administrador',
   analista: 'Analista',
@@ -72,6 +74,24 @@ export default function Perfil() {
       .then(({ data }) => { setRelatorios(data || []); setLoadRelatorios(false); })
       .catch(() => setLoadRelatorios(false));
   }, [user?.id]);
+
+  // Comissões (apenas para papéis elegíveis)
+  const temComissao = ROLES_COM_COMISSAO.includes(role);
+  const [resumoComissao, setResumoComissao] = useState(null);
+
+  useEffect(() => {
+    if (!temComissao) return;
+    supabase
+      .from('comissoes')
+      .select('valor_comissao, status')
+      .eq('beneficiario_id', user.id)
+      .then(({ data }) => {
+        if (!data) return;
+        const pendente = data.filter(c => c.status === 'pendente').reduce((a, c) => a + Number(c.valor_comissao), 0);
+        const pago = data.filter(c => c.status === 'pago').reduce((a, c) => a + Number(c.valor_comissao), 0);
+        setResumoComissao({ pendente, pago, total: data.length });
+      });
+  }, [temComissao, user.id]);
 
   async function salvar(e) {
     e.preventDefault();
@@ -226,6 +246,33 @@ export default function Perfil() {
                 })}
               </div>
             )}
+
+        {/* Card Comissões (apenas para papéis com repasse) */}
+        {temComissao && (
+          <div style={{ background: 'white', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 12 }}>MINHAS COMISSÕES</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#d97706', fontWeight: 700 }}>A RECEBER</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>
+                  {resumoComissao ? Number(resumoComissao.pendente).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center', borderLeft: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>JÁ PAGO</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>
+                  {resumoComissao ? Number(resumoComissao.pago).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>VENDAS</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{resumoComissao?.total ?? '—'}</div>
+              </div>
+            </div>
+            <button onClick={() => nav('/comissoes')}
+              style={{ width: '100%', padding: '9px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              Ver extrato completo e solicitar saque →
+            </button>
           </div>
         )}
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, Headphones } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlanos } from '../contexts/PlanosContext';
@@ -310,6 +310,9 @@ export default function Header() {
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
                     { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
                     { path: '/planos', label: 'Minha Assinatura', icon: Tag },
+                    ...(['admin','consultor','analista','advogado'].includes(role)
+                      ? [{ path: '/comissoes', label: 'Minhas Comissões', icon: DollarSign }]
+                      : []),
                   ].map(item => (
                     <button key={item.path} onClick={() => { nav(item.path); setShowUserMenu(false); }}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#334155', fontSize: 13, fontWeight: 600, borderRadius: 8, textAlign: 'left' }}

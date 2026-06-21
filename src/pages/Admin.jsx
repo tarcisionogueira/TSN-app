@@ -1002,6 +1002,82 @@ function ConfigTab() {
   const [contratoAberto, setContratoAberto] = useState(null);
   // planos kept for ContratoModal compatibility
   const [planos, setPlanos] = useState([]);
+  const [planosLoading, setPlanosLoading] = useState(true);
+  const [planosSaved, setPlanosSaved] = useState({});
+  const [planosErr, setPlanosErr] = useState('');
+  const [comissoesExpanded, setComissoesExpanded] = useState({});
+  const [cfin, setCfin] = useState({});   // config_financeira por gateway
+  const [cfinSaved, setCfinSaved] = useState({});
+  const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 4.5, analista_pct: 1 });
+  const [honorariosSaved, setHonorariosSaved] = useState(false);
+  const [honorariosErr, setHonorariosErr] = useState('');
+
+  useEffect(() => {
+    supabase.from('planos_config').select('*').order('preco', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data) setPlanos(data.map(p => ({
+          ...p,
+          desconto_vista_pct: (p.preco && p.preco_vista)
+            ? Math.round((1 - p.preco_vista / p.preco) * 10000) / 100
+            : '',
+        })));
+        else setPlanosErr('Erro ao carregar planos. Rode o SQL schema_planos_config.sql no Supabase.');
+        setPlanosLoading(false);
+      });
+    supabase.from('config_financeira').select('*')
+      .then(({ data }) => {
+        if (data) {
+          const m = {};
+          data.forEach(r => { m[r.gateway] = r; });
+          setCfin(m);
+        }
+      });
+    supabase.from('config_honorarios').select('*').eq('id', 1).maybeSingle()
+      .then(({ data }) => { if (data) setHonorarios(data); });
+  }, []);
+
+  function updateCfin(gateway, field, value) {
+    setCfin(prev => ({ ...prev, [gateway]: { ...(prev[gateway] || { gateway }), [field]: value } }));
+  }
+
+  async function salvarCfin(gateway) {
+    const r = cfin[gateway] || { gateway };
+    const { error } = await supabase.from('config_financeira').upsert({
+      gateway,
+      taxa_credito_pct:      Number(r.taxa_credito_pct) || 0,
+      taxa_debito_pct:       Number(r.taxa_debito_pct) || 0,
+      antecipacao_ativa:     r.antecipacao_ativa || false,
+      antecipacao_pct_mes:   Number(r.antecipacao_pct_mes) || 0,
+      prazo_recebimento_dias: Number(r.prazo_recebimento_dias) || 30,
+      atualizado_em: new Date().toISOString(),
+    });
+    if (!error) {
+      setCfinSaved(prev => ({ ...prev, [gateway]: true }));
+      setTimeout(() => setCfinSaved(prev => ({ ...prev, [gateway]: false })), 2000);
+    }
+  }
+
+  async function salvarHonorarios() {
+    setHonorariosErr('');
+    const total = Number(honorarios.total_pct) || 0;
+    const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
+    if (Math.abs(soma - total) > 0.01) {
+      setHonorariosErr(`A soma dos percentuais (${soma.toFixed(2)}%) deve ser igual ao total (${total.toFixed(2)}%).`);
+      return;
+    }
+    const { error } = await supabase.from('config_honorarios').upsert({
+      id: 1,
+      total_pct:    total,
+      admin_pct:    Number(honorarios.admin_pct) || 0,
+      advogado_pct: Number(honorarios.advogado_pct) || 0,
+      analista_pct: Number(honorarios.analista_pct) || 0,
+      atualizado_em: new Date().toISOString(),
+    });
+    if (!error) { setHonorariosSaved(true); setTimeout(() => setHonorariosSaved(false), 2500); }
+    else setHonorariosErr('Erro ao salvar: ' + error.message);
+  }
+
+  function salvar() {
   const isDirty = dirtyIds.size > 0;
 
   useEffect(() => {
@@ -1123,6 +1199,45 @@ function ConfigTab() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  async function salvarPlano(p) {
+    // Valida: soma das comissões por papel ≤ total
+    const somaRoles = ['admin', 'analista', 'advogado', 'consultor'].reduce(
+      (s, r) => s + (Number(p[`comissao_${r}_pct`]) || 0), 0
+    );
+    const total = Number(p.comissao_total_pct) || 0;
+    if (somaRoles > total + 0.01) {
+      alert(`A soma das comissões por papel (${somaRoles.toFixed(2)}%) não pode exceder o total configurado (${total.toFixed(2)}%).`);
+      return;
+    }
+
+    const { error } = await supabase.from('planos_config').update({
+      preco:                   Number(p.preco) || 0,
+      preco_vista:             (() => {
+                                 const pct = Number(p.desconto_vista_pct);
+                                 return pct > 0
+                                   ? Math.round(Number(p.preco) * (1 - pct / 100) * 100) / 100
+                                   : null;
+                               })(),
+      cobrar:                  p.cobrar,
+      ativo:                   p.ativo,
+      comissao_total_pct:      Number(p.comissao_total_pct) || 0,
+      comissao_admin_pct:      Number(p.comissao_admin_pct) || 0,
+      comissao_analista_pct:   Number(p.comissao_analista_pct) || 0,
+      comissao_advogado_pct:   Number(p.comissao_advogado_pct) || 0,
+      comissao_consultor_pct:  Number(p.comissao_consultor_pct) || 0,
+      atualizado_em:           new Date().toISOString(),
+    }).eq('plano_key', p.plano_key);
+    if (!error) {
+      setPlanosSaved(prev => ({ ...prev, [p.plano_key]: true }));
+      setTimeout(() => setPlanosSaved(prev => ({ ...prev, [p.plano_key]: false })), 2000);
+    }
+  }
+
+  function updatePlano(key, field, value) {
+    setPlanos(prev => prev.map(p => p.plano_key === key ? { ...p, [field]: value } : p));
+  }
+
+  const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
   const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—';
   const COLS = '2fr 110px 140px 90px 70px 80px 90px';
 
@@ -1266,6 +1381,164 @@ function ConfigTab() {
           </button>
         </div>
       )}
+      {/* Honorários de Êxito na Arrematação */}
+      <div style={S.card}>
+        <p style={S.subTitle}>Honorários de Êxito — Arrematação</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Percentual cobrado sobre o valor arrematado quando o cliente finaliza uma compra com apoio da equipe.
+          O total deve ser distribuído integralmente entre Admin, Advogado e Analista.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
+          {/* Total */}
+          <div style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 18px', minWidth: 150 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 6 }}>TOTAL HONORÁRIO %</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="number" step="0.1" min="0" max="100"
+                value={honorarios.total_pct}
+                onChange={e => setHonorarios(h => ({ ...h, total_pct: e.target.value }))}
+                style={{ ...S.input, padding: '7px 10px', fontSize: 15, width: 70, fontWeight: 900, color: '#0f172a' }} />
+              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 700 }}>%</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>padrão 10%</div>
+          </div>
+
+          {/* Seta divisória */}
+          <div style={{ display: 'flex', alignItems: 'center', paddingTop: 28, color: '#94a3b8', fontSize: 18 }}>→</div>
+
+          {/* Distribuição por papel */}
+          {[
+            { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação' },
+            { key: 'advogado_pct', label: 'Advogado', cor: '#2563eb', desc: 'análise jurídica' },
+            { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica' },
+          ].map(({ key, label, cor, desc }) => (
+            <div key={key} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 18px', minWidth: 140, border: `1px solid ${cor}22` }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: cor, marginBottom: 6, textTransform: 'uppercase' }}>{label}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="number" step="0.1" min="0" max="100"
+                  value={honorarios[key]}
+                  onChange={e => setHonorarios(h => ({ ...h, [key]: e.target.value }))}
+                  style={{ ...S.input, padding: '7px 10px', fontSize: 15, width: 70, fontWeight: 700, color: '#0f172a' }} />
+                <span style={{ fontSize: 14, color: '#64748b', fontWeight: 700 }}>%</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{desc}</div>
+            </div>
+          ))}
+
+          {/* Totalizador visual */}
+          <div style={{ display: 'flex', alignItems: 'center', paddingTop: 28 }}>
+            {(() => {
+              const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
+              const total = Number(honorarios.total_pct) || 0;
+              const ok = Math.abs(soma - total) <= 0.01;
+              return (
+                <div style={{ padding: '6px 14px', borderRadius: 20, background: ok ? '#f0fdf4' : '#fef2f2', color: ok ? '#16a34a' : '#ef4444', fontWeight: 700, fontSize: 13 }}>
+                  {soma.toFixed(1)}% / {total.toFixed(1)}%
+                  <span style={{ marginLeft: 6 }}>{ok ? '✓' : '✗'}</span>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        {honorariosErr && (
+          <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', color: '#ef4444', borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+            {honorariosErr}
+          </div>
+        )}
+
+        <button onClick={salvarHonorarios}
+          style={{ marginTop: 16, padding: '9px 22px', background: honorariosSaved ? '#10b981' : '#0f172a', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          {honorariosSaved ? '✓ Salvo' : 'Salvar Honorários'}
+        </button>
+
+        <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8' }}>
+          Esses valores são usados para calcular o repasse de cada papel no êxito de uma arrematação.<br/>
+          A soma Admin + Advogado + Analista deve ser igual ao total configurado.
+        </div>
+      </div>
+
+      {/* Taxas Financeiras por Gateway */}
+      <div style={S.card}>
+        <p style={S.subTitle}>Taxas Financeiras por Gateway</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Configure as taxas cobradas por cada gateway. Usadas para exibir o breakdown financeiro no analítico de comissões.
+          <br/>As taxas reais do seu contrato devem ser verificadas diretamente nos painéis Asaas e Pagar.me.
+        </p>
+        {['asaas', 'pagarme'].map(gw => {
+          const r = cfin[gw] || {};
+          const gwLabel = gw === 'pagarme' ? 'Pagar.me' : 'Asaas';
+          const prazoPadrao = gw === 'pagarme' ? 30 : 32;
+          return (
+            <div key={gw} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 12 }}>{gwLabel}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA CRÉDITO (MDR) %</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="number" step="0.001" min="0" max="10" value={r.taxa_credito_pct ?? 2.49}
+                      onChange={e => updateCfin(gw, 'taxa_credito_pct', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
+                    <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>ex: 2,49%</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA DÉBITO (MDR) %</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="number" step="0.001" min="0" max="10" value={r.taxa_debito_pct ?? 0}
+                      onChange={e => updateCfin(gw, 'taxa_debito_pct', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
+                    <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>PRAZO PADRÃO (D+X)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 12, color: '#64748b' }}>D+</span>
+                    <input type="number" step="1" min="1" max="60" value={r.prazo_recebimento_dias ?? prazoPadrao}
+                      onChange={e => updateCfin(gw, 'prazo_recebimento_dias', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 60 }} />
+                    <span style={{ fontSize: 12, color: '#64748b' }}>dias</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{gw === 'pagarme' ? 'padrão D+30' : 'padrão D+32'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>ANTECIPAÇÃO HABILITADA</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                    <input type="checkbox" checked={r.antecipacao_ativa || false}
+                      onChange={e => updateCfin(gw, 'antecipacao_ativa', e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
+                    <span style={{ fontSize: 12, color: '#334155' }}>Ativa</span>
+                  </div>
+                </div>
+                {r.antecipacao_ativa && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA ANTECIPAÇÃO % / MÊS</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <input type="number" step="0.01" min="0" max="5" value={r.antecipacao_pct_mes ?? 1.25}
+                        onChange={e => updateCfin(gw, 'antecipacao_pct_mes', e.target.value)}
+                        style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
+                      <span style={{ fontSize: 12, color: '#64748b' }}>% a.m.</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                      {gw === 'asaas' ? 'Asaas: a partir 1,25% a.m.' : 'Varia por contrato Stone'}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button onClick={() => salvarCfin(gw)}
+                style={{ marginTop: 14, padding: '7px 18px', background: cfinSaved[gw] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                {cfinSaved[gw] ? '✓ Salvo' : `Salvar ${gwLabel}`}
+              </button>
+            </div>
+          );
+        })}
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+          Asaas: crédito D+32 · antecipação a partir de 1,25% ao mês · recebe em até 2 dias úteis · sem IOF<br/>
+          Pagar.me: crédito D+30 · taxa de antecipação negociada por contrato com Stone · cálculo proporcional por dias
+        </div>
+      </div>
+
     </div>
   );
 }

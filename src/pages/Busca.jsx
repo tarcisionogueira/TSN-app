@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
@@ -39,6 +39,32 @@ const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lo
 const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', venda_direta:'Venda Direta', licitacao_aberta:'Licitação Aberta', judicial:'Judicial', extrajudicial:'Extrajudicial' };
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
+// Carrega imagem apenas quando o elemento entra na viewport
+function LazyImage({ src, alt, style }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); obs.disconnect(); }
+    }, { rootMargin: '100px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{ ...style, background:'#f1f5f9', overflow:'hidden', flexShrink:0 }}>
+      {visible && src && (
+        <img src={src} alt={alt} loading="lazy"
+          style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
+      )}
+    </div>
+  );
+}
+
+
 const PLANO_LABELS = {
   explorador: 'Explorador', top1: 'Investidor', top2: 'Investidor Pro',
   assessorado: 'Assessorado', clube: 'Clube de Negócios',
@@ -74,7 +100,7 @@ export default function Busca() {
   const [sortBy, setSortBy] = useState('desconto_desc');
   const [pagina, setPagina] = useState(1);
   const [totalResultados, setTotalResultados] = useState(0);
-  const POR_PAGINA = 50;
+  const POR_PAGINA = 20;
 
   // Radius search state
   const [raioQuery, setRaioQuery] = useState('');
@@ -241,6 +267,7 @@ export default function Busca() {
         scoreViabilidade: im.score_viabilidade,
         fracionado: im.fracionado,
         fonte: im.fonte,
+        fonteId: im.fonte_id,
         numeroEdital: im.numero_edital,
         numeroMatricula: im.numero_matricula,
         numeroProcesso: im.numero_processo,
@@ -308,13 +335,21 @@ export default function Busca() {
       setGeocodingErro('Informe um CEP ou cidade válido para busca por raio.');
       return;
     }
+    if (!filtros.estado) { setErro('Selecione um estado para buscar.'); return; }
+    setErro('');
     setPagina(1);
     saveBuscaRecente({ ...filtros, cidade: filtros.cidades.join(', ') });
     buscarPagina(1, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo);
   };
 
+  const imgUrlCaixa = (im) => {
+    if (im.fonte !== 'CEF') return null;
+    const id = (im.fonte_id || '').replace(/^cef_/, '');
+    return id ? `/api/img-caixa?id=${encodeURIComponent(id)}` : null;
+  };
+
   const irParaAnalise = (im) => {
-    nav('/analise', { state: { imovel: im } });
+    nav('/caso', { state: { imovel: im } });
   };
 
   const marcarArrematado = (im) => {
@@ -399,8 +434,8 @@ export default function Busca() {
                 </select>
               </div>
               <div>
-                <label style={lbl}>Estado (UF)</label>
-                <select value={filtros.estado} onChange={e=>{ up('estado',e.target.value); up('cidades',[]); setBuscaCidade(''); }} style={inp}>
+                <label style={lbl}>Estado (UF) <span style={{ color:'#ef4444' }}>*</span></label>
+                <select value={filtros.estado} onChange={e=>{ up('estado',e.target.value); up('cidades',[]); setBuscaCidade(''); setErro(''); }} style={{ ...inp, borderColor: !filtros.estado ? '#fca5a5' : '#e2e8f0' }}>
                   <option value="">Todos</option>
                   {ESTADOS.map(e=><option key={e} value={e}>{e}</option>)}
                 </select>
@@ -561,8 +596,13 @@ export default function Busca() {
                 ))}
               </div>
               {erro && <div style={{ padding:'8px 10px', background:'#fee2e2', borderRadius:8, fontSize:11, color:'#dc2626', fontWeight:600 }}>{erro}</div>}
-              <button onClick={buscar} disabled={loading}
-                style={{ width:'100%', padding:'11px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              {!filtros.estado && (
+                <div style={{ fontSize:11, color:'#92400e', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:7, padding:'7px 10px', fontWeight:600 }}>
+                  Selecione um estado para habilitar a busca
+                </div>
+              )}
+              <button onClick={buscar} disabled={loading || !filtros.estado}
+                style={{ width:'100%', padding:'11px', background: filtros.estado ? '#2563eb' : '#94a3b8', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor: filtros.estado ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                 {loading ? <><Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...</> : <><Search size={14}/> Buscar Leilões</>}
               </button>
               <button onClick={limparFiltros}
@@ -689,6 +729,92 @@ export default function Busca() {
               const modalLabel = MODAL_LABEL[im.modalidade] || im.modalidade || '—';
               const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#1e40af' };
 
+              const caixaImg = imgUrlCaixa({ ...im, fonte_id: im.fonteId });
+
+              // Mobile: card layout
+              if (isMobile) {
+                return (
+                  <div key={im.id} style={{ padding:'14px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa' }}>
+                    {caixaImg && (
+                      <LazyImage src={caixaImg} alt={im.titulo} style={{ width:'100%', height:140, borderRadius:8, marginBottom:10 }}/>
+                    )}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:8 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                          <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}
+                            style={{ width:16, height:16, cursor:'pointer', accentColor:'#2563eb', flexShrink:0 }}/>
+                          {im.tipo && <span style={{ fontSize:10, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap' }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
+                        <span style={{ fontWeight:700, color:'#0f172a', fontSize:14, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
+                          {im.fonte === 'CEF' && (
+                            <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
+                          )}
+                          {im.fracionado && (
+                            <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>
+                              ⚠ Fracionado
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize:12, color:'#64748b', marginTop:4, display:'flex', alignItems:'center', gap:4 }}>
+                          <MapPin size={11}/> {im.endereco||'—'}{im.cidade?', '+im.cidade:''}
+                        </div>
+                      </div>
+                      <div style={{ textAlign:'right', flexShrink:0 }}>
+                        {desc>0 && <div style={{ background: desc>=40?'#dcfce7':desc>=20?'#fef9c3':'#fee2e2', color: desc>=40?'#15803d':desc>=20?'#92400e':'#dc2626', fontSize:20, fontWeight:900, padding:'6px 12px', borderRadius:10, minWidth:64, textAlign:'center' }}>{desc}%<div style={{ fontSize:9, fontWeight:700, opacity:0.8 }}>DESCONTO</div></div>}
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom:10 }}>
+                      <div>
+                        <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Lance mín.</div>
+                        <div style={{ fontWeight:800, color:'#0f172a', fontSize:16 }}>{fmtBRL(im.valorMinimo)}</div>
+                      </div>
+                      {im.valorAvaliacao>0 && (
+                        <div>
+                          <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Avaliação</div>
+                          <div style={{ fontSize:13, color:'#64748b' }}>{fmtBRL(im.valorAvaliacao)}</div>
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Data</div>
+                        <div style={{ fontSize:13, color:'#64748b' }}>{fmtData(im.dataLeilao, im.modalidade)}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:8 }}>
+                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:20, background:im.modalidade==='judicial'?'#fef3c7':'#dbeafe', color:im.modalidade==='judicial'?'#92400e':'#1e40af' }}>
+                        {im.modalidade==='judicial'?'Judicial':'Extrajudicial'}
+                      </span>
+                      {im.areaM2>0 && <span style={{ fontSize:11, color:'#8b5cf6', fontWeight:600, padding:'3px 8px', background:'#f5f3ff', borderRadius:20 }}>{im.areaM2}m²</span>}
+                      {(im.pagamento||[]).map(p=>(
+                        <span key={p} style={{ fontSize:10, background:'#f1f5f9', color:'#475569', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>
+                          {p==='a_vista'||p==='aVista'?'À Vista':p==='financiado'?'Financiado':'Hipotecado'}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      {im.urlLote && (
+                        canSite
+                          ? <a href={im.urlLote} target="_blank" rel="noopener noreferrer"
+                              style={{ flex:1, padding:'10px 8px', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center', gap:4, minHeight:44 }}>
+                              <ExternalLink size={13}/> {im.fonte==='CEF'?'Edital/Mat.':'Site'}
+                            </a>
+                          : <span style={{ flex:1, padding:'10px 8px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:4, cursor:'not-allowed', minHeight:44 }}>
+                              🔒 {im.fonte==='CEF'?'Edital/Mat.':'Site'}
+                            </span>
+                      )}
+                      {canAnalise
+                        ? <button onClick={()=>irParaAnalise(im)}
+                            style={{ flex:2, padding:'10px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:44 }}>
+                            📊 Analisar
+                          </button>
+                        : <span style={{ flex:2, padding:'10px', background:'#f8fafc', color:'#cbd5e1', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:44 }}>
+                            🔒 Analisar
+                          </span>
+                      }
+                    </div>
+                  </div>
+                );
+              }
+
+              // Desktop: row layout
               return (
                 <div key={im.id}
                   style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', flexDirection:'column', cursor:'pointer', transition:'box-shadow 0.15s' }}

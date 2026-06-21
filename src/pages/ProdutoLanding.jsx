@@ -372,9 +372,16 @@ export default function ProdutoLanding() {
           let nome = id === 'top1' ? 'Investidor' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
           if (data) {
             nome = data.nome || nome;
-            if (data.preco) precoLabel = `R$ ${Number(data.preco).toFixed(2).replace('.',',')}`;
+            const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
+            if (data.preco) {
+              if (data.preco_vista) {
+                precoLabel = `${fmtBRL(data.preco)} em 12× · ${fmtBRL(data.preco_vista)} à vista`;
+              } else {
+                precoLabel = `${fmtBRL(data.preco)} em 12×`;
+              }
+            }
           }
-          setProduto({ tipo: 'plano', key: id, nome, precoLabel, tagline: info.tagline, features: info.features });
+          setProduto({ tipo: 'plano', key: id, nome, precoLabel, precoVista: data?.preco_vista, tagline: info.tagline, features: info.features });
         }
       } else if (tipo === 'curso') {
         const { data } = await supabase.from('cursos_admin').select('id,titulo,subtitulo,descricao,preco,emoji,cor').eq('id', id).single();

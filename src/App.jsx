@@ -35,6 +35,8 @@ import ProdutoLanding from './pages/ProdutoLanding';
 import ProdutoPublico from './pages/ProdutoPublico';
 import CancelarAlertas from './pages/CancelarAlertas';
 import Perfil from './pages/Perfil';
+import Comissoes from './pages/Comissoes';
+import Caso from './pages/Caso';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -167,6 +169,8 @@ function MainLayout() {
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<PrivateRoute><ImovelDetalhe /></PrivateRoute>} />
           <Route path="/analise" element={<PrivateRoute><Analise /></PrivateRoute>} />
+          <Route path="/caso" element={<PrivateRoute><Caso /></PrivateRoute>} />
+          <Route path="/caso/:id" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
           <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin']}><Consultor /></PrivateRoute>} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
@@ -178,6 +182,7 @@ function MainLayout() {
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
           <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
           <Route path="/perfil" element={<PrivateRoute><Perfil /></PrivateRoute>} />
+          <Route path="/comissoes" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><Comissoes /></PrivateRoute>} />
           <Route path="/atendimento" element={<PrivateRoute roles={['analista','consultor','admin','advogado']}><Atendimento /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />

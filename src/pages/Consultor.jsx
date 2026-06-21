@@ -201,7 +201,23 @@ export default function Consultor() {
     return result;
   }
 
-  const planosVenda = buildPlanosVenda();
+  const planosVenda = planosConfig.length > 0
+    ? planosConfig.map(p => {
+        const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
+        let precoLabel = '';
+        if (p.preco) {
+          if (p.cobrar) {
+            precoLabel = `${fmtBRL(p.preco)}/mês`;
+          } else {
+            const parcelas = `${fmtBRL(p.preco)} em 12×`;
+            precoLabel = p.preco_vista
+              ? `${parcelas} · ${fmtBRL(p.preco_vista)} à vista`
+              : parcelas;
+          }
+        }
+        return { key: p.plano_key, nome: p.nome, precoLabel };
+      })
+    : buildPlanosVenda();
 
   const codigo = perfil?.codigo_indicacao;
   const origin = window.location.origin;
