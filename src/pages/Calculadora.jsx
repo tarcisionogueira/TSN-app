@@ -381,32 +381,42 @@ export default function Calculadora() {
         const isPago = ['top1','top2','assessorado','clube','consultor','analista','advogado','admin'].includes(r);
         const isAssessoradoOuClube = ['assessorado','clube'].includes(r);
         if (isAssessoradoOuClube) return null;
-        if (isPago) return null; // top1/top2 already paid, no upsell
-        // Not logged in OR explorador OR SDR lead
+        if (isPago) return null;
         const isExplorador = user && (r === 'explorador');
         const refAtivo = searchParams.get('ref') || sessionStorage.getItem('tsn_ref_codigo') || '';
         const refSufixo = refAtivo ? `&ref=${refAtivo}` : '';
+        const temRef = !!refAtivo;
         return (
-          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius: 16, padding: '24px 28px', color: 'white' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-              {isExplorador ? '🚀 Desbloqueie o potencial completo' : '🏆 Invista com mais segurança'}
+          <div style={{ marginTop: 32, background: temRef ? 'linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%)' : 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: temRef ? '1px solid #3b82f6' : 'none' }}>
+            {temRef && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#2563eb', borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 800, color: 'white', letterSpacing: 1, marginBottom: 14 }}>
+                🎯 OFERTA EXCLUSIVA DO SEU CONSULTOR
+              </div>
+            )}
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+              {isExplorador ? '🚀 Desbloqueie o potencial completo' : '🏆 Invista com mais segurança e inteligência'}
             </div>
-            <h3 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 900 }}>
-              {isExplorador ? 'Seu acesso gratuito está ativo. Quer ir mais fundo?' : 'Descubra como identificar os melhores leilões'}
-            </h3>
-            <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, margin: '0 0 18px' }}>
+            <h3 style={{ margin: '0 0 10px', fontSize: 22, fontWeight: 900, lineHeight: 1.25 }}>
               {isExplorador
-                ? 'Com o Plano Pago, você acessa análises detalhadas, suporte especializado e pode usar esta calculadora com todos os imóveis que analisar — sem limitações.'
-                : 'A TSN conecta investidores a leilões judiciais e extrajudiciais com curadoria especializada. Crie sua conta gratuitamente e comece a explorar oportunidades reais de retorno acima do mercado.'}
+                ? 'Seu acesso gratuito está ativo. Quer ir mais fundo?'
+                : 'Gostou da calculadora? Conheça a plataforma completa.'}
+            </h3>
+            <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.75, margin: '0 0 22px' }}>
+              {isExplorador
+                ? 'Com o Plano Investidor Pro, você acessa análises detalhadas, suporte especializado e usa esta calculadora sem limitações em todos os imóveis que analisar.'
+                : 'A TSN Ativos conecta investidores a leilões judiciais e extrajudiciais com curadoria especializada. Acesse lotes selecionados, análises de viabilidade e suporte de especialistas.'}
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {!user && (
-                <button onClick={() => nav(`/login?modo=cadastro${refSufixo}`)} style={{ padding: '11px 22px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+                <button onClick={() => nav(`/login?modo=cadastro${refSufixo}`)}
+                  style={{ padding: '12px 24px', background: 'white', color: '#1e40af', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
                   Criar conta gratuita
                 </button>
               )}
-              <button onClick={() => nav(`/checkout?plano=top1${refSufixo}`)} style={{ padding: '11px 22px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
-                {isExplorador ? 'Assinar Investidor Pro — R$ 49,90/mês →' : 'Conhecer os planos →'}
+              <button
+                onClick={() => nav(`/planos${refAtivo ? `?ref=${refAtivo}` : ''}`)}
+                style={{ padding: '12px 24px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+                {isExplorador ? 'Ver planos e assinar →' : 'Conhecer os planos →'}
               </button>
             </div>
           </div>
