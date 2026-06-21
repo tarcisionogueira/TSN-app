@@ -168,7 +168,7 @@ export default function Checkout() {
       // Log de aceite dos termos para proteção contra chargeback
       await logAceite(planoApiKey, plano.preco, data);
       // Abre o link do Asaas em nova aba automaticamente
-      if (link) window.open(link, '_blank', 'noopener');
+      if (link) window.location.href = link;
       // Salva IDs para polling de verificação
       const ids = { subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null };
       setAsaasIds(ids);
@@ -196,7 +196,7 @@ export default function Checkout() {
       setResultadoMudanca(data);
       if (data.linkPagamento) {
         setLinkPagamento(data.linkPagamento);
-        window.open(data.linkPagamento, '_blank', 'noopener');
+        window.location.href = data.linkPagamento;
       } else {
         // Mudança sem link (downgrade): mostra sucesso e redireciona
         setTimeout(() => nav('/'), 3000);
@@ -404,10 +404,11 @@ export default function Checkout() {
             ))}
           </div>
 
-          <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 13, color: '#475569' }}>
-            <strong>Conta:</strong> {user?.email ? (() => { const [u, d] = user.email.split('@'); return u.slice(0,3) + '***@' + d; })() : ''}
-            {ehMudanca && planoAtual && <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>Plano atual: <strong>{planoAtual.nome}</strong> ({planoAtual.precoLabel})</div>}
-          </div>
+          {ehMudanca && planoAtual && (
+            <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#64748b' }}>
+              Plano atual: <strong>{planoAtual.nome}</strong> ({planoAtual.precoLabel})
+            </div>
+          )}
           {/* Aviso LGPD — CPF e nome são enviados ao processador de pagamento */}
           <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '8px 12px', marginBottom: 20, fontSize: 11, color: '#0369a1', lineHeight: 1.5 }}>
             Seus dados (nome e CPF) serão compartilhados com o processador de pagamento para emissão da cobrança, conforme a <strong>Lei nº 13.709/2018 (LGPD)</strong>.

@@ -323,20 +323,20 @@ export default function Consultor() {
                       {
                         emoji: '⭐',
                         label: 'Investidor Pro',
-                        sub: 'R$ 49,90/mês · ver plano e assinar',
-                        url: `${origin}/#/planos${codigo?`?ref=${codigo}`:''}`,
+                        sub: 'R$ 49,90/mês',
+                        url: `${origin}/#/checkout?plano=top1${codigo?`&ref=${codigo}`:''}`,
                       },
                       {
                         emoji: '🏅',
                         label: 'Assessoria',
-                        sub: 'R$ 6.000 parcelado · R$ 5.000 à vista · ver plano e contratar',
-                        url: `${origin}/#/planos${codigo?`?ref=${codigo}`:''}`,
+                        sub: 'R$ 6.000 parcelado · R$ 5.000 à vista',
+                        url: `${origin}/#/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
                       },
                       {
                         emoji: '🏛️',
                         label: 'Clube de Negócios',
-                        sub: 'R$ 60.000/ano · R$ 48.000 à vista · ver plano e contratar',
-                        url: `${origin}/#/planos${codigo?`?ref=${codigo}`:''}`,
+                        sub: 'R$ 60.000/ano · R$ 48.000 à vista',
+                        url: `${origin}/#/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
                       },
                       ...cursos.map(c=>({
                         emoji: c.emoji||'🎓',

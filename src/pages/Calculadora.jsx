@@ -392,12 +392,12 @@ export default function Calculadora() {
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {!user && (
-                <button onClick={() => nav('/cadastro')} style={{ padding: '11px 22px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+                <button onClick={() => nav('/login?modo=cadastro')} style={{ padding: '11px 22px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
                   Criar conta gratuita
                 </button>
               )}
-              <button onClick={() => nav('/planos')} style={{ padding: '11px 22px', background: isExplorador ? '#2563eb' : 'rgba(255,255,255,0.1)', color: 'white', border: isExplorador ? 'none' : '1px solid rgba(255,255,255,0.2)', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
-                {isExplorador ? 'Ver planos' : 'Conhecer os planos'}
+              <button onClick={() => nav('/checkout?plano=top1')} style={{ padding: '11px 22px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+                {isExplorador ? 'Assinar Investidor Pro — R$ 49,90/mês →' : 'Conhecer os planos →'}
               </button>
             </div>
           </div>
