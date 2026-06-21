@@ -879,6 +879,14 @@ function ConfigTab() {
   const [ebooksCfg, setEbooksCfg] = useState([]);
   const [produtosSaved, setProdutosSaved] = useState({});
 
+  // Dirty tracking para botão flutuante
+  const [dirtyPlanos, setDirtyPlanos] = useState(new Set());
+  const [dirtyCursos, setDirtyCursos] = useState(new Set());
+  const [dirtyEbooks, setDirtyEbooks] = useState(new Set());
+  const [salvandoTudo, setSalvandoTudo] = useState(false);
+  const [tudoSalvo, setTudoSalvo] = useState(false);
+  const isDirty = dirtyPlanos.size > 0 || dirtyCursos.size > 0 || dirtyEbooks.size > 0;
+
   useEffect(() => {
     supabase.from('cursos_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('titulo')
       .then(({ data }) => setCursosCfg(data || []));
@@ -901,9 +909,11 @@ function ConfigTab() {
 
   function updateCurso(id, field, value) {
     setCursosCfg(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+    setDirtyCursos(prev => new Set([...prev, id]));
   }
   function updateEbook(id, field, value) {
     setEbooksCfg(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+    setDirtyEbooks(prev => new Set([...prev, id]));
   }
 
   useEffect(() => {
@@ -941,6 +951,25 @@ function ConfigTab() {
 
   function updatePlano(key, field, value) {
     setPlanos(prev => prev.map(p => p.plano_key === key ? { ...p, [field]: value } : p));
+    setDirtyPlanos(prev => new Set([...prev, key]));
+  }
+
+  async function salvarTudo() {
+    setSalvandoTudo(true);
+    const planosParaSalvar = planos.filter(p => dirtyPlanos.has(p.plano_key));
+    const cursosParaSalvar = cursosCfg.filter(c => dirtyCursos.has(c.id));
+    const ebooksParaSalvar = ebooksCfg.filter(e => dirtyEbooks.has(e.id));
+    await Promise.all([
+      ...planosParaSalvar.map(p => salvarPlano(p)),
+      ...cursosParaSalvar.map(c => salvarProduto('curso', c)),
+      ...ebooksParaSalvar.map(e => salvarProduto('ebook', e)),
+    ]);
+    setDirtyPlanos(new Set());
+    setDirtyCursos(new Set());
+    setDirtyEbooks(new Set());
+    setSalvandoTudo(false);
+    setTudoSalvo(true);
+    setTimeout(() => setTudoSalvo(false), 2500);
   }
 
   const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
@@ -965,13 +994,13 @@ function ConfigTab() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 80px 80px 90px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
-              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Preço Anual', 'Cobrar?', 'Ativo?', 'Comissão %', 'Contrato', ''].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 80px 80px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
+              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Preço Anual', 'Cobrar?', 'Ativo?', 'Comissão %', 'Contrato'].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
             {planos.map(p => (
-              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 80px 80px 90px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '150px 120px 120px 120px 75px 65px 80px 80px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9', background: dirtyPlanos.has(p.plano_key) ? '#fffbeb' : 'transparent' }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.nome}</div>
                   <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.plano_key}</div>
@@ -1014,10 +1043,6 @@ function ConfigTab() {
                     📄 Contrato
                   </button>
                 </div>
-                <button onClick={() => salvarPlano(p)}
-                  style={{ padding: '7px 14px', background: planosSaved[p.plano_key] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                  {planosSaved[p.plano_key] ? '✓ Salvo' : 'Salvar'}
-                </button>
               </div>
             ))}
           </div>
@@ -1036,13 +1061,13 @@ function ConfigTab() {
           {cursosCfg.length > 0 && (
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Cursos</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px 80px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
-                {['Título', 'Preço (R$)', 'Comissão %', 'Contrato', ''].map(h => (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
+                {['Título', 'Preço (R$)', 'Comissão %', 'Contrato'].map(h => (
                   <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>{h}</div>
                 ))}
               </div>
               {cursosCfg.map(c => (
-                <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px 80px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+                <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc', background: dirtyCursos.has(c.id) ? '#fffbeb' : 'transparent' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>🎓 {c.titulo}</div>
                   <InputBRL value={c.preco ?? 0} onChange={v => updateCurso(c.id, 'preco', v)}
                     style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
@@ -1053,10 +1078,6 @@ function ConfigTab() {
                     style={{ padding: '6px 8px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
                     📄 Contrato
                   </button>
-                  <button onClick={() => salvarProduto('curso', c)}
-                    style={{ padding: '7px 10px', background: produtosSaved[`curso_${c.id}`] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {produtosSaved[`curso_${c.id}`] ? '✓' : 'Salvar'}
-                  </button>
                 </div>
               ))}
             </>
@@ -1066,13 +1087,13 @@ function ConfigTab() {
           {ebooksCfg.length > 0 && (
             <div style={{ marginTop: cursosCfg.length > 0 ? 20 : 0 }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>eBooks</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px 80px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
-                {['Título', 'Preço (R$)', 'Comissão %', 'Contrato', ''].map(h => (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px', gap: 10, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
+                {['Título', 'Preço (R$)', 'Comissão %', 'Contrato'].map(h => (
                   <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>{h}</div>
                 ))}
               </div>
               {ebooksCfg.map(e => (
-                <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px 80px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+                <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px 90px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f8fafc', background: dirtyEbooks.has(e.id) ? '#fffbeb' : 'transparent' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>📖 {e.titulo}</div>
                   <InputBRL value={e.preco ?? 0} onChange={v => updateEbook(e.id, 'preco', v)}
                     style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
@@ -1082,10 +1103,6 @@ function ConfigTab() {
                   <button onClick={() => setContratoPlano(`ebook:${e.id}:${e.titulo}`)}
                     style={{ padding: '6px 8px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%' }}>
                     📄 Contrato
-                  </button>
-                  <button onClick={() => salvarProduto('ebook', e)}
-                    style={{ padding: '7px 10px', background: produtosSaved[`ebook_${e.id}`] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {produtosSaved[`ebook_${e.id}`] ? '✓' : 'Salvar'}
                   </button>
                 </div>
               ))}
@@ -1100,6 +1117,16 @@ function ConfigTab() {
           planos={planos}
           onClose={() => setContratoPlano(null)}
         />
+      )}
+
+      {/* Botão flutuante de salvar */}
+      {(isDirty || tudoSalvo) && (
+        <div style={{ position: 'fixed', bottom: 32, right: 32, zIndex: 9999 }}>
+          <button onClick={salvarTudo} disabled={salvandoTudo || tudoSalvo}
+            style={{ padding: '14px 28px', background: tudoSalvo ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: salvandoTudo || tudoSalvo ? 'default' : 'pointer', boxShadow: '0 8px 30px rgba(37,99,235,0.4)', transition: 'background 0.2s', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {salvandoTudo ? '⏳ Salvando…' : tudoSalvo ? '✅ Salvo!' : '💾 Salvar alterações'}
+          </button>
+        </div>
       )}
 
     </div>

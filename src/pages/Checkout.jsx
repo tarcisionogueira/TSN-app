@@ -82,7 +82,10 @@ export default function Checkout() {
   const pollingRef = React.useRef(null);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
-  const planoApiKey = temModalidade && modalidade === 'vista' ? `${planoKey}_vista` : planoKey;
+  const temToggleAnual = planoKey === 'top1';
+  const planoApiKey = temModalidade && modalidade === 'vista'
+    ? `${planoKey}_vista`
+    : temToggleAnual && modalidade === 'anual' ? `${planoKey}_anual` : planoKey;
 
   // Não redireciona automaticamente — deixa o usuário ver a apresentação do plano primeiro
 
@@ -405,6 +408,23 @@ export default function Checkout() {
             Plano {plano.nome}
           </h2>
 
+          {/* Toggle mensal/anual — top1 */}
+          {temToggleAnual && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
+              {[
+                { key: 'mensal', label: 'Mensal — R$ 49,90/mês' },
+                { key: 'anual', label: 'Anual — R$ 39,90/mês · 20% off' },
+              ].map(({ key, label }) => (
+                <button key={key} onClick={() => setModalidade(key)}
+                  style={{ flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                    background: modalidade === key ? plano.cor : 'transparent',
+                    color: modalidade === key ? 'white' : '#64748b' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Seletor de modalidade — apenas para assessorado e clube */}
           {temModalidade && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
@@ -423,7 +443,8 @@ export default function Checkout() {
           )}
 
           {promoInfo ? (() => {
-            const orig = temModalidade && modalidade === 'vista' ? (plano.precoVista || plano.preco) : plano.preco;
+            const orig = temModalidade && modalidade === 'vista' ? (plano.precoVista || plano.preco)
+              : temToggleAnual && modalidade === 'anual' ? (plano.precoAnual || plano.preco * 12) : plano.preco;
             const promo = promoInfo.desconto_pct > 0
               ? orig * (1 - promoInfo.desconto_pct / 100)
               : promoInfo.desconto_valor > 0 ? Math.max(0, orig - promoInfo.desconto_valor) : orig;
@@ -447,6 +468,12 @@ export default function Checkout() {
                 <>
                   <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoVistaLabel}</strong>
                   {' '}à vista · sem renovação automática
+                </>
+              ) : temToggleAnual && modalidade === 'anual' ? (
+                <>
+                  <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoMensalAnualLabel}</strong>
+                  <span style={{ color: '#64748b', fontSize: 15 }}>/mês · cobrado anualmente ({plano.precoAnualLabel}/ano)</span>
+                  <span style={{ marginLeft: 8, background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 20 }}>20% off</span>
                 </>
               ) : (
                 <>

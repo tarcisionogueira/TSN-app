@@ -146,6 +146,7 @@ export default function Header() {
   const ROLES_CALC = ['top1', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
   const linksPublicos = [
     { path: '/', label: 'Home', icon: Home, tourId: 'home' },
+    { path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' },
     { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' },
   ];
   const linksPrivados = [
@@ -154,7 +155,7 @@ export default function Header() {
     ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
   const links = user
-    ? [linksPublicos[0], ...linksPrivados, linksPublicos[1]]
+    ? [linksPublicos[0], ...linksPrivados, linksPublicos[2]]
     : linksPublicos;
 
   // Auto-inicia tour para membros não-admin: até 3x por mês, cooldown de 24h
