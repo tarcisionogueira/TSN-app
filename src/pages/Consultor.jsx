@@ -50,6 +50,14 @@ export default function Consultor() {
   const [leadsSDR, setLeadsSDR] = useState([]);
   const [leadDetalhe, setLeadDetalhe] = useState(null);
   const [clienteDetalhe, setClienteDetalhe] = useState(null);
+  const [msgModal, setMsgModal] = useState(null);   // { nome, email, user_id }
+  const [msgForm, setMsgForm] = useState({ assunto: '', conteudo: '' });
+  const [enviandoMsg, setEnviandoMsg] = useState(false);
+  const [msgOk, setMsgOk] = useState(false);
+  const [reuniaoModal, setReuniaoModal] = useState(null); // { nome, email }
+  const [reuniaoForm, setReuniaoForm] = useState({ data: '', hora: '10:00', duracao: 30 });
+  const [criandoReuniao, setCriandoReuniao] = useState(false);
+  const [reuniaoLink, setReuniaoLink] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -180,6 +188,39 @@ export default function Consultor() {
   const totalPago     = comissoes.filter(c=>c.status==='pago').reduce((s,c)=>s+Number(c.valor_comissao),0);
   const clientesPagantes = carteira.filter(c => c.plano && c.plano !== 'gratuito').length;
 
+  async function enviarMensagem() {
+    if (!msgForm.conteudo.trim()) return;
+    setEnviandoMsg(true);
+    await supabase.from('mensagens_diretas').insert({
+      de_consultor_id: user.id,
+      para_user_id: msgModal.user_id || null,
+      para_email: msgModal.email || null,
+      assunto: msgForm.assunto.trim() || 'Mensagem do seu consultor',
+      conteudo: msgForm.conteudo.trim(),
+    });
+    setEnviandoMsg(false);
+    setMsgOk(true);
+    setTimeout(() => { setMsgModal(null); setMsgOk(false); setMsgForm({ assunto:'', conteudo:'' }); }, 1800);
+  }
+
+  async function criarReuniao() {
+    if (!reuniaoForm.data) return;
+    setCriandoReuniao(true);
+    setReuniaoLink('');
+    const reuniaoEm = `${reuniaoForm.data}T${reuniaoForm.hora}:00`;
+    const fakeId = `consultor-${user.id.slice(0,8)}-${Date.now()}`;
+    try {
+      const res = await fetch('/api/criar-sala-reuniao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ solicitacaoId: fakeId, reuniaoEm, duracaoMin: Number(reuniaoForm.duracao) }),
+      });
+      const data = await res.json();
+      setReuniaoLink(data.url || data.link || '');
+    } catch (_) { setReuniaoLink(''); }
+    setCriandoReuniao(false);
+  }
+
   const tabBtn = (id, label) => (
     <button onClick={()=>setAba(id)}
       style={{ padding:'10px 20px', border:'none', background: aba===id ? '#0f172a' : 'transparent', color: aba===id ? 'white' : '#64748b', fontWeight:700, fontSize:14, cursor:'pointer', borderRadius:'10px 10px 0 0', borderBottom: aba===id ? 'none' : '2px solid #e2e8f0' }}>
@@ -243,6 +284,31 @@ export default function Consultor() {
                   <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
                     <span style={{ fontSize:26, fontWeight:900, color:'#0f172a', letterSpacing:2 }}>{codigo}</span>
                     <span style={{ fontSize:12, color:'#64748b' }}>Comissão de <strong>{pct}%</strong> sobre produtos e assinaturas, enquanto o cliente pagar.</span>
+                  </div>
+                </div>
+
+                {/* ── Kit da Consulta ── */}
+                <div style={{ background:'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius:14, padding:'18px 20px' }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:'#60a5fa', textTransform:'uppercase', letterSpacing:1, marginBottom:4 }}>🛒 Kit da Consulta</div>
+                  <p style={{ fontSize:12, color:'#94a3b8', margin:'0 0 14px' }}>Use estes links durante o atendimento para converter o cliente na hora.</p>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:8 }}>
+                    {[
+                      { label:'Página de Planos', url:`${origin}/#/planos${codigo?`?ref=${codigo}`:''}`, emoji:'📋' },
+                      ...planosVenda.map(pl=>({ label:pl.nome, sub:pl.precoLabel, url:`${origin}/#/p/plano/${pl.key}${codigo?`?ref=${codigo}`:''}`, emoji:'⭐' })),
+                      ...cursos.map(c=>({ label:c.titulo, sub:'Curso', url:`${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`, emoji:c.emoji||'🎓' })),
+                    ].map((item,i)=>(
+                      <div key={i} style={{ background:'rgba(255,255,255,0.07)', borderRadius:10, padding:'10px 12px', display:'flex', alignItems:'center', gap:10 }}>
+                        <span style={{ fontSize:18 }}>{item.emoji}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:'white', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.label}</div>
+                          {item.sub && <div style={{ fontSize:11, color:'#60a5fa' }}>{item.sub}</div>}
+                        </div>
+                        <button onClick={()=>navigator.clipboard.writeText(item.url)}
+                          style={{ padding:'4px 10px', background:'#2563eb', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}>
+                          Copiar
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -416,54 +482,53 @@ export default function Consultor() {
         {/* === CARTEIRA === */}
         {aba==='carteira' && (() => {
           const listaClientes = filtroCarteira === 'pagantes' ? carteira.filter(c => c.plano && c.plano !== 'gratuito') : carteira;
-          // Helper: render contact card (shared between clients and SDR leads)
-          function ContatoCard({ nome, email, whatsapp, plano, data, badge, badgeColor, badgeBg, onVerRespostas, tipo }) {
-            const tel = whatsapp || '';
-            const telDigits = tel.replace(/\D/g,'');
+          function ContatoCard({ nome, email, whatsapp, userId, plano, data, badge, badgeColor, badgeBg, onVerRespostas, tipo }) {
+            const tel = (whatsapp || '').replace(/\D/g,'');
+            const telFmt = whatsapp || '';
+            const [copiadoTel, setCopiadoTel] = useState(false);
+            function copiarTel() { navigator.clipboard.writeText(telFmt); setCopiadoTel(true); setTimeout(()=>setCopiadoTel(false),1500); }
             return (
-              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 18px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
-                {/* Avatar */}
-                <div style={{ width:40, height:40, borderRadius:20, background: tipo==='lead'?'#fef3c7':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>
-                  {tipo==='lead' ? '🎯' : '👤'}
-                </div>
-                {/* Info */}
-                <div style={{ flex:1, minWidth:160 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:3 }}>
-                    <span style={{ fontWeight:800, fontSize:14, color:'#0f172a' }}>{nome||'—'}</span>
-                    <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20, background:badgeBg||'#f1f5f9', color:badgeColor||'#64748b', textTransform:'uppercase' }}>
-                      {badge}
-                    </span>
+              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+                <div style={{ display:'flex', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}>
+                  {/* Avatar + Info */}
+                  <div style={{ width:38, height:38, borderRadius:19, background: tipo==='lead'?'#fef3c7':'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>
+                    {tipo==='lead' ? '🎯' : '👤'}
                   </div>
-                  <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'#64748b' }}>
-                    {email && <span>📧 {email}</span>}
-                    {tel && <span>📱 {tel}</span>}
-                    {data && <span>📅 {fmtData(data)}</span>}
+                  <div style={{ flex:1, minWidth:140 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:4 }}>
+                      <span style={{ fontWeight:800, fontSize:14, color:'#0f172a' }}>{nome||'—'}</span>
+                      <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20, background:badgeBg||'#f1f5f9', color:badgeColor||'#64748b', textTransform:'uppercase' }}>{badge}</span>
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                      {email && <span style={{ fontSize:12, color:'#64748b' }}>📧 {email}</span>}
+                      {telFmt && (
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <span style={{ fontSize:12, color:'#64748b' }}>📱 {telFmt}</span>
+                          <button onClick={copiarTel} style={{ fontSize:10, background:copiadoTel?'#dcfce7':'#f1f5f9', border:'none', borderRadius:4, padding:'1px 7px', cursor:'pointer', color:copiadoTel?'#166534':'#64748b', fontWeight:700 }}>
+                            {copiadoTel ? '✓' : 'copiar'}
+                          </button>
+                        </div>
+                      )}
+                      {data && <span style={{ fontSize:11, color:'#94a3b8' }}>📅 {fmtData(data)}</span>}
+                    </div>
                   </div>
-                </div>
-                {/* Actions */}
-                <div style={{ display:'flex', gap:6, flexWrap:'wrap', flexShrink:0 }}>
-                  {telDigits && (
-                    <a href={`https://wa.me/55${telDigits}`} target="_blank" rel="noreferrer"
-                      style={{ padding:'6px 12px', background:'#dcfce7', color:'#166534', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', whiteSpace:'nowrap' }}>
-                      WhatsApp
-                    </a>
-                  )}
-                  {email && (
-                    <a href={`mailto:${email}`}
-                      style={{ padding:'6px 12px', background:'#eff6ff', color:'#1d4ed8', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', whiteSpace:'nowrap' }}>
-                      E-mail
-                    </a>
-                  )}
-                  <button onClick={() => setClienteDetalhe({ nome, email, whatsapp: tel, plano, data, tipo, onVerRespostas })}
-                    style={{ padding:'6px 12px', background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
-                    Ver perfil
-                  </button>
-                  {onVerRespostas && (
-                    <button onClick={onVerRespostas}
-                      style={{ padding:'6px 12px', background:'#fef9c3', color:'#92400e', border:'1px solid #fde68a', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
-                      Respostas
+                  {/* Ações */}
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+                    <button onClick={()=>{ setMsgModal({ nome, email, user_id: userId }); setMsgForm({ assunto:'', conteudo:'' }); }}
+                      style={{ padding:'6px 12px', background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                      ✉ Mensagem
                     </button>
-                  )}
+                    <button onClick={()=>{ setReuniaoModal({ nome, email }); setReuniaoForm({ data:'', hora:'10:00', duracao:30 }); setReuniaoLink(''); }}
+                      style={{ padding:'6px 12px', background:'#f0fdf4', color:'#15803d', border:'1px solid #bbf7d0', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                      📅 Reunião
+                    </button>
+                    {onVerRespostas && (
+                      <button onClick={onVerRespostas}
+                        style={{ padding:'6px 12px', background:'#fef9c3', color:'#92400e', border:'1px solid #fde68a', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                        Respostas
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -491,7 +556,7 @@ export default function Consultor() {
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                   {listaClientes.map(c => (
                     <ContatoCard key={c.id}
-                      nome={c.nome} email={c.email} whatsapp={c.whatsapp||c.telefone}
+                      nome={c.nome} email={c.email} whatsapp={c.whatsapp||c.telefone} userId={c.id}
                       plano={c.plano} data={c.created_at} tipo="cliente"
                       badge={c.plano && c.plano !== 'gratuito' ? c.plano : 'gratuito'}
                       badgeBg={c.plano && c.plano !== 'gratuito' ? '#d1fae5' : '#f1f5f9'}
@@ -512,7 +577,7 @@ export default function Consultor() {
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                     {leadsSDR.map(l => (
                       <ContatoCard key={l.id}
-                        nome={l.nome} email={l.email} whatsapp={l.whatsapp}
+                        nome={l.nome} email={l.email} whatsapp={l.whatsapp} userId={l.user_id}
                         data={l.criado_em} tipo="lead"
                         badge={l.sdr_produtos?.nome || 'Lead'}
                         badgeBg="#fef3c7" badgeColor="#92400e"
@@ -523,43 +588,6 @@ export default function Consultor() {
                 </div>
               )}
 
-              {/* Modal: Ver perfil simplificado */}
-              {clienteDetalhe && (
-                <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
-                  onClick={()=>setClienteDetalhe(null)}>
-                  <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:420, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}
-                    onClick={e=>e.stopPropagation()}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
-                      <div style={{ fontSize:16, fontWeight:800 }}>{clienteDetalhe.nome}</div>
-                      <button onClick={()=>setClienteDetalhe(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#94a3b8' }}>✕</button>
-                    </div>
-                    <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:20 }}>
-                      {clienteDetalhe.email && <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px', fontSize:13 }}>📧 <strong>E-mail:</strong> {clienteDetalhe.email}</div>}
-                      {clienteDetalhe.whatsapp && <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px', fontSize:13 }}>📱 <strong>WhatsApp:</strong> {clienteDetalhe.whatsapp}</div>}
-                      {clienteDetalhe.plano && <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px', fontSize:13 }}>📋 <strong>Plano:</strong> {clienteDetalhe.plano}</div>}
-                      {clienteDetalhe.data && <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 14px', fontSize:13 }}>📅 <strong>Cadastro:</strong> {fmtData(clienteDetalhe.data)}</div>}
-                    </div>
-                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                      {clienteDetalhe.whatsapp && (
-                        <a href={`https://wa.me/55${clienteDetalhe.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
-                          style={{ padding:'11px', background:'#dcfce7', color:'#166534', borderRadius:10, fontWeight:700, fontSize:14, textDecoration:'none', textAlign:'center' }}>
-                          📱 Abrir WhatsApp
-                        </a>
-                      )}
-                      {clienteDetalhe.email && (
-                        <a href={`mailto:${clienteDetalhe.email}`}
-                          style={{ padding:'11px', background:'#eff6ff', color:'#1d4ed8', borderRadius:10, fontWeight:700, fontSize:14, textDecoration:'none', textAlign:'center' }}>
-                          ✉️ Enviar e-mail
-                        </a>
-                      )}
-                      <button onClick={()=>{ setClienteDetalhe(null); window.location.hash='/reuniao'; }}
-                        style={{ padding:'11px', background:'#0f172a', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer' }}>
-                        📅 Agendar reunião
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Modal: Respostas lead SDR */}
               {leadDetalhe && (
@@ -647,6 +675,118 @@ export default function Consultor() {
           );
         })()}
       </div>
+      {/* === MODAL: MENSAGEM === */}
+      {msgModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={()=>setMsgModal(null)}>
+          <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:480, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+              <div>
+                <div style={{ fontSize:16, fontWeight:800, color:'#0f172a' }}>Mensagem para {msgModal.nome}</div>
+                {msgModal.email && <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>{msgModal.email}</div>}
+              </div>
+              <button onClick={()=>setMsgModal(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+            </div>
+            {msgOk ? (
+              <div style={{ textAlign:'center', padding:'20px 0' }}>
+                <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
+                <div style={{ fontWeight:700, color:'#059669' }}>Mensagem enviada com sucesso!</div>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                <div>
+                  <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#374151', marginBottom:4 }}>Assunto</label>
+                  <input value={msgForm.assunto} onChange={e=>setMsgForm(f=>({...f,assunto:e.target.value}))}
+                    placeholder="Mensagem do seu consultor"
+                    style={{ width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:14, boxSizing:'border-box', outline:'none' }} />
+                </div>
+                <div>
+                  <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#374151', marginBottom:4 }}>Mensagem *</label>
+                  <textarea value={msgForm.conteudo} onChange={e=>setMsgForm(f=>({...f,conteudo:e.target.value}))}
+                    placeholder="Escreva sua mensagem para o cliente…"
+                    rows={5}
+                    style={{ width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:14, boxSizing:'border-box', outline:'none', resize:'vertical' }} />
+                </div>
+                <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                  <button onClick={()=>setMsgModal(null)} style={{ padding:'9px 18px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer' }}>Cancelar</button>
+                  <button onClick={enviarMensagem} disabled={enviandoMsg || !msgForm.conteudo.trim()}
+                    style={{ padding:'9px 20px', background:enviandoMsg?'#94a3b8':'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:enviandoMsg?'not-allowed':'pointer' }}>
+                    {enviandoMsg ? 'Enviando…' : '✉ Enviar mensagem'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* === MODAL: AGENDAR REUNIÃO === */}
+      {reuniaoModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={()=>{ setReuniaoModal(null); setReuniaoLink(''); }}>
+          <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:460, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+              <div style={{ fontSize:16, fontWeight:800, color:'#0f172a' }}>Agendar reunião — {reuniaoModal.nome}</div>
+              <button onClick={()=>{ setReuniaoModal(null); setReuniaoLink(''); }} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
+              <div style={{ display:'flex', gap:10 }}>
+                <div style={{ flex:1 }}>
+                  <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#374151', marginBottom:4 }}>Data *</label>
+                  <input type="date" value={reuniaoForm.data} onChange={e=>setReuniaoForm(f=>({...f,data:e.target.value}))}
+                    min={new Date().toISOString().split('T')[0]}
+                    style={{ width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:14, boxSizing:'border-box', outline:'none' }} />
+                </div>
+                <div style={{ width:120 }}>
+                  <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#374151', marginBottom:4 }}>Horário</label>
+                  <input type="time" value={reuniaoForm.hora} onChange={e=>setReuniaoForm(f=>({...f,hora:e.target.value}))}
+                    style={{ width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:14, boxSizing:'border-box', outline:'none' }} />
+                </div>
+                <div style={{ width:110 }}>
+                  <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#374151', marginBottom:4 }}>Duração</label>
+                  <select value={reuniaoForm.duracao} onChange={e=>setReuniaoForm(f=>({...f,duracao:Number(e.target.value)}))}
+                    style={{ width:'100%', padding:'9px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, outline:'none' }}>
+                    <option value={30}>30 min</option>
+                    <option value={45}>45 min</option>
+                    <option value={60}>1 hora</option>
+                    <option value={90}>1h30</option>
+                  </select>
+                </div>
+              </div>
+              <button onClick={criarReuniao} disabled={criandoReuniao || !reuniaoForm.data}
+                style={{ padding:'11px', background:criandoReuniao||!reuniaoForm.data?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:criandoReuniao||!reuniaoForm.data?'not-allowed':'pointer' }}>
+                {criandoReuniao ? 'Criando sala…' : '📅 Gerar link da reunião'}
+              </button>
+            </div>
+            {reuniaoLink && (
+              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'14px 16px' }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'#15803d', marginBottom:8 }}>✅ Sala criada! Envie este link ao cliente:</div>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <input readOnly value={reuniaoLink} style={{ flex:1, padding:'8px 10px', border:'1px solid #bbf7d0', borderRadius:8, fontSize:12, background:'white', color:'#0f172a', outline:'none' }} />
+                  <button onClick={()=>navigator.clipboard.writeText(reuniaoLink)}
+                    style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                    Copiar
+                  </button>
+                </div>
+                <div style={{ marginTop:8, display:'flex', gap:8 }}>
+                  {reuniaoModal.email && (
+                    <button onClick={()=>{ setReuniaoModal(null); setReuniaoLink(''); setMsgModal({ nome:reuniaoModal.nome, email:reuniaoModal.email }); setMsgForm({ assunto:'Convite para reunião TSN', conteudo:`Olá ${reuniaoModal.nome}! Segue o link para nossa reunião:\n\n${reuniaoLink}\n\nData: ${reuniaoForm.data} às ${reuniaoForm.hora}\n\nAté lá!` }); }}
+                      style={{ flex:1, padding:'8px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'center' }}>
+                      ✉ Enviar por mensagem
+                    </button>
+                  )}
+                  <a href={reuniaoLink} target="_blank" rel="noreferrer"
+                    style={{ flex:1, padding:'8px', background:'#0f172a', color:'white', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', textAlign:'center' }}>
+                    Entrar na sala →
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
