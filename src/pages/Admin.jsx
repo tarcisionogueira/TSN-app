@@ -651,9 +651,12 @@ function ConfigTab() {
 
     const { error } = await supabase.from('planos_config').update({
       preco:                   Number(p.preco) || 0,
-      preco_vista:             p.desconto_vista_pct
-                                 ? Math.round(Number(p.preco) * (1 - Number(p.desconto_vista_pct) / 100) * 100) / 100
-                                 : (p.preco_vista ? Number(p.preco_vista) : null),
+      preco_vista:             (() => {
+                                 const pct = Number(p.desconto_vista_pct);
+                                 return pct > 0
+                                   ? Math.round(Number(p.preco) * (1 - pct / 100) * 100) / 100
+                                   : null;
+                               })(),
       cobrar:                  p.cobrar,
       ativo:                   p.ativo,
       comissao_total_pct:      Number(p.comissao_total_pct) || 0,

@@ -41,20 +41,35 @@ function parseLinha(cols) {
   const valorMin = num(preco);
   const valorAval = num(avaliacao);
   const desc = descricao || '';
+  const modal = String(modalidade || '').trim();
+
   // Detecta fração ideal / imóvel fracionado pela descrição
   const fracionado = /fra[çc][ãa]o|fracion|ideal|cota|condom[íi]nio.*ideal/i.test(desc);
+
   let tipo = 'imovel';
   if (/apartamento|apto/i.test(desc)) tipo = 'apartamento';
   else if (/casa/i.test(desc)) tipo = 'casa';
   else if (/terreno|lote/i.test(desc)) tipo = 'terreno';
   else if (/comercial|loja|sala|gal[pã]/i.test(desc)) tipo = 'comercial';
 
+  // Forma de pagamento: detecta se a Caixa permite financiamento/FGTS na modalidade
+  // Valores típicos que indicam financiamento: "Financiamento Habitacional",
+  // "Venda Online - FGTS", "Carta de Crédito FGTS", "FGTS", "Financiado"
+  const aceitaFinanciamento = /financ|fgts|carta.*cr[eé]dito|cr[eé]dito.*carta/i.test(modal)
+    || /financ|fgts/i.test(desc);
+  const forma_pagamento = aceitaFinanciamento ? 'financiado' : 'a_vista';
+
+  // Modalidade de venda: judicial / venda_direta / extrajudicial
+  const modalidadeVenda = /judicial/i.test(modal) ? 'judicial'
+    : /venda direta|direta online|direta/i.test(modal) ? 'venda_direta'
+    : 'extrajudicial';
+
   return {
     fonte: 'CEF',
     fonte_id: `CEF-${String(numero || '').trim()}`,
     titulo: desc.slice(0, 120) || `Imóvel Caixa ${numero}`,
     tipo,
-    modalidade: /judicial/i.test(modalidade) ? 'judicial' : (/venda direta|direta/i.test(modalidade) ? 'venda_direta' : 'extrajudicial'),
+    modalidade: modalidadeVenda,
     estado: (uf || '').trim().toUpperCase(),
     cidade: (cidade || '').trim(),
     bairro: (bairro || '').trim(),
@@ -66,7 +81,7 @@ function parseLinha(cols) {
     url_lote: (link || '').trim(),
     link_edital: (link || '').trim(),
     leiloeiro: 'Caixa Econômica Federal',
-    forma_pagamento: 'a_vista',
+    forma_pagamento,
     fracionado,
     ativo: true,
     atualizado_em: new Date().toISOString(),
