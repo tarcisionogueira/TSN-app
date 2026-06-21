@@ -316,13 +316,13 @@ export default function Consultor() {
                       },
                       {
                         emoji: '🎁',
-                        label: 'Acesso Gratuito (Explorador)',
-                        sub: 'Cadastro grátis · sem cartão',
+                        label: 'Assinatura Explorador',
+                        sub: 'Acesso gratuito · sem cartão',
                         url: `${origin}/#/login?modo=cadastro${codigo?`&ref=${codigo}`:''}`,
                       },
                       {
                         emoji: '⭐',
-                        label: 'Investidor Pro',
+                        label: 'Assinatura Investidor Pro',
                         sub: 'R$ 49,90/mês',
                         url: `${origin}/#/checkout?plano=top1${codigo?`&ref=${codigo}`:''}`,
                       },
