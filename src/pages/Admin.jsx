@@ -3494,7 +3494,127 @@ function MarketingTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Registros', 'Configurações'];
+
+function RegistrosTab() {
+  const [transcricoes, setTranscricoes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState('');
+  const [expandido, setExpandido] = useState(null);
+  const [filtroMes, setFiltroMes] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    supabase
+      .from('transcricoes_reuniao')
+      .select(`
+        id, transcricao, duracao_seg, daily_room_name, created_at,
+        solicitacoes ( imovel_nome, imovel_cidade, tipo, user_id,
+          perfis:user_id ( nome, email )
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { setTranscricoes(data || []); setLoading(false); });
+  }, []);
+
+  const meses = [...new Set(transcricoes.map(t => t.created_at?.slice(0, 7)))];
+
+  const filtradas = transcricoes.filter(t => {
+    const sol = t.solicitacoes;
+    const texto = `${sol?.imovel_nome || ''} ${sol?.imovel_cidade || ''} ${sol?.perfis?.nome || ''} ${sol?.perfis?.email || ''} ${t.daily_room_name || ''}`.toLowerCase();
+    const matchBusca = !busca || texto.includes(busca.toLowerCase());
+    const matchMes = !filtroMes || t.created_at?.startsWith(filtroMes);
+    return matchBusca && matchMes;
+  });
+
+  return (
+    <div>
+      <div style={{ ...S.card, marginBottom: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={S.sectionTitle}>📁 Diretório de Registros</div>
+            <div style={{ fontSize: 13, color: '#64748b' }}>Transcrições de reuniões armazenadas para auditoria</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              style={{ ...S.input, width: 220 }}
+              placeholder="Buscar por cliente, imóvel..."
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+            />
+            <select style={{ ...S.input, width: 150 }} value={filtroMes} onChange={e => setFiltroMes(e.target.value)}>
+              <option value="">Todos os meses</option>
+              {meses.map(m => (
+                <option key={m} value={m}>{new Date(m + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Carregando registros...</div>
+        ) : filtradas.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📂</div>
+            <div style={{ color: '#64748b', fontSize: 14 }}>Nenhum registro encontrado.</div>
+            <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 4 }}>As transcrições aparecem aqui automaticamente após cada reunião.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtradas.map(t => {
+              const sol = t.solicitacoes;
+              const cliente = sol?.perfis;
+              const dataHora = new Date(t.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+              const durMin = t.duracao_seg ? Math.round(t.duracao_seg / 60) : null;
+              const aberto = expandido === t.id;
+              const tipoLabel = { processual: 'Processual', edital: 'Edital', mercadologica: 'Mercadológica', consulta: 'Consulta' }[sol?.tipo] || sol?.tipo || '—';
+
+              return (
+                <div key={t.id} style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+                  <div
+                    onClick={() => setExpandido(aberto ? null : t.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', cursor: 'pointer', background: aberto ? '#f8fafc' : '#fff', flexWrap: 'wrap' }}
+                  >
+                    <div style={{ fontSize: 28 }}>📝</div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+                        {sol?.imovel_nome || 'Imóvel sem nome'}{sol?.imovel_cidade ? ` — ${sol.imovel_cidade}` : ''}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                        {cliente?.nome || '—'} · {cliente?.email || '—'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: '#eff6ff', color: '#1e40af' }}>{tipoLabel}</span>
+                      {durMin && <span style={{ fontSize: 11, color: '#64748b' }}>⏱ {durMin} min</span>}
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>{dataHora}</span>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>{aberto ? '▲' : '▼'}</span>
+                    </div>
+                  </div>
+                  {aberto && (
+                    <div style={{ padding: '0 18px 18px', borderTop: '1px solid #f1f5f9' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '14px 0 8px' }}>Transcrição</div>
+                      <div style={{ background: '#f8fafc', borderRadius: 8, padding: '14px 16px', fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-wrap', maxHeight: 320, overflowY: 'auto', fontFamily: 'monospace' }}>
+                        {t.transcricao || <em style={{ color: '#94a3b8', fontFamily: 'inherit' }}>Transcrição não disponível para esta reunião.</em>}
+                      </div>
+                      {t.daily_room_name && (
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>Sala: {t.daily_room_name}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{ marginTop: 16, fontSize: 12, color: '#94a3b8', textAlign: 'right' }}>
+          {filtradas.length} registro{filtradas.length !== 1 ? 's' : ''} encontrado{filtradas.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Admin() {
   const { role, loading } = useAuth();
@@ -3548,6 +3668,7 @@ export default function Admin() {
         {tab === 'SDR / Leads'    && <SdrTab />}
         {tab === 'Equipe'         && <EquipeTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
+        {tab === 'Registros'      && <RegistrosTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}
       </div>
