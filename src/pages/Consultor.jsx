@@ -150,11 +150,22 @@ export default function Consultor() {
   ];
 
   const planosVenda = planosConfig.length > 0
-    ? planosConfig.map(p => ({
-        key: p.plano_key,
-        nome: p.nome,
-        precoLabel: p.preco ? `R$ ${Number(p.preco).toFixed(2).replace('.',',')}` : (PLANOS_VENDA.find(x => x.key === p.plano_key)?.precoLabel || ''),
-      }))
+    ? planosConfig.map(p => {
+        const fallback = PLANOS_VENDA.find(x => x.key === p.plano_key);
+        const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
+        let precoLabel = fallback?.precoLabel || '';
+        if (p.preco) {
+          if (p.cobrar) {
+            precoLabel = `${fmtBRL(p.preco)}/mês`;
+          } else {
+            const parcelas = `${fmtBRL(p.preco)} em 12×`;
+            precoLabel = p.preco_vista
+              ? `${parcelas} · ${fmtBRL(p.preco_vista)} à vista`
+              : parcelas;
+          }
+        }
+        return { key: p.plano_key, nome: p.nome, precoLabel };
+      })
     : PLANOS_VENDA;
 
   const codigo = perfil?.codigo_indicacao;

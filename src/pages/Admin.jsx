@@ -570,7 +570,12 @@ function ConfigTab() {
   useEffect(() => {
     supabase.from('planos_config').select('*').order('preco', { ascending: true })
       .then(({ data, error }) => {
-        if (!error && data) setPlanos(data);
+        if (!error && data) setPlanos(data.map(p => ({
+          ...p,
+          desconto_vista_pct: (p.preco && p.preco_vista)
+            ? Math.round((1 - p.preco_vista / p.preco) * 10000) / 100
+            : '',
+        })));
         else setPlanosErr('Erro ao carregar planos. Rode o SQL schema_planos_config.sql no Supabase.');
         setPlanosLoading(false);
       });
@@ -646,7 +651,9 @@ function ConfigTab() {
 
     const { error } = await supabase.from('planos_config').update({
       preco:                   Number(p.preco) || 0,
-      preco_vista:             p.preco_vista ? Number(p.preco_vista) : null,
+      preco_vista:             p.desconto_vista_pct
+                                 ? Math.round(Number(p.preco) * (1 - Number(p.desconto_vista_pct) / 100) * 100) / 100
+                                 : (p.preco_vista ? Number(p.preco_vista) : null),
       cobrar:                  p.cobrar,
       ativo:                   p.ativo,
       comissao_total_pct:      Number(p.comissao_total_pct) || 0,
@@ -686,7 +693,7 @@ function ConfigTab() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Header */}
             <div style={{ display: 'grid', gridTemplateColumns: '160px 130px 130px 80px 70px 90px', gap: 10, padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
-              {['Plano', 'Preço mensal / único', 'Preço à vista', 'Cobrar?', 'Ativo?', ''].map(h => (
+              {['Plano', 'Valor R$', 'Desc. à vista %', 'Cobrar?', 'Ativo?', ''].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
@@ -710,9 +717,16 @@ function ConfigTab() {
                       style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (opcional)</div>
-                    <input type="number" step="0.01" value={p.preco_vista ?? ''} onChange={e => updatePlano(p.plano_key, 'preco_vista', e.target.value || null)}
-                      placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                    <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                      <input type="number" step="0.5" min="0" max="100" value={p.desconto_vista_pct ?? ''} onChange={e => updatePlano(p.plano_key, 'desconto_vista_pct', e.target.value)}
+                        placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '65%' }} />
+                      <span style={{ fontSize:12, color:'#64748b' }}>%</span>
+                    </div>
+                    {p.desconto_vista_pct && Number(p.desconto_vista_pct) > 0 && Number(p.preco) > 0 && (
+                      <div style={{ fontSize:11, color:'#059669', fontWeight:700, marginTop:3 }}>
+                        R$ {(Number(p.preco) * (1 - Number(p.desconto_vista_pct)/100)).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })} à vista
+                      </div>
+                    )}
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={p.cobrar} onChange={e => updatePlano(p.plano_key, 'cobrar', e.target.checked)}
