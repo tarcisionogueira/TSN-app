@@ -183,7 +183,6 @@ function CursosTab() {
               <table style={S.table}>
                 <thead><tr>
                   <th style={S.th}>Curso</th>
-                  <th style={S.th}>Preço</th>
                   <th style={S.th}>Aulas</th>
                   <th style={S.th}>Nível</th>
                   <th style={S.th}>Status</th>
@@ -193,7 +192,6 @@ function CursosTab() {
                   {cursos.map(c => (
                     <tr key={c.id}>
                       <td style={S.td}><span style={{ marginRight: 6 }}>{c.emoji}</span><strong>{c.titulo}</strong></td>
-                      <td style={S.td}>{c.gratuito ? 'Grátis' : `R$ ${c.preco}`}</td>
                       <td style={S.td}>{c._aulaCount}</td>
                       <td style={S.td}>{c.nivel}</td>
                       <td style={S.td}><span style={S.badge(c.ativo)}>{c.ativo ? 'Ativo' : 'Inativo'}</span></td>
@@ -385,7 +383,6 @@ function EbooksTab() {
               <table style={S.table}>
                 <thead><tr>
                   <th style={S.th}>Título</th>
-                  <th style={S.th}>Tipo</th>
                   <th style={S.th}>Status</th>
                   <th style={S.th}>Ações</th>
                 </tr></thead>
@@ -393,7 +390,6 @@ function EbooksTab() {
                   {ebooks.map(e => (
                     <tr key={e.id}>
                       <td style={S.td}><strong>{e.titulo}</strong><br /><span style={{ fontSize: 12, color: '#94a3b8' }}>{e.descricao?.slice(0, 60)}</span></td>
-                      <td style={S.td}>{!e.preco || Number(e.preco) === 0 ? <span style={{ ...S.badge(true), background: '#dcfce7', color: '#166534' }}>Gratuito</span> : `R$ ${e.preco}`}</td>
                       <td style={S.td}><span style={S.badge(e.ativo)}>{e.ativo ? 'Ativo' : 'Inativo'}</span></td>
                       <td style={S.td}>
                         <div style={{ display: 'flex', gap: 6 }}>
