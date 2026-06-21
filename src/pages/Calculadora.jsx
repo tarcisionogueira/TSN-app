@@ -171,24 +171,6 @@ export default function Calculadora() {
 
   if (authLoading) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Carregando…</div>;
 
-  const temAcesso = user && ROLES_COM_ACESSO.includes(effectiveRole || role);
-  if (!temAcesso) {
-    return (
-      <div style={{ maxWidth: 560, margin: '70px auto', textAlign: 'center', padding: '0 20px' }}>
-        <div style={{ background: '#0f172a', width: 64, height: 64, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
-          <Lock size={28} color="#60a5fa" />
-        </div>
-        <h2 style={{ color: '#0f172a', margin: '0 0 8px' }}>Calculadora de Lance</h2>
-        <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6 }}>
-          Ferramenta exclusiva para assinantes a partir do plano <strong>Investidor</strong>. Simule o teto máximo de lance, todos os custos do leilão e o retorno do investimento.
-        </p>
-        <button onClick={() => nav('/planos')} style={{ marginTop: 18, padding: '11px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
-          Ver planos
-        </button>
-      </div>
-    );
-  }
-
   const temDados = vArr > 0 && vMerc > 0;
 
   return (
@@ -385,6 +367,42 @@ export default function Calculadora() {
           )}
         </div>
       </div>
+
+      {/* ── Upsell contextual ── */}
+      {(() => {
+        const r = effectiveRole || role;
+        const isPago = ['top1','top2','assessorado','clube','consultor','analista','advogado','admin'].includes(r);
+        const isAssessoradoOuClube = ['assessorado','clube'].includes(r);
+        if (isAssessoradoOuClube) return null;
+        if (isPago) return null; // top1/top2 already paid, no upsell
+        // Not logged in OR explorador OR SDR lead
+        const isExplorador = user && (r === 'explorador');
+        return (
+          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius: 16, padding: '24px 28px', color: 'white' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+              {isExplorador ? '🚀 Desbloqueie o potencial completo' : '🏆 Invista com mais segurança'}
+            </div>
+            <h3 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 900 }}>
+              {isExplorador ? 'Seu acesso gratuito está ativo. Quer ir mais fundo?' : 'Descubra como identificar os melhores leilões'}
+            </h3>
+            <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, margin: '0 0 18px' }}>
+              {isExplorador
+                ? 'Com o Plano Pago, você acessa análises detalhadas, suporte especializado e pode usar esta calculadora com todos os imóveis que analisar — sem limitações.'
+                : 'A TSN conecta investidores a leilões judiciais e extrajudiciais com curadoria especializada. Crie sua conta gratuitamente e comece a explorar oportunidades reais de retorno acima do mercado.'}
+            </p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {!user && (
+                <button onClick={() => nav('/cadastro')} style={{ padding: '11px 22px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+                  Criar conta gratuita
+                </button>
+              )}
+              <button onClick={() => nav('/planos')} style={{ padding: '11px 22px', background: isExplorador ? '#2563eb' : 'rgba(255,255,255,0.1)', color: 'white', border: isExplorador ? 'none' : '1px solid rgba(255,255,255,0.2)', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+                {isExplorador ? 'Ver planos' : 'Conhecer os planos'}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       <style>{`@media (max-width: 820px){ .calc-grid{ grid-template-columns: 1fr !important; } }`}</style>
     </div>

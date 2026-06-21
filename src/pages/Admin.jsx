@@ -1232,13 +1232,14 @@ function ContratosTab() {
 
 // ─── Aba Promoções ────────────────────────────────────────────────────────────
 const PRODUTOS_PROMO = [
-  { key: 'top1', label: 'Investidor — R$ 49,90/mês' },
-  { key: 'top2', label: 'Investidor Pro — R$ 99,90/mês' },
-  { key: 'assessorado', label: 'Assessorado — R$ 500×12 ou R$ 5.000 à vista' },
-  { key: 'clube', label: 'Clube de Negócios — R$ 5.000/mês (12 meses)' },
+  { key: 'top1', label: 'Plano Pago — R$ 49,90/mês' },
+  { key: 'assessorado', label: 'Assessoria — R$ 6.000 (12× R$ 500)' },
+  { key: 'assessorado_vista', label: 'Assessoria À Vista — R$ 5.400' },
+  { key: 'clube', label: 'Clube de Negócios — R$ 60.000/ano' },
+  { key: 'clube_vista', label: 'Clube de Negócios À Vista — R$ 54.000' },
 ];
 
-const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', ativo: true });
+const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', beneficios: '', ativo: true });
 
 function PromoTab() {
   const { user } = useAuth();
@@ -1286,7 +1287,7 @@ function PromoTab() {
     setSalvando(false);
   };
 
-  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', ativo: l.ativo }); setEditId(l.id); };
+  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', beneficios: l.beneficios || '', ativo: l.ativo }); setEditId(l.id); };
   const toggleAtivo = async (l) => { await supabase.from('links_promo').update({ ativo: !l.ativo }).eq('id', l.id); await carregar(); };
   const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${cod}`);
 
@@ -1317,6 +1318,9 @@ function PromoTab() {
           <textarea value={form.descricao_condicoes} onChange={e => up('descricao_condicoes', e.target.value)}
             placeholder="Condições promocionais (ex: '30% de desconto no primeiro mês para novos alunos')"
             rows={3} style={{ ...S.input, resize: 'vertical', marginBottom: 14 }} />
+          <textarea value={form.beneficios} onChange={e => up('beneficios', e.target.value)}
+            placeholder="Benefícios incluídos (ex: 'Acesso a todos os cursos gravados + eBooks exclusivos')"
+            rows={2} style={{ ...S.input, resize: 'vertical', marginBottom: 14 }} />
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', marginBottom: 14, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.ativo} onChange={e => up('ativo', e.target.checked)} /> Link ativo
           </label>
@@ -1352,6 +1356,7 @@ function PromoTab() {
                         </div>
                       </div>
                       {l.descricao_condicoes && <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>📋 {l.descricao_condicoes}</div>}
+                      {l.beneficios && <div style={{ fontSize: 11, color: '#059669', marginTop: 4 }}>✅ {l.beneficios}</div>}
                       <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', wordBreak: 'break-all' }}>{linkUrl}</div>
                       {l.perfis?.nome && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Criado por: {l.perfis.nome}</div>}
                     </div>
@@ -1519,7 +1524,7 @@ function UsuariosPlanoDetalhe({ planoKey }) {
   const [usuarios, setUsuarios] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
-  const LABEL = { explorador: 'Explorador (Grátis)', top1: 'Investidor (R$49,90)', top2: 'Investidor Pro (R$99,90)', assessorado: 'Assessorado (R$500×12)', clube: 'Clube de Negócios (R$5k/mês)' };
+  const LABEL = { explorador: 'Explorador (Grátis)', top1: 'Plano Pago (R$49,90)', top2: 'Plano Pago Pro (R$99,90)', assessorado: 'Assessoria (R$500/mês)', clube: 'Clube de Negócios (R$5k/mês)' };
   const PRECO = { explorador: 0, top1: 49.90, top2: 99.90, assessorado: 500, clube: 5000 };
   const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -1835,11 +1840,11 @@ function DashboardTab() {
             {!usuariosDetalhe ? (
               // Vista resumida — só quantidade, clicável
               [
-                { key: 'explorador', label: 'Explorador (Grátis)', cor: '#64748b' },
-                { key: 'top1',       label: 'Investidor',          cor: '#2563eb' },
-                { key: 'top2',       label: 'Investidor Pro',      cor: '#7c3aed' },
-                { key: 'assessorado',label: 'Assessorado',         cor: '#d97706' },
-                { key: 'clube',      label: 'Clube de Negócios',   cor: '#059669' },
+                { key: 'explorador', label: 'Explorador (Grátis)',   cor: '#64748b' },
+                { key: 'top1',       label: 'Plano Pago',            cor: '#2563eb' },
+                { key: 'top2',       label: 'Plano Pago Pro',        cor: '#7c3aed' },
+                { key: 'assessorado',label: 'Assessoria',            cor: '#d97706' },
+                { key: 'clube',      label: 'Clube de Negócios',     cor: '#059669' },
               ].map(({ key, label, cor }) => {
                 const qtd = dados.contagem[key] || 0;
                 return (

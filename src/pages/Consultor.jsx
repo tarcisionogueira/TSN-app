@@ -163,23 +163,24 @@ export default function Consultor() {
     setTimeout(() => setCopiandoConvite(''), 2000);
   };
 
-  const PRODUTOS_NOME = { top1: 'Investidor', top2: 'Investidor Pro', assessorado: 'Assessorado', clube: 'Leilão Club' };
+  const PRODUTOS_NOME = { top1: 'Plano Pago', top2: 'Plano Pago Pro', assessorado: 'Assessoria', clube: 'Clube de Negócios' };
 
   const PLANOS_VENDA = [
-    { key: 'top1',              nome: 'Investidor',                  precoLabel: 'R$ 49,90/mês' },
-    { key: 'assessorado',       nome: 'Assessorado',                 precoLabel: '12× R$ 500' },
-    { key: 'assessorado_vista', nome: 'Assessorado (À Vista)',        precoLabel: 'R$ 5.000' },
-    { key: 'clube',             nome: 'Clube de Negócios',            precoLabel: 'R$ 5.000/mês' },
-    { key: 'clube_vista',       nome: 'Clube de Negócios (À Vista)', precoLabel: 'R$ 48.000' },
+    { key: 'top1',              nome: 'Plano Pago',                   precoLabel: 'R$ 49,90/mês' },
+    { key: 'assessorado',       nome: 'Assessoria',                   precoLabel: 'R$ 6.000' },
+    { key: 'assessorado_vista', nome: 'Assessoria (À Vista)',          precoLabel: 'R$ 5.400' },
+    { key: 'clube',             nome: 'Clube de Negócios',             precoLabel: 'R$ 60.000/ano' },
+    { key: 'clube_vista',       nome: 'Clube de Negócios (À Vista)',  precoLabel: 'R$ 54.000' },
   ];
 
+  const PLANOS_CLIENTE_KEYS = ['explorador', 'top1', 'top2', 'assessorado', 'assessorado_vista', 'clube', 'clube_vista'];
   const planosVenda = planosConfig.length > 0
-    ? planosConfig.map(p => ({
+    ? planosConfig.filter(p => PLANOS_CLIENTE_KEYS.includes(p.plano_key)).map(p => ({
         key: p.plano_key,
         nome: p.nome,
-        precoLabel: p.preco ? `R$ ${Number(p.preco).toFixed(2).replace('.',',')}` : (PLANOS_VENDA.find(x => x.key === p.plano_key)?.precoLabel || ''),
-      }))
-    : PLANOS_VENDA;
+        precoLabel: p.preco ? `R$ ${Number(p.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : (PLANOS_VENDA.find(x => x.key === p.plano_key)?.precoLabel || ''),
+    }))
+    : PLANOS_VENDA.filter(p => PLANOS_CLIENTE_KEYS.includes(p.key));
 
   const codigo = perfil?.codigo_indicacao;
   const origin = window.location.origin;
@@ -311,7 +312,6 @@ export default function Consultor() {
                   <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     {[
                       { label:'Calculadora de Lances', sub:'Ferramenta gratuita', url:`${origin}/#/calculadora`, emoji:'🧮' },
-                      { label:'Página de Planos', sub:'Todos os planos', url:`${origin}/#/planos${codigo?`?ref=${codigo}`:''}`, emoji:'📋' },
                       ...planosVenda.map(pl=>({ label:pl.nome, sub:pl.precoLabel, url:`${origin}/#/p/plano/${pl.key}${codigo?`?ref=${codigo}`:''}`, emoji:'⭐' })),
                       ...cursos.map(c=>({ label:c.titulo, sub:`Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Gratuito'}`, url:`${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`, emoji:c.emoji||'🎓' })),
                       ...sdrProdutos.map(s=>({ label:s.nome, sub:`${s.tipo||'Conteúdo'} · Acesso gratuito`, url:`${origin}/#/p/captura/${s.id}`, emoji: s.tipo==='ebook'?'📖':s.tipo==='curso'?'🎓':s.tipo==='calculadora'?'🧮':'🎁' })),
@@ -335,6 +335,7 @@ export default function Consultor() {
                       </div>
                     ))}
                   </div>
+                  <p style={{ fontSize:11, color:'#60a5fa', margin:'10px 0 0', lineHeight:1.5 }}>💡 O sistema informa ao cliente automaticamente se já tem acesso ao conteúdo durante o atendimento.</p>
                 </div>
 
                 {/* Link geral */}
