@@ -71,11 +71,11 @@ export default function Consultor() {
         supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', user.id).single(),
         supabase.from('perfis').select('id, nome, email, whatsapp, telefone, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
         supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('cursos_admin').select('id, titulo, subtitulo, preco, emoji, cor').eq('ativo', true).order('ordem'),
-        supabase.from('ebooks_admin').select('id, titulo, preco').eq('ativo', true).order('criado_em', { ascending: false }),
+        supabase.from('cursos_admin').select('id, titulo, subtitulo, preco, emoji, cor, comissao_pct').eq('ativo', true).order('ordem'),
+        supabase.from('ebooks_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('criado_em', { ascending: false }),
         supabase.from('links_promo').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
         supabase.from('links_convite').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
-        supabase.from('planos_config').select('plano_key,nome,preco,preco_vista').eq('ativo', true),
+        supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,comissao_pct').eq('ativo', true),
         supabase.from('sdr_produtos').select('id, nome, tipo').eq('ativo', true).order('criado_em', { ascending: false }),
       ]);
       setPerfil(p || null);
@@ -181,7 +181,13 @@ export default function Consultor() {
 
   const codigo = perfil?.codigo_indicacao;
   const origin = window.location.origin;
-  const pct = Number(perfil?.comissao_afiliado_pct || 0);
+  const pct = Number(perfil?.comissao_afiliado_pct || 0); // fallback genérico
+
+  // Retorna comissão configurada pelo admin para um plano ou produto específico
+  function comissaoDePlano(planoKey) {
+    const p = planosConfig.find(p => p.plano_key === planoKey);
+    return p?.comissao_pct != null ? Number(p.comissao_pct) : pct;
+  }
 
   const linkBase = codigo ? `${origin}/#/login?ref=${codigo}` : '';
   const linkPlanos = codigo ? `${origin}/#/planos?ref=${codigo}` : '';
@@ -327,7 +333,7 @@ export default function Consultor() {
                         label: 'Assinatura Investidor Pro',
                         sub: 'R$ 49,90/mês',
                         url: `${origin}/#/checkout?plano=top1${codigo?`&ref=${codigo}`:''}`,
-                        comissao: pct,
+                        comissao: comissaoDePlano('top1'),
                         recorrente: true,
                       },
                       {
@@ -335,7 +341,7 @@ export default function Consultor() {
                         label: 'Assessoria',
                         sub: 'R$ 6.000 parcelado · R$ 5.000 à vista',
                         url: `${origin}/#/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
-                        comissao: pct,
+                        comissao: comissaoDePlano('assessorado'),
                         recorrente: false,
                       },
                       {
@@ -343,7 +349,7 @@ export default function Consultor() {
                         label: 'Clube de Negócios',
                         sub: 'R$ 60.000/ano · R$ 48.000 à vista',
                         url: `${origin}/#/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
-                        comissao: pct,
+                        comissao: comissaoDePlano('clube'),
                         recorrente: false,
                       },
                       ...cursos.map(c=>({
@@ -351,7 +357,7 @@ export default function Consultor() {
                         label: c.titulo,
                         sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Incluído na assinatura'}`,
                         url: `${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`,
-                        comissao: pct,
+                        comissao: c.comissao_pct != null ? Number(c.comissao_pct) : pct,
                         recorrente: false,
                       })),
                       ...ebooks.map(e=>({
@@ -359,7 +365,7 @@ export default function Consultor() {
                         label: e.titulo,
                         sub: `eBook${Number(e.preco)>0?` · R$ ${Number(e.preco).toFixed(0)}`:'· Incluído na assinatura'}`,
                         url: `${origin}/#/p/ebook/${e.id}${codigo?`?ref=${codigo}`:''}`,
-                        comissao: pct,
+                        comissao: e.comissao_pct != null ? Number(e.comissao_pct) : pct,
                         recorrente: false,
                       })),
                       ...sdrProdutos.map(s=>({
