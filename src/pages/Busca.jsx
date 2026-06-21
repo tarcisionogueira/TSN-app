@@ -175,7 +175,12 @@ export default function Busca() {
   const toggleRaio = () => {
     const next = !raioAtivo;
     setRaioAtivo(next);
-    if (!next) { setCentroRaio(null); setDistancias({}); setGeocodingErro(''); }
+    if (next) {
+      // Raio ativo: limita a no máximo 1 cidade
+      if (filtros.cidades.length > 1) up('cidades', [filtros.cidades[0]]);
+    } else {
+      setCentroRaio(null); setDistancias({}); setGeocodingErro('');
+    }
   };
 
   async function salvarFiltroAtual() {
@@ -472,7 +477,11 @@ export default function Busca() {
                     } else if (e.key === 'Enter') {
                       e.preventDefault();
                       const cidade = cidadesFiltradas[dropdownIndex >= 0 ? dropdownIndex : 0];
-                      if (cidade) { up('cidades', [...filtros.cidades, cidade]); setBuscaCidade(''); setDropdownIndex(-1); }
+                      if (cidade) {
+                        // Se raio ativo, substituir cidade (só 1 permitida)
+                        const novas = raioAtivo ? [cidade] : [...filtros.cidades, cidade];
+                        up('cidades', novas); setBuscaCidade(''); setDropdownIndex(-1);
+                      }
                     } else if (e.key === 'Escape') {
                       setBuscaCidade(''); setDropdownIndex(-1);
                     }
@@ -508,8 +517,8 @@ export default function Busca() {
                   );
                 })()}
               </div>
-              {/* Radius search */}
-              <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:12 }}>
+              {/* Radius search — oculto quando cidade selecionada sem raio ativo */}
+              <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:12, display: filtros.cidades.length > 0 && !raioAtivo ? 'none' : 'block' }}>
                 <label style={{ ...lbl, display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
                   <span style={{ display:'flex', alignItems:'center', gap:5 }}><MapPin size={11}/> Buscar por raio</span>
                   <button
@@ -723,196 +732,92 @@ export default function Busca() {
 
         {/* Resultados em cards */}
         {!loading && resultadosFiltrados.length>0 && (
-          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap:12 }}>
             {resultadosPagina.map((im)=>{
               const desc = desconto(im);
-              const modalLabel = MODAL_LABEL[im.modalidade] || im.modalidade || '—';
               const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#1e40af' };
+              const imgSrc = im.foto || imgUrlCaixa({ ...im, fonte_id: im.fonteId });
 
-              const caixaImg = imgUrlCaixa({ ...im, fonte_id: im.fonteId });
-
-              // Mobile: card layout
-              if (isMobile) {
-                return (
-                  <div key={im.id} style={{ padding:'14px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa' }}>
-                    {caixaImg && (
-                      <LazyImage src={caixaImg} alt={im.titulo} style={{ width:'100%', height:140, borderRadius:8, marginBottom:10 }}/>
-                    )}
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:8 }}>
-                      <div style={{ flex:1 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                          <input type="checkbox" checked={sel} onChange={()=>toggleSelecionado(im.id)}
-                            style={{ width:16, height:16, cursor:'pointer', accentColor:'#2563eb', flexShrink:0 }}/>
-                          {im.tipo && <span style={{ fontSize:10, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap' }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
-                        <span style={{ fontWeight:700, color:'#0f172a', fontSize:14, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
-                          {im.fonte === 'CEF' && (
-                            <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
-                          )}
-                          {im.fracionado && (
-                            <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>
-                              ⚠ Fracionado
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize:12, color:'#64748b', marginTop:4, display:'flex', alignItems:'center', gap:4 }}>
-                          <MapPin size={11}/> {im.endereco||'—'}{im.cidade?', '+im.cidade:''}
-                        </div>
-                      </div>
-                      <div style={{ textAlign:'right', flexShrink:0 }}>
-                        {desc>0 && <div style={{ background: desc>=40?'#dcfce7':desc>=20?'#fef9c3':'#fee2e2', color: desc>=40?'#15803d':desc>=20?'#92400e':'#dc2626', fontSize:20, fontWeight:900, padding:'6px 12px', borderRadius:10, minWidth:64, textAlign:'center' }}>{desc}%<div style={{ fontSize:9, fontWeight:700, opacity:0.8 }}>DESCONTO</div></div>}
-                      </div>
-                    </div>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8, marginBottom:10 }}>
-                      <div>
-                        <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Lance mín.</div>
-                        <div style={{ fontWeight:800, color:'#0f172a', fontSize:16 }}>{fmtBRL(im.valorMinimo)}</div>
-                      </div>
-                      {im.valorAvaliacao>0 && (
-                        <div>
-                          <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Avaliação</div>
-                          <div style={{ fontSize:13, color:'#64748b' }}>{fmtBRL(im.valorAvaliacao)}</div>
-                        </div>
-                      )}
-                      <div>
-                        <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>Data</div>
-                        <div style={{ fontSize:13, color:'#64748b' }}>{fmtData(im.dataLeilao, im.modalidade)}</div>
-                      </div>
-                    </div>
-                    <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:8 }}>
-                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:20, background:im.modalidade==='judicial'?'#fef3c7':'#dbeafe', color:im.modalidade==='judicial'?'#92400e':'#1e40af' }}>
-                        {im.modalidade==='judicial'?'Judicial':'Extrajudicial'}
-                      </span>
-                      {im.areaM2>0 && <span style={{ fontSize:11, color:'#8b5cf6', fontWeight:600, padding:'3px 8px', background:'#f5f3ff', borderRadius:20 }}>{im.areaM2}m²</span>}
-                      {(im.pagamento||[]).map(p=>(
-                        <span key={p} style={{ fontSize:10, background:'#f1f5f9', color:'#475569', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>
-                          {p==='a_vista'||p==='aVista'?'À Vista':p==='financiado'?'Financiado':'Hipotecado'}
-                        </span>
-                      ))}
-                    </div>
-                    <div style={{ display:'flex', gap:8 }}>
-                      {im.urlLote && (
-                        canSite
-                          ? <a href={im.urlLote} target="_blank" rel="noopener noreferrer"
-                              style={{ flex:1, padding:'10px 8px', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center', gap:4, minHeight:44 }}>
-                              <ExternalLink size={13}/> {im.fonte==='CEF'?'Edital/Mat.':'Site'}
-                            </a>
-                          : <span style={{ flex:1, padding:'10px 8px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:4, cursor:'not-allowed', minHeight:44 }}>
-                              🔒 {im.fonte==='CEF'?'Edital/Mat.':'Site'}
-                            </span>
-                      )}
-                      {canAnalise
-                        ? <button onClick={()=>irParaAnalise(im)}
-                            style={{ flex:2, padding:'10px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:44 }}>
-                            📊 Analisar
-                          </button>
-                        : <span style={{ flex:2, padding:'10px', background:'#f8fafc', color:'#cbd5e1', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:6, minHeight:44 }}>
-                            🔒 Analisar
-                          </span>
-                      }
-                    </div>
-                  </div>
-                );
-              }
-
-              // Desktop: row layout
               return (
                 <div key={im.id}
                   style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', flexDirection:'column', cursor:'pointer', transition:'box-shadow 0.15s' }}
                   onClick={e => { if (e.target.closest('a,button,input')) return; nav('/imovel/'+im.id, { state: { imovel: im } }); }}
-                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.1)'}
                   onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
 
-                  {/* Card body: photo + content */}
-                  <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:0 }}>
-                    {/* Thumbnail */}
-                    <div style={{ width: isMobile ? '100%' : 160, height: isMobile ? 160 : 110, flexShrink:0, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', position:'relative' }}>
-                      {im.foto
-                        ? <img src={im.foto} alt="foto" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} onError={e=>{ e.currentTarget.style.display='none'; e.currentTarget.nextSibling.style.display='flex'; }}/>
-                        : null}
-                      <div style={{ display: im.foto ? 'none' : 'flex', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', color:'#cbd5e1', flexDirection:'column', gap:4 }}>
-                        <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6M12 4.5v.01"/></svg>
-                        <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600 }}>Sem foto</span>
+                  {/* Foto */}
+                  <div style={{ width:'100%', height: isMobile ? 180 : 150, background:'#f1f5f9', position:'relative', overflow:'hidden' }}>
+                    {imgSrc
+                      ? <LazyImage src={imgSrc} alt={im.titulo} style={{ width:'100%', height:'100%' }}/>
+                      : <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, color:'#cbd5e1' }}>
+                          <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6"/></svg>
+                          <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600 }}>Sem foto</span>
+                        </div>
+                    }
+                    {desc>0 && (
+                      <div style={{ position:'absolute', top:8, right:8, background: desc>=40?'#16a34a':desc>=20?'#d97706':'#dc2626', color:'white', fontWeight:900, fontSize:13, padding:'3px 8px', borderRadius:8 }}>
+                        -{desc}%
                       </div>
+                    )}
+                    {im.fonte==='CEF' && (
+                      <div style={{ position:'absolute', top:8, left:8, background:'#c2410c', color:'white', fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:8 }}>CAIXA</div>
+                    )}
+                  </div>
+
+                  {/* Conteúdo */}
+                  <div style={{ flex:1, padding:'10px 12px', display:'flex', flexDirection:'column', gap:5 }}>
+                    <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                      {im.tipo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8 }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
+                      <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:8, background:modalColor.bg, color:modalColor.color }}>
+                        {im.modalidade==='judicial'?'Judicial':'Extrajudicial'}
+                      </span>
+                      {im.fracionado && <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:8 }}>⚠ Fração</span>}
                     </div>
 
-                    {/* Content */}
-                    <div style={{ flex:1, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, minWidth:0 }}>
-                      {/* Badges row */}
-                      <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
-                        {im.tipo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap' }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
-                        <span style={{ fontSize:9, fontWeight:700, padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap', background:modalColor.bg, color:modalColor.color }}>{modalLabel}</span>
-                        {im.fonte === 'CEF' && (
-                          <span style={{ fontSize:9, fontWeight:800, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap' }}>CAIXA</span>
-                        )}
-                        {im.fonte && im.fonte !== 'CEF' && (
-                          <span style={{ fontSize:9, fontWeight:700, background:'#f8fafc', color:'#64748b', border:'1px solid #e2e8f0', padding:'2px 7px', borderRadius:10, whiteSpace:'nowrap' }}>{im.fonte}</span>
-                        )}
-                        {im.fracionado && (
-                          <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'2px 6px', borderRadius:10, whiteSpace:'nowrap' }}>⚠ Fracionado</span>
-                        )}
-                      </div>
+                    <div style={{ fontWeight:700, color:'#0f172a', fontSize: isMobile ? 14 : 12, lineHeight:1.3, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+                      {im.titulo||im.nome}
+                    </div>
 
-                      {/* Title */}
-                      <div style={{ fontWeight:700, color:'#0f172a', fontSize:13, lineHeight:1.3, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
-                        {im.titulo||im.nome}
-                      </div>
+                    <div style={{ fontSize:10, color:'#64748b', display:'flex', alignItems:'center', gap:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+                      <MapPin size={9} style={{ flexShrink:0 }}/>{[im.bairro, im.cidade, im.estado].filter(Boolean).join(', ')||'—'}
+                      {distancias[im.id] != null && (
+                        <span style={{ flexShrink:0, fontSize:9, fontWeight:700, background:'#eff6ff', color:'#1d4ed8', borderRadius:8, padding:'1px 6px' }}>
+                          {distancias[im.id]} km
+                        </span>
+                      )}
+                    </div>
 
-                      {/* Location */}
-                      <div style={{ fontSize:11, color:'#64748b', display:'flex', alignItems:'center', gap:4, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
-                        <MapPin size={10} style={{ flexShrink:0 }}/> {[im.endereco, im.bairro, im.cidade, im.estado].filter(Boolean).join(', ')||'—'}
-                        {distancias[im.id] != null && (
-                          <span style={{ marginLeft:4, flexShrink:0, fontSize:10, fontWeight:700, background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', borderRadius:10, padding:'1px 7px', whiteSpace:'nowrap' }}>
-                            a {distancias[im.id]} km
-                          </span>
-                        )}
-                      </div>
+                    <div style={{ marginTop:2 }}>
+                      <div style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:0.4 }}>Lance Mín.</div>
+                      <div style={{ fontWeight:900, color:'#0f172a', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(im.valorMinimo)}</div>
+                      {im.valorAvaliacao>0 && (
+                        <div style={{ fontSize:10, color:'#64748b' }}>Aval. {fmtBRL(im.valorAvaliacao)}</div>
+                      )}
+                    </div>
 
-                      {/* Lance + Avaliação + Desconto */}
-                      <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-                        <div>
-                          <div style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:0.4 }}>Lance Mín.</div>
-                          <div style={{ fontWeight:900, color:'#0f172a', fontSize:16 }}>{fmtBRL(im.valorMinimo)}</div>
-                        </div>
-                        {im.valorAvaliacao>0 && (
-                          <div>
-                            <div style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:0.4 }}>Avaliação</div>
-                            <div style={{ fontSize:12, color:'#64748b' }}>{fmtBRL(im.valorAvaliacao)}</div>
-                          </div>
-                        )}
-                        {desc>0 && (
-                          <span style={{ background: desc>=40?'#dcfce7':desc>=20?'#fef9c3':'#fee2e2', color: desc>=40?'#15803d':desc>=20?'#92400e':'#dc2626', fontWeight:900, fontSize:14, padding:'4px 10px', borderRadius:8, whiteSpace:'nowrap' }}>
-                            -{desc}%
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Date + pagamento + area */}
-                      <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
-                        <span style={{ fontSize:10, color:'#64748b', fontWeight:600 }}>{fmtData(im.dataLeilao, im.modalidade)}</span>
-                        {(im.pagamento||[]).map(p=>(
-                          <span key={p} style={{ fontSize:9, background:'#f1f5f9', color:'#475569', padding:'2px 7px', borderRadius:10, fontWeight:600 }}>
-                            {p==='a_vista'||p==='aVista'?'À Vista':p==='financiado'?'Financiado':'Hipotecado'}
-                          </span>
-                        ))}
-                        {im.areaM2>0 && <span style={{ fontSize:10, color:'#8b5cf6', fontWeight:600 }}>{im.areaM2}m²</span>}
-                      </div>
+                    <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+                      {(im.pagamento||[]).map(p=>(
+                        <span key={p} style={{ fontSize:9, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8, fontWeight:600 }}>
+                          {p==='a_vista'||p==='aVista'?'À Vista':p==='financiado'?'Financiado':'Hipotecado'}
+                        </span>
+                      ))}
+                      {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{im.areaM2}m²</span>}
+                      <span style={{ fontSize:9, color:'#94a3b8' }}>{fmtData(im.dataLeilao, im.modalidade)}</span>
                     </div>
                   </div>
 
-                  {/* Action buttons */}
-                  <div style={{ display:'flex', gap:8, padding:'10px 14px', borderTop:'1px solid #f1f5f9', background:'#fafafa' }}>
-                    <button
-                      onClick={e=>{ e.stopPropagation(); nav('/imovel/'+im.id, { state: { imovel: im } }); }}
-                      style={{ flex:1, padding:'9px', background:'white', color:'#334155', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
-                      Ver detalhes →
+                  {/* Botões */}
+                  <div style={{ display:'flex', gap:6, padding:'8px 12px', borderTop:'1px solid #f1f5f9', background:'#fafafa' }}>
+                    <button onClick={e=>{ e.stopPropagation(); nav('/imovel/'+im.id, { state: { imovel: im } }); }}
+                      style={{ flex:1, padding:'8px 4px', background:'white', color:'#334155', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                      Ver →
                     </button>
                     {canAnalise
                       ? <button onClick={e=>{ e.stopPropagation(); irParaAnalise(im); }}
-                          style={{ flex:1, padding:'9px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+                          style={{ flex:2, padding:'8px 4px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer' }}>
                           📊 Analisar
                         </button>
-                      : <span title="Disponível no plano Investidor ou acima"
-                          style={{ flex:1, padding:'9px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, cursor:'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+                      : <span style={{ flex:2, padding:'8px 4px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11, fontWeight:700, cursor:'not-allowed', display:'flex', alignItems:'center', justifyContent:'center' }}>
                           🔒 Analisar
                         </span>
                     }
