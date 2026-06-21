@@ -78,9 +78,7 @@ export default function Checkout() {
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
   const planoApiKey = temModalidade && modalidade === 'vista' ? `${planoKey}_vista` : planoKey;
 
-  useEffect(() => {
-    if (!user && planoKey !== 'explorador') nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`);
-  }, [user]);
+  // Não redireciona automaticamente — deixa o usuário ver a apresentação do plano primeiro
 
   useEffect(() => {
     if (!promoCode) return;
@@ -522,6 +520,24 @@ export default function Checkout() {
                 Assim que seu pagamento for processado, seu plano será ativado automaticamente.
               </p>
             </div>
+          ) : !user ? (
+            /* Usuário não logado — CTA para criar conta ou entrar */
+            <>
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginBottom: 20, fontSize: 13, color: '#1d4ed8', fontWeight: 600 }}>
+                ✅ Plano <strong>{plano.nome}</strong> selecionado — crie sua conta ou entre para continuar
+              </div>
+              <button onClick={() => nav(`/login?modo=cadastro&plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
+                style={{ width: '100%', padding: '15px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
+                Criar conta e assinar →
+              </button>
+              <button onClick={() => nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
+                style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
+                Já tenho conta — Entrar
+              </button>
+              <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
+                Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser
+              </p>
+            </>
           ) : (
             <>
               {/* Aceite dos termos — prova de consentimento */}
