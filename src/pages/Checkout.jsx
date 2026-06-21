@@ -88,7 +88,7 @@ export default function Checkout() {
   const pollingRef = React.useRef(null);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
-  const temToggleAnual = planoKey === 'top1';
+  const temToggleAnual = planoKey === 'top2' || planoKey === 'top1';
   const planoApiKey = temModalidade && modalidade === 'vista'
     ? `${planoKey}_vista`
     : temToggleAnual && modalidade === 'anual' ? `${planoKey}_anual` : planoKey;

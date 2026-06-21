@@ -196,25 +196,16 @@ export default function Planos() {
                   ))}
                 </div>
 
-                {/* CTAs */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {/* Botão mensal */}
-                  <button onClick={() => irParaCheckout(key, plano, 'mensal')} disabled={atual}
-                    style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual ? 'rgba(255,255,255,0.15)' : 'white', color: atual ? '#93c5fd' : '#1e40af', fontWeight: 800, fontSize: 15, cursor: atual ? 'default' : 'pointer', boxShadow: atual ? 'none' : '0 4px 14px rgba(0,0,0,0.2)' }}>
-                    {atual ? 'Seu plano atual' : `Assinar mensal — R$ ${fmtVal(plano.preco)}/mês`}
-                  </button>
-
-                  {/* Botão anual — só aparece se não for plano atual e tiver preço anual */}
-                  {!atual && temAnual && (
-                    <button onClick={() => irParaCheckout(key, plano, 'anual')}
-                      style={{ width: '100%', padding: '12px', border: '1px solid rgba(134,239,172,0.5)', borderRadius: 12, background: 'rgba(134,239,172,0.1)', color: '#86efac', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <span>Anual — R$ {fmtVal(plano.precoAnual)}/ano</span>
-                      <span style={{ background: 'rgba(134,239,172,0.25)', borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 800 }}>
-                        25% off · economize R$ {fmtVal(economia)}
-                      </span>
-                    </button>
-                  )}
-                </div>
+                {/* CTA único */}
+                <button onClick={() => irParaCheckout(key, plano)} disabled={atual}
+                  style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual ? 'rgba(255,255,255,0.15)' : 'white', color: atual ? '#93c5fd' : '#1e40af', fontWeight: 800, fontSize: 15, cursor: atual ? 'default' : 'pointer', boxShadow: atual ? 'none' : '0 4px 14px rgba(0,0,0,0.2)' }}>
+                  {atual ? 'Seu plano atual' : 'Assinar →'}
+                </button>
+                {!atual && temAnual && (
+                  <div style={{ textAlign: 'center', marginTop: 10, fontSize: 12, color: '#86efac' }}>
+                    Mensal ou anual com 25% off — escolha na próxima tela
+                  </div>
+                )}
               </div>
             );
           })()}
