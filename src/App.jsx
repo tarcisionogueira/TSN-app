@@ -29,6 +29,7 @@ import ContratoLink from './pages/ContratoLink';
 import ProdutoLanding from './pages/ProdutoLanding';
 import CancelarAlertas from './pages/CancelarAlertas';
 import Perfil from './pages/Perfil';
+import Comissoes from './pages/Comissoes';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -123,6 +124,7 @@ function MainLayout() {
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
           <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
           <Route path="/perfil" element={<PrivateRoute><Perfil /></PrivateRoute>} />
+          <Route path="/comissoes" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><Comissoes /></PrivateRoute>} />
           <Route path="/atendimento" element={<PrivateRoute roles={['analista','consultor','admin','advogado']}><Atendimento /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />

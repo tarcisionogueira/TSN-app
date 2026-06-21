@@ -560,6 +560,7 @@ function ConfigTab() {
   const [planosLoading, setPlanosLoading] = useState(true);
   const [planosSaved, setPlanosSaved] = useState({});
   const [planosErr, setPlanosErr] = useState('');
+  const [comissoesExpanded, setComissoesExpanded] = useState({});
 
   useEffect(() => {
     supabase.from('planos_config').select('*').order('preco', { ascending: true })
@@ -577,12 +578,27 @@ function ConfigTab() {
   }
 
   async function salvarPlano(p) {
+    // Valida: soma das comissões por papel ≤ total
+    const somaRoles = ['admin', 'analista', 'advogado', 'consultor'].reduce(
+      (s, r) => s + (Number(p[`comissao_${r}_pct`]) || 0), 0
+    );
+    const total = Number(p.comissao_total_pct) || 0;
+    if (somaRoles > total + 0.01) {
+      alert(`A soma das comissões por papel (${somaRoles.toFixed(2)}%) não pode exceder o total configurado (${total.toFixed(2)}%).`);
+      return;
+    }
+
     const { error } = await supabase.from('planos_config').update({
-      preco: Number(p.preco) || 0,
-      preco_vista: p.preco_vista ? Number(p.preco_vista) : null,
-      cobrar: p.cobrar,
-      ativo: p.ativo,
-      atualizado_em: new Date().toISOString(),
+      preco:                   Number(p.preco) || 0,
+      preco_vista:             p.preco_vista ? Number(p.preco_vista) : null,
+      cobrar:                  p.cobrar,
+      ativo:                   p.ativo,
+      comissao_total_pct:      Number(p.comissao_total_pct) || 0,
+      comissao_admin_pct:      Number(p.comissao_admin_pct) || 0,
+      comissao_analista_pct:   Number(p.comissao_analista_pct) || 0,
+      comissao_advogado_pct:   Number(p.comissao_advogado_pct) || 0,
+      comissao_consultor_pct:  Number(p.comissao_consultor_pct) || 0,
+      atualizado_em:           new Date().toISOString(),
     }).eq('plano_key', p.plano_key);
     if (!error) {
       setPlanosSaved(prev => ({ ...prev, [p.plano_key]: true }));
@@ -618,36 +634,94 @@ function ConfigTab() {
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
-            {planos.map(p => (
-              <div key={p.plano_key} style={{ display: 'grid', gridTemplateColumns: '160px 130px 130px 80px 70px 90px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.nome}</div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.plano_key}</div>
+            {planos.map(p => {
+              const somaRoles = ['admin', 'analista', 'advogado', 'consultor'].reduce(
+                (s, r) => s + (Number(p[`comissao_${r}_pct`]) || 0), 0
+              );
+              const totalPct = Number(p.comissao_total_pct) || 0;
+              const somaOk = somaRoles <= totalPct + 0.01;
+              const isExpanded = comissoesExpanded[p.plano_key];
+              return (
+              <div key={p.plano_key} style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '160px 130px 130px 80px 70px 90px', gap: 10, alignItems: 'center', padding: '8px 0' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.nome}</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8' }}>{p.plano_key}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$</div>
+                    <input type="number" step="0.01" value={p.preco} onChange={e => updatePlano(p.plano_key, 'preco', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (opcional)</div>
+                    <input type="number" step="0.01" value={p.preco_vista ?? ''} onChange={e => updatePlano(p.plano_key, 'preco_vista', e.target.value || null)}
+                      placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <input type="checkbox" checked={p.cobrar} onChange={e => updatePlano(p.plano_key, 'cobrar', e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <input type="checkbox" checked={p.ativo} onChange={e => updatePlano(p.plano_key, 'ativo', e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#10b981' }} />
+                  </div>
+                  <button onClick={() => salvarPlano(p)}
+                    style={{ padding: '7px 14px', background: planosSaved[p.plano_key] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    {planosSaved[p.plano_key] ? '✓ Salvo' : 'Salvar'}
+                  </button>
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$</div>
-                  <input type="number" step="0.01" value={p.preco} onChange={e => updatePlano(p.plano_key, 'preco', e.target.value)}
-                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                {/* Linha de distribuição de comissão */}
+                <div style={{ paddingLeft: 4 }}>
+                  <button onClick={() => setComissoesExpanded(prev => ({ ...prev, [p.plano_key]: !prev[p.plano_key] }))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: 11, fontWeight: 700, padding: '2px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {isExpanded ? '▲' : '▼'} Distribuição de comissão
+                    {totalPct > 0 && (
+                      <span style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 10, background: somaOk ? '#f0fdf4' : '#fef2f2', color: somaOk ? '#16a34a' : '#ef4444', fontWeight: 700 }}>
+                        {somaRoles.toFixed(1)}% / {totalPct.toFixed(1)}%
+                      </span>
+                    )}
+                  </button>
+                  {isExpanded && (
+                    <div style={{ marginTop: 8, background: '#f8fafc', borderRadius: 10, padding: '12px 14px', display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                      {/* Total */}
+                      <div style={{ minWidth: 130 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TOTAL (máx. %)</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="number" step="0.1" min="0" max="100" value={p.comissao_total_pct ?? 0}
+                            onChange={e => updatePlano(p.plano_key, 'comissao_total_pct', e.target.value)}
+                            style={{ ...S.input, padding: '5px 8px', fontSize: 12, width: 70 }} />
+                          <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                        </div>
+                      </div>
+                      {/* Por papel */}
+                      {[
+                        { key: 'admin',    label: 'Admin' },
+                        { key: 'analista', label: 'Analista' },
+                        { key: 'advogado', label: 'Advogado' },
+                        { key: 'consultor',label: 'Consultor/Afiliado' },
+                      ].map(({ key, label }) => (
+                        <div key={key} style={{ minWidth: 130 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>{label.toUpperCase()}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input type="number" step="0.1" min="0" max="100" value={p[`comissao_${key}_pct`] ?? 0}
+                              onChange={e => updatePlano(p.plano_key, `comissao_${key}_pct`, e.target.value)}
+                              style={{ ...S.input, padding: '5px 8px', fontSize: 12, width: 70 }} />
+                            <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                          </div>
+                        </div>
+                      ))}
+                      {!somaOk && (
+                        <div style={{ width: '100%', fontSize: 11, color: '#ef4444', fontWeight: 600, marginTop: 4 }}>
+                          ⚠ A soma ({somaRoles.toFixed(2)}%) ultrapassa o total ({totalPct.toFixed(2)}%). Corrija antes de salvar.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 3 }}>R$ (opcional)</div>
-                  <input type="number" step="0.01" value={p.preco_vista ?? ''} onChange={e => updatePlano(p.plano_key, 'preco_vista', e.target.value || null)}
-                    placeholder="—" style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <input type="checkbox" checked={p.cobrar} onChange={e => updatePlano(p.plano_key, 'cobrar', e.target.checked)}
-                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <input type="checkbox" checked={p.ativo} onChange={e => updatePlano(p.plano_key, 'ativo', e.target.checked)}
-                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#10b981' }} />
-                </div>
-                <button onClick={() => salvarPlano(p)}
-                  style={{ padding: '7px 14px', background: planosSaved[p.plano_key] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                  {planosSaved[p.plano_key] ? '✓ Salvo' : 'Salvar'}
-                </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
