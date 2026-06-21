@@ -80,10 +80,43 @@ export default function Calculadora() {
   const { user, role, effectiveRole, loading: authLoading } = useAuth();
 
   // Captura e persiste o código de referência do consultor
+  const refAtualUrl = searchParams.get('ref') || '';
   useEffect(() => {
-    const refFromUrl = searchParams.get('ref');
-    if (refFromUrl) sessionStorage.setItem('tsn_ref_codigo', refFromUrl);
-  }, []);
+    if (refAtualUrl) sessionStorage.setItem('tsn_ref_codigo', refAtualUrl);
+  }, [refAtualUrl]);
+
+  // Mini formulário de captura do lead (quando vem de link de consultor)
+  const [leadCpf, setLeadCpf] = useState('');
+  const [leadEmail, setLeadEmail] = useState('');
+  const [leadEnviando, setLeadEnviando] = useState(false);
+  const [leadMsg, setLeadMsg] = useState('');
+
+  async function submeterLead(e) {
+    e.preventDefault();
+    if (!leadEmail.trim()) return;
+    setLeadEnviando(true);
+    setLeadMsg('');
+    try {
+      const ref = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
+      const res = await fetch('/api/verificar-cpf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf: leadCpf, email: leadEmail }),
+      });
+      const d = await res.json();
+      if (ref) sessionStorage.setItem('tsn_ref_codigo', ref);
+      if (d.temConta) {
+        // Já tem conta → vai para login
+        nav(`/login?email=${encodeURIComponent(leadEmail)}${ref ? `&ref=${ref}` : ''}`);
+      } else {
+        // Sem conta → cadastro com dados pré-preenchidos
+        nav(`/login?modo=cadastro&email=${encodeURIComponent(leadEmail)}${leadCpf ? `&cpf=${encodeURIComponent(leadCpf)}` : ''}${ref ? `&ref=${ref}` : ''}`);
+      }
+    } catch {
+      setLeadMsg('Erro de conexão. Tente novamente.');
+    }
+    setLeadEnviando(false);
+  }
 
   const [origem, setOrigem] = useState('extrajudicial');
   const [pagamento, setPagamento] = useState('a_vista');
@@ -379,42 +412,80 @@ export default function Calculadora() {
       {(() => {
         const r = effectiveRole || role;
         const isPago = ['top1','top2','assessorado','clube','consultor','analista','advogado','admin'].includes(r);
-        const isAssessoradoOuClube = ['assessorado','clube'].includes(r);
-        if (isAssessoradoOuClube) return null;
-        if (isPago) return null;
-        const isExplorador = user && (r === 'explorador');
-        const refAtivo = searchParams.get('ref') || sessionStorage.getItem('tsn_ref_codigo') || '';
-        const refSufixo = refAtivo ? `&ref=${refAtivo}` : '';
+        const refAtivo = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
         const temRef = !!refAtivo;
-        return (
-          <div style={{ marginTop: 32, background: temRef ? 'linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%)' : 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: temRef ? '1px solid #3b82f6' : 'none' }}>
-            {temRef && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#2563eb', borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 800, color: 'white', letterSpacing: 1, marginBottom: 14 }}>
-                🎯 OFERTA EXCLUSIVA DO SEU CONSULTOR
+
+        // Com ref de consultor: sempre mostra (mesmo logado) — consultor pode estar apresentando ao cliente
+        // Sem ref: só mostra para não-logados ou explorador
+        if (!temRef) {
+          if (['assessorado','clube'].includes(r)) return null;
+          if (isPago) return null;
+        }
+
+        const isExplorador = user && r === 'explorador';
+
+        // Quando vem de link de consultor → formulário CPF + email
+        if (temRef) return (
+          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#2563eb', borderRadius: 20, padding: '4px 14px', fontSize: 11, fontWeight: 800, letterSpacing: 1, marginBottom: 14 }}>
+              🎯 ACESSO EXCLUSIVO PELO SEU CONSULTOR
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 900, lineHeight: 1.25 }}>
+              Gostou da calculadora? Acesse a plataforma completa.
+            </h3>
+            <p style={{ color: '#93c5fd', fontSize: 14, lineHeight: 1.7, margin: '0 0 22px' }}>
+              Análises de viabilidade, lotes selecionados, suporte de especialistas e muito mais. Comece gratuitamente — sem cartão de crédito.
+            </p>
+            <form onSubmit={submeterLead} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#93c5fd', marginBottom: 4, textTransform: 'uppercase' }}>CPF</div>
+                  <input value={leadCpf} onChange={e => setLeadCpf(e.target.value)} placeholder="000.000.000-00"
+                    style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#93c5fd', marginBottom: 4, textTransform: 'uppercase' }}>E-mail *</div>
+                  <input required type="email" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} placeholder="seu@email.com"
+                    style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
               </div>
-            )}
+              {leadMsg && <div style={{ fontSize: 12, color: '#fca5a5' }}>{leadMsg}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button type="submit" disabled={leadEnviando}
+                  style={{ flex: 2, padding: '13px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: 'pointer', opacity: leadEnviando ? 0.7 : 1 }}>
+                  {leadEnviando ? 'Verificando…' : 'Quero acessar a plataforma →'}
+                </button>
+                <button type="button" onClick={() => nav(`/planos${refAtivo ? `?ref=${refAtivo}` : ''}`)}
+                  style={{ flex: 1, padding: '13px', background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  Ver planos
+                </button>
+              </div>
+            </form>
+          </div>
+        );
+
+        // Sem ref → banner simples para visitantes externos
+        return (
+          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius: 16, padding: '28px 32px', color: 'white' }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
               {isExplorador ? '🚀 Desbloqueie o potencial completo' : '🏆 Invista com mais segurança e inteligência'}
             </div>
             <h3 style={{ margin: '0 0 10px', fontSize: 22, fontWeight: 900, lineHeight: 1.25 }}>
-              {isExplorador
-                ? 'Seu acesso gratuito está ativo. Quer ir mais fundo?'
-                : 'Gostou da calculadora? Conheça a plataforma completa.'}
+              {isExplorador ? 'Seu acesso gratuito está ativo. Quer ir mais fundo?' : 'Gostou da calculadora? Conheça a plataforma completa.'}
             </h3>
             <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.75, margin: '0 0 22px' }}>
               {isExplorador
-                ? 'Com o Plano Investidor Pro, você acessa análises detalhadas, suporte especializado e usa esta calculadora sem limitações em todos os imóveis que analisar.'
+                ? 'Com o Plano Investidor Pro você acessa análises detalhadas, suporte especializado e usa esta calculadora sem limitações.'
                 : 'A TSN Ativos conecta investidores a leilões judiciais e extrajudiciais com curadoria especializada. Acesse lotes selecionados, análises de viabilidade e suporte de especialistas.'}
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {!user && (
-                <button onClick={() => nav(`/login?modo=cadastro${refSufixo}`)}
+                <button onClick={() => nav('/login?modo=cadastro')}
                   style={{ padding: '12px 24px', background: 'white', color: '#1e40af', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
                   Criar conta gratuita
                 </button>
               )}
-              <button
-                onClick={() => nav(`/planos${refAtivo ? `?ref=${refAtivo}` : ''}`)}
+              <button onClick={() => nav('/planos')}
                 style={{ padding: '12px 24px', background: '#10b981', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
                 {isExplorador ? 'Ver planos e assinar →' : 'Conhecer os planos →'}
               </button>
