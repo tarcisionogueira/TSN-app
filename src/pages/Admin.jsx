@@ -2467,6 +2467,9 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
     sol.reuniao_em ? new Date(sol.reuniao_em).toISOString().slice(0, 16) : ''
   );
   const [reuniaoDuracao, setReuniaoDuracao] = useState(sol.reuniao_duracao_min || 30);
+  const [concedendo, setConcedendo] = useState(false);
+  const [analisesExtras, setAnalisesExtras] = useState(1);
+  const [msgConcessao, setMsgConcessao] = useState('');
 
   useEffect(() => {
     if (sol.user_id) {
@@ -2576,6 +2579,17 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
     alert(`Reunião estendida para ${novasDuracao} minutos.`);
   }
 
+  async function concederAnalises() {
+    if (!sol.user_id) return;
+    if (analisesExtras < 1 || analisesExtras > 2) { setMsgConcessao('Máximo de 2 análises por reunião.'); return; }
+    setConcedendo(true); setMsgConcessao('');
+    const { data: perfil } = await supabase.from('perfis').select('analises_bonus').eq('id', sol.user_id).single();
+    const atual = perfil?.analises_bonus || 0;
+    const { error } = await supabase.from('perfis').update({ analises_bonus: atual + analisesExtras }).eq('id', sol.user_id);
+    if (error) { setMsgConcessao('Erro ao conceder análises.'); } else { setMsgConcessao(`✅ ${analisesExtras} análise${analisesExtras > 1 ? 's' : ''} concedida${analisesExtras > 1 ? 's' : ''} ao cliente.`); }
+    setConcedendo(false);
+  }
+
   const meetCreateUrl = buildMeetCreateUrl();
 
   const statusSol = STATUS_SOL_COLORS[sol.status] || STATUS_SOL_COLORS.solicitado;
@@ -2660,6 +2674,22 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
                 ⏱ +30 min na reunião atual
               </button>
             )}
+
+            <div style={{ marginTop: 16, padding: '14px 16px', background: '#fffbeb', borderRadius: 10, border: '1.5px solid #fde68a' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>🎁 Conceder análises adicionais ao cliente</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select value={analisesExtras} onChange={e => setAnalisesExtras(Number(e.target.value))}
+                  style={{ padding: '7px 10px', border: '1.5px solid #fde68a', borderRadius: 7, fontSize: 14, background: 'white' }}>
+                  <option value={1}>1 análise</option>
+                  <option value={2}>2 análises</option>
+                </select>
+                <button onClick={concederAnalises} disabled={concedendo || !sol.user_id}
+                  style={{ flex: 1, padding: '8px 14px', background: '#d97706', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: concedendo ? 0.7 : 1 }}>
+                  {concedendo ? 'Concedendo…' : 'Conceder'}
+                </button>
+              </div>
+              {msgConcessao && <div style={{ marginTop: 8, fontSize: 12, color: msgConcessao.startsWith('✅') ? '#065f46' : '#dc2626' }}>{msgConcessao}</div>}
+            </div>
           </div>
 
           {/* RIGHT — Checklist + Transcrições */}
