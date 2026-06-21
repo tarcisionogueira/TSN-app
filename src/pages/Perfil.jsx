@@ -247,6 +247,9 @@ export default function Perfil() {
               </div>
             )}
 
+          </div>
+        )}
+
         {/* Card Comissões (apenas para papéis com repasse) */}
         {temComissao && (
           <div style={{ background: 'white', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: '1px solid #e2e8f0' }}>

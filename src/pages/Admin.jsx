@@ -1542,6 +1542,7 @@ function ConfigTab() {
     </div>
   );
 }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONTRATOS TAB — admin gera, aprova e libera contratos para assinatura
