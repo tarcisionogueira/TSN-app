@@ -26,7 +26,7 @@ export default async function handler(req) {
     headers: { Authorization: `Bearer ${DAILY_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       url: `${BASE_URL}/api/daily-webhook`,
-      event_types: ['transcription.started', 'transcription.stopped', 'transcription.ready-on-s3'],
+      event_types: ['transcription-ready'],
     }),
   });
 
