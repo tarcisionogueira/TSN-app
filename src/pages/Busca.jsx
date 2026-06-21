@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
@@ -30,6 +30,31 @@ function fmtData(d, modalidade) {
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem' };
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
+// Carrega imagem apenas quando o elemento entra na viewport
+function LazyImage({ src, alt, style }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); obs.disconnect(); }
+    }, { rootMargin: '100px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{ ...style, background:'#f1f5f9', overflow:'hidden', flexShrink:0 }}>
+      {visible && src && (
+        <img src={src} alt={alt} loading="lazy"
+          style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
+      )}
+    </div>
+  );
+}
+
 const PLANO_LABELS = {
   explorador: 'Explorador', top1: 'Investidor', top2: 'Investidor Pro',
   assessorado: 'Assessorado', clube: 'Clube de Negócios',
@@ -58,7 +83,7 @@ export default function Busca() {
   const [sortBy, setSortBy] = useState('desconto_desc');
   const [pagina, setPagina] = useState(1);
   const [totalResultados, setTotalResultados] = useState(0);
-  const POR_PAGINA = 50;
+  const POR_PAGINA = 20;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -151,6 +176,7 @@ export default function Busca() {
         scoreViabilidade: im.score_viabilidade,
         fracionado: im.fracionado,
         fonte: im.fonte,
+        fonteId: im.fonte_id,
         numeroEdital: im.numero_edital,
         numeroMatricula: im.numero_matricula,
         numeroProcesso: im.numero_processo,
@@ -188,9 +214,17 @@ export default function Busca() {
   };
 
   const buscar = () => {
+    if (!filtros.estado) { setErro('Selecione um estado para buscar.'); return; }
+    setErro('');
     setPagina(1);
     saveBuscaRecente({ ...filtros, cidade: filtros.cidades.join(', ') });
     buscarPagina(1, filtros, sortBy);
+  };
+
+  const imgUrlCaixa = (im) => {
+    if (im.fonte !== 'CEF') return null;
+    const id = (im.fonte_id || '').replace(/^cef_/, '');
+    return id ? `/api/img-caixa?id=${encodeURIComponent(id)}` : null;
   };
 
   const irParaAnalise = (im) => {
@@ -270,8 +304,8 @@ export default function Busca() {
                 </select>
               </div>
               <div>
-                <label style={lbl}>Estado (UF)</label>
-                <select value={filtros.estado} onChange={e=>{ up('estado',e.target.value); up('cidades',[]); setBuscaCidade(''); }} style={inp}>
+                <label style={lbl}>Estado (UF) <span style={{ color:'#ef4444' }}>*</span></label>
+                <select value={filtros.estado} onChange={e=>{ up('estado',e.target.value); up('cidades',[]); setBuscaCidade(''); setErro(''); }} style={{ ...inp, borderColor: !filtros.estado ? '#fca5a5' : '#e2e8f0' }}>
                   <option value="">Todos</option>
                   {ESTADOS.map(e=><option key={e} value={e}>{e}</option>)}
                 </select>
@@ -367,8 +401,13 @@ export default function Busca() {
                 ))}
               </div>
               {erro && <div style={{ padding:'8px 10px', background:'#fee2e2', borderRadius:8, fontSize:11, color:'#dc2626', fontWeight:600 }}>{erro}</div>}
-              <button onClick={buscar} disabled={loading}
-                style={{ width:'100%', padding:'11px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              {!filtros.estado && (
+                <div style={{ fontSize:11, color:'#92400e', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:7, padding:'7px 10px', fontWeight:600 }}>
+                  Selecione um estado para habilitar a busca
+                </div>
+              )}
+              <button onClick={buscar} disabled={loading || !filtros.estado}
+                style={{ width:'100%', padding:'11px', background: filtros.estado ? '#2563eb' : '#94a3b8', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor: filtros.estado ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                 {loading ? <><Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...</> : <><Search size={14}/> Buscar Leilões</>}
               </button>
               <button onClick={limparFiltros}
@@ -504,10 +543,15 @@ export default function Busca() {
               const desc = desconto(im);
               const sel = isSelecionado(im.id);
 
+              const caixaImg = imgUrlCaixa({ ...im, fonte_id: im.fonteId });
+
               // Mobile: card layout
               if (isMobile) {
                 return (
                   <div key={im.id} style={{ padding:'14px 16px', borderBottom:'1px solid #f1f5f9', background:sel?'#eff6ff':i%2===0?'white':'#fafafa' }}>
+                    {caixaImg && (
+                      <LazyImage src={caixaImg} alt={im.titulo} style={{ width:'100%', height:140, borderRadius:8, marginBottom:10 }}/>
+                    )}
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:8 }}>
                       <div style={{ flex:1 }}>
                         <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
@@ -594,7 +638,9 @@ export default function Busca() {
                     style={{ width:16, height:16, cursor:'pointer', accentColor:'#2563eb' }}/>
 
                   {/* Info do imóvel */}
-                  <div style={{ paddingRight:12 }}>
+                  <div style={{ paddingRight:12, display:'flex', gap:10, alignItems:'flex-start' }}>
+                    {caixaImg && <LazyImage src={caixaImg} alt={im.titulo} style={{ width:72, height:54, borderRadius:6, flexShrink:0 }}/>}
+                  <div style={{ flex:1 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                       {im.tipo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:10, whiteSpace:'nowrap' }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
                       <span style={{ fontWeight:700, color:'#0f172a', fontSize:13, lineHeight:1.2 }}>{im.titulo||im.nome}</span>
@@ -626,6 +672,7 @@ export default function Busca() {
                         {im.numeroProcesso && <span style={{ fontSize:9, background:'#faf5ff', color:'#7c3aed', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>Proc. {im.numeroProcesso}</span>}
                       </div>
                     )}
+                  </div>
                   </div>
 
                   {/* Modalidade */}
