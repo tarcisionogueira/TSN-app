@@ -480,7 +480,7 @@ export default function Checkout() {
                     <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% off</span>
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-                    Total de <strong>R$ 478,80/ano</strong>. Pague em até 12× no cartão ou à vista com desconto. Contratação anual — não é renovação automática mensal.
+                    Total de <strong>R$ 449,00/ano</strong>. Pague em até 12× no cartão ou à vista com desconto. Contratação anual — não é renovação automática mensal.
                   </div>
                 </>
               )}
@@ -605,7 +605,7 @@ export default function Checkout() {
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
                 {temToggleAnual && modalidade === 'anual'
-                  ? 'Pagamento anual único (R$ 478,80) via PIX, boleto ou em até 12× no cartão · Contratação anual sem renovação automática mensal'
+                  ? 'Pagamento anual único (R$ 449,00) via PIX, boleto ou em até 12× no cartão · Contratação anual sem renovação automática mensal'
                   : 'Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser'}
               </p>
             </>
