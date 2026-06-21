@@ -79,7 +79,7 @@ export default function Checkout() {
   const planoApiKey = temModalidade && modalidade === 'vista' ? `${planoKey}_vista` : planoKey;
 
   useEffect(() => {
-    if (!user) nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`);
+    if (!user && planoKey !== 'explorador') nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`);
   }, [user]);
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function Checkout() {
   }, [promoCode]);
 
   React.useEffect(() => {
-    if (!plano || planoKey === 'explorador' || plano.preco === 0) nav('/');
+    if (!plano && planoKey !== 'explorador') nav('/');
   }, [planoKey]);
 
   // Polling automático — verifica a cada 8s se o Asaas confirmou o pagamento
@@ -119,7 +119,69 @@ export default function Checkout() {
     return () => clearInterval(pollingRef.current);
   }, [asaasIds, pago]);
 
-  if (!plano || planoKey === 'explorador' || plano.preco === 0) return null;
+  if (!plano && planoKey !== 'explorador') return null;
+
+  // Página de apresentação do plano Explorador (gratuito)
+  if (planoKey === 'explorador') {
+    const planoExp = PLANOS['explorador'];
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) minmax(280px, 420px)', gap: 24, maxWidth: 840, width: '100%', alignItems: 'stretch' }} className="checkout-grid">
+          {/* Coluna esquerda — apresentação */}
+          <div style={{ color: 'white' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
+              <div style={{ background: '#2563eb', borderRadius: 12, padding: 10, fontSize: 20 }}>🏢</div>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 16, letterSpacing: 1 }}>TSN ATIVOS</div>
+                <div style={{ fontSize: 11, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Plano Explorador — Gratuito</div>
+            <h1 style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.2, margin: '0 0 16px' }}>Comece a explorar leilões imobiliários sem pagar nada.</h1>
+            <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.8, marginBottom: 28 }}>
+              Crie sua conta gratuitamente e tenha acesso à plataforma TSN Ativos — sem cartão de crédito, sem compromisso.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[
+                'Acesso à plataforma TSN Ativos',
+                'Calculadora de lances gratuita',
+                'Visualização de leilões disponíveis',
+                'Perfil de investidor ativo',
+                'Suporte via chat da plataforma',
+              ].map(r => (
+                <div key={r} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#10b98122', border: '1px solid #10b98144', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span style={{ color: '#10b981', fontSize: 12 }}>✓</span>
+                  </div>
+                  <span style={{ fontSize: 13, color: '#cbd5e1' }}>{r}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Coluna direita — CTA */}
+          <div style={{ background: 'white', borderRadius: 20, padding: '36px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>Grátis</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>Sem cartão de crédito · Cancele quando quiser</div>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px', marginBottom: 24, fontSize: 13, color: '#166534', fontWeight: 600 }}>
+              ✅ Acesso imediato após o cadastro
+            </div>
+            <button onClick={() => nav('/login?modo=cadastro')}
+              style={{ width: '100%', padding: '15px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', marginBottom: 12 }}>
+              Criar conta grátis →
+            </button>
+            <button onClick={() => nav('/planos')}
+              style={{ width: '100%', padding: '12px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 16 }}>
+              Ver todos os planos
+            </button>
+            <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
+              Já tem conta? <button onClick={() => nav('/login')} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', fontSize: 11 }}>Entrar</button>
+            </p>
+          </div>
+        </div>
+        <style>{`@media (max-width: 760px) { .checkout-grid { grid-template-columns: 1fr !important; } }`}</style>
+      </div>
+    );
+  }
 
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
   const cpfUsuario = user?.user_metadata?.cpf || '';
