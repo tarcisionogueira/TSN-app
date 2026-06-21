@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { usePlanos } from '../contexts/PlanosContext';
+import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 
@@ -1107,6 +1107,7 @@ function ConfigTab() {
         }
       }));
       setDirtyIds(new Set());
+      PlanosProvider.invalidate(); // força re-fetch em todas as telas
       setTudoSalvo(true);
       setTimeout(() => setTudoSalvo(false), 2500);
     } catch (err) {

@@ -192,8 +192,8 @@ function MainLayout() {
 export default function App() {
   return (
     <AuthProvider>
-      <PlanosProvider>
       <HashRouter>
+        <PlanosProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/checkout" element={<Checkout />} />
@@ -205,8 +205,8 @@ export default function App() {
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />
           <Route path="*" element={<MainLayout />} />
         </Routes>
+        </PlanosProvider>
       </HashRouter>
-      </PlanosProvider>
     </AuthProvider>
   );
 }
