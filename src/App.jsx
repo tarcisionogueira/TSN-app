@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from './utils/supabase';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
+import { PlanosProvider } from './contexts/PlanosContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import TourGuia from './components/TourGuia';
@@ -191,6 +192,7 @@ function MainLayout() {
 export default function App() {
   return (
     <AuthProvider>
+      <PlanosProvider>
       <HashRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -204,6 +206,7 @@ export default function App() {
           <Route path="*" element={<MainLayout />} />
         </Routes>
       </HashRouter>
+      </PlanosProvider>
     </AuthProvider>
   );
 }

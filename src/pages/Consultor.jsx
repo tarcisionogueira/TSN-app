@@ -5,6 +5,7 @@ import {
   TrendingUp, Clock, CheckCircle2, Wallet,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { usePlanos } from '../contexts/PlanosContext';
 import { supabase } from '../utils/supabase';
 import { fmt } from '../utils/calculos';
 
@@ -32,6 +33,7 @@ function CopyBtn({ texto }) {
 export default function Consultor() {
   const nav = useNavigate();
   const { user, role, loading: authLoading } = useAuth();
+  const planosCtx = usePlanos();
   const podeVer = ROLES_CONSULTOR.includes(role);
 
   const [perfil, setPerfil] = useState(null);
@@ -166,18 +168,40 @@ export default function Consultor() {
     setTimeout(() => setCopiandoConvite(''), 2000);
   };
 
-  const PRODUTOS_NOME = { top1: 'Plano Pago', top2: 'Plano Pago Pro', assessorado: 'Assessoria', clube: 'Clube de Negócios' };
+  // Nomes ao vivo do admin — fallback para chave se contexto ainda carregando
+  const pNome = (key) => planosCtx?.[key]?.nome || key;
+  const PRODUTOS_NOME = {
+    top2: pNome('top2'), assessorado: pNome('assessorado'), clube: pNome('clube'),
+  };
 
-  const PLANOS_VENDA = [
-    { key: 'top1',              nome: 'Plano Pago',                   precoLabel: 'R$ 49,90/mês' },
-    { key: 'assessorado',       nome: 'Assessoria',                   precoLabel: 'R$ 6.000' },
-    { key: 'assessorado_vista', nome: 'Assessoria (À Vista)',          precoLabel: 'R$ 5.000 (20% off)' },
-    { key: 'clube',             nome: 'Clube de Negócios',             precoLabel: 'R$ 60.000/ano' },
-    { key: 'clube_vista',       nome: 'Clube de Negócios (À Vista)',  precoLabel: 'R$ 48.000 (20% off)' },
-  ];
+  function fmtPreco(v, decimais = 2) {
+    return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: decimais, maximumFractionDigits: decimais })}`;
+  }
 
-  // Nome e preço sempre do hardcoded — banco pode ter nomes/preços antigos
-  const planosVenda = PLANOS_VENDA;
+  function buildPlanosVenda() {
+    if (!planosCtx) return [];
+    const result = [];
+    ['top2', 'assessorado', 'clube'].forEach(key => {
+      const p = planosCtx[key];
+      if (!p || p.ativo === false) return;
+      const precoLabel = p.assinatura
+        ? `${fmtPreco(p.preco)}/mês`
+        : p.precoVista
+          ? `${fmtPreco(p.preco)} em 12× ou ${fmtPreco(p.precoVista)} à vista`
+          : fmtPreco(p.preco);
+      result.push({ key, nome: p.nome, precoLabel });
+      if (!p.assinatura && p.precoVista) {
+        result.push({
+          key: `${key}_vista`,
+          nome: `${p.nome} (À Vista)`,
+          precoLabel: `${fmtPreco(p.precoVista)} (${p.desconto_vista_pct || 20}% off)`,
+        });
+      }
+    });
+    return result;
+  }
+
+  const planosVenda = buildPlanosVenda();
 
   const codigo = perfil?.codigo_indicacao;
   const origin = window.location.origin;
@@ -330,24 +354,28 @@ export default function Consultor() {
                       },
                       {
                         emoji: '⭐',
-                        label: 'Assinatura Investidor Pro',
-                        sub: 'R$ 49,90/mês',
-                        url: `${origin}/#/checkout?plano=top1${codigo?`&ref=${codigo}`:''}`,
-                        comissao: comissaoDePlano('top1'),
+                        label: `Assinatura ${pNome('top2')}`,
+                        sub: planosCtx?.top2 ? `${fmtPreco(planosCtx.top2.preco)}/mês` : 'R$ 49,90/mês',
+                        url: `${origin}/#/checkout?plano=top2${codigo?`&ref=${codigo}`:''}`,
+                        comissao: comissaoDePlano('top2'),
                         recorrente: true,
                       },
                       {
                         emoji: '🏅',
-                        label: 'Assessoria',
-                        sub: 'R$ 6.000 parcelado · R$ 5.000 à vista',
+                        label: pNome('assessorado'),
+                        sub: planosCtx?.assessorado
+                          ? `${fmtPreco(planosCtx.assessorado.preco)} em 12× · ${fmtPreco(planosCtx.assessorado.precoVista || planosCtx.assessorado.preco * 12 * 0.8)} à vista`
+                          : 'R$ 6.000 parcelado · R$ 5.000 à vista',
                         url: `${origin}/#/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
                         comissao: comissaoDePlano('assessorado'),
                         recorrente: false,
                       },
                       {
                         emoji: '🏛️',
-                        label: 'Clube de Negócios',
-                        sub: 'R$ 60.000/ano · R$ 48.000 à vista',
+                        label: pNome('clube'),
+                        sub: planosCtx?.clube
+                          ? `${fmtPreco(planosCtx.clube.preco)} em 12× · ${fmtPreco(planosCtx.clube.precoVista || planosCtx.clube.preco * 12 * 0.8)} à vista`
+                          : 'R$ 60.000/ano · R$ 48.000 à vista',
                         url: `${origin}/#/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
                         comissao: comissaoDePlano('clube'),
                         recorrente: false,
@@ -411,7 +439,7 @@ export default function Consultor() {
 
                   {/* Rodapé informativo */}
                   <div style={{ marginTop:14, padding:'12px 14px', background:'rgba(16,185,129,0.08)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:10 }}>
-                    <div style={{ fontSize:11, fontWeight:800, color:'#10b981', marginBottom:4 }}>💡 Comissões recorrentes — Assinatura Investidor Pro</div>
+                    <div style={{ fontSize:11, fontWeight:800, color:'#10b981', marginBottom:4 }}>{`💡 Comissões recorrentes — Assinatura ${pNome('top2')}`}</div>
                     <p style={{ margin:0, fontSize:11, color:'#94a3b8', lineHeight:1.6 }}>
                       Enquanto o cliente mantiver a assinatura ativa, você recebe sua comissão todos os meses. Acompanhe de perto o sucesso de uso dos seus indicados — clientes engajados renovam mais e aumentam sua renda recorrente.
                     </p>

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Briefcase, Search, LayoutDashboard, Home, Menu, X, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, Headphones } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import { useAuth } from '../contexts/AuthContext';
+import { usePlanos } from '../contexts/PlanosContext';
 import { supabase } from '../utils/supabase';
 
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -127,17 +128,16 @@ function ModalFeedback({ user, onClose }) {
   );
 }
 
-const ROLE_LABELS = {
-  admin: 'Admin', explorador: 'Explorador', top1: 'Investidor',
-  top2: 'Investidor Pro', assessorado: 'Assessorado',
-  clube: 'Clube de Negócios', consultor: 'Consultor',
-  analista: 'Analista', advogado: 'Advogado',
+const ROLE_LABELS_STATIC = {
+  admin: 'Admin', explorador: 'Explorador',
+  consultor: 'Consultor', analista: 'Analista', advogado: 'Advogado',
 };
 
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
   const { user, role, loading, impersonate, encerrarSuporte } = useAuth();
+  const planosCtx = usePlanos();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -299,7 +299,7 @@ export default function Header() {
                     <div style={{ fontSize: 11 }}>{user.email}</div>
                     {!loading && role && role !== 'aluno' && (
                       <div style={{ fontSize: 10, background: '#f1f5f9', borderRadius: 4, padding: '2px 6px', marginTop: 4, display: 'inline-block', fontWeight: 700, textTransform: 'uppercase' }}>
-                        {ROLE_LABELS[role] || role}
+                        {ROLE_LABELS_STATIC[role] || planosCtx?.[role]?.nome || role}
                       </div>
                     )}
                   </div>

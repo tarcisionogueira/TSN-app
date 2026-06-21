@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { usePlanos } from '../contexts/PlanosContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
@@ -10,6 +11,8 @@ const inp = {
 const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 };
 
 export default function Login() {
+  const planosCtx = usePlanos();
+  const pNome = (key) => planosCtx?.[key]?.nome || { top2: 'Investidor Pro', assessorado: 'Assessoria', clube: 'Leilão Club', explorador: 'Explorador' }[key] || key;
   const nav = useNavigate();
   const loc = useLocation();
   // HashRouter coloca query params dentro do hash, ex: /#/login?ref=ABC
@@ -190,7 +193,7 @@ export default function Login() {
         {/* Banner plano escolhido */}
         {planoEscolhido && (
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1d4ed8', fontWeight: 600 }}>
-            ✅ Plano <strong>{{ top1: 'Investidor Pro', top2: 'Investidor Pro', assessorado: 'Assessoria', clube: 'Clube de Negócios', explorador: 'Explorador (Gratuito)' }[planoEscolhido] || planoEscolhido}</strong> selecionado — crie sua conta para continuar
+            ✅ Plano <strong>{planoEscolhido === 'explorador' ? 'Explorador (Gratuito)' : pNome(planoEscolhido)}</strong> selecionado — crie sua conta para continuar
           </div>
         )}
         {/* Banner convite cliente */}
@@ -224,7 +227,7 @@ export default function Login() {
             <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#0f172a' }}>Cadastro realizado!</h2>
             <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
               Verifique seu email para confirmar o cadastro e depois faça login.
-              {planoEscolhido && <><br /><strong style={{ color: '#1d4ed8' }}>Após o login você será direcionado para o pagamento do Plano {{ top1: 'Investidor Pro', top2: 'Investidor Pro', assessorado: 'Assessoria', clube: 'Clube de Negócios' }[planoEscolhido] || planoEscolhido}.</strong></>}
+              {planoEscolhido && <><br /><strong style={{ color: '#1d4ed8' }}>Após o login você será direcionado para o pagamento do Plano {pNome(planoEscolhido)}.</strong></>}
             </p>
             <button onClick={() => setModo('login')}
               style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>

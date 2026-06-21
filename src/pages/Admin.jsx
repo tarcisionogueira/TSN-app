@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { usePlanos } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 
@@ -1806,18 +1807,36 @@ function ContratosTab() {
 }
 
 // ─── Aba Promoções ────────────────────────────────────────────────────────────
-const PRODUTOS_PROMO = [
-  { key: 'top1', label: 'Plano Pago — R$ 49,90/mês' },
-  { key: 'assessorado', label: 'Assessoria — R$ 6.000 (12× R$ 500)' },
-  { key: 'assessorado_vista', label: 'Assessoria À Vista — R$ 5.000 (20% off)' },
-  { key: 'clube', label: 'Clube de Negócios — R$ 60.000/ano (12× R$ 5.000)' },
-  { key: 'clube_vista', label: 'Clube de Negócios À Vista — R$ 48.000 (20% off)' },
-];
+const defaultPromo = () => ({ codigo: '', produto: 'top2', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', beneficios: '', ativo: true });
 
-const defaultPromo = () => ({ codigo: '', produto: 'top1', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', beneficios: '', ativo: true });
+function buildProdutosPromo(planos) {
+  const fmt = (v, d = 2) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+  if (!planos) return [
+    { key: 'top2', label: 'Investidor Pro — R$ 49,90/mês' },
+    { key: 'assessorado', label: 'Assessoria — R$ 500/mês × 12' },
+    { key: 'assessorado_vista', label: 'Assessoria À Vista' },
+    { key: 'clube', label: 'Leilão Club — R$ 5.000/mês × 12' },
+    { key: 'clube_vista', label: 'Leilão Club À Vista' },
+  ];
+  const result = [];
+  ['top2', 'assessorado', 'clube'].forEach(key => {
+    const p = planos[key];
+    if (!p || p.ativo === false) return;
+    const label = p.assinatura
+      ? `${p.nome} — ${fmt(p.preco)}/mês`
+      : `${p.nome} — ${fmt(p.preco)} × 12`;
+    result.push({ key, label });
+    if (!p.assinatura && p.precoVista) {
+      result.push({ key: `${key}_vista`, label: `${p.nome} À Vista — ${fmt(p.precoVista)} (${p.desconto_vista_pct || 20}% off)` });
+    }
+  });
+  return result;
+}
 
 function PromoTab() {
   const { user } = useAuth();
+  const planosCtx = usePlanos();
+  const PRODUTOS_PROMO = buildProdutosPromo(planosCtx);
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(defaultPromo());
@@ -2100,8 +2119,15 @@ function UsuariosPlanoDetalhe({ planoKey }) {
   const [usuarios, setUsuarios] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
-  const LABEL = { explorador: 'Explorador (Grátis)', top1: 'Plano Pago (R$49,90)', top2: 'Plano Pago Pro (R$99,90)', assessorado: 'Assessoria (R$500/mês)', clube: 'Clube de Negócios (R$5k/mês)' };
-  const PRECO = { explorador: 0, top1: 49.90, top2: 99.90, assessorado: 500, clube: 5000 };
+  const planosCtx = usePlanos();
+  const pNome = (key) => planosCtx?.[key]?.nome || key;
+  const LABEL = {
+    explorador: 'Explorador (Grátis)',
+    top2: `${pNome('top2')} (R$${planosCtx?.top2?.preco?.toFixed(2) || '49,90'}/mês)`,
+    assessorado: `${pNome('assessorado')} (R$${planosCtx?.assessorado?.preco?.toFixed(2) || '500'}/mês)`,
+    clube: `${pNome('clube')} (R$${planosCtx?.clube?.preco ? (planosCtx.clube.preco/1000).toFixed(0)+'k' : '5k'}/mês)`,
+  };
+  const PRECO = { explorador: 0, top2: planosCtx?.top2?.preco || 49.90, assessorado: planosCtx?.assessorado?.preco || 500, clube: planosCtx?.clube?.preco || 5000 };
   const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   React.useEffect(() => {
@@ -2161,6 +2187,8 @@ function UsuariosPlanoDetalhe({ planoKey }) {
 }
 
 function DashboardTab() {
+  const planosCtx = usePlanos();
+  const pNome = (key) => planosCtx?.[key]?.nome || key;
   const [dados, setDados] = useState(null);
   const [asaasDados, setAsaasDados] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2416,11 +2444,10 @@ function DashboardTab() {
             {!usuariosDetalhe ? (
               // Vista resumida — só quantidade, clicável
               [
-                { key: 'explorador', label: 'Explorador (Grátis)',   cor: '#64748b' },
-                { key: 'top1',       label: 'Plano Pago',            cor: '#2563eb' },
-                { key: 'top2',       label: 'Plano Pago Pro',        cor: '#7c3aed' },
-                { key: 'assessorado',label: 'Assessoria',            cor: '#d97706' },
-                { key: 'clube',      label: 'Clube de Negócios',     cor: '#059669' },
+                { key: 'explorador', label: 'Explorador (Grátis)',        cor: '#64748b' },
+                { key: 'top2',       label: pNome('top2'),                cor: '#7c3aed' },
+                { key: 'assessorado',label: pNome('assessorado'),         cor: '#d97706' },
+                { key: 'clube',      label: pNome('clube'),               cor: '#059669' },
               ].map(({ key, label, cor }) => {
                 const qtd = dados.contagem[key] || 0;
                 return (
