@@ -313,48 +313,61 @@ export default function Consultor() {
                         label: 'Calculadora de Lances',
                         sub: 'Ferramenta gratuita · com chamada para a plataforma',
                         url: `${origin}/#/calculadora`,
+                        comissao: null,
                       },
                       {
                         emoji: '🎁',
                         label: 'Assinatura Explorador',
                         sub: 'Acesso gratuito · sem cartão',
                         url: `${origin}/#/login?modo=cadastro${codigo?`&ref=${codigo}`:''}`,
+                        comissao: null,
                       },
                       {
                         emoji: '⭐',
                         label: 'Assinatura Investidor Pro',
                         sub: 'R$ 49,90/mês',
                         url: `${origin}/#/checkout?plano=top1${codigo?`&ref=${codigo}`:''}`,
+                        comissao: pct,
+                        recorrente: true,
                       },
                       {
                         emoji: '🏅',
                         label: 'Assessoria',
                         sub: 'R$ 6.000 parcelado · R$ 5.000 à vista',
                         url: `${origin}/#/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
+                        comissao: pct,
+                        recorrente: false,
                       },
                       {
                         emoji: '🏛️',
                         label: 'Clube de Negócios',
                         sub: 'R$ 60.000/ano · R$ 48.000 à vista',
                         url: `${origin}/#/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
+                        comissao: pct,
+                        recorrente: false,
                       },
                       ...cursos.map(c=>({
                         emoji: c.emoji||'🎓',
                         label: c.titulo,
                         sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Incluído na assinatura'}`,
                         url: `${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`,
+                        comissao: pct,
+                        recorrente: false,
                       })),
                       ...ebooks.map(e=>({
                         emoji: '📖',
                         label: e.titulo,
                         sub: `eBook${Number(e.preco)>0?` · R$ ${Number(e.preco).toFixed(0)}`:'· Incluído na assinatura'}`,
                         url: `${origin}/#/p/ebook/${e.id}${codigo?`?ref=${codigo}`:''}`,
+                        comissao: pct,
+                        recorrente: false,
                       })),
                       ...sdrProdutos.map(s=>({
                         emoji: s.tipo==='ebook'?'📖':s.tipo==='curso'?'🎓':s.tipo==='calculadora'?'🧮':'🎁',
                         label: s.nome,
                         sub: `${s.tipo||'Conteúdo'} · Acesso gratuito`,
                         url: `${origin}/#/p/captura/${s.id}`,
+                        comissao: null,
                       })),
                     ].map((item,i)=>(
                       <div key={i} style={{ background:'rgba(255,255,255,0.07)', borderRadius:10, padding:'10px 14px', display:'flex', alignItems:'center', gap:10 }}>
@@ -362,6 +375,19 @@ export default function Consultor() {
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:13, fontWeight:700, color:'white', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.label}</div>
                           {item.sub && <div style={{ fontSize:11, color:'#60a5fa' }}>{item.sub}</div>}
+                        </div>
+                        {/* Comissão */}
+                        <div style={{ flexShrink:0, minWidth:80, textAlign:'right' }}>
+                          {item.comissao != null ? (
+                            <div>
+                              <div style={{ fontSize:13, fontWeight:800, color:'#10b981' }}>{item.comissao}%</div>
+                              <div style={{ fontSize:10, color: item.recorrente ? '#34d399' : '#64748b', fontWeight:600 }}>
+                                {item.recorrente ? '↻ recorrente' : 'por venda'}
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize:11, color:'#475569' }}>—</div>
+                          )}
                         </div>
                         <div style={{ display:'flex', gap:6, flexShrink:0 }}>
                           <a href={item.url} target="_blank" rel="noreferrer"
@@ -375,6 +401,14 @@ export default function Consultor() {
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  {/* Rodapé informativo */}
+                  <div style={{ marginTop:14, padding:'12px 14px', background:'rgba(16,185,129,0.08)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:10 }}>
+                    <div style={{ fontSize:11, fontWeight:800, color:'#10b981', marginBottom:4 }}>💡 Comissões recorrentes — Assinatura Investidor Pro</div>
+                    <p style={{ margin:0, fontSize:11, color:'#94a3b8', lineHeight:1.6 }}>
+                      Enquanto o cliente mantiver a assinatura ativa, você recebe sua comissão todos os meses. Acompanhe de perto o sucesso de uso dos seus indicados — clientes engajados renovam mais e aumentam sua renda recorrente.
+                    </p>
                   </div>
                 </div>
 
