@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
@@ -10,6 +10,14 @@ import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
 
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
@@ -60,6 +68,16 @@ export default function Busca() {
   const [pagina, setPagina] = useState(1);
   const [totalResultados, setTotalResultados] = useState(0);
   const POR_PAGINA = 50;
+
+  // Radius search state
+  const [raioQuery, setRaioQuery] = useState('');
+  const [raioKmAtivo, setRaioKmAtivo] = useState(50);
+  const [raioAtivo, setRaioAtivo] = useState(false);
+  const [geocodingLoading, setGeocodingLoading] = useState(false);
+  const [geocodingErro, setGeocodingErro] = useState('');
+  const [centroRaio, setCentroRaio] = useState(null); // { lat, lng, label }
+  const [distancias, setDistancias] = useState({}); // id -> km
+  const geocodingTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!user?.id) return;
