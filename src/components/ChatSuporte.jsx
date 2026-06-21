@@ -236,16 +236,24 @@ export default function ChatSuporte() {
       {/* Botão flutuante */}
       {!isOpen && (
         <button onClick={() => setIsOpen(true)} title="Suporte / Ajuda"
-          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, width: 54, height: 54, borderRadius: '50%', background: 'linear-gradient(135deg,#1d4ed8,#2563eb)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(37,99,235,0.45)', transition: 'transform 0.15s, box-shadow 0.15s' }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(37,99,235,0.6)'; }}
+          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, height: 48, padding: '0 20px 0 16px', borderRadius: 999, background: 'linear-gradient(135deg,#1d4ed8,#2563eb)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(37,99,235,0.45)', transition: 'transform 0.15s, box-shadow 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(37,99,235,0.6)'; }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(37,99,235,0.45)'; }}>
-          <MessageCircle size={22} />
+          <MessageCircle size={20} />
+          <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>Suporte</span>
         </button>
       )}
 
       {/* Widget de chat */}
       {isOpen && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, width: 360, maxWidth: 'calc(100vw - 32px)', background: 'white', borderRadius: 20, boxShadow: '0 16px 48px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden', maxHeight: '90vh' }}>
+        <div style={{ position: 'fixed', bottom: 0, right: 0, zIndex: 9990,
+          width: 'min(420px, 100vw)', height: 'min(620px, 100dvh)',
+          background: 'white',
+          borderRadius: window.innerWidth < 480 ? '20px 20px 0 0' : 20,
+          boxShadow: '0 16px 56px rgba(0,0,0,0.25)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          margin: window.innerWidth < 480 ? 0 : '0 16px 16px 0',
+        }}>
 
           {/* Header */}
           <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#2563eb)', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
