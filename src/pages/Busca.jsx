@@ -209,9 +209,22 @@ export default function Busca() {
       let dbData, dbError;
 
       if (raioAtivoBusca && centro) {
-        // Fetch all records for the state (skip city filter — radius defines area)
-        const { data, error } = await buildQuery(supabase.from('imoveis_leilao').select('*'), true)
-          .order(coluna, { ascending: dir, nullsFirst: false });
+        // Bounding box: 1° lat ≈ 111 km; 1° lng ≈ 111 * cos(lat) km
+        const deltaLat = raioKmBusca / 111;
+        const deltaLng = raioKmBusca / (111 * Math.cos(centro.lat * Math.PI / 180));
+        const minLat = (centro.lat - deltaLat).toFixed(6);
+        const maxLat = (centro.lat + deltaLat).toFixed(6);
+        const minLng = (centro.lng - deltaLng).toFixed(6);
+        const maxLng = (centro.lng + deltaLng).toFixed(6);
+        const cidadeCentro = filtrosAtivos.cidades?.[0] || '';
+
+        // Single query: properties with coords inside bounding box OR no-coord props in center city
+        let q = buildQuery(supabase.from('imoveis_leilao').select('*'), true);
+        q = q.or(
+          `and(latitude.gte.${minLat},latitude.lte.${maxLat},longitude.gte.${minLng},longitude.lte.${maxLng}),` +
+          `and(latitude.is.null,cidade.ilike.${cidadeCentro})`
+        );
+        const { data, error } = await q.order(coluna, { ascending: dir, nullsFirst: false }).limit(5000);
         dbData = data;
         dbError = error;
       } else {
@@ -260,7 +273,7 @@ export default function Busca() {
         longitude: im.longitude,
       })) : [];
 
-      // Apply radius filter client-side
+      // Refine radius client-side: precise haversine for properties with coords
       if (raioAtivoBusca && centro) {
         const novasDistancias = {};
         const comCoords = [];
@@ -272,15 +285,11 @@ export default function Busca() {
               novasDistancias[im.id] = Math.round(dist);
               comCoords.push(im);
             }
+            // else: bounding box overcaptured — discard (corners of the square)
           } else {
-            // Sem coordenadas: inclui apenas os da cidade centro (não temos como calcular distância)
-            const cidadeCentro = filtrosAtivos.cidades?.[0]?.toLowerCase();
-            if (!cidadeCentro || (im.cidade || '').toLowerCase() === cidadeCentro) {
-              semCoords.push(im);
-            }
+            semCoords.push(im); // no-coord props already filtered to center city by DB query
           }
         });
-        // Ordena por distância os que têm coords; sem coords vêm depois
         comCoords.sort((a, b) => (novasDistancias[a.id] || 0) - (novasDistancias[b.id] || 0));
         mapeados = [...comCoords, ...semCoords];
         setDistancias(novasDistancias);
