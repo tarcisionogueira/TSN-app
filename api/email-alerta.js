@@ -2,9 +2,13 @@ export const config = { runtime: 'edge' };
 
 function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl) {
   const unsubToken = btoa(`${userId}:unsubscribe`);
-  const unsubLink = `${baseUrl}/#/cancelar-alertas?token=${unsubToken}`;
 
-  // Link para busca com os filtros pré-ativados via query params
+  // UTM params identificam tráfego vindo de alertas de email no GA4
+  // GA4 lê a query string ANTES do #, não dentro do hash (SPA routing)
+  // Relatório GA4: Aquisição → Tráfego → utm_source = "email_alerta"
+  const utm = `utm_source=email_alerta&utm_medium=email&utm_campaign=alerta_imoveis`;
+
+  // Link busca: UTMs na query string real + filtros no hash (lidos pelo SPA)
   const filtroParams = new URLSearchParams();
   if (filtros?.estado) filtroParams.set('estado', filtros.estado);
   if (filtros?.cidades?.length) filtroParams.set('cidades', filtros.cidades.join(','));
@@ -13,7 +17,9 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl)
   if (filtros?.valorMin) filtroParams.set('valorMin', filtros.valorMin);
   if (filtros?.valorMax) filtroParams.set('valorMax', filtros.valorMax);
   if (filtros?.pagamento?.length) filtroParams.set('pagamento', filtros.pagamento.join(','));
-  const buscaLink = `${baseUrl}/#/buscar?${filtroParams.toString()}`;
+  const buscaLink = `${baseUrl}?${utm}&utm_content=logo#/buscar?${filtroParams.toString()}`;
+
+  const unsubLink = `${baseUrl}?${utm}&utm_content=unsub#/cancelar-alertas?token=${unsubToken}`;
 
   const formatBRL = (v) => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}` : '—';
 
@@ -45,9 +51,10 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl)
     const localizacao = [im.bairro, im.cidade, im.estado].filter(Boolean).join(', ');
     const descricaoSnippet = im.descricao ? im.descricao.replace(/\s+/g, ' ').trim().slice(0, 140) + (im.descricao.length > 140 ? '…' : '') : '';
 
-    // Link de deep-link: login → redirect para tela do imóvel
+    // Deep-link: UTMs na query string real + login com redirect para o imóvel
+    // utm_content identifica qual card foi clicado (visível no GA4 por imóvel)
     const imovelPath = encodeURIComponent(`/imovel/${im.id}`);
-    const imovelLink = `${baseUrl}/#/login?next=${imovelPath}`;
+    const imovelLink = `${baseUrl}?${utm}&utm_content=imovel_${im.id}#/login?next=${imovelPath}`;
 
     const pgto = im.forma_pagamento;
     const pgtoBadge = pgto && PGTO_LABEL[pgto]
