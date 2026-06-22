@@ -667,17 +667,31 @@ export default function Busca() {
         )}
 
         {/* Header de resultados */}
-        <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10 }}>
-          <div>
-            <h1 style={{ margin:0, fontSize:18, fontWeight:900, color:'#111111' }}>Busca de Imóveis em Leilão</h1>
-            <p style={{ margin:'4px 0 0', fontSize:12, color:'#64748b' }}>
-              {loading ? 'Buscando leilões...'
-                : buscaFeita ? `${totalResultados} imóvel(is) encontrado(s) · página ${pagina} de ${totalPaginas}`
-                : 'Configure os filtros e clique em Buscar Leilões'}
-            </p>
+        <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 18px', marginBottom:12 }}>
+          {/* Linha 1: título + visualização */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, marginBottom: buscaFeita && !loading ? 10 : 0 }}>
+            <div>
+              <h1 style={{ margin:0, fontSize:18, fontWeight:900, color:'#111111' }}>Busca de Imóveis em Leilão</h1>
+              <p style={{ margin:'4px 0 0', fontSize:12, color:'#64748b' }}>
+                {loading ? 'Buscando leilões...'
+                  : buscaFeita ? `${totalResultados} imóvel(is) encontrado(s) · página ${pagina} de ${totalPaginas}`
+                  : 'Configure os filtros e clique em Buscar Leilões'}
+              </p>
+            </div>
+            {/* Alternador Lista / Mapa */}
+            <div style={{ display:'flex', background:'#f1f5f9', borderRadius:10, padding:3, gap:2 }}>
+              <button style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'default', background:'white', color:'#111111', boxShadow:'0 1px 3px rgba(0,0,0,0.1)' }}>
+                ☰ Lista
+              </button>
+              <button onClick={() => window.location.hash = '/mapa'}
+                style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background:'transparent', color:'#64748b' }}>
+                🗺️ Mapa
+              </button>
+            </div>
           </div>
-          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-            {buscaFeita && !loading && (
+          {/* Linha 2: controles (só quando há resultados) */}
+          {buscaFeita && !loading && (
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', paddingTop:10, borderTop:'1px solid #f1f5f9' }}>
               <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); setPagina(1); buscarPagina(1, filtros, e.target.value, centroRaio, raioAtivo, raioKmAtivo); }}
                 style={{ padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:600, color:'#334155', background:'white', cursor:'pointer' }}>
                 <option value="desconto_desc">Maior desconto primeiro</option>
@@ -685,25 +699,19 @@ export default function Busca() {
                 <option value="valor_asc">Menor valor primeiro</option>
                 <option value="valor_desc">Maior valor primeiro</option>
               </select>
-            )}
-            {selecionados.length>0 && (
-              <button onClick={()=>irParaAnalise(resultados.find(r=>r.id===selecionados[0]))}
-                style={{ padding:'8px 16px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-                <ArrowRight size={13}/> Analisar imóvel selecionado
-              </button>
-            )}
-            <button onClick={() => window.location.hash = '/mapa'}
-              style={{ padding:'7px 12px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, fontSize:12, fontWeight:700, color:'#0D63DB', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-              🗺️ Ver no Mapa
-            </button>
-            {buscaFeita&&!loading && (
+              {selecionados.length>0 && (
+                <button onClick={()=>irParaAnalise(resultados.find(r=>r.id===selecionados[0]))}
+                  style={{ padding:'7px 14px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                  <ArrowRight size={13}/> Analisar selecionado
+                </button>
+              )}
               <button onClick={() => buscarPagina(pagina, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo)}
                 style={{ padding:'7px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
                 <RefreshCw size={12}/> Atualizar
               </button>
-            )}
-            {loading && <Loader2 size={18} color="#0D63DB" style={{animation:'spin 1s linear infinite'}}/>}
-          </div>
+              {loading && <Loader2 size={18} color="#0D63DB" style={{animation:'spin 1s linear infinite'}}/>}
+            </div>
+          )}
         </div>
 
         {/* Info inicial */}
