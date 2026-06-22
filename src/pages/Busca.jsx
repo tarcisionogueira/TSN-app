@@ -86,7 +86,7 @@ function svgPin(cor) {
   )}`;
 }
 
-function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo }) {
+function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista }) {
   const mapContainerRef = useRef(null);
   const leafletRef = useRef(null);
   const markersRef = useRef(null);
@@ -94,37 +94,51 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
   const [mapReady, setMapReady] = React.useState(false);
   const [carregando, setCarregando] = React.useState(true);
 
-  // Carrega imóveis com coordenadas usando os filtros ativos.
-  // NOTA: pagamento NÃO é aplicado aqui — no mapa o objetivo é ver localização;
-  // o pagamento aparece no popup de cada pin. Filtrar por pagamento excluiria
-  // imóveis cujo campo ainda é null (não geocodificado/não parseado do edital).
+  const [semCoordenadas, setSemCoordenadas] = React.useState(false);
+
   useEffect(() => {
     async function carregar() {
       setCarregando(true);
-      let q = supabase
-        .from('imoveis_leilao')
-        .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, valor_avaliacao, desconto_percentual, forma_pagamento, latitude, longitude, link_foto')
-        .eq('ativo', true)
-        .not('latitude', 'is', null)
-        .neq('latitude', 0)
-        .limit(2000);
-      if (filtros.estado) q = q.eq('estado', filtros.estado);
-      if (filtros.tipo) q = q.in('tipo', [filtros.tipo, 'imovel']);
-      if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
-      if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
-      if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
-      if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
-      // pagamento: exibido no popup mas NÃO filtra a query do mapa
-      const { data } = await q;
-      const filtered = (data || []).filter(im => {
+      setSemCoordenadas(false);
+
+      // Query base com todos os filtros — sem restrição de coordenadas
+      const aplicarFiltros = (base) => {
+        let q = base.eq('ativo', true);
+        if (filtros.estado) q = q.eq('estado', filtros.estado);
+        if (filtros.tipo) q = q.in('tipo', [filtros.tipo, 'imovel']);
+        if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
+        if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
+        if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
+        if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
+        if (filtros.pagamento?.length > 0) {
+          const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_FILTRO_DB[v] || [v]);
+          q = q.or(dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(','));
+        }
+        return q;
+      };
+
+      // Busca só imóveis com coordenadas (aparecem como pins)
+      const { data } = await aplicarFiltros(
+        supabase
+          .from('imoveis_leilao')
+          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto')
+          .not('latitude', 'is', null)
+          .neq('latitude', 0)
+          .limit(2000)
+      );
+      const comCoords = (data || []).filter(im => {
         if (!raioAtivo || !centroRaio || !im.latitude || !im.longitude) return true;
         return haversine(centroRaio.lat, centroRaio.lng, im.latitude, im.longitude) <= raioKm;
       });
-      setImoveisMapa(filtered);
+
+      // Detecta caso onde há resultados na lista mas nenhum tem coordenadas
+      if (comCoords.length === 0 && totalLista > 0) setSemCoordenadas(true);
+
+      setImoveisMapa(comCoords);
       setCarregando(false);
     }
     carregar();
-  }, [filtros, centroRaio, raioAtivo, raioKm]);
+  }, [filtros, centroRaio, raioAtivo, raioKm, totalLista]);
 
   // Inicializa mapa
   useEffect(() => {
@@ -211,9 +225,15 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
           {imoveisMapa.length} imóveis com localização
         </div>
       )}
-      {!carregando && imoveisMapa.length === 0 && (
-        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '8px 18px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#64748b', textAlign: 'center', whiteSpace: 'nowrap' }}>
-          Imóveis encontrados ainda não possuem localização cadastrada
+      {!carregando && imoveisMapa.length === 0 && semCoordenadas && (
+        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '10px 18px', borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', fontSize: 12, color: '#64748b', textAlign: 'center', maxWidth: 320 }}>
+          <div style={{ fontWeight: 700, color: '#334155', marginBottom: 3 }}>📍 {totalLista} imóvel(is) encontrado(s) sem localização</div>
+          <div>As coordenadas ainda não foram cadastradas. A geocodificação automática ocorre às 3h.</div>
+        </div>
+      )}
+      {!carregando && imoveisMapa.length === 0 && !semCoordenadas && (
+        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '8px 18px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#94a3b8' }}>
+          Nenhum imóvel com localização para os filtros selecionados
         </div>
       )}
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
@@ -974,7 +994,7 @@ export default function Busca() {
 
         {/* Vista Mapa embutido — usa snapshot dos filtros no momento da busca */}
         {vista === 'mapa' && buscaFeita && filtrosBusca && (
-          <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} />
+          <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} totalLista={totalResultados} />
         )}
         {vista === 'mapa' && !buscaFeita && (
           <div style={{ borderRadius:14, border:'1px solid #e2e8f0', height:'calc(100vh - 220px)', minHeight:400, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, background:'#f8fafc', color:'#94a3b8' }}>
