@@ -2610,13 +2610,49 @@ function DashboardTab() {
   const hcBg  = { ok: '#f0fdf4', aviso: '#fffbeb', erro: '#fef2f2' };
   const hcBorder = { ok: '#bbf7d0', aviso: '#fde68a', erro: '#fecaca' };
   const hcIcon = { ok: '✅', aviso: '⚠️', erro: '🔴' };
+  const [hcItemAberto, setHcItemAberto] = React.useState(null);
+  const [acaoStatus, setAcaoStatus] = React.useState({});
+
+  const diagnosticos = {
+    'Supabase — conexão': { causa: 'Banco de dados inacessível ou credenciais inválidas.', acoes: ['Verificar SUPABASE_SERVICE_KEY no Vercel', 'Checar status em status.supabase.com', 'Verificar se o projeto Supabase está ativo'] },
+    'Supabase — chamados presos': { causa: 'Existem chamados de suporte abertos há mais de 7 dias sem resolução.', acoes: ['Acessar aba Suporte no Admin', 'Filtrar chamados por status "aberto" mais antigos', 'Atribuir ou finalizar manualmente'] },
+    'SDR — leads sem consultor': { causa: 'Leads novos aguardam atribuição de consultor há mais de 3 dias.', acoes: ['Acessar aba SDR no Admin', 'Filtrar leads sem consultor', 'Atribuir manualmente a um consultor disponível'] },
+    'Daily.co — API': { causa: 'API de videochamadas não está respondendo.', acoes: ['Verificar DAILY_API_KEY no Vercel', 'Checar status em status.daily.co', 'Confirmar que a chave não expirou'] },
+    'Claude — API': { causa: 'API da Anthropic não está respondendo.', acoes: ['Verificar CLAUDE_KEY no Vercel', 'Checar status em status.anthropic.com', 'Confirmar que há créditos na conta Anthropic'] },
+    'API interna — /api/system-status': { causa: 'O próprio servidor da aplicação não está respondendo.', acoes: ['Verificar deployments no Vercel', 'Checar logs de erro no Vercel → Logs', 'Fazer redeploy se necessário'] },
+  };
+
+  async function executarAcao(acao, label) {
+    setAcaoStatus(s => ({ ...s, [label]: 'executando' }));
+    try {
+      if (acao === 'liberar_chamados_presos') {
+        const limite = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+        const { data: presos } = await supabase.from('chamados').select('id').eq('status', 'aberto').lt('criado_em', limite);
+        if (presos?.length) {
+          const ids = presos.map(c => c.id);
+          await supabase.from('chamados').update({ status: 'finalizado', obs_interna: 'Finalizado manualmente via painel de ações' }).in('id', ids);
+        }
+        setAcaoStatus(s => ({ ...s, [label]: `ok — ${presos?.length || 0} chamado(s) finalizados` }));
+      } else if (acao === 'rodar_health') {
+        await rodarHealthCheck();
+        setAcaoStatus(s => ({ ...s, [label]: 'ok — executado' }));
+      } else if (acao === 'ver_leads_sem_consultor') {
+        window.location.hash = '/admin';
+        setAcaoStatus(s => ({ ...s, [label]: 'ok — navegando para SDR' }));
+      }
+    } catch(e) {
+      setAcaoStatus(s => ({ ...s, [label]: `erro — ${e.message}` }));
+    }
+  }
+
+  const temProblemas = hcLast && hcLast.status !== 'ok';
 
   return (
     <div>
       {/* ── Health Check Banner ── */}
       {hcLast && (
         <div onClick={() => setHealthOpen(o => !o)}
-          style={{ cursor: 'pointer', background: hcBg[hcLast.status], border: `1px solid ${hcBorder[hcLast.status]}`, borderRadius: 10, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          style={{ cursor: 'pointer', background: hcBg[hcLast.status], border: `1px solid ${hcBorder[hcLast.status]}`, borderRadius: 10, padding: '10px 16px', marginBottom: temProblemas ? 0 : 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomLeftRadius: temProblemas ? 0 : 10, borderBottomRightRadius: temProblemas ? 0 : 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 16 }}>{hcIcon[hcLast.status]}</span>
             <div>
@@ -2632,6 +2668,53 @@ function DashboardTab() {
           </div>
         </div>
       )}
+
+      {/* ── Painel de Ações (só aparece quando há problemas) ── */}
+      {temProblemas && (
+        <div style={{ background: '#1e293b', border: `1px solid ${hcBorder[hcLast.status]}`, borderTop: 'none', borderBottomLeftRadius: 10, borderBottomRightRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>Ações disponíveis</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {(hcLast.itens || []).filter(i => i.status !== 'ok').map((item, j) => {
+              const diag = diagnosticos[item.nome] || { causa: item.detalhe, acoes: [] };
+              const labelAcao = item.nome === 'Supabase — chamados presos' ? 'liberar_chamados_presos' : item.nome === 'SDR — leads sem consultor' ? 'ver_leads_sem_consultor' : null;
+              return (
+                <div key={j} style={{ background: '#0f172a', borderRadius: 8, padding: '10px 14px', minWidth: 220, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <span style={{ color: item.status === 'erro' ? '#f87171' : '#fbbf24', fontSize: 12 }}>{item.status === 'erro' ? '✗' : '⚠'}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>{item.nome}</span>
+                    <button onClick={() => setHcItemAberto(hcItemAberto === item.nome ? null : item.nome)}
+                      style={{ marginLeft: 'auto', fontSize: 10, padding: '2px 8px', background: '#334155', color: '#94a3b8', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                      {hcItemAberto === item.nome ? 'fechar' : 'diagnóstico'}
+                    </button>
+                  </div>
+                  {hcItemAberto === item.nome && (
+                    <div style={{ background: '#1e293b', borderRadius: 6, padding: '8px 10px', marginBottom: 8 }}>
+                      <div style={{ fontSize: 11, color: '#fbbf24', fontWeight: 700, marginBottom: 4 }}>Causa provável:</div>
+                      <div style={{ fontSize: 11, color: '#cbd5e1', marginBottom: 8 }}>{diag.causa}</div>
+                      <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 700, marginBottom: 4 }}>O que fazer:</div>
+                      {diag.acoes.map((a, k) => <div key={k} style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>• {a}</div>)}
+                    </div>
+                  )}
+                  {labelAcao && (
+                    <button onClick={() => executarAcao(labelAcao, item.nome)}
+                      disabled={acaoStatus[item.nome] === 'executando'}
+                      style={{ fontSize: 11, padding: '4px 12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, width: '100%' }}>
+                      {acaoStatus[item.nome] === 'executando' ? 'Executando…' : acaoStatus[item.nome] ? acaoStatus[item.nome] : item.nome === 'Supabase — chamados presos' ? '▶ Liberar chamados presos' : '▶ Ver leads sem consultor'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            <div style={{ background: '#0f172a', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center' }}>
+              <button onClick={() => executarAcao('rodar_health', 'recheck')}
+                style={{ fontSize: 11, padding: '6px 14px', background: '#059669', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700 }}>
+                {acaoStatus['recheck'] === 'executando' ? 'Verificando…' : '🔄 Re-verificar tudo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!hcLast && (
         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 13, color: '#64748b' }}>🔧 Automação de saúde — nenhuma execução ainda</span>
@@ -2643,7 +2726,7 @@ function DashboardTab() {
         <div style={{ background: '#111111', borderRadius: 12, padding: '16px 20px', marginBottom: 16, maxHeight: 420, overflowY: 'auto' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#60a5fa', marginBottom: 12 }}>Histórico de execuções ({healthLogs.length})</div>
           {healthLogs.map((log, i) => (
-            <div key={log.id} style={{ borderBottom: i < healthLogs.length - 1 ? '1px solid #111111' : 'none', paddingBottom: 12, marginBottom: 12 }}>
+            <div key={log.id} style={{ borderBottom: i < healthLogs.length - 1 ? '1px solid #1e293b' : 'none', paddingBottom: 12, marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 12 }}>{hcIcon[log.status]}</span>
                 <span style={{ fontSize: 12, color: hcCor[log.status], fontWeight: 700 }}>{new Date(log.executado_em).toLocaleString('pt-BR')}</span>
@@ -2651,17 +2734,37 @@ function DashboardTab() {
               </div>
               <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>{log.resumo}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {(log.itens || []).map((item, j) => (
-                  <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-                    <span style={{ color: item.status === 'ok' ? '#34d399' : item.status === 'aviso' ? '#fbbf24' : '#f87171' }}>
-                      {item.status === 'ok' ? '✓' : item.status === 'aviso' ? '⚠' : '✗'}
-                    </span>
-                    <span style={{ color: '#cbd5e1', fontWeight: 600 }}>{item.nome}</span>
-                    <span style={{ color: '#64748b' }}>— {item.detalhe}</span>
-                    {item.corrigido && <span style={{ color: '#34d399', fontWeight: 700 }}>AUTO-CORRIGIDO</span>}
-                    <span style={{ color: '#475569', marginLeft: 'auto' }}>{item.ms}ms</span>
-                  </div>
-                ))}
+                {(log.itens || []).map((item, j) => {
+                  const diagKey = `${log.id}-${j}`;
+                  return (
+                    <div key={j}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, cursor: item.status !== 'ok' ? 'pointer' : 'default' }}
+                        onClick={() => item.status !== 'ok' && setHcItemAberto(hcItemAberto === diagKey ? null : diagKey)}>
+                        <span style={{ color: item.status === 'ok' ? '#34d399' : item.status === 'aviso' ? '#fbbf24' : '#f87171' }}>
+                          {item.status === 'ok' ? '✓' : item.status === 'aviso' ? '⚠' : '✗'}
+                        </span>
+                        <span style={{ color: '#cbd5e1', fontWeight: 600 }}>{item.nome}</span>
+                        <span style={{ color: '#64748b' }}>— {item.detalhe}</span>
+                        {item.corrigido && <span style={{ color: '#34d399', fontWeight: 700 }}>AUTO-CORRIGIDO</span>}
+                        {item.status !== 'ok' && <span style={{ color: '#475569', fontSize: 10, textDecoration: 'underline' }}>{hcItemAberto === diagKey ? '▲ fechar' : '▼ diagnóstico'}</span>}
+                        <span style={{ color: '#475569', marginLeft: 'auto' }}>{item.ms}ms</span>
+                      </div>
+                      {hcItemAberto === diagKey && (() => {
+                        const diag = diagnosticos[item.nome] || { causa: item.detalhe, acoes: [] };
+                        return (
+                          <div style={{ background: '#1e293b', borderRadius: 6, padding: '8px 10px', margin: '4px 0 4px 20px' }}>
+                            <div style={{ fontSize: 11, color: '#fbbf24', fontWeight: 700, marginBottom: 4 }}>Causa provável:</div>
+                            <div style={{ fontSize: 11, color: '#cbd5e1', marginBottom: 6 }}>{diag.causa}</div>
+                            {diag.acoes.length > 0 && <>
+                              <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 700, marginBottom: 4 }}>O que fazer:</div>
+                              {diag.acoes.map((a, k) => <div key={k} style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>• {a}</div>)}
+                            </>}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}

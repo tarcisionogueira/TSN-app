@@ -4,6 +4,39 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const DAILY_KEY = process.env.DAILY_API_KEY;
 const APP_URL = process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.APP_FROM_EMAIL || 'alertas@bidprobrasil.com.br';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
+
+async function enviarAlertaEmail(statusGeral, resumo, itens) {
+  if (!RESEND_API_KEY || statusGeral === 'ok') return;
+  const cor = statusGeral === 'erro' ? '#dc2626' : '#d97706';
+  const emoji = statusGeral === 'erro' ? '🔴' : '⚠️';
+  const linhas = itens
+    .filter(i => i.status !== 'ok')
+    .map(i => `<tr><td style="padding:8px;border-bottom:1px solid #f1f5f9;font-weight:600">${i.nome}</td><td style="padding:8px;border-bottom:1px solid #f1f5f9;color:${i.status==='erro'?'#dc2626':'#d97706'}">${i.status.toUpperCase()}</td><td style="padding:8px;border-bottom:1px solid #f1f5f9;color:#64748b">${i.detalhe}</td></tr>`)
+    .join('');
+  const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+    <div style="background:${cor};color:white;padding:20px;border-radius:8px 8px 0 0">
+      <h2 style="margin:0">${emoji} Health Check — ${statusGeral.toUpperCase()}</h2>
+      <p style="margin:8px 0 0;opacity:.9">${resumo}</p>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:20px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#f8fafc"><th style="padding:8px;text-align:left;color:#64748b;font-size:12px">VERIFICAÇÃO</th><th style="padding:8px;text-align:left;color:#64748b;font-size:12px">STATUS</th><th style="padding:8px;text-align:left;color:#64748b;font-size:12px">DETALHE</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f1f5f9">
+        <a href="${APP_URL}/#/admin" style="display:inline-block;background:#0D63DB;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:700">Ver no Admin →</a>
+      </div>
+    </div>
+  </div>`;
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM_EMAIL, to: ADMIN_EMAIL, subject: `${emoji} BidPro Health Check — ${statusGeral.toUpperCase()}`, html }),
+  });
+}
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -130,6 +163,9 @@ export default async function handler(req) {
     body: JSON.stringify({ status: statusGeral, resumo, itens, duracao_ms: Date.now() - inicio }),
     headers: { Prefer: 'return=minimal' },
   });
+
+  // ── Envia alerta por e-mail se há erro ou aviso ──
+  await enviarAlertaEmail(statusGeral, resumo, itens);
 
   return new Response(JSON.stringify({ status: statusGeral, resumo, itens, duracao_ms: Date.now() - inicio }), {
     status: 200,
