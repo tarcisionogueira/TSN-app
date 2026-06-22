@@ -3522,6 +3522,21 @@ function ScrapersTab() {
   const [running, setRunning] = useState(false);
   const [resultado, setResultado] = useState(null);
   const [erroMsg, setErroMsg] = useState('');
+  const [geocStatus, setGeocStatus] = React.useState(null);
+  const [geocLoading, setGeocLoading] = React.useState(false);
+
+  async function rodarGeocodificacao(limite = 50) {
+    setGeocLoading(true);
+    setGeocStatus(null);
+    try {
+      const res = await fetch('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite }) });
+      const data = await res.json();
+      setGeocStatus(data);
+    } catch (e) {
+      setGeocStatus({ error: e.message });
+    }
+    setGeocLoading(false);
+  }
 
   useEffect(() => {
     fetch('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
@@ -3582,6 +3597,50 @@ function ScrapersTab() {
         </button>
         <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>
           Pode levar até 60 segundos. Cobre todos os 27 estados.
+        </p>
+      </div>
+
+      {/* ── Geocodificação ── */}
+      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '24px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🗺️</div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111111', marginBottom: 4 }}>Geocodificação de Imóveis</div>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
+              Adiciona latitude/longitude aos imóveis sem coordenadas via Nominatim (OpenStreetMap).
+              Necessário para exibir imóveis no mapa. Processa 50 por vez respeitando o limite de 1 req/seg.
+            </p>
+          </div>
+        </div>
+        {geocStatus && !geocStatus.error && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
+            ✅ <strong>{geocStatus.processados}</strong> imóveis processados —
+            <strong> {geocStatus.geocodificados}</strong> com coordenadas · <strong>{geocStatus.falhas}</strong> sem resultado
+          </div>
+        )}
+        {geocStatus?.error && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#dc2626' }}>
+            ⚠️ {geocStatus.error}
+          </div>
+        )}
+        {geocStatus?.msg && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
+            ✅ {geocStatus.msg}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => rodarGeocodificacao(50)} disabled={geocLoading}
+            style={{ padding: '11px 24px', background: geocLoading ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: geocLoading ? 'default' : 'pointer' }}>
+            {geocLoading ? '⏳ Geocodificando...' : '📍 Geocodificar 50 imóveis'}
+          </button>
+          <button onClick={() => rodarGeocodificacao(200)} disabled={geocLoading}
+            style={{ padding: '11px 24px', background: geocLoading ? '#94a3b8' : '#084BA6', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: geocLoading ? 'default' : 'pointer' }}>
+            {geocLoading ? '⏳ Geocodificando...' : '📍 Geocodificar 200 imóveis'}
+          </button>
+        </div>
+        <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>
+          50 imóveis ≈ 1 min · 200 imóveis ≈ 4 min. Roda automaticamente toda noite às 3h.
+          Marco de troca para Google Maps: 5.000 imóveis ativos ou 500 novos/mês.
         </p>
       </div>
 

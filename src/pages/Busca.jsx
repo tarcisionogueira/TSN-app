@@ -70,6 +70,107 @@ const PLANO_LABELS = {
   assessorado: 'Assessorado', clube: 'Clube de Negócios',
 };
 
+const COR_TIPO = {
+  apartamento: '#0D63DB', casa: '#059669', terreno: '#d97706',
+  comercial: '#7c3aed', sala: '#7c3aed', galpao: '#dc2626',
+  rural: '#065f46', vaga: '#64748b', imovel: '#111111',
+};
+
+function svgPin(cor) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="33" viewBox="0 0 24 36">
+      <path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="${cor}" stroke="white" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="5" fill="white"/>
+    </svg>`
+  )}`;
+}
+
+function MapaEmbutido({ filtros, resultados, nav }) {
+  const mapContainerRef = useRef(null);
+  const leafletRef = useRef(null);
+  const markersRef = useRef(null);
+  const [imoveisMapa, setImoveisMapa] = React.useState([]);
+
+  // Carrega imóveis com coordenadas usando os filtros ativos
+  useEffect(() => {
+    async function carregar() {
+      let q = supabase
+        .from('imoveis_leilao')
+        .select('id, titulo, cidade, estado, tipo, valor_minimo, latitude, longitude, link_foto')
+        .eq('ativo', true)
+        .not('latitude', 'is', null)
+        .neq('latitude', 0)
+        .limit(2000);
+      if (filtros.tipo) q = q.eq('tipo', filtros.tipo);
+      if (filtros.estado) q = q.eq('estado', filtros.estado);
+      if (filtros.cidades?.length) q = q.in('cidade', filtros.cidades);
+      if (filtros.valorMin) q = q.gte('valor_minimo', filtros.valorMin);
+      if (filtros.valorMax) q = q.lte('valor_minimo', filtros.valorMax);
+      const { data } = await q;
+      setImoveisMapa(data || []);
+    }
+    carregar();
+  }, [filtros]);
+
+  // Inicializa mapa
+  useEffect(() => {
+    if (!mapContainerRef.current || leafletRef.current) return;
+    import('leaflet').then(L => {
+      delete L.Icon.Default.prototype._getIconUrl;
+      leafletRef.current = L.map(mapContainerRef.current, { center: [-15.8, -47.9], zoom: 5 });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 18,
+      }).addTo(leafletRef.current);
+      markersRef.current = L.layerGroup().addTo(leafletRef.current);
+    });
+    return () => { if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null; } };
+  }, []);
+
+  // Atualiza pins
+  useEffect(() => {
+    if (!leafletRef.current || !markersRef.current) return;
+    import('leaflet').then(L => {
+      markersRef.current.clearLayers();
+      imoveisMapa.forEach(im => {
+        if (!im.latitude || !im.longitude) return;
+        const cor = COR_TIPO[im.tipo] || '#111111';
+        const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [22, 33], iconAnchor: [11, 33], popupAnchor: [0, -33] });
+        const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+        const marker = L.marker([im.latitude, im.longitude], { icon });
+        marker.bindPopup(`
+          <div style="font-family:Inter,sans-serif;min-width:180px">
+            ${im.link_foto ? `<img src="${im.link_foto}" style="width:100%;height:90px;object-fit:cover;border-radius:6px;margin-bottom:8px"/>` : ''}
+            <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px">${im.titulo || 'Imóvel'}</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:5px">${im.cidade} — ${im.estado}</div>
+            <div style="font-size:13px;font-weight:800;color:#0D63DB;margin-bottom:8px">${fmt(im.valor_minimo)}</div>
+            <button onclick="window.location.hash='/imovel/${im.id}'" style="width:100%;padding:5px;background:#0D63DB;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:700;font-size:11px">Ver detalhes →</button>
+          </div>
+        `);
+        markersRef.current.addLayer(marker);
+      });
+    });
+  }, [imoveisMapa]);
+
+  const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+
+  return (
+    <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: 'calc(100vh - 220px)', minHeight: 400, position: 'relative' }}>
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      {imoveisMapa.length === 0 && (
+        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '6px 16px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#64748b' }}>
+          Carregando imóveis no mapa…
+        </div>
+      )}
+      {imoveisMapa.length > 0 && (
+        <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, background: 'white', padding: '5px 14px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>
+          {imoveisMapa.length} imóveis com localização
+        </div>
+      )}
+      <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+    </div>
+  );
+}
+
 export default function Busca() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
@@ -107,6 +208,10 @@ export default function Busca() {
   const [raioAtivo, setRaioAtivo] = useState(false);
   const [centroRaio, setCentroRaio] = useState(null); // { lat, lng, label }
   const [distancias, setDistancias] = useState({}); // id -> km
+  const [vista, setVista] = useState('lista'); // 'lista' | 'mapa'
+  const [imoveisMapa, setImoveisMapa] = useState([]);
+  const mapRef = useRef(null);
+  const leafletMapRef = useRef(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -680,11 +785,12 @@ export default function Busca() {
             </div>
             {/* Alternador Lista / Mapa */}
             <div style={{ display:'flex', background:'#f1f5f9', borderRadius:10, padding:3, gap:2 }}>
-              <button style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'default', background:'white', color:'#111111', boxShadow:'0 1px 3px rgba(0,0,0,0.1)' }}>
+              <button onClick={() => setVista('lista')}
+                style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='lista' ? 'white' : 'transparent', color: vista==='lista' ? '#111111' : '#64748b', boxShadow: vista==='lista' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 ☰ Lista
               </button>
-              <button onClick={() => window.location.hash = '/mapa'}
-                style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background:'transparent', color:'#64748b' }}>
+              <button onClick={() => setVista('mapa')}
+                style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='mapa' ? 'white' : 'transparent', color: vista==='mapa' ? '#111111' : '#64748b', boxShadow: vista==='mapa' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 🗺️ Mapa
               </button>
             </div>
@@ -753,8 +859,13 @@ export default function Busca() {
           </div>
         )}
 
+        {/* Vista Mapa embutido */}
+        {vista === 'mapa' && (
+          <MapaEmbutido filtros={filtros} resultados={resultadosFiltrados} nav={nav} />
+        )}
+
         {/* Resultados em cards */}
-        {!loading && resultadosFiltrados.length>0 && (
+        {vista === 'lista' && !loading && resultadosFiltrados.length>0 && (
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap:12 }}>
             {resultadosPagina.map((im)=>{
               const desc = desconto(im);
