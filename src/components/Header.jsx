@@ -151,6 +151,7 @@ export default function Header() {
   ];
   const linksPrivados = [
     { path: '/buscar', label: 'Leilões', icon: Search, tourId: 'leiloes' },
+    { path: '/mapa', label: 'Mapa', icon: Eye },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
     ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];

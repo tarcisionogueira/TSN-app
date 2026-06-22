@@ -252,6 +252,12 @@ export default async function handler(req, res) {
       totalProcessados += imoveis.length;
       todosImoveis.push(...imoveis);
       estadosOk.push(uf);
+      // Dispara geocodificação em background para novos imóveis (sem aguardar)
+      fetch(`${process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app'}/api/geocodificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limite: Math.min(imoveis.length, 50) }),
+      }).catch(() => {});
     } catch (e) {
       estadosErro.push(uf);
       erros.push({ uf, erro: e.message });

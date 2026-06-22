@@ -28,6 +28,7 @@ import Login from './pages/Login';
 import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
 import AdminFinanceiro from './pages/AdminFinanceiro';
+import MapaImoveis from './pages/MapaImoveis';
 import Promo from './pages/Promo';
 import Convite from './pages/Convite';
 import ConviteEquipe from './pages/ConviteEquipe';
@@ -176,6 +177,7 @@ function MainLayout() {
           <Route path="/planos" element={<Planos />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<PrivateRoute><ImovelDetalhe /></PrivateRoute>} />
+          <Route path="/mapa" element={<PrivateRoute><MapaImoveis /></PrivateRoute>} />
           <Route path="/analise" element={<PrivateRoute><Analise /></PrivateRoute>} />
           <Route path="/caso" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/caso/:id" element={<PrivateRoute><Caso /></PrivateRoute>} />
