@@ -21,6 +21,25 @@ function inferirTipo(descricao) {
   return 'imovel';
 }
 
+/**
+ * Classifica forma_pagamento para imóveis da Caixa Econômica Federal.
+ * CEF não disponibiliza campo explícito de forma de pagamento no CSV/API.
+ * Critérios baseados nas regras publicadas pela CEF:
+ *   - Venda Direta: aceita financiamento bancário e FGTS → 'financiado'
+ *   - 2ª Praça: CEF normalmente aceita FGTS como recurso → 'financiado'
+ *   - 1ª Praça / Licitação Aberta: exige recurso próprio → 'a_vista'
+ *
+ * ⚠️ Marco para futura integração com leiloeiros externos:
+ * Quando integrar Superbid, eLeilões, Mega Leilões etc., usar
+ * normalizarFormaPagamento() de src/data/pagamento.js (não disponível em Edge Functions).
+ * Replicar a lógica da função aqui ou criar api/_pagamento-utils.js compartilhado.
+ */
+function inferirFormaPagamentoCaixa(modalidadeNormalizada) {
+  if (modalidadeNormalizada === 'venda_direta') return 'financiado';
+  if (modalidadeNormalizada === 'segundo_leilao') return 'financiado';
+  return 'a_vista';
+}
+
 function normalizarModalidade(modalidade) {
   const m = (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   if (m.includes('1') && (m.includes('praca') || m.includes('leilao'))) return 'primeiro_leilao';
@@ -133,7 +152,7 @@ function csvToImoveis(csv, uf) {
       link_foto: linkFoto.trim() || null,
       descricao: descricao.trim() || null,
       titulo: `${descricao.trim().slice(0, 80) || 'Imóvel'} — ${cidade.trim()}`,
-      forma_pagamento: normalizarModalidade(modalidade) === 'venda_direta' ? 'financiado' : 'a_vista',
+      forma_pagamento: inferirFormaPagamentoCaixa(normalizarModalidade(modalidade)),
       leiloeiro: 'Caixa Econômica Federal',
       ativo: true,
       atualizado_em: new Date().toISOString(),

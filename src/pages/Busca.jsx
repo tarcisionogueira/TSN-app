@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
+import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoBadge } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -113,8 +114,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
       if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
       // Pagamento: OR interno entre opções (ANDado com cidades via filtro separado)
       if (filtros.pagamento?.length > 0) {
-        const PAGAMENTO_DB_MAP = { aVista: ['a_vista','aVista','À Vista'], financiado: ['financiado','Financiado'], hipotecado: ['hipotecado','Hipotecado'] };
-        const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_DB_MAP[v] || [v]);
+        const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_FILTRO_DB[v] || [v]);
         q = q.or(dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(','));
       }
       const { data } = await q;
@@ -279,8 +279,8 @@ export default function Busca() {
   const toggleSelecionado = (id) => setSelecionados(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
   const isSelecionado = (id) => selecionados.includes(id);
 
-  // Mapeamento: valor do checkbox → valor(es) no banco
-  const PAGAMENTO_DB = { aVista: ['a_vista','aVista','À Vista'], financiado: ['financiado','Financiado'], hipotecado: ['hipotecado','Hipotecado'] };
+  // Mapeamento centralizado em src/data/pagamento.js
+  const PAGAMENTO_DB = PAGAMENTO_FILTRO_DB;
 
   const limparFiltros = () => {
     setFiltros(FILTROS_INICIAL);
@@ -779,10 +779,14 @@ export default function Busca() {
               </div>
               <div>
                 <label style={lbl}>Forma de Pagamento</label>
-                {[['aVista','À Vista'],['financiado','Financiado'],['hipotecado','Hipotecado']].map(([v,l])=>(
+                {[['aVista','À Vista'],['financiado','Financiado / FGTS'],['hipotecado','Hipotecado']].map(([v,l])=>(
                   <label key={v} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:12, color:'#334155', marginBottom:5 }}>
                     <input type="checkbox" checked={filtros.pagamento.includes(v)} onChange={()=>togglePagamento(v)} style={{ width:14, height:14 }}/>
-                    {l}
+                    <span>
+                      {l}
+                      {v === 'financiado' && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:4 }}>(parcelado, FGTS, consórcio)</span>}
+                      {v === 'hipotecado' && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:4 }}>(assume ônus)</span>}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -1002,11 +1006,15 @@ export default function Busca() {
                     </div>
 
                     <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
-                      {(im.pagamento||[]).map(p=>(
-                        <span key={p} style={{ fontSize:9, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8, fontWeight:600 }}>
-                          {p==='a_vista'||p==='aVista'?'À Vista':p==='financiado'?'Financiado':'Hipotecado'}
-                        </span>
-                      ))}
+                      {(im.pagamento||[]).filter(Boolean).map(p => {
+                        const badge = pagamentoBadge(p);
+                        if (!badge) return null;
+                        return (
+                          <span key={p} style={{ fontSize:9, background: badge.bg, color: badge.color, padding:'1px 6px', borderRadius:8, fontWeight:600 }}>
+                            {badge.label}
+                          </span>
+                        );
+                      })}
                       {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{im.areaM2}m²</span>}
                       <span style={{ fontSize:9, color:'#94a3b8' }}>{fmtData(im.dataLeilao, im.modalidade)}</span>
                     </div>
