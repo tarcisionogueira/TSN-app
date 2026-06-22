@@ -218,6 +218,14 @@ export default function Busca() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
   const { role, user } = useAuth();
+  // Lê filtros pré-ativados via URL (usados no deep-link do email de alerta)
+  const loc = typeof window !== 'undefined' ? window.location.hash : '';
+  const _urlParams = React.useMemo(() => {
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const qIdx = hash.indexOf('?');
+    if (qIdx === -1) return {};
+    return Object.fromEntries(new URLSearchParams(hash.slice(qIdx + 1)));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const plano = role || 'explorador';
   const canSite    = user && ROLES_SITE.includes(role);
   const canAnalise = user && ROLES_ANALISE.includes(role);
@@ -229,7 +237,21 @@ export default function Busca() {
       .then(({ data }) => { if (data) setAnalisesBonus(data.analises_bonus || 0); });
   }, [role, user?.id]);
   const FILTROS_INICIAL = { tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] };
-  const [filtros, setFiltros] = useState(FILTROS_INICIAL);
+  // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
+  const filtrosFromUrl = React.useMemo(() => {
+    if (!_urlParams.estado) return null;
+    return {
+      tipo: _urlParams.tipo || '',
+      estado: _urlParams.estado || '',
+      cidades: _urlParams.cidades ? _urlParams.cidades.split(',').filter(Boolean) : [],
+      raioKm: 0,
+      valorMin: _urlParams.valorMin || '',
+      valorMax: _urlParams.valorMax || '',
+      modalidade: _urlParams.modalidade || '',
+      pagamento: _urlParams.pagamento ? _urlParams.pagamento.split(',').filter(Boolean) : [],
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [filtros, setFiltros] = useState(filtrosFromUrl || FILTROS_INICIAL);
   const [filtrosSalvos, setFiltrosSalvos] = useState([]);
   const [nomeFiltro, setNomeFiltro] = useState('');
   const [showSalvarModal, setShowSalvarModal] = useState(false);
@@ -273,6 +295,19 @@ export default function Busca() {
     supabase.from('filtros_salvos').select('*').eq('user_id', user.id).order('criado_em', { ascending: false })
       .then(({ data }) => setFiltrosSalvos(data || []));
   }, [user?.id]);
+
+  // Deep-link do email: ao carregar com filtros na URL, dispara busca automática
+  const deepLinkDisparado = useRef(false);
+  useEffect(() => {
+    if (!filtrosFromUrl || deepLinkDisparado.current) return;
+    deepLinkDisparado.current = true;
+    const timer = setTimeout(() => {
+      buscarPagina(1, filtrosFromUrl, sortBy, null, false, raioKmAtivo, null);
+      setFiltrosBusca(filtrosFromUrl);
+      setBuscaFeita(true);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filtrosFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const up = (name, val) => setFiltros(p => ({ ...p, [name]: val }));
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x=>x!==v) : [...filtros.pagamento, v]);
