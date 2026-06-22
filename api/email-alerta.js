@@ -34,7 +34,7 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl)
     judicial: 'Judicial', extrajudicial: 'Extrajudicial',
   };
   const PGTO_LABEL = {
-    financiado: '✓ Financiado / FGTS',
+    financiado: '✓ Financiado',
     hipotecado: '⚠ Hipotecado',
     a_vista: '💵 À Vista',
   };

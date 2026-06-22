@@ -814,14 +814,10 @@ export default function Busca() {
               </div>
               <div>
                 <label style={lbl}>Forma de Pagamento</label>
-                {[['aVista','À Vista'],['financiado','Financiado / FGTS'],['hipotecado','Hipotecado']].map(([v,l])=>(
+                {[['aVista','À Vista'],['financiado','Financiado'],['hipotecado','Hipotecado']].map(([v,l])=>(
                   <label key={v} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:12, color:'#334155', marginBottom:5 }}>
                     <input type="checkbox" checked={filtros.pagamento.includes(v)} onChange={()=>togglePagamento(v)} style={{ width:14, height:14 }}/>
-                    <span>
-                      {l}
-                      {v === 'financiado' && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:4 }}>(FGTS, parcelamento)</span>}
-                      {v === 'hipotecado' && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:4 }}>(assume dívida)</span>}
-                    </span>
+                    {l}
                   </label>
                 ))}
                 {filtros.pagamento.length > 0 && (

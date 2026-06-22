@@ -21,7 +21,7 @@
 // ─── Rótulos para exibição ────────────────────────────────────────────────────
 export const PAGAMENTO_LABEL = {
   a_vista:    'À Vista',
-  financiado: 'Financiado / FGTS',
+  financiado: 'Financiado',
   hipotecado: 'Hipotecado',
 };
 
@@ -94,5 +94,5 @@ export function pagamentoBadge(valor) {
     return { label: 'Hipotecado', bg: '#fef3c7', color: '#92400e' };
   }
   // financiado, parcelado, fgts, etc.
-  return { label: 'Financiado / FGTS', bg: '#dcfce7', color: '#166534' };
+  return { label: 'Financiado', bg: '#dcfce7', color: '#166534' };
 }
