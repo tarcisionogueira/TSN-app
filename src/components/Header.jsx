@@ -232,10 +232,8 @@ export default function Header() {
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 20px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 
         {/* Logo */}
-        <button onClick={() => nav('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ background: '#0D63DB', borderRadius: 8, padding: '6px 8px', display: 'flex' }}>
-            <Briefcase size={18} color="white" />
-          </div>
+        <button onClick={() => nav('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+          <img src="/logo.svg" alt="BidPro Brasil" style={{ height: 40 }} />
         </button>
 
         {/* Nav desktop */}

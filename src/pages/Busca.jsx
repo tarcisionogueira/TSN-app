@@ -101,11 +101,17 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
         .not('latitude', 'is', null)
         .neq('latitude', 0)
         .limit(2000);
-      if (filtros.tipo) q = q.eq('tipo', filtros.tipo);
+      if (filtros.tipo) q = q.in('tipo', [filtros.tipo, 'imovel']);
       if (filtros.estado) q = q.eq('estado', filtros.estado);
       if (filtros.cidades?.length) q = q.in('cidade', filtros.cidades);
-      if (filtros.valorMin) q = q.gte('valor_minimo', filtros.valorMin);
-      if (filtros.valorMax) q = q.lte('valor_minimo', filtros.valorMax);
+      if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
+      if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
+      if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
+      if (filtros.pagamento?.length > 0) {
+        const PAGAMENTO_DB_MAP = { aVista: ['a_vista','aVista','À Vista'], financiado: ['financiado','Financiado'], hipotecado: ['hipotecado','Hipotecado'] };
+        const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_DB_MAP[v] || [v]);
+        q = q.or(dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(','));
+      }
       const { data } = await q;
       const filtered = (data || []).filter(im => {
         if (!raioAtivo || !centroRaio || !im.latitude || !im.longitude) return true;
@@ -239,7 +245,6 @@ export default function Busca() {
     setRaioAtivo(false);
     setCentroRaio(null);
     setDistancias({});
-    setGeocodingErro('');
   };
 
   const geocodificarCidade = async (cidade, estado) => {
