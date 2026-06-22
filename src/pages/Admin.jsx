@@ -2566,8 +2566,12 @@ function DashboardTab() {
     async function loadAsaas() {
       try {
         const res = await fetch('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
-        if (res.ok) setAsaasDados(await res.json());
-      } catch (_) {}
+        const data = await res.json();
+        if (res.ok) setAsaasDados(data);
+        else setAsaasDados({ error: data?.error || 'Erro desconhecido' });
+      } catch (_) {
+        setAsaasDados({ error: 'Falha de conexão com Asaas' });
+      }
       setAsaasLoading(false);
     }
 
@@ -2821,6 +2825,10 @@ function DashboardTab() {
             <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
             {asaasLoading ? (
               <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
+            ) : asaasDados?.error ? (
+              <p style={{ fontSize: 13, color: '#f59e0b', background: '#fefce8', padding: '10px 14px', borderRadius: 8, margin: 0 }}>
+                ⚠️ {asaasDados.error}
+              </p>
             ) : asaasDados ? (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
@@ -2840,9 +2848,7 @@ function DashboardTab() {
                   Dados direto da API Asaas · atualizado agora
                 </div>
               </>
-            ) : (
-              <p style={{ fontSize: 13, color: '#dc2626' }}>Não foi possível carregar dados do Asaas. Verifique a chave ASAAS_API_KEY.</p>
-            )}
+            ) : null}
           </div>
 
           {/* Marco comercial */}
