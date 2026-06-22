@@ -134,21 +134,20 @@ export default function Busca() {
   };
 
   const geocodificarCidade = async (cidade, estado) => {
-    if (!cidade) return;
+    if (!cidade) return null;
     const query = estado ? `${cidade}, ${estado}, Brasil` : `${cidade}, Brasil`;
     try {
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`;
       const res = await fetch(url, { headers: { 'User-Agent': 'TSN-Ativos/1.0' } });
       const data = await res.json();
       if (data && data.length > 0) {
-        const { lat, lon } = data[0];
-        setCentroRaio({ lat: parseFloat(lat), lng: parseFloat(lon), label: cidade });
-      } else {
-        setCentroRaio(null);
+        const centro = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: cidade };
+        setCentroRaio(centro);
+        return centro;
       }
-    } catch {
-      setCentroRaio(null);
-    }
+    } catch {}
+    setCentroRaio(null);
+    return null;
   };
 
   const toggleRaio = () => {
@@ -263,20 +262,25 @@ export default function Busca() {
       // Apply radius filter client-side
       if (raioAtivoBusca && centro) {
         const novasDistancias = {};
-        mapeados = mapeados.filter(im => {
-          if (im.latitude == null || im.longitude == null) return false;
-          const dist = haversine(centro.lat, centro.lng, Number(im.latitude), Number(im.longitude));
-          if (dist <= raioKmBusca) {
-            novasDistancias[im.id] = Math.round(dist);
-            return true;
+        const comCoords = [];
+        const semCoords = [];
+        mapeados.forEach(im => {
+          if (im.latitude != null && im.longitude != null) {
+            const dist = haversine(centro.lat, centro.lng, Number(im.latitude), Number(im.longitude));
+            if (dist <= raioKmBusca) {
+              novasDistancias[im.id] = Math.round(dist);
+              comCoords.push(im);
+            }
+          } else {
+            // Sem coordenadas: inclui mesmo assim (já filtrado por cidade acima)
+            semCoords.push(im);
           }
-          return false;
         });
-        // Sort by distance after radius filter
-        mapeados.sort((a, b) => (novasDistancias[a.id] || 0) - (novasDistancias[b.id] || 0));
+        // Ordena por distância os que têm coords; sem coords vêm depois
+        comCoords.sort((a, b) => (novasDistancias[a.id] || 0) - (novasDistancias[b.id] || 0));
+        mapeados = [...comCoords, ...semCoords];
         setDistancias(novasDistancias);
         setTotalResultados(mapeados.length);
-        // Paginate client-side
         const offset = (paginaAlvo - 1) * POR_PAGINA;
         mapeados = mapeados.slice(offset, offset + POR_PAGINA);
       } else {
@@ -316,18 +320,20 @@ export default function Busca() {
   };
 
   const buscar = async () => {
+    if (!filtros.estado) { setErro('Selecione um estado para buscar.'); return; }
     if (raioAtivo && !filtros.cidades.length) {
       setErro('Selecione uma cidade para usar a busca por raio.');
       return;
     }
-    if (raioAtivo && filtros.cidades[0] && !centroRaio) {
-      await geocodificarCidade(filtros.cidades[0], filtros.estado);
-    }
-    if (!filtros.estado) { setErro('Selecione um estado para buscar.'); return; }
     setErro('');
     setPagina(1);
     saveBuscaRecente({ ...filtros, cidade: filtros.cidades.join(', ') });
-    buscarPagina(1, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo);
+    // Geocodifica cidade agora e passa coords diretamente (evita estado desatualizado)
+    let centro = centroRaio;
+    if (raioAtivo && filtros.cidades[0]) {
+      centro = await geocodificarCidade(filtros.cidades[0], filtros.estado);
+    }
+    buscarPagina(1, filtros, sortBy, centro, raioAtivo, raioKmAtivo);
   };
 
   const imgUrlCaixa = (im) => {
