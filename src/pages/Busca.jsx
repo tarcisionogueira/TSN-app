@@ -90,10 +90,13 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
   const leafletRef = useRef(null);
   const markersRef = useRef(null);
   const [imoveisMapa, setImoveisMapa] = React.useState([]);
+  const [mapReady, setMapReady] = React.useState(false);
+  const [carregando, setCarregando] = React.useState(true);
 
   // Carrega imóveis com coordenadas usando os filtros ativos
   useEffect(() => {
     async function carregar() {
+      setCarregando(true);
       let q = supabase
         .from('imoveis_leilao')
         .select('id, titulo, cidade, estado, tipo, valor_minimo, latitude, longitude, link_foto')
@@ -118,6 +121,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
         return haversine(centroRaio.lat, centroRaio.lng, im.latitude, im.longitude) <= raioKm;
       });
       setImoveisMapa(filtered);
+      setCarregando(false);
     }
     carregar();
   }, [filtros, centroRaio, raioAtivo, raioKm]);
@@ -132,15 +136,20 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 18,
       }).addTo(leafletRef.current);
       markersRef.current = L.layerGroup().addTo(leafletRef.current);
+      setMapReady(true);
     });
-    return () => { if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null; } };
+    return () => {
+      if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null; }
+      setMapReady(false);
+    };
   }, []);
 
-  // Atualiza pins
+  // Atualiza pins — depende de mapReady para garantir que o mapa está pronto
   useEffect(() => {
-    if (!leafletRef.current || !markersRef.current) return;
+    if (!mapReady || !leafletRef.current || !markersRef.current) return;
     import('leaflet').then(L => {
       markersRef.current.clearLayers();
+      const bounds = [];
       imoveisMapa.forEach(im => {
         if (!im.latitude || !im.longitude) return;
         const cor = COR_TIPO[im.tipo] || '#111111';
@@ -157,23 +166,45 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
           </div>
         `);
         markersRef.current.addLayer(marker);
+        bounds.push([im.latitude, im.longitude]);
       });
-    });
-  }, [imoveisMapa]);
 
-  const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+      // Auto-zoom: raio ativo → centraliza no centro com zoom proporcional ao raio
+      if (raioAtivo && centroRaio) {
+        const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
+        leafletRef.current.setView([centroRaio.lat, centroRaio.lng], zoom);
+      } else if (centroRaio) {
+        leafletRef.current.setView([centroRaio.lat, centroRaio.lng], 11);
+      } else if (bounds.length > 0) {
+        // Ajusta para mostrar todos os pins
+        leafletRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+      }
+    });
+  }, [imoveisMapa, mapReady]);
+
+  // Zoom quando centroRaio muda (ex: cidade selecionada sem busca)
+  useEffect(() => {
+    if (!mapReady || !leafletRef.current || !centroRaio) return;
+    const zoom = raioAtivo ? (raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8) : 11;
+    leafletRef.current.flyTo([centroRaio.lat, centroRaio.lng], zoom, { duration: 1 });
+  }, [centroRaio, raioAtivo, raioKm, mapReady]);
 
   return (
     <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: 'calc(100vh - 220px)', minHeight: 400, position: 'relative' }}>
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-      {imoveisMapa.length === 0 && (
+      {carregando && (
         <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '6px 16px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#64748b' }}>
-          Carregando imóveis no mapa…
+          Carregando imóveis…
         </div>
       )}
-      {imoveisMapa.length > 0 && (
+      {!carregando && imoveisMapa.length > 0 && (
         <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, background: 'white', padding: '5px 14px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>
           {imoveisMapa.length} imóveis com localização
+        </div>
+      )}
+      {!carregando && imoveisMapa.length === 0 && (
+        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '6px 16px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#94a3b8' }}>
+          Nenhum imóvel com localização nesta área
         </div>
       )}
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
@@ -218,7 +249,14 @@ export default function Busca() {
   const [raioAtivo, setRaioAtivo] = useState(false);
   const [centroRaio, setCentroRaio] = useState(null); // { lat, lng, label }
   const [distancias, setDistancias] = useState({}); // id -> km
-  const [vista, setVista] = useState('lista'); // 'lista' | 'mapa'
+  const [vista, setVista] = useState('lista');
+
+  // Ao trocar para mapa com cidade selecionada, geocodifica para auto-zoom
+  useEffect(() => {
+    if (vista === 'mapa' && filtros.cidades[0] && !centroRaio) {
+      geocodificarCidade(filtros.cidades[0], filtros.estado);
+    }
+  }, [vista]); // eslint-disable-line react-hooks/exhaustive-deps
   const [imoveisMapa, setImoveisMapa] = useState([]);
   const mapRef = useRef(null);
   const leafletMapRef = useRef(null);
