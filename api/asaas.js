@@ -276,8 +276,8 @@ export default async function handler(req, res) {
       const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
       const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
       const [balance, statsMes] = await Promise.allSettled([
-        asaasGet('/finances/balance'),
-        asaasGet(`/finances/statistics?startDate=${inicioMes}&endDate=${fimMes}`),
+        asaasGet('/finance/balance'),
+        asaasGet(`/finance/statistics?startDate=${inicioMes}&endDate=${fimMes}`),
       ]);
       if (balance.status === 'rejected') throw new Error(balance.reason?.message || 'Erro ao buscar saldo');
       return res.status(200).json({
