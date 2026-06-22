@@ -286,6 +286,26 @@ export default async function handler(req, res) {
       });
     }
 
+    if (action === 'extrato') {
+      const hoje = new Date();
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+      const data = await asaasGet(`/payments?status=RECEIVED&paymentDate[ge]=${inicioMes}&paymentDate[le]=${fimMes}&limit=50`);
+      return res.status(200).json(data);
+    }
+
+    if (action === 'transferir_pix') {
+      const { chavePix, tipoChave, valor, descricao } = body;
+      if (!chavePix || !valor) return res.status(400).json({ error: 'Chave PIX e valor são obrigatórios' });
+      const data = await asaasPost('/transfers', {
+        value: valor,
+        pixAddressKey: chavePix,
+        pixAddressKeyType: tipoChave || 'CPF',
+        description: descricao || 'Transferência BidPro Brasil',
+      });
+      return res.status(200).json(data);
+    }
+
     return res.status(400).json({ error: 'Ação inválida' });
   } catch (err) {
     console.error('Asaas error:', err.message);

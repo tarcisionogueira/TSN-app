@@ -26,6 +26,7 @@ import Planos from './pages/Planos';
 import Login from './pages/Login';
 import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
+import AdminFinanceiro from './pages/AdminFinanceiro';
 import Promo from './pages/Promo';
 import Convite from './pages/Convite';
 import ConviteEquipe from './pages/ConviteEquipe';
@@ -203,6 +204,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/financeiro" element={<AdminFinanceiro />} />
           <Route path="/promo/:codigo" element={<Promo />} />
           <Route path="/convite/:codigo" element={<Convite />} />
           <Route path="/convite-equipe/:token" element={<ConviteEquipe />} />

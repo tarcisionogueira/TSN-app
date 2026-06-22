@@ -2844,8 +2844,9 @@ function DashboardTab() {
                     </div>
                   ))}
                 </div>
-                <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>
-                  Dados direto da API Asaas · atualizado agora
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Dados direto da API Asaas · atualizado agora</div>
+                  <a href="/#/admin/financeiro" style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', textDecoration: 'none' }}>Ver detalhes →</a>
                 </div>
               </>
             ) : null}
