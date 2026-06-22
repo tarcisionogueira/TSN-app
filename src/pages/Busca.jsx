@@ -692,6 +692,10 @@ export default function Busca() {
                 <ArrowRight size={13}/> Analisar imóvel selecionado
               </button>
             )}
+            <button onClick={() => window.location.hash = '/mapa'}
+              style={{ padding:'7px 12px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, fontSize:12, fontWeight:700, color:'#0D63DB', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+              🗺️ Ver no Mapa
+            </button>
             {buscaFeita&&!loading && (
               <button onClick={() => buscarPagina(pagina, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo)}
                 style={{ padding:'7px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
