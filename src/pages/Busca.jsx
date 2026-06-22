@@ -104,12 +104,14 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
         .not('latitude', 'is', null)
         .neq('latitude', 0)
         .limit(2000);
-      if (filtros.tipo) q = q.in('tipo', [filtros.tipo, 'imovel']);
       if (filtros.estado) q = q.eq('estado', filtros.estado);
-      if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
+      if (filtros.tipo) q = q.in('tipo', [filtros.tipo, 'imovel']);
+      if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
       if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
       if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
-      if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
+      // Cidades: OR interno entre cidades (ANDado com restante via filtro separado)
+      if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
+      // Pagamento: OR interno entre opções (ANDado com cidades via filtro separado)
       if (filtros.pagamento?.length > 0) {
         const PAGAMENTO_DB_MAP = { aVista: ['a_vista','aVista','À Vista'], financiado: ['financiado','Financiado'], hipotecado: ['hipotecado','Hipotecado'] };
         const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_DB_MAP[v] || [v]);
@@ -247,19 +249,24 @@ export default function Busca() {
   // Radius search state
   const [raioKmAtivo, setRaioKmAtivo] = useState(50);
   const [raioAtivo, setRaioAtivo] = useState(false);
-  const [centroRaio, setCentroRaio] = useState(null); // { lat, lng, label }
-  const [distancias, setDistancias] = useState({}); // id -> km
+  const [centroRaio, setCentroRaio] = useState(null);
+  const [distancias, setDistancias] = useState({});
   const [vista, setVista] = useState('lista');
+
+  // Snapshot dos filtros/raio no momento do último clique em Buscar
+  // MapaEmbutido usa este snapshot para garantir consistência com a lista
+  const [filtrosBusca, setFiltrosBusca] = useState(null);
+  const [centroBusca, setCentroBusca] = useState(null);
+  const [raioAtivoBusca, setRaioAtivoBusca] = useState(false);
+  const [raioKmBusca, setRaioKmBusca] = useState(50);
 
   // Ao trocar para mapa com cidade selecionada, geocodifica para auto-zoom
   useEffect(() => {
-    if (vista === 'mapa' && filtros.cidades[0] && !centroRaio) {
-      geocodificarCidade(filtros.cidades[0], filtros.estado);
+    if (vista === 'mapa' && filtrosBusca?.cidades?.[0] && !centroBusca) {
+      geocodificarCidade(filtrosBusca.cidades[0], filtrosBusca.estado)
+        .then(c => setCentroBusca(c));
     }
   }, [vista]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [imoveisMapa, setImoveisMapa] = useState([]);
-  const mapRef = useRef(null);
-  const leafletMapRef = useRef(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -283,6 +290,13 @@ export default function Busca() {
     setRaioAtivo(false);
     setCentroRaio(null);
     setDistancias({});
+    setResultados([]);
+    setTotalResultados(0);
+    setBuscaFeita(false);
+    setErro('');
+    setFiltrosBusca(null);
+    setCentroBusca(null);
+    setRaioAtivoBusca(false);
   };
 
   const geocodificarCidade = async (cidade, estado) => {
@@ -360,20 +374,19 @@ export default function Busca() {
     const buildQuery = (base) => {
       let q = base.eq('ativo', true);
       if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
-      // cidadesRaio: list of cities within the radius (from Overpass geocoding)
-      const cidadesFiltro = cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null);
-      if (cidadesFiltro?.length > 0) {
-        const orParts = cidadesFiltro.map(c => `cidade.ilike.${c}`).join(',');
-        q = q.or(orParts);
-      }
       if (filtrosAtivos.tipo) q = q.in('tipo', [filtrosAtivos.tipo, 'imovel']);
       if (filtrosAtivos.modalidade) q = q.eq('modalidade', filtrosAtivos.modalidade);
       if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')));
       if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')));
+      // Cidades: OR interno entre cidades, mas ANDado com os demais filtros via filtro separado
+      const cidadesFiltro = cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null);
+      if (cidadesFiltro?.length > 0) {
+        q = q.or(cidadesFiltro.map(c => `cidade.ilike.${c}`).join(','));
+      }
+      // Pagamento: OR interno entre opções — mantido como filtro separado (ANDado com cidades acima)
       if (filtrosAtivos.pagamento?.length > 0) {
         const dbVals = filtrosAtivos.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]);
-        const orParts = dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(',');
-        q = q.or(orParts);
+        q = q.or(dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(','));
       }
       return q;
     };
@@ -462,7 +475,7 @@ export default function Busca() {
         const sid = sessionStorage.getItem('tsn_session_id') || (() => { const s = Math.random().toString(36).slice(2); sessionStorage.setItem('tsn_session_id', s); return s; })();
         supabase.from('busca_historico').insert({
           user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos,
-          resultados_count: count || 0, cidade: filtrosAtivos.cidades?.join(', ') || null,
+          resultados_count: totalResultados || 0, cidade: filtrosAtivos.cidades?.join(', ') || null,
           estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipo || null,
           valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
           valor_max: filtrosAtivos.valorMax ? Number(filtrosAtivos.valorMax) : null,
@@ -502,21 +515,27 @@ export default function Busca() {
 
     if (raioAtivo && filtros.cidades[0]) {
       setLoading(true);
-      // 1. Geocodifica cidade centro
       centro = await geocodificarCidade(filtros.cidades[0], filtros.estado);
       if (centro) {
-        // 2. Busca todas as cidades do estado com coordenadas (Overpass, cached)
         const todasCidades = await getCidadesEstadoComCoords(filtros.estado);
-        // 3. Filtra as que estão dentro do raio
         cidadesNaArea = todasCidades
           .filter(c => haversine(centro.lat, centro.lng, c.lat, c.lng) <= raioKmAtivo)
           .map(c => c.nome);
-        // Garante que a cidade centro está incluída
         if (!cidadesNaArea.some(c => c.toLowerCase() === filtros.cidades[0].toLowerCase())) {
           cidadesNaArea.push(filtros.cidades[0]);
         }
       }
+    } else if (!centroRaio && filtros.cidades[0]) {
+      // Geocodifica para auto-zoom no mapa mesmo sem raio
+      geocodificarCidade(filtros.cidades[0], filtros.estado).then(c => setCentroBusca(c));
     }
+
+    // Salva snapshot dos filtros ativos no momento da busca
+    const filtrosSnapshot = { ...filtros };
+    setFiltrosBusca(filtrosSnapshot);
+    setCentroBusca(centro);
+    setRaioAtivoBusca(raioAtivo);
+    setRaioKmBusca(raioKmAtivo);
 
     buscarPagina(1, filtros, sortBy, centro, raioAtivo, raioKmAtivo, cidadesNaArea);
   };
@@ -906,9 +925,15 @@ export default function Busca() {
           </div>
         )}
 
-        {/* Vista Mapa embutido */}
-        {vista === 'mapa' && (
-          <MapaEmbutido filtros={filtros} resultados={resultadosFiltrados} nav={nav} centroRaio={centroRaio} raioKm={raioKmAtivo} raioAtivo={raioAtivo} />
+        {/* Vista Mapa embutido — usa snapshot dos filtros no momento da busca */}
+        {vista === 'mapa' && buscaFeita && filtrosBusca && (
+          <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} />
+        )}
+        {vista === 'mapa' && !buscaFeita && (
+          <div style={{ borderRadius:14, border:'1px solid #e2e8f0', height:'calc(100vh - 220px)', minHeight:400, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, background:'#f8fafc', color:'#94a3b8' }}>
+            <span style={{ fontSize:32 }}>🗺️</span>
+            <span style={{ fontSize:14, fontWeight:600 }}>Configure os filtros e clique em Buscar para ver os imóveis no mapa</span>
+          </div>
         )}
 
         {/* Resultados em cards */}
