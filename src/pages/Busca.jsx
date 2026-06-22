@@ -121,7 +121,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const { data } = await aplicarFiltros(
         supabase
           .from('imoveis_leilao')
-          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto')
+          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel')
           .not('latitude', 'is', null)
           .neq('latitude', 0)
           .limit(2000)
@@ -175,7 +175,14 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         const pgtoLabel = pgto === 'financiado' ? 'Financiado' : pgto === 'hipotecado' ? 'Hipotecado' : pgto === 'a_vista' ? 'À Vista' : null;
         const pgtoColor = pgto === 'financiado' ? '#16a34a' : pgto === 'hipotecado' ? '#92400e' : '#475569';
         const pgtoBg = pgto === 'financiado' ? '#dcfce7' : pgto === 'hipotecado' ? '#fef3c7' : '#f1f5f9';
-        marker.bindPopup(`
+
+        // Precisão da geocodificação
+        const nivel = im.geocod_nivel; // 'endereco' | 'bairro' | 'cidade' | null
+        const isAproximado = nivel && nivel !== 'endereco';
+        const nivelLabel = nivel === 'bairro' ? '📍 Bairro (±500m)' : nivel === 'cidade' ? '🏙️ Cidade (±2km)' : null;
+        const raioMetros = nivel === 'bairro' ? 500 : nivel === 'cidade' ? 2000 : 0;
+
+        const popupHTML = `
           <div style="font-family:Inter,sans-serif;min-width:190px;max-width:220px">
             ${im.link_foto ? `<img src="${im.link_foto}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>` : ''}
             <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${im.titulo || 'Imóvel'}</div>
@@ -183,12 +190,28 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
               ${desc ? `<span style="font-size:10px;font-weight:800;background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:20px">-${desc}%</span>` : ''}
               ${pgtoLabel ? `<span style="font-size:10px;font-weight:700;background:${pgtoBg};color:${pgtoColor};padding:1px 6px;border-radius:20px">${pgtoLabel}</span>` : ''}
+              ${nivelLabel ? `<span style="font-size:10px;font-weight:600;background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:20px">${nivelLabel}</span>` : ''}
             </div>
             <div style="font-size:15px;font-weight:900;color:#0D63DB;margin-bottom:8px">${fmt(im.valor_minimo)}</div>
             <button onclick="window.location.hash='/imovel/${im.id}'" style="width:100%;padding:7px;background:#0D63DB;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">Ver detalhes →</button>
-          </div>
-        `, { maxWidth: 240 });
+          </div>`;
+
+        marker.bindPopup(popupHTML, { maxWidth: 240 });
         markersRef.current.addLayer(marker);
+
+        // Círculo de raio para localização aproximada
+        if (isAproximado && raioMetros > 0) {
+          const circle = L.circle([im.latitude, im.longitude], {
+            radius: raioMetros,
+            color: '#0D63DB',
+            fillColor: '#0D63DB',
+            fillOpacity: 0.08,
+            weight: 1.5,
+            dashArray: '4 4',
+          });
+          circle.bindPopup(popupHTML, { maxWidth: 240 });
+          markersRef.current.addLayer(circle);
+        }
         bounds.push([im.latitude, im.longitude]);
       });
 
