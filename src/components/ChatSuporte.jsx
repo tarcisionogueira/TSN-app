@@ -233,7 +233,7 @@ export default function ChatSuporte() {
   const fmtHora = d => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   const AvatarIA = () => (
-    <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+    <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#0D63DB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       <Bot size={11} color="white" />
     </div>
   );
@@ -245,7 +245,7 @@ export default function ChatSuporte() {
       {/* Botão flutuante */}
       {!isOpen && (
         <button onClick={() => setIsOpen(true)} title="Suporte / Ajuda"
-          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, height: 48, padding: '0 20px 0 16px', borderRadius: 999, background: 'linear-gradient(135deg,#1d4ed8,#2563eb)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(37,99,235,0.45)', transition: 'transform 0.15s, box-shadow 0.15s' }}
+          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, height: 48, padding: '0 20px 0 16px', borderRadius: 999, background: 'linear-gradient(135deg,#084BA6,#0D63DB)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(37,99,235,0.45)', transition: 'transform 0.15s, box-shadow 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(37,99,235,0.6)'; }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(37,99,235,0.45)'; }}>
           <MessageCircle size={20} />
@@ -265,7 +265,7 @@ export default function ChatSuporte() {
         }}>
 
           {/* Header */}
-          <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#2563eb)', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#0D63DB)', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Bot size={19} color="white" />
@@ -298,13 +298,13 @@ export default function ChatSuporte() {
 
           {carregando ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-              <Loader2 size={22} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
+              <Loader2 size={22} color="#0D63DB" style={{ animation: 'spin 1s linear infinite' }} />
             </div>
           ) : novoTicket ? (
             /* Formulário novo chamado */
             <div style={{ padding: 20, flexShrink: 0 }}>
               <p style={{ fontSize: 13, color: '#475569', margin: '0 0 14px', lineHeight: 1.6 }}>
-                Olá, <strong style={{ color: '#0f172a' }}>{nomeUsuario}</strong>! Como posso ajudar?
+                Olá, <strong style={{ color: '#111111' }}>{nomeUsuario}</strong>! Como posso ajudar?
               </p>
               <textarea
                 value={descricao} onChange={e => setDescricao(e.target.value)} onPaste={handlePaste}
@@ -331,7 +331,7 @@ export default function ChatSuporte() {
                   <Paperclip size={13} /> Anexar
                 </button>
                 <button onClick={criarChamado} disabled={!descricao.trim() || enviando}
-                  style={{ flex: 1, padding: '9px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: (!descricao.trim() || enviando) ? 'not-allowed' : 'pointer', opacity: (!descricao.trim() || enviando) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  style={{ flex: 1, padding: '9px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: (!descricao.trim() || enviando) ? 'not-allowed' : 'pointer', opacity: (!descricao.trim() || enviando) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                   {enviando ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />} Enviar
                 </button>
               </div>
@@ -356,11 +356,11 @@ export default function ChatSuporte() {
                     <div style={{
                       maxWidth: '85%', padding: '9px 13px',
                       borderRadius: m.autor_tipo === 'cliente' ? '14px 14px 4px 14px' : '4px 14px 14px 14px',
-                      background: m.autor_tipo === 'cliente' ? '#2563eb'
+                      background: m.autor_tipo === 'cliente' ? '#0D63DB'
                         : m.autor_tipo === 'atendente' ? '#f0fdf4'
                         : m.autor_nome === 'Sistema' ? '#fef3c7'
                         : '#f0f9ff',
-                      color: m.autor_tipo === 'cliente' ? 'white' : '#0f172a',
+                      color: m.autor_tipo === 'cliente' ? 'white' : '#111111',
                       fontSize: 13, lineHeight: 1.55,
                       border: m.autor_tipo !== 'cliente' ? `1px solid ${m.autor_tipo === 'atendente' ? '#86efac' : m.autor_nome === 'Sistema' ? '#fde68a' : '#bae6fd'}` : 'none',
                       fontStyle: m.autor_nome === 'Sistema' ? 'italic' : 'normal',
@@ -370,7 +370,7 @@ export default function ChatSuporte() {
                         <div style={{ marginTop: 6 }}>
                           {m.anexos.map((a, i) => a.tipo === 'imagem'
                             ? <img key={i} src={a.url} alt={a.nome} style={{ maxWidth: 160, display: 'block', marginTop: 4, borderRadius: 6 }} />
-                            : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 4, fontSize: 11, color: m.autor_tipo === 'cliente' ? 'rgba(255,255,255,0.85)' : '#2563eb', textDecoration: 'underline' }}>{a.nome}</a>
+                            : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 4, fontSize: 11, color: m.autor_tipo === 'cliente' ? 'rgba(255,255,255,0.85)' : '#0D63DB', textDecoration: 'underline' }}>{a.nome}</a>
                           )}
                         </div>
                       )}
@@ -449,7 +449,7 @@ export default function ChatSuporte() {
                     style={{ flex: 1, padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
                   />
                   <button onClick={enviarMensagem} disabled={(!texto.trim() && !anexos.length) || enviando}
-                    style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, padding: '9px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1, flexShrink: 0 }}>
+                    style={{ background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, padding: '9px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1, flexShrink: 0 }}>
                     {enviando ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />}
                   </button>
                   <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />

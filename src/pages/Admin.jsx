@@ -43,29 +43,29 @@ function InputBRL({ value, onChange, disabled, placeholder, style }) {
 
 const S = {
   page: { minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif" },
-  header: { background: '#0f172a', color: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 },
+  header: { background: '#111111', color: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 },
   headerTitle: { fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px' },
   body: { padding: '24px 20px', maxWidth: 1100, margin: '0 auto' },
   tabs: { display: 'flex', gap: 4, marginBottom: 24, flexWrap: 'wrap' },
-  tab: (active) => ({ padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: active ? '#0f172a' : '#fff', color: active ? '#fff' : '#475569', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
+  tab: (active) => ({ padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: active ? '#111111' : '#fff', color: active ? '#fff' : '#475569', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
   card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16 },
   btn: (variant = 'primary') => ({
     padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-    background: variant === 'primary' ? '#0f172a' : variant === 'danger' ? '#ef4444' : variant === 'outline' ? '#fff' : '#64748b',
-    color: variant === 'outline' ? '#0f172a' : '#fff',
+    background: variant === 'primary' ? '#111111' : variant === 'danger' ? '#ef4444' : variant === 'outline' ? '#fff' : '#64748b',
+    color: variant === 'outline' ? '#111111' : '#fff',
     border: variant === 'outline' ? '1px solid #cbd5e1' : 'none',
   }),
   input: { width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', outline: 'none' },
   label: { fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: 14 },
   th: { textAlign: 'left', padding: '10px 12px', borderBottom: '2px solid #e2e8f0', color: '#64748b', fontWeight: 600, fontSize: 12 },
-  td: { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', color: '#1e293b' },
+  td: { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', color: '#111111' },
   badge: (ok) => ({ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: ok ? '#dcfce7' : '#fee2e2', color: ok ? '#166534' : '#991b1b' }),
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' },
   modal: { background: '#fff', borderRadius: 14, padding: 28, width: '100%', maxWidth: 680, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
   row: { display: 'flex', gap: 12, marginBottom: 14 },
   col: { flex: 1 },
-  sectionTitle: { fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: 700, color: '#111111', marginBottom: 12 },
   subTitle: { fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 8 },
   accessDenied: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 16 },
 };
@@ -74,7 +74,7 @@ const S = {
 // CURSOS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', emoji: '📚', cor: '#2563eb', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', emoji: '📚', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false }; }
@@ -129,7 +129,7 @@ function CursosTab() {
     setSaving(true);
     try {
       const { modulos, _aulaCount, ...rest } = form;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', cor: rest.cor || '#2563eb', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, ativo: rest.ativo !== false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, ativo: rest.ativo !== false };
 
       let cursoId;
       if (modal === 'new') {
@@ -172,7 +172,7 @@ function CursosTab() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Cursos</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Cursos</h2>
         <button style={S.btn('primary')} onClick={openNew}>+ Novo Curso</button>
       </div>
 
@@ -264,7 +264,7 @@ function CursosTab() {
                 <input type="checkbox" checked={form.destaque || false} onChange={e => setForm({ ...form, destaque: e.target.checked })} /> Destaque
               </label>
             </div>
-            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#1e40af', marginBottom:14 }}>
+            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>
               💡 Preço e comissão são configurados na aba <strong>Configurações</strong>.
             </div>
 
@@ -372,7 +372,7 @@ function EbooksTab() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>eBooks / Materiais</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>eBooks / Materiais</h2>
         <button style={S.btn('primary')} onClick={openNew}>+ Novo eBook</button>
       </div>
 
@@ -427,7 +427,7 @@ function EbooksTab() {
               <label style={S.label}>URL do arquivo (PDF) — abre no leitor estilo Kindle</label>
               <input style={S.input} value={form.arquivo_url || ''} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} placeholder="https://... (link do PDF no Drive)" />
             </div>
-            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#1e40af', marginBottom:20 }}>
+            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:20 }}>
               💡 Preço é configurado na aba <strong>Configurações</strong>.
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -520,13 +520,13 @@ function UsuariosTab() {
     return (u.nome || '').toLowerCase().includes(q) || (u.cpf || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
   });
 
-  const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top1: '#2563eb', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626' };
+  const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top1: '#0D63DB', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626' };
   const fmtData = v => v ? new Date(v).toLocaleDateString('pt-BR') : '—';
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Usuários ({users.length})</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Usuários ({users.length})</h2>
         <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou role..." style={{ ...S.input, maxWidth: 280 }} />
         <button style={S.btn('outline')} onClick={loadUsers}>↻ Atualizar</button>
       </div>
@@ -584,7 +584,7 @@ function UsuariosTab() {
                                 {ativo ? 'Inativar' : 'Reativar'}
                               </button>
                               <button
-                                style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#2563eb', cursor: 'pointer' }}
+                                style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}
                                 onClick={() => abrirAuditoria(u)}>
                                 🔍 Auditoria
                               </button>
@@ -606,7 +606,7 @@ function UsuariosTab() {
           onClick={e => { if (e.target === e.currentTarget) setAuditoriaUser(null); }}>
           <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 700, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: '#111111', margin: 0 }}>
                 Auditoria — {auditoriaUser.nome || auditoriaUser.cpf || auditoriaUser.id}
               </h3>
               <button onClick={() => setAuditoriaUser(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
@@ -840,7 +840,7 @@ function ContratoModal({ chave, planos, onClose }) {
     setSalvando(false);
   }
 
-  const inp = { border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, padding:'9px 12px', width:'100%', boxSizing:'border-box', fontFamily:'inherit', color:'#0f172a' };
+  const inp = { border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, padding:'9px 12px', width:'100%', boxSizing:'border-box', fontFamily:'inherit', color:'#111111' };
 
   if (loadingExistente) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -856,7 +856,7 @@ function ContratoModal({ chave, planos, onClose }) {
         {/* Cabeçalho */}
         <div style={{ padding:'24px 28px 16px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
           <div>
-            <div style={{ fontWeight:900, fontSize:16, color:'#0f172a' }}>📄 {nomeContrato}</div>
+            <div style={{ fontWeight:900, fontSize:16, color:'#111111' }}>📄 {nomeContrato}</div>
             <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
               {etapa === 'dados' && 'Preencha os dados para gerar o contrato com IA'}
               {etapa === 'gerando' && 'Gerando contrato com inteligência artificial…'}
@@ -879,7 +879,7 @@ function ContratoModal({ chave, planos, onClose }) {
               </div>
               <div style={{ display:'flex', gap:10, marginTop:6 }}>
                 <button onClick={onClose} style={{ flex:1, padding:'11px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>Cancelar</button>
-                <button onClick={gerarComIA} style={{ flex:2, padding:'11px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:800, cursor:'pointer' }}>
+                <button onClick={gerarComIA} style={{ flex:2, padding:'11px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:800, cursor:'pointer' }}>
                   🤖 Gerar contrato com IA →
                 </button>
               </div>
@@ -890,7 +890,7 @@ function ContratoModal({ chave, planos, onClose }) {
           {etapa === 'gerando' && (
             <div style={{ textAlign:'center', padding:'40px 0' }}>
               <div style={{ fontSize:40, marginBottom:16 }}>⏳</div>
-              <div style={{ fontWeight:700, fontSize:15, color:'#0f172a', marginBottom:8 }}>Elaborando o contrato…</div>
+              <div style={{ fontWeight:700, fontSize:15, color:'#111111', marginBottom:8 }}>Elaborando o contrato…</div>
               <div style={{ fontSize:13, color:'#64748b' }}>A IA está redigindo as cláusulas. Aguarde alguns segundos.</div>
             </div>
           )}
@@ -911,20 +911,20 @@ function ContratoModal({ chave, planos, onClose }) {
                 <textarea value={conteudo} onChange={e=>setConteudo(e.target.value)} rows={16}
                   style={{ ...inp, resize:'vertical', fontSize:12, lineHeight:1.7 }} />
               ) : (
-                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 18px', fontSize:13, lineHeight:1.8, color:'#1e293b', whiteSpace:'pre-wrap', maxHeight:340, overflowY:'auto' }}>
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 18px', fontSize:13, lineHeight:1.8, color:'#111111', whiteSpace:'pre-wrap', maxHeight:340, overflowY:'auto' }}>
                   {conteudo}
                 </div>
               )}
 
               {/* Instrução para IA reescrever */}
               <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'14px 16px' }}>
-                <div style={{ fontSize:11, fontWeight:800, color:'#1e40af', marginBottom:8 }}>🤖 Pedir alteração à IA</div>
+                <div style={{ fontSize:11, fontWeight:800, color:'#084BA6', marginBottom:8 }}>🤖 Pedir alteração à IA</div>
                 <div style={{ display:'flex', gap:8 }}>
                   <input value={instrucaoIA} onChange={e=>setInstrucaoIA(e.target.value)}
                     placeholder="Ex: Adicione cláusula de confidencialidade · Ajuste o prazo para 6 meses"
                     style={{ ...inp, flex:1 }} onKeyDown={e=>e.key==='Enter'&&reescreverComIA()} />
                   <button onClick={reescreverComIA} disabled={reescrevendo || !instrucaoIA.trim()}
-                    style={{ padding:'9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap', opacity:reescrevendo?0.7:1 }}>
+                    style={{ padding:'9px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap', opacity:reescrevendo?0.7:1 }}>
                     {reescrevendo ? '…' : 'Aplicar'}
                   </button>
                 </div>
@@ -957,7 +957,7 @@ function ContratoModal({ chave, planos, onClose }) {
               </div>
 
               {/* Preview do conteúdo */}
-              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 18px', fontSize:13, lineHeight:1.8, color:'#1e293b', whiteSpace:'pre-wrap', maxHeight:260, overflowY:'auto' }}>
+              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 18px', fontSize:13, lineHeight:1.8, color:'#111111', whiteSpace:'pre-wrap', maxHeight:260, overflowY:'auto' }}>
                 {conteudo || contratoExistente?.conteudo || '—'}
               </div>
 
@@ -966,11 +966,11 @@ function ContratoModal({ chave, planos, onClose }) {
                 <div>
                   <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:6 }}>LINK PARA O CLIENTE ASSINAR</div>
                   <div style={{ display:'flex', gap:8 }}>
-                    <div style={{ flex:1, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#2563eb', wordBreak:'break-all' }}>
+                    <div style={{ flex:1, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#0D63DB', wordBreak:'break-all' }}>
                       {linkGerado || `${window.location.href.split('#')[0]}#/c/${contratoExistente?.token}`}
                     </div>
                     <button onClick={() => { const l = linkGerado || `${window.location.href.split('#')[0]}#/c/${contratoExistente?.token}`; navigator.clipboard.writeText(l); setCopiado(true); setTimeout(()=>setCopiado(false),2000); }}
-                      style={{ padding:'9px 14px', background:copiado?'#10b981':'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                      style={{ padding:'9px 14px', background:copiado?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                       {copiado ? '✓ Copiado' : '📋 Copiar'}
                     </button>
                   </div>
@@ -1243,7 +1243,7 @@ function ConfigTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Configurações</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Configurações</h2>
 
       {/* Tabela unificada */}
       <div style={S.card}>
@@ -1269,7 +1269,7 @@ function ConfigTab() {
               const temVista = !r.assinatura && Number(r.preco) > 0;
               const isDirtyRow = dirtyIds.has(`${r._tipo}:${r._id}`);
               const tipoBadge = r._tipo === 'plano'
-                ? { text: '📋 plano', bg: '#eff6ff', color: '#1d4ed8' }
+                ? { text: '📋 plano', bg: '#eff6ff', color: '#084BA6' }
                 : r._tipo === 'curso'
                   ? { text: '🎓 curso', bg: '#f5f3ff', color: '#7c3aed' }
                   : { text: '📖 ebook', bg: '#f0fdf4', color: '#166534' };
@@ -1287,7 +1287,7 @@ function ConfigTab() {
                     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: tipoBadge.bg, color: tipoBadge.color, marginBottom: 4 }}>
                       {tipoBadge.text}
                     </span>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{r.nome}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#111111' }}>{r.nome}</div>
                   </div>
 
                   {/* Col 2: Valor R$ */}
@@ -1319,7 +1319,7 @@ function ConfigTab() {
                   <div style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={!!r.assinatura}
                       onChange={e => updateRow(r._id, r._tipo, 'assinatura', e.target.checked)}
-                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#0D63DB' }} />
                     <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>
                       {r.assinatura ? 'Recorrente' : 'em até 12×'}
                     </div>
@@ -1349,7 +1349,7 @@ function ConfigTab() {
                       }}
                       style={{
                         padding: '6px 10px',
-                        background: r.requer_contrato ? '#2563eb' : '#f8fafc',
+                        background: r.requer_contrato ? '#0D63DB' : '#f8fafc',
                         color: r.requer_contrato ? '#fff' : '#374151',
                         border: r.requer_contrato ? 'none' : '1px solid #e2e8f0',
                         borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%',
@@ -1376,7 +1376,7 @@ function ConfigTab() {
       {(isDirty || tudoSalvo) && (
         <div style={{ position: 'fixed', bottom: 32, right: 32, zIndex: 9999 }}>
           <button onClick={salvarTudo} disabled={salvandoTudo || tudoSalvo}
-            style={{ padding: '14px 28px', background: tudoSalvo ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: salvandoTudo || tudoSalvo ? 'default' : 'pointer', boxShadow: '0 8px 30px rgba(37,99,235,0.4)', transition: 'background 0.2s', display: 'flex', alignItems: 'center', gap: 8 }}>
+            style={{ padding: '14px 28px', background: tudoSalvo ? '#10b981' : '#0D63DB', color: 'white', border: 'none', borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: salvandoTudo || tudoSalvo ? 'default' : 'pointer', boxShadow: '0 8px 30px rgba(37,99,235,0.4)', transition: 'background 0.2s', display: 'flex', alignItems: 'center', gap: 8 }}>
             {salvandoTudo ? '⏳ Salvando…' : tudoSalvo ? '✅ Salvo!' : '💾 Salvar alterações'}
           </button>
         </div>
@@ -1396,7 +1396,7 @@ function ConfigTab() {
               <input type="number" step="0.1" min="0" max="100"
                 value={honorarios.total_pct}
                 onChange={e => setHonorarios(h => ({ ...h, total_pct: e.target.value }))}
-                style={{ ...S.input, padding: '7px 10px', fontSize: 15, width: 70, fontWeight: 900, color: '#0f172a' }} />
+                style={{ ...S.input, padding: '7px 10px', fontSize: 15, width: 70, fontWeight: 900, color: '#111111' }} />
               <span style={{ fontSize: 14, color: '#64748b', fontWeight: 700 }}>%</span>
             </div>
             <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>padrão 10%</div>
@@ -1408,7 +1408,7 @@ function ConfigTab() {
           {/* Distribuição por papel */}
           {[
             { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação' },
-            { key: 'advogado_pct', label: 'Advogado', cor: '#2563eb', desc: 'análise jurídica' },
+            { key: 'advogado_pct', label: 'Advogado', cor: '#0D63DB', desc: 'análise jurídica' },
             { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica' },
           ].map(({ key, label, cor, desc }) => (
             <div key={key} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 18px', minWidth: 140, border: `1px solid ${cor}22` }}>
@@ -1417,7 +1417,7 @@ function ConfigTab() {
                 <input type="number" step="0.1" min="0" max="100"
                   value={honorarios[key]}
                   onChange={e => setHonorarios(h => ({ ...h, [key]: e.target.value }))}
-                  style={{ ...S.input, padding: '7px 10px', fontSize: 15, width: 70, fontWeight: 700, color: '#0f172a' }} />
+                  style={{ ...S.input, padding: '7px 10px', fontSize: 15, width: 70, fontWeight: 700, color: '#111111' }} />
                 <span style={{ fontSize: 14, color: '#64748b', fontWeight: 700 }}>%</span>
               </div>
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{desc}</div>
@@ -1447,7 +1447,7 @@ function ConfigTab() {
         )}
 
         <button onClick={salvarHonorarios}
-          style={{ marginTop: 16, padding: '9px 22px', background: honorariosSaved ? '#10b981' : '#0f172a', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          style={{ marginTop: 16, padding: '9px 22px', background: honorariosSaved ? '#10b981' : '#111111', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           {honorariosSaved ? '✓ Salvo' : 'Salvar Honorários'}
         </button>
 
@@ -1470,7 +1470,7 @@ function ConfigTab() {
           const prazoPadrao = gw === 'pagarme' ? 30 : 32;
           return (
             <div key={gw} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 12 }}>{gwLabel}</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 12 }}>{gwLabel}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
                 <div>
                   <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA CRÉDITO (MDR) %</div>
@@ -1507,7 +1507,7 @@ function ConfigTab() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
                     <input type="checkbox" checked={r.antecipacao_ativa || false}
                       onChange={e => updateCfin(gw, 'antecipacao_ativa', e.target.checked)}
-                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#2563eb' }} />
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#0D63DB' }} />
                     <span style={{ fontSize: 12, color: '#334155' }}>Ativa</span>
                   </div>
                 </div>
@@ -1527,7 +1527,7 @@ function ConfigTab() {
                 )}
               </div>
               <button onClick={() => salvarCfin(gw)}
-                style={{ marginTop: 14, padding: '7px 18px', background: cfinSaved[gw] ? '#10b981' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                style={{ marginTop: 14, padding: '7px 18px', background: cfinSaved[gw] ? '#10b981' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 {cfinSaved[gw] ? '✓ Salvo' : `Salvar ${gwLabel}`}
               </button>
             </div>
@@ -1708,7 +1708,7 @@ function ContratosTab() {
     <div>
       {/* Cabeçalho */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-        <h2 style={{ fontSize:18, fontWeight:700, color:'#0f172a', margin:0 }}>Contratos ({contratosLink.length})</h2>
+        <h2 style={{ fontSize:18, fontWeight:700, color:'#111111', margin:0 }}>Contratos ({contratosLink.length})</h2>
         <button style={S.btn('primary')} onClick={abrirModal}>🔗 Novo contrato com link</button>
       </div>
 
@@ -1784,13 +1784,13 @@ function ContratosTab() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
               <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px' }}>
                 <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
-                <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>Nogueira Empreendimentos</div>
+                <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Nogueira Empreendimentos</div>
               </div>
               <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px' }}>
-                <div style={{ fontSize:10, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
+                <div style={{ fontSize:10, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
                 {detalhe.dados_signatario ? (
                   <>
-                    <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>{detalhe.dados_signatario.nome || detalhe.dados_signatario.razao_social}</div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{detalhe.dados_signatario.nome || detalhe.dados_signatario.razao_social}</div>
                     <div style={{ fontSize:11, color:'#475569' }}>{detalhe.dados_signatario.cpf || detalhe.dados_signatario.cnpj}</div>
                     <div style={{ fontSize:11, color:'#475569' }}>{detalhe.dados_signatario.email}</div>
                   </>
@@ -1802,7 +1802,7 @@ function ContratosTab() {
 
             {/* Conteúdo */}
             <div style={{ background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0', padding:'14px 16px', maxHeight:300, overflowY:'auto', marginBottom:16 }}>
-              <div style={{ fontSize:13, color:'#0f172a', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{detalhe.conteudo}</div>
+              <div style={{ fontSize:13, color:'#111111', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{detalhe.conteudo}</div>
             </div>
 
             {/* KYC fotos */}
@@ -1852,9 +1852,9 @@ function ContratosTab() {
                 <React.Fragment key={s}>
                   <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                     <div style={{ width:22, height:22, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800,
-                      background: step > i+1 ? '#059669' : step === i+1 ? '#2563eb' : '#e2e8f0',
+                      background: step > i+1 ? '#059669' : step === i+1 ? '#0D63DB' : '#e2e8f0',
                       color: step >= i+1 ? 'white' : '#94a3b8' }}>{step > i+1 ? '✓' : i+1}</div>
-                    <span style={{ fontSize:12, fontWeight:step===i+1?700:400, color:step===i+1?'#0f172a':'#94a3b8' }}>{s}</span>
+                    <span style={{ fontSize:12, fontWeight:step===i+1?700:400, color:step===i+1?'#111111':'#94a3b8' }}>{s}</span>
                   </div>
                   {i < 2 && <div style={{ flex:1, height:1, background:'#e2e8f0' }}/>}
                 </React.Fragment>
@@ -1880,9 +1880,9 @@ function ContratosTab() {
                   ].map(t => (
                     <button key={t.key} onClick={() => aplicarTemplate(t.key)}
                       style={{ padding:'5px 14px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:'1px solid',
-                        background: templateSelecionado === t.key ? '#0f172a' : '#fff',
+                        background: templateSelecionado === t.key ? '#111111' : '#fff',
                         color: templateSelecionado === t.key ? '#fff' : '#475569',
-                        borderColor: templateSelecionado === t.key ? '#0f172a' : '#cbd5e1' }}>
+                        borderColor: templateSelecionado === t.key ? '#111111' : '#cbd5e1' }}>
                       {t.label}
                     </button>
                   ))}
@@ -1926,7 +1926,7 @@ function ContratosTab() {
                   {arquivos.length > 0 && (
                     <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8 }}>
                       {arquivos.map((a, i) => (
-                        <div key={i} style={{ display:'flex', alignItems:'center', gap:4, background: a.conteudo ? '#dbeafe' : '#fef3c7', color: a.conteudo ? '#1e40af' : '#92400e', fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20 }}>
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:4, background: a.conteudo ? '#dbeafe' : '#fef3c7', color: a.conteudo ? '#084BA6' : '#92400e', fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20 }}>
                           {a.conteudo ? '📄' : '📎'} {a.nome}
                           <button onClick={() => setArquivos(prev => prev.filter((_, j) => j !== i))}
                             style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:0, marginLeft:2 }}>×</button>
@@ -1939,9 +1939,9 @@ function ContratosTab() {
                 {/* KYC — opcional */}
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: kycIncluido ? 14 : 0 }}>
-                    <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#2563eb' }} />
+                    <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0D63DB' }} />
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Incluir documentação KYC ao final do contrato</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Incluir documentação KYC ao final do contrato</div>
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Selfie, documento e selfie com documento serão exibidos na última página</div>
                     </div>
                   </label>
@@ -1996,10 +1996,10 @@ function ContratosTab() {
 
                     <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px', marginBottom:10 }}>
                       <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
-                      <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>Nogueira Empreendimentos</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Nogueira Empreendimentos</div>
                     </div>
                     <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px', marginBottom:20 }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
                       <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Preenchido pelo signatário ao assinar</div>
                     </div>
 
@@ -2032,11 +2032,11 @@ function ContratosTab() {
                 {/* Área principal — texto do contrato */}
                 <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
                   <div style={{ padding:'16px 24px 8px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>{titulo || 'Contrato'}</div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{titulo || 'Contrato'}</div>
                     <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Edite diretamente se necessário antes de aprovar.</div>
                   </div>
                   <textarea
-                    style={{ flex:1, border:'none', outline:'none', resize:'none', fontFamily:'Georgia, serif', fontSize:14, lineHeight:1.9, padding:'24px 32px', color:'#1e293b', background:'white' }}
+                    style={{ flex:1, border:'none', outline:'none', resize:'none', fontFamily:'Georgia, serif', fontSize:14, lineHeight:1.9, padding:'24px 32px', color:'#111111', background:'white' }}
                     value={conteudo}
                     onChange={e => setConteudo(e.target.value)} />
                 </div>
@@ -2061,7 +2061,7 @@ function ContratosTab() {
               <>
                 <div style={{ textAlign:'center', padding:'20px 0 12px' }}>
                   <div style={{ fontSize:48, marginBottom:10 }}>🔗</div>
-                  <h3 style={{ fontSize:18, fontWeight:800, color:'#0f172a', margin:'0 0 6px' }}>Link gerado com sucesso!</h3>
+                  <h3 style={{ fontSize:18, fontWeight:800, color:'#111111', margin:'0 0 6px' }}>Link gerado com sucesso!</h3>
                   <p style={{ fontSize:13, color:'#64748b', margin:0 }}>Válido por 30 dias. Ao ser assinado, os dados ficam registrados.</p>
                 </div>
                 <div style={{ background:'#f1f5f9', borderRadius:8, padding:'14px 16px', margin:'16px 0', display:'flex', gap:10, alignItems:'center' }}>
@@ -2162,11 +2162,11 @@ function PromoTab() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: '0 0 20px' }}>Links Promocionais</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: '0 0 20px' }}>Links Promocionais</h2>
       <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, alignItems: 'start' }}>
         {/* Formulário */}
         <div style={S.card}>
-          <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 16 }}>{editId ? 'Editar link' : 'Novo link promocional'}</div>
+          <div style={{ fontWeight: 800, color: '#111111', marginBottom: 16 }}>{editId ? 'Editar link' : 'Novo link promocional'}</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
             <input value={form.codigo} onChange={e => up('codigo', e.target.value.toUpperCase())} placeholder="CÓDIGO (ex: TSN30)" style={{ ...S.input, flex: 1, fontFamily: 'monospace', fontWeight: 700 }} maxLength={12} />
             <button onClick={gerarCodigo} style={{ padding: '0 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}>Gerar</button>
@@ -2213,14 +2213,14 @@ function PromoTab() {
                     <div key={l.id} style={{ padding: '14px 16px', border: `1px solid ${l.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, background: l.ativo ? 'white' : '#fff5f5' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
                         <div>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 15, color: '#0f172a', marginRight: 10 }}>{l.codigo}</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb' }}>{PRODUTOS_PROMO.find(p => p.key === l.produto)?.label || l.produto}</span>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 15, color: '#111111', marginRight: 10 }}>{l.codigo}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>{PRODUTOS_PROMO.find(p => p.key === l.produto)?.label || l.produto}</span>
                           <span style={{ fontSize: 12, color: '#059669', fontWeight: 700, marginLeft: 8 }}>{desconto}</span>
                           {!l.ativo && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>INATIVO</span>}
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button onClick={() => copiarLink(l.codigo)} style={{ padding: '5px 10px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#475569', cursor: 'pointer' }}>Copiar link</button>
-                          <button onClick={() => editar(l)} style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#2563eb', cursor: 'pointer' }}>Editar</button>
+                          <button onClick={() => editar(l)} style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}>Editar</button>
                           <button onClick={() => toggleAtivo(l)} style={{ padding: '5px 10px', background: l.ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: l.ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}>{l.ativo ? 'Desativar' : 'Ativar'}</button>
                         </div>
                       </div>
@@ -2278,7 +2278,7 @@ function ConvitesTab() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Links de Convite</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Links de Convite</h2>
         <button style={S.btn('primary')} onClick={gerarLink}>+ Gerar novo convite</button>
       </div>
       <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
@@ -2290,7 +2290,7 @@ function ConvitesTab() {
           : convites.map(c => (
             <div key={c.id} style={{ padding: '14px 16px', border: `1px solid ${c.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, marginBottom: 10, background: c.ativo ? 'white' : '#fff5f5', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{c.codigo}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#111111' }}>{c.codigo}</div>
                 <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                   Por: {c.perfis?.nome || '—'} · {c.usos} uso{c.usos !== 1 ? 's' : ''} · {new Date(c.criado_em).toLocaleDateString('pt-BR')}
                 </div>
@@ -2316,7 +2316,7 @@ function ConvitesTab() {
 const FONTES_SCRAPER = [
   { key: 'santander',  label: 'Santander',        cor: '#dc2626' },
   { key: 'rodobens',   label: 'Rodobens',          cor: '#d97706' },
-  { key: 'sold',       label: 'Sold (BV/Bradesco/Itaú)', cor: '#2563eb' },
+  { key: 'sold',       label: 'Sold (BV/Bradesco/Itaú)', cor: '#0D63DB' },
   { key: 'zuk',        label: 'Zuk (Sicredi)',     cor: '#059669' },
   { key: 'megaleiloes',label: 'MegaLeilões',       cor: '#7c3aed' },
   { key: 'sicoob',     label: 'Sicoob',            cor: '#0891b2' },
@@ -2347,7 +2347,7 @@ function ScrapersMonitor() {
   return (
     <div style={S.card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Monitor de Scrapers</div>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>Monitor de Scrapers</div>
         {erros.length > 0 && (
           <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
             ⚠️ {erros.length} com erro
@@ -2370,7 +2370,7 @@ function ScrapersMonitor() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: f.cor, flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{f.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{f.label}</div>
                     {log && <div style={{ fontSize: 11, color: '#64748b' }}>
                       {log.imoveis_encontrados} imóveis · {new Date(log.iniciado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                       {log.duracao_ms && ` · ${(log.duracao_ms / 1000).toFixed(1)}s`}
@@ -2420,10 +2420,10 @@ function UsuariosPlanoDetalhe({ planoKey }) {
 
   return (
     <div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>{LABEL[planoKey]}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#111111', marginBottom: 12 }}>{LABEL[planoKey]}</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
         {[
-          { label: 'Total', value: usuarios.length, cor: '#2563eb' },
+          { label: 'Total', value: usuarios.length, cor: '#0D63DB' },
           { label: 'Ativos', value: usuarios.length - inadimplentes, cor: '#10b981' },
           { label: preco > 0 ? 'MRR estimado' : '—', value: preco > 0 ? `R$ ${fmt(mrr)}` : '—', cor: '#7c3aed' },
         ].map(({ label, value, cor }) => (
@@ -2443,7 +2443,7 @@ function UsuariosPlanoDetalhe({ planoKey }) {
           <div key={u.id} style={{ padding: '8px 10px', background: u.inadimplente_desde ? '#fef2f2' : '#f8fafc', borderRadius: 8, border: `1px solid ${u.inadimplente_desde ? '#fca5a5' : '#e2e8f0'}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{u.nome || '—'}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{u.nome || '—'}</div>
                 <div style={{ fontSize: 11, color: '#64748b' }}>{u.email}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -2593,8 +2593,8 @@ function DashboardTab() {
   const proximo = dados.mrr < 10000 ? 10000 : dados.mrr < 30000 ? 30000 : dados.mrr < 100000 ? 100000 : null;
   const progresso = proximo ? Math.min(100, (dados.mrr / proximo) * 100) : 100;
 
-  const statCard = (label, value, sub, cor = '#2563eb') => (
-    <div style={{ background: '#0f172a', borderRadius: 12, padding: '20px 22px', flex: 1, minWidth: 160 }}>
+  const statCard = (label, value, sub, cor = '#0D63DB') => (
+    <div style={{ background: '#111111', borderRadius: 12, padding: '20px 22px', flex: 1, minWidth: 160 }}>
       <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 900, color: cor, lineHeight: 1 }}>{value}</div>
       {sub && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{sub}</div>}
@@ -2623,7 +2623,7 @@ function DashboardTab() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <span style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(hcLast.executado_em).toLocaleString('pt-BR')}</span>
             <button onClick={e => { e.stopPropagation(); rodarHealthCheck(); }}
-              style={{ fontSize: 11, padding: '3px 10px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>▶ Rodar agora</button>
+              style={{ fontSize: 11, padding: '3px 10px', background: '#111111', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>▶ Rodar agora</button>
             <span style={{ fontSize: 12, color: '#94a3b8' }}>{healthOpen ? '▲' : '▼'}</span>
           </div>
         </div>
@@ -2631,15 +2631,15 @@ function DashboardTab() {
       {!hcLast && (
         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 13, color: '#64748b' }}>🔧 Automação de saúde — nenhuma execução ainda</span>
-          <button onClick={rodarHealthCheck} style={{ fontSize: 12, padding: '4px 12px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>▶ Rodar agora</button>
+          <button onClick={rodarHealthCheck} style={{ fontSize: 12, padding: '4px 12px', background: '#111111', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>▶ Rodar agora</button>
         </div>
       )}
       {/* Histórico de health check */}
       {healthOpen && (
-        <div style={{ background: '#0f172a', borderRadius: 12, padding: '16px 20px', marginBottom: 16, maxHeight: 420, overflowY: 'auto' }}>
+        <div style={{ background: '#111111', borderRadius: 12, padding: '16px 20px', marginBottom: 16, maxHeight: 420, overflowY: 'auto' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#60a5fa', marginBottom: 12 }}>Histórico de execuções ({healthLogs.length})</div>
           {healthLogs.map((log, i) => (
-            <div key={log.id} style={{ borderBottom: i < healthLogs.length - 1 ? '1px solid #1e293b' : 'none', paddingBottom: 12, marginBottom: 12 }}>
+            <div key={log.id} style={{ borderBottom: i < healthLogs.length - 1 ? '1px solid #111111' : 'none', paddingBottom: 12, marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 12 }}>{hcIcon[log.status]}</span>
                 <span style={{ fontSize: 12, color: hcCor[log.status], fontWeight: 700 }}>{new Date(log.executado_em).toLocaleString('pt-BR')}</span>
@@ -2675,25 +2675,25 @@ function DashboardTab() {
         ].map(({ key, label }) => (
           <button key={key} onClick={() => setPeriodo(key)}
             style={{ fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 20, border: '2px solid', cursor: 'pointer',
-              borderColor: periodo === key ? '#2563eb' : '#e2e8f0',
+              borderColor: periodo === key ? '#0D63DB' : '#e2e8f0',
               background: periodo === key ? '#eff6ff' : 'white',
-              color: periodo === key ? '#2563eb' : '#64748b' }}>
+              color: periodo === key ? '#0D63DB' : '#64748b' }}>
             {label}
           </button>
         ))}
         {periodo === 'custom' && (
           <>
             <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
-              style={{ fontSize: 12, padding: '4px 10px', border: '2px solid #e2e8f0', borderRadius: 8, color: '#0f172a', outline: 'none' }} />
+              style={{ fontSize: 12, padding: '4px 10px', border: '2px solid #e2e8f0', borderRadius: 8, color: '#111111', outline: 'none' }} />
             <span style={{ fontSize: 12, color: '#94a3b8' }}>até</span>
             <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)}
-              style={{ fontSize: 12, padding: '4px 10px', border: '2px solid #e2e8f0', borderRadius: 8, color: '#0f172a', outline: 'none' }} />
+              style={{ fontSize: 12, padding: '4px 10px', border: '2px solid #e2e8f0', borderRadius: 8, color: '#111111', outline: 'none' }} />
           </>
         )}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Dashboard</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Dashboard</h2>
         <div style={{ fontSize: 12, color: '#94a3b8' }}>Atualizado agora · {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
       </div>
 
@@ -2710,7 +2710,7 @@ function DashboardTab() {
         {/* Coluna esquerda: Usuários por plano */}
         <div>
           <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               Usuários por plano
               {usuariosDetalhe && <button onClick={() => setUsuariosDetalhe(false)} style={{ fontSize: 12, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>← Voltar</button>}
             </div>
@@ -2734,7 +2734,7 @@ function DashboardTab() {
                       <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{qtd}</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: '#111111' }}>{qtd}</span>
                       <span style={{ fontSize: 12, color: '#94a3b8' }}>→</span>
                     </div>
                   </div>
@@ -2747,7 +2747,7 @@ function DashboardTab() {
           </div>
 
           <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               Equipe interna
               {equipeDetalhe && <button onClick={() => setEquipeDetalhe(null)} style={{ fontSize: 11, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>← Voltar</button>}
             </div>
@@ -2787,16 +2787,16 @@ function DashboardTab() {
                   const isAnalista  = equipeDetalhe === 'analista';
                   return (
                     <div key={m.id} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 6 }}>{m.nome || m.email}</div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 6 }}>{m.nome || m.email}</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {isConsultor && <>
-                          <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>👥 {met.leadsSDR || 0} leads</span>
+                          <span style={{ fontSize: 11, background: '#eff6ff', color: '#084BA6', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>👥 {met.leadsSDR || 0} leads</span>
                           <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>🎯 {met.leadsConv || 0} convertidos</span>
                           <span style={{ fontSize: 11, background: '#fef9c3', color: '#92400e', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💰 R$ {Number(met.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}</span>
                           <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamados || 0} atend.</span>
                         </>}
                         {isAnalista && <>
-                          <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>📋 {met.analises || 0} análises</span>
+                          <span style={{ fontSize: 11, background: '#eff6ff', color: '#084BA6', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>📋 {met.analises || 0} análises</span>
                           <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>✅ {met.analisesOk || 0} concluídas</span>
                           <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamadosFin || 0} tickets</span>
                         </>}
@@ -2818,7 +2818,7 @@ function DashboardTab() {
         <div>
           {/* Taxas Asaas reais */}
           <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
             {asaasLoading ? (
               <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
             ) : asaasDados ? (
@@ -2826,7 +2826,7 @@ function DashboardTab() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
                   {[
                     { label: 'Saldo disponível', value: `R$ ${fmt(asaasDados.balance?.balance || 0)}`, cor: '#10b981' },
-                    { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#2563eb' },
+                    { label: 'A receber', value: `R$ ${fmt(asaasDados.balance?.totalReceivable || 0)}`, cor: '#0D63DB' },
                     { label: 'Recebido no mês', value: `R$ ${fmt(asaasDados.statsMes?.revenue || 0)}`, cor: '#7c3aed' },
                     { label: 'Taxas cobradas', value: `R$ ${fmt(asaasDados.statsMes?.fees || 0)}`, cor: '#f59e0b' },
                   ].map(({ label, value, cor }) => (
@@ -2848,7 +2848,7 @@ function DashboardTab() {
           {/* Marco comercial */}
           <div style={{ ...S.card, border: `2px solid ${marco.cor}20` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Marco Comercial Asaas</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>Marco Comercial Asaas</div>
               <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: marco.cor + '20', color: marco.cor }}>{marco.label}</span>
             </div>
             {proximo && (
@@ -2872,7 +2872,7 @@ function DashboardTab() {
 
           {/* Infraestrutura */}
           <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Infraestrutura & Custos</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 14 }}>Infraestrutura & Custos</div>
 
             {/* Supabase — DB size + usuários */}
             {(() => {
@@ -2888,7 +2888,7 @@ function DashboardTab() {
                 <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Supabase (Banco de Dados)</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Supabase (Banco de Dados)</div>
                       <div style={{ fontSize: 11, color: '#64748b' }}>Plano {planoAtivo} · {fmtN(dados.total)} usuários de 50.000</div>
                     </div>
                     <div style={{ fontWeight: 700, fontSize: 13, color: planoAtivo === 'Pro' ? '#d97706' : '#10b981' }}>
@@ -2933,12 +2933,12 @@ function DashboardTab() {
             <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Supabase — Banda de Saída (Egress)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Supabase — Banda de Saída (Egress)</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>Limite gratuito: 5 GB/mês · Monitore no painel Supabase</div>
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b' }}>Ver painel</div>
               </div>
-              <div style={{ marginTop: 6, padding: '7px 10px', background: '#eff6ff', borderRadius: 7, fontSize: 11, color: '#1e40af', lineHeight: 1.5 }}>
+              <div style={{ marginTop: 6, padding: '7px 10px', background: '#eff6ff', borderRadius: 7, fontSize: 11, color: '#084BA6', lineHeight: 1.5 }}>
                 💡 Mantenha no Supabase apenas textos e lógica. Imagens, PDFs e vídeos devem ir para a Bunny.net — isso reduz drasticamente o egress e adia o upgrade.
               </div>
             </div>
@@ -2947,7 +2947,7 @@ function DashboardTab() {
             <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Bunny.net (Vídeos & Arquivos)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Bunny.net (Vídeos & Arquivos)</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>CDN + Storage · $0,01/GB armazenado · $0,005/GB transferido</div>
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#10b981' }}>~R$ 1–5/mês</div>
@@ -2961,7 +2961,7 @@ function DashboardTab() {
             <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Vercel (Hosting + Edge Functions)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Vercel (Hosting + Edge Functions)</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>Plano Free · 100 GB egress · Serverless ilimitado</div>
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#10b981' }}>R$ 0/mês</div>
@@ -2972,7 +2972,7 @@ function DashboardTab() {
             <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Anthropic — Laudos & KYC</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Anthropic — Laudos & KYC</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>Pay-as-you-go · Haiku Vision por análise</div>
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#10b981' }}>~R$ 0,08/doc</div>
@@ -2983,7 +2983,7 @@ function DashboardTab() {
             <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Asaas Gateway (PIX)</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Asaas Gateway (PIX)</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>~1% por transação PIX</div>
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 13, color: dados.mrr > 8000 ? '#d97706' : '#10b981' }}>R$ {fmt(dados.taxaPix)}/mês</div>
@@ -2996,7 +2996,7 @@ function DashboardTab() {
               const totalMensal = (dados.dbSizeMB > 400 || dados.total > 40000 ? 150 : 0) + 3 + dados.taxaPix;
               const cor = totalMensal > 200 ? '#d97706' : '#10b981';
               return (
-                <div style={{ marginTop: 14, padding: '12px 14px', background: '#0f172a', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ marginTop: 14, padding: '12px 14px', background: '#111111', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>Custo mensal estimado de infra</div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: cor }}>R$ {fmt(totalMensal)}</div>
                 </div>
@@ -3088,7 +3088,7 @@ function DashboardTab() {
         ];
         return (
           <div style={{ marginTop: 24 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
               🧭 Guia de Decisão de Plataforma
             </div>
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Análise atual de cada serviço: manter ou substituir, e qual seria a melhor alternativa se precisar trocar.</div>
@@ -3099,7 +3099,7 @@ function DashboardTab() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: p.atingiuGatilho ? '#fefce8' : p.cor === '#10b981' ? '#f0fdf4' : '#fff7ed', borderBottom: '1px solid #f1f5f9' }}>
                     <span style={{ fontSize: 22 }}>{p.icone}</span>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{p.nome}</div>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: '#111111' }}>{p.nome}</div>
                       <div style={{ fontSize: 11, color: '#64748b' }}>{p.categoria}</div>
                     </div>
                     <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 800, background: p.cor, color: 'white', letterSpacing: 0.5 }}>
@@ -3125,8 +3125,8 @@ function DashboardTab() {
                         Melhor substituta se precisar trocar
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 5 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{p.alternativa.nome}</div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{p.alternativa.custo}</span>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#111111' }}>{p.alternativa.nome}</div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#0D63DB', background: '#eff6ff', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{p.alternativa.custo}</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>{p.alternativa.motivo}</div>
                     </div>
@@ -3140,7 +3140,7 @@ function DashboardTab() {
 
       {/* Marcos de melhoria e sugestões de eficiência */}
       <div style={{ marginTop: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
           🗺️ Marcos de Melhoria & Eficiência
           <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400 }}>— ações a executar quando os gatilhos forem atingidos</span>
         </div>
@@ -3200,7 +3200,7 @@ function DashboardTab() {
               <div style={{ fontSize: 24, flexShrink: 0 }}>{m.icone}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{m.titulo}</span>
+                  <span style={{ fontWeight: 800, fontSize: 14, color: '#111111' }}>{m.titulo}</span>
                   <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: m.atingido ? m.cor : '#f1f5f9', color: m.atingido ? 'white' : '#64748b' }}>
                     {m.atingido ? '✅ Gatilho atingido!' : `Gatilho: ${m.gatilho}`}
                   </span>
@@ -3242,7 +3242,7 @@ function SystemStatusCard() {
     <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>Configurações & Saúde do Sistema</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#111111' }}>Configurações & Saúde do Sistema</div>
           <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Variáveis de ambiente e integrações pendentes</div>
         </div>
         {!loading && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 28, fontWeight: 900, color: saude >= 80 ? '#059669' : saude >= 50 ? '#f59e0b' : '#dc2626' }}>{saude}%</div><div style={{ fontSize: 11, color: '#94a3b8' }}>configurado</div></div>}
@@ -3255,7 +3255,7 @@ function SystemStatusCard() {
               {grupo.items.map(itemKey => { const item = status?.[itemKey]; if (!item) return null; return (
                 <div key={itemKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <div style={{ width: 20, height: 20, borderRadius: '50%', background: item.ok ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0, fontWeight: 700, color: item.ok ? '#166534' : '#dc2626' }}>{item.ok ? '✓' : '✗'}</div>
-                  <span style={{ fontSize: 13, color: item.ok ? '#0f172a' : '#94a3b8', flex: 1 }}>{item.label}</span>
+                  <span style={{ fontSize: 13, color: item.ok ? '#111111' : '#94a3b8', flex: 1 }}>{item.label}</span>
                   {!item.ok && <span style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', borderRadius: 6, padding: '1px 6px', fontWeight: 700 }}>Pendente</span>}
                 </div>
               ); })}
@@ -3280,7 +3280,7 @@ function SystemStatusCard() {
           {[['Google Ads','GOOGLE_ADS_*'],['Meta Ads','META_ACCESS_TOKEN'],['RI Digital','RI_DIGITAL_KEY']].map(([nome, env]) => (
             <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#e2e8f0' }} />
-              <div><div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{nome}</div><div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{env}</div></div>
+              <div><div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{nome}</div><div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{env}</div></div>
             </div>
           ))}
         </div>
@@ -3346,7 +3346,7 @@ function TourTab() {
   return (
     <div style={{ maxWidth: 800 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h3 style={{ margin: 0, fontWeight: 800, color: '#0f172a' }}>Passos do Tour Guiado</h3>
+        <h3 style={{ margin: 0, fontWeight: 800, color: '#111111' }}>Passos do Tour Guiado</h3>
         <span style={{ fontSize: 12, color: '#94a3b8' }}>{passos.filter(p => p.ativo).length} ativos</span>
       </div>
 
@@ -3358,7 +3358,7 @@ function TourTab() {
         <textarea value={novoDesc} onChange={e => setNovoDesc(e.target.value)} placeholder="Descrição (opcional)" rows={2}
           style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, resize: 'vertical', width: '100%', boxSizing: 'border-box' }} />
         <button onClick={adicionar} disabled={!novoTitulo.trim()}
-          style={{ alignSelf: 'flex-end', padding: '8px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: novoTitulo.trim() ? 1 : 0.5 }}>
+          style={{ alignSelf: 'flex-end', padding: '8px 20px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: novoTitulo.trim() ? 1 : 0.5 }}>
           + Adicionar
         </button>
       </div>
@@ -3384,9 +3384,9 @@ function TourTab() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#0f172a', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{idx + 1}</div>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#111111', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{idx + 1}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{p.titulo}</div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#111111' }}>{p.titulo}</div>
                     {p.descricao && <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>{p.descricao}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
@@ -3434,13 +3434,13 @@ function ScrapersTab() {
 
   return (
     <div style={{ maxWidth: 640 }}>
-      <h3 style={{ margin: '0 0 20px', fontWeight: 800, color: '#0f172a' }}>Importar Imóveis de Leilão</h3>
+      <h3 style={{ margin: '0 0 20px', fontWeight: 800, color: '#111111' }}>Importar Imóveis de Leilão</h3>
 
       <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '24px', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
           <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🏦</div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a', marginBottom: 4 }}>Caixa Econômica Federal</div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111111', marginBottom: 4 }}>Caixa Econômica Federal</div>
             <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
               Importa imóveis disponíveis para venda diretamente do portal da Caixa para todos os estados do Brasil.
               Os dados são atualizados na tabela <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, fontSize: 12 }}>imoveis_leilao</code>.
@@ -3602,7 +3602,7 @@ function SdrTab() {
                     return (
                       <div key={p.id} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px' }}>
                         <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{p.texto}</div>
-                        <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 600 }}>{resp}</div>
+                        <div style={{ fontSize: 14, color: '#111111', fontWeight: 600 }}>{resp}</div>
                       </div>
                     );
                   })}
@@ -3610,7 +3610,7 @@ function SdrTab() {
                   {!(leadDetalhe.sdr_produtos?.perguntas?.length) && Object.entries(leadDetalhe.respostas).map(([k, v]) => (
                     <div key={k} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px' }}>
                       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Pergunta ID: {k}</div>
-                      <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 600 }}>{v}</div>
+                      <div style={{ fontSize: 14, color: '#111111', fontWeight: 600 }}>{v}</div>
                     </div>
                   ))}
                 </div>
@@ -3725,7 +3725,7 @@ function SdrTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // EQUIPE TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-const ROLE_BADGE_COLORS = { admin: { bg: '#fef3c7', color: '#92400e' }, analista: { bg: '#dbeafe', color: '#1e40af' }, consultor: { bg: '#d1fae5', color: '#065f46' }, advogado: { bg: '#ede9fe', color: '#5b21b6' } };
+const ROLE_BADGE_COLORS = { admin: { bg: '#fef3c7', color: '#92400e' }, analista: { bg: '#dbeafe', color: '#084BA6' }, consultor: { bg: '#d1fae5', color: '#065f46' }, advogado: { bg: '#ede9fe', color: '#5b21b6' } };
 
 const CHECKLIST_ITEMS = [
   { key: 'leiloeiro_habilitado',  label: 'Leiloeiro habilitado verificado (JUCESP/CRA)' },
@@ -3741,7 +3741,7 @@ const CHECKLIST_ITEMS = [
 
 const STATUS_SOL_COLORS = {
   solicitado:   { bg: '#fef9c3', color: '#854d0e', label: 'Solicitado' },
-  em_andamento: { bg: '#dbeafe', color: '#1e40af', label: 'Em Andamento' },
+  em_andamento: { bg: '#dbeafe', color: '#084BA6', label: 'Em Andamento' },
   concluido:    { bg: '#d1fae5', color: '#065f46', label: 'Concluído' },
 };
 
@@ -3896,7 +3896,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
         <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          {sol.tipo && <span style={{ background: '#eff6ff', color: '#1e40af', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>{{ processual:'Processual', edital:'Edital', mercadologica:'Mercadológica', consulta:'Consulta com Especialista' }[sol.tipo] || sol.tipo}</span>}
+          {sol.tipo && <span style={{ background: '#eff6ff', color: '#084BA6', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>{{ processual:'Processual', edital:'Edital', mercadologica:'Mercadológica', consulta:'Consulta com Especialista' }[sol.tipo] || sol.tipo}</span>}
           <span style={{ background: statusSol.bg, color: statusSol.color, borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>{statusSol.label}</span>
           {sol.tipo === 'processual' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>⏰ Prazo judicial</span>}
         </div>
@@ -3904,17 +3904,17 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
           {/* LEFT — Info */}
           <div>
-            <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a', marginBottom: 16 }}>Informações do Imóvel</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: '#111111', marginBottom: 16 }}>Informações do Imóvel</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
               {[['Imóvel', sol.imovel_nome || '—'], ['Cidade', sol.imovel_cidade || '—'], ['Referência', sol.imovel_ref || '—'], ['Analista', analista?.nome || 'Não atribuído']].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', gap: 8 }}>
                   <span style={{ fontSize: 13, color: '#64748b', minWidth: 80 }}>{k}:</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{v}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{v}</span>
                 </div>
               ))}
             </div>
 
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Agendamento da Reunião</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Agendamento da Reunião</div>
 
             <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
               <div style={{ flex: 2 }}>
@@ -3938,7 +3938,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
               {clienteEmail && (
                 <a href={`mailto:${clienteEmail}?subject=Reunião TSN Ativos — ${sol.imovel_nome || 'Imóvel'}`}
-                  style={{ padding: '8px 14px', background: '#eff6ff', color: '#1e40af', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  style={{ padding: '8px 14px', background: '#eff6ff', color: '#084BA6', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   ✉️ E-mail direto
                 </a>
               )}
@@ -3990,7 +3990,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
 
           {/* RIGHT — Checklist + Transcrições */}
           <div>
-            <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a', marginBottom: 16 }}>Checklist de Análise</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: '#111111', marginBottom: 16 }}>Checklist de Análise</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
               {CHECKLIST_ITEMS.map(item => (
                 <label key={item.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '8px 12px', background: checklist[item.key] ? '#f0fdf4' : '#f8fafc', borderRadius: 8, border: `1px solid ${checklist[item.key] ? '#bbf7d0' : '#e2e8f0'}` }}>
@@ -4083,7 +4083,7 @@ function AnalistaPerf({ analistaId }) {
   if (!perf) return <span style={{ fontSize: 12, color: '#94a3b8' }}>Carregando...</span>;
   return (
     <div style={{ display: 'flex', gap: 16 }}>
-      <div><div style={{ fontSize: 20, fontWeight: 900, color: '#2563eb' }}>{perf.andamento}</div><div style={{ fontSize: 11, color: '#64748b' }}>Em andamento</div></div>
+      <div><div style={{ fontSize: 20, fontWeight: 900, color: '#0D63DB' }}>{perf.andamento}</div><div style={{ fontSize: 11, color: '#64748b' }}>Em andamento</div></div>
       <div><div style={{ fontSize: 20, fontWeight: 900, color: '#059669' }}>{perf.concluido}</div><div style={{ fontSize: 11, color: '#64748b' }}>Concluídos (mês)</div></div>
     </div>
   );
@@ -4192,7 +4192,7 @@ function EquipeTab() {
   if (loading) return <p style={{ color: '#94a3b8' }}>Carregando…</p>;
 
   const INVITE_BTNS = [
-    { label: '🔍 Convidar Analista',   roles: ['analista'],  bg: '#2563eb' },
+    { label: '🔍 Convidar Analista',   roles: ['analista'],  bg: '#0D63DB' },
     { label: '⚖️ Convidar Advogado',   roles: ['advogado'],  bg: '#7c3aed' },
     { label: '🤝 Convidar Consultor',  roles: ['consultor'], bg: '#059669' },
   ];
@@ -4203,8 +4203,8 @@ function EquipeTab() {
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginBottom: 24 }}>
         {[
-          ['Total Equipe', membros.length, '#0f172a'],
-          ['Analistas', membros.filter(m=>m.role==='analista').length, '#2563eb'],
+          ['Total Equipe', membros.length, '#111111'],
+          ['Analistas', membros.filter(m=>m.role==='analista').length, '#0D63DB'],
           ['Advogados', membros.filter(m=>m.role==='advogado').length, '#7c3aed'],
           ['Consultores', membros.filter(m=>m.role==='consultor').length, '#059669'],
           ['Finalizados Hoje', finalizadosHoje, '#f59e0b'],
@@ -4256,7 +4256,7 @@ function EquipeTab() {
 
       {/* Recent convites_equipe list */}
       <div style={{ ...S.card, borderRadius: 14, marginBottom: 24 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 14 }}>Convites de Equipe Recentes</div>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 14 }}>Convites de Equipe Recentes</div>
         {convitesEquipe.length === 0 ? (
           <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 16 }}>Nenhum convite gerado ainda.</p>
         ) : convitesEquipe.map(c => {
@@ -4304,7 +4304,7 @@ function EquipeTab() {
 
       {/* ── SECTION B ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>Solicitações de Análise</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: '#111111', margin: 0 }}>Solicitações de Análise</h2>
         <button disabled={distribuindo} onClick={distribuirAutomaticamente}
           style={{ padding: '9px 18px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: distribuindo ? 0.7 : 1 }}>
           {distribuindo ? 'Distribuindo…' : '⚡ Distribuir automaticamente'}
@@ -4315,7 +4315,7 @@ function EquipeTab() {
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {[['todas','Todas'], ['aguardando','Aguardando'], ['andamento','Em Andamento'], ['concluidas','Concluídas']].map(([k,l]) => (
           <button key={k} onClick={() => setFiltroStatus(k)}
-            style={{ padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: filtroStatus === k ? '#0f172a' : '#f1f5f9', color: filtroStatus === k ? '#fff' : '#475569' }}>
+            style={{ padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: filtroStatus === k ? '#111111' : '#f1f5f9', color: filtroStatus === k ? '#fff' : '#475569' }}>
             {l}
           </button>
         ))}
@@ -4339,12 +4339,12 @@ function EquipeTab() {
               return (
                 <tr key={s.id}>
                   <td style={S.td}><div style={{ fontWeight:600, maxWidth:180 }}>{s.imovel_nome||'—'}</div></td>
-                  <td style={S.td}><span style={{ fontSize:12, background:'#eff6ff', color:'#1e40af', borderRadius:6, padding:'2px 8px', fontWeight:700 }}>{s.tipo||'—'}</span></td>
+                  <td style={S.td}><span style={{ fontSize:12, background:'#eff6ff', color:'#084BA6', borderRadius:6, padding:'2px 8px', fontWeight:700 }}>{s.tipo||'—'}</span></td>
                   <td style={{ ...S.td, fontSize:13, color:'#475569' }}>{s.imovel_cidade||'—'}</td>
                   <td style={{ ...S.td, fontSize:12, color:'#94a3b8' }}>{s.criado_em ? new Date(s.criado_em).toLocaleDateString('pt-BR') : '—'}</td>
                   <td style={{ ...S.td, fontSize:13 }}>{analista?.nome || <span style={{ color:'#94a3b8' }}>Não atribuído</span>}</td>
                   <td style={S.td}><span style={{ background:st.bg, color:st.color, borderRadius:6, padding:'2px 10px', fontSize:12, fontWeight:700 }}>{st.label}</span></td>
-                  <td style={S.td}><button onClick={() => setSolModal(s)} style={{ padding:'4px 10px', background:'#0f172a', color:'white', border:'none', borderRadius:6, fontSize:12, fontWeight:700, cursor:'pointer' }}>Ver</button></td>
+                  <td style={S.td}><button onClick={() => setSolModal(s)} style={{ padding:'4px 10px', background:'#111111', color:'white', border:'none', borderRadius:6, fontSize:12, fontWeight:700, cursor:'pointer' }}>Ver</button></td>
                 </tr>
               );
             })}
@@ -4362,7 +4362,7 @@ function EquipeTab() {
               const rc = ROLE_BADGE_COLORS[r] || { bg:'#f1f5f9', color:'#475569' };
               return (
                 <label key={r} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background: multiRoles.includes(r) ? rc.bg : '#f8fafc', borderRadius:8, marginBottom:8, cursor:'pointer', border:`1px solid ${multiRoles.includes(r) ? '#cbd5e1' : '#e2e8f0'}` }}>
-                  <input type="checkbox" checked={multiRoles.includes(r)} onChange={e => setMultiRoles(p => e.target.checked ? [...p,r] : p.filter(x=>x!==r))} style={{ accentColor:'#0f172a' }} />
+                  <input type="checkbox" checked={multiRoles.includes(r)} onChange={e => setMultiRoles(p => e.target.checked ? [...p,r] : p.filter(x=>x!==r))} style={{ accentColor:'#111111' }} />
                   <span style={{ fontWeight:700, color:rc.color }}>{r}</span>
                 </label>
               );
@@ -4540,7 +4540,7 @@ function MarketingTab() {
   const kpiLabel = { fontSize: 12, color: '#64748b', marginTop: 2 };
   const sectionHeader = (title, sub) => (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{title}</div>
+      <div style={{ fontWeight: 800, fontSize: 16, color: '#111111' }}>{title}</div>
       {sub && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
     </div>
   );
@@ -4548,14 +4548,14 @@ function MarketingTab() {
   if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>Carregando dados de marketing...</div>;
 
   const FUNNEL_STEPS = ['novo', 'contatado', 'qualificado', 'convertido'];
-  const FUNNEL_COLORS = ['#2563eb', '#7c3aed', '#d97706', '#059669'];
+  const FUNNEL_COLORS = ['#0D63DB', '#7c3aed', '#d97706', '#059669'];
 
   return (
     <div>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Inteligência de Marketing</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: '#111111', margin: 0 }}>Inteligência de Marketing</h2>
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Painel privado — somente admin</div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -4569,7 +4569,7 @@ function MarketingTab() {
         {sectionHeader('Painel de Buscas', 'Dados dos últimos 30 dias')}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
           {[
-            { label: 'Total de buscas', value: buscas.total, color: '#2563eb' },
+            { label: 'Total de buscas', value: buscas.total, color: '#0D63DB' },
             { label: 'Usuários únicos buscadores', value: buscas.unicos, color: '#7c3aed' },
             { label: 'Tipos de imóvel buscados', value: buscas.tipos.length, color: '#059669' },
             { label: 'Buscas por usuário', value: buscas.unicos > 0 ? (buscas.total / buscas.unicos).toFixed(1) + 'x' : '—', color: '#d97706' },
@@ -4582,20 +4582,20 @@ function MarketingTab() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Cidades mais buscadas</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Cidades mais buscadas</div>
             {buscas.cidades.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div> : buscas.cidades.map(([cidade, count]) => (
               <div key={cidade} style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
-                  <span>{cidade}</span><span style={{ fontWeight: 700, color: '#2563eb' }}>{count}</span>
+                  <span>{cidade}</span><span style={{ fontWeight: 700, color: '#0D63DB' }}>{count}</span>
                 </div>
                 <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
-                  <div style={{ background: 'linear-gradient(90deg,#2563eb,#60a5fa)', borderRadius: 4, height: 8, width: `${(count / maxBar(buscas.cidades)) * 100}%` }} />
+                  <div style={{ background: 'linear-gradient(90deg,#0D63DB,#60a5fa)', borderRadius: 4, height: 8, width: `${(count / maxBar(buscas.cidades)) * 100}%` }} />
                 </div>
               </div>
             ))}
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Estados mais buscados</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Estados mais buscados</div>
             {buscas.estados.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div> : buscas.estados.map(([estado, count]) => (
               <div key={estado} style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
@@ -4609,19 +4609,19 @@ function MarketingTab() {
           </div>
         </div>
         <div style={{ marginTop: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Tipos de imóvel buscados</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Tipos de imóvel buscados</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {buscas.tipos.length === 0 ? <span style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</span>
               : buscas.tipos.map(([tipo, count]) => (
-                <span key={tipo} style={{ padding: '4px 14px', background: '#eff6ff', color: '#1e40af', borderRadius: 999, fontWeight: 700, fontSize: 13 }}>
-                  {tipo} <span style={{ color: '#2563eb' }}>({count})</span>
+                <span key={tipo} style={{ padding: '4px 14px', background: '#eff6ff', color: '#084BA6', borderRadius: 999, fontWeight: 700, fontSize: 13 }}>
+                  {tipo} <span style={{ color: '#0D63DB' }}>({count})</span>
                 </span>
               ))}
           </div>
         </div>
         {buscas.pagamentos.length > 0 && (
           <div style={{ marginTop: 20 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Filtros de pagamento</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Filtros de pagamento</div>
             {(() => {
               const total = buscas.pagamentos.reduce((s, [, c]) => s + c, 0);
               return buscas.pagamentos.map(([tipo, count]) => (
@@ -4644,10 +4644,10 @@ function MarketingTab() {
         {sectionHeader('Perfil Demográfico dos Usuários', 'Dados dos últimos 30 dias')}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
           {[
-            { label: 'Total de usuários', value: perfisData.total, color: '#0f172a' },
+            { label: 'Total de usuários', value: perfisData.total, color: '#111111' },
             { label: 'Usuários ativos', value: perfisData.ativos, color: '#059669' },
             { label: 'Usuários inativos', value: perfisData.inativos, color: '#dc2626' },
-            { label: 'Taxa de atividade', value: perfisData.total > 0 ? ((perfisData.ativos / perfisData.total) * 100).toFixed(0) + '%' : '—', color: '#2563eb' },
+            { label: 'Taxa de atividade', value: perfisData.total > 0 ? ((perfisData.ativos / perfisData.total) * 100).toFixed(0) + '%' : '—', color: '#0D63DB' },
           ].map(k => (
             <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
               <div style={kpiStyle(k.color)}>{k.value}</div>
@@ -4657,7 +4657,7 @@ function MarketingTab() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Usuários por plano</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Usuários por plano</div>
             {perfisData.porRole.map(([role, count]) => {
               const maxV = Math.max(...perfisData.porRole.map(([, c]) => c), 1);
               return (
@@ -4673,7 +4673,7 @@ function MarketingTab() {
             })}
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Usuários por estado</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Usuários por estado</div>
             {perfisData.porEstado.length === 0 ? (
               <div style={{ color: '#94a3b8', fontSize: 13 }}>N/D — coluna estado não preenchida</div>
             ) : perfisData.porEstado.map(([estado, count]) => {
@@ -4692,14 +4692,14 @@ function MarketingTab() {
           </div>
         </div>
         <div style={{ marginTop: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Novos usuários por semana (últimas 12 semanas)</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Novos usuários por semana (últimas 12 semanas)</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
             {(() => {
               const maxV = Math.max(...perfisData.semanas.map(s => s.count), 1);
               return perfisData.semanas.map(s => (
                 <div key={s.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                   <div style={{ fontSize: 10, color: '#475569', fontWeight: 700 }}>{s.count > 0 ? s.count : ''}</div>
-                  <div style={{ width: '100%', background: s.count > 0 ? 'linear-gradient(180deg,#2563eb,#60a5fa)' : '#e2e8f0', borderRadius: 4, height: `${Math.max((s.count / maxV) * 56, s.count > 0 ? 8 : 4)}px` }} />
+                  <div style={{ width: '100%', background: s.count > 0 ? 'linear-gradient(180deg,#0D63DB,#60a5fa)' : '#e2e8f0', borderRadius: 4, height: `${Math.max((s.count / maxV) * 56, s.count > 0 ? 8 : 4)}px` }} />
                   <div style={{ fontSize: 9, color: '#94a3b8' }}>{s.label}</div>
                 </div>
               ));
@@ -4713,9 +4713,9 @@ function MarketingTab() {
         {sectionHeader('SDR Intelligence', 'Dados dos últimos 30 dias')}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
           {[
-            { label: 'Total de leads', value: sdrData.total, color: '#0f172a' },
+            { label: 'Total de leads', value: sdrData.total, color: '#111111' },
             { label: 'Convertidos', value: sdrData.convertidos, color: '#059669' },
-            { label: 'Taxa de conversão', value: sdrData.total > 0 ? ((sdrData.convertidos / sdrData.total) * 100).toFixed(1) + '%' : '—', color: '#2563eb' },
+            { label: 'Taxa de conversão', value: sdrData.total > 0 ? ((sdrData.convertidos / sdrData.total) * 100).toFixed(1) + '%' : '—', color: '#0D63DB' },
             { label: 'Leads novos', value: sdrData.leadsStatus['novo'] || 0, color: '#d97706' },
           ].map(k => (
             <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
@@ -4726,7 +4726,7 @@ function MarketingTab() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Funil de leads</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Funil de leads</div>
             {FUNNEL_STEPS.map((step, i) => {
               const count = sdrData.leadsStatus[step] || 0;
               const pct = sdrData.total > 0 ? ((count / sdrData.total) * 100).toFixed(0) : 0;
@@ -4744,7 +4744,7 @@ function MarketingTab() {
             })}
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Leads por produto</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Leads por produto</div>
             {sdrData.leadsPorProduto.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div>
               : sdrData.leadsPorProduto.map(l => (
                 <div key={l.nome} style={{ marginBottom: 8 }}>
@@ -4759,7 +4759,7 @@ function MarketingTab() {
           </div>
         </div>
         <div style={{ marginTop: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 10 }}>Leads por semana (últimas 8 semanas)</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Leads por semana (últimas 8 semanas)</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
             {(() => {
               const maxV = Math.max(...sdrData.semanas.map(s => s.count), 1);
@@ -4800,8 +4800,8 @@ function MarketingTab() {
                   return (
                     <tr key={o.cidade}>
                       <td style={S.td}><strong>{o.cidade}</strong></td>
-                      <td style={{ ...S.td, fontWeight: 700, color: '#2563eb' }}>{o.buscas}</td>
-                      <td style={{ ...S.td, color: o.imoveis === 0 ? '#dc2626' : '#0f172a' }}>{o.imoveis === 0 ? '0 ⚠' : o.imoveis}</td>
+                      <td style={{ ...S.td, fontWeight: 700, color: '#0D63DB' }}>{o.buscas}</td>
+                      <td style={{ ...S.td, color: o.imoveis === 0 ? '#dc2626' : '#111111' }}>{o.imoveis === 0 ? '0 ⚠' : o.imoveis}</td>
                       <td style={{ ...S.td, fontWeight: 700 }}>{o.ratio}</td>
                       <td style={S.td}><span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: oppColor + '20', color: oppColor }}>{opp}</span></td>
                     </tr>
@@ -4836,7 +4836,7 @@ function MarketingTab() {
                     <td style={{ ...S.td, fontSize: 13 }}>{a.perfis?.email || a.user_id || '—'}</td>
                     <td style={{ ...S.td, fontSize: 12, color: '#475569', maxWidth: 200 }}>{JSON.stringify(a.filtros || a.filtro || {})}</td>
                     <td style={{ ...S.td, fontSize: 12 }}>{a.ultimo_envio ? new Date(a.ultimo_envio).toLocaleDateString('pt-BR') : '—'}</td>
-                    <td style={{ ...S.td, fontWeight: 700, color: '#2563eb' }}>{a.total_enviados || 0}</td>
+                    <td style={{ ...S.td, fontWeight: 700, color: '#0D63DB' }}>{a.total_enviados || 0}</td>
                     <td style={S.td}><span style={S.badge(a.ativo !== false)}>{a.ativo !== false ? 'Ativo' : 'Inativo'}</span></td>
                   </tr>
                 ))}
@@ -4932,7 +4932,7 @@ function RegistrosTab() {
                   >
                     <div style={{ fontSize: 28 }}>📝</div>
                     <div style={{ flex: 1, minWidth: 200 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#111111' }}>
                         {sol?.imovel_nome || 'Imóvel sem nome'}{sol?.imovel_cidade ? ` — ${sol.imovel_cidade}` : ''}
                       </div>
                       <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
@@ -4940,7 +4940,7 @@ function RegistrosTab() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: '#eff6ff', color: '#1e40af' }}>{tipoLabel}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: '#eff6ff', color: '#084BA6' }}>{tipoLabel}</span>
                       {durMin && <span style={{ fontSize: 11, color: '#64748b' }}>⏱ {durMin} min</span>}
                       <span style={{ fontSize: 12, color: '#94a3b8' }}>{dataHora}</span>
                       <span style={{ fontSize: 12, color: '#94a3b8' }}>{aberto ? '▲' : '▼'}</span>
@@ -5058,7 +5058,7 @@ function CnjTab() {
 
   function imprimirRelatorio() {
     const w = window.open('', '_blank');
-    w.document.write(`<html><head><title>Relatório — ${new Date().toLocaleDateString('pt-BR')}</title><style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:800px;margin:0 auto}.user{background:#eff6ff;padding:12px;border-radius:8px;margin:8px 0}.assistant{background:#f8fafc;padding:12px;border-radius:8px;margin:8px 0}</style></head><body>`);
+    w.document.write(`<html><head><title>Relatório — ${new Date().toLocaleDateString('pt-BR')}</title><style>body{font-family:sans-serif;padding:32px;color:#111111;max-width:800px;margin:0 auto}.user{background:#eff6ff;padding:12px;border-radius:8px;margin:8px 0}.assistant{background:#f8fafc;padding:12px;border-radius:8px;margin:8px 0}</style></head><body>`);
     w.document.write(`<h1>Relatório Administrativo — ${new Date().toLocaleString('pt-BR')}</h1>`);
     chat.forEach(m => w.document.write(`<div class="${m.role}"><strong>${m.role === 'user' ? 'Admin' : 'Assistente'}:</strong><br>${m.content.replace(/\n/g, '<br>')}</div>`));
     w.document.write('</body></html>'); w.document.close(); w.print();
@@ -5071,7 +5071,7 @@ function CnjTab() {
         {/* Header */}
         <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>🧠 Inteligência Admin</div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111111' }}>🧠 Inteligência Admin</div>
             <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>CNJ DataJud · Atendimentos de usuários · Análises gerenciais</div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -5083,7 +5083,7 @@ function CnjTab() {
         {/* Chips de contexto + carregar conversas */}
         <div style={{ padding: '10px 20px', display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0, borderBottom: '1px solid #f8fafc', alignItems: 'center' }}>
           {resultadoCnj && (
-            <span style={{ fontSize: 11, background: '#eff6ff', color: '#2563eb', padding: '3px 10px', borderRadius: 99, fontWeight: 600, cursor: 'pointer' }} onClick={() => setResultadoCnj(null)}>
+            <span style={{ fontSize: 11, background: '#eff6ff', color: '#0D63DB', padding: '3px 10px', borderRadius: 99, fontWeight: 600, cursor: 'pointer' }} onClick={() => setResultadoCnj(null)}>
               📋 CNJ: {resultadoCnj.processos?.length || 0} processo(s) ✕
             </span>
           )}
@@ -5117,7 +5117,7 @@ function CnjTab() {
           )}
           {chat.map((m, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-              <div style={{ maxWidth: '80%', padding: '12px 16px', borderRadius: 14, background: m.role === 'user' ? '#2563eb' : m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#f0fdf4' : '#f8fafc', color: m.role === 'user' ? 'white' : '#1e293b', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', border: m.role === 'user' ? 'none' : `1px solid ${m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#bbf7d0' : '#e2e8f0'}` }}>
+              <div style={{ maxWidth: '80%', padding: '12px 16px', borderRadius: 14, background: m.role === 'user' ? '#0D63DB' : m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#f0fdf4' : '#f8fafc', color: m.role === 'user' ? 'white' : '#111111', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', border: m.role === 'user' ? 'none' : `1px solid ${m.content.startsWith('📋') || m.content.startsWith('🔍') ? '#bbf7d0' : '#e2e8f0'}` }}>
                 {m.content}
               </div>
             </div>
@@ -5132,7 +5132,7 @@ function CnjTab() {
         {/* Input */}
         <div style={{ padding: '12px 20px 16px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 12, color: '#64748b', cursor: 'pointer' }}>
-            <input type="checkbox" checked={gerarRelatorio} onChange={e => setGerarRelatorio(e.target.checked)} style={{ accentColor: '#2563eb' }} />
+            <input type="checkbox" checked={gerarRelatorio} onChange={e => setGerarRelatorio(e.target.checked)} style={{ accentColor: '#0D63DB' }} />
             Gerar relatório formal estruturado
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -5142,7 +5142,7 @@ function CnjTab() {
               rows={2}
               style={{ flex: 1, padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }} />
             <button onClick={enviarPergunta} disabled={perguntando || !pergunta.trim()}
-              style={{ padding: '10px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: (perguntando || !pergunta.trim()) ? 0.5 : 1, alignSelf: 'flex-end' }}>
+              style={{ padding: '10px 20px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: (perguntando || !pergunta.trim()) ? 0.5 : 1, alignSelf: 'flex-end' }}>
               ↑
             </button>
           </div>
@@ -5177,7 +5177,7 @@ function CnjTab() {
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
               <button onClick={() => setModalConv(false)} style={{ flex: 1, padding: 10, background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, color: '#475569' }}>Cancelar</button>
-              <button onClick={aplicarContextoConv} style={{ flex: 2, padding: 10, background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Aplicar</button>
+              <button onClick={aplicarContextoConv} style={{ flex: 2, padding: 10, background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Aplicar</button>
             </div>
           </div>
         </div>
@@ -5200,7 +5200,7 @@ export default function Admin() {
       <div style={S.page}>
         <div style={S.accessDenied}>
           <p style={{ fontSize: 48 }}>🔒</p>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Acesso restrito</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111111' }}>Acesso restrito</h2>
           <p style={{ color: '#64748b' }}>Você não tem permissão para acessar esta área.</p>
           <button style={S.btn('primary')} onClick={() => navigate('/')}>Voltar ao início</button>
         </div>

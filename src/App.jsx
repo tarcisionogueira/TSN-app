@@ -44,7 +44,7 @@ function ContaInativa() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: 20 }}>
       <div style={{ textAlign: 'center', maxWidth: 420 }}>
         <div style={{ fontSize: 52, marginBottom: 16 }}>🔒</div>
-        <h2 style={{ color: '#0f172a', marginBottom: 8, fontWeight: 900 }}>Conta inativa</h2>
+        <h2 style={{ color: '#111111', marginBottom: 8, fontWeight: 900 }}>Conta inativa</h2>
         <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
           Sua conta está temporariamente inativa. Entre em contato com o suporte para reativá-la.
         </p>
@@ -78,16 +78,16 @@ function PopupBonusAnalises({ userId, onFechar }) {
       <div style={{ background: 'white', borderRadius: 20, padding: 36, maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', position: 'relative' }}>
         <button onClick={fechar} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
         <div style={{ fontSize: 56, marginBottom: 12 }}>🎁</div>
-        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 10px' }}>Bônus de boas-vindas!</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 10px' }}>Bônus de boas-vindas!</h2>
         <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.6, margin: '0 0 24px' }}>
-          Você ganhou <strong style={{ color: '#2563eb' }}>5 análises gratuitas</strong> para explorar a plataforma e conhecer o potencial de imóveis em leilão.
+          Você ganhou <strong style={{ color: '#0D63DB' }}>5 análises gratuitas</strong> para explorar a plataforma e conhecer o potencial de imóveis em leilão.
         </p>
         <div style={{ background: '#eff6ff', borderRadius: 12, padding: '14px 20px', marginBottom: 24 }}>
-          <div style={{ fontSize: 36, fontWeight: 900, color: '#2563eb' }}>5</div>
+          <div style={{ fontSize: 36, fontWeight: 900, color: '#0D63DB' }}>5</div>
           <div style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>análises disponíveis</div>
         </div>
         <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 20px' }}>Faça upgrade para o plano Investidor Pro e ganhe 20 análises mensais com relatório jurídico completo.</p>
-        <button onClick={fechar} style={{ width: '100%', padding: '13px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+        <button onClick={fechar} style={{ width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
           Começar a explorar →
         </button>
       </div>

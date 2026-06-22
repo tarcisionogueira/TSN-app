@@ -91,7 +91,7 @@ export default function Planos() {
     <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
       {/* Hero */}
-      <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', padding: '64px 20px 80px', textAlign: 'center' }}>
+      <div style={{ background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', padding: '64px 20px 80px', textAlign: 'center' }}>
         <div style={{ display: 'inline-block', background: 'rgba(37,99,235,0.25)', border: '1px solid rgba(37,99,235,0.4)', borderRadius: 20, padding: '6px 16px', fontSize: 12, fontWeight: 700, color: '#93c5fd', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 }}>
           Planos & Preços
         </div>
@@ -127,10 +127,10 @@ export default function Planos() {
             const atual = ehPlanoAtual(key);
             const promo = promosPublicas[key];
             return (
-              <div style={{ background: 'white', borderRadius: 20, border: atual ? '2px solid #2563eb' : '1px solid #e2e8f0', padding: '32px 28px', boxShadow: '0 4px 20px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column' }}>
-                {atual && <div style={{ background: '#dbeafe', color: '#1e40af', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16, display: 'inline-block', alignSelf: 'flex-start' }}>Seu plano</div>}
+              <div style={{ background: 'white', borderRadius: 20, border: atual ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: '32px 28px', boxShadow: '0 4px 20px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column' }}>
+                {atual && <div style={{ background: '#dbeafe', color: '#084BA6', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16, display: 'inline-block', alignSelf: 'flex-start' }}>Seu plano</div>}
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>Explorador</div>
-                <div style={{ fontSize: 42, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>Grátis</div>
+                <div style={{ fontSize: 42, fontWeight: 900, color: '#111111', marginBottom: 4 }}>Grátis</div>
                 <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 20 }}>Para sempre</div>
                 <p style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>
                   Explore o mercado de leilões sem gastar nada. Ideal para quem está começando a pesquisar.
@@ -147,7 +147,7 @@ export default function Planos() {
                   ))}
                 </div>
                 <button onClick={() => irParaCheckout(key, plano)} disabled={atual}
-                  style={{ width: '100%', padding: '13px', border: atual ? '2px solid #cbd5e1' : '2px solid #e2e8f0', borderRadius: 12, background: atual ? '#f8fafc' : 'white', color: atual ? '#94a3b8' : '#0f172a', fontWeight: 700, fontSize: 14, cursor: atual ? 'default' : 'pointer', transition: 'all 0.15s' }}>
+                  style={{ width: '100%', padding: '13px', border: atual ? '2px solid #cbd5e1' : '2px solid #e2e8f0', borderRadius: 12, background: atual ? '#f8fafc' : 'white', color: atual ? '#94a3b8' : '#111111', fontWeight: 700, fontSize: 14, cursor: atual ? 'default' : 'pointer', transition: 'all 0.15s' }}>
                   {labelBotao(key, plano)}
                 </button>
               </div>
@@ -164,7 +164,7 @@ export default function Planos() {
             const economia = temAnual ? (plano.preco * 12 - plano.precoAnual) : 0;
             const fmtVal = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return (
-              <div style={{ background: 'linear-gradient(145deg, #1e40af 0%, #1d4ed8 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 28px', boxShadow: '0 8px 32px rgba(37,99,235,0.35)', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ background: 'linear-gradient(145deg, #084BA6 0%, #084BA6 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 28px', boxShadow: '0 8px 32px rgba(37,99,235,0.35)', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
                 <div style={{ position: 'absolute', top: 16, right: 16, background: '#fbbf24', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>⭐ Mais popular</div>
                 {atual && <div style={{ background: 'rgba(255,255,255,0.2)', color: 'white', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16, display: 'inline-block', alignSelf: 'flex-start' }}>Seu plano</div>}
@@ -199,7 +199,7 @@ export default function Planos() {
 
                 {/* CTA único */}
                 <button onClick={() => irParaCheckout(key, plano)} disabled={atual}
-                  style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual ? 'rgba(255,255,255,0.15)' : 'white', color: atual ? '#93c5fd' : '#1e40af', fontWeight: 800, fontSize: 15, cursor: atual ? 'default' : 'pointer', boxShadow: atual ? 'none' : '0 4px 14px rgba(0,0,0,0.2)' }}>
+                  style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual ? 'rgba(255,255,255,0.15)' : 'white', color: atual ? '#93c5fd' : '#084BA6', fontWeight: 800, fontSize: 15, cursor: atual ? 'default' : 'pointer', boxShadow: atual ? 'none' : '0 4px 14px rgba(0,0,0,0.2)' }}>
                   {atual ? 'Seu plano atual' : 'Assinar →'}
                 </button>
               </div>
@@ -212,7 +212,7 @@ export default function Planos() {
           <div style={{ display: 'inline-block', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 20, padding: '6px 16px', fontSize: 12, fontWeight: 700, color: '#92400e', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
             Assessoria Personalizada
           </div>
-          <h2 style={{ fontSize: 'clamp(22px, 4vw, 32px)', fontWeight: 900, color: '#0f172a', margin: '0 0 12px' }}>Quer a equipe TSN do seu lado?</h2>
+          <h2 style={{ fontSize: 'clamp(22px, 4vw, 32px)', fontWeight: 900, color: '#111111', margin: '0 0 12px' }}>Quer a equipe TSN do seu lado?</h2>
           <p style={{ color: '#64748b', fontSize: 16, maxWidth: 500, margin: '0 auto' }}>
             Para quem quer resultados acompanhados por especialistas do início ao fim da arrematação.
           </p>
@@ -221,15 +221,15 @@ export default function Planos() {
         {!user ? (
           <div style={{ background: 'white', borderRadius: 20, border: '2px dashed #cbd5e1', padding: '48px 32px', textAlign: 'center', maxWidth: 560, margin: '0 auto' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
-            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Faça login para ver os planos de assessoria</h3>
+            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#111111', marginBottom: 8 }}>Faça login para ver os planos de assessoria</h3>
             <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24, maxWidth: 380, margin: '0 auto 24px', lineHeight: 1.6 }}>
               Os planos Assessorado e Clube de Negócios são exclusivos para membros cadastrados.
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => nav('/login')} style={{ padding: '12px 28px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              <button onClick={() => nav('/login')} style={{ padding: '12px 28px', background: '#111111', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                 Entrar na minha conta
               </button>
-              <button onClick={() => nav('/login')} style={{ padding: '12px 28px', background: 'transparent', color: '#0f172a', border: '2px solid #e2e8f0', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              <button onClick={() => nav('/login')} style={{ padding: '12px 28px', background: 'transparent', color: '#111111', border: '2px solid #e2e8f0', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                 Criar conta grátis
               </button>
             </div>
@@ -246,7 +246,7 @@ export default function Planos() {
                   {atual && <div style={{ background: plano.bg, color: plano.cor, fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16, display: 'inline-block', alignSelf: 'flex-start' }}>Seu plano</div>}
                   <div style={{ fontSize: 11, fontWeight: 800, color: plano.cor, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>{plano.nome}</div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                    <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a' }}>{plano.precoLabel}</div>
+                    <div style={{ fontSize: 36, fontWeight: 900, color: '#111111' }}>{plano.precoLabel}</div>
                     <div style={{ fontSize: 13, color: '#94a3b8' }}>{key === 'assessorado' ? '× 12 parcelas' : '/mês'}</div>
                   </div>
                   {key === 'assessorado' && (
@@ -292,7 +292,7 @@ export default function Planos() {
           ].map(({ icon, titulo, sub }) => (
             <div key={titulo} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px', textAlign: 'center' }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{titulo}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111111', marginBottom: 4 }}>{titulo}</div>
               <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>{sub}</div>
             </div>
           ))}
@@ -300,13 +300,13 @@ export default function Planos() {
 
         {/* FAQ */}
         <div style={{ maxWidth: 720, margin: '64px auto 0' }}>
-          <h3 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', textAlign: 'center', marginBottom: 32 }}>Perguntas frequentes</h3>
+          <h3 style={{ fontSize: 24, fontWeight: 900, color: '#111111', textAlign: 'center', marginBottom: 32 }}>Perguntas frequentes</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {FAQS.map((faq, i) => (
               <div key={i} style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
                 <button onClick={() => setFaqAberto(faqAberto === i ? null : i)}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', gap: 12 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{faq.q}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#111111' }}>{faq.q}</span>
                   {faqAberto === i ? <ChevronUp size={18} color="#64748b" /> : <ChevronDown size={18} color="#64748b" />}
                 </button>
                 {faqAberto === i && (
@@ -319,7 +319,7 @@ export default function Planos() {
 
         <p style={{ textAlign: 'center', marginTop: 48, fontSize: 13, color: '#94a3b8' }}>
           Dúvidas? Fale com nossa equipe pelo chat ·{' '}
-          <span style={{ color: '#2563eb', cursor: 'pointer', fontWeight: 600 }}
+          <span style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}
             onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}>
             Abrir suporte
           </span>

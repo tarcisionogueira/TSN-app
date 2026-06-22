@@ -70,7 +70,7 @@ function maskWA(value) {
 
 const TIPO_LABELS = { ebook: 'eBook', curso: 'Curso', calculadora: 'Calculadora', plataforma: 'Acesso à Plataforma', minicurso: 'Mini-curso', webinar: 'Webinar', outro: 'Conteúdo' };
 
-const inputStyle = { width: '100%', padding: '12px 14px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' };
+const inputStyle = { width: '100%', padding: '12px 14px', background: '#111111', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 15, outline: 'none', boxSizing: 'border-box' };
 const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 };
 
 /* ── Lead Capture (captura tipo) — multi-step funnel ── */
@@ -96,11 +96,11 @@ function CapturaLanding({ id }) {
   }, [id]);
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 16 }}>Carregando…</div>
+    <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 16 }}>Carregando…</div>
   );
 
   if (!produto) return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#94a3b8', gap: 16 }}>
+    <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#94a3b8', gap: 16 }}>
       <div style={{ fontSize: 40 }}>❌</div>
       <div style={{ fontSize: 18, color: '#e2e8f0' }}>Produto não encontrado.</div>
       <a href="/" style={{ color: '#60a5fa', textDecoration: 'none', fontSize: 14 }}>← Voltar ao site</a>
@@ -112,7 +112,7 @@ function CapturaLanding({ id }) {
   const tipoLabel = TIPO_LABELS[produto.tipo] || 'Conteúdo';
 
   const Header = () => (
-    <div style={{ borderBottom: '1px solid #1e293b', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div style={{ borderBottom: '1px solid #111111', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <div style={{ fontWeight: 900, fontSize: 18, color: 'white', letterSpacing: 1 }}>TSN <span style={{ color: '#f59e0b' }}>ATIVOS</span></div>
       <a href="/" style={{ fontSize: 13, color: '#94a3b8', textDecoration: 'none' }}>← Voltar ao site</a>
     </div>
@@ -122,7 +122,7 @@ function CapturaLanding({ id }) {
   if (step === 'sucesso') {
     const msg = produto.mensagem_boas_vindas || `Seu acesso foi liberado! Todo o conteúdo está disponível dentro da plataforma TSN Ativos.`;
     return (
-      <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+      <div style={{ minHeight: '100vh', background: '#111111', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
         <Header />
         <div style={{ maxWidth: 560, margin: '0 auto', padding: '64px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
@@ -137,7 +137,7 @@ function CapturaLanding({ id }) {
           {produto.conteudo_url && (
             <div style={{ marginTop: 12 }}>
               <a href={produto.conteudo_url} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'inline-block', padding: '12px 28px', background: '#1e293b', color: '#60a5fa', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', border: '1px solid #334155' }}>
+                style={{ display: 'inline-block', padding: '12px 28px', background: '#111111', color: '#60a5fa', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', border: '1px solid #334155' }}>
                 Acessar {tipoLabel} diretamente →
               </a>
             </div>
@@ -150,7 +150,7 @@ function CapturaLanding({ id }) {
   /* ── Step: HERO ── */
   if (step === 'hero') {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+      <div style={{ minHeight: '100vh', background: '#111111', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
         <Header />
         <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 24px 80px' }}>
           {produto.imagem_url && (
@@ -202,7 +202,7 @@ function CapturaLanding({ id }) {
       }
     };
     return (
-      <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+      <div style={{ minHeight: '100vh', background: '#111111', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
         <Header />
         <div style={{ maxWidth: 560, margin: '0 auto', padding: '40px 24px 80px' }}>
           <div style={{ marginBottom: 24 }}>
@@ -212,12 +212,12 @@ function CapturaLanding({ id }) {
               <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: 'white' }}>Responda rapidinho</h2>
               <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>Pergunta {qIdx + 1} de {perguntas.length}</span>
             </div>
-            <div style={{ background: '#1e293b', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+            <div style={{ background: '#111111', borderRadius: 99, height: 6, overflow: 'hidden' }}>
               <div style={{ width: `${((qIdx + 1) / perguntas.length) * 100}%`, background: '#059669', height: '100%', borderRadius: 99, transition: 'width 0.3s ease' }} />
             </div>
           </div>
           {p && (
-            <div style={{ background: '#1e293b', borderRadius: 12, padding: '24px 20px', border: '1px solid #334155', marginBottom: 24 }}>
+            <div style={{ background: '#111111', borderRadius: 12, padding: '24px 20px', border: '1px solid #334155', marginBottom: 24 }}>
               <label style={{ display: 'block', fontSize: 15, fontWeight: 700, color: '#e2e8f0', marginBottom: 16, textAlign: 'center' }}>{p.texto}</label>
               {p.tipo === 'texto' && (
                 <textarea value={respostas[p.id] || ''} onChange={e => setRespostas(r => ({ ...r, [p.id]: e.target.value }))}
@@ -228,7 +228,7 @@ function CapturaLanding({ id }) {
                 <div style={{ display: 'flex', gap: 10 }}>
                   {['Sim', 'Não'].map(opt => (
                     <button key={opt} onClick={() => setRespostas(r => ({ ...r, [p.id]: opt }))}
-                      style={{ flex: 1, padding: '10px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#0f172a', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                      style={{ flex: 1, padding: '10px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#111111', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                       {opt}
                     </button>
                   ))}
@@ -238,7 +238,7 @@ function CapturaLanding({ id }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(p.opcoes || '').split(',').map(opt => opt.trim()).filter(Boolean).map(opt => (
                     <button key={opt} onClick={() => setRespostas(r => ({ ...r, [p.id]: opt }))}
-                      style={{ padding: '10px 14px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#0f172a', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+                      style={{ padding: '10px 14px', borderRadius: 8, border: `2px solid ${respostas[p.id] === opt ? '#059669' : '#334155'}`, background: respostas[p.id] === opt ? '#065f46' : '#111111', color: respostas[p.id] === opt ? '#34d399' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
                       {respostas[p.id] === opt ? '● ' : '○ '}{opt}
                     </button>
                   ))}
@@ -247,7 +247,7 @@ function CapturaLanding({ id }) {
             </div>
           )}
           <button onClick={handleNext} disabled={!respondida}
-            style={{ width: '100%', padding: '14px', background: respondida ? '#059669' : '#1e293b', color: respondida ? 'white' : '#64748b', border: `1px solid ${respondida ? '#059669' : '#334155'}`, borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: respondida ? 'pointer' : 'not-allowed' }}>
+            style={{ width: '100%', padding: '14px', background: respondida ? '#059669' : '#111111', color: respondida ? 'white' : '#64748b', border: `1px solid ${respondida ? '#059669' : '#334155'}`, borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: respondida ? 'pointer' : 'not-allowed' }}>
             {isLast ? 'Continuar →' : 'Próxima →'}
           </button>
         </div>
@@ -300,7 +300,7 @@ function CapturaLanding({ id }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
+    <div style={{ minHeight: '100vh', background: '#111111', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
       <Header />
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '40px 24px 80px' }}>
         <button onClick={() => setStep(temPerguntas ? 'perguntas' : 'hero')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 20 }}>← Voltar</button>
@@ -394,10 +394,10 @@ export default function ProdutoLanding() {
     load();
   }, [tipo, id]);
 
-  if (loading) return <div style={{ minHeight:'100vh', background:'#0f172a', display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', fontSize:16 }}>Carregando…</div>;
+  if (loading) return <div style={{ minHeight:'100vh', background:'#111111', display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', fontSize:16 }}>Carregando…</div>;
 
   if (!produto) return (
-    <div style={{ minHeight:'100vh', background:'#0f172a', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', color:'#94a3b8', gap:16 }}>
+    <div style={{ minHeight:'100vh', background:'#111111', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', color:'#94a3b8', gap:16 }}>
       <div style={{ fontSize:40 }}>❌</div>
       <div style={{ fontSize:18, color:'#e2e8f0' }}>Produto não encontrado.</div>
       <a href="/" style={{ color:'#60a5fa', textDecoration:'none', fontSize:14 }}>← Voltar ao site</a>
@@ -424,14 +424,14 @@ export default function ProdutoLanding() {
     ? (isPlano ? 'Assinar agora' : 'Adquirir curso')
     : (isPlano ? 'Criar conta e assinar' : 'Criar conta e adquirir');
 
-  const accentColor = isPlano ? '#f59e0b' : (produto.cor || '#2563eb');
+  const accentColor = isPlano ? '#f59e0b' : (produto.cor || '#0D63DB');
   const emoji = isPlano ? '📋' : (produto.emoji || '🎓');
   const preco = isPlano ? produto.precoLabel : (Number(produto.preco) > 0 ? `R$ ${Number(produto.preco).toFixed(2).replace('.',',')}` : 'Gratuito');
 
   return (
-    <div style={{ minHeight:'100vh', background:'#0f172a', fontFamily:"'Inter', sans-serif", color:'#e2e8f0' }}>
+    <div style={{ minHeight:'100vh', background:'#111111', fontFamily:"'Inter', sans-serif", color:'#e2e8f0' }}>
       {/* Header */}
-      <div style={{ borderBottom:'1px solid #1e293b', padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ borderBottom:'1px solid #111111', padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div style={{ fontWeight:900, fontSize:18, color:'white', letterSpacing:1 }}>
           TSN <span style={{ color:'#f59e0b' }}>ATIVOS</span>
         </div>
@@ -460,7 +460,7 @@ export default function ProdutoLanding() {
 
         {/* Features / Descrição */}
         {isPlano ? (
-          <div style={{ background:'#1e293b', borderRadius:16, padding:'28px 32px', marginBottom:32 }}>
+          <div style={{ background:'#111111', borderRadius:16, padding:'28px 32px', marginBottom:32 }}>
             <div style={{ fontSize:14, fontWeight:800, color:accentColor, textTransform:'uppercase', letterSpacing:1, marginBottom:18 }}>O que está incluso</div>
             <ul style={{ listStyle:'none', margin:0, padding:0, display:'flex', flexDirection:'column', gap:12 }}>
               {produto.features.map((f, i) => (
@@ -472,7 +472,7 @@ export default function ProdutoLanding() {
             </ul>
           </div>
         ) : (
-          <div style={{ background:'#1e293b', borderRadius:16, padding:'28px 32px', marginBottom:32 }}>
+          <div style={{ background:'#111111', borderRadius:16, padding:'28px 32px', marginBottom:32 }}>
             <div style={{ fontSize:14, fontWeight:800, color:accentColor, textTransform:'uppercase', letterSpacing:1, marginBottom:16 }}>Sobre o curso</div>
             {produto.descricao && (
               <p style={{ fontSize:15, color:'#cbd5e1', lineHeight:1.7, margin:0, whiteSpace:'pre-wrap' }}>{produto.descricao}</p>

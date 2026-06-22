@@ -22,7 +22,7 @@ export default function AssinaturaCanvas({ onChange, altura = 180 }) {
     ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#0f172a';
+    ctx.strokeStyle = '#111111';
   }, []);
 
   const pos = (e) => {

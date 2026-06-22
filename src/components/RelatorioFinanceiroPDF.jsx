@@ -42,11 +42,11 @@ export function gerarPDFFinanceiro({ grupos, totalEntradas, totalSaidas }) {
 <title>Relatório Financeiro TSN Ativos</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
-  body{font-family:'Inter',sans-serif;font-size:10.5px;color:#0f172a;padding:20px;line-height:1.5;background:white;margin:0;}
+  body{font-family:'Inter',sans-serif;font-size:10.5px;color:#111111;padding:20px;line-height:1.5;background:white;margin:0;}
   @media print{body{padding:0;}@page{margin:8mm;size:A4;}.av{page-break-inside:avoid;}}
-  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:18px;}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111111;padding-bottom:12px;margin-bottom:18px;}
   h2{font-size:12px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:18px 0 8px;}
-  h3{font-size:11px;font-weight:800;margin:14px 0 6px;color:#0f172a;}
+  h3{font-size:11px;font-weight:800;margin:14px 0 6px;color:#111111;}
   table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:10px;}
   th,td{border:1px solid #cbd5e1;padding:5px 7px;}
   th{background:#f1f5f9;font-weight:700;text-align:left;}

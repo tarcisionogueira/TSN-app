@@ -31,21 +31,21 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
 <title>Relatório TSN Ativos — ${d.nome||d.endereco}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
-  body{font-family:'Inter',sans-serif;font-size:10.5px;color:#0f172a;padding:20px;line-height:1.5;background:white;margin:0;}
+  body{font-family:'Inter',sans-serif;font-size:10.5px;color:#111111;padding:20px;line-height:1.5;background:white;margin:0;}
   @media print{body{padding:0;}@page{margin:8mm;size:A4;}
     .pb{page-break-before:always;}.av{page-break-inside:avoid;}}
-  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:18px;}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111111;padding-bottom:12px;margin-bottom:18px;}
   h2{font-size:12px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:18px 0 8px;}
-  h3{font-size:10.5px;font-weight:700;margin:12px 0 6px;color:#1e293b;}
+  h3{font-size:10.5px;font-weight:700;margin:12px 0 6px;color:#111111;}
   table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:10px;}
   th,td{border:1px solid #cbd5e1;padding:5px 7px;}
   th{background:#f1f5f9;font-weight:700;text-align:left;}
   .r{text-align:right;}.c{text-align:center;}
   .g{color:#059669;font-weight:700;}.rd{color:#dc2626;font-weight:700;}
-  .am{color:#d97706;font-weight:700;}.bl{color:#2563eb;font-weight:700;}
+  .am{color:#d97706;font-weight:700;}.bl{color:#0D63DB;font-weight:700;}
   .bg-g{background:#d1fae5;}.bg-rd{background:#fee2e2;}.bg-bl{background:#dbeafe;}
   .box{border:2px solid #dc2626;background:#fef2f2;padding:10px;border-radius:5px;margin:10px 0;}
-  .obs{border-left:4px solid #2563eb;background:#f0f9ff;padding:8px 12px;margin-bottom:12px;}
+  .obs{border-left:4px solid #0D63DB;background:#f0f9ff;padding:8px 12px;margin-bottom:12px;}
   pre{white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:10px;margin:0;line-height:1.6;}
   .viab{padding:12px;border-radius:6px;margin:12px 0;border:2px solid;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
@@ -148,7 +148,7 @@ ${sec.def?`<div class="av"><h2>Defesa da Arrematação</h2><pre>${sec.def}</pre>
 ${mercado?`<div class="av">
 <h2>Avaliação Mercadológica</h2>
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
-  ${[['Preço Médio/m²',`R$ ${fmt(mercado.precoMedioM2||0,0)}`,'#2563eb'],
+  ${[['Preço Médio/m²',`R$ ${fmt(mercado.precoMedioM2||0,0)}`,'#0D63DB'],
      ['Aluguel Médio',`R$ ${fmt(mercado.aluguelMedio||0,0)}/mês`,'#7c3aed'],
      ['Yield Bruto',fmtPct(mercado.yieldBruto||0),'#059669'],
      ['Yield Líquido',fmtPct(mercado.yieldLiquido||0),'#d97706']].map(([l,v,c])=>`
@@ -173,7 +173,7 @@ ${fluxo.linhas.map((r,i)=>`<tr style="background:${i%2===0?'white':'#f8fafc'}">
 <td class="r g">${r.entrada>0?'+ R$ '+fmt(r.entrada):'—'}</td>
 <td class="r rd">${r.saida>0?'- R$ '+fmt(r.saida):'—'}</td>
 <td class="r ${r.saldo>=0?'g':'rd'}" style="background:${r.saldo>=0?'#f0fdf4':'#fef2f2'}">R$ ${fmt(r.saldo)}</td></tr>`).join('')}
-<tr style="background:#0f172a;color:white;font-weight:800;"><td colspan="3" class="r" style="font-size:9px;text-transform:uppercase;">Total Aportado</td>
+<tr style="background:#111111;color:white;font-weight:800;"><td colspan="3" class="r" style="font-size:9px;text-transform:uppercase;">Total Aportado</td>
 <td class="r" style="color:#fca5a5;">- R$ ${fmt(fluxo.totalSaidas)}</td><td></td></tr>
 <tr style="background:#065f46;color:white;font-weight:900;"><td colspan="4" class="r" style="text-transform:uppercase;">Resultado Final</td>
 <td class="r" style="font-size:13px;">= R$ ${fmt(fluxo.totalEntradas-fluxo.totalSaidas)}</td></tr>
@@ -208,7 +208,7 @@ ${sacTab.filter((_,i)=>i<5||i===sacTab.length-1||i%Math.max(1,Math.floor(sacTab.
 ${(d.riscos||[]).length>0?`<div class="av">
 <h2>Riscos Jurídicos Identificados</h2>
 ${(d.riscos||[]).map(r=>`<div style="padding:6px 10px;margin-bottom:4px;border-radius:4px;background:${r.tipo==='bloqueante'?'#fee2e2':r.tipo==='alerta'?'#fef3c7':'#dbeafe'};border:1px solid ${r.tipo==='bloqueante'?'#fca5a5':r.tipo==='alerta'?'#fde68a':'#bfdbfe'};display:flex;gap:8px;align-items:flex-start;">
-<span style="font-size:8px;font-weight:800;background:white;padding:2px 6px;border-radius:10px;color:${r.tipo==='bloqueante'?'#dc2626':r.tipo==='alerta'?'#d97706':'#2563eb'};white-space:nowrap;">${r.tipo.toUpperCase()}</span>
+<span style="font-size:8px;font-weight:800;background:white;padding:2px 6px;border-radius:10px;color:${r.tipo==='bloqueante'?'#dc2626':r.tipo==='alerta'?'#d97706':'#0D63DB'};white-space:nowrap;">${r.tipo.toUpperCase()}</span>
 <span style="font-size:10px;">${r.texto}</span></div>`).join('')}
 </div>`:''}
 

@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_CFG = {
   aberto:         { label: 'Aberto',         cor: '#10b981', bg: '#d1fae5' },
-  em_atendimento: { label: 'Em atendimento', cor: '#2563eb', bg: '#dbeafe' },
+  em_atendimento: { label: 'Em atendimento', cor: '#0D63DB', bg: '#dbeafe' },
   finalizado:     { label: 'Finalizado',     cor: '#64748b', bg: '#f1f5f9' },
 };
 
@@ -137,7 +137,7 @@ export default function Atendimento() {
 
           {/* Título */}
           <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>Fila de Atendimento</span>
+            <span style={{ fontWeight: 800, fontSize: 15, color: '#111111' }}>Fila de Atendimento</span>
             <button onClick={carregarChamados} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4, display: 'flex' }} title="Atualizar">
               <RefreshCw size={14} />
             </button>
@@ -145,7 +145,7 @@ export default function Atendimento() {
 
           {/* Resumo por status */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #f1f5f9' }}>
-            {[['aberto', 'Abertos', '#10b981'], ['em_atendimento', 'Em at.', '#2563eb'], ['finalizado', 'Final.', '#94a3b8']].map(([s, l, c]) => (
+            {[['aberto', 'Abertos', '#10b981'], ['em_atendimento', 'Em at.', '#0D63DB'], ['finalizado', 'Final.', '#94a3b8']].map(([s, l, c]) => (
               <div key={s} style={{ padding: '10px 6px', textAlign: 'center', borderRight: '1px solid #f1f5f9' }}>
                 <div style={{ fontSize: 20, fontWeight: 900, color: c }}>{cont(s)}</div>
                 <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>{l}</div>
@@ -157,7 +157,7 @@ export default function Atendimento() {
           <div style={{ padding: '8px 12px', display: 'flex', gap: 5, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
             {[['pendentes', 'Pendentes'], ['todos', 'Todos'], ['finalizado', 'Finalizados']].map(([k, l]) => (
               <button key={k} onClick={() => setFiltro(k)}
-                style={{ padding: '4px 12px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: filtro === k ? '#0f172a' : '#f1f5f9', color: filtro === k ? 'white' : '#64748b' }}>
+                style={{ padding: '4px 12px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: filtro === k ? '#111111' : '#f1f5f9', color: filtro === k ? 'white' : '#64748b' }}>
                 {l}
               </button>
             ))}
@@ -170,7 +170,7 @@ export default function Atendimento() {
               value={busca}
               onChange={e => setBusca(e.target.value)}
               placeholder="Buscar por cliente ou atendente..."
-              style={{ width: '100%', padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, color: '#111111', outline: 'none', boxSizing: 'border-box' }}
             />
           </div>
 
@@ -178,7 +178,7 @@ export default function Atendimento() {
           <div style={{ maxHeight: 520, overflowY: 'auto' }}>
             {loading ? (
               <div style={{ padding: 24, textAlign: 'center' }}>
-                <Loader2 size={20} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
+                <Loader2 size={20} color="#0D63DB" style={{ animation: 'spin 1s linear infinite' }} />
               </div>
             ) : chamadosFiltrados.length === 0 ? (
               <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Nenhum chamado</div>
@@ -187,11 +187,11 @@ export default function Atendimento() {
               const ativo = chamadoAtivo?.id === c.id;
               return (
                 <button key={c.id} onClick={() => abrirChamado(c)}
-                  style={{ width: '100%', padding: '11px 14px', border: 'none', background: ativo ? '#eff6ff' : 'none', textAlign: 'left', cursor: 'pointer', borderBottom: '1px solid #f8fafc', borderLeft: ativo ? '3px solid #2563eb' : '3px solid transparent', transition: 'background 0.1s' }}
+                  style={{ width: '100%', padding: '11px 14px', border: 'none', background: ativo ? '#eff6ff' : 'none', textAlign: 'left', cursor: 'pointer', borderBottom: '1px solid #f8fafc', borderLeft: ativo ? '3px solid #0D63DB' : '3px solid transparent', transition: 'background 0.1s' }}
                   onMouseEnter={e => { if (!ativo) e.currentTarget.style.background = '#f8fafc'; }}
                   onMouseLeave={e => { if (!ativo) e.currentTarget.style.background = 'none'; }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', lineHeight: 1.3, flex: 1, marginRight: 6 }}>{c.titulo}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#111111', lineHeight: 1.3, flex: 1, marginRight: 6 }}>{c.titulo}</span>
                     <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: s.bg, color: s.cor, whiteSpace: 'nowrap' }}>{s.label}</span>
                   </div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>
@@ -221,7 +221,7 @@ export default function Atendimento() {
           {/* Cabeçalho do chamado ativo */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{chamadoAtivo.titulo}</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#111111' }}>{chamadoAtivo.titulo}</div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                 <User size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                 {chamadoAtivo.user_nome || chamadoAtivo.user_email}
@@ -237,7 +237,7 @@ export default function Atendimento() {
               })()}
               {chamadoAtivo.status === 'aberto' && (
                 <button onClick={assumirChamado}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                   <UserCheck size={14} /> Assumir
                 </button>
               )}
@@ -269,16 +269,16 @@ export default function Atendimento() {
                 <div style={{
                   maxWidth: '76%', padding: '10px 14px', borderRadius: 12,
                   background: m.autor_tipo === 'cliente' ? '#f8fafc' : m.autor_tipo === 'ia' ? '#eff6ff' : '#ecfdf5',
-                  color: '#0f172a', fontSize: 13, lineHeight: 1.6,
+                  color: '#111111', fontSize: 13, lineHeight: 1.6,
                   border: `1px solid ${m.autor_tipo === 'cliente' ? '#e2e8f0' : m.autor_tipo === 'ia' ? '#bae6fd' : '#86efac'}`,
                 }}>
                   {m.autor_tipo === 'ia' && (
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', marginBottom: 5 }}>Resposta automática</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#0D63DB', marginBottom: 5 }}>Resposta automática</div>
                   )}
                   {m.conteudo}
                   {(m.anexos || []).map((a, i) => a.tipo === 'imagem'
                     ? <img key={i} src={a.url} alt={a.nome} style={{ maxWidth: 200, display: 'block', marginTop: 8, borderRadius: 8 }} />
-                    : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#2563eb' }}>{a.nome}</a>
+                    : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#0D63DB' }}>{a.nome}</a>
                   )}
                 </div>
               </div>
@@ -314,7 +314,7 @@ export default function Atendimento() {
                   style={{ flex: 1, padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
                 />
                 <button onClick={enviarMensagem} disabled={(!texto.trim() && !anexos.length) || enviando}
-                  style={{ background: '#0f172a', color: 'white', border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1 }}>
+                  style={{ background: '#111111', color: 'white', border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1 }}>
                   {enviando ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={15} />}
                 </button>
                 <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />

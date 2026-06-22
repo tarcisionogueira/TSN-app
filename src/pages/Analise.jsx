@@ -38,7 +38,7 @@ const STATUS_OPTS = [
 
 const TIPO_OPTS = [['casa','Casa'],['apartamento','Apartamento'],['terreno','Terreno'],['comercial','Comercial']];
 
-const inp = { width:'100%', padding:'9px 11px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#0f172a', boxSizing:'border-box' };
+const inp = { width:'100%', padding:'9px 11px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#111111', boxSizing:'border-box' };
 const lbl = { fontSize:10, fontWeight:700, color:'#64748b', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
 
 function Field({ label, name, value, onChange, type='text', opts=[], rows=2, ph='', prefix='' }) {
@@ -59,7 +59,7 @@ function Field({ label, name, value, onChange, type='text', opts=[], rows=2, ph=
   );
 }
 
-function Section({ step, title, icon: Icon, color='#2563eb', open, onToggle, badge, children }) {
+function Section({ step, title, icon: Icon, color='#0D63DB', open, onToggle, badge, children }) {
   return (
     <div style={{background:'white',borderRadius:16,border:'1px solid #e2e8f0',overflow:'hidden',boxShadow:'0 1px 4px rgba(0,0,0,0.04)'}}>
       <button onClick={onToggle} style={{width:'100%',padding:'16px 20px',border:'none',background:'white',cursor:'pointer',display:'flex',alignItems:'center',gap:14,textAlign:'left'}}>
@@ -71,7 +71,7 @@ function Section({ step, title, icon: Icon, color='#2563eb', open, onToggle, bad
             {step && <span style={{fontSize:10,fontWeight:800,color:open?color:'#94a3b8',textTransform:'uppercase',letterSpacing:1}}>Etapa {step}</span>}
             {badge && <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:open?color+'18':' #f1f5f9',color:open?color:'#94a3b8'}}>{badge}</span>}
           </div>
-          <div style={{fontSize:15,fontWeight:800,color:'#0f172a',marginTop:1}}>{title}</div>
+          <div style={{fontSize:15,fontWeight:800,color:'#111111',marginTop:1}}>{title}</div>
         </div>
         {open ? <ChevronUp size={16} color="#94a3b8"/> : <ChevronDown size={16} color="#94a3b8"/>}
       </button>
@@ -414,7 +414,7 @@ export default function Analise() {
     <div style={{ maxWidth: 960, margin:'0 auto', padding: isMobile ? '12px' : '20px', display:'flex', flexDirection:'column', gap:14 }}>
 
       {/* HEADER */}
-      <div style={{ background:'#0f172a', borderRadius:16, padding:'18px 22px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+      <div style={{ background:'#111111', borderRadius:16, padding:'18px 22px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
         <div>
           <div style={{ fontSize:11, color:'#64748b', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:4 }}>Análise de Viabilidade</div>
           <div style={{ fontSize:18, fontWeight:900, color:'white', lineHeight:1.2 }}>{d.nome||'Novo Imóvel'}</div>
@@ -422,10 +422,10 @@ export default function Analise() {
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <select name="status" value={d.status||'analise'} onChange={upN}
-            style={{ fontSize:12, fontWeight:700, border:'1px solid #334155', borderRadius:8, padding:'7px 10px', background:'#1e293b', color:'white' }}>
+            style={{ fontSize:12, fontWeight:700, border:'1px solid #334155', borderRadius:8, padding:'7px 10px', background:'#111111', color:'white' }}>
             {STATUS_OPTS.map(([v,l])=><option key={v} value={v}>{l}</option>)}
           </select>
-          <button onClick={salvar} style={{ padding:'8px 16px', background:saved?'#10b981':'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, transition:'background 0.2s' }}>
+          <button onClick={salvar} style={{ padding:'8px 16px', background:saved?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, transition:'background 0.2s' }}>
             {saved ? <><CheckCircle2 size={14}/> Salvo!</> : <><Save size={14}/> Salvar</>}
           </button>
           {parecer && (
@@ -438,7 +438,7 @@ export default function Analise() {
 
       {/* Contador de análises por role */}
       {!semLimite && (
-        <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : role === 'explorador' ? '#eff6ff' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : role === 'explorador' ? '#1e40af' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+        <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : role === 'explorador' ? '#eff6ff' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : role === 'explorador' ? '#084BA6' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <span>{analisesBloqueado
             ? (role === 'explorador'
                 ? '🔒 Suas análises bônus foram utilizadas. Faça upgrade para continuar.'
@@ -469,19 +469,19 @@ export default function Analise() {
       )}
 
       {/* ── ETAPA 1: DOCUMENTO ── */}
-      <Section step="1" title="Edital" icon={FileText} color="#2563eb" open={openSec.doc} onToggle={()=>toggleSec('doc')} badge="Upload ou cole o texto">
+      <Section step="1" title="Edital" icon={FileText} color="#0D63DB" open={openSec.doc} onToggle={()=>toggleSec('doc')} badge="Upload ou cole o texto">
         <div style={{ display:'flex', flexDirection:'column', gap:12, paddingTop:14 }}>
           <textarea value={textoDoc} onChange={e=>setTextoDoc(e.target.value)} rows={7}
             placeholder="Cole aqui o texto do edital do leilão. A extração irá capturar endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, datas e muito mais..."
-            style={{ width:'100%', padding:'12px', border:'1px solid #e2e8f0', borderRadius:10, fontSize:13, color:'#0f172a', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
+            style={{ width:'100%', padding:'12px', border:'1px solid #e2e8f0', borderRadius:10, fontSize:13, color:'#111111', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
           <div style={{ display:'flex', gap:8 }}>
             <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #e2e8f0', borderRadius:10, color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer', transition:'border-color 0.2s' }}
-              onMouseEnter={e=>e.currentTarget.style.borderColor='#2563eb'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
+              onMouseEnter={e=>e.currentTarget.style.borderColor='#0D63DB'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
               <UploadCloud size={16}/> Upload .TXT
               <input type="file" accept=".txt" onChange={handleFileUpload} style={{display:'none'}}/>
             </label>
             <button onClick={extrairDoc} disabled={loadDoc||analisesBloqueado||(!textoDoc.trim()&&!textoMatricula.trim())}
-              style={{ flex:2, padding:'10px', background:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'#2563eb':'#e2e8f0', color:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'white':'#94a3b8', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              style={{ flex:2, padding:'10px', background:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'#0D63DB':'#e2e8f0', color:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'white':'#94a3b8', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
               {loadDoc ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Extraindo dados...</> : analisesBloqueado ? <><Lock size={14}/> Limite atingido</> : <><Sparkles size={15}/> Extrair dados</>}
             </button>
           </div>
@@ -501,7 +501,7 @@ export default function Analise() {
             </div>
             <textarea value={textoMatricula} onChange={e=>setTextoMatricula(e.target.value)} rows={6}
               placeholder="Cole aqui o texto da matrícula do imóvel (certidão de inteiro teor). A análise identificará automaticamente ônus reais, hipotecas, penhoras, usufrutos, alienação fiduciária e histórico de proprietários..."
-              style={{ width:'100%', padding:'12px', border:'1px solid #c4b5fd', borderRadius:10, fontSize:13, color:'#0f172a', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
+              style={{ width:'100%', padding:'12px', border:'1px solid #c4b5fd', borderRadius:10, fontSize:13, color:'#111111', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
             <label style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #c4b5fd', borderRadius:10, color:'#7c3aed', fontSize:13, fontWeight:600, cursor:'pointer' }}>
               <UploadCloud size={16}/> Upload matrícula .TXT
               <input type="file" accept=".txt" onChange={async e => { const f = e.target.files[0]; if (f) setTextoMatricula(await f.text()); }} style={{display:'none'}}/>
@@ -515,7 +515,7 @@ export default function Analise() {
         <div style={{ padding:'12px 16px', borderRadius:10, background:'#f8fafc', border:'1px solid #e2e8f0', fontSize:13, color:'#64748b', display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
           <Lock size={15} color="#94a3b8"/>
           <span>Consulta Jurídica CNJ disponível a partir do plano <strong>Investidor Pro</strong>.</span>
-          <button onClick={() => nav('/planos')} style={{ marginLeft:'auto', padding:'5px 12px', background:'#2563eb', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer' }}>Ver planos</button>
+          <button onClick={() => nav('/planos')} style={{ marginLeft:'auto', padding:'5px 12px', background:'#0D63DB', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer' }}>Ver planos</button>
         </div>
       )}
       {temCNJ && <Section step="1C" title="Consulta Jurídica — CNJ DataJud" icon={Scale} color="#dc2626"
@@ -628,7 +628,7 @@ export default function Analise() {
                     <div style={{ background: proc.tem_bloqueante ? '#fef2f2' : proc.riscos?.length > 0 ? '#fefce8' : '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
                         <Scale size={13} color={proc.tem_bloqueante ? '#dc2626' : '#64748b'} />
-                        <span style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>{proc.numero}</span>
+                        <span style={{ fontWeight: 800, fontSize: 13, color: '#111111' }}>{proc.numero}</span>
                         <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#e2e8f0', color: '#475569' }}>{proc.tribunal}</span>
                         {proc.riscos?.filter(r => r.severidade === 'bloqueante').map(r => (
                           <span key={r.categoria} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fee2e2', color: '#dc2626' }}>⛔ {r.categoria}</span>
@@ -673,13 +673,13 @@ export default function Analise() {
                       {/* Partes */}
                       {proc.partes?.length > 0 && (
                         <div>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', marginBottom: 6, letterSpacing: 0.5 }}>Partes Processuais</div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', marginBottom: 6, letterSpacing: 0.5 }}>Partes Processuais</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {proc.partes.map((parte, i) => (
                               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '7px 10px', background: i % 2 === 0 ? '#f8fafc' : 'white', borderRadius: 6, fontSize: 12 }}>
                                 <User size={12} color="#64748b" style={{ flexShrink: 0, marginTop: 1 }} />
                                 <div style={{ flex: 1 }}>
-                                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{parte.nome}</span>
+                                  <span style={{ fontWeight: 700, color: '#111111' }}>{parte.nome}</span>
                                   {parte.tipo && <span style={{ color: '#94a3b8', marginLeft: 6, fontSize: 11 }}>({parte.tipo})</span>}
                                   {parte.documento && <span style={{ color: '#64748b', marginLeft: 6, fontSize: 10 }}>{parte.documento}</span>}
                                   {parte.advogados?.length > 0 && (
@@ -720,13 +720,13 @@ export default function Analise() {
       </Section>}
 
       {/* ── ETAPA 2: DADOS DO IMÓVEL ── */}
-      <Section step="2" title="Dados do Imóvel" icon={Home} color="#0f172a" open={openSec.dados} onToggle={()=>toggleSec('dados')}
+      <Section step="2" title="Dados do Imóvel" icon={Home} color="#111111" open={openSec.dados} onToggle={()=>toggleSec('dados')}
         badge={d.nome ? d.tipo.charAt(0).toUpperCase()+d.tipo.slice(1) : 'Preencha ou extraia do edital'}>
         <div style={{ display:'flex', flexDirection:'column', gap:18, paddingTop:14 }}>
 
           {/* Identificação */}
           <div>
-            <div style={{ fontSize:11, fontWeight:800, color:'#2563eb', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #eff6ff' }}>Identificação</div>
+            <div style={{ fontSize:11, fontWeight:800, color:'#0D63DB', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #eff6ff' }}>Identificação</div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
               <div style={{ gridColumn:'span 2' }}>
                 <Field label="Nome / Referência" name="nome" value={d.nome||''} onChange={upN} ph="Ex: Apt 302 Torre Norte — Rua das Flores"/>
@@ -808,7 +808,7 @@ export default function Analise() {
                 <div style={{ display:'flex', gap:6 }}>
                   {[['sac','SAC'],['price','PRICE']].map(([v,l])=>(
                     <button key={v} onClick={()=>up('tabelaAmortizacao',v)}
-                      style={{ flex:1, padding:'9px', border:'none', borderRadius:8, background:(d.tabelaAmortizacao||'sac')===v?'#0f172a':'#f1f5f9', color:(d.tabelaAmortizacao||'sac')===v?'white':'#64748b', fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                      style={{ flex:1, padding:'9px', border:'none', borderRadius:8, background:(d.tabelaAmortizacao||'sac')===v?'#111111':'#f1f5f9', color:(d.tabelaAmortizacao||'sac')===v?'white':'#64748b', fontWeight:700, fontSize:12, cursor:'pointer' }}>
                       {l}
                     </button>
                   ))}
@@ -851,7 +851,7 @@ export default function Analise() {
               {/* KPIs consolidados */}
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
                 {[
-                  ['Preço Médio/m²', `R$ ${fmt(mercado.precoMedioM2||0,0)}`, '#2563eb','#eff6ff'],
+                  ['Preço Médio/m²', `R$ ${fmt(mercado.precoMedioM2||0,0)}`, '#0D63DB','#eff6ff'],
                   ['Aluguel Médio', `R$ ${fmt(mercado.aluguelMedio||0,0)}/mês`, '#8b5cf6','#ede9fe'],
                   ['Yield Bruto', fmtPct(mercado.yieldBruto||0)+' a.a.', '#10b981','#f0fdf4'],
                   ['Yield Líquido', fmtPct(mercado.yieldLiquido||0)+' a.a.', '#f59e0b','#fef3c7'],
@@ -864,8 +864,8 @@ export default function Analise() {
               </div>
 
               {/* Nível 1 — Mesmo Condomínio */}
-              <div style={{ borderRadius:12, border:'2px solid #2563eb', overflow:'hidden' }}>
-                <div style={{ background:'#2563eb', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
+                <div style={{ background:'#0D63DB', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
                   <Building2 size={15} color="white"/>
                   <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Nível 1 — {mercado.nivel1?.descricao||'Mesmo Condomínio / Endereço'}</span>
                   <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white' }}>
@@ -875,9 +875,9 @@ export default function Analise() {
                 <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
                   {mercado.nivel1?.vendas?.length > 0 && (
                     <div>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#2563eb', textTransform:'uppercase', marginBottom:8 }}>Venda — {mercado.nivel1.vendas.length} imóveis</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:8 }}>Venda — {mercado.nivel1.vendas.length} imóveis</div>
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
-                        {[['Mín R$/m²',`${fmt(mercado.nivel1.precoMinM2||0,0)}`,'#ef4444'],['Médio R$/m²',`${fmt(mercado.nivel1.precoMedioM2||0,0)}`,'#2563eb'],['Máx R$/m²',`${fmt(mercado.nivel1.precoMaxM2||0,0)}`,'#10b981']].map(([l,v,c])=>(
+                        {[['Mín R$/m²',`${fmt(mercado.nivel1.precoMinM2||0,0)}`,'#ef4444'],['Médio R$/m²',`${fmt(mercado.nivel1.precoMedioM2||0,0)}`,'#0D63DB'],['Máx R$/m²',`${fmt(mercado.nivel1.precoMaxM2||0,0)}`,'#10b981']].map(([l,v,c])=>(
                           <div key={l} style={{ background:'#f8fafc', borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
                             <div style={{ fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>{l}</div>
                             <div style={{ fontSize:14, fontWeight:900, color:c }}>R$ {v}</div>
@@ -888,7 +888,7 @@ export default function Analise() {
                         {mercado.nivel1.vendas.map((v,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
                             <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte})</span></span>
-                            <span style={{ fontWeight:700, color:'#2563eb', flexShrink:0 }}>R$ {fmt(v.valor,0)} · {fmt(v.valorM2,0)}/m²</span>
+                            <span style={{ fontWeight:700, color:'#0D63DB', flexShrink:0 }}>R$ {fmt(v.valor,0)} · {fmt(v.valorM2,0)}/m²</span>
                           </div>
                         ))}
                       </div>
@@ -934,7 +934,7 @@ export default function Analise() {
                     <div>
                       <div style={{ fontSize:11, fontWeight:700, color:'#10b981', textTransform:'uppercase', marginBottom:8 }}>Venda — {mercado.nivel2.vendas.length} imóveis</div>
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
-                        {[['Mín',`${fmt(mercado.nivel2.precoMinM2||0,0)}`,'#ef4444'],['Médio',`${fmt(mercado.nivel2.precoMedioM2||0,0)}`,'#10b981'],['Máx',`${fmt(mercado.nivel2.precoMaxM2||0,0)}`,'#2563eb']].map(([l,v,c])=>(
+                        {[['Mín',`${fmt(mercado.nivel2.precoMinM2||0,0)}`,'#ef4444'],['Médio',`${fmt(mercado.nivel2.precoMedioM2||0,0)}`,'#10b981'],['Máx',`${fmt(mercado.nivel2.precoMaxM2||0,0)}`,'#0D63DB']].map(([l,v,c])=>(
                           <div key={l} style={{ background:'#f0fdf4', borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
                             <div style={{ fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>{l} R$/m²</div>
                             <div style={{ fontSize:14, fontWeight:900, color:c }}>R$ {v}</div>
@@ -990,7 +990,7 @@ export default function Analise() {
           {/* Cenário */}
           <div style={{ display:'flex', alignItems:'center', gap:10, background:'#f8fafc', borderRadius:10, padding:'12px 16px' }}>
             <span style={{ fontSize:12, fontWeight:700, color:'#64748b' }}>CENÁRIO:</span>
-            {[['aVista','À Vista','#2563eb'],['financiado','Alavancado','#10b981']].map(([v,l,c])=>(
+            {[['aVista','À Vista','#0D63DB'],['financiado','Alavancado','#10b981']].map(([v,l,c])=>(
               <button key={v} onClick={()=>setCenario(v)} disabled={v==='financiado'&&d.somenteAVista}
                 style={{ padding:'7px 20px', borderRadius:8, border:'none', background:cenario===v?c:'white', color:cenario===v?'white':'#64748b', fontWeight:800, fontSize:13, cursor:'pointer', border:`2px solid ${cenario===v?c:'#e2e8f0'}`, opacity:v==='financiado'&&d.somenteAVista?0.4:1 }}>
                 {l}
@@ -1031,7 +1031,7 @@ export default function Analise() {
 
           {/* Tabela financeira detalhada */}
           <div style={{ borderRadius:12, border:'1px solid #e2e8f0', overflow:'hidden' }}>
-            <div style={{ background:'#0f172a', padding:'12px 18px' }}>
+            <div style={{ background:'#111111', padding:'12px 18px' }}>
               <div style={{ fontSize:13, fontWeight:800, color:'white' }}>Detalhamento Financeiro — Lance Base vs Teto</div>
             </div>
             <div style={{ overflowX:'auto' }}>
@@ -1086,8 +1086,8 @@ export default function Analise() {
                     <td style={{ padding:'12px 14px', textAlign:'right', color:metricasTeto.lucro>=0?'#047857':'#dc2626', fontSize:18 }}>R$ {fmt(metricasTeto.lucro)}</td>
                   </tr>
                   <tr style={{ background:'#dbeafe', fontWeight:900 }}>
-                    <td style={{ padding:'12px 14px', color:'#1e40af', fontSize:14 }}>RETORNO ({isAVista?'ROI':'ROE'})</td><td/>
-                    <td style={{ padding:'12px 14px', textAlign:'right', color:'#2563eb', fontSize:20 }}>{fmtPct(metricas.roi)}</td>
+                    <td style={{ padding:'12px 14px', color:'#084BA6', fontSize:14 }}>RETORNO ({isAVista?'ROI':'ROE'})</td><td/>
+                    <td style={{ padding:'12px 14px', textAlign:'right', color:'#0D63DB', fontSize:20 }}>{fmtPct(metricas.roi)}</td>
                     <td style={{ padding:'12px 14px', textAlign:'right', color:'#f59e0b', fontSize:20 }}>{fmtPct(metricasTeto.roi)}</td>
                   </tr>
                 </tbody>
@@ -1119,7 +1119,7 @@ export default function Analise() {
           <div style={{ borderRadius:10, border:'1px solid #e2e8f0', overflowX:'auto' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead>
-                <tr style={{ background:'#1e293b' }}>
+                <tr style={{ background:'#111111' }}>
                   {['Mês','Descrição','Entradas','Saídas','Saldo Acumulado'].map((h,i)=>(
                     <th key={h} style={{ padding:'9px 12px', textAlign:i<=1?'left':'right', fontWeight:700, color:'#94a3b8', whiteSpace:'nowrap' }}>{h}</th>
                   ))}
@@ -1128,7 +1128,7 @@ export default function Analise() {
               <tbody>
                 {fluxo.linhas.map((row,i)=>(
                   <tr key={i} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
-                    <td style={{ padding:'7px 12px', fontWeight:700, color:'#0f172a' }}>Mês {row.mes}</td>
+                    <td style={{ padding:'7px 12px', fontWeight:700, color:'#111111' }}>Mês {row.mes}</td>
                     <td style={{ padding:'7px 12px', color:'#64748b', fontSize:11 }}>{row.descricao}</td>
                     <td style={{ padding:'7px 12px', textAlign:'right', color:'#10b981', fontWeight:600 }}>{row.entrada>0?`+ R$ ${fmt(row.entrada)}`:'—'}</td>
                     <td style={{ padding:'7px 12px', textAlign:'right', color:'#dc2626', fontWeight:600 }}>{row.saida>0?`- R$ ${fmt(row.saida)}`:'—'}</td>
@@ -1145,7 +1145,7 @@ export default function Analise() {
       </Section>
 
       {/* ── ETAPA 6: LAUDO DE VIABILIDADE ── */}
-      <Section step="6" title="Laudo de Viabilidade e Defesa da Arrematação" icon={Award} color="#0f172a" open={openSec.laudo} onToggle={()=>toggleSec('laudo')}
+      <Section step="6" title="Laudo de Viabilidade e Defesa da Arrematação" icon={Award} color="#111111" open={openSec.laudo} onToggle={()=>toggleSec('laudo')}
         badge={parecer ? 'Gerado' : 'Gere o parecer executivo'}>
         <div style={{ display:'flex', flexDirection:'column', gap:14, paddingTop:14 }}>
           <div style={{ display:'flex', gap:10, alignItems:'flex-start', background:'#f8fafc', borderRadius:12, padding:'14px 16px' }}>
@@ -1162,13 +1162,13 @@ export default function Analise() {
 
           {parecer && (
             <>
-              <div style={{ background:'#0f172a', borderRadius:12, padding:'20px 22px' }}>
+              <div style={{ background:'#111111', borderRadius:12, padding:'20px 22px' }}>
                 {parecer.split('§ SEÇÃO:').filter(Boolean).map((sec, i) => {
                   const [titulo, ...corpo] = sec.split('\n');
                   return (
                     <div key={i} style={{ marginBottom: i < 3 ? 22 : 0 }}>
                       <div style={{ fontSize:11, fontWeight:800, color:'#34d399', textTransform:'uppercase', letterSpacing:1, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ background:'#1e293b', borderRadius:6, padding:'2px 8px' }}>§ {titulo.trim()}</span>
+                        <span style={{ background:'#111111', borderRadius:6, padding:'2px 8px' }}>§ {titulo.trim()}</span>
                       </div>
                       <p style={{ margin:0, fontSize:13, lineHeight:1.9, color:'#cbd5e1', whiteSpace:'pre-wrap' }}>{corpo.join('\n').trim()}</p>
                     </div>
@@ -1176,12 +1176,12 @@ export default function Analise() {
                 })}
               </div>
               <button onClick={imprimirPDF}
-                style={{ width:'100%', padding:'13px', background:'#2563eb', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                style={{ width:'100%', padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                 <Printer size={16}/> Exportar Laudo Completo em PDF
               </button>
               {user && !['analista','advogado','consultor','admin'].includes(role) && (
                 <button onClick={solicitarAnalista} disabled={solicitando || solicitado}
-                  style={{ width:'100%', padding:'13px', background: solicitado ? '#10b981' : '#0f172a', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor: solicitado ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, opacity: solicitando ? 0.7 : 1 }}>
+                  style={{ width:'100%', padding:'13px', background: solicitado ? '#10b981' : '#111111', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor: solicitado ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, opacity: solicitando ? 0.7 : 1 }}>
                   {solicitando
                     ? <><Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Enviando...</>
                     : solicitado

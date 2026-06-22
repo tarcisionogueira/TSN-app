@@ -5,13 +5,13 @@ import { isFavorito, toggleFavorito } from '../utils/storage';
 import { fmt } from '../utils/calculos';
 
 const TIPO_ICONS = { casa: Home, apartamento: Building2, terreno: LayoutGrid, comercial: Warehouse };
-const TIPO_COLORS = { casa: '#10b981', apartamento: '#2563eb', terreno: '#f59e0b', comercial: '#8b5cf6' };
+const TIPO_COLORS = { casa: '#10b981', apartamento: '#0D63DB', terreno: '#f59e0b', comercial: '#8b5cf6' };
 
 export default function PropertyCard({ imovel, onFavToggle }) {
   const nav = useNavigate();
   const [fav, setFav] = React.useState(isFavorito(imovel.id));
   const TIcon = TIPO_ICONS[imovel.tipo] || Building2;
-  const tColor = TIPO_COLORS[imovel.tipo] || '#2563eb';
+  const tColor = TIPO_COLORS[imovel.tipo] || '#0D63DB';
   const desconto = imovel.valorAvaliacao && imovel.valorMinimo
     ? Math.round((1 - imovel.valorMinimo / imovel.valorAvaliacao) * 100) : null;
 
@@ -40,7 +40,7 @@ export default function PropertyCard({ imovel, onFavToggle }) {
               <TIcon size={18} color={tColor} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a', lineHeight: 1.3 }}>{imovel.titulo || 'Imóvel em Leilão'}</div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#111111', lineHeight: 1.3 }}>{imovel.titulo || 'Imóvel em Leilão'}</div>
               <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 }}>
                 {imovel.tipo} · {imovel.modalidade}
               </div>
@@ -80,7 +80,7 @@ export default function PropertyCard({ imovel, onFavToggle }) {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
           {imovel.areaM2 && <span style={{ background: '#f1f5f9', borderRadius: 6, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#475569' }}>{imovel.areaM2}m²</span>}
           {(imovel.pagamento||[]).map(p => (
-            <span key={p} style={{ background: '#dbeafe', borderRadius: 6, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#1e40af' }}>
+            <span key={p} style={{ background: '#dbeafe', borderRadius: 6, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#084BA6' }}>
               {p === 'aVista' ? 'À Vista' : p === 'financiado' ? 'Financiado' : 'Hipotecado'}
             </span>
           ))}
@@ -101,7 +101,7 @@ export default function PropertyCard({ imovel, onFavToggle }) {
         {/* Ações */}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={handleAnalise}
-            style={{ flex: 1, padding: '9px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+            style={{ flex: 1, padding: '9px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             <BarChart3 size={13} /> Ver Análise
           </button>
           {imovel.urlLote && (

@@ -14,7 +14,7 @@ const STATUS_LABEL = {
   concluido: 'Concluído', reprovado: 'Reprovado',
 };
 const STATUS_COLOR = {
-  analise: '#2563eb', aprovado: '#16a34a', arrematado: '#7c3aed',
+  analise: '#0D63DB', aprovado: '#16a34a', arrematado: '#7c3aed',
   em_reforma: '#d97706', venda: '#0891b2', alugado: '#0891b2',
   concluido: '#15803d', reprovado: '#dc2626',
 };
@@ -133,7 +133,7 @@ export default function Perfil() {
     border: '1px solid #e2e8f0',
     borderRadius: 8,
     fontSize: 14,
-    color: '#0f172a',
+    color: '#111111',
     background: 'white',
     outline: 'none',
     boxSizing: 'border-box',
@@ -156,7 +156,7 @@ export default function Perfil() {
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, color: '#0f172a', margin: 0 }}>Meu Perfil</h1>
+          <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, color: '#111111', margin: 0 }}>Meu Perfil</h1>
           <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>Gerencie seus dados e segurança da conta</p>
         </div>
 
@@ -176,7 +176,7 @@ export default function Perfil() {
           </div>
           <button
             onClick={() => nav('/planos')}
-            style={{ padding: '8px 16px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            style={{ padding: '8px 16px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Fazer upgrade
           </button>
         </div>
@@ -186,11 +186,11 @@ export default function Perfil() {
           <div style={{ background: 'white', borderRadius: 14, padding: isMobile ? '16px' : '24px', border: '1px solid #e2e8f0', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <BarChart2 size={18} color="#2563eb" />
-                <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Minhas Análises</span>
+                <BarChart2 size={18} color="#0D63DB" />
+                <span style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>Minhas Análises</span>
               </div>
               <button onClick={() => nav('/analise')}
-                style={{ padding: '6px 14px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                style={{ padding: '6px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 + Nova análise
               </button>
             </div>
@@ -219,7 +219,7 @@ export default function Perfil() {
                         <FileText size={16} color={STATUS_COLOR[r.status] || '#64748b'} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {r.imovel_nome || 'Imóvel sem nome'}
                         </div>
                         <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
@@ -257,23 +257,23 @@ export default function Perfil() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 11, color: '#d97706', fontWeight: 700 }}>A RECEBER</div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#111111' }}>
                   {resumoComissao ? Number(resumoComissao.pendente).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
                 </div>
               </div>
               <div style={{ textAlign: 'center', borderLeft: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9' }}>
                 <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>JÁ PAGO</div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#111111' }}>
                   {resumoComissao ? Number(resumoComissao.pago).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>VENDAS</div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{resumoComissao?.total ?? '—'}</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#111111' }}>{resumoComissao?.total ?? '—'}</div>
               </div>
             </div>
             <button onClick={() => nav('/comissoes')}
-              style={{ width: '100%', padding: '9px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              style={{ width: '100%', padding: '9px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               Ver extrato completo e solicitar saque →
             </button>
           </div>
@@ -357,7 +357,7 @@ export default function Perfil() {
               style={{
                 width: '100%',
                 padding: '12px',
-                background: salvando ? '#94a3b8' : '#0f172a',
+                background: salvando ? '#94a3b8' : '#111111',
                 color: 'white',
                 border: 'none',
                 borderRadius: 10,

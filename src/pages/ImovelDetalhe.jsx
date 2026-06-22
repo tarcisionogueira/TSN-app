@@ -69,7 +69,7 @@ export default function ImovelDetalhe() {
     <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: 80 }}>
 
       {/* Breadcrumb */}
-      <div style={{ background: '#0f172a', padding: '12px 20px' }}>
+      <div style={{ background: '#111111', padding: '12px 20px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => nav(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}>
             <ArrowLeft size={15} /> Voltar à busca
@@ -86,7 +86,7 @@ export default function ImovelDetalhe() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Foto + badges */}
-            <div style={{ borderRadius: 16, overflow: 'hidden', position: 'relative', background: '#1e293b', minHeight: 260 }}>
+            <div style={{ borderRadius: 16, overflow: 'hidden', position: 'relative', background: '#111111', minHeight: 260 }}>
               {imovel.foto && !imgError ? (
                 <img src={imovel.foto} alt={imovel.titulo} onError={() => setImgError(true)}
                   style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }} />
@@ -97,8 +97,8 @@ export default function ImovelDetalhe() {
                 </div>
               )}
               <div style={{ position: 'absolute', top: 16, left: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {imovel.tipo && <span style={{ background: '#0f172a', color: 'white', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{TIPO_LABEL[imovel.tipo] || imovel.tipo}</span>}
-                {imovel.modalidade && <span style={{ background: '#1e40af', color: 'white', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{MODAL_LABEL[imovel.modalidade] || imovel.modalidade}</span>}
+                {imovel.tipo && <span style={{ background: '#111111', color: 'white', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{TIPO_LABEL[imovel.tipo] || imovel.tipo}</span>}
+                {imovel.modalidade && <span style={{ background: '#084BA6', color: 'white', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{MODAL_LABEL[imovel.modalidade] || imovel.modalidade}</span>}
               </div>
               {desc > 0 && (
                 <div style={{ position: 'absolute', top: 16, right: 16, background: descBg, color: descColor, fontWeight: 900, fontSize: 18, padding: '6px 12px', borderRadius: 10, lineHeight: 1 }}>
@@ -109,13 +109,13 @@ export default function ImovelDetalhe() {
 
             {/* Título e localização */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
-              <h1 style={{ fontSize: 'clamp(16px, 3vw, 22px)', fontWeight: 800, color: '#0f172a', margin: '0 0 12px', lineHeight: 1.3 }}>
+              <h1 style={{ fontSize: 'clamp(16px, 3vw, 22px)', fontWeight: 800, color: '#111111', margin: '0 0 12px', lineHeight: 1.3 }}>
                 {imovel.titulo || 'Imóvel em leilão'}
               </h1>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, color: '#64748b', fontSize: 14 }}>
                 {(imovel.endereco || imovel.cidade) && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <MapPin size={14} color="#2563eb" />
+                    <MapPin size={14} color="#0D63DB" />
                     {[imovel.endereco, imovel.bairro, imovel.cidade, imovel.estado].filter(Boolean).join(', ')}
                   </span>
                 )}
@@ -134,13 +134,13 @@ export default function ImovelDetalhe() {
 
             {/* Valores */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Banknote size={18} color="#2563eb" /> Valores
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Banknote size={18} color="#0D63DB" /> Valores
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
                 <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo</div>
-                  <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{fmtBRL(imovel.valorMinimo)}</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(imovel.valorMinimo)}</div>
                 </div>
                 {imovel.valorAvaliacao && (
                   <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
@@ -167,8 +167,8 @@ export default function ImovelDetalhe() {
 
             {/* Data do leilão */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Calendar size={18} color="#2563eb" /> Data do leilão
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Calendar size={18} color="#0D63DB" /> Data do leilão
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Clock size={16} color="#64748b" />
@@ -179,8 +179,8 @@ export default function ImovelDetalhe() {
             {/* Descrição */}
             {imovel.descricao && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
-                <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileText size={18} color="#2563eb" /> Descrição
+                <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FileText size={18} color="#0D63DB" /> Descrição
                 </h2>
                 <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{imovel.descricao}</p>
               </div>
@@ -189,8 +189,8 @@ export default function ImovelDetalhe() {
             {/* Documentos */}
             {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula) && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
-                <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileText size={18} color="#2563eb" /> Documentos
+                <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FileText size={18} color="#0D63DB" /> Documentos
                 </h2>
 
                 {/* Números de referência */}
@@ -222,7 +222,7 @@ export default function ImovelDetalhe() {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                     {imovel.linkEdital && (
                       <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#1e40af', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#084BA6', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
                         📄 Abrir Edital (PDF)
                       </a>
                     )}
@@ -252,7 +252,7 @@ export default function ImovelDetalhe() {
             {/* Card de ação */}
             <div style={{ background: 'white', borderRadius: 16, border: '2px solid #e2e8f0', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 4 }}>Lance mínimo</div>
-              <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>{fmtBRL(imovel.valorMinimo)}</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#111111', marginBottom: 4 }}>{fmtBRL(imovel.valorMinimo)}</div>
               {desc > 0 && (
                 <div style={{ display: 'inline-block', background: descBg, color: descColor, fontWeight: 800, fontSize: 13, padding: '3px 10px', borderRadius: 8, marginBottom: 16 }}>
                   {desc}% abaixo da avaliação
@@ -263,14 +263,14 @@ export default function ImovelDetalhe() {
               {imovel.urlLote && (
                 <div style={{ marginBottom: 10 }}>
                   <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0f172a', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#111111', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
                     <ExternalLink size={15} /> Ir ao leiloeiro
                   </a>
                   <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
                     ⚠️ Se o link estiver expirado, o imóvel pode ter sido vendido.{' '}
                     {imovel.fonte === 'caixa' && (
                       <a href="https://venda-imoveis.caixa.gov.br/sistema/busca-imovel.asp" target="_blank" rel="noopener noreferrer"
-                        style={{ color: '#2563eb', fontWeight: 600 }}>
+                        style={{ color: '#0D63DB', fontWeight: 600 }}>
                         Buscar na CEF →
                       </a>
                     )}
@@ -282,7 +282,7 @@ export default function ImovelDetalhe() {
               {user ? (
                 podeFazerAnalise ? (
                   <button onClick={() => nav('/analise', { state: { imovel } })}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                     <BarChart2 size={15} /> Solicitar Análise
                   </button>
                 ) : (
@@ -293,7 +293,7 @@ export default function ImovelDetalhe() {
                 )
               ) : (
                 <button onClick={() => nav('/login')}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                   <BarChart2 size={15} /> Entrar para analisar
                 </button>
               )}

@@ -39,13 +39,13 @@ export default function EbookPage() {
   const isPdf = pdfUrl ? pdfUrl.toLowerCase().endsWith('.pdf') : false;
 
   if (loading) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a', color:'#94a3b8' }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', color:'#94a3b8' }}>
       Carregando…
     </div>
   );
 
   if (!ebook) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a', color:'#94a3b8' }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', color:'#94a3b8' }}>
       eBook não encontrado.
     </div>
   );
@@ -58,9 +58,9 @@ export default function EbookPage() {
 
           {/* Breadcrumb */}
           <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, color:'#94a3b8', marginBottom:24 }}>
-            <span style={{ cursor:'pointer', color:'#2563eb', fontWeight:600 }} onClick={() => nav('/membros')}>Membros</span>
+            <span style={{ cursor:'pointer', color:'#0D63DB', fontWeight:600 }} onClick={() => nav('/membros')}>Membros</span>
             <ChevronRight size={13}/>
-            <span style={{ cursor:'pointer', color:'#2563eb', fontWeight:600 }} onClick={() => nav('/membros')}>Ebooks</span>
+            <span style={{ cursor:'pointer', color:'#0D63DB', fontWeight:600 }} onClick={() => nav('/membros')}>Ebooks</span>
             <ChevronRight size={13}/>
             <span style={{ color:'#64748b' }}>{ebook.titulo}</span>
           </div>
@@ -68,7 +68,7 @@ export default function EbookPage() {
           {/* Card principal */}
           <div style={{ background:'white', borderRadius:20, boxShadow:'0 4px 24px rgba(0,0,0,0.08)', overflow:'hidden' }}>
             {/* Banner/capa */}
-            <div style={{ background:'linear-gradient(135deg,#1e1b4b,#0f172a)', padding:'40px 24px', display:'flex', flexDirection:'column', alignItems:'center', gap:20 }}>
+            <div style={{ background:'linear-gradient(135deg,#1e1b4b,#111111)', padding:'40px 24px', display:'flex', flexDirection:'column', alignItems:'center', gap:20 }}>
               {ebook.capa_url ? (
                 <img src={ebook.capa_url} alt={ebook.titulo}
                   style={{ maxWidth:200, borderRadius:10, boxShadow:'0 16px 48px rgba(0,0,0,0.4)' }}/>
@@ -93,14 +93,14 @@ export default function EbookPage() {
                 <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
                   {(pdfUrl || ebook.descricao) && (
                     <button onClick={() => setReading(true)}
-                      style={{ flex:1, minWidth:140, padding:'13px 24px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                      style={{ flex:1, minWidth:140, padding:'13px 24px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                       <BookOpen size={18}/>
                       {isPdf ? 'Ler PDF no app' : 'Ler'}
                     </button>
                   )}
                   {pdfUrl && (
                     <a href={pdfUrl} download target="_blank" rel="noreferrer"
-                      style={{ flex:1, minWidth:140, padding:'13px 24px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, textDecoration:'none' }}>
+                      style={{ flex:1, minWidth:140, padding:'13px 24px', background:'white', color:'#111111', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, textDecoration:'none' }}>
                       <Download size={18}/> Baixar
                     </a>
                   )}
@@ -177,11 +177,11 @@ export default function EbookPage() {
               </div>
             )}
             <div style={{ flex:1 }}>
-              <h2 style={{ margin:'0 0 4px', fontSize:16, fontWeight:800, color: dark ? '#e8e0d0' : '#0f172a' }}>{ebook.titulo}</h2>
+              <h2 style={{ margin:'0 0 4px', fontSize:16, fontWeight:800, color: dark ? '#e8e0d0' : '#111111' }}>{ebook.titulo}</h2>
               {ebook.descricao && <p style={{ margin:0, fontSize:12, color: sutil, lineHeight:1.4 }}>{ebook.descricao.slice(0,120)}{ebook.descricao.length>120?'…':''}</p>}
             </div>
             <a href={pdfUrl} download target="_blank" rel="noreferrer"
-              style={{ padding:'9px 18px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6, textDecoration:'none', flexShrink:0 }}>
+              style={{ padding:'9px 18px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6, textDecoration:'none', flexShrink:0 }}>
               <Download size={14}/> Baixar PDF
             </a>
           </div>
@@ -199,7 +199,7 @@ export default function EbookPage() {
           <h2 style={{ fontSize:22, fontWeight:800, color: texto, margin:'0 0 16px' }}>{ebook.titulo}</h2>
           {ebook.descricao && <p style={{ fontSize:14, color: sutil, lineHeight:1.8, marginBottom:24 }}>{ebook.descricao}</p>}
           <a href={pdfUrl} download target="_blank" rel="noreferrer"
-            style={{ padding:'13px 32px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8, textDecoration:'none' }}>
+            style={{ padding:'13px 32px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8, textDecoration:'none' }}>
             <Download size={18}/> Baixar material
           </a>
         </div>
@@ -231,12 +231,12 @@ function AcessoBloqueado({ nav, ebook }) {
   return (
     <div style={{ textAlign:'center', padding:'20px' }}>
       <div style={{ fontSize:48, marginBottom:16 }}>🔒</div>
-      <h3 style={{ color:'#0f172a', marginBottom:8 }}>Acesso restrito</h3>
+      <h3 style={{ color:'#111111', marginBottom:8 }}>Acesso restrito</h3>
       <p style={{ color:'#64748b', marginBottom:24, maxWidth:360, margin:'0 auto 24px' }}>
         {gratis ? 'Faça login para acessar este material.' : 'Este eBook requer um plano pago.'}
       </p>
       <button onClick={() => nav(gratis ? '/login' : '/planos')}
-        style={{ padding:'11px 28px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
+        style={{ padding:'11px 28px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
         {gratis ? 'Fazer login' : 'Ver planos'}
       </button>
     </div>

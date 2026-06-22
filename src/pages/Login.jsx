@@ -6,7 +6,7 @@ import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
-  fontSize: 14, background: 'white', color: '#0f172a', boxSizing: 'border-box',
+  fontSize: 14, background: 'white', color: '#111111', boxSizing: 'border-box',
 };
 const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 };
 
@@ -187,12 +187,12 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, padding: '40px 36px', width: '100%', maxWidth: 420, boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
 
         {/* Banner plano escolhido */}
         {planoEscolhido && (
-          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1d4ed8', fontWeight: 600 }}>
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
             ✅ Plano <strong>{planoEscolhido === 'explorador' ? 'Explorador (Gratuito)' : pNome(planoEscolhido)}</strong> selecionado — crie sua conta para continuar
           </div>
         )}
@@ -211,11 +211,11 @@ export default function Login() {
 
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
-          <div style={{ background: '#2563eb', borderRadius: 10, padding: '8px 10px' }}>
+          <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
             <Briefcase size={20} color="white" />
           </div>
           <div>
-            <div style={{ fontWeight: 900, fontSize: 16, color: '#0f172a', letterSpacing: '-0.5px' }}>TSN ATIVOS</div>
+            <div style={{ fontWeight: 900, fontSize: 16, color: '#111111', letterSpacing: '-0.5px' }}>TSN ATIVOS</div>
             <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
           </div>
         </div>
@@ -224,13 +224,13 @@ export default function Login() {
         {modo === 'sucesso' && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 16px' }} />
-            <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#0f172a' }}>Cadastro realizado!</h2>
+            <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#111111' }}>Cadastro realizado!</h2>
             <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
               Verifique seu email para confirmar o cadastro e depois faça login.
-              {planoEscolhido && <><br /><strong style={{ color: '#1d4ed8' }}>Após o login você será direcionado para o pagamento do Plano {pNome(planoEscolhido)}.</strong></>}
+              {planoEscolhido && <><br /><strong style={{ color: '#084BA6' }}>Após o login você será direcionado para o pagamento do Plano {pNome(planoEscolhido)}.</strong></>}
             </p>
             <button onClick={() => setModo('login')}
-              style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
               Ir para Login
             </button>
           </div>
@@ -239,7 +239,7 @@ export default function Login() {
         {/* Login */}
         {modo === 'login' && (
           <>
-            <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#0f172a' }}>Entrar</h2>
+            <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>Entrar</h2>
             <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Acesse sua conta TSN Ativos</p>
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
@@ -260,7 +260,7 @@ export default function Login() {
               </div>
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
               <button type="submit" disabled={loading}
-                style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
                 {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Entrando...</> : 'Entrar'}
               </button>
             </form>
@@ -278,7 +278,7 @@ export default function Login() {
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>Não tem conta? </span>
               <button onClick={() => { setModo('cadastro'); setErro(''); }}
-                style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                 Criar conta grátis
               </button>
             </div>
@@ -292,7 +292,7 @@ export default function Login() {
         {/* Cadastro */}
         {modo === 'cadastro' && (
           <>
-            <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#0f172a' }}>Criar conta</h2>
+            <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>Criar conta</h2>
             <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Grátis — sem cartão de crédito</p>
             <form onSubmit={handleCadastro} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
@@ -310,7 +310,7 @@ export default function Login() {
                   <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626', fontWeight: 600 }}>
                     ⚠️ Este email já está cadastrado.{' '}
                     <button type="button" onClick={() => { setModo('login'); setErro(''); }}
-                      style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0 }}>
+                      style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0 }}>
                       Fazer login →
                     </button>
                   </div>
@@ -347,9 +347,9 @@ export default function Login() {
               </div>
               <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12, color: '#475569', lineHeight: 1.5, cursor: 'pointer' }}>
                 <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)}
-                  style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: 'pointer', accentColor: '#2563eb' }} />
+                  style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: 'pointer', accentColor: '#0D63DB' }} />
                 <span>
-                  Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#2563eb', fontWeight: 700 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#2563eb', fontWeight: 700 }}>Política de Privacidade</a>, e autorizo o tratamento dos meus dados conforme a LGPD.
+                  Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB', fontWeight: 700 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB', fontWeight: 700 }}>Política de Privacidade</a>, e autorizo o tratamento dos meus dados conforme a LGPD.
                 </span>
               </label>
               {/* Aviso CPF já cadastrado */}
@@ -427,7 +427,7 @@ export default function Login() {
               )}
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
               <button type="submit" disabled={loading || !aceite || cpfCheck?.temConta || emailDuplicado}
-                style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite) ? 0.6 : 1 }}>
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</>
                   : planoEscolhido ? 'Criar conta e ir para pagamento →' : 'Criar conta grátis'
@@ -437,7 +437,7 @@ export default function Login() {
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>Já tem conta? </span>
               <button onClick={() => { setModo('login'); setErro(''); }}
-                style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                 Fazer login
               </button>
             </div>

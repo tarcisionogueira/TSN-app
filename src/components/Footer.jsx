@@ -4,10 +4,10 @@ import { Briefcase } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer style={{ background: '#0f172a', color: '#94a3b8', padding: '32px 20px 24px', marginTop: 40 }}>
+    <footer style={{ background: '#111111', color: '#94a3b8', padding: '32px 20px 24px', marginTop: 40 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ background: '#2563eb', borderRadius: 8, padding: '6px 8px' }}><Briefcase size={16} color="white" /></div>
+          <div style={{ background: '#0D63DB', borderRadius: 8, padding: '6px 8px' }}><Briefcase size={16} color="white" /></div>
           <div>
             <div style={{ fontWeight: 900, fontSize: 14, color: 'white' }}>TSN ATIVOS</div>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#475569' }}>Leilão & Investimentos</div>
@@ -18,7 +18,7 @@ export default function Footer() {
           <Link to="/privacidade" style={{ color: '#64748b', textDecoration: 'none', fontSize: 12 }}>Política de Privacidade</Link>
         </div>
       </div>
-      <div style={{ maxWidth: 1100, margin: '20px auto 0', paddingTop: 16, borderTop: '1px solid #1e293b', fontSize: 11, color: '#334155', textAlign: 'center' }}>
+      <div style={{ maxWidth: 1100, margin: '20px auto 0', paddingTop: 16, borderTop: '1px solid #111111', fontSize: 11, color: '#334155', textAlign: 'center' }}>
         © {new Date().getFullYear()} TSN Ativos. Todos os direitos reservados.
       </div>
     </footer>

@@ -17,7 +17,7 @@ import { supabase } from '../utils/supabase';
 // Tipos de avaliação disponíveis na aba "Em Análise"
 const AVALIACOES = [
   { key:'mercadologica', label:'Avaliação Mercadológica + Viabilidade', desc:'Relatório de mercado em 2 níveis com viabilidade financeira e fluxo de caixa.', icon:BarChart3, cor:'#10b981', bg:'#f0fdf4', via:'analise' },
-  { key:'edital',        label:'Avaliação de Edital e Matrícula',         desc:'Leitura do edital, matrícula e certidões com extração de riscos via IA.',       icon:FileText,  cor:'#2563eb', bg:'#eff6ff', via:'analise' },
+  { key:'edital',        label:'Avaliação de Edital e Matrícula',         desc:'Leitura do edital, matrícula e certidões com extração de riscos via IA.',       icon:FileText,  cor:'#0D63DB', bg:'#eff6ff', via:'analise' },
   { key:'processual',    label:'Avaliação Processual',                    desc:'Consulta processual integrada (Jusbrasil/CNJ). Liberação em até 24h.',          icon:Scale,     cor:'#8b5cf6', bg:'#ede9fe', via:'integracao' },
 ];
 
@@ -43,7 +43,7 @@ function diasAteLeilao(dataLeilao) {
 const STATUS_CONFIG = {
   analise:    { l:'Em Análise',  c:'#f59e0b', bg:'#fef3c7' },
   aprovado:   { l:'Aprovado',    c:'#10b981', bg:'#d1fae5' },
-  arrematado: { l:'Arrematado',  c:'#2563eb', bg:'#dbeafe' },
+  arrematado: { l:'Arrematado',  c:'#0D63DB', bg:'#dbeafe' },
   em_reforma: { l:'Em Reforma',  c:'#8b5cf6', bg:'#ede9fe' },
   venda:      { l:'À Venda',     c:'#f97316', bg:'#ffedd5' },
   alugado:    { l:'Alugado',     c:'#06b6d4', bg:'#cffafe' },
@@ -90,13 +90,13 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
       <div style={{ background:'white', borderRadius:18, width:'100%', maxWidth:680, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
 
         {/* Header */}
-        <div style={{ background:'#0f172a', borderRadius:'18px 18px 0 0', padding:'18px 22px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+        <div style={{ background:'#111111', borderRadius:'18px 18px 0 0', padding:'18px 22px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
           <div>
             <div style={{ fontSize:12, color:'#64748b', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Controle Financeiro</div>
             <div style={{ fontSize:17, fontWeight:900, color:'white', lineHeight:1.3 }}>{im.nome || im.endereco || 'Imóvel'}</div>
             {im.cidade && <div style={{ fontSize:12, color:'#94a3b8', marginTop:3 }}>{im.cidade}{im.estado?', '+im.estado:''}</div>}
           </div>
-          <button onClick={onClose} style={{ background:'#1e293b', border:'none', borderRadius:8, padding:8, cursor:'pointer', color:'#94a3b8' }}>
+          <button onClick={onClose} style={{ background:'#111111', border:'none', borderRadius:8, padding:8, cursor:'pointer', color:'#94a3b8' }}>
             <X size={16}/>
           </button>
         </div>
@@ -144,7 +144,7 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
               <input type="number" value={form.valor} onChange={e=>setForm(p=>({...p,valor:e.target.value}))} placeholder="0,00"
                 style={{ width:'100%', padding:'8px', border:'1px solid #e2e8f0', borderRadius:7, fontSize:12, boxSizing:'border-box' }}/>
             </div>
-            <button onClick={adicionar} style={{ padding:'8px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:13, cursor:'pointer', whiteSpace:'nowrap', height:36 }}>
+            <button onClick={adicionar} style={{ padding:'8px 14px', background:'#0D63DB', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:13, cursor:'pointer', whiteSpace:'nowrap', height:36 }}>
               + Lançar
             </button>
           </div>
@@ -374,7 +374,7 @@ export default function Painel() {
       <meta charset="UTF-8"/><title>Relatório — ${im.nome||'Imóvel'}</title>
       <style>
         body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:0 30px;color:#1a1a1a;line-height:1.7}
-        h1{font-size:22px;font-weight:bold;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:6px}
+        h1{font-size:22px;font-weight:bold;border-bottom:2px solid #111111;padding-bottom:10px;margin-bottom:6px}
         h2{font-size:15px;font-weight:bold;margin:24px 0 6px;color:#334155;text-transform:uppercase;letter-spacing:.5px}
         .meta{font-size:12px;color:#64748b;margin-bottom:24px}
         .corpo{white-space:pre-wrap;font-size:14px;line-height:1.85}
@@ -423,7 +423,7 @@ export default function Painel() {
 
   const tabBtn = (id, label) => (
     <button onClick={()=>setAba(id)}
-      style={{ padding:'10px 20px', border:'none', background: aba===id ? '#0f172a' : 'transparent', color: aba===id ? 'white' : '#64748b', fontWeight:700, fontSize:14, cursor:'pointer', borderRadius: aba===id ? '10px 10px 0 0' : '10px 10px 0 0', borderBottom: aba===id ? 'none' : '2px solid #e2e8f0' }}>
+      style={{ padding:'10px 20px', border:'none', background: aba===id ? '#111111' : 'transparent', color: aba===id ? 'white' : '#64748b', fontWeight:700, fontSize:14, cursor:'pointer', borderRadius: aba===id ? '10px 10px 0 0' : '10px 10px 0 0', borderBottom: aba===id ? 'none' : '2px solid #e2e8f0' }}>
       {label}
     </button>
   );
@@ -436,11 +436,11 @@ export default function Painel() {
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12 }}>
         <div>
-          <h1 style={{ margin:0, fontSize:24, fontWeight:900, color:'#0f172a' }}>Meu Portfólio</h1>
+          <h1 style={{ margin:0, fontSize:24, fontWeight:900, color:'#111111' }}>Meu Portfólio</h1>
           <p style={{ margin:'4px 0 0', fontSize:13, color:'#64748b' }}>{imoveis.length} imóvel(is) · {todosLancamentos.length} lançamentos</p>
         </div>
         <button onClick={()=>nav('/buscar')}
-          style={{ padding:'10px 18px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+          style={{ padding:'10px 18px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
           + Buscar Leilões
         </button>
       </div>
@@ -448,7 +448,7 @@ export default function Painel() {
       {/* KPIs rápidos */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, marginBottom:20 }}>
         {[
-          { l:'Imóveis', v: imoveis.length, c:'#2563eb', bg:'#eff6ff' },
+          { l:'Imóveis', v: imoveis.length, c:'#0D63DB', bg:'#eff6ff' },
           { l:'Total Investido', v:`R$ ${fmt(imoveis.reduce((s,i)=>s+Number(i.valorArrematacao||0),0),0)}`, c:'#ef4444', bg:'#fef2f2' },
           { l:'Entradas', v:`R$ ${fmt(totalEntradas,0)}`, c:'#10b981', bg:'#f0fdf4' },
           { l:'Saídas', v:`R$ ${fmt(totalSaidas,0)}`, c:'#f59e0b', bg:'#fffbeb' },
@@ -456,7 +456,7 @@ export default function Painel() {
         ].map(k=>(
           <div key={k.l} style={{ background:k.bg, borderRadius:12, padding:'14px 16px', border:`1px solid ${k.c}20` }}>
             <div style={{ fontSize:11, fontWeight:700, color:k.c, textTransform:'uppercase', marginBottom:4 }}>{k.l}</div>
-            <div style={{ fontSize:18, fontWeight:900, color:'#0f172a' }}>{k.v}</div>
+            <div style={{ fontSize:18, fontWeight:900, color:'#111111' }}>{k.v}</div>
           </div>
         ))}
       </div>
@@ -476,7 +476,7 @@ export default function Painel() {
               <div style={{ fontSize:48, marginBottom:16 }}>🏠</div>
               <h3 style={{ color:'#334155', fontWeight:900, margin:'0 0 8px' }}>Nenhum imóvel arrematado ainda</h3>
               <p style={{ color:'#94a3b8', marginBottom:24, fontSize:14 }}>Na aba "Em Análise", clique em <strong>✅ Arrematei!</strong> para mover um imóvel para cá.</p>
-              <button onClick={()=>setAba('analise')} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:10, padding:'11px 24px', fontWeight:700, cursor:'pointer' }}>
+              <button onClick={()=>setAba('analise')} style={{ background:'#0D63DB', color:'white', border:'none', borderRadius:10, padding:'11px 24px', fontWeight:700, cursor:'pointer' }}>
                 Ver Em Análise
               </button>
             </div>
@@ -500,7 +500,7 @@ export default function Painel() {
                     return (
                       <tr key={im.id} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
                         <td style={{ padding:'12px 14px' }}>
-                          <div style={{ fontWeight:700, color:'#0f172a', fontSize:13 }}>{im.nome||'Sem nome'}</div>
+                          <div style={{ fontWeight:700, color:'#111111', fontSize:13 }}>{im.nome||'Sem nome'}</div>
                         </td>
                         <td style={{ padding:'12px 14px', fontSize:12, color:'#64748b' }}>
                           {[im.cidade, im.bairro, im.estado].filter(Boolean).join(' · ') || '—'}
@@ -511,7 +511,7 @@ export default function Painel() {
                             {Object.entries(STATUS_CONFIG).map(([v,s])=><option key={v} value={v}>{s.l}</option>)}
                           </select>
                         </td>
-                        <td style={{ padding:'12px 14px', fontWeight:800, color:'#0f172a' }}>
+                        <td style={{ padding:'12px 14px', fontWeight:800, color:'#111111' }}>
                           R$ {fmt(Number(im.valorArrematacao||0),0)}
                         </td>
                         <td style={{ padding:'12px 14px', fontWeight:700, color:'#ef4444' }}>
@@ -557,8 +557,8 @@ export default function Painel() {
           {proximasReunioes.length > 0 && (
             <div style={{ borderBottom:'2px solid #e2e8f0', padding:'18px', background:'#eff6ff' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
-                <CalendarClock size={16} color="#2563eb"/>
-                <span style={{ fontWeight:900, fontSize:14, color:'#1e40af' }}>Próximas Reuniões</span>
+                <CalendarClock size={16} color="#0D63DB"/>
+                <span style={{ fontWeight:900, fontSize:14, color:'#084BA6' }}>Próximas Reuniões</span>
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {proximasReunioes.map(r => {
@@ -568,13 +568,13 @@ export default function Painel() {
                   return (
                     <div key={r.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'14px 16px', background:'white', borderRadius:12, border:'1px solid #bfdbfe', flexWrap:'wrap' }}>
                       <div>
-                        <div style={{ fontWeight:700, color:'#0f172a', fontSize:14 }}>{r.imovel_nome || 'Imóvel'}{r.imovel_cidade ? ` — ${r.imovel_cidade}` : ''}</div>
+                        <div style={{ fontWeight:700, color:'#111111', fontSize:14 }}>{r.imovel_nome || 'Imóvel'}{r.imovel_cidade ? ` — ${r.imovel_cidade}` : ''}</div>
                         <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
                           📅 <strong style={{ textTransform:'capitalize' }}>{dataHora}</strong> · {r.reuniao_duracao_min || 30} min
                         </div>
                       </div>
                       <a href={r.google_meet_link} target="_blank" rel="noreferrer"
-                        style={{ padding:'9px 18px', background:'#2563eb', color:'white', borderRadius:9, fontWeight:700, fontSize:13, textDecoration:'none', whiteSpace:'nowrap' }}>
+                        style={{ padding:'9px 18px', background:'#0D63DB', color:'white', borderRadius:9, fontWeight:700, fontSize:13, textDecoration:'none', whiteSpace:'nowrap' }}>
                         📹 Entrar na Reunião
                       </a>
                     </div>
@@ -600,7 +600,7 @@ export default function Painel() {
                     {todosAgends.map(ag => (
                       <div key={ag.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'12px 16px', background:'white', borderRadius:10, border:'1px solid #d1fae5', flexWrap:'wrap' }}>
                         <div>
-                          <div style={{ fontWeight:700, color:'#0f172a', fontSize:13 }}>{ag.imovel_nome}</div>
+                          <div style={{ fontWeight:700, color:'#111111', fontSize:13 }}>{ag.imovel_nome}</div>
                           <div style={{ fontSize:12, color:'#64748b' }}>
                             {ag.imovel_cidade && <>{ag.imovel_cidade} · </>}
                             Cliente: <strong>{ag.cliente_nome}</strong> · Reunião em{' '}
@@ -626,7 +626,7 @@ export default function Painel() {
                         <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, background:'#fef3c7', color:'#92400e' }}>
                           {AVALIACOES.find(a=>a.key===s.tipo)?.label || s.tipo}
                         </span>
-                        <span style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>{s.imovel_nome}</span>
+                        <span style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{s.imovel_nome}</span>
                         {s.imovel_cidade && <span style={{ fontSize:12, color:'#64748b' }}>{s.imovel_cidade}</span>}
                         <span style={{ fontSize:12, color:'#64748b' }}>Cliente: <strong>{s.cliente_nome}</strong></span>
                         {s.prazo_ate && <span style={{ fontSize:11, color:'#f59e0b' }}>Prazo: {new Date(s.prazo_ate).toLocaleString('pt-BR')}</span>}
@@ -644,7 +644,7 @@ export default function Painel() {
               <div style={{ fontSize:48, marginBottom:16 }}>🔎</div>
               <h3 style={{ color:'#334155', fontWeight:900, margin:'0 0 8px' }}>Nenhum imóvel em análise</h3>
               <p style={{ color:'#94a3b8', marginBottom:24, fontSize:14 }}>Na busca de leilões, clique em <strong>Analisar</strong> para trazer um imóvel para cá.</p>
-              <button onClick={()=>nav('/buscar')} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:10, padding:'11px 24px', fontWeight:700, cursor:'pointer' }}>
+              <button onClick={()=>nav('/buscar')} style={{ background:'#0D63DB', color:'white', border:'none', borderRadius:10, padding:'11px 24px', fontWeight:700, cursor:'pointer' }}>
                 Buscar Leilões
               </button>
             </div>
@@ -659,7 +659,7 @@ export default function Painel() {
                     {/* Cabeçalho do imóvel */}
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'14px 18px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
                       <div>
-                        <div style={{ fontWeight:800, color:'#0f172a', fontSize:15 }}>{im.nome||'Sem nome'}</div>
+                        <div style={{ fontWeight:800, color:'#111111', fontSize:15 }}>{im.nome||'Sem nome'}</div>
                         <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
                           {im.cidade}{im.estado?`, ${im.estado}`:''}
                           {im.dataLeilao && <> · Leilão {dias!=null ? (dias>=0?`em ${dias} dia(s)`:'já ocorrido') : ''}</>}
@@ -674,7 +674,7 @@ export default function Painel() {
                           </button>
                         )}
                         <button onClick={()=>nav('/analise',{state:{imovel:im}})}
-                          style={{ padding:'7px 14px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                          style={{ padding:'7px 14px', background:'#111111', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                           <Sparkles size={13}/> Abrir análise
                         </button>
                         <button onClick={()=>marcarArrematado(im)}
@@ -696,7 +696,7 @@ export default function Painel() {
                               <div style={{ width:30, height:30, borderRadius:8, background:av.cor, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                                 <Icon size={15} color="white"/>
                               </div>
-                              <span style={{ fontSize:12.5, fontWeight:800, color:'#0f172a', lineHeight:1.25 }}>{av.label}</span>
+                              <span style={{ fontSize:12.5, fontWeight:800, color:'#111111', lineHeight:1.25 }}>{av.label}</span>
                             </div>
                             <p style={{ margin:0, fontSize:11, color:'#64748b', lineHeight:1.5, minHeight:46 }}>{av.desc}</p>
                             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:6 }}>
@@ -717,7 +717,7 @@ export default function Painel() {
                     {/* Faixa de agendamento / aprovação */}
                     <div style={{ padding:'14px 18px', borderTop:'1px solid #f1f5f9', background:'#fcfcfd', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:12, color:'#475569' }}>
-                        <CalendarClock size={16} color="#2563eb"/>
+                        <CalendarClock size={16} color="#0D63DB"/>
                         {ag?.status === 'encaminhado_juridico' ? (
                           <span style={{ color:'#10b981', fontWeight:700 }}>✓ Aprovado e encaminhado ao jurídico</span>
                         ) : ag?.status === 'solicitado' ? (
@@ -740,7 +740,7 @@ export default function Painel() {
                             <input type="date" value={dataAgenda} onChange={e=>setDataAgenda(e.target.value)}
                               style={{ ...inp2, padding:'7px 10px' }}/>
                             <button onClick={()=>agendarAnalista(im)}
-                              style={{ padding:'8px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                              style={{ padding:'8px 14px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
                               Confirmar
                             </button>
                             <button onClick={()=>{setAgendando(null);setDataAgenda('');}}
@@ -750,7 +750,7 @@ export default function Painel() {
                           </>
                         ) : ag?.status !== 'encaminhado_juridico' && (
                           <button onClick={()=>{ if(!podeAgendar){alert('Este leilão ocorre em menos de 7 dias — não é possível agendar.');return;} setAgendando(im.id); setDataAgenda(''); }}
-                            style={{ padding:'8px 14px', background:'white', color:'#2563eb', border:'2px solid #bfdbfe', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', opacity:podeAgendar?1:0.5 }}>
+                            style={{ padding:'8px 14px', background:'white', color:'#0D63DB', border:'2px solid #bfdbfe', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', opacity:podeAgendar?1:0.5 }}>
                             {ag?.status === 'solicitado' ? 'Reagendar' : 'Agendar com analista'}
                           </button>
                         )}
@@ -789,7 +789,7 @@ export default function Painel() {
                       style={{ border:`1px solid ${sc.c}40`, borderRadius:12, padding:'12px 14px', cursor:'pointer', background:sc.bg+'80', transition:'all 0.15s' }}
                       onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'}
                       onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                      <div style={{ fontWeight:800, fontSize:13, color:'#0f172a', marginBottom:4 }}>{im.nome||'Sem nome'}</div>
+                      <div style={{ fontWeight:800, fontSize:13, color:'#111111', marginBottom:4 }}>{im.nome||'Sem nome'}</div>
                       <div style={{ fontSize:11, color:'#64748b', marginBottom:6 }}>{im.cidade||'—'}</div>
                       <div style={{ display:'flex', justifyContent:'space-between', fontSize:11 }}>
                         <span style={{ color:'#ef4444' }}>Saídas: R$ {fmt(c.saidas,0)}</span>
@@ -853,7 +853,7 @@ export default function Painel() {
               </div>
               <button onClick={adicionarLancamento}
                 disabled={!novoLanc.imovelId || !novoLanc.valor}
-                style={{ padding:'8px 16px', background: (!novoLanc.imovelId||!novoLanc.valor) ? '#94a3b8' : '#2563eb', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:13, cursor: (!novoLanc.imovelId||!novoLanc.valor) ? 'not-allowed' : 'pointer', height:36, whiteSpace:'nowrap' }}>
+                style={{ padding:'8px 16px', background: (!novoLanc.imovelId||!novoLanc.valor) ? '#94a3b8' : '#0D63DB', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:13, cursor: (!novoLanc.imovelId||!novoLanc.valor) ? 'not-allowed' : 'pointer', height:36, whiteSpace:'nowrap' }}>
                 + Lançar
               </button>
             </div>
@@ -876,7 +876,7 @@ export default function Painel() {
                   <div key={g.id} style={{ border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
                     {/* Cabeçalho do imóvel com subtotais */}
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'10px 16px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
-                      <div style={{ fontWeight:800, color:'#0f172a', fontSize:14 }}>🏠 {g.nome}{g.cidade?<span style={{ fontSize:12, color:'#94a3b8', fontWeight:500 }}> · {g.cidade}</span>:null}</div>
+                      <div style={{ fontWeight:800, color:'#111111', fontSize:14 }}>🏠 {g.nome}{g.cidade?<span style={{ fontSize:12, color:'#94a3b8', fontWeight:500 }}> · {g.cidade}</span>:null}</div>
                       <div style={{ display:'flex', gap:14, fontSize:12 }}>
                         <span style={{ color:'#10b981', fontWeight:700 }}>+ R$ {fmt(ent,0)}</span>
                         <span style={{ color:'#ef4444', fontWeight:700 }}>− R$ {fmt(sai,0)}</span>

@@ -17,7 +17,7 @@ const RISCOS_COMUNS = [
 const TIPO_CONFIG = {
   bloqueante: { label: 'Bloqueante', color: '#dc2626', bg: '#fee2e2', icon: XCircle },
   alerta: { label: 'Alerta', color: '#d97706', bg: '#fef3c7', icon: AlertTriangle },
-  informativo: { label: 'Informativo', color: '#2563eb', bg: '#dbeafe', icon: Info },
+  informativo: { label: 'Informativo', color: '#0D63DB', bg: '#dbeafe', icon: Info },
 };
 
 export default function RiscoJuridico({ riscos, onChange }) {
@@ -83,7 +83,7 @@ export default function RiscoJuridico({ riscos, onChange }) {
             </button>
           ))}
         </div>
-        <button onClick={adicionar} style={{ width: '100%', padding: '8px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12 }}>
+        <button onClick={adicionar} style={{ width: '100%', padding: '8px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12 }}>
           <Plus size={14} /> Adicionar
         </button>
       </div>

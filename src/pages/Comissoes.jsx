@@ -10,7 +10,7 @@ const ROLES_ELEGÍVEIS = ['admin', 'consultor', 'analista', 'advogado'];
 const STATUS_LABEL = { pendente: 'Pendente', pago: 'Pago', cancelado: 'Cancelado' };
 const STATUS_COLOR = { pendente: '#d97706', pago: '#16a34a', cancelado: '#94a3b8' };
 const SAQUE_STATUS_LABEL = { pendente: 'Aguardando', aprovado: 'Aprovado', pago: 'Pago', recusado: 'Recusado' };
-const SAQUE_STATUS_COLOR = { pendente: '#d97706', aprovado: '#2563eb', pago: '#16a34a', recusado: '#ef4444' };
+const SAQUE_STATUS_COLOR = { pendente: '#d97706', aprovado: '#0D63DB', pago: '#16a34a', recusado: '#ef4444' };
 
 function fmt(v) {
   return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -116,7 +116,7 @@ export default function Comissoes() {
 
   const inputStyle = {
     width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0',
-    borderRadius: 8, fontSize: 14, color: '#0f172a', background: 'white',
+    borderRadius: 8, fontSize: 14, color: '#111111', background: 'white',
     outline: 'none', boxSizing: 'border-box',
   };
   const cardStyle = {
@@ -126,7 +126,7 @@ export default function Comissoes() {
   const abaStyle = (a) => ({
     padding: '8px 18px', border: 'none', borderRadius: 8, fontWeight: 700,
     fontSize: 13, cursor: 'pointer',
-    background: aba === a ? '#0f172a' : 'transparent',
+    background: aba === a ? '#111111' : 'transparent',
     color: aba === a ? 'white' : '#64748b',
   });
 
@@ -142,7 +142,7 @@ export default function Comissoes() {
 
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>Minhas Comissões</h1>
+          <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 900, color: '#111111', margin: 0 }}>Minhas Comissões</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>Acompanhe seus repasses e solicite saques</p>
         </div>
 
@@ -151,7 +151,7 @@ export default function Comissoes() {
           {[
             { icon: Clock, label: 'A receber', valor: fmt(totalPendente), cor: '#d97706', bg: '#fffbeb' },
             { icon: CheckCircle, label: 'Já recebido', valor: fmt(totalPago), cor: '#16a34a', bg: '#f0fdf4' },
-            { icon: DollarSign, label: 'Disponível p/ saque', valor: fmt(totalDisponivel), cor: '#2563eb', bg: '#eff6ff' },
+            { icon: DollarSign, label: 'Disponível p/ saque', valor: fmt(totalDisponivel), cor: '#0D63DB', bg: '#eff6ff' },
             { icon: TrendingUp, label: 'Total de vendas', valor: comissoes.length, cor: '#7c3aed', bg: '#faf5ff' },
           ].map(({ icon: Icon, label, valor, cor, bg }) => (
             <div key={label} style={{ background: bg, borderRadius: 12, padding: '14px 16px', border: `1px solid ${cor}22` }}>
@@ -159,7 +159,7 @@ export default function Comissoes() {
                 <Icon size={14} color={cor} />
                 <div style={{ fontSize: 11, fontWeight: 700, color: cor, textTransform: 'uppercase' }}>{label}</div>
               </div>
-              <div style={{ fontSize: isMobile ? 16 : 20, fontWeight: 900, color: '#0f172a' }}>{valor}</div>
+              <div style={{ fontSize: isMobile ? 16 : 20, fontWeight: 900, color: '#111111' }}>{valor}</div>
             </div>
           ))}
         </div>
@@ -175,7 +175,7 @@ export default function Comissoes() {
               style={{ ...inputStyle, flex: 1, minWidth: 200 }}
             />
             <button onClick={salvarPix} disabled={salvandoPix || pixKey === pixKeySalva}
-              style={{ padding: '9px 18px', background: pixKey === pixKeySalva ? '#e2e8f0' : '#0f172a', color: pixKey === pixKeySalva ? '#94a3b8' : 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: pixKey === pixKeySalva ? 'default' : 'pointer' }}>
+              style={{ padding: '9px 18px', background: pixKey === pixKeySalva ? '#e2e8f0' : '#111111', color: pixKey === pixKeySalva ? '#94a3b8' : 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: pixKey === pixKeySalva ? 'default' : 'pointer' }}>
               {salvandoPix ? 'Salvando...' : 'Salvar PIX'}
             </button>
           </div>
@@ -187,14 +187,14 @@ export default function Comissoes() {
         </div>
 
         {/* Solicitar saque */}
-        <div style={{ ...cardStyle, background: totalDisponivel > 0 ? '#eff6ff' : 'white', border: `1px solid ${totalDisponivel > 0 ? '#2563eb44' : '#e2e8f0'}` }}>
+        <div style={{ ...cardStyle, background: totalDisponivel > 0 ? '#eff6ff' : 'white', border: `1px solid ${totalDisponivel > 0 ? '#0D63DB44' : '#e2e8f0'}` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>Solicitar saque</div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Disponível: {fmt(totalDisponivel)}</div>
             </div>
             <button onClick={() => setShowSaqueForm(p => !p)} disabled={totalDisponivel <= 0 || !pixKeySalva}
-              style={{ padding: '9px 18px', background: totalDisponivel > 0 && pixKeySalva ? '#2563eb' : '#e2e8f0', color: totalDisponivel > 0 && pixKeySalva ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: totalDisponivel > 0 && pixKeySalva ? 'pointer' : 'default' }}>
+              style={{ padding: '9px 18px', background: totalDisponivel > 0 && pixKeySalva ? '#0D63DB' : '#e2e8f0', color: totalDisponivel > 0 && pixKeySalva ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: totalDisponivel > 0 && pixKeySalva ? 'pointer' : 'default' }}>
               Solicitar saque
             </button>
           </div>
@@ -212,7 +212,7 @@ export default function Comissoes() {
                   style={{ ...inputStyle, flex: 1, minWidth: 160 }}
                 />
                 <button onClick={solicitarSaque} disabled={solicitandoSaque}
-                  style={{ padding: '9px 18px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  style={{ padding: '9px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                   {solicitandoSaque ? 'Enviando...' : 'Confirmar'}
                 </button>
                 <button onClick={() => setShowSaqueForm(false)}
@@ -247,10 +247,10 @@ export default function Comissoes() {
                 {Object.entries(porGateway).map(([g, d]) => (
                   <div key={g} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#f8fafc', borderRadius: 8 }}>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', textTransform: 'capitalize' }}>{g}</div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', textTransform: 'capitalize' }}>{g}</div>
                       <div style={{ fontSize: 12, color: '#64748b' }}>{d.qtd} venda{d.qtd !== 1 ? 's' : ''}</div>
                     </div>
-                    <div style={{ fontSize: 16, fontWeight: 900, color: '#2563eb' }}>{fmt(d.total)}</div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: '#0D63DB' }}>{fmt(d.total)}</div>
                   </div>
                 ))}
               </div>
@@ -297,11 +297,11 @@ export default function Comissoes() {
                       return (
                         <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmtData(c.created_at)}</td>
-                          <td style={{ padding: '8px 10px', color: '#0f172a', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.referencia || c.origem}</td>
+                          <td style={{ padding: '8px 10px', color: '#111111', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.referencia || c.origem}</td>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{gw || '—'}</td>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmt(c.valor_base)}</td>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{Number(c.percentual).toFixed(1)}%</td>
-                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap' }}>{fmt(comissaoBruta)}</td>
+                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#111111', whiteSpace: 'nowrap' }}>{fmt(comissaoBruta)}</td>
                           <td style={{ padding: '8px 10px', color: taxaCredito > 0 ? '#ef4444' : '#94a3b8', whiteSpace: 'nowrap' }}>
                             {taxaCredito > 0 ? `−${fmt(descontoCredito)} (${taxaCredito}%)` : '—'}
                           </td>
@@ -343,7 +343,7 @@ export default function Comissoes() {
                 {saques.map(s => (
                   <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#f8fafc', borderRadius: 8, gap: 12, flexWrap: 'wrap' }}>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{fmt(s.valor)}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#111111' }}>{fmt(s.valor)}</div>
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>PIX: {s.pix_key} · {fmtData(s.criado_em)}</div>
                       {s.observacao && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{s.observacao}</div>}
                     </div>

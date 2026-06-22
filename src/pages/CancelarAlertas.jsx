@@ -29,7 +29,7 @@ export default function CancelarAlertas() {
     <div style={{ minHeight: '100vh', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, padding: '48px 40px', maxWidth: 440, width: '100%', textAlign: 'center', boxShadow: '0 8px 40px rgba(0,0,0,0.08)' }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
-        <h2 style={{ color: '#0f172a', fontWeight: 900, fontSize: 22, margin: '0 0 8px' }}>Alertas de oportunidades</h2>
+        <h2 style={{ color: '#111111', fontWeight: 900, fontSize: 22, margin: '0 0 8px' }}>Alertas de oportunidades</h2>
         <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, margin: '0 0 32px' }}>
           Receba semanalmente imóveis em leilão que combinam com o seu perfil de investimento.
         </p>
@@ -44,10 +44,10 @@ export default function CancelarAlertas() {
               {status ? '✅ Alertas ativados' : '⏸ Alertas pausados'}
             </div>
             <button onClick={toggleAlerta} disabled={salvando}
-              style={{ width: '100%', padding: '13px', background: status ? '#fef2f2' : '#2563eb', color: status ? '#dc2626' : 'white', border: status ? '1px solid #fca5a5' : 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', marginBottom: 16 }}>
+              style={{ width: '100%', padding: '13px', background: status ? '#fef2f2' : '#0D63DB', color: status ? '#dc2626' : 'white', border: status ? '1px solid #fca5a5' : 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', marginBottom: 16 }}>
               {salvando ? 'Salvando...' : status ? 'Pausar alertas' : 'Reativar alertas'}
             </button>
-            <button onClick={() => nav('/buscar')} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+            <button onClick={() => nav('/buscar')} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
               Alterar preferências de busca →
             </button>
           </>

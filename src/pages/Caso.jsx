@@ -13,9 +13,9 @@ import { useIsMobile } from '../utils/useIsMobile';
 
 // ─── Estilos base ────────────────────────────────────────────────────────────
 const card = { background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding:'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' };
-const inp = { width:'100%', padding:'9px 11px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#0f172a', boxSizing:'border-box' };
+const inp = { width:'100%', padding:'9px 11px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#111111', boxSizing:'border-box' };
 const lbl = { fontSize:10, fontWeight:700, color:'#64748b', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
-const btn = (color='#2563eb') => ({ padding:'10px 20px', background:color, color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer' });
+const btn = (color='#0D63DB') => ({ padding:'10px 20px', background:color, color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer' });
 
 const fmt = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
@@ -78,7 +78,7 @@ function EtapaTimeline({ status }) {
         <React.Fragment key={e}>
           <div style={{
             width:10, height:10, borderRadius:'50%',
-            background: i < idx ? '#10b981' : i === idx ? '#2563eb' : '#e2e8f0',
+            background: i < idx ? '#10b981' : i === idx ? '#0D63DB' : '#e2e8f0',
             flexShrink:0,
             title: STATUS_ETAPA_LABEL[e],
           }} title={STATUS_ETAPA_LABEL[e]} />
@@ -105,10 +105,10 @@ function AnaliseCard({ info, job, relatorio, onSolicitar, solicitando, podeSolic
         </div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-            <span style={{ fontWeight:800, fontSize:14, color:'#0f172a' }}>{info.label}</span>
+            <span style={{ fontWeight:800, fontSize:14, color:'#111111' }}>{info.label}</span>
             <Badge label={statusLabel} color={statusColor} bg={statusColor+'18'} />
             {job?.status === 'concluido' && relatorio && (
-              <button onClick={() => setOpen(o=>!o)} style={{ background:'none', border:'none', color:'#2563eb', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+              <button onClick={() => setOpen(o=>!o)} style={{ background:'none', border:'none', color:'#0D63DB', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
                 {open ? 'Ocultar' : 'Ver relatório'} {open ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
               </button>
             )}
@@ -154,7 +154,7 @@ function AnaliseCard({ info, job, relatorio, onSolicitar, solicitando, podeSolic
 }
 
 // ─── Seção colapsável ─────────────────────────────────────────────────────────
-function Secao({ title, icon: Icon, color='#2563eb', open, onToggle, badge, children, disabled }) {
+function Secao({ title, icon: Icon, color='#0D63DB', open, onToggle, badge, children, disabled }) {
   return (
     <div style={{ ...card, padding:0, overflow:'hidden', opacity: disabled ? 0.5 : 1 }}>
       <button onClick={disabled ? undefined : onToggle} style={{ width:'100%', padding:'16px 20px', border:'none', background:'white', cursor: disabled ? 'default' : 'pointer', display:'flex', alignItems:'center', gap:12, textAlign:'left' }}>
@@ -162,7 +162,7 @@ function Secao({ title, icon: Icon, color='#2563eb', open, onToggle, badge, chil
           <Icon size={16} color={open ? 'white' : color}/>
         </div>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:15, fontWeight:800, color: disabled ? '#94a3b8' : '#0f172a' }}>{title}</div>
+          <div style={{ fontSize:15, fontWeight:800, color: disabled ? '#94a3b8' : '#111111' }}>{title}</div>
           {badge && <div style={{ fontSize:11, color:'#64748b', marginTop:1 }}>{badge}</div>}
         </div>
         {disabled ? <Lock size={14} color="#cbd5e1"/> : open ? <ChevronUp size={15} color="#94a3b8"/> : <ChevronDown size={15} color="#94a3b8"/>}
@@ -577,7 +577,7 @@ export default function Caso() {
 
   if (loading) return (
     <div style={{ display:'flex', justifyContent:'center', alignItems:'center', minHeight:'60vh' }}>
-      <Loader2 size={32} color="#2563eb" style={{animation:'spin 1s linear infinite'}}/>
+      <Loader2 size={32} color="#0D63DB" style={{animation:'spin 1s linear infinite'}}/>
     </div>
   );
 
@@ -601,7 +601,7 @@ export default function Caso() {
         <div style={{ display:'flex', alignItems:'flex-start', gap:14, flexWrap:'wrap' }}>
           <div style={{ flex:1, minWidth:200 }}>
             <div style={{ fontSize:12, color:'#94a3b8', fontWeight:600, marginBottom:4 }}>Análise de Imóvel</div>
-            <div style={{ fontSize:18, fontWeight:900, color:'#0f172a', lineHeight:1.3 }}>
+            <div style={{ fontSize:18, fontWeight:900, color:'#111111', lineHeight:1.3 }}>
               {caso.imovel_endereco || 'Imóvel sem endereço'}
             </div>
             {caso.imovel_valor && (
@@ -610,12 +610,12 @@ export default function Caso() {
               </div>
             )}
             <div style={{ marginTop:10 }}>
-              <Badge label={STATUS_ETAPA_LABEL[statusAtual] || statusAtual} color="#2563eb" bg="#eff6ff"/>
+              <Badge label={STATUS_ETAPA_LABEL[statusAtual] || statusAtual} color="#0D63DB" bg="#eff6ff"/>
               <span style={{ marginLeft:8, fontSize:11, color:'#64748b' }}>{caso.tipo_leilao === 'judicial' ? 'Leilão Judicial' : 'Leilão Extrajudicial'}</span>
             </div>
           </div>
           {imovelInit?.url && (
-            <a href={imovelInit.url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'#2563eb', fontWeight:700, textDecoration:'none' }}>
+            <a href={imovelInit.url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'#0D63DB', fontWeight:700, textDecoration:'none' }}>
               Ver no leiloeiro <ExternalLink size={12}/>
             </a>
           )}
@@ -630,20 +630,20 @@ export default function Caso() {
         <div style={{ ...card, marginBottom:20, background:'#f8fafc', padding:'12px 16px', display:'flex', gap:20, flexWrap:'wrap', alignItems:'center' }}>
           <div>
             <span style={{ fontSize:11, color:'#64748b', fontWeight:600 }}>ANÁLISES NO MÊS</span>
-            <div style={{ fontSize:18, fontWeight:900, color: cotaInfo.usadas >= cotaInfo.limite ? '#ef4444' : '#0f172a' }}>
+            <div style={{ fontSize:18, fontWeight:900, color: cotaInfo.usadas >= cotaInfo.limite ? '#ef4444' : '#111111' }}>
               {cotaInfo.usadas} / {cotaInfo.limite}
             </div>
           </div>
           <div>
             <span style={{ fontSize:11, color:'#64748b', fontWeight:600 }}>REUNIÕES NO MÊS</span>
-            <div style={{ fontSize:18, fontWeight:900, color:'#0f172a' }}>
+            <div style={{ fontSize:18, fontWeight:900, color:'#111111' }}>
               {cotaInfo.reunioesUsadas} / {cotaInfo.reunioesLimite}
             </div>
           </div>
           {cotaInfo.usadas >= cotaInfo.limite && (
             <div style={{ fontSize:12, color:'#92400e', background:'#fef3c7', padding:'8px 12px', borderRadius:8 }}>
               Cota esgotada para este mês.
-              <button onClick={() => nav('/planos')} style={{ marginLeft:8, color:'#2563eb', background:'none', border:'none', fontWeight:700, cursor:'pointer', fontSize:12 }}>Fazer upgrade</button>
+              <button onClick={() => nav('/planos')} style={{ marginLeft:8, color:'#0D63DB', background:'none', border:'none', fontWeight:700, cursor:'pointer', fontSize:12 }}>Fazer upgrade</button>
             </div>
           )}
         </div>
@@ -661,7 +661,7 @@ export default function Caso() {
         <Secao
           title="Análises e Relatórios"
           icon={BarChart3}
-          color="#2563eb"
+          color="#0D63DB"
           open={secOpen.analises}
           onToggle={() => toggleSec('analises')}
           badge={`${jobs.filter(j=>j.status==='concluido').length} de ${TIPOS_ANALISE.length} concluídas`}
@@ -682,8 +682,8 @@ export default function Caso() {
 
           {analisesConcluidas && isAnalista && !reuniao1 && (
             <div style={{ marginTop:16, padding:'14px 16px', background:'#eff6ff', borderRadius:10, border:'1px solid #bfdbfe' }}>
-              <div style={{ fontWeight:700, fontSize:14, color:'#1e40af', marginBottom:8 }}>Relatórios prontos — agendar reunião com cliente</div>
-              <button onClick={() => { nav('/atendimento'); }} style={{ ...btn('#2563eb'), fontSize:12 }}>
+              <div style={{ fontWeight:700, fontSize:14, color:'#084BA6', marginBottom:8 }}>Relatórios prontos — agendar reunião com cliente</div>
+              <button onClick={() => { nav('/atendimento'); }} style={{ ...btn('#0D63DB'), fontSize:12 }}>
                 <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Agendar reunião
               </button>
             </div>
@@ -729,7 +729,7 @@ export default function Caso() {
               {isCliente && reuniao1.status === 'realizada' && !podeSolicitarJuridico && !juridica && (
                 <div style={{ marginTop:12, padding:'12px', background:'#fef2f2', borderRadius:8, fontSize:12, color:'#991b1b' }}>
                   A análise jurídica está disponível apenas nos planos Assessorado e Leilão Club.
-                  <button onClick={() => nav('/planos')} style={{ marginLeft:8, color:'#2563eb', background:'none', border:'none', fontWeight:700, cursor:'pointer', fontSize:12 }}>Fazer upgrade</button>
+                  <button onClick={() => nav('/planos')} style={{ marginLeft:8, color:'#0D63DB', background:'none', border:'none', fontWeight:700, cursor:'pointer', fontSize:12 }}>Fazer upgrade</button>
                 </div>
               )}
             </div>
@@ -860,7 +860,7 @@ export default function Caso() {
                 <div><span style={lbl}>Valor Arrematado</span><div style={{ fontSize:18, fontWeight:900, color:'#059669' }}>{fmt(arrematacao.valor_arrematado)}</div></div>
                 <div>
                   <span style={lbl}>Honorários ({honorariosConfig.total_pct}%)</span>
-                  <div style={{ fontSize:18, fontWeight:900, color:'#0f172a' }}>{fmt(arrematacao.honorarios_valor)}</div>
+                  <div style={{ fontSize:18, fontWeight:900, color:'#111111' }}>{fmt(arrematacao.honorarios_valor)}</div>
                 </div>
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
@@ -877,14 +877,14 @@ export default function Caso() {
               {/* Botão gerar procuração */}
               {arrematacao.honorarios_status === 'pago' && !procuracao && isCliente && (
                 <div style={{ marginTop:16 }}>
-                  <button onClick={gerarProcuracao} disabled={gerandoProc} style={{ ...btn('#2563eb'), display:'flex', alignItems:'center', gap:6 }}>
+                  <button onClick={gerarProcuracao} disabled={gerandoProc} style={{ ...btn('#0D63DB'), display:'flex', alignItems:'center', gap:6 }}>
                     {gerandoProc ? <Loader2 size={13} style={{animation:'spin 1s linear infinite'}}/> : <FileText size={13}/>}
                     Gerar Procuração
                   </button>
                 </div>
               )}
               {arrematacao.honorarios_status !== 'pago' && isCliente && (
-                <div style={{ marginTop:12, padding:'12px', background:'#eff6ff', borderRadius:8, fontSize:12, color:'#1e40af' }}>
+                <div style={{ marginTop:12, padding:'12px', background:'#eff6ff', borderRadius:8, fontSize:12, color:'#084BA6' }}>
                   Após a confirmação do pagamento dos honorários, o botão de gerar procuração será liberado.
                 </div>
               )}
@@ -1004,7 +1004,7 @@ export default function Caso() {
                 return (
                   <div key={m.id} style={{ alignSelf: meu ? 'flex-end' : 'flex-start', maxWidth:'80%' }}>
                     {!meu && <div style={{ fontSize:10, color:'#94a3b8', marginBottom:2 }}>{m.perfis?.nome || 'Sistema'}</div>}
-                    <div style={{ padding:'8px 12px', borderRadius: meu ? '12px 12px 2px 12px' : '12px 12px 12px 2px', background: meu ? '#2563eb' : 'white', color: meu ? 'white' : '#0f172a', fontSize:13, border: meu ? 'none' : '1px solid #e2e8f0' }}>
+                    <div style={{ padding:'8px 12px', borderRadius: meu ? '12px 12px 2px 12px' : '12px 12px 12px 2px', background: meu ? '#0D63DB' : 'white', color: meu ? 'white' : '#111111', fontSize:13, border: meu ? 'none' : '1px solid #e2e8f0' }}>
                       {m.texto}
                     </div>
                     <div style={{ fontSize:10, color:'#94a3b8', marginTop:2, textAlign: meu ? 'right' : 'left' }}>{fmtDate(m.created_at)}</div>
@@ -1072,11 +1072,11 @@ function ChecklistJuridico({ juridica, casoId, onSalvo }) {
   };
 
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
-  const inp2 = { width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:7, fontSize:12, background:'white', color:'#0f172a', boxSizing:'border-box' };
+  const inp2 = { width:'100%', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:7, fontSize:12, background:'white', color:'#111111', boxSizing:'border-box' };
 
   return (
     <div style={{ marginTop:14 }}>
-      <div style={{ fontWeight:700, fontSize:13, color:'#0f172a', marginBottom:12 }}>Checklist Jurídico</div>
+      <div style={{ fontWeight:700, fontSize:13, color:'#111111', marginBottom:12 }}>Checklist Jurídico</div>
 
       {/* Seção 5: débitos e hierarquia */}
       <div style={{ background:'#f8fafc', borderRadius:10, padding:'14px', marginBottom:10 }}>

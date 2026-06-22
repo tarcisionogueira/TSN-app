@@ -130,7 +130,7 @@ export default function Membros() {
     <div style={{ maxWidth:1280, margin:'0 auto', padding:'24px 20px' }}>
 
       {/* Hero */}
-      <div style={{ background:'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)', borderRadius:20, padding:'40px 48px', marginBottom:28, position:'relative', overflow:'hidden' }}>
+      <div style={{ background:'linear-gradient(135deg, #111111 0%, #1e1b4b 50%, #111111 100%)', borderRadius:20, padding:'40px 48px', marginBottom:28, position:'relative', overflow:'hidden' }}>
         <div style={{ position:'absolute', top:-60, right:-60, width:240, height:240, borderRadius:'50%', background:'rgba(99,102,241,0.15)' }}/>
         <div style={{ position:'absolute', bottom:-40, right:120, width:160, height:160, borderRadius:'50%', background:'rgba(37,99,235,0.12)' }}/>
         <div style={{ position:'relative', zIndex:1 }}>
@@ -182,8 +182,8 @@ export default function Membros() {
       {/* ── Continuar assistindo ─────────────────────────────────────────────── */}
       {cursosEmProgresso.length > 0 && (
         <div style={{ marginBottom:28 }}>
-          <div style={{ fontSize:12, fontWeight:800, color:'#2563eb', textTransform:'uppercase', letterSpacing:1, marginBottom:14, display:'flex', alignItems:'center', gap:6 }}>
-            <Play size={13} fill="#2563eb"/> Continuar assistindo
+          <div style={{ fontSize:12, fontWeight:800, color:'#0D63DB', textTransform:'uppercase', letterSpacing:1, marginBottom:14, display:'flex', alignItems:'center', gap:6 }}>
+            <Play size={13} fill="#0D63DB"/> Continuar assistindo
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))', gap:14 }}>
             {cursosEmProgresso.map(c => (
@@ -196,7 +196,7 @@ export default function Membros() {
                   {c.emoji}
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontWeight:800, fontSize:14, color:'#0f172a', marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.titulo}</div>
+                  <div style={{ fontWeight:800, fontSize:14, color:'#111111', marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.titulo}</div>
                   {/* Barra de progresso */}
                   <div style={{ height:6, background:'#f1f5f9', borderRadius:6, overflow:'hidden', marginBottom:4 }}>
                     <div style={{ height:6, background:c.cor, width:`${c.pct}%`, borderRadius:6, transition:'width 0.4s' }}/>
@@ -227,7 +227,7 @@ export default function Membros() {
                     <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:20, background:c.bg, color:c.cor }}>{c.nivel}</span>
                     <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:20, background:'#fef3c7', color:'#92400e' }}>★ Destaque</span>
                   </div>
-                  <div style={{ fontWeight:900, fontSize:16, color:'#0f172a', marginBottom:4 }}>{c.titulo}</div>
+                  <div style={{ fontWeight:900, fontSize:16, color:'#111111', marginBottom:4 }}>{c.titulo}</div>
                   <div style={{ fontSize:12, color:'#64748b', lineHeight:1.5, marginBottom:8 }}>{c.subtitulo}</div>
                   <div style={{ display:'flex', gap:12, fontSize:11, color:'#94a3b8' }}>
                     <span><BookOpen size={11}/> {c.aulas} aulas</span>
@@ -253,7 +253,7 @@ export default function Membros() {
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
           {CATEGORIAS.map(cat => (
             <button key={cat} onClick={()=>setCategoria(cat)}
-              style={{ padding:'7px 14px', border:'1px solid #e2e8f0', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', background:categoria===cat?'#0f172a':'white', color:categoria===cat?'white':'#64748b', transition:'all 0.15s' }}>
+              style={{ padding:'7px 14px', border:'1px solid #e2e8f0', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', background:categoria===cat?'#111111':'white', color:categoria===cat?'white':'#64748b', transition:'all 0.15s' }}>
               {cat}
             </button>
           ))}
@@ -292,9 +292,9 @@ export default function Membros() {
               )}
 
               <div style={{ padding:'12px 14px' }}>
-                <div style={{ fontWeight:800, fontSize:13, color:'#0f172a', lineHeight:1.4 }}>{c.titulo}</div>
+                <div style={{ fontWeight:800, fontSize:13, color:'#111111', lineHeight:1.4 }}>{c.titulo}</div>
                 {concluidas > 0 && pct < 100 && (
-                  <div style={{ fontSize:10, color:'#2563eb', fontWeight:700, marginTop:4 }}>{pct}% concluído</div>
+                  <div style={{ fontSize:10, color:'#0D63DB', fontWeight:700, marginTop:4 }}>{pct}% concluído</div>
                 )}
                 {pct === 100 && (
                   <div style={{ fontSize:10, color:'#10b981', fontWeight:700, marginTop:4 }}>✅ Concluído</div>
@@ -325,7 +325,7 @@ export default function Membros() {
                   <EbookCover titulo={eb.titulo}/>
                 )}
                 <div style={{ padding:'10px 12px' }}>
-                  <div style={{ fontWeight:800, fontSize:12, color:'#0f172a', lineHeight:1.4 }}>{eb.titulo}</div>
+                  <div style={{ fontWeight:800, fontSize:12, color:'#111111', lineHeight:1.4 }}>{eb.titulo}</div>
                 </div>
               </div>
             ))}
@@ -349,7 +349,7 @@ export default function Membros() {
                   onMouseEnter={e=>e.currentTarget.style.borderColor=p.cor} onMouseLeave={e=>e.currentTarget.style.borderColor=plano===k?p.cor:p.destaque?p.cor+'60':'#e2e8f0'}>
                   {p.destaque && <div style={{ position:'absolute', top:-10, left:'50%', transform:'translateX(-50%)', background:p.cor, color:'white', fontSize:10, fontWeight:800, padding:'3px 12px', borderRadius:20, whiteSpace:'nowrap' }}>⭐ MAIS POPULAR</div>}
                   <div style={{ fontWeight:900, fontSize:16, color:p.cor, marginBottom:6 }}>{p.nome}</div>
-                  <div style={{ fontSize:28, fontWeight:900, color:'#0f172a', lineHeight:1 }}>
+                  <div style={{ fontSize:28, fontWeight:900, color:'#111111', lineHeight:1 }}>
                     {p.precoLabel}
                   </div>
                   {p.periodicidade && <div style={{ fontSize:12, color:'#94a3b8', marginBottom:12 }}>{p.periodicidade}</div>}
@@ -400,14 +400,14 @@ export default function Membros() {
             {cancelMsg ? (
               <div style={{ textAlign:'center', padding:'20px 0' }}>
                 <div style={{ fontSize:36 }}>{cancelMsg.includes('Erro') ? '❌' : '✅'}</div>
-                <p style={{ fontWeight:700, color:'#0f172a', marginTop:12 }}>{cancelMsg}</p>
-                <button onClick={() => setShowCancelar(false)} style={{ marginTop:16, padding:'10px 24px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontWeight:700, cursor:'pointer' }}>Fechar</button>
+                <p style={{ fontWeight:700, color:'#111111', marginTop:12 }}>{cancelMsg}</p>
+                <button onClick={() => setShowCancelar(false)} style={{ marginTop:16, padding:'10px 24px', background:'#111111', color:'white', border:'none', borderRadius:8, fontWeight:700, cursor:'pointer' }}>Fechar</button>
               </div>
             ) : (
               <>
                 <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
                   <AlertTriangle size={24} color="#ef4444" />
-                  <h3 style={{ margin:0, fontSize:18, fontWeight:800, color:'#0f172a' }}>Cancelar plano</h3>
+                  <h3 style={{ margin:0, fontSize:18, fontWeight:800, color:'#111111' }}>Cancelar plano</h3>
                 </div>
                 <p style={{ fontSize:14, color:'#475569', marginBottom:8, lineHeight:1.6 }}>
                   Ao cancelar, você perde o acesso aos recursos do plano <strong>{PLANOS[plano]?.nome}</strong> ao final do período atual.

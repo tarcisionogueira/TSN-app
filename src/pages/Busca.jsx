@@ -22,7 +22,7 @@ function haversine(lat1, lon1, lat2, lon2) {
 const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
 
-const inp = { width:'100%', padding:'9px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#0f172a', boxSizing:'border-box' };
+const inp = { width:'100%', padding:'9px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#111111', boxSizing:'border-box' };
 const lbl = { fontSize:10, fontWeight:700, color:'#475569', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
 
 const ROLES_SITE   = ['explorador','top1','top2','assessorado','clube','consultor','analista','advogado','admin'];
@@ -180,10 +180,11 @@ export default function Busca() {
   const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo, centro = centroRaio, raioAtivoBusca = raioAtivo, raioKmBusca = raioKmAtivo) => {
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
 
-    const buildQuery = (base) => {
+    const buildQuery = (base, skipCidadeFilter = false) => {
       let q = base.eq('ativo', true);
       if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
-      if (filtrosAtivos.cidades?.length > 0) {
+      // When radius is active, skip city filter — radius itself defines the area
+      if (!skipCidadeFilter && filtrosAtivos.cidades?.length > 0) {
         const orParts = filtrosAtivos.cidades.map(c => `cidade.ilike.${c}`).join(',');
         q = q.or(orParts);
       }
@@ -208,8 +209,8 @@ export default function Busca() {
       let dbData, dbError;
 
       if (raioAtivoBusca && centro) {
-        // Fetch all records (no pagination at DB level) for client-side radius filter
-        const { data, error } = await buildQuery(supabase.from('imoveis_leilao').select('*'))
+        // Fetch all records for the state (skip city filter — radius defines area)
+        const { data, error } = await buildQuery(supabase.from('imoveis_leilao').select('*'), true)
           .order(coluna, { ascending: dir, nullsFirst: false });
         dbData = data;
         dbError = error;
@@ -272,8 +273,11 @@ export default function Busca() {
               comCoords.push(im);
             }
           } else {
-            // Sem coordenadas: inclui mesmo assim (já filtrado por cidade acima)
-            semCoords.push(im);
+            // Sem coordenadas: inclui apenas os da cidade centro (não temos como calcular distância)
+            const cidadeCentro = filtrosAtivos.cidades?.[0]?.toLowerCase();
+            if (!cidadeCentro || (im.cidade || '').toLowerCase() === cidadeCentro) {
+              semCoords.push(im);
+            }
           }
         });
         // Ordena por distância os que têm coords; sem coords vêm depois
@@ -392,7 +396,7 @@ export default function Busca() {
     <div style={{ position:'relative' }}>
     {/* Badge fixo de análises bônus para explorador */}
     {role === 'explorador' && analisesBonus !== null && (
-      <div style={{ position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)', zIndex:1000, background: analisesBonus > 0 ? '#2563eb' : '#dc2626', color:'white', borderRadius:999, padding:'8px 20px', fontSize:13, fontWeight:700, boxShadow:'0 4px 20px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap' }}>
+      <div style={{ position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)', zIndex:1000, background: analisesBonus > 0 ? '#0D63DB' : '#dc2626', color:'white', borderRadius:999, padding:'8px 20px', fontSize:13, fontWeight:700, boxShadow:'0 4px 20px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap' }}>
         {analisesBonus > 0 ? `🎁 ${analisesBonus} análise${analisesBonus !== 1 ? 's' : ''} bônus disponível${analisesBonus !== 1 ? 'is' : ''}` : '🔒 Análises bônus esgotadas'}
       </div>
     )}
@@ -404,7 +408,7 @@ export default function Busca() {
         {/* Filtros */}
         <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden' }}>
           <button onClick={()=>setShowFiltros(!showFiltros)}
-            style={{ width:'100%', padding:'13px 16px', background:'#0f172a', color:'white', border:'none', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', fontWeight:700, fontSize:13 }}>
+            style={{ width:'100%', padding:'13px 16px', background:'#111111', color:'white', border:'none', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', fontWeight:700, fontSize:13 }}>
             <span style={{ display:'flex', alignItems:'center', gap:7 }}><Filter size={14}/> Filtros</span>
             {showFiltros ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
           </button>
@@ -441,10 +445,10 @@ export default function Busca() {
                 {filtros.cidades.length > 0 && (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
                     {filtros.cidades.map(c=>(
-                      <span key={c} style={{ display:'flex', alignItems:'center', gap:3, background:'#dbeafe', color:'#1e40af', fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:20 }}>
+                      <span key={c} style={{ display:'flex', alignItems:'center', gap:3, background:'#dbeafe', color:'#084BA6', fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:20 }}>
                         {c}
                         <button onClick={()=>up('cidades', filtros.cidades.filter(x=>x!==c))}
-                          style={{ background:'none', border:'none', cursor:'pointer', color:'#1e40af', padding:0, display:'flex' }}>
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#084BA6', padding:0, display:'flex' }}>
                           <X size={10}/>
                         </button>
                       </span>
@@ -491,7 +495,7 @@ export default function Busca() {
                           {cidadesFiltradas.map((c, idx) => (
                             <button key={c}
                               onClick={()=>{ up('cidades', [...filtros.cidades, c]); setBuscaCidade(''); setDropdownIndex(-1); }}
-                              style={{ width:'100%', padding:'7px 12px', border:'none', background: idx === dropdownIndex ? '#eff6ff' : 'none', textAlign:'left', cursor:'pointer', fontSize:12, color: idx === dropdownIndex ? '#1d4ed8' : '#334155', borderBottom:'1px solid #f1f5f9', fontWeight: idx === dropdownIndex ? 700 : 400 }}
+                              style={{ width:'100%', padding:'7px 12px', border:'none', background: idx === dropdownIndex ? '#eff6ff' : 'none', textAlign:'left', cursor:'pointer', fontSize:12, color: idx === dropdownIndex ? '#084BA6' : '#334155', borderBottom:'1px solid #f1f5f9', fontWeight: idx === dropdownIndex ? 700 : 400 }}
                               onMouseEnter={e=>{ setDropdownIndex(idx); e.currentTarget.style.background='#eff6ff'; }}
                               onMouseLeave={e=>{ if (dropdownIndex !== idx) e.currentTarget.style.background='none'; }}>
                               {c}
@@ -512,7 +516,7 @@ export default function Busca() {
                   <span style={{ display:'flex', alignItems:'center', gap:5 }}><MapPin size={11}/> Buscar por raio</span>
                   <button
                     onClick={toggleRaio}
-                    style={{ background: raioAtivo ? '#2563eb' : '#e2e8f0', border:'none', borderRadius:20, width:36, height:20, cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
+                    style={{ background: raioAtivo ? '#0D63DB' : '#e2e8f0', border:'none', borderRadius:20, width:36, height:20, cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
                     <span style={{ position:'absolute', top:2, left: raioAtivo ? 18 : 2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left 0.2s', display:'block' }}/>
                   </button>
                 </label>
@@ -530,14 +534,14 @@ export default function Busca() {
                     <div>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
                         <span style={{ fontSize:10, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.5 }}>Raio</span>
-                        <span style={{ fontSize:12, fontWeight:800, color:'#2563eb' }}>{raioKmAtivo} km</span>
+                        <span style={{ fontSize:12, fontWeight:800, color:'#0D63DB' }}>{raioKmAtivo} km</span>
                       </div>
                       <input
                         type="range"
                         min={10} max={200} step={1}
                         value={raioKmAtivo}
                         onChange={e => setRaioKmAtivo(Number(e.target.value))}
-                        style={{ width:'100%', accentColor:'#2563eb', cursor:'pointer' }}
+                        style={{ width:'100%', accentColor:'#0D63DB', cursor:'pointer' }}
                       />
                       <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:'#94a3b8', marginTop:2 }}>
                         <span>10 km</span>
@@ -549,7 +553,7 @@ export default function Busca() {
                     <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                       {[10, 25, 50, 100, 200].map(r => (
                         <button key={r} onClick={() => setRaioKmAtivo(r)}
-                          style={{ padding:'4px 10px', border:`1px solid ${raioKmAtivo===r?'#2563eb':'#e2e8f0'}`, borderRadius:20, fontSize:10, fontWeight:700, cursor:'pointer', background: raioKmAtivo===r?'#eff6ff':'white', color: raioKmAtivo===r?'#1d4ed8':'#64748b', transition:'all 0.1s' }}>
+                          style={{ padding:'4px 10px', border:`1px solid ${raioKmAtivo===r?'#0D63DB':'#e2e8f0'}`, borderRadius:20, fontSize:10, fontWeight:700, cursor:'pointer', background: raioKmAtivo===r?'#eff6ff':'white', color: raioKmAtivo===r?'#084BA6':'#64748b', transition:'all 0.1s' }}>
                           {r} km
                         </button>
                       ))}
@@ -589,7 +593,7 @@ export default function Busca() {
                 </div>
               )}
               <button onClick={buscar} disabled={loading || !filtros.estado}
-                style={{ width:'100%', padding:'11px', background: filtros.estado ? '#2563eb' : '#94a3b8', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor: filtros.estado ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                style={{ width:'100%', padding:'11px', background: filtros.estado ? '#0D63DB' : '#94a3b8', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor: filtros.estado ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                 {loading ? <><Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...</> : <><Search size={14}/> Buscar Leilões</>}
               </button>
               <button onClick={limparFiltros}
@@ -610,7 +614,7 @@ export default function Busca() {
           <div style={{ background: 'white', borderRadius: 12, padding: '10px 14px', marginBottom: 0, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>Filtros salvos:</span>
             {filtrosSalvos.map(filtro => (
-              <span key={filtro.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <span key={filtro.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#084BA6', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 <span onClick={() => setFiltros(filtro.filtros)}>{filtro.nome}</span>
                 <button onClick={() => deletarFiltro(filtro.id)} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center' }}>×</button>
               </span>
@@ -626,7 +630,7 @@ export default function Busca() {
                   placeholder="Nome do filtro..." autoFocus
                   onKeyDown={e => e.key === 'Enter' && salvarFiltroAtual()}
                   style={{ padding: '4px 8px', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, outline: 'none', width: 140 }} />
-                <button onClick={salvarFiltroAtual} style={{ padding: '4px 10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Salvar</button>
+                <button onClick={salvarFiltroAtual} style={{ padding: '4px 10px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Salvar</button>
                 <button onClick={() => { setShowSalvarModal(false); setNomeFiltro(''); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}>×</button>
               </div>
             )}
@@ -636,7 +640,7 @@ export default function Busca() {
         {/* Header de resultados */}
         <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10 }}>
           <div>
-            <h1 style={{ margin:0, fontSize:18, fontWeight:900, color:'#0f172a' }}>Busca de Imóveis em Leilão</h1>
+            <h1 style={{ margin:0, fontSize:18, fontWeight:900, color:'#111111' }}>Busca de Imóveis em Leilão</h1>
             <p style={{ margin:'4px 0 0', fontSize:12, color:'#64748b' }}>
               {loading ? 'Buscando leilões...'
                 : buscaFeita ? `${totalResultados} imóvel(is) encontrado(s) · página ${pagina} de ${totalPaginas}`
@@ -665,7 +669,7 @@ export default function Busca() {
                 <RefreshCw size={12}/> Atualizar
               </button>
             )}
-            {loading && <Loader2 size={18} color="#2563eb" style={{animation:'spin 1s linear infinite'}}/>}
+            {loading && <Loader2 size={18} color="#0D63DB" style={{animation:'spin 1s linear infinite'}}/>}
           </div>
         </div>
 
@@ -713,7 +717,7 @@ export default function Busca() {
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap:12 }}>
             {resultadosPagina.map((im)=>{
               const desc = desconto(im);
-              const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#1e40af' };
+              const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#084BA6' };
               const imgSrc = im.foto || imgUrlCaixa({ ...im, fonte_id: im.fonteId });
 
               return (
@@ -752,14 +756,14 @@ export default function Busca() {
                       {im.fracionado && <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:8 }}>⚠ Fração</span>}
                     </div>
 
-                    <div style={{ fontWeight:700, color:'#0f172a', fontSize: isMobile ? 14 : 12, lineHeight:1.3, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+                    <div style={{ fontWeight:700, color:'#111111', fontSize: isMobile ? 14 : 12, lineHeight:1.3, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
                       {im.titulo||im.nome}
                     </div>
 
                     <div style={{ fontSize:10, color:'#64748b', display:'flex', alignItems:'center', gap:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
                       <MapPin size={9} style={{ flexShrink:0 }}/>{[im.bairro, im.cidade, im.estado].filter(Boolean).join(', ')||'—'}
                       {distancias[im.id] != null && (
-                        <span style={{ flexShrink:0, fontSize:9, fontWeight:700, background:'#eff6ff', color:'#1d4ed8', borderRadius:8, padding:'1px 6px' }}>
+                        <span style={{ flexShrink:0, fontSize:9, fontWeight:700, background:'#eff6ff', color:'#084BA6', borderRadius:8, padding:'1px 6px' }}>
                           {distancias[im.id]} km
                         </span>
                       )}
@@ -767,7 +771,7 @@ export default function Busca() {
 
                     <div style={{ marginTop:2 }}>
                       <div style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:0.4 }}>Lance Mín.</div>
-                      <div style={{ fontWeight:900, color:'#0f172a', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(im.valorMinimo)}</div>
+                      <div style={{ fontWeight:900, color:'#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(im.valorMinimo)}</div>
                       {im.valorAvaliacao>0 && (
                         <div style={{ fontSize:10, color:'#64748b' }}>Aval. {fmtBRL(im.valorAvaliacao)}</div>
                       )}
@@ -792,7 +796,7 @@ export default function Busca() {
                     </button>
                     {canAnalise
                       ? <button onClick={e=>{ e.stopPropagation(); irParaAnalise(im); }}
-                          style={{ flex:2, padding:'8px 4px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                          style={{ flex:2, padding:'8px 4px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer' }}>
                           📊 Analisar
                         </button>
                       : <span style={{ flex:2, padding:'8px 4px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11, fontWeight:700, cursor:'not-allowed', display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -819,7 +823,7 @@ export default function Busca() {
             },[]).map((n,i)=>
               n==='…' ? <span key={'e'+i} style={{color:'#94a3b8',fontSize:12}}>…</span>
               : <button key={n} onClick={()=>{ setPagina(n); buscarPagina(n, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo); }}
-                  style={{ padding:'6px 11px', border:`1px solid ${n===pagina?'#2563eb':'#e2e8f0'}`, borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer', background:n===pagina?'#2563eb':'white', color:n===pagina?'white':'#334155' }}>
+                  style={{ padding:'6px 11px', border:`1px solid ${n===pagina?'#0D63DB':'#e2e8f0'}`, borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer', background:n===pagina?'#0D63DB':'white', color:n===pagina?'white':'#334155' }}>
                   {n}
                 </button>
             )}

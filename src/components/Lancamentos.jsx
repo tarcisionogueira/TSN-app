@@ -28,7 +28,7 @@ export default function Lancamentos({ lancamentos, onChange }) {
         {[
           { label: 'Saídas', value: totais.saidas, color: '#dc2626', bg: '#fef2f2' },
           { label: 'Entradas', value: totais.entradas, color: '#10b981', bg: '#d1fae5' },
-          { label: 'Saldo', value: totais.entradas - totais.saidas, color: (totais.entradas - totais.saidas) >= 0 ? '#2563eb' : '#dc2626', bg: '#eff6ff' },
+          { label: 'Saldo', value: totais.entradas - totais.saidas, color: (totais.entradas - totais.saidas) >= 0 ? '#0D63DB' : '#dc2626', bg: '#eff6ff' },
         ].map((s, i) => (
           <div key={i} style={{ background: s.bg, borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{s.label}</div>
@@ -58,7 +58,7 @@ export default function Lancamentos({ lancamentos, onChange }) {
         <div style={{ display: 'flex', gap: 8 }}>
           <input type="number" placeholder="Valor (R$)" value={form.valor} onChange={e => setForm(p => ({ ...p, valor: e.target.value }))}
             style={{ flex: 1, padding: '7px 8px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12 }} />
-          <button onClick={adicionar} style={{ padding: '7px 14px', background: '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+          <button onClick={adicionar} style={{ padding: '7px 14px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
             <Plus size={13} /> Lançar
           </button>
         </div>

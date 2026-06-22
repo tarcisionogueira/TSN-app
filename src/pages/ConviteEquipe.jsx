@@ -7,7 +7,7 @@ const ROLE_CONFIG = {
   analista: {
     emoji: '🔍',
     label: 'Analista de Imóveis',
-    cor: '#2563eb',
+    cor: '#0D63DB',
     descricao: 'Você foi selecionado para integrar nossa equipe como Analista — responsável pela avaliação de viabilidade e elaboração de laudos técnicos.',
     passos_extras: [
       { key: 'especialidade', label: 'Qual é sua área de especialidade?', tipo: 'select', opts: ['Análise financeira','Análise jurídica','Ambas'] },
@@ -37,7 +37,7 @@ const ROLE_CONFIG = {
   admin: {
     emoji: '🛡️',
     label: 'Administrador',
-    cor: '#0f172a',
+    cor: '#111111',
     descricao: 'Você foi convidado como Administrador da plataforma TSN Ativos.',
     passos_extras: [],
   },
@@ -186,7 +186,7 @@ function PastoFoto({ cor, instrucao, validacao_prompt, onCapturada }) {
       )}
 
       {/* Preview / câmera */}
-      <div style={{ position: 'relative', background: '#0f172a', borderRadius: 16, overflow: 'hidden', aspectRatio: '4/3', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'relative', background: '#111111', borderRadius: 16, overflow: 'hidden', aspectRatio: '4/3', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {foto ? (
           <img src={foto} alt="foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : camAtiva ? (
@@ -292,19 +292,19 @@ export default function ConviteEquipe() {
   }, [token]);
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <Loader2 size={32} color="#94a3b8" style={{ animation: 'spin 1s linear infinite' }} />
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 
   if (erro || !convite) return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ textAlign: 'center', maxWidth: 440 }}>
         <AlertCircle size={48} color="#dc2626" style={{ margin: '0 auto 16px' }} />
         <h2 style={{ color: 'white', marginBottom: 8 }}>Convite inválido</h2>
         <p style={{ color: '#94a3b8', marginBottom: 24 }}>{erro}</p>
-        <button onClick={() => nav('/login')} style={{ padding: '10px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
+        <button onClick={() => nav('/login')} style={{ padding: '10px 24px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
           Ir para Login
         </button>
       </div>
@@ -435,7 +435,7 @@ export default function ConviteEquipe() {
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !isFoto) avancar(); };
 
   if (concluido) return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #111111 0%, #111111 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
         <CheckCircle2 size={64} color="#10b981" style={{ margin: '0 auto 20px' }} />
         <h1 style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: '0 0 12px' }}>Cadastro concluído!</h1>
@@ -457,17 +457,17 @@ export default function ConviteEquipe() {
   const fotoOk = isFoto && !!form[passo.key];
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #111111 0%, #111111 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}} @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: cfg.cor + '22', border: `1px solid ${cfg.cor}44`, color: cfg.cor === '#0f172a' ? '#e2e8f0' : cfg.cor, fontSize: 13, fontWeight: 700, padding: '6px 16px', borderRadius: 20, marginBottom: 24 }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: cfg.cor + '22', border: `1px solid ${cfg.cor}44`, color: cfg.cor === '#111111' ? '#e2e8f0' : cfg.cor, fontSize: 13, fontWeight: 700, padding: '6px 16px', borderRadius: 20, marginBottom: 24 }}>
         {cfg.emoji} {cfg.label}
       </div>
 
       <div style={{ maxWidth: isFoto ? 520 : 480, width: '100%' }}>
 
         {/* Barra de progresso */}
-        <div style={{ background: '#1e293b', borderRadius: 4, height: 4, marginBottom: 32, overflow: 'hidden' }}>
+        <div style={{ background: '#111111', borderRadius: 4, height: 4, marginBottom: 32, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${progresso}%`, background: cfg.cor, borderRadius: 4, transition: 'width 0.4s ease' }} />
         </div>
 
@@ -478,7 +478,7 @@ export default function ConviteEquipe() {
             {passoAtual + 1} de {totalPassos}
           </div>
 
-          <h2 style={{ fontSize: isFoto ? 18 : 22, fontWeight: 900, color: '#0f172a', margin: '0 0 20px', lineHeight: 1.3 }}>
+          <h2 style={{ fontSize: isFoto ? 18 : 22, fontWeight: 900, color: '#111111', margin: '0 0 20px', lineHeight: 1.3 }}>
             {passo.label}
           </h2>
 
@@ -495,7 +495,7 @@ export default function ConviteEquipe() {
           {/* Select */}
           {passo.tipo === 'select' && (
             <select value={form[passo.key] || ''} onChange={e => setVal(passo.key, e.target.value)}
-              style={{ width: '100%', padding: '14px 16px', border: `2px solid ${erroPasso ? '#ef4444' : '#e2e8f0'}`, borderRadius: 12, fontSize: 15, color: '#0f172a', background: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}>
+              style={{ width: '100%', padding: '14px 16px', border: `2px solid ${erroPasso ? '#ef4444' : '#e2e8f0'}`, borderRadius: 12, fontSize: 15, color: '#111111', background: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}>
               <option value="">Selecione...</option>
               {passo.opts.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -505,7 +505,7 @@ export default function ConviteEquipe() {
           {passo.tipo === 'password' && (
             <div style={{ position: 'relative' }}>
               <input type={showSenha ? 'text' : 'password'} value={form[passo.key] || ''} onChange={e => setVal(passo.key, e.target.value)} onKeyDown={handleKeyDown} placeholder={passo.placeholder} autoFocus
-                style={{ width: '100%', padding: '14px 48px 14px 16px', border: `2px solid ${erroPasso ? '#ef4444' : '#e2e8f0'}`, borderRadius: 12, fontSize: 15, color: '#0f172a', background: 'white', boxSizing: 'border-box', outline: 'none' }} />
+                style={{ width: '100%', padding: '14px 48px 14px 16px', border: `2px solid ${erroPasso ? '#ef4444' : '#e2e8f0'}`, borderRadius: 12, fontSize: 15, color: '#111111', background: 'white', boxSizing: 'border-box', outline: 'none' }} />
               <button type="button" onClick={() => setShowSenha(s => !s)}
                 style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
                 {showSenha ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -516,7 +516,7 @@ export default function ConviteEquipe() {
           {/* Text / email */}
           {(passo.tipo === 'text' || passo.tipo === 'email') && (
             <input type={passo.tipo} value={form[passo.key] || ''} onChange={e => setVal(passo.key, aplicarMascara(passo.key, e.target.value))} onKeyDown={handleKeyDown} placeholder={passo.placeholder} autoFocus
-              style={{ width: '100%', padding: '14px 16px', border: `2px solid ${erroPasso ? '#ef4444' : '#e2e8f0'}`, borderRadius: 12, fontSize: 15, color: '#0f172a', background: 'white', boxSizing: 'border-box', outline: 'none' }} />
+              style={{ width: '100%', padding: '14px 16px', border: `2px solid ${erroPasso ? '#ef4444' : '#e2e8f0'}`, borderRadius: 12, fontSize: 15, color: '#111111', background: 'white', boxSizing: 'border-box', outline: 'none' }} />
           )}
 
           {/* Erro */}

@@ -45,9 +45,9 @@ export default function Promo() {
   if (erro || !link) return (
     <div style={{ maxWidth: 520, margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
       <AlertCircle size={48} color="#dc2626" style={{ margin: '0 auto 16px' }} />
-      <h2 style={{ color: '#0f172a', marginBottom: 8 }}>Oferta não encontrada</h2>
+      <h2 style={{ color: '#111111', marginBottom: 8 }}>Oferta não encontrada</h2>
       <p style={{ color: '#64748b', marginBottom: 24 }}>{erro || 'Este link pode ter sido desativado ou expirado.'}</p>
-      <button onClick={() => nav('/planos')} style={{ padding: '10px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
+      <button onClick={() => nav('/planos')} style={{ padding: '10px 24px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
         Ver todos os planos
       </button>
     </div>
@@ -72,7 +72,7 @@ export default function Promo() {
   };
 
   return (
-    <div style={{ background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 40%, #0f172a 100%)', minHeight: '100vh', padding: '0 0 80px' }}>
+    <div style={{ background: 'linear-gradient(160deg, #111111 0%, #111111 40%, #111111 100%)', minHeight: '100vh', padding: '0 0 80px' }}>
 
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '60px 20px 0', maxWidth: 720, margin: '0 auto' }}>
@@ -108,7 +108,7 @@ export default function Promo() {
             </>
           ) : (
             <>
-              <div style={{ fontSize: 48, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>
+              <div style={{ fontSize: 48, fontWeight: 900, color: '#111111', lineHeight: 1 }}>
                 {plano.precoLabel}
               </div>
               <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{plano.periodicidade}</div>

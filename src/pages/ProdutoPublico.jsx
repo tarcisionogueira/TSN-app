@@ -51,7 +51,7 @@ export default function ProdutoPublico({ tipo }) {
   const temPlano = user && ['top1','top2','assessorado','clube','analista','advogado','admin'].includes(role);
   const temAcesso = temPlano || comprouAvulso;
   const isPago = Number(produto.preco) > 0;
-  const cor = produto.cor || '#2563eb';
+  const cor = produto.cor || '#0D63DB';
   const bgCor = cor + '20';
   const refParam = ref ? `?ref=${ref}` : '';
 
@@ -63,10 +63,10 @@ export default function ProdutoPublico({ tipo }) {
   }, {});
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', padding: '0 0 60px' }}>
+    <div style={{ minHeight: '100vh', background: '#111111', padding: '0 0 60px' }}>
       {/* Header */}
-      <div style={{ borderBottom: '1px solid #1e293b', padding: '16px 32px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ background: '#2563eb', borderRadius: 10, padding: 8, fontSize: 18 }}>🏢</div>
+      <div style={{ borderBottom: '1px solid #111111', padding: '16px 32px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ background: '#0D63DB', borderRadius: 10, padding: 8, fontSize: 18 }}>🏢</div>
         <div>
           <div style={{ fontWeight: 900, fontSize: 14, color: 'white', letterSpacing: 1 }}>TSN ATIVOS</div>
           <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
@@ -103,7 +103,7 @@ export default function ProdutoPublico({ tipo }) {
               </div>
               {Object.entries(modulos).map(([mod, licoes]) => (
                 <div key={mod} style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6, padding: '6px 10px', background: '#1e293b', borderRadius: 6 }}>{mod}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6, padding: '6px 10px', background: '#111111', borderRadius: 6 }}>{mod}</div>
                   {licoes.map((l, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', fontSize: 13, color: '#94a3b8' }}>
                       <span style={{ fontSize: 11, color: l.gratis ? '#10b981' : '#475569' }}>{l.gratis ? '▶ Grátis' : '🔒'}</span>
@@ -120,7 +120,7 @@ export default function ProdutoPublico({ tipo }) {
         {/* Coluna direita — CTA */}
         <div style={{ position: 'sticky', top: 24 }}>
           <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px' }}>
-            <div style={{ fontSize: 34, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>
+            <div style={{ fontSize: 34, fontWeight: 900, color: '#111111', marginBottom: 4 }}>
               {isPago ? `R$ ${Number(produto.preco).toFixed(0)}` : 'Gratuito'}
             </div>
             <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>
@@ -141,7 +141,7 @@ export default function ProdutoPublico({ tipo }) {
             ) : (
               /* Não tem acesso */
               <>
-                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: '#1d4ed8' }}>
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: '#084BA6' }}>
                   {isPago
                     ? '📦 Adquira o acesso a este conteúdo'
                     : '⭐ Disponível para assinantes Investidor Pro'}

@@ -142,13 +142,13 @@ export default function TourGuia() {
       <button
         onClick={() => setMostrarMenu(m => !m)}
         title="Tour de funcionalidades"
-        style={{ position: 'fixed', bottom: 80, right: 20, zIndex: 8000, background: '#2563eb', color: 'white', border: 'none', borderRadius: '50%', width: 44, height: 44, cursor: 'pointer', fontSize: 20, boxShadow: '0 4px 16px rgba(37,99,235,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        style={{ position: 'fixed', bottom: 80, right: 20, zIndex: 8000, background: '#0D63DB', color: 'white', border: 'none', borderRadius: '50%', width: 44, height: 44, cursor: 'pointer', fontSize: 20, boxShadow: '0 4px 16px rgba(37,99,235,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         ?
         {mostrarMenu && (
           <div style={{ position: 'absolute', bottom: 52, right: 0, background: 'white', borderRadius: 12, boxShadow: '0 8px 30px rgba(0,0,0,0.15)', padding: 12, minWidth: 220, textAlign: 'left' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8, padding: '0 4px' }}>Tour de Funcionalidades</div>
-            <button onClick={verNovamente} style={{ width: '100%', padding: '8px 10px', background: '#eff6ff', border: 'none', borderRadius: 8, fontSize: 13, color: '#1d4ed8', fontWeight: 600, cursor: 'pointer', textAlign: 'left', marginBottom: 4 }}>
+            <button onClick={verNovamente} style={{ width: '100%', padding: '8px 10px', background: '#eff6ff', border: 'none', borderRadius: 8, fontSize: 13, color: '#084BA6', fontWeight: 600, cursor: 'pointer', textAlign: 'left', marginBottom: 4 }}>
               ✨ Funcionalidades do mês
             </button>
             {versoes.filter(v => v !== VERSAO_ATUAL).map(v => (
@@ -179,11 +179,11 @@ export default function TourGuia() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
             {ehNovas && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#eff6ff', color: '#1d4ed8', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#eff6ff', color: '#084BA6', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 ✨ Novidade — {VERSAO_ATUAL}
               </div>
             )}
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a', lineHeight: 1.3 }}>{etapa.titulo}</h3>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#111111', lineHeight: 1.3 }}>{etapa.titulo}</h3>
           </div>
           <button onClick={fechar} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4, marginLeft: 12, flexShrink: 0 }}>
             <X size={18} />
@@ -195,7 +195,7 @@ export default function TourGuia() {
         {/* Progresso */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
           {etapas.map((_, i) => (
-            <div key={i} style={{ height: 3, flex: 1, borderRadius: 3, background: i <= indice ? '#2563eb' : '#e2e8f0', transition: 'background 0.3s' }} />
+            <div key={i} style={{ height: 3, flex: 1, borderRadius: 3, background: i <= indice ? '#0D63DB' : '#e2e8f0', transition: 'background 0.3s' }} />
           ))}
         </div>
 
@@ -209,7 +209,7 @@ export default function TourGuia() {
           <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>{indice + 1} / {total}</span>
 
           <button onClick={avancar}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: '#2563eb', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, color: 'white', cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: '#0D63DB', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, color: 'white', cursor: 'pointer' }}>
             {indice === total - 1 ? 'Concluir' : 'Próximo'} <ChevronRight size={15} />
           </button>
         </div>

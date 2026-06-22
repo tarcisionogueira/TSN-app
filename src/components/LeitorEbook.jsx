@@ -31,7 +31,7 @@ export default function LeitorEbook({ ebook, onClose }) {
       {/* Barra superior */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-        background: '#0f172a', color: 'white', flexShrink: 0,
+        background: '#111111', color: 'white', flexShrink: 0,
       }}>
         <BookOpen size={18} color="#818cf8" />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -43,7 +43,7 @@ export default function LeitorEbook({ ebook, onClose }) {
           <a href={download} target="_blank" rel="noopener noreferrer"
             style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-              background: '#2563eb', color: 'white', borderRadius: 8, fontWeight: 700,
+              background: '#0D63DB', color: 'white', borderRadius: 8, fontWeight: 700,
               fontSize: 13, textDecoration: 'none', whiteSpace: 'nowrap',
             }}>
             <Download size={14} /> Baixar
@@ -60,7 +60,7 @@ export default function LeitorEbook({ ebook, onClose }) {
       </div>
 
       {/* Conteúdo do PDF */}
-      <div style={{ flex: 1, background: '#1e293b', overflow: 'hidden' }}>
+      <div style={{ flex: 1, background: '#111111', overflow: 'hidden' }}>
         {preview ? (
           <iframe
             title={ebook.titulo}

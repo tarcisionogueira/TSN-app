@@ -11,7 +11,7 @@ export default function TabelaAmortizacao({ sacTabela, priceTabela, d }) {
 
   return (
     <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-      <button onClick={() => setOpen(!open)} style={{ width: '100%', padding: '14px 18px', background: '#1e293b', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700 }}>
+      <button onClick={() => setOpen(!open)} style={{ width: '100%', padding: '14px 18px', background: '#111111', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700 }}>
         <span>Tabela de Amortização SAC / PRICE</span>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
@@ -20,7 +20,7 @@ export default function TabelaAmortizacao({ sacTabela, priceTabela, d }) {
           <div style={{ display: 'flex', gap: 8, padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
             {[['sac','SAC (Sistema de Amortização Constante)'],['price','PRICE (Prestações Iguais)']].map(([v, l]) => (
               <button key={v} onClick={() => setVista(v)}
-                style={{ padding: '6px 14px', border: 'none', borderRadius: 8, background: vista === v ? '#0f172a' : '#f1f5f9', color: vista === v ? 'white' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                style={{ padding: '6px 14px', border: 'none', borderRadius: 8, background: vista === v ? '#111111' : '#f1f5f9', color: vista === v ? 'white' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 {l}
               </button>
             ))}
@@ -44,7 +44,7 @@ export default function TabelaAmortizacao({ sacTabela, priceTabela, d }) {
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, color: '#dc2626' }}>R$ {fmt(r.parcela)}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right' }}>R$ {fmt(r.amortizacao)}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', color: '#f97316' }}>R$ {fmt(r.juros)}</td>
-                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, color: '#1e40af' }}>R$ {fmt(r.saldo)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, color: '#084BA6' }}>R$ {fmt(r.saldo)}</td>
                   </tr>
                 ))}
               </tbody>

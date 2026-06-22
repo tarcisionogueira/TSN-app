@@ -14,7 +14,7 @@ const HONORARIOS_PCT = 10; // já embutido no motor (vArremate * 0.10)
 // Taxa do leiloeiro: padrão de mercado
 const TAXA_LEILOEIRO_PADRAO = 5;
 
-const inp = { width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, background: 'white', color: '#0f172a', boxSizing: 'border-box' };
+const inp = { width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, background: 'white', color: '#111111', boxSizing: 'border-box' };
 const lbl = { fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 };
 
 function fmtInput(v) {
@@ -66,10 +66,10 @@ function Linha({ label, valor, destaque, cor, sublabel }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
       <div>
-        <span style={{ color: destaque ? '#0f172a' : '#64748b', fontWeight: destaque ? 800 : 500, fontSize: destaque ? 14 : 13 }}>{label}</span>
+        <span style={{ color: destaque ? '#111111' : '#64748b', fontWeight: destaque ? 800 : 500, fontSize: destaque ? 14 : 13 }}>{label}</span>
         {sublabel && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{sublabel}</div>}
       </div>
-      <span style={{ color: cor || (destaque ? '#0f172a' : '#334155'), fontWeight: destaque ? 800 : 700, fontSize: destaque ? 14 : 13, marginLeft: 12, textAlign: 'right' }}>{valor}</span>
+      <span style={{ color: cor || (destaque ? '#111111' : '#334155'), fontWeight: destaque ? 800 : 700, fontSize: destaque ? 14 : 13, marginLeft: 12, textAlign: 'right' }}>{valor}</span>
     </div>
   );
 }
@@ -216,8 +216,8 @@ export default function Calculadora() {
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: '28px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-        <div style={{ background: '#2563eb', borderRadius: 10, padding: 8, display: 'flex' }}><Calculator size={22} color="white" /></div>
-        <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: 0 }}>Calculadora de Lance</h1>
+        <div style={{ background: '#0D63DB', borderRadius: 10, padding: 8, display: 'flex' }}><Calculator size={22} color="white" /></div>
+        <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111111', margin: 0 }}>Calculadora de Lance</h1>
       </div>
       <p style={{ color: '#64748b', margin: '0 0 24px', fontSize: 14 }}>Simule o teto de lance, custos e retorno para leilões judicial e extrajudicial.</p>
 
@@ -230,7 +230,7 @@ export default function Calculadora() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
             {[['extrajudicial', 'Extrajudicial'], ['judicial', 'Judicial']].map(([v, l]) => (
               <button key={v} onClick={() => setOrigem(v)}
-                style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid', borderColor: origem === v ? '#2563eb' : '#e2e8f0', background: origem === v ? '#eff6ff' : 'white', color: origem === v ? '#2563eb' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid', borderColor: origem === v ? '#0D63DB' : '#e2e8f0', background: origem === v ? '#eff6ff' : 'white', color: origem === v ? '#0D63DB' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 <Gavel size={14} /> {l}
               </button>
             ))}
@@ -246,7 +246,7 @@ export default function Calculadora() {
             ))}
           </div>
           {origem === 'judicial' && pagamento === 'financiado' && (
-            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#1d4ed8', fontWeight: 600 }}>
+            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#084BA6', fontWeight: 600 }}>
               CPC Art. 895: 25% de entrada + 30 parcelas mensais. Correção monetária a critério judicial.
             </div>
           )}
@@ -277,7 +277,7 @@ export default function Calculadora() {
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                   {[['sac', 'SAC'], ['price', 'PRICE']].map(([v, l]) => (
                     <button key={v} onClick={() => setTabela(v)}
-                      style={{ flex: 1, padding: '7px', borderRadius: 8, border: '1px solid', borderColor: tabela === v ? '#2563eb' : '#e2e8f0', background: tabela === v ? '#eff6ff' : 'white', color: tabela === v ? '#2563eb' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      style={{ flex: 1, padding: '7px', borderRadius: 8, border: '1px solid', borderColor: tabela === v ? '#0D63DB' : '#e2e8f0', background: tabela === v ? '#eff6ff' : 'white', color: tabela === v ? '#0D63DB' : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                       {l}
                     </button>
                   ))}
@@ -316,7 +316,7 @@ export default function Calculadora() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Teto de lance */}
-          <div style={{ background: temDados ? 'linear-gradient(135deg,#1e3a8a,#2563eb)' : '#f1f5f9', borderRadius: 16, padding: 22, color: temDados ? 'white' : '#94a3b8' }}>
+          <div style={{ background: temDados ? 'linear-gradient(135deg,#1e3a8a,#0D63DB)' : '#f1f5f9', borderRadius: 16, padding: 22, color: temDados ? 'white' : '#94a3b8' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1 }}>
               <Target size={15} /> Teto máximo de lance
             </div>
@@ -332,8 +332,8 @@ export default function Calculadora() {
           {/* Cenário atual */}
           {temDados && (
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 22 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#0f172a', marginBottom: 14 }}>
-                <TrendingUp size={16} color="#2563eb" /> Cenário no lance atual
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#111111', marginBottom: 14 }}>
+                <TrendingUp size={16} color="#0D63DB" /> Cenário no lance atual
               </div>
 
               <Linha label="Desconto sobre avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 1) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
@@ -349,15 +349,15 @@ export default function Calculadora() {
 
               {/* Necessidade de caixa — o que precisa ter disponível */}
               <div style={{ margin: '12px 0 4px', padding: '12px 14px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Necessidade de caixa</div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#084BA6', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Necessidade de caixa</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 600 }}>
+                  <span style={{ fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
                     {isAVista ? 'Total na arrematação' : 'Total no ato (sinal + custos)'}
                   </span>
                   <span style={{ fontSize: 15, fontWeight: 900, color: '#1e3a8a' }}>R$ {fmt(desembolsoArrematacao, 0)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 600 }}>Parcela mensal a suportar</span>
+                  <span style={{ fontSize: 13, color: '#084BA6', fontWeight: 600 }}>Parcela mensal a suportar</span>
                   <span style={{ fontSize: 15, fontWeight: 900, color: '#1e3a8a' }}>
                     {isAVista ? '—' : `R$ ${fmt(m.parcelaMedia, 0)}`}
                   </span>
@@ -376,7 +376,7 @@ export default function Calculadora() {
 
               <div style={{ marginTop: 4 }} />
               <Linha label="Capital mobilizado" valor={`R$ ${fmt(m.capitalMobilizado, 0)}`} destaque />
-              <Linha label="Entrada no caixa (venda)" valor={`R$ ${fmt(entradaCaixa, 0)}`} destaque cor="#2563eb" />
+              <Linha label="Entrada no caixa (venda)" valor={`R$ ${fmt(entradaCaixa, 0)}`} destaque cor="#0D63DB" />
               <Linha label="Lucro líquido" valor={`R$ ${fmt(m.lucro, 0)}`} destaque cor={m.lucro >= 0 ? '#059669' : '#dc2626'} />
               <Linha label="ROI / ROE" valor={fmtPct(m.roi, 1)} destaque cor={m.roi >= 0 ? '#059669' : '#dc2626'} />
 
@@ -422,9 +422,9 @@ export default function Calculadora() {
         const irAssinar = () => nav(user ? checkoutUrl : `/login?plano=top2${refAtivo ? `&ref=${refAtivo}` : ''}`);
 
         return (
-          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
+          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#084BA6 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
             {temRef && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#2563eb', borderRadius: 20, padding: '4px 14px', fontSize: 11, fontWeight: 800, letterSpacing: 1, marginBottom: 14 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#0D63DB', borderRadius: 20, padding: '4px 14px', fontSize: 11, fontWeight: 800, letterSpacing: 1, marginBottom: 14 }}>
                 🎯 ACESSO EXCLUSIVO PELO SEU CONSULTOR
               </div>
             )}
@@ -445,7 +445,7 @@ export default function Calculadora() {
                   Relatório de viabilidade, análise jurídica do edital e matrícula, consulta processual integrada e análises ilimitadas — tudo em uma plataforma.
                 </p>
                 <button onClick={irAssinar}
-                  style={{ padding: '12px 24px', background: 'white', color: '#1e40af', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
+                  style={{ padding: '12px 24px', background: 'white', color: '#084BA6', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
                   Assinar Investidor Pro →
                 </button>
               </div>

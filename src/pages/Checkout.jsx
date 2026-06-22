@@ -138,12 +138,12 @@ export default function Checkout() {
   if (planoKey === 'explorador') {
     const planoExp = PLANOS['explorador'];
     return (
-      <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+      <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) minmax(280px, 420px)', gap: 24, maxWidth: 840, width: '100%', alignItems: 'stretch' }} className="checkout-grid">
           {/* Coluna esquerda — apresentação */}
           <div style={{ color: 'white' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
-              <div style={{ background: '#2563eb', borderRadius: 12, padding: 10, fontSize: 20 }}>🏢</div>
+              <div style={{ background: '#0D63DB', borderRadius: 12, padding: 10, fontSize: 20 }}>🏢</div>
               <div>
                 <div style={{ fontWeight: 900, fontSize: 16, letterSpacing: 1 }}>TSN ATIVOS</div>
                 <div style={{ fontSize: 11, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
@@ -173,7 +173,7 @@ export default function Checkout() {
           </div>
           {/* Coluna direita — CTA */}
           <div style={{ background: 'white', borderRadius: 20, padding: '36px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>Grátis</div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: '#111111', marginBottom: 4 }}>Grátis</div>
             <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>Sem cartão de crédito · Cancele quando quiser</div>
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px', marginBottom: 24, fontSize: 13, color: '#166534', fontWeight: 600 }}>
               ✅ Acesso imediato após o cadastro
@@ -187,7 +187,7 @@ export default function Checkout() {
               Ver todos os planos
             </button>
             <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-              Já tem conta? <button onClick={() => nav('/login')} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', fontSize: 11 }}>Entrar</button>
+              Já tem conta? <button onClick={() => nav('/login')} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 11 }}>Entrar</button>
             </p>
           </div>
         </div>
@@ -327,7 +327,7 @@ export default function Checkout() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
 
       {/* Popup de erro — overlay sobre o checkout */}
       {erro && (
@@ -369,7 +369,7 @@ export default function Checkout() {
         {/* Coluna esquerda — conteúdo TSN sobre o produto */}
         <div style={{ color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8px 4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-            <div style={{ background: '#2563eb', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
               <Briefcase size={20} color="white" />
             </div>
             <div>
@@ -404,13 +404,13 @@ export default function Checkout() {
         <div style={{ background: 'white', borderRadius: 20, padding: '36px 34px', boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
 
           {ehMudanca && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: ehUpgrade ? '#eff6ff' : '#fef3c7', color: ehUpgrade ? '#1d4ed8' : '#92400e', fontSize: 12, fontWeight: 800, padding: '5px 12px', borderRadius: 20, marginBottom: 16 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: ehUpgrade ? '#eff6ff' : '#fef3c7', color: ehUpgrade ? '#084BA6' : '#92400e', fontSize: 12, fontWeight: 800, padding: '5px 12px', borderRadius: 20, marginBottom: 16 }}>
               {ehUpgrade ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
               {ehUpgrade ? 'Upgrade de plano' : 'Downgrade de plano'}
             </div>
           )}
 
-          <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#0f172a' }}>
+          <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>
             Plano {plano.nome}
           </h2>
 
@@ -473,7 +473,7 @@ export default function Checkout() {
               {modalidade === 'mensal' ? (
                 <>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                    <strong style={{ color: '#0f172a', fontSize: 32 }}>12× {plano.precoLabel}</strong>
+                    <strong style={{ color: '#111111', fontSize: 32 }}>12× {plano.precoLabel}</strong>
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
                     Cobrança recorrente mensal de <strong>R$ 49,90</strong>. Cancele a qualquer momento pela plataforma. Sem multa ou fidelidade.
@@ -482,7 +482,7 @@ export default function Checkout() {
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                    <strong style={{ color: '#0f172a', fontSize: 32 }}>12× {plano.precoMensalAnualLabel}</strong>
+                    <strong style={{ color: '#111111', fontSize: 32 }}>12× {plano.precoMensalAnualLabel}</strong>
                     <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% off</span>
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
@@ -495,12 +495,12 @@ export default function Checkout() {
             <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: 15 }}>
               {temModalidade && modalidade === 'vista' ? (
                 <>
-                  <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoVistaLabel}</strong>
+                  <strong style={{ color: '#111111', fontSize: 28 }}>{plano.precoVistaLabel}</strong>
                   {' '}à vista · sem renovação automática
                 </>
               ) : (
                 <>
-                  <strong style={{ color: '#0f172a', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
+                  <strong style={{ color: '#111111', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
                 </>
               )}
             </p>
@@ -557,7 +557,7 @@ export default function Checkout() {
           ) : linkPagamento ? (
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>🔗</div>
-              <p style={{ fontWeight: 800, color: '#0f172a', marginBottom: 8, fontSize: 16 }}>Página de pagamento aberta!</p>
+              <p style={{ fontWeight: 800, color: '#111111', marginBottom: 8, fontSize: 16 }}>Página de pagamento aberta!</p>
               <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, marginBottom: 20 }}>
                 Complete o pagamento na aba que abrimos. Após confirmar o pagamento, clique no botão abaixo.
               </p>
@@ -579,7 +579,7 @@ export default function Checkout() {
           ) : !user ? (
             /* Usuário não logado — CTA para criar conta ou entrar */
             <>
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginBottom: 20, fontSize: 13, color: '#1d4ed8', fontWeight: 600 }}>
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginBottom: 20, fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
                 ✅ Plano <strong>{plano.nome}</strong> selecionado — crie sua conta ou entre para continuar
               </div>
               <button onClick={() => nav(`/login?modo=cadastro&plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
@@ -601,7 +601,7 @@ export default function Checkout() {
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
                   <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
                   <span>
-                    Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#2563eb' }}>Termos de Uso</a>.{' '}
+                    Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a>.{' '}
                     {temToggleAnual && modalidade === 'anual'
                       ? `Estou ciente de que esta é uma contratação anual de valor único (${plano?.precoAnualLabel || 'R$ 449,90'}), podendo ser paga em até 12× no cartão. Não há renovação automática — o acesso é válido por 12 meses a partir da confirmação do pagamento.`
                       : 'Autorizo a cobrança recorrente mensal conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma sem multa.'}

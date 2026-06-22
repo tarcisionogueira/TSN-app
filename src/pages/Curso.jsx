@@ -140,7 +140,7 @@ export default function Curso() {
       <div style={{ maxWidth:800, margin:'80px auto', textAlign:'center', padding:20 }}>
         <div style={{ fontSize:40 }}>🔍</div>
         <h2 style={{ color:'#334155' }}>Curso não encontrado</h2>
-        <button onClick={()=>nav('/membros')} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:10, padding:'10px 20px', fontWeight:700, cursor:'pointer', marginTop:16 }}>
+        <button onClick={()=>nav('/membros')} style={{ background:'#0D63DB', color:'white', border:'none', borderRadius:10, padding:'10px 20px', fontWeight:700, cursor:'pointer', marginTop:16 }}>
           Voltar à Área de Membros
         </button>
       </div>
@@ -223,7 +223,7 @@ export default function Curso() {
                   <div style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.4, marginBottom:2 }}>
                     Módulo {mi+1}
                   </div>
-                  <div style={{ fontSize:12, fontWeight:700, color:'#0f172a', lineHeight:1.3 }}>{mod.titulo.replace(`Módulo ${mi+1} — `, '')}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#111111', lineHeight:1.3 }}>{mod.titulo.replace(`Módulo ${mi+1} — `, '')}</div>
                 </div>
                 {modulosAbertos[mi] ? <ChevronUp size={14} color="#94a3b8"/> : <ChevronDown size={14} color="#94a3b8"/>}
               </button>
@@ -267,7 +267,7 @@ export default function Curso() {
 
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, color:'#94a3b8' }}>
-          <span style={{ cursor:'pointer', color:'#2563eb', fontWeight:600 }} onClick={()=>nav('/membros')}>Membros</span>
+          <span style={{ cursor:'pointer', color:'#0D63DB', fontWeight:600 }} onClick={()=>nav('/membros')}>Membros</span>
           <ChevronRight size={13}/>
           <span style={{ color:'#64748b' }}>{curso.titulo}</span>
           {licaoAtiva && <><ChevronRight size={13}/><span style={{ color:'#64748b' }}>{licaoAtiva.titulo}</span></>}
@@ -279,7 +279,7 @@ export default function Curso() {
               <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden' }}>
 
                 {/* Player simulado com progresso */}
-                <div style={{ background:'#0f172a', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}
+                <div style={{ background:'#111111', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}
                   onClick={() => { if (podeVer) setVideoPlaying(p => !p); }}>
                   <div style={{ position:'absolute', inset:0, background:`radial-gradient(circle at 30% 40%, ${curso.cor}30 0%, transparent 60%)` }}/>
                   <div style={{ fontSize:72, position:'relative' }}>{curso.emoji}</div>
@@ -319,7 +319,7 @@ export default function Curso() {
                       <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', marginBottom:4 }}>
                         {curso.modulos.find(m=>m.licoes.some(l=>l.id===licaoAtiva.id))?.titulo}
                       </div>
-                      <h2 style={{ margin:0, fontSize:20, fontWeight:900, color:'#0f172a' }}>{licaoAtiva.titulo}</h2>
+                      <h2 style={{ margin:0, fontSize:20, fontWeight:900, color:'#111111' }}>{licaoAtiva.titulo}</h2>
                     </div>
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                       {licaoAnterior && (
@@ -340,7 +340,7 @@ export default function Curso() {
                       )}
                       {proximaLicao && (
                         <button onClick={()=>irParaLicao(proximaLicao)}
-                          style={{ padding:'7px 12px', background:'#0f172a', color:'white', border:'none', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+                          style={{ padding:'7px 12px', background:'#111111', color:'white', border:'none', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
                           Próxima <ArrowRight size={13}/>
                         </button>
                       )}
@@ -368,7 +368,7 @@ export default function Curso() {
             ) : (
               /* Conteúdo bloqueado */
               <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden' }}>
-                <div style={{ background:'#0f172a', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}>
+                <div style={{ background:'#111111', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}>
                   <div style={{ position:'absolute', inset:0, backdropFilter:'blur(2px)' }}/>
                   <div style={{ position:'relative', textAlign:'center' }}>
                     <div style={{ width:72, height:72, borderRadius:'50%', background:'rgba(255,255,255,0.1)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
@@ -402,7 +402,7 @@ export default function Curso() {
                         : <Play size={14} color={curso.cor}/>}
                     </div>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:600, color:'#0f172a' }}>{lic.titulo}</div>
+                      <div style={{ fontSize:13, fontWeight:600, color:'#111111' }}>{lic.titulo}</div>
                       <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>{lic.duracao}{lic.gratis?' · Grátis':''}</div>
                     </div>
                     <ChevronRight size={14} color="#94a3b8"/>
@@ -436,7 +436,7 @@ export default function Curso() {
               ].map(({p:pk,label,desc,destaque})=>(
                 <button key={pk} onClick={()=>{ localStorage.setItem('tsn_plano_membro',pk); setShowUpgrade(false); window.location.reload(); }}
                   style={{ padding:'14px 18px', border:`2px solid ${destaque?'#7c3aed':'#e2e8f0'}`, borderRadius:12, background:destaque?'#ede9fe':'white', cursor:'pointer', textAlign:'left' }}>
-                  <div style={{ fontWeight:700, color:destaque?'#7c3aed':'#0f172a', fontSize:14 }}>{label}</div>
+                  <div style={{ fontWeight:700, color:destaque?'#7c3aed':'#111111', fontSize:14 }}>{label}</div>
                   <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>{desc}</div>
                 </button>
               ))}

@@ -11,10 +11,10 @@ export default function Landing() {
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* HERO */}
-      <section style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', padding: '80px 20px 100px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 20% 80%, #2563eb22 0%, transparent 50%), radial-gradient(circle at 80% 20%, #10b98122 0%, transparent 50%)' }} />
+      <section style={{ background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', padding: '80px 20px 100px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 20% 80%, #0D63DB22 0%, transparent 50%), radial-gradient(circle at 80% 20%, #10b98122 0%, transparent 50%)' }} />
         <div style={{ maxWidth: 800, margin: '0 auto', position: 'relative' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#2563eb22', border: '1px solid #2563eb44', borderRadius: 20, padding: '6px 16px', fontSize: 12, color: '#93c5fd', fontWeight: 700, marginBottom: 28, textTransform: 'uppercase', letterSpacing: 1 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#0D63DB22', border: '1px solid #0D63DB44', borderRadius: 20, padding: '6px 16px', fontSize: 12, color: '#93c5fd', fontWeight: 700, marginBottom: 28, textTransform: 'uppercase', letterSpacing: 1 }}>
             <Gavel size={12} /> Leilões Imobiliários com Inteligência
           </div>
           <h1 style={{ fontSize: 'clamp(32px, 6vw, 58px)', fontWeight: 900, color: 'white', lineHeight: 1.1, margin: '0 0 20px', letterSpacing: '-1px' }}>
@@ -26,11 +26,11 @@ export default function Landing() {
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => nav(user ? '/buscar' : '/login')}
-              style={{ padding: '14px 28px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              style={{ padding: '14px 28px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Search size={16} /> Buscar Imóveis em Leilão
             </button>
             <button onClick={() => nav(user ? '/analise' : '/login')}
-              style={{ padding: '14px 28px', background: 'white', color: '#0f172a', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              style={{ padding: '14px 28px', background: 'white', color: '#111111', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <BarChart3 size={16} /> Analisar um Imóvel <ChevronRight size={14} />
             </button>
           </div>
@@ -49,12 +49,12 @@ export default function Landing() {
       <section style={{ padding: '48px 20px', background: 'white', borderTop: '1px solid #f1f5f9' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 36 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>Plataforma em Números</div>
-            <h2 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', margin: 0 }}>Resultados reais de quem usa o método TSN</h2>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>Plataforma em Números</div>
+            <h2 style={{ fontSize: 28, fontWeight: 900, color: '#111111', margin: 0 }}>Resultados reais de quem usa o método TSN</h2>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
             {[
-              { label: 'Volume arrematado', value: 'R$ 70M+', sub: 'em imóveis no portfólio TSN', color: '#2563eb', bg: '#eff6ff', icon: '🏦' },
+              { label: 'Volume arrematado', value: 'R$ 70M+', sub: 'em imóveis no portfólio TSN', color: '#0D63DB', bg: '#eff6ff', icon: '🏦' },
               { label: 'ROI médio realizado', value: '48%', sub: 'por operação concluída', color: '#10b981', bg: '#f0fdf4', icon: '📈' },
               { label: 'Imóveis analisados', value: '1.200+', sub: 'pela plataforma', color: '#8b5cf6', bg: '#f5f3ff', icon: '🔍' },
               { label: 'Estados atendidos', value: '11', sub: 'com leiloeiros credenciados', color: '#f59e0b', bg: '#fffbeb', icon: '📍' },
@@ -69,13 +69,13 @@ export default function Landing() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 24, background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', borderRadius: 14, padding: '20px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+          <div style={{ marginTop: 24, background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', borderRadius: 14, padding: '20px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 4 }}>Quer ver os números do seu portfólio aqui?</div>
               <div style={{ fontSize: 18, fontWeight: 900, color: 'white' }}>Comece gratuitamente — sem cartão de crédito</div>
             </div>
             <button onClick={() => nav('/buscar')}
-              style={{ padding: '12px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ padding: '12px 24px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               Buscar meu primeiro imóvel →
             </button>
           </div>
@@ -86,12 +86,12 @@ export default function Landing() {
       <section style={{ padding: '80px 20px', background: '#f8fafc' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 52 }}>
-            <h2 style={{ fontSize: 34, fontWeight: 900, color: '#0f172a', margin: '0 0 12px' }}>Como Funciona</h2>
+            <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111111', margin: '0 0 12px' }}>Como Funciona</h2>
             <p style={{ color: '#64748b', fontSize: 16 }}>Três passos para uma arrematação estruturada e lucrativa</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
             {[
-              { n: '01', icon: Search, color: '#2563eb', title: 'Buscar o Imóvel', desc: 'Pesquise em todos os leiloeiros credenciados pelas Juntas Comerciais do país. Filtre por tipo, cidade, valor, modalidade e data.' },
+              { n: '01', icon: Search, color: '#0D63DB', title: 'Buscar o Imóvel', desc: 'Pesquise em todos os leiloeiros credenciados pelas Juntas Comerciais do país. Filtre por tipo, cidade, valor, modalidade e data.' },
               { n: '02', icon: BarChart3, color: '#10b981', title: 'Analisar a Viabilidade', desc: 'Carregue o edital e a matrícula. A IA extrai os dados e gera a análise financeira, mercadológica e jurídica automaticamente.' },
               { n: '03', icon: FileText, color: '#8b5cf6', title: 'Apresentar ao Cliente', desc: 'Gere o relatório executivo com defesa da arrematação, projeções financeiras SAC/Price, yield de locação e comparativos de mercado.' },
             ].map(s => (
@@ -100,7 +100,7 @@ export default function Landing() {
                   <div style={{ background: `${s.color}20`, borderRadius: 12, padding: 10 }}><s.icon size={22} color={s.color} /></div>
                   <span style={{ fontSize: 36, fontWeight: 900, color: '#e2e8f0' }}>{s.n}</span>
                 </div>
-                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: '0 0 10px' }}>{s.title}</h3>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#111111', margin: '0 0 10px' }}>{s.title}</h3>
                 <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.7, margin: 0 }}>{s.desc}</p>
               </div>
             ))}
@@ -109,7 +109,7 @@ export default function Landing() {
       </section>
 
       {/* CALCULADORA CTA */}
-      <section style={{ padding: '64px 20px', background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)' }}>
+      <section style={{ padding: '64px 20px', background: 'linear-gradient(135deg,#111111 0%,#1e3a5f 100%)' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 48, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 260 }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#10b98122', border: '1px solid #10b98144', borderRadius: 20, padding: '6px 14px', fontSize: 11, color: '#34d399', fontWeight: 800, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -151,7 +151,7 @@ export default function Landing() {
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 60, alignItems: 'center' }}>
             <div>
-              <h2 style={{ fontSize: 34, fontWeight: 900, color: '#0f172a', margin: '0 0 20px', lineHeight: 1.2 }}>Análise completa em minutos, não semanas</h2>
+              <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111111', margin: '0 0 20px', lineHeight: 1.2 }}>Análise completa em minutos, não semanas</h2>
               <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.8, marginBottom: 28 }}>
                 Nossa plataforma usa Inteligência Artificial para extrair dados do edital e da matrícula, pesquisar comparativos de mercado no mesmo condomínio ou rua, calcular a viabilidade financeira e identificar riscos jurídicos que poderiam inviabilizar a posse.
               </p>
@@ -165,7 +165,7 @@ export default function Landing() {
                   { icon: FileText, text: 'Relatório PDF profissional para apresentar ao cliente' },
                 ].map(f => (
                   <div key={f.text} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    <div style={{ background: '#dbeafe', borderRadius: 8, padding: 7, flexShrink: 0 }}><f.icon size={15} color="#2563eb" /></div>
+                    <div style={{ background: '#dbeafe', borderRadius: 8, padding: 7, flexShrink: 0 }}><f.icon size={15} color="#0D63DB" /></div>
                     <span style={{ fontSize: 14, color: '#334155', paddingTop: 5, lineHeight: 1.4 }}>{f.text}</span>
                   </div>
                 ))}
@@ -174,7 +174,7 @@ export default function Landing() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {[
                 { label: 'ROI Médio', value: '48%', sub: 'por operação', color: '#10b981', bg: '#d1fae5' },
-                { label: 'Economia vs Mercado', value: '32%', sub: 'uso próprio', color: '#2563eb', bg: '#dbeafe' },
+                { label: 'Economia vs Mercado', value: '32%', sub: 'uso próprio', color: '#0D63DB', bg: '#dbeafe' },
                 { label: 'Yield Locação', value: '0,8%', sub: 'ao mês (referência)', color: '#8b5cf6', bg: '#ede9fe' },
                 { label: 'Análises', value: '< 5min', sub: 'com IA', color: '#f59e0b', bg: '#fef3c7' },
               ].map(k => (
@@ -193,7 +193,7 @@ export default function Landing() {
       <section style={{ padding: '80px 20px', background: '#f8fafc' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 52 }}>
-            <h2 style={{ fontSize: 34, fontWeight: 900, color: '#0f172a', margin: '0 0 12px' }}>Planos & Preços</h2>
+            <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111111', margin: '0 0 12px' }}>Planos & Preços</h2>
             <p style={{ color: '#64748b', fontSize: 16 }}>Comece gratuitamente, evolua quando precisar</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
@@ -201,7 +201,7 @@ export default function Landing() {
               <div key={key} style={{ background: 'white', borderRadius: 16, border: plano.destaque ? `2px solid ${plano.cor}` : '1px solid #e2e8f0', padding: '28px 24px', position: 'relative', boxShadow: plano.destaque ? '0 8px 24px rgba(37,99,235,0.15)' : '0 2px 8px rgba(0,0,0,0.05)' }}>
                 {plano.destaque && <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: plano.cor, color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>Mais Popular</div>}
                 <div style={{ fontSize: 14, fontWeight: 700, color: plano.cor, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{plano.nome}</div>
-                <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>
+                <div style={{ fontSize: 36, fontWeight: 900, color: '#111111', marginBottom: 4 }}>
                   {plano.precoLabel}
                 </div>
                 {plano.preco > 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24 }}>{plano.periodicidade}</div>}
@@ -225,7 +225,7 @@ export default function Landing() {
           </div>
           <div style={{ textAlign: 'center', marginTop: 32 }}>
             <button onClick={() => nav('/planos')}
-              style={{ padding: '12px 28px', border: '2px solid #2563eb', borderRadius: 10, background: 'transparent', color: '#2563eb', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              style={{ padding: '12px 28px', border: '2px solid #0D63DB', borderRadius: 10, background: 'transparent', color: '#0D63DB', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
               Ver todos os planos, incluindo Assessoria e Clube de Negócios →
             </button>
           </div>
@@ -234,7 +234,7 @@ export default function Landing() {
       </section>
 
       {/* FOOTER */}
-      <footer style={{ background: '#0f172a', padding: '40px 20px', textAlign: 'center' }}>
+      <footer style={{ background: '#111111', padding: '40px 20px', textAlign: 'center' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ fontSize: 20, fontWeight: 900, color: 'white', marginBottom: 8 }}>TSN ATIVOS</div>
           <div style={{ fontSize: 12, color: '#475569', marginBottom: 20 }}>Aquisição em Leilão & Investimentos Estratégicos · Honorários Jurídicos 10%</div>

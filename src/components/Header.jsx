@@ -54,13 +54,13 @@ function ModalFeedback({ user, onClose }) {
         {enviado ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 40 }}>✅</div>
-            <p style={{ fontWeight: 700, color: '#0f172a', marginTop: 12 }}>Feedback registrado!</p>
+            <p style={{ fontWeight: 700, color: '#111111', marginTop: 12 }}>Feedback registrado!</p>
             <p style={{ fontSize: 13, color: '#64748b' }}>Obrigado. Nossa equipe vai analisar em breve.</p>
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontWeight: 800, fontSize: 18, color: '#0f172a' }}>Enviar Feedback</h3>
+              <h3 style={{ margin: 0, fontWeight: 800, fontSize: 18, color: '#111111' }}>Enviar Feedback</h3>
               <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 20, lineHeight: 1 }}>✕</button>
             </div>
             {user && (
@@ -91,7 +91,7 @@ function ModalFeedback({ user, onClose }) {
               <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>FOI RESOLVIDO?</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {['Sim', 'Não', 'Em andamento'].map(op => (
-                  <label key={op} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#374151', cursor: 'pointer', padding: '6px 8px', borderRadius: 8, border: `1px solid ${resolvido === op ? '#2563eb' : '#e2e8f0'}`, background: resolvido === op ? '#eff6ff' : 'white', fontWeight: resolvido === op ? 700 : 400, textAlign: 'center' }}>
+                  <label key={op} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#374151', cursor: 'pointer', padding: '6px 8px', borderRadius: 8, border: `1px solid ${resolvido === op ? '#0D63DB' : '#e2e8f0'}`, background: resolvido === op ? '#eff6ff' : 'white', fontWeight: resolvido === op ? 700 : 400, textAlign: 'center' }}>
                     <input type="radio" name="resolvido" value={op} checked={resolvido === op} onChange={() => setResolvido(op)} style={{ display: 'none' }} />
                     {op}
                   </label>
@@ -103,7 +103,7 @@ function ModalFeedback({ user, onClose }) {
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {Array.from({ length: 11 }, (_, i) => (
                   <button key={i} onClick={() => setNps(i)}
-                    style={{ width: 34, height: 34, borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: nps === i ? (npsColors[i] || '#2563eb') : '#f1f5f9', color: nps === i ? 'white' : '#64748b' }}>
+                    style={{ width: 34, height: 34, borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: nps === i ? (npsColors[i] || '#0D63DB') : '#f1f5f9', color: nps === i ? 'white' : '#64748b' }}>
                     {i}
                   </button>
                 ))}
@@ -117,7 +117,7 @@ function ModalFeedback({ user, onClose }) {
               <button onClick={onClose} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
                 Cancelar
               </button>
-              <button onClick={enviar} disabled={!queixa.trim() || enviando} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#0f172a', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: queixa.trim() && !enviando ? 1 : 0.5 }}>
+              <button onClick={enviar} disabled={!queixa.trim() || enviando} style={{ flex: 2, padding: '10px', border: 'none', borderRadius: 8, background: '#111111', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: queixa.trim() && !enviando ? 1 : 0.5 }}>
                 {enviando ? 'Enviando…' : 'Enviar Feedback →'}
               </button>
             </div>
@@ -228,12 +228,12 @@ export default function Header() {
           </button>
         </div>
       )}
-      <div style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
+      <div style={{ background: '#111111', borderBottom: '1px solid #111111' }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 20px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 
         {/* Logo */}
         <button onClick={() => nav('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ background: '#2563eb', borderRadius: 8, padding: '6px 8px', display: 'flex' }}>
+          <div style={{ background: '#0D63DB', borderRadius: 8, padding: '6px 8px', display: 'flex' }}>
             <Briefcase size={18} color="white" />
           </div>
           <div>
@@ -247,7 +247,7 @@ export default function Header() {
           {links.map(l => (
             <button key={l.path} onClick={() => nav(l.path)}
               data-tour={l.tourId}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#1e40af' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#084BA6' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
               <l.icon size={14} /> {l.label}
             </button>
           ))}
@@ -288,7 +288,7 @@ export default function Header() {
               <button onClick={() => setShowUserMenu(p => !p)}
                 data-tour="conta"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', border: '1px solid #334155', borderRadius: 8, background: 'transparent', color: 'white', cursor: 'pointer' }}>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#0D63DB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>
                   {nomeUsuario[0].toUpperCase()}
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 600, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomeUsuario}</span>
@@ -296,7 +296,7 @@ export default function Header() {
               {showUserMenu && (
                 <div data-usermenu="true" style={{ position: 'absolute', right: 0, top: '110%', background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '8px', minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 200 }}>
                   <div style={{ padding: '8px 12px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
-                    <div style={{ fontWeight: 700, color: '#0f172a' }}>{nomeUsuario}</div>
+                    <div style={{ fontWeight: 700, color: '#111111' }}>{nomeUsuario}</div>
                     <div style={{ fontSize: 11 }}>{user.email}</div>
                     {!loading && role && role !== 'aluno' && (
                       <div style={{ fontSize: 10, background: '#f1f5f9', borderRadius: 4, padding: '2px 6px', marginTop: 4, display: 'inline-block', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -348,10 +348,10 @@ export default function Header() {
 
       {/* Mobile menu */}
       {open && (
-        <div style={{ background: '#0f172a', borderTop: '1px solid #1e293b', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ background: '#111111', borderTop: '1px solid #111111', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {links.map(l => (
             <button key={l.path} onClick={() => { nav(l.path); setOpen(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#1e40af' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#084BA6' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               <l.icon size={16} /> {l.label}
             </button>
           ))}

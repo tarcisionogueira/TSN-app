@@ -24,7 +24,7 @@ function CopyBtn({ texto }) {
   };
   return (
     <button onClick={copiar}
-      style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 12px', background: ok?'#10b981':'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+      style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 12px', background: ok?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
       {ok ? <><Check size={13}/> Copiado</> : <><Copy size={13}/> Copiar</>}
     </button>
   );
@@ -112,9 +112,9 @@ export default function Consultor() {
   if (!user) {
     return (
       <div style={{ maxWidth:520, margin:'80px auto', textAlign:'center', padding:'0 20px' }}>
-        <h2 style={{ color:'#0f172a' }}>Acesso restrito</h2>
+        <h2 style={{ color:'#111111' }}>Acesso restrito</h2>
         <p style={{ color:'#64748b' }}>Faça login para acessar o painel do consultor.</p>
-        <button onClick={()=>nav('/login')} style={{ padding:'10px 20px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>Entrar</button>
+        <button onClick={()=>nav('/login')} style={{ padding:'10px 20px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>Entrar</button>
       </div>
     );
   }
@@ -122,9 +122,9 @@ export default function Consultor() {
   if (!podeVer) {
     return (
       <div style={{ maxWidth:520, margin:'80px auto', textAlign:'center', padding:'0 20px' }}>
-        <h2 style={{ color:'#0f172a' }}>Programa de Consultores</h2>
+        <h2 style={{ color:'#111111' }}>Programa de Consultores</h2>
         <p style={{ color:'#64748b' }}>Esta área é exclusiva para consultores parceiros da TSN. Fale com a equipe para se tornar um consultor e ganhar comissões recorrentes indicando clientes.</p>
-        <a href="mailto:tarcisioaraujo@reimob.com.br" style={{ display:'inline-block', marginTop:8, padding:'10px 20px', background:'#2563eb', color:'white', borderRadius:10, fontWeight:700, textDecoration:'none' }}>Quero ser consultor</a>
+        <a href="mailto:tarcisioaraujo@reimob.com.br" style={{ display:'inline-block', marginTop:8, padding:'10px 20px', background:'#0D63DB', color:'white', borderRadius:10, fontWeight:700, textDecoration:'none' }}>Quero ser consultor</a>
       </div>
     );
   }
@@ -291,7 +291,7 @@ export default function Consultor() {
 
   const tabBtn = (id, label) => (
     <button onClick={()=>setAba(id)}
-      style={{ padding:'10px 20px', border:'none', background: aba===id ? '#0f172a' : 'transparent', color: aba===id ? 'white' : '#64748b', fontWeight:700, fontSize:14, cursor:'pointer', borderRadius:'10px 10px 0 0', borderBottom: aba===id ? 'none' : '2px solid #e2e8f0' }}>
+      style={{ padding:'10px 20px', border:'none', background: aba===id ? '#111111' : 'transparent', color: aba===id ? 'white' : '#64748b', fontWeight:700, fontSize:14, cursor:'pointer', borderRadius:'10px 10px 0 0', borderBottom: aba===id ? 'none' : '2px solid #e2e8f0' }}>
       {label}
     </button>
   );
@@ -299,14 +299,14 @@ export default function Consultor() {
   return (
     <div style={{ maxWidth:1100, margin:'0 auto', padding:'24px 20px' }}>
       <div style={{ marginBottom:20 }}>
-        <h1 style={{ margin:0, fontSize:24, fontWeight:900, color:'#0f172a' }}>Painel do Consultor</h1>
+        <h1 style={{ margin:0, fontSize:24, fontWeight:900, color:'#111111' }}>Painel do Consultor</h1>
         <p style={{ margin:'4px 0 0', fontSize:13, color:'#64748b' }}>Indique clientes e ganhe comissões recorrentes enquanto eles forem pagantes.</p>
       </div>
 
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:10, marginBottom:20 }}>
         {[
-          { l:'Clientes na carteira', v: carteira.length, c:'#2563eb', bg:'#eff6ff', icon:Users, onClick:()=>{ setFiltroCarteira('todos'); setAba('carteira'); } },
+          { l:'Clientes na carteira', v: carteira.length, c:'#0D63DB', bg:'#eff6ff', icon:Users, onClick:()=>{ setFiltroCarteira('todos'); setAba('carteira'); } },
           { l:'Clientes pagantes', v: clientesPagantes, c:'#8b5cf6', bg:'#ede9fe', icon:TrendingUp, onClick:()=>{ setFiltroCarteira('pagantes'); setAba('carteira'); } },
           { l:'Comissão pendente', v:`R$ ${fmt(totalPendente,0)}`, c:'#f59e0b', bg:'#fffbeb', icon:Clock, onClick:()=>{ setFiltroComissao('pendente'); setAba('comissoes'); } },
           { l:'Comissão recebida', v:`R$ ${fmt(totalPago,0)}`, c:'#10b981', bg:'#f0fdf4', icon:CheckCircle2, onClick:()=>{ setFiltroComissao('pago'); setAba('comissoes'); } },
@@ -318,7 +318,7 @@ export default function Consultor() {
             <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, color:k.c, textTransform:'uppercase', marginBottom:6 }}>
               <k.icon size={13}/> {k.l}
             </div>
-            <div style={{ fontSize:20, fontWeight:900, color:'#0f172a' }}>{k.v}</div>
+            <div style={{ fontSize:20, fontWeight:900, color:'#111111' }}>{k.v}</div>
             <div style={{ fontSize:10, color:k.c, marginTop:4, fontWeight:600 }}>clique para ver →</div>
           </div>
         ))}
@@ -342,14 +342,14 @@ export default function Consultor() {
                   <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:12, padding:'14px 18px' }}>
                     <div style={{ fontSize:11, fontWeight:800, color:'#059669', textTransform:'uppercase', marginBottom:4 }}>Seu código de indicação</div>
                     <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                      <span style={{ fontSize:24, fontWeight:900, color:'#0f172a', letterSpacing:2 }}>{codigo}</span>
+                      <span style={{ fontSize:24, fontWeight:900, color:'#111111', letterSpacing:2 }}>{codigo}</span>
                       <span style={{ fontSize:12, color:'#64748b' }}>Comissão de <strong>{pct}%</strong> sobre produtos e assinaturas.</span>
                     </div>
                   </div>
                 )}
 
                 {/* ── Kit da Consulta ── */}
-                <div style={{ background:'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', borderRadius:14, padding:'18px 20px' }}>
+                <div style={{ background:'linear-gradient(135deg,#111111 0%,#1e3a5f 100%)', borderRadius:14, padding:'18px 20px' }}>
                   <div style={{ fontSize:12, fontWeight:800, color:'#60a5fa', textTransform:'uppercase', letterSpacing:1, marginBottom:4 }}>🛒 Links para Compartilhar</div>
                   <p style={{ fontSize:12, color:'#94a3b8', margin:'0 0 14px' }}>Todos os produtos e links disponíveis para enviar ao cliente durante o atendimento.</p>
                   <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
@@ -445,7 +445,7 @@ export default function Consultor() {
                             Ver
                           </a>
                           <button onClick={()=>navigator.clipboard.writeText(item.url)}
-                            style={{ padding:'4px 10px', background:'#2563eb', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                            style={{ padding:'4px 10px', background:'#0D63DB', color:'white', border:'none', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer' }}>
                             Copiar
                           </button>
                         </div>
@@ -487,7 +487,7 @@ export default function Consultor() {
                   </div>
                   <div style={{ flex:1, minWidth:140 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:4 }}>
-                      <span style={{ fontWeight:800, fontSize:14, color:'#0f172a' }}>{nome||'—'}</span>
+                      <span style={{ fontWeight:800, fontSize:14, color:'#111111' }}>{nome||'—'}</span>
                       <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20, background:badgeBg||'#f1f5f9', color:badgeColor||'#64748b', textTransform:'uppercase' }}>{badge}</span>
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
@@ -506,7 +506,7 @@ export default function Consultor() {
                   {/* Ações */}
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
                     <button onClick={()=>{ setMsgModal({ nome, email, user_id: userId }); setMsgForm({ assunto:'', conteudo:'' }); }}
-                      style={{ padding:'6px 12px', background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                      style={{ padding:'6px 12px', background:'#eff6ff', color:'#084BA6', border:'1px solid #bfdbfe', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                       ✉ Mensagem
                     </button>
                     <button onClick={()=>{ setReuniaoModal({ nome, email }); setReuniaoForm({ data:'', hora:'10:00', duracao:30 }); setReuniaoLink(''); }}
@@ -531,7 +531,7 @@ export default function Consultor() {
               <div style={{ display:'flex', gap:8, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
                 {[['todos','Todos'],['pagantes','Pagantes'],['nao_pagantes','Não pagantes']].map(([v,l])=>(
                   <button key={v} onClick={()=>setFiltroCarteira(v)}
-                    style={{ padding:'5px 14px', border:'none', borderRadius:20, fontWeight:700, fontSize:12, cursor:'pointer', background:filtroCarteira===v?'#0f172a':'#f1f5f9', color:filtroCarteira===v?'white':'#475569' }}>
+                    style={{ padding:'5px 14px', border:'none', borderRadius:20, fontWeight:700, fontSize:12, cursor:'pointer', background:filtroCarteira===v?'#111111':'#f1f5f9', color:filtroCarteira===v?'white':'#475569' }}>
                     {l}
                   </button>
                 ))}
@@ -597,7 +597,7 @@ export default function Consultor() {
                           return r ? (
                             <div key={p.id} style={{ background:'#f8fafc', borderRadius:8, padding:'12px 14px' }}>
                               <div style={{ fontSize:12, color:'#64748b', marginBottom:4 }}>{p.texto}</div>
-                              <div style={{ fontSize:14, fontWeight:700, color:'#0f172a' }}>{r}</div>
+                              <div style={{ fontSize:14, fontWeight:700, color:'#111111' }}>{r}</div>
                             </div>
                           ) : null;
                         })}
@@ -620,7 +620,7 @@ export default function Consultor() {
               <div style={{ display:'flex', gap:8, marginBottom:14, alignItems:'center', flexWrap:'wrap' }}>
                 {[['todos','Todas'],['pendente','Pendentes'],['pago','Recebidas'],['cancelado','Canceladas']].map(([v,l])=>(
                   <button key={v} onClick={()=>setFiltroComissao(v)}
-                    style={{ padding:'5px 14px', border:'none', borderRadius:20, fontWeight:700, fontSize:12, cursor:'pointer', background:filtroComissao===v?'#0f172a':'#f1f5f9', color:filtroComissao===v?'white':'#475569' }}>
+                    style={{ padding:'5px 14px', border:'none', borderRadius:20, fontWeight:700, fontSize:12, cursor:'pointer', background:filtroComissao===v?'#111111':'#f1f5f9', color:filtroComissao===v?'white':'#475569' }}>
                     {l}
                   </button>
                 ))}
@@ -674,7 +674,7 @@ export default function Consultor() {
             onClick={e=>e.stopPropagation()}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
               <div>
-                <div style={{ fontSize:16, fontWeight:800, color:'#0f172a' }}>Mensagem para {msgModal.nome}</div>
+                <div style={{ fontSize:16, fontWeight:800, color:'#111111' }}>Mensagem para {msgModal.nome}</div>
                 {msgModal.email && <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>{msgModal.email}</div>}
               </div>
               <button onClick={()=>setMsgModal(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
@@ -702,7 +702,7 @@ export default function Consultor() {
                 <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
                   <button onClick={()=>setMsgModal(null)} style={{ padding:'9px 18px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer' }}>Cancelar</button>
                   <button onClick={enviarMensagem} disabled={enviandoMsg || !msgForm.conteudo.trim()}
-                    style={{ padding:'9px 20px', background:enviandoMsg?'#94a3b8':'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:enviandoMsg?'not-allowed':'pointer' }}>
+                    style={{ padding:'9px 20px', background:enviandoMsg?'#94a3b8':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:enviandoMsg?'not-allowed':'pointer' }}>
                     {enviandoMsg ? 'Enviando…' : '✉ Enviar mensagem'}
                   </button>
                 </div>
@@ -719,7 +719,7 @@ export default function Consultor() {
           <div style={{ background:'white', borderRadius:14, padding:28, width:'100%', maxWidth:500, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
             onClick={e=>e.stopPropagation()}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
-              <div style={{ fontSize:16, fontWeight:800, color:'#0f172a' }}>Agendar reunião — {reuniaoModal.nome}</div>
+              <div style={{ fontSize:16, fontWeight:800, color:'#111111' }}>Agendar reunião — {reuniaoModal.nome}</div>
               <button onClick={()=>{ setReuniaoModal(null); setReuniaoInfo(null); }} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
@@ -757,7 +757,7 @@ export default function Consultor() {
                 <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'14px 16px' }}>
                   <div style={{ fontSize:12, fontWeight:700, color:'#15803d', marginBottom:8 }}>✅ Sala criada! Envie este link ao cliente:</div>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <input readOnly value={reuniaoInfo.link} style={{ flex:1, padding:'8px 10px', border:'1px solid #bbf7d0', borderRadius:8, fontSize:12, background:'white', color:'#0f172a', outline:'none' }} />
+                    <input readOnly value={reuniaoInfo.link} style={{ flex:1, padding:'8px 10px', border:'1px solid #bbf7d0', borderRadius:8, fontSize:12, background:'white', color:'#111111', outline:'none' }} />
                     <button onClick={()=>navigator.clipboard.writeText(reuniaoInfo.link)}
                       style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                       Copiar
@@ -766,12 +766,12 @@ export default function Consultor() {
                   <div style={{ marginTop:8, display:'flex', gap:8 }}>
                     {reuniaoModal.email && (
                       <button onClick={()=>{ setReuniaoModal(null); setReuniaoInfo(null); setMsgModal({ nome:reuniaoModal.nome, email:reuniaoModal.email }); setMsgForm({ assunto:'Convite para reunião TSN', conteudo:`Olá ${reuniaoModal.nome}! Segue o link para nossa reunião:\n\n${reuniaoInfo.link}\n\nData: ${reuniaoForm.data} às ${reuniaoForm.hora}\n\nAté lá!` }); }}
-                        style={{ flex:1, padding:'8px', background:'#2563eb', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'center' }}>
+                        style={{ flex:1, padding:'8px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'center' }}>
                         ✉ Enviar por mensagem
                       </button>
                     )}
                     <a href={reuniaoInfo.link} target="_blank" rel="noreferrer"
-                      style={{ flex:1, padding:'8px', background:'#0f172a', color:'white', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', textAlign:'center' }}>
+                      style={{ flex:1, padding:'8px', background:'#111111', color:'white', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none', textAlign:'center' }}>
                       Entrar na sala →
                     </a>
                   </div>

@@ -4,7 +4,7 @@ import { CheckCircle2, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 
-const inp = { width:'100%', padding:'10px 13px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:14, background:'white', color:'#0f172a', boxSizing:'border-box' };
+const inp = { width:'100%', padding:'10px 13px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:14, background:'white', color:'#111111', boxSizing:'border-box' };
 const lbl = { fontSize:12, fontWeight:700, color:'#94a3b8', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
 
 function Campo({ label, name, value, onChange, type='text', required=false, placeholder='' }) {
@@ -41,7 +41,7 @@ function AssinaturaCanvas({ onChange }) {
     const ctx = canvasRef.current.getContext('2d');
     const pos = getPos(e, canvasRef.current);
     ctx.beginPath(); ctx.moveTo(last.current.x, last.current.y);
-    ctx.lineTo(pos.x, pos.y); ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2.5;
+    ctx.lineTo(pos.x, pos.y); ctx.strokeStyle = '#111111'; ctx.lineWidth = 2.5;
     ctx.lineCap = 'round'; ctx.stroke();
     last.current = pos;
   };
@@ -143,13 +143,13 @@ export default function ContratoLink() {
   };
 
   if (loading) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a' }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111' }}>
       <Loader2 size={32} color="#60a5fa" style={{ animation:'spin 1s linear infinite' }} />
     </div>
   );
 
   if (erro) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a', padding:20 }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', padding:20 }}>
       <div style={{ textAlign:'center', maxWidth:420 }}>
         <AlertCircle size={52} color="#f87171" style={{ margin:'0 auto 20px' }} />
         <h2 style={{ color:'white', marginBottom:8 }}>Link indisponível</h2>
@@ -159,8 +159,8 @@ export default function ContratoLink() {
   );
 
   if (etapa === 'ok') return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a', padding:20 }}>
-      <div style={{ textAlign:'center', maxWidth:480, background:'#1e293b', borderRadius:20, padding:'48px 32px', border:'1px solid #334155' }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', padding:20 }}>
+      <div style={{ textAlign:'center', maxWidth:480, background:'#111111', borderRadius:20, padding:'48px 32px', border:'1px solid #334155' }}>
         <CheckCircle2 size={72} color="#34d399" style={{ margin:'0 auto 24px' }} />
         <h2 style={{ color:'white', marginBottom:8, fontWeight:900, fontSize:26 }}>Contrato assinado!</h2>
         <p style={{ color:'#94a3b8', fontSize:15, lineHeight:1.7 }}>
@@ -176,10 +176,10 @@ export default function ContratoLink() {
   // Layout principal: coluna esquerda = contrato, coluna direita = formulário
   // Em mobile: empilhado
   return (
-    <div style={{ minHeight:'100vh', background:'#0f172a', fontFamily:"'Inter',sans-serif", display:'flex', flexDirection:'column' }}>
+    <div style={{ minHeight:'100vh', background:'#111111', fontFamily:"'Inter',sans-serif", display:'flex', flexDirection:'column' }}>
       {/* Barra de título */}
-      <div style={{ background:'#0f172a', borderBottom:'1px solid #1e293b', padding:isMobile ? '14px 16px' : '16px 28px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
-        <div style={{ width:32, height:32, background:'#2563eb', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ background:'#111111', borderBottom:'1px solid #111111', padding:isMobile ? '14px 16px' : '16px 28px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        <div style={{ width:32, height:32, background:'#0D63DB', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <ShieldCheck size={18} color="white" />
         </div>
         <div>
@@ -196,7 +196,7 @@ export default function ContratoLink() {
           flex: isMobile ? 'none' : 1,
           overflowY:'auto',
           padding: isMobile ? '16px 16px 0' : '28px 32px',
-          borderRight: isMobile ? 'none' : '1px solid #1e293b',
+          borderRight: isMobile ? 'none' : '1px solid #111111',
           maxHeight: isMobile ? '45vh' : 'none',
         }}>
           <div style={{ fontSize:11, color:'#475569', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:16 }}>
@@ -205,14 +205,14 @@ export default function ContratoLink() {
           <div style={{
             whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1',
             background:'#111827', borderRadius:12, padding:'20px 22px',
-            border:'1px solid #1e293b', minHeight:200,
+            border:'1px solid #111111', minHeight:200,
           }}>
             {contrato.conteudo}
           </div>
           {/* KYC section */}
           {contrato.kyc_incluido && contrato.kyc_fotos && (
             <div style={{ marginTop: 32 }}>
-              <div style={{ borderTop: '2px solid #1e293b', paddingTop: 24, marginBottom: 20 }}>
+              <div style={{ borderTop: '2px solid #111111', paddingTop: 24, marginBottom: 20 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
                   Documentação KYC
                 </div>
@@ -226,7 +226,7 @@ export default function ContratoLink() {
                   { key: 'doc_frente', label: '2. Documento de Identidade', desc: 'RG ou CNH — frente' },
                   { key: 'selfie_doc', label: '3. Selfie com Documento', desc: 'Confirmação de posse do documento' },
                 ].filter(({ key }) => contrato.kyc_fotos[key]).map(({ key, label, desc }) => (
-                  <div key={key} style={{ background: '#1a2744', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
+                  <div key={key} style={{ background: '#1a2744', border: '1px solid #111111', borderRadius: 12, overflow: 'hidden' }}>
                     <img
                       src={contrato.kyc_fotos[key]}
                       alt={label}
@@ -255,7 +255,7 @@ export default function ContratoLink() {
           overflowY:'auto',
           background:'#111827',
           padding: isMobile ? '16px 16px 24px' : '28px 24px',
-          borderTop: isMobile ? '1px solid #1e293b' : 'none',
+          borderTop: isMobile ? '1px solid #111111' : 'none',
         }}>
 
           {/* ETAPA: tipo de pessoa */}
@@ -279,9 +279,9 @@ export default function ContratoLink() {
                 ].map(({ key, emoji, titulo, sub }) => (
                   <button key={key} onClick={() => { if (!lgpdAceite) return; setTipoPessoa(key); setEtapa('dados'); }}
                     disabled={!lgpdAceite}
-                    style={{ padding:'16px', border:'1px solid #334155', borderRadius:12, background:'#1e293b', cursor:lgpdAceite?'pointer':'not-allowed', textAlign:'left', display:'flex', alignItems:'center', gap:14, opacity:lgpdAceite?1:0.4, transition:'all 0.15s' }}
+                    style={{ padding:'16px', border:'1px solid #334155', borderRadius:12, background:'#111111', cursor:lgpdAceite?'pointer':'not-allowed', textAlign:'left', display:'flex', alignItems:'center', gap:14, opacity:lgpdAceite?1:0.4, transition:'all 0.15s' }}
                     onMouseEnter={e => { if (!lgpdAceite) return; e.currentTarget.style.borderColor='#3b82f6'; e.currentTarget.style.background='rgba(59,130,246,0.1)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor='#334155'; e.currentTarget.style.background='#1e293b'; }}>
+                    onMouseLeave={e => { e.currentTarget.style.borderColor='#334155'; e.currentTarget.style.background='#111111'; }}>
                     <span style={{ fontSize:28 }}>{emoji}</span>
                     <div>
                       <div style={{ fontWeight:800, color:'white', fontSize:14 }}>{titulo}</div>
@@ -306,7 +306,7 @@ export default function ContratoLink() {
                 {campos.map(c => <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange} />)}
               </div>
               <button onClick={() => setEtapa('revisar')} disabled={!podeProsseguir()}
-                style={{ width:'100%', padding:'13px', background:'#2563eb', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', opacity:podeProsseguir()?1:0.5 }}>
+                style={{ width:'100%', padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', opacity:podeProsseguir()?1:0.5 }}>
                 Próximo: Revisar e assinar →
               </button>
             </div>

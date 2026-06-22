@@ -11,7 +11,7 @@ const ROLE_LABELS = {
 };
 
 const ROLE_COLORS = {
-  analista: { bg: '#dbeafe', color: '#1e40af', icon: '🔍' },
+  analista: { bg: '#dbeafe', color: '#084BA6', icon: '🔍' },
   advogado: { bg: '#ede9fe', color: '#5b21b6', icon: '⚖️' },
   consultor: { bg: '#d1fae5', color: '#065f46', icon: '🤝' },
   admin:     { bg: '#fef3c7', color: '#92400e', icon: '👑' },
@@ -85,18 +85,18 @@ export default function Convite() {
   const irParaLogin    = () => nav('/login?convite=' + codigo);
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: '#94a3b8' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111111', color: '#94a3b8' }}>
       Carregando convite…
     </div>
   );
 
   if (erro || (!link && !conviteEquipe)) return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ textAlign: 'center', maxWidth: 480 }}>
         <AlertCircle size={48} color="#dc2626" style={{ margin: '0 auto 16px' }} />
         <h2 style={{ color: 'white', marginBottom: 8 }}>Convite não encontrado</h2>
         <p style={{ color: '#94a3b8', marginBottom: 24 }}>{erro || 'Este link pode ter sido desativado.'}</p>
-        <button onClick={() => nav('/login')} style={{ padding: '10px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
+        <button onClick={() => nav('/login')} style={{ padding: '10px 24px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
           Ir para Login
         </button>
       </div>
@@ -111,7 +111,7 @@ export default function Convite() {
     const rolesLabel = roles.map(r => ROLE_LABELS[r] || r).join(' + ');
 
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #111111 0%, #111111 50%, #111111 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <div style={{ maxWidth: 520, width: '100%', textAlign: 'center' }}>
 
           <div style={{ fontSize: 64, marginBottom: 16 }}>
@@ -173,12 +173,12 @@ export default function Convite() {
   const nomeConvidante = link.perfis?.nome || 'TSN Ativos';
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #111111 0%, #111111 50%, #111111 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
 
         <div style={{ fontSize: 64, marginBottom: 16 }}>🎯</div>
 
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#2563eb', color: 'white', fontSize: 13, fontWeight: 700, padding: '6px 16px', borderRadius: 20, marginBottom: 24 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#0D63DB', color: 'white', fontSize: 13, fontWeight: 700, padding: '6px 16px', borderRadius: 20, marginBottom: 24 }}>
           <Users size={14} /> Convite exclusivo
         </div>
 
@@ -192,7 +192,7 @@ export default function Convite() {
 
         <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
           <button onClick={irParaCadastro}
-            style={{ width: '100%', padding: '14px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
+            style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
             <UserPlus size={18} /> Criar minha conta
           </button>
 

@@ -139,7 +139,7 @@ function Spotlight({ rect, step }) {
           width: 0, height: 0,
           borderLeft: '8px solid transparent',
           borderRight: '8px solid transparent',
-          [tooltipAbaixo ? 'borderBottom' : 'borderTop']: '8px solid #1e293b',
+          [tooltipAbaixo ? 'borderBottom' : 'borderTop']: '8px solid #111111',
         }} />
       </div>
     </>
@@ -149,7 +149,7 @@ function Spotlight({ rect, step }) {
 function TooltipCard({ step, centered }) {
   return (
     <div style={{
-      background: '#1e293b',
+      background: '#111111',
       border: '1px solid #334155',
       borderRadius: 14,
       padding: '18px 20px',
@@ -192,7 +192,7 @@ export default function TourGuiado({ onClose }) {
         display: 'flex',
         alignItems: 'center',
         gap: 12,
-        background: '#0f172a',
+        background: '#111111',
         border: '1px solid #334155',
         borderRadius: 40,
         padding: '10px 20px',

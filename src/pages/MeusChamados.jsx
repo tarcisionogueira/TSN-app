@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const STATUS = {
   aberto: { label: 'Aberto', cor: '#10b981', bg: '#d1fae5' },
-  em_atendimento: { label: 'Em atendimento', cor: '#2563eb', bg: '#dbeafe' },
+  em_atendimento: { label: 'Em atendimento', cor: '#0D63DB', bg: '#dbeafe' },
   finalizado: { label: 'Finalizado', cor: '#64748b', bg: '#f1f5f9' },
 };
 
@@ -111,7 +111,7 @@ export default function MeusChamados() {
     return (
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 20px' }}>
         <button onClick={() => { setChamadoAtivo(null); carregarChamados(); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
           <ChevronLeft size={16} /> Voltar aos chamados
         </button>
 
@@ -119,7 +119,7 @@ export default function MeusChamados() {
           {/* Cabeçalho do chamado */}
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a', lineHeight: 1.3 }}>{chamadoAtivo.titulo}</h2>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#111111', lineHeight: 1.3 }}>{chamadoAtivo.titulo}</h2>
               <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>Aberto em {fmtData(chamadoAtivo.criado_em)}</div>
             </div>
             <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: s.bg, color: s.cor, whiteSpace: 'nowrap', marginLeft: 12 }}>{s.label}</span>
@@ -131,7 +131,7 @@ export default function MeusChamados() {
               <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: m.autor_tipo === 'cliente' ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   {m.autor_tipo !== 'cliente' && (
-                    <div style={{ width: 20, height: 20, borderRadius: '50%', background: m.autor_tipo === 'ia' ? '#2563eb' : '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 20, height: 20, borderRadius: '50%', background: m.autor_tipo === 'ia' ? '#0D63DB' : '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Bot size={11} color="white" />
                     </div>
                   )}
@@ -142,22 +142,22 @@ export default function MeusChamados() {
                 <div style={{
                   maxWidth: '78%', padding: '11px 15px',
                   borderRadius: m.autor_tipo === 'cliente' ? '16px 16px 4px 16px' : '4px 16px 16px 16px',
-                  background: m.autor_tipo === 'cliente' ? '#2563eb' : m.autor_tipo === 'ia' ? '#f0f9ff' : '#f0fdf4',
-                  color: m.autor_tipo === 'cliente' ? 'white' : '#0f172a',
+                  background: m.autor_tipo === 'cliente' ? '#0D63DB' : m.autor_tipo === 'ia' ? '#f0f9ff' : '#f0fdf4',
+                  color: m.autor_tipo === 'cliente' ? 'white' : '#111111',
                   fontSize: 14, lineHeight: 1.6,
                   border: m.autor_tipo !== 'cliente' ? `1px solid ${m.autor_tipo === 'ia' ? '#bae6fd' : '#86efac'}` : 'none',
                 }}>
                   {m.conteudo}
                   {(m.anexos || []).map((a, i) => a.tipo === 'imagem'
                     ? <img key={i} src={a.url} alt={a.nome} style={{ maxWidth: 220, display: 'block', marginTop: 8, borderRadius: 8 }} />
-                    : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 6, fontSize: 12, color: m.autor_tipo === 'cliente' ? 'rgba(255,255,255,0.9)' : '#2563eb', textDecoration: 'underline' }}>{a.nome}</a>
+                    : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 6, fontSize: 12, color: m.autor_tipo === 'cliente' ? 'rgba(255,255,255,0.9)' : '#0D63DB', textDecoration: 'underline' }}>{a.nome}</a>
                   )}
                 </div>
               </div>
             ))}
             {loadingIA && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 12 }}>
-                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#0D63DB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Bot size={11} color="white" />
                 </div>
                 <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Respondendo…
@@ -195,7 +195,7 @@ export default function MeusChamados() {
                   style={{ flex: 1, padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit' }}
                 />
                 <button onClick={enviarMensagem} disabled={(!texto.trim() && !anexos.length) || enviando}
-                  style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer', display: 'flex', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1 }}>
+                  style={{ background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer', display: 'flex', opacity: ((!texto.trim() && !anexos.length) || enviando) ? 0.5 : 1 }}>
                   {enviando ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={15} />}
                 </button>
                 <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />
@@ -216,13 +216,13 @@ export default function MeusChamados() {
   // Lista de chamados
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 20px' }}>
-      <h1 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 900, color: '#0f172a' }}>Meus Chamados</h1>
+      <h1 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 900, color: '#111111' }}>Meus Chamados</h1>
 
       {/* Abas */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {[['abertos', 'Em aberto'], ['finalizados', 'Finalizados']].map(([k, l]) => (
           <button key={k} onClick={() => setAba(k)}
-            style={{ padding: '8px 22px', borderRadius: 10, border: aba !== k ? '1px solid #e2e8f0' : 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: aba === k ? '#2563eb' : 'white', color: aba === k ? 'white' : '#64748b', transition: 'all 0.15s' }}>
+            style={{ padding: '8px 22px', borderRadius: 10, border: aba !== k ? '1px solid #e2e8f0' : 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: aba === k ? '#0D63DB' : 'white', color: aba === k ? 'white' : '#64748b', transition: 'all 0.15s' }}>
             {l}
           </button>
         ))}
@@ -230,7 +230,7 @@ export default function MeusChamados() {
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-          <Loader2 size={26} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />
+          <Loader2 size={26} color="#0D63DB" style={{ animation: 'spin 1s linear infinite' }} />
         </div>
       ) : chamados.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 20px', background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
@@ -254,7 +254,7 @@ export default function MeusChamados() {
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 5 }}>{c.titulo}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 5 }}>{c.titulo}</div>
                   <div style={{ fontSize: 12, color: '#94a3b8' }}>
                     Aberto em {fmtData(c.criado_em)}
                     {c.atendente_nome && !['Auto-resolvido','Sistema (inatividade)'].includes(c.atendente_nome) && (

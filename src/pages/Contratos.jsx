@@ -32,7 +32,7 @@ const STATUS_INFO = {
 };
 
 const S = {
-  input: { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#0f172a', boxSizing: 'border-box', outline: 'none' },
+  input: { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#111111', boxSizing: 'border-box', outline: 'none' },
   label: { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4 },
   secao: { marginTop: 20, paddingTop: 16, borderTop: '1px solid #e2e8f0' },
 };
@@ -173,16 +173,16 @@ export default function Contratos() {
   if (!user) {
     return (
       <div style={{ maxWidth: 520, margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
-        <h2 style={{ color: '#0f172a' }}>Acesso restrito</h2>
+        <h2 style={{ color: '#111111' }}>Acesso restrito</h2>
         <p style={{ color: '#64748b' }}>Faça login para ver seus contratos.</p>
-        <button onClick={() => nav('/login')} style={{ padding: '10px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Entrar</button>
+        <button onClick={() => nav('/login')} style={{ padding: '10px 20px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>Entrar</button>
       </div>
     );
   }
 
   return (
     <div style={{ maxWidth: 920, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px' }}>
-      <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: '0 0 4px' }}>Meus Contratos</h1>
+      <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111111', margin: '0 0 4px' }}>Meus Contratos</h1>
       <p style={{ color: '#64748b', margin: '0 0 24px', fontSize: 14 }}>Contratos de assessoria, clube de negócios e demais produtos.</p>
 
       {contratos.length === 0 ? (
@@ -199,7 +199,7 @@ export default function Contratos() {
             return (
               <div key={c.id} style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: isMobile ? '14px 16px' : '18px 20px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 12 : 16, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>{c.titulo}</div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: '#111111' }}>{c.titulo}</div>
                   <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                     {c.tipo_contrato && <span style={{ textTransform: 'capitalize' }}>{c.tipo_contrato}</span>}
                     {c.assinado_em && <span> · Assinado em {new Date(c.assinado_em).toLocaleDateString('pt-BR')}</span>}
@@ -218,7 +218,7 @@ export default function Contratos() {
                     </button>
                   )}
                   <button onClick={() => nav(`/c/${c.token}`)}
-                    style={{ padding: isMobile ? '12px 16px' : '8px 16px', background: aguardando ? '#2563eb' : '#f1f5f9', color: aguardando ? 'white' : '#475569', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 44, width: isMobile ? '100%' : 'auto' }}>
+                    style={{ padding: isMobile ? '12px 16px' : '8px 16px', background: aguardando ? '#0D63DB' : '#f1f5f9', color: aguardando ? 'white' : '#475569', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 44, width: isMobile ? '100%' : 'auto' }}>
                     {aguardando ? 'Ler e assinar' : 'Visualizar'}
                   </button>
                 </div>
@@ -236,7 +236,7 @@ export default function Contratos() {
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a' }}>{aberto.titulo}</h3>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#111111' }}>{aberto.titulo}</h3>
               <button onClick={() => setAberto(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
             </div>
 
@@ -286,7 +286,7 @@ export default function Contratos() {
                 <div>
                   {/* CPF */}
                   <div style={S.secao}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', marginBottom: 12 }}>Identificação do assinante</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', marginBottom: 12 }}>Identificação do assinante</div>
                     <label style={S.label}>CPF</label>
                     <input style={S.input} value={cpfAssinante} onChange={e => setCpfAssinante(e.target.value)}
                       placeholder="000.000.000-00" maxLength={14} />
@@ -294,7 +294,7 @@ export default function Contratos() {
 
                   {/* Assinatura principal */}
                   <div style={S.secao}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Assinatura do contratante</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', marginBottom: 8 }}>Assinatura do contratante</div>
                     <AssinaturaCanvas onChange={setAssinatura} />
                   </div>
 
@@ -310,7 +310,7 @@ export default function Contratos() {
                       </span>
                       {geoStatus === 'idle' && (
                         <button type="button" onClick={buscarGeo}
-                          style={{ marginLeft: 'auto', padding: '5px 12px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          style={{ marginLeft: 'auto', padding: '5px 12px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                           Capturar localização
                         </button>
                       )}
@@ -321,7 +321,7 @@ export default function Contratos() {
                   <div style={S.secao}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                       <input type="checkbox" checked={usaTestemunha} onChange={e => setUsaTestemunha(e.target.checked)} />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#111111', display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Users size={14} /> Adicionar testemunha (opcional)
                       </span>
                     </label>

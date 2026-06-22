@@ -50,7 +50,7 @@ export default function ContratoObrigatorio({ userId }) {
           boxShadow: '0 24px 80px rgba(0,0,0,0.5)',
         }}>
           <div style={{ fontSize: 56, marginBottom: 16 }}>📄</div>
-          <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 12px' }}>
+          <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 12px' }}>
             Assinatura de contrato necessária
           </h2>
           <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.6, margin: '0 0 28px' }}>
@@ -59,7 +59,7 @@ export default function ContratoObrigatorio({ userId }) {
           <button
             onClick={() => navigate('/contratos')}
             style={{
-              width: '100%', padding: '14px', background: '#2563eb',
+              width: '100%', padding: '14px', background: '#0D63DB',
               color: 'white', border: 'none', borderRadius: 10,
               fontWeight: 800, fontSize: 15, cursor: 'pointer',
             }}>
@@ -91,7 +91,7 @@ export default function ContratoObrigatorio({ userId }) {
         <button
           onClick={() => navigate('/contratos')}
           style={{
-            flex: 2, padding: '10px', background: '#2563eb',
+            flex: 2, padding: '10px', background: '#0D63DB',
             color: 'white', border: 'none', borderRadius: 8,
             fontWeight: 700, fontSize: 13, cursor: 'pointer',
           }}>
