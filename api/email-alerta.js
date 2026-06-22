@@ -101,7 +101,7 @@ function gerarEmailHTML(userName, imoveis, filtroDesc, userId, baseUrl) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="x-apple-disable-message-reformatting">
-  <title>Oportunidades TSN Ativos</title>
+  <title>Oportunidades BidPro Brasil</title>
 </head>
 <body style="margin:0;padding:0;background:#f1f5f9;-webkit-text-size-adjust:100%;mso-line-height-rule:exactly;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;">
@@ -112,7 +112,7 @@ function gerarEmailHTML(userName, imoveis, filtroDesc, userId, baseUrl) {
           <!-- HEADER -->
           <tr>
             <td style="background:#111111;border-radius:16px 16px 0 0;padding:36px 40px 28px;text-align:center;">
-              <div style="font-size:32px;font-weight:900;color:#ffffff;letter-spacing:-0.03em;line-height:1;">TSN<span style="color:#0D63DB;">.</span></div>
+              <div style="font-size:32px;font-weight:900;color:#ffffff;letter-spacing:-0.03em;line-height:1;">BidPro Brasil</div>
               <div style="font-size:13px;color:#94a3b8;margin-top:6px;letter-spacing:0.05em;text-transform:uppercase;">Ativos Imobiliários</div>
             </td>
           </tr>
@@ -163,10 +163,10 @@ function gerarEmailHTML(userName, imoveis, filtroDesc, userId, baseUrl) {
           <!-- FOOTER -->
           <tr>
             <td style="background:#111111;border-radius:0 0 16px 16px;padding:28px 40px;text-align:center;">
-              <div style="font-size:18px;font-weight:900;color:#ffffff;letter-spacing:-0.02em;margin-bottom:12px;">TSN<span style="color:#0D63DB;">.</span> <span style="font-weight:400;font-size:13px;color:#94a3b8;">Ativos Imobiliários</span></div>
+              <div style="font-size:18px;font-weight:900;color:#ffffff;letter-spacing:-0.02em;margin-bottom:12px;">BidPro Brasil <span style="font-weight:400;font-size:13px;color:#94a3b8;">Ativos Imobiliários</span></div>
               <p style="color:#64748b;font-size:12px;line-height:1.8;margin:0 0 16px;">
-                Você recebe este email porque salvou um filtro de busca na plataforma TSN Ativos.<br>
-                © ${new Date().getFullYear()} TSN Ativos · Assessoria em Imóveis de Leilão · Brasil
+                Você recebe este email porque salvou um filtro de busca na plataforma BidPro Brasil.<br>
+                © ${new Date().getFullYear()} BidPro Brasil · Assessoria em Imóveis de Leilão · Brasil
               </p>
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
                 <tr>
@@ -211,7 +211,7 @@ export default async function handler(req) {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: process.env.APP_FROM_EMAIL || 'TSN Ativos <alertas@tsnAtivos.com.br>',
+      from: process.env.APP_FROM_EMAIL || 'BidPro Brasil <alertas@tsnAtivos.com.br>',
       to: userEmail,
       subject,
       html,
