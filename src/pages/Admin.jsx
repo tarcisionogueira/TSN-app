@@ -4504,7 +4504,20 @@ function EquipeTab() {
 // (visível APENAS para role === 'admin')
 // ═══════════════════════════════════════════════════════════════════════════════
 function MarketingTab() {
-  const thirtyDaysAgo = React.useMemo(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), []);
+  const [periodo, setPeriodo] = React.useState('30d');
+  const [dataInicio, setDataInicio] = React.useState('');
+  const [dataFim, setDataFim] = React.useState('');
+
+  const thirtyDaysAgo = React.useMemo(() => {
+    if (periodo === 'custom' && dataInicio) return new Date(dataInicio).toISOString();
+    const dias = periodo === '7d' ? 7 : periodo === '90d' ? 90 : periodo === 'ano' ? 365 : 30;
+    return new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+  }, [periodo, dataInicio]);
+
+  const dataFimISO = React.useMemo(() => {
+    if (periodo === 'custom' && dataFim) return new Date(dataFim + 'T23:59:59').toISOString();
+    return new Date().toISOString();
+  }, [periodo, dataFim]);
 
   const [loading, setLoading] = useState(true);
   const [buscas, setBuscas] = useState({ total: 0, unicos: 0, cidades: [], estados: [], tipos: [], pagamentos: [] });
@@ -4524,11 +4537,11 @@ function MarketingTab() {
         { data: pagamentosRaw },
         { data: totaisRaw },
       ] = await Promise.all([
-        supabase.from('busca_historico').select('cidade').not('cidade', 'is', null).gte('criado_em', thirtyDaysAgo),
-        supabase.from('busca_historico').select('tipo_imovel').not('tipo_imovel', 'is', null).gte('criado_em', thirtyDaysAgo),
-        supabase.from('busca_historico').select('estado').not('estado', 'is', null).gte('criado_em', thirtyDaysAgo),
-        supabase.from('busca_historico').select('pagamento_tipos').not('pagamento_tipos', 'is', null).gte('criado_em', thirtyDaysAgo),
-        supabase.from('busca_historico').select('user_id, id').gte('criado_em', thirtyDaysAgo),
+        supabase.from('busca_historico').select('cidade').not('cidade', 'is', null).gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
+        supabase.from('busca_historico').select('tipo_imovel').not('tipo_imovel', 'is', null).gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
+        supabase.from('busca_historico').select('estado').not('estado', 'is', null).gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
+        supabase.from('busca_historico').select('pagamento_tipos').not('pagamento_tipos', 'is', null).gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
+        supabase.from('busca_historico').select('user_id, id').gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
       ]);
 
       const countBy = (arr, key) => {
@@ -4616,7 +4629,7 @@ function MarketingTab() {
       console.error('MarketingTab error:', e);
     }
     setLoading(false);
-  }, [thirtyDaysAgo]);
+  }, [thirtyDaysAgo, dataFimISO]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -4660,10 +4673,12 @@ function MarketingTab() {
   const FUNNEL_STEPS = ['novo', 'contatado', 'qualificado', 'convertido'];
   const FUNNEL_COLORS = ['#0D63DB', '#7c3aed', '#d97706', '#059669'];
 
+  const periodoLabel = { '7d': 'Últimos 7 dias', '30d': 'Últimos 30 dias', '90d': 'Últimos 90 dias', 'ano': 'Último ano', 'custom': 'Personalizado' };
+
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: '#111111', margin: 0 }}>Inteligência de Marketing</h2>
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Painel privado — somente admin</div>
@@ -4672,6 +4687,32 @@ function MarketingTab() {
           <button style={S.btn('outline')} onClick={carregar}>↻ Atualizar dados</button>
           <button style={S.btn('primary')} onClick={exportarCSV}>⬇ Exportar Relatório</button>
         </div>
+      </div>
+
+      {/* Filtro de tempo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 4 }}>Período:</span>
+        {['7d', '30d', '90d', 'ano', 'custom'].map(p => (
+          <button key={p} onClick={() => setPeriodo(p)}
+            style={{ fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 20, border: '2px solid', cursor: 'pointer',
+              borderColor: periodo === p ? '#0D63DB' : '#e2e8f0',
+              background: periodo === p ? '#eff6ff' : 'white',
+              color: periodo === p ? '#0D63DB' : '#64748b' }}>
+            {periodoLabel[p]}
+          </button>
+        ))}
+        {periodo === 'custom' && (
+          <>
+            <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 10px', border: '2px solid #e2e8f0', borderRadius: 8, color: '#111111', outline: 'none' }} />
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>até</span>
+            <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 10px', border: '2px solid #e2e8f0', borderRadius: 8, color: '#111111', outline: 'none' }} />
+          </>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>
+          {periodo !== 'custom' ? periodoLabel[periodo] : dataInicio && dataFim ? `${dataInicio} → ${dataFim}` : 'Selecione as datas'}
+        </span>
       </div>
 
       {/* Painel Google Ads */}
