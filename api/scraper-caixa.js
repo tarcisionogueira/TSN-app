@@ -22,22 +22,36 @@ function inferirTipo(descricao) {
 }
 
 /**
- * Classifica forma_pagamento para imóveis da Caixa Econômica Federal.
- * CEF não disponibiliza campo explícito de forma de pagamento no CSV/API.
- * Critérios baseados nas regras publicadas pela CEF:
- *   - Venda Direta: aceita financiamento bancário e FGTS → 'financiado'
- *   - 2ª Praça: CEF normalmente aceita FGTS como recurso → 'financiado'
- *   - 1ª Praça / Licitação Aberta: exige recurso próprio → 'a_vista'
+ * Extrai forma_pagamento do texto livre da descrição do imóvel (CEF).
  *
- * ⚠️ Marco para futura integração com leiloeiros externos:
- * Quando integrar Superbid, eLeilões, Mega Leilões etc., usar
- * normalizarFormaPagamento() de src/data/pagamento.js (não disponível em Edge Functions).
- * Replicar a lógica da função aqui ou criar api/_pagamento-utils.js compartilhado.
+ * O CSV da CEF NÃO tem coluna dedicada de forma de pagamento.
+ * A informação aparece (quando existe) dentro do campo descrição ou modalidade.
+ * Inferir pelo tipo de modalidade (venda_direta, 2ª praça etc.) é INCORRETO:
+ * há imóveis em venda direta que são à vista e há 2ª praça que aceita FGTS.
+ *
+ * Regra: se não encontrar indicação explícita no texto → retorna null.
+ * null = "não sabemos" — melhor não exibir do que exibir errado.
+ *
+ * ⚠️ Marco leiloeiros externos (Superbid, eLeilões, Mega Leilões etc.):
+ * Ao integrar, verificar se o leiloeiro fornece campo de pagamento.
+ * Se fornecer: usar normalizarFormaPagamento() (replicar lógica abaixo no scraper).
+ * Se não fornecer: gravar null — nunca inventar.
  */
-function inferirFormaPagamentoCaixa(modalidadeNormalizada) {
-  if (modalidadeNormalizada === 'venda_direta') return 'financiado';
-  if (modalidadeNormalizada === 'segundo_leilao') return 'financiado';
-  return 'a_vista';
+function extrairFormaPagamentoCaixa(descricao, modalidadeRaw) {
+  const texto = `${descricao || ''} ${modalidadeRaw || ''}`.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  // Hipotecado — menção explícita a ônus/hipoteca
+  if (/hipotec|com onus|gravame/.test(texto)) return 'hipotecado';
+
+  // Financiado — indica que banco/FGTS/parcelamento é aceito
+  if (/fgts|financiamento|financiado|aceita financ|parcelamento/.test(texto)) return 'financiado';
+
+  // À vista — menção explícita
+  if (/a vista|avista|recursos proprios/.test(texto)) return 'a_vista';
+
+  // Nenhuma informação confiável encontrada — não adivinhar
+  return null;
 }
 
 function normalizarModalidade(modalidade) {
@@ -152,7 +166,7 @@ function csvToImoveis(csv, uf) {
       link_foto: linkFoto.trim() || null,
       descricao: descricao.trim() || null,
       titulo: `${descricao.trim().slice(0, 80) || 'Imóvel'} — ${cidade.trim()}`,
-      forma_pagamento: inferirFormaPagamentoCaixa(normalizarModalidade(modalidade)),
+      forma_pagamento: extrairFormaPagamentoCaixa(descricao, modalidade),
       leiloeiro: 'Caixa Econômica Federal',
       ativo: true,
       atualizado_em: new Date().toISOString(),

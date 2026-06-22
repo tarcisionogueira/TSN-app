@@ -784,11 +784,16 @@ export default function Busca() {
                     <input type="checkbox" checked={filtros.pagamento.includes(v)} onChange={()=>togglePagamento(v)} style={{ width:14, height:14 }}/>
                     <span>
                       {l}
-                      {v === 'financiado' && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:4 }}>(parcelado, FGTS, consórcio)</span>}
-                      {v === 'hipotecado' && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:4 }}>(assume ônus)</span>}
+                      {v === 'financiado' && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:4 }}>(FGTS, parcelamento)</span>}
+                      {v === 'hipotecado' && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:4 }}>(assume dívida)</span>}
                     </span>
                   </label>
                 ))}
+                {filtros.pagamento.length > 0 && (
+                  <div style={{ fontSize:10, color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:6, padding:'6px 8px', marginTop:6, lineHeight:1.5 }}>
+                    ℹ️ Exibe apenas imóveis com pagamento confirmado no edital. Imóveis sem informação são omitidos para evitar dado incorreto.
+                  </div>
+                )}
               </div>
               {erro && <div style={{ padding:'8px 10px', background:'#fee2e2', borderRadius:8, fontSize:11, color:'#dc2626', fontWeight:600 }}>{erro}</div>}
               {!filtros.estado && (
@@ -1010,11 +1015,15 @@ export default function Busca() {
                         const badge = pagamentoBadge(p);
                         if (!badge) return null;
                         return (
-                          <span key={p} style={{ fontSize:9, background: badge.bg, color: badge.color, padding:'1px 6px', borderRadius:8, fontWeight:600 }}>
+                          <span key={p} title={`Forma de pagamento: ${badge.label}`} style={{ fontSize:9, background: badge.bg, color: badge.color, padding:'1px 6px', borderRadius:8, fontWeight:600 }}>
                             {badge.label}
                           </span>
                         );
                       })}
+                      {/* Nenhuma informação de pagamento disponível */}
+                      {(im.pagamento||[]).every(p => !p || !pagamentoBadge(p)) && (
+                        <span style={{ fontSize:9, color:'#94a3b8', fontStyle:'italic' }}>Consultar edital</span>
+                      )}
                       {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{im.areaM2}m²</span>}
                       <span style={{ fontSize:9, color:'#94a3b8' }}>{fmtData(im.dataLeilao, im.modalidade)}</span>
                     </div>

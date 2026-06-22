@@ -1,10 +1,21 @@
 /**
  * pagamento.js — fonte única da verdade para forma_pagamento
  *
- * Valores canônicos gravados no banco: 'a_vista' | 'financiado' | 'hipotecado'
- * (parcelado é alias de financiado — ambos significam pagamento parcelado)
+ * Valores canônicos no banco: 'a_vista' | 'financiado' | 'hipotecado' | null
  *
- * Ao integrar novo leiloeiro, use normalizarFormaPagamento(rawString) antes de gravar.
+ * ⚠️ REGRA CRÍTICA: null = "não sabemos"
+ * NUNCA inferir forma_pagamento a partir da modalidade (venda_direta, 2ª praça etc.)
+ * pois isso é incorreto: há venda_direta à vista e 2ª praça financiada.
+ * Só gravar um valor quando a fonte de dados o informa EXPLICITAMENTE.
+ * Se não houver informação → gravar null.
+ *
+ * Impacto no filtro: propriedades com null são EXCLUÍDAS quando o filtro
+ * de pagamento está ativo — melhor omitir do que mostrar dado errado.
+ *
+ * Ao integrar novo leiloeiro:
+ * 1. Verificar se o leiloeiro fornece campo explícito de pagamento
+ * 2. Se sim: usar normalizarFormaPagamento(rawString) e gravar o resultado
+ * 3. Se não: gravar null — nunca inventar
  */
 
 // ─── Rótulos para exibição ────────────────────────────────────────────────────
