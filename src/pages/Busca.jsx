@@ -106,7 +106,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
         .limit(2000);
       if (filtros.tipo) q = q.in('tipo', [filtros.tipo, 'imovel']);
       if (filtros.estado) q = q.eq('estado', filtros.estado);
-      if (filtros.cidades?.length) q = q.in('cidade', filtros.cidades);
+      if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
       if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
       if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
       if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
