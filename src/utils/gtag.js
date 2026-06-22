@@ -1,4 +1,6 @@
 const AW_ID = 'AW-16850175262';
+const CONV_PLANO = `${AW_ID}/7658576769`;
+const CONV_CADASTRO = `${AW_ID}/7658576772`;
 
 function gtag(...args) {
   if (typeof window === 'undefined') return;
@@ -12,7 +14,7 @@ export function trackPageView(path) {
 
 export function trackCadastro(email) {
   gtag('event', 'sign_up', { method: 'email', send_to: AW_ID });
-  gtag('event', 'conversion', { send_to: `${AW_ID}/cadastro`, email });
+  gtag('event', 'conversion', { send_to: CONV_CADASTRO });
 }
 
 export function trackCheckoutIniciado(plano, valor) {
@@ -21,7 +23,7 @@ export function trackCheckoutIniciado(plano, valor) {
 
 export function trackPlanContratado(plano, valor) {
   gtag('event', 'purchase', { currency: 'BRL', value: valor, transaction_id: Date.now(), items: [{ item_name: plano }], send_to: AW_ID });
-  gtag('event', 'conversion', { send_to: `${AW_ID}/plano_contratado`, value: valor, currency: 'BRL' });
+  gtag('event', 'conversion', { send_to: CONV_PLANO, value: valor, currency: 'BRL' });
 }
 
 export function trackAlertaCriado() {
