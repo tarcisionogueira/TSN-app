@@ -94,13 +94,16 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
   const [mapReady, setMapReady] = React.useState(false);
   const [carregando, setCarregando] = React.useState(true);
 
-  // Carrega imóveis com coordenadas usando os filtros ativos
+  // Carrega imóveis com coordenadas usando os filtros ativos.
+  // NOTA: pagamento NÃO é aplicado aqui — no mapa o objetivo é ver localização;
+  // o pagamento aparece no popup de cada pin. Filtrar por pagamento excluiria
+  // imóveis cujo campo ainda é null (não geocodificado/não parseado do edital).
   useEffect(() => {
     async function carregar() {
       setCarregando(true);
       let q = supabase
         .from('imoveis_leilao')
-        .select('id, titulo, cidade, estado, tipo, valor_minimo, latitude, longitude, link_foto')
+        .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, valor_avaliacao, desconto_percentual, forma_pagamento, latitude, longitude, link_foto')
         .eq('ativo', true)
         .not('latitude', 'is', null)
         .neq('latitude', 0)
@@ -110,13 +113,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
       if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
       if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
       if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
-      // Cidades: OR interno entre cidades (ANDado com restante via filtro separado)
       if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
-      // Pagamento: OR interno entre opções (ANDado com cidades via filtro separado)
-      if (filtros.pagamento?.length > 0) {
-        const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_FILTRO_DB[v] || [v]);
-        q = q.or(dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(','));
-      }
+      // pagamento: exibido no popup mas NÃO filtra a query do mapa
       const { data } = await q;
       const filtered = (data || []).filter(im => {
         if (!raioAtivo || !centroRaio || !im.latitude || !im.longitude) return true;
@@ -158,15 +156,24 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
         const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [22, 33], iconAnchor: [11, 33], popupAnchor: [0, -33] });
         const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
         const marker = L.marker([im.latitude, im.longitude], { icon });
+        const desc = im.desconto_percentual ? Math.round(im.desconto_percentual) : null;
+        const pgto = im.forma_pagamento;
+        const pgtoLabel = pgto === 'financiado' ? 'Financiado' : pgto === 'hipotecado' ? 'Hipotecado' : pgto === 'a_vista' ? 'À Vista' : null;
+        const pgtoColor = pgto === 'financiado' ? '#16a34a' : pgto === 'hipotecado' ? '#92400e' : '#475569';
+        const pgtoBg = pgto === 'financiado' ? '#dcfce7' : pgto === 'hipotecado' ? '#fef3c7' : '#f1f5f9';
         marker.bindPopup(`
-          <div style="font-family:Inter,sans-serif;min-width:180px">
-            ${im.link_foto ? `<img src="${im.link_foto}" style="width:100%;height:90px;object-fit:cover;border-radius:6px;margin-bottom:8px"/>` : ''}
-            <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px">${im.titulo || 'Imóvel'}</div>
-            <div style="font-size:11px;color:#64748b;margin-bottom:5px">${im.cidade} — ${im.estado}</div>
-            <div style="font-size:13px;font-weight:800;color:#0D63DB;margin-bottom:8px">${fmt(im.valor_minimo)}</div>
-            <button onclick="window.location.hash='/imovel/${im.id}'" style="width:100%;padding:5px;background:#0D63DB;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:700;font-size:11px">Ver detalhes →</button>
+          <div style="font-family:Inter,sans-serif;min-width:190px;max-width:220px">
+            ${im.link_foto ? `<img src="${im.link_foto}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>` : ''}
+            <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${im.titulo || 'Imóvel'}</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${im.cidade} — ${im.estado}</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+              ${desc ? `<span style="font-size:10px;font-weight:800;background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:20px">-${desc}%</span>` : ''}
+              ${pgtoLabel ? `<span style="font-size:10px;font-weight:700;background:${pgtoBg};color:${pgtoColor};padding:1px 6px;border-radius:20px">${pgtoLabel}</span>` : ''}
+            </div>
+            <div style="font-size:15px;font-weight:900;color:#0D63DB;margin-bottom:8px">${fmt(im.valor_minimo)}</div>
+            <button onclick="window.location.hash='/imovel/${im.id}'" style="width:100%;padding:7px;background:#0D63DB;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">Ver detalhes →</button>
           </div>
-        `);
+        `, { maxWidth: 240 });
         markersRef.current.addLayer(marker);
         bounds.push([im.latitude, im.longitude]);
       });
@@ -205,8 +212,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo 
         </div>
       )}
       {!carregando && imoveisMapa.length === 0 && (
-        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '6px 16px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#94a3b8' }}>
-          Nenhum imóvel com localização nesta área
+        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '8px 18px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#64748b', textAlign: 'center', whiteSpace: 'nowrap' }}>
+          Imóveis encontrados ainda não possuem localização cadastrada
         </div>
       )}
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
