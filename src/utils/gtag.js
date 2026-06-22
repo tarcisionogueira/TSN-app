@@ -1,3 +1,4 @@
+const GA4_ID = 'G-5YNHQB5F81';
 const AW_ID = 'AW-16850175262';
 const CONV_PLANO = `${AW_ID}/7658576769`;
 const CONV_CADASTRO = `${AW_ID}/7658576772`;
@@ -9,6 +10,7 @@ function gtag(...args) {
 }
 
 export function trackPageView(path) {
+  gtag('event', 'page_view', { page_path: path, send_to: GA4_ID });
   gtag('event', 'page_view', { page_path: path, send_to: AW_ID });
 }
 
