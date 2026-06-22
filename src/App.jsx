@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { trackPageView } from './utils/gtag';
 import { supabase } from './utils/supabase';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
 import { PlanosProvider } from './contexts/PlanosContext';
@@ -137,6 +138,12 @@ function PrivateRoute({ children, roles }) {
   return children;
 }
 
+function RouteTracker() {
+  const loc = useLocation();
+  useEffect(() => { trackPageView(loc.pathname); }, [loc.pathname]);
+  return null;
+}
+
 function MainLayout() {
   const { ativo, isLoggedIn, inadimplenteDias, role, loading, user } = useAuth();
   const loc = useLocation();
@@ -199,6 +206,7 @@ export default function App() {
   return (
     <AuthProvider>
       <HashRouter>
+        <RouteTracker />
         <PlanosProvider>
         <Routes>
           <Route path="/login" element={<Login />} />

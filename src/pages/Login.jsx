@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { usePlanos } from '../contexts/PlanosContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { trackCadastro } from '../utils/gtag';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 
 const inp = {
@@ -175,6 +176,7 @@ export default function Login() {
         },
       });
       if (error) throw error;
+      trackCadastro(form.email);
       // Preserva o plano na URL de confirmação de email (HashRouter usa /#/)
       if (planoEscolhido) {
         sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);

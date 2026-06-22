@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { trackCheckoutIniciado } from '../utils/gtag';
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
@@ -93,7 +94,11 @@ export default function Checkout() {
     ? `${planoKey}_vista`
     : temToggleAnual && modalidade === 'anual' ? `${planoKey}_anual` : planoKey;
 
-  // Não redireciona automaticamente — deixa o usuário ver a apresentação do plano primeiro
+  useEffect(() => {
+    if (planoKey && PLANOS_STATIC[planoKey]) {
+      trackCheckoutIniciado(planoKey, PLANOS_STATIC[planoKey]?.valor || 0);
+    }
+  }, [planoKey]);
 
   useEffect(() => {
     if (!promoCode) return;
