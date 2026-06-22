@@ -236,10 +236,6 @@ export default function Header() {
           <div style={{ background: '#0D63DB', borderRadius: 8, padding: '6px 8px', display: 'flex' }}>
             <Briefcase size={18} color="white" />
           </div>
-          <div>
-            <div style={{ color: 'white', fontWeight: 900, fontSize: 16, lineHeight: 1, letterSpacing: '-0.5px' }}>BidPro Brasil</div>
-            <div style={{ color: '#475569', fontSize: 8, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
-          </div>
         </button>
 
         {/* Nav desktop */}

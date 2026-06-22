@@ -85,7 +85,7 @@ function svgPin(cor) {
   )}`;
 }
 
-function MapaEmbutido({ filtros, resultados, nav }) {
+function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo }) {
   const mapContainerRef = useRef(null);
   const leafletRef = useRef(null);
   const markersRef = useRef(null);
@@ -107,10 +107,14 @@ function MapaEmbutido({ filtros, resultados, nav }) {
       if (filtros.valorMin) q = q.gte('valor_minimo', filtros.valorMin);
       if (filtros.valorMax) q = q.lte('valor_minimo', filtros.valorMax);
       const { data } = await q;
-      setImoveisMapa(data || []);
+      const filtered = (data || []).filter(im => {
+        if (!raioAtivo || !centroRaio || !im.latitude || !im.longitude) return true;
+        return haversine(centroRaio.lat, centroRaio.lng, im.latitude, im.longitude) <= raioKm;
+      });
+      setImoveisMapa(filtered);
     }
     carregar();
-  }, [filtros]);
+  }, [filtros, centroRaio, raioAtivo, raioKm]);
 
   // Inicializa mapa
   useEffect(() => {
@@ -861,7 +865,7 @@ export default function Busca() {
 
         {/* Vista Mapa embutido */}
         {vista === 'mapa' && (
-          <MapaEmbutido filtros={filtros} resultados={resultadosFiltrados} nav={nav} />
+          <MapaEmbutido filtros={filtros} resultados={resultadosFiltrados} nav={nav} centroRaio={centroRaio} raioKm={raioKmAtivo} raioAtivo={raioAtivo} />
         )}
 
         {/* Resultados em cards */}
@@ -963,7 +967,7 @@ export default function Busca() {
         )}
 
         {/* Paginação */}
-        {!loading && totalPaginas > 1 && (
+        {vista === 'lista' && !loading && totalPaginas > 1 && (
           <div style={{ background:'white', borderRadius:12, border:'1px solid #e2e8f0', padding:'12px 18px', display:'flex', justifyContent:'center', alignItems:'center', gap:8 }}>
             <button onClick={()=>{ const p=Math.max(1,pagina-1); setPagina(p); buscarPagina(p, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo); }} disabled={pagina===1}
               style={{ padding:'6px 14px', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:pagina===1?'not-allowed':'pointer', background:pagina===1?'#f8fafc':'white', color:pagina===1?'#cbd5e1':'#334155' }}>
