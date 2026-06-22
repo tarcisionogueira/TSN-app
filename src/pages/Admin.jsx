@@ -4401,7 +4401,7 @@ function EquipeTab() {
 // (visível APENAS para role === 'admin')
 // ═══════════════════════════════════════════════════════════════════════════════
 function MarketingTab() {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const thirtyDaysAgo = React.useMemo(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), []);
 
   const [loading, setLoading] = useState(true);
   const [buscas, setBuscas] = useState({ total: 0, unicos: 0, cidades: [], estados: [], tipos: [], pagamentos: [] });
@@ -4568,6 +4568,31 @@ function MarketingTab() {
         <div style={{ display: 'flex', gap: 10 }}>
           <button style={S.btn('outline')} onClick={carregar}>↻ Atualizar dados</button>
           <button style={S.btn('primary')} onClick={exportarCSV}>⬇ Exportar Relatório</button>
+        </div>
+      </div>
+
+      {/* Painel Google Ads */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('Google Ads', 'Integrações e rastreamento ativo')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
+          {[
+            { label: 'Tag instalada', value: 'AW-16850175262', status: true, desc: 'Ativa em todas as páginas' },
+            { label: 'Conversão: Cadastro', value: 'ID 7658576772', status: true, desc: 'Conta Uma por usuário' },
+            { label: 'Conversão: Plano', value: 'ID 7658576769', status: true, desc: 'Valor dinâmico por plano' },
+            { label: 'Page Views', value: 'Automático', status: true, desc: 'Toda troca de rota' },
+          ].map(item => (
+            <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.status ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</span>
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#111111', marginBottom: 2 }}>{item.value}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.desc}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: '#eff6ff', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#0D63DB' }}>
+          ℹ️ Status "Inativo" no Google Ads é normal até o primeiro cadastro/assinatura ser disparado. Acesse <strong>tsn-app-two.vercel.app</strong> para ativar a tag de page_view.
         </div>
       </div>
 
