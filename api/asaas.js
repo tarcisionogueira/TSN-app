@@ -63,8 +63,10 @@ async function asaasGet(path) {
   const res = await fetch(`${ASAAS_URL}${path}`, {
     headers: { 'access_token': API_KEY },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.errors?.[0]?.description || 'Erro Asaas');
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error(`Asaas retornou resposta inválida (${res.status})`); }
+  if (!res.ok) throw new Error(data.errors?.[0]?.description || data.message || 'Erro Asaas');
   return data;
 }
 
@@ -273,11 +275,15 @@ export default async function handler(req, res) {
       const hoje = new Date();
       const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
       const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
-      const [balance, statsMes] = await Promise.all([
+      const [balance, statsMes] = await Promise.allSettled([
         asaasGet('/finances/balance'),
         asaasGet(`/finances/statistics?startDate=${inicioMes}&endDate=${fimMes}`),
       ]);
-      return res.status(200).json({ balance, statsMes });
+      if (balance.status === 'rejected') throw new Error(balance.reason?.message || 'Erro ao buscar saldo');
+      return res.status(200).json({
+        balance: balance.value,
+        statsMes: statsMes.status === 'fulfilled' ? statsMes.value : null,
+      });
     }
 
     return res.status(400).json({ error: 'Ação inválida' });
