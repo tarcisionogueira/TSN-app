@@ -138,7 +138,7 @@ export default function Busca() {
     const query = estado ? `${cidade}, ${estado}, Brasil` : `${cidade}, Brasil`;
     try {
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'TSN-Ativos/1.0' } });
+      const res = await fetch(url, { headers: { 'User-Agent': 'BidPro-Brasil/1.0' } });
       const data = await res.json();
       if (data && data.length > 0) {
         const centro = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: cidade };
@@ -148,6 +148,31 @@ export default function Busca() {
     } catch {}
     setCentroRaio(null);
     return null;
+  };
+
+  // Busca coordenadas de todas as cidades do estado via Overpass API (cached 30 dias)
+  const getCidadesEstadoComCoords = async (uf) => {
+    const CACHE_KEY = `bidpro_overpass_v1_${uf}`;
+    const CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+    try {
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+    } catch {}
+
+    const query = `[out:json][timeout:30];rel["ISO3166-2"="BR-${uf}"];map_to_area->.s;node["place"~"city|town|village"](area.s);out center;`;
+    try {
+      const res = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: query,
+      });
+      const json = await res.json();
+      const cidades = (json.elements || [])
+        .filter(e => e.tags?.name)
+        .map(e => ({ nome: e.tags.name, lat: e.lat, lng: e.lon }));
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: cidades })); } catch {}
+      return cidades;
+    } catch { return []; }
   };
 
   const toggleRaio = () => {
@@ -177,15 +202,16 @@ export default function Busca() {
     setFiltrosSalvos(p => p.filter(f => f.id !== id));
   }
 
-  const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo, centro = centroRaio, raioAtivoBusca = raioAtivo, raioKmBusca = raioKmAtivo) => {
+  const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo, centro = centroRaio, raioAtivoBusca = raioAtivo, raioKmBusca = raioKmAtivo, cidadesRaio = null) => {
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
 
-    const buildQuery = (base, skipCidadeFilter = false) => {
+    const buildQuery = (base) => {
       let q = base.eq('ativo', true);
       if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
-      // When radius is active, skip city filter — radius itself defines the area
-      if (!skipCidadeFilter && filtrosAtivos.cidades?.length > 0) {
-        const orParts = filtrosAtivos.cidades.map(c => `cidade.ilike.${c}`).join(',');
+      // cidadesRaio: list of cities within the radius (from Overpass geocoding)
+      const cidadesFiltro = cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null);
+      if (cidadesFiltro?.length > 0) {
+        const orParts = cidadesFiltro.map(c => `cidade.ilike.${c}`).join(',');
         q = q.or(orParts);
       }
       if (filtrosAtivos.tipo) q = q.in('tipo', [filtrosAtivos.tipo, 'imovel']);
@@ -208,23 +234,11 @@ export default function Busca() {
     try {
       let dbData, dbError;
 
-      if (raioAtivoBusca && centro) {
-        // Bounding box: 1° lat ≈ 111 km; 1° lng ≈ 111 * cos(lat) km
-        const deltaLat = raioKmBusca / 111;
-        const deltaLng = raioKmBusca / (111 * Math.cos(centro.lat * Math.PI / 180));
-        const minLat = (centro.lat - deltaLat).toFixed(6);
-        const maxLat = (centro.lat + deltaLat).toFixed(6);
-        const minLng = (centro.lng - deltaLng).toFixed(6);
-        const maxLng = (centro.lng + deltaLng).toFixed(6);
-        const cidadeCentro = filtrosAtivos.cidades?.[0] || '';
-
-        // Single query: properties with coords inside bounding box OR no-coord props in center city
-        let q = buildQuery(supabase.from('imoveis_leilao').select('*'), true);
-        q = q.or(
-          `and(latitude.gte.${minLat},latitude.lte.${maxLat},longitude.gte.${minLng},longitude.lte.${maxLng}),` +
-          `and(latitude.is.null,cidade.ilike.${cidadeCentro})`
-        );
-        const { data, error } = await q.order(coluna, { ascending: dir, nullsFirst: false }).limit(5000);
+      if (raioAtivoBusca && centro && cidadesRaio) {
+        // City-based radius: buildQuery already applies cidadesRaio as the city filter
+        const { data, error } = await buildQuery(supabase.from('imoveis_leilao').select('*'))
+          .order(coluna, { ascending: dir, nullsFirst: false })
+          .limit(5000);
         dbData = data;
         dbError = error;
       } else {
@@ -273,25 +287,14 @@ export default function Busca() {
         longitude: im.longitude,
       })) : [];
 
-      // Refine radius client-side: precise haversine for properties with coords
-      if (raioAtivoBusca && centro) {
+      // Radius: all results are already city-filtered; add distance badge for those with coords
+      if (raioAtivoBusca && centro && cidadesRaio) {
         const novasDistancias = {};
-        const comCoords = [];
-        const semCoords = [];
         mapeados.forEach(im => {
           if (im.latitude != null && im.longitude != null) {
-            const dist = haversine(centro.lat, centro.lng, Number(im.latitude), Number(im.longitude));
-            if (dist <= raioKmBusca) {
-              novasDistancias[im.id] = Math.round(dist);
-              comCoords.push(im);
-            }
-            // else: bounding box overcaptured — discard (corners of the square)
-          } else {
-            semCoords.push(im); // no-coord props already filtered to center city by DB query
+            novasDistancias[im.id] = Math.round(haversine(centro.lat, centro.lng, Number(im.latitude), Number(im.longitude)));
           }
         });
-        comCoords.sort((a, b) => (novasDistancias[a.id] || 0) - (novasDistancias[b.id] || 0));
-        mapeados = [...comCoords, ...semCoords];
         setDistancias(novasDistancias);
         setTotalResultados(mapeados.length);
         const offset = (paginaAlvo - 1) * POR_PAGINA;
@@ -341,12 +344,29 @@ export default function Busca() {
     setErro('');
     setPagina(1);
     saveBuscaRecente({ ...filtros, cidade: filtros.cidades.join(', ') });
-    // Geocodifica cidade agora e passa coords diretamente (evita estado desatualizado)
+
     let centro = centroRaio;
+    let cidadesNaArea = null;
+
     if (raioAtivo && filtros.cidades[0]) {
+      setLoading(true);
+      // 1. Geocodifica cidade centro
       centro = await geocodificarCidade(filtros.cidades[0], filtros.estado);
+      if (centro) {
+        // 2. Busca todas as cidades do estado com coordenadas (Overpass, cached)
+        const todasCidades = await getCidadesEstadoComCoords(filtros.estado);
+        // 3. Filtra as que estão dentro do raio
+        cidadesNaArea = todasCidades
+          .filter(c => haversine(centro.lat, centro.lng, c.lat, c.lng) <= raioKmAtivo)
+          .map(c => c.nome);
+        // Garante que a cidade centro está incluída
+        if (!cidadesNaArea.some(c => c.toLowerCase() === filtros.cidades[0].toLowerCase())) {
+          cidadesNaArea.push(filtros.cidades[0]);
+        }
+      }
     }
-    buscarPagina(1, filtros, sortBy, centro, raioAtivo, raioKmAtivo);
+
+    buscarPagina(1, filtros, sortBy, centro, raioAtivo, raioKmAtivo, cidadesNaArea);
   };
 
   const imgUrlCaixa = (im) => {

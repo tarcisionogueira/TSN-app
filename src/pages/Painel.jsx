@@ -390,7 +390,7 @@ export default function Painel() {
       </div>
       ${im.parecer ? `<h2>Parecer e Viabilidade</h2><div class="corpo">${im.parecer.replace(/</g,'&lt;')}</div>` : ''}
       ${im.mercado ? `<h2>Dados de Mercado</h2><div class="corpo">${im.mercado.replace(/</g,'&lt;')}</div>` : ''}
-      <div class="rodape">TSN Ativos · Relatório gerado em ${data}</div>
+      <div class="rodape">BidPro Brasil · Relatório gerado em ${data}</div>
       <script>window.onload=()=>{window.print();}</script>
     </body></html>`);
     w.document.close();

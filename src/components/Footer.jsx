@@ -9,7 +9,7 @@ export default function Footer() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ background: '#0D63DB', borderRadius: 8, padding: '6px 8px' }}><Briefcase size={16} color="white" /></div>
           <div>
-            <div style={{ fontWeight: 900, fontSize: 14, color: 'white' }}>TSN ATIVOS</div>
+            <div style={{ fontWeight: 900, fontSize: 14, color: 'white' }}>BidPro Brasil</div>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#475569' }}>Leilão & Investimentos</div>
           </div>
         </div>
@@ -19,7 +19,7 @@ export default function Footer() {
         </div>
       </div>
       <div style={{ maxWidth: 1100, margin: '20px auto 0', paddingTop: 16, borderTop: '1px solid #111111', fontSize: 11, color: '#334155', textAlign: 'center' }}>
-        © {new Date().getFullYear()} TSN Ativos. Todos os direitos reservados.
+        © {new Date().getFullYear()} BidPro Brasil. Todos os direitos reservados.
       </div>
     </footer>
   );

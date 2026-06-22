@@ -28,7 +28,7 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8">
-<title>Relatório TSN Ativos — ${d.nome||d.endereco}</title>
+<title>Relatório BidPro Brasil — ${d.nome||d.endereco}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   body{font-family:'Inter',sans-serif;font-size:10.5px;color:#111111;padding:20px;line-height:1.5;background:white;margin:0;}
@@ -56,7 +56,7 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
 
 <div class="hdr av">
   <div>
-    <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">TSN ATIVOS</div>
+    <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">BidPro Brasil</div>
     <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Aquisição em Leilão & Investimentos Estratégicos</div>
     <div style="font-size:13px;font-weight:900;margin-bottom:3px;">ANÁLISE DE VIABILIDADE DE ARREMATAÇÃO</div>
     <div style="font-size:10px;color:#475569;">${(d.tipo||'').toUpperCase()} — ${d.endereco||''} ${d.cidade?'· '+d.cidade:''} ${d.estado?'/'+d.estado:''}</div>
@@ -78,7 +78,7 @@ ${d.observacoes?`<div class="obs av"><b style="font-size:9px;text-transform:uppe
 <div class="viab av" style="border-color:${isViavel?'#10b981':'#dc2626'};background:${isViavel?'#d1fae5':'#fee2e2'};">
   <div style="font-size:15px;font-weight:900;color:${isViavel?'#065f46':'#b91c1c'};">${isViavel?'✓ OPERAÇÃO VIÁVEL — APROVADA':'✗ OPERAÇÃO REPROVADA — RETORNO INSUFICIENTE'}</div>
   <div style="font-size:10px;color:${isViavel?'#047857':'#dc2626'};margin-top:4px;">
-    ${isUsoProprio?`Economia de R$ ${fmt(m.lucro,0)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 40% mínimos':'Abaixo dos 40% exigidos pela TSN Ativos'} · Teto de disputa: R$ ${fmt(teto,0)}`}
+    ${isUsoProprio?`Economia de R$ ${fmt(m.lucro,0)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 40% mínimos':'Abaixo dos 40% exigidos pela BidPro Brasil'} · Teto de disputa: R$ ${fmt(teto,0)}`}
   </div>
 </div>
 
@@ -215,7 +215,7 @@ ${(d.riscos||[]).map(r=>`<div style="padding:6px 10px;margin-bottom:4px;border-r
 ${sec.conc?`<div class="av"><h2>Conclusão e Recomendação da Gestão</h2><pre>${sec.conc}</pre></div>`:''}
 
 <div style="margin-top:28px;border-top:2px solid #e2e8f0;padding-top:12px;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8;">
-  <span>TSN Ativos · Análise gerada em ${new Date().toLocaleString('pt-BR')}</span>
+  <span>BidPro Brasil · Análise gerada em ${new Date().toLocaleString('pt-BR')}</span>
   <span>Documento confidencial · Uso exclusivo do cliente</span>
 </div>
 </body></html>`;

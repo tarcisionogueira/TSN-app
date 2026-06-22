@@ -120,7 +120,7 @@ function CapturaLanding({ id }) {
 
   /* ── Step: SUCESSO ── */
   if (step === 'sucesso') {
-    const msg = produto.mensagem_boas_vindas || `Seu acesso foi liberado! Todo o conteúdo está disponível dentro da plataforma TSN Ativos.`;
+    const msg = produto.mensagem_boas_vindas || `Seu acesso foi liberado! Todo o conteúdo está disponível dentro da plataforma BidPro Brasil.`;
     return (
       <div style={{ minHeight: '100vh', background: '#111111', fontFamily: "'Inter', sans-serif", color: '#e2e8f0' }}>
         <Header />
@@ -167,7 +167,7 @@ function CapturaLanding({ id }) {
             <div style={{ fontSize: 22, marginBottom: 8 }}>🎁</div>
             <div style={{ fontWeight: 800, fontSize: 16, color: '#34d399', marginBottom: 6 }}>Seu acesso é 100% gratuito</div>
             <div style={{ fontSize: 14, color: '#a7f3d0', lineHeight: 1.6 }}>
-              O {tipoLabel.toLowerCase()} fica disponível <strong>dentro da plataforma TSN Ativos</strong> — sem custo, sem cartão de crédito. Basta criar sua conta gratuita em menos de 1 minuto.
+              O {tipoLabel.toLowerCase()} fica disponível <strong>dentro da plataforma BidPro Brasil</strong> — sem custo, sem cartão de crédito. Basta criar sua conta gratuita em menos de 1 minuto.
             </div>
           </div>
 
@@ -338,7 +338,7 @@ function CapturaLanding({ id }) {
             {enviando ? 'Criando conta…' : 'Criar conta e liberar acesso →'}
           </button>
           <div style={{ textAlign: 'center', fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
-            Ao se cadastrar você concorda com os Termos de Uso da TSN Ativos. Acesso gratuito, sem cobranças automáticas.
+            Ao se cadastrar você concorda com os Termos de Uso da BidPro Brasil. Acesso gratuito, sem cobranças automáticas.
           </div>
         </form>
       </div>
@@ -485,7 +485,7 @@ export default function ProdutoLanding() {
           <div style={{ fontSize:14, fontWeight:800, color:'#60a5fa', textTransform:'uppercase', letterSpacing:1, marginBottom:16 }}>O que você está contratando</div>
           <div style={{ display:'flex', flexDirection:'column', gap:12, fontSize:14, color:'#94a3b8', lineHeight:1.6 }}>
             <p style={{ margin:0 }}>
-              Ao clicar em "{ctaLabel}" você contrata diretamente com TSN Ativos o {isPlano ? `plano ${produto.nome}` : `curso ${produto.titulo}`} conforme descrito acima.
+              Ao clicar em "{ctaLabel}" você contrata diretamente com BidPro Brasil o {isPlano ? `plano ${produto.nome}` : `curso ${produto.titulo}`} conforme descrito acima.
             </p>
             <p style={{ margin:0, color:'#cbd5e1' }}>
               <strong style={{ color:'white' }}>Cancelamento:</strong> a qualquer momento em Minha Conta → Cancelar plano. Sem multa.

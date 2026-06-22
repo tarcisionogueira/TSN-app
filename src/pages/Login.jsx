@@ -205,7 +205,7 @@ export default function Login() {
         {/* Banner convite equipe */}
         {conviteEquipeParam && !planoEscolhido && (
           <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#5b21b6', fontWeight: 600 }}>
-            🏢 Convite de equipe TSN Ativos — entre ou crie sua conta para aceitar
+            🏢 Convite de equipe BidPro Brasil — entre ou crie sua conta para aceitar
           </div>
         )}
 
@@ -215,7 +215,7 @@ export default function Login() {
             <Briefcase size={20} color="white" />
           </div>
           <div>
-            <div style={{ fontWeight: 900, fontSize: 16, color: '#111111', letterSpacing: '-0.5px' }}>TSN ATIVOS</div>
+            <div style={{ fontWeight: 900, fontSize: 16, color: '#111111', letterSpacing: '-0.5px' }}>BidPro Brasil</div>
             <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
           </div>
         </div>
@@ -240,7 +240,7 @@ export default function Login() {
         {modo === 'login' && (
           <>
             <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>Entrar</h2>
-            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Acesse sua conta TSN Ativos</p>
+            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Acesse sua conta BidPro Brasil</p>
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <label style={lbl}>Email</label>
@@ -405,7 +405,7 @@ export default function Login() {
               {cpfCheck?.temConta && !cpfCheck.temAcesso && (
                 <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
-                    ⚠️ Este CPF já tem uma conta TSN Ativos.
+                    ⚠️ Este CPF já tem uma conta BidPro Brasil.
                   </div>
                   <div style={{ fontSize: 12, color: '#78350f', marginBottom: 10 }}>
                     {cpfCheck.ehBeneficio

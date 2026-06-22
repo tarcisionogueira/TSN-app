@@ -259,7 +259,7 @@ export default function Atendimento() {
               <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: m.autor_tipo === 'cliente' ? 'flex-start' : 'flex-end' }}>
                 <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>
                   {m.autor_tipo === 'ia' ? (
-                    <><Bot size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />TSN Assistente · {fmtHora(m.criado_em)}</>
+                    <><Bot size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />BidPro Assistente · {fmtHora(m.criado_em)}</>
                   ) : m.autor_tipo === 'atendente' ? (
                     <>{m.autor_nome || 'Atendente'} · {fmtHora(m.criado_em)}</>
                   ) : (

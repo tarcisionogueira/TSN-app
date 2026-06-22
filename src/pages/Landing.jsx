@@ -22,7 +22,7 @@ export default function Landing() {
             <span style={{ background: 'linear-gradient(90deg, #60a5fa, #34d399)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Lucro Garantido.</span>
           </h1>
           <p style={{ fontSize: 18, color: '#94a3b8', maxWidth: 600, margin: '0 auto 40px', lineHeight: 1.7 }}>
-            A TSN Ativos transforma leilões imobiliários em oportunidades estruturadas. Busca, análise financeira, avaliação jurídica e laudo de mercado — tudo em uma plataforma.
+            A BidPro Brasil transforma leilões imobiliários em oportunidades estruturadas. Busca, análise financeira, avaliação jurídica e laudo de mercado — tudo em uma plataforma.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => nav(user ? '/buscar' : '/login')}
@@ -236,7 +236,7 @@ export default function Landing() {
       {/* FOOTER */}
       <footer style={{ background: '#111111', padding: '40px 20px', textAlign: 'center' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ fontSize: 20, fontWeight: 900, color: 'white', marginBottom: 8 }}>TSN ATIVOS</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: 'white', marginBottom: 8 }}>BidPro Brasil</div>
           <div style={{ fontSize: 12, color: '#475569', marginBottom: 20 }}>Aquisição em Leilão & Investimentos Estratégicos · Honorários Jurídicos 10%</div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap', marginBottom: 20 }}>
             {['Buscar Leilões', 'Fazer Análise', 'Meu Painel', 'Planos'].map(l => (
@@ -244,7 +244,7 @@ export default function Landing() {
                 style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>{l}</button>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: '#334155' }}>© {new Date().getFullYear()} TSN Ativos. Todos os direitos reservados.</div>
+          <div style={{ fontSize: 11, color: '#334155' }}>© {new Date().getFullYear()} BidPro Brasil. Todos os direitos reservados.</div>
         </div>
       </footer>
     </div>

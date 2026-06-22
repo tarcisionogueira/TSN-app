@@ -183,7 +183,7 @@ export default function ContratoLink() {
           <ShieldCheck size={18} color="white" />
         </div>
         <div>
-          <div style={{ fontSize:11, color:'#60a5fa', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>TSN Ativos — Contrato Digital</div>
+          <div style={{ fontSize:11, color:'#60a5fa', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>BidPro Brasil — Contrato Digital</div>
           <div style={{ fontSize:15, fontWeight:800, color:'white' }}>{contrato.titulo}</div>
         </div>
       </div>

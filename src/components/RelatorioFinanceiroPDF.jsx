@@ -39,7 +39,7 @@ export function gerarPDFFinanceiro({ grupos, totalEntradas, totalSaidas }) {
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8">
-<title>Relatório Financeiro TSN Ativos</title>
+<title>Relatório Financeiro BidPro Brasil</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   body{font-family:'Inter',sans-serif;font-size:10.5px;color:#111111;padding:20px;line-height:1.5;background:white;margin:0;}
@@ -60,7 +60,7 @@ export function gerarPDFFinanceiro({ grupos, totalEntradas, totalSaidas }) {
 
 <div class="hdr av">
   <div>
-    <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">TSN ATIVOS</div>
+    <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">BidPro Brasil</div>
     <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:2px;">Relatório Financeiro de Operações</div>
   </div>
   <div style="text-align:right;font-size:9px;color:#64748b;">
@@ -87,7 +87,7 @@ export function gerarPDFFinanceiro({ grupos, totalEntradas, totalSaidas }) {
 ${secoes || '<p style="color:#94a3b8;">Nenhum lançamento registrado.</p>'}
 
 <div style="margin-top:24px;font-size:8px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px;">
-  TSN Ativos · Relatório gerado automaticamente · Documento de controle interno
+  BidPro Brasil · Relatório gerado automaticamente · Documento de controle interno
 </div>
 
 <script>window.onload=()=>{setTimeout(()=>window.print(),400);}</script>
