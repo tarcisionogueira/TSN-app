@@ -156,6 +156,13 @@ function csvToImoveis(csv, uf) {
     const ehVendaDireta = modalidadeNorm === 'venda_direta' ||
       (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('venda');
     const leiloeiro = nomeLeiloeiro || 'Caixa Econômica Federal';
+
+    // URL da página do imóvel no portal da Caixa (funciona para todos os imóveis)
+    const urlLote = numeroImovel
+      ? `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroImovel}`
+      : null;
+
+    // Matrícula do imóvel no cartório (portal da Caixa)
     const linkMatricula = numeroImovel
       ? `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${numeroImovel}`
       : null;
@@ -184,6 +191,7 @@ function csvToImoveis(csv, uf) {
       link_edital: ehVendaDireta ? null : (linkDocumento.trim() || null),
       link_regras_venda: ehVendaDireta ? (linkDocumento.trim() || null) : null,
       link_matricula: linkMatricula,
+      url_lote: urlLote,
       link_foto: linkFoto.trim() || null,
       descricao: descricao.trim() || null,
       titulo: `${descricao.trim().slice(0, 80) || 'Imóvel'} — ${cidade.trim()}`,

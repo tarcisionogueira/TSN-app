@@ -270,7 +270,7 @@ export default function ImovelDetalhe() {
                 <div style={{ marginBottom: 10 }}>
                   <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#111111', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
-                    <ExternalLink size={15} /> Ir ao leiloeiro
+                    <ExternalLink size={15} /> {imovel.fonte === 'caixa' ? 'Ver no portal da Caixa' : 'Ir ao leiloeiro'}
                   </a>
                   <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
                     ⚠️ Se o link estiver expirado, o imóvel pode ter sido vendido.{' '}
