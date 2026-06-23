@@ -608,7 +608,7 @@ function UsuariosTab() {
           <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 700, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ fontSize: 17, fontWeight: 800, color: '#111111', margin: 0 }}>
-                Auditoria — {auditoriaUser.nome || auditoriaUser.cpf || auditoriaUser.id}
+                Auditoria — {auditoriaUser?.nome || auditoriaUser?.cpf || auditoriaUser?.id || 'Usuário'}
               </h3>
               <button onClick={() => setAuditoriaUser(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
             </div>

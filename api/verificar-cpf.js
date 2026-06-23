@@ -1,5 +1,4 @@
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -13,15 +12,40 @@ function sb(path, opts = {}) {
   });
 }
 
-export default async function handler(req) {
+// Rate limiting: registra tentativa e bloqueia se exceder limite por IP
+async function checkRateLimit(ip) {
+  if (!ip) return false; // sem IP, permite (ambiente dev)
+  const window = new Date(Date.now() - 60_000).toISOString(); // últimos 60s
+  const res = await sb(
+    `verificar_cpf_rate?ip=eq.${encodeURIComponent(ip)}&criado_em=gte.${window}&select=id`
+  ).catch(() => null);
+  if (!res?.ok) return false; // tabela não existe ainda, permite
+  const rows = await res.json().catch(() => []);
+  if (Array.isArray(rows) && rows.length >= 10) return true; // bloqueado
 
-  const user = await getUser(req);
-  if (!user) return unauthorized();
+  // Registra nova tentativa (fire-and-forget)
+  sb('verificar_cpf_rate', {
+    method: 'POST',
+    body: JSON.stringify({ ip }),
+    headers: { Prefer: 'return=minimal' },
+  }).catch(() => {});
+
+  return false;
+}
+
+export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   if (!SVC) return new Response(JSON.stringify({ error: 'Configuração ausente' }), { status: 500 });
 
+  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+  const bloqueado = await checkRateLimit(ip);
+  if (bloqueado) {
+    return new Response(JSON.stringify({ error: 'Muitas tentativas. Aguarde 1 minuto.' }), { status: 429, headers });
+  }
+
   const { cpf, email, produto } = await req.json();
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_BASE_URL || 'https://bidprobrasil.com.br' };
 
   // ── Verificação de email único ──
   if (email && !cpf) {
@@ -44,7 +68,7 @@ export default async function handler(req) {
 
   const { id: userId, role } = perfis[0];
 
-  // Sem produto específico — só informa que tem conta
+  // Sem produto específico — só informa que tem conta (nunca expõe userId)
   if (!produto) {
     return new Response(JSON.stringify({ temConta: true, role, temAcesso: false, ehBeneficio: false }), { status: 200, headers });
   }
@@ -55,34 +79,30 @@ export default async function handler(req) {
     const nivelAtual = hierarquia.indexOf(role);
     const nivelDesejado = hierarquia.indexOf(produto.planoKey);
     const temAcesso = nivelAtual >= nivelDesejado && nivelDesejado >= 0;
-    return new Response(JSON.stringify({ temConta: true, role, temAcesso, ehBeneficio: true, userId }), { status: 200, headers });
+    return new Response(JSON.stringify({ temConta: true, role, temAcesso, ehBeneficio: true }), { status: 200, headers });
   }
 
   // ── Verifica curso ou ebook ──
   if (produto.tipo === 'curso' || produto.tipo === 'ebook') {
     const tabela = produto.tipo === 'curso' ? 'cursos_admin' : 'ebooks_admin';
-
-    // Busca o produto para saber o preço
     const rp = await sb(`${tabela}?id=eq.${produto.id}&select=preco`);
     const [prod] = await rp.json();
     const preco = Number(prod?.preco || 0);
-    const ehBeneficio = preco === 0; // preço 0 = incluído na assinatura
+    const ehBeneficio = preco === 0;
 
     if (ehBeneficio) {
-      // Produto gratuito/incluído — tem acesso se tiver plano pago
       const temAcesso = PLANOS_COM_CONTEUDO.includes(role);
-      return new Response(JSON.stringify({ temConta: true, role, temAcesso, ehBeneficio: true, userId }), { status: 200, headers });
+      return new Response(JSON.stringify({ temConta: true, role, temAcesso, ehBeneficio: true }), { status: 200, headers });
     } else {
-      // Produto pago avulso — verifica se já comprou individualmente
       const rc = await sb(`compras_produtos?user_id=eq.${userId}&produto_tipo=eq.${produto.tipo}&produto_id=eq.${produto.id}&status=eq.ativo&select=id`);
       const compras = await rc.json();
       const jaComprou = Array.isArray(compras) && compras.length > 0;
       return new Response(
-        JSON.stringify({ temConta: true, role, temAcesso: jaComprou, ehBeneficio: false, produtoPago: true, userId }),
+        JSON.stringify({ temConta: true, role, temAcesso: jaComprou, ehBeneficio: false, produtoPago: true }),
         { status: 200, headers }
       );
     }
   }
 
-  return new Response(JSON.stringify({ temConta: true, role, temAcesso: false, ehBeneficio: false, userId }), { status: 200, headers });
+  return new Response(JSON.stringify({ temConta: true, role, temAcesso: false, ehBeneficio: false }), { status: 200, headers });
 }

@@ -4,7 +4,6 @@ import { Calculator, Gavel, TrendingUp, Target, Lock, Share2, Copy, Check, Info 
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { calcularMetricasCenario, calcularTetoLance, fmt, fmtPct } from '../utils/calculos';
-import { apiCall } from '../utils/apiCall';
 
 const ROLES_COM_ACESSO = ['top1', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
 
@@ -99,7 +98,7 @@ export default function Calculadora() {
     setLeadMsg('');
     try {
       const ref = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
-      const res = await apiCall('/api/verificar-cpf', {
+      const res = await fetch('/api/verificar-cpf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf: leadCpf, email: leadEmail }),
@@ -186,7 +185,7 @@ export default function Calculadora() {
   const m = useMemo(() => calcularMetricasCenario(inputs, vArr, isAVista), [inputs, vArr, isAVista]);
   const teto = useMemo(() => calcularTetoLance(inputs, isAVista, Number(metaRoi) || 0, vMerc), [inputs, isAVista, metaRoi, vMerc]);
 
-  const descontoAvaliacao = vAval > 0 ? (1 - vArr / vAval) * 100 : 0;
+  const descontoAvaliacao = vAval > 0 && vArr > 0 ? (1 - vArr / vAval) * 100 : 0;
 
   // Custos do leilão = leiloeiro + honorários + ITBI+registro (sem débitos/reforma — esses são do imóvel)
   const custosLeilao = m.taxaLeiloeiro + m.honorarios + m.itbiRegistro;
