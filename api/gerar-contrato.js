@@ -56,7 +56,37 @@ export default async function handler(req, res) {
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { descricao: descricaoRaw, tipo, titulo: tituloRaw, arquivos = [], respostas } = req.body || {};
+  const {
+    descricao: descricaoRaw, tipo, titulo: tituloRaw, arquivos = [], respostas,
+    // Novo fluxo CriarContrato
+    conteudo: conteudoDireto, emailAssinante, verificacaoIdentidade, arquivosReferencia, geradoPorIA,
+  } = req.body || {};
+  // Fluxo direto: conteúdo já pronto (assinar documento existente ou contrato gerado pela IA no frontend)
+  if (conteudoDireto && emailAssinante) {
+    try {
+      const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+      const tituloFinal = sanitizeText(tituloRaw, 200) || 'Contrato';
+      const { data, error } = await supabase.from('contratos_link').insert({
+        titulo: tituloFinal,
+        conteudo: sanitizeText(conteudoDireto, 20000),
+        tipo_contrato: tipo || 'servico',
+        status: 'aguardando_assinatura',
+        requer_assinatura: true,
+        criado_por: user.id,
+        assinante_email: sanitizeText(emailAssinante, 200),
+        verificacao_identidade: verificacaoIdentidade || 'nenhuma',
+        arquivos_referencia: arquivosReferencia || [],
+        gerado_por_ia: !!geradoPorIA,
+      }).select('token').single();
+      if (error || !data) return res.status(500).json({ error: 'Erro ao salvar contrato' });
+      await auditLog({ acao: 'contrato_criado', user_id: user.id, ip, detalhes: { titulo: tituloFinal, email: emailAssinante, verificacao: verificacaoIdentidade }, sucesso: true });
+      return res.status(200).json({ ok: true, token: data.token });
+    } catch (e) {
+      console.error('[gerar-contrato direto]', e.message);
+      return res.status(500).json({ error: 'Erro interno' });
+    }
+  }
+
   if (!descricaoRaw) return res.status(400).json({ error: 'descricao obrigatória' });
 
   const descricao = sanitizeText(descricaoRaw, 5000);

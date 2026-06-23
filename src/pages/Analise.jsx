@@ -6,7 +6,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
-  Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle,
+  Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck,
 } from 'lucide-react';
 import { extrairDadosDocumento, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
@@ -18,6 +18,7 @@ import RiscoJuridico from '../components/RiscoJuridico';
 import Lancamentos from '../components/Lancamentos';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { apiCall } from '../utils/apiCall';
+import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
 
 const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
@@ -238,7 +239,7 @@ export default function Analise() {
   const [solicitado, setSolicitado] = useState(false);
 
   // Controle de abertura por seção
-  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false });
+  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false, guia:true });
   const toggleSec = (k) => setOpenSec(p => ({ ...p, [k]: !p[k] }));
 
   const up = useCallback((name, val) => setD(p => ({ ...p, [name]: val })), []);
@@ -1301,6 +1302,22 @@ export default function Analise() {
           )}
         </div>
       </Section>
+
+      {/* ── GUIA PÓS-ARREMATAÇÃO (aparece somente quando status = arrematado) ── */}
+      {d.status === 'arrematado' && (
+        <Section step="7" title="Guia Pós-Arrematação" icon={ClipboardCheck} color="#059669"
+          open={openSec.guia} onToggle={() => toggleSec('guia')}
+          badge={`${d.origem === 'judicial' ? 'Judicial' : 'Extrajudicial'} — checklist completo`}>
+          <div style={{ paddingTop: 14 }}>
+            <GuiaPosArrematacao
+              modalidade={d.origem || 'extrajudicial'}
+              imovelId={d.id}
+              onNavCNJ={() => { toggleSec('cnj'); document.querySelector('[data-sec="cnj"]')?.scrollIntoView({ behavior: 'smooth' }); }}
+              onNavCertidoes={() => { toggleSec('cnj'); }}
+            />
+          </div>
+        </Section>
+      )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
     </div>
