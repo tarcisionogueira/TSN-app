@@ -231,31 +231,43 @@ export default function Checkout() {
     setLoading(true);
     setErro('');
     try {
-      const res = await apiCall('/api/asaas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'criar_assinatura',
-          nome: nomeUsuario,
-          email: user.email,
-          cpf: cpfUsuario,
-          plano: planoApiKey,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao gerar cobrança');
-      const link = data.linkPagamento;
-      setLinkPagamento(link);
-      // Log de aceite dos termos para proteção contra chargeback
-      await logAceite(planoApiKey, plano.preco, data);
-      // Abre o link do Asaas em nova aba automaticamente
-      if (link) window.location.href = link;
-      // Salva IDs para polling de verificação
-      const ids = { subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null };
-      setAsaasIds(ids);
-      // Salva o ID do customer Asaas no perfil
-      if (data.customerId && user?.id) {
-        supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id).then(() => {});
+      // Verifica gateway ativo (MP principal, Asaas backup)
+      const { data: cfgRows } = await supabase.from('config_financeira').select('gateway,ativo');
+      const mpAtivo = cfgRows?.find(r => r.gateway === 'mp')?.ativo !== false; // padrão: MP ativo
+
+      if (mpAtivo) {
+        // ── Mercado Pago ──────────────────────────────────────────────────
+        const planoRecorrente = ['clube', 'top1', 'top2'].includes(planoApiKey);
+        const action = planoRecorrente ? 'criar_assinatura' : 'criar_preferencia';
+        const res = await apiCall('/api/mp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, plano: planoApiKey, email: user.email, nome: nomeUsuario, cpf: cpfUsuario }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao gerar cobrança MP');
+        const link = data.initPoint || data.init_point;
+        setLinkPagamento(link);
+        await logAceite(planoApiKey, plano.preco, { mp_preference_id: data.preferenceId || data.assinaturaId });
+        if (link) window.location.href = link;
+      } else {
+        // ── Asaas (backup) ────────────────────────────────────────────────
+        const res = await apiCall('/api/asaas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'criar_assinatura', nome: nomeUsuario, email: user.email, cpf: cpfUsuario, plano: planoApiKey }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao gerar cobrança');
+        const link = data.linkPagamento;
+        setLinkPagamento(link);
+        await logAceite(planoApiKey, plano.preco, data);
+        if (link) window.location.href = link;
+        const ids = { subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null };
+        setAsaasIds(ids);
+        if (data.customerId && user?.id) {
+          supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id).then(() => {});
+        }
       }
     } catch (err) {
       setErro(err.message);

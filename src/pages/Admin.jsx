@@ -4618,6 +4618,221 @@ function EquipeTab() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FINANCEIRO TAB — Gateway (MP/Asaas), saldo MP, saques da equipe
+// ═══════════════════════════════════════════════════════════════════════════════
+function FinanceiroTab() {
+  const { apiCall } = useApiCall?.() || {};
+  const [gateway, setGateway] = React.useState('mp'); // 'mp' | 'asaas'
+  const [gwSaving, setGwSaving] = React.useState(false);
+  const [gwSaved,  setGwSaved]  = React.useState(false);
+  const [mpSaldo,  setMpSaldo]  = React.useState(null);
+  const [mpLoading, setMpLoading] = React.useState(true);
+  const [saques,   setSaques]   = React.useState([]);
+  const [sacLoading, setSacLoading] = React.useState(true);
+  const [sacTab,   setSacTab]   = React.useState('pendente');
+  const [aprovando, setAprovando] = React.useState({});
+  const [comprovante, setComprovante] = React.useState({});
+  const [erroSac, setErroSac]   = React.useState('');
+
+  React.useEffect(() => {
+    // Carrega config de gateway ativo
+    supabase.from('config_financeira').select('gateway,ativo').then(({ data }) => {
+      const mp = data?.find(r => r.gateway === 'mp');
+      if (mp) setGateway(mp.ativo ? 'mp' : 'asaas');
+    });
+    // Saldo MP
+    fetch('/api/mp-admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabase.auth.getSession()?.access_token}` }, body: JSON.stringify({ action: 'saldo' }) })
+      .then(r => r.json()).then(d => setMpSaldo(d)).catch(() => setMpSaldo(null)).finally(() => setMpLoading(false));
+  }, []);
+
+  React.useEffect(() => {
+    setSacLoading(true);
+    fetch('/api/mp-saque', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabase.auth.getSession()?.access_token}` },
+      body: JSON.stringify({ action: 'listar', status: sacTab }),
+    }).then(r => r.json()).then(d => setSaques(Array.isArray(d) ? d : [])).catch(() => setSaques([])).finally(() => setSacLoading(false));
+  }, [sacTab]);
+
+  const salvarGateway = async (gw) => {
+    setGwSaving(true);
+    await supabase.from('config_financeira').upsert({ gateway: 'mp', ativo: gw === 'mp' }, { onConflict: 'gateway' });
+    await supabase.from('config_financeira').upsert({ gateway: 'asaas', ativo: gw === 'asaas' }, { onConflict: 'gateway' });
+    setGateway(gw);
+    setGwSaving(false);
+    setGwSaved(true);
+    setTimeout(() => setGwSaved(false), 2000);
+  };
+
+  const aprovarSaque = async (saqueId) => {
+    setErroSac('');
+    setAprovando(p => ({ ...p, [saqueId]: true }));
+    const comp = comprovante[saqueId] || '';
+    const res = await fetch('/api/mp-saque', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabase.auth.getSession()?.access_token}` },
+      body: JSON.stringify({ action: 'aprovar', saqueId, comprovante_url: comp }),
+    });
+    const d = await res.json();
+    if (!res.ok) { setErroSac(d.error || 'Erro'); } else { setSaques(p => p.filter(s => s.id !== saqueId)); }
+    setAprovando(p => ({ ...p, [saqueId]: false }));
+  };
+
+  const rejeitarSaque = async (saqueId) => {
+    const motivo = prompt('Motivo da rejeição (será notificado ao profissional):');
+    if (!motivo) return;
+    await fetch('/api/mp-saque', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabase.auth.getSession()?.access_token}` },
+      body: JSON.stringify({ action: 'rejeitar', saqueId, motivo }),
+    });
+    setSaques(p => p.filter(s => s.id !== saqueId));
+  };
+
+  const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const totalPendente = saques.filter(s => s.status === 'pendente').reduce((a, s) => a + Number(s.valor), 0);
+
+  const S2 = {
+    card:    { background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '20px 24px', marginBottom: 20 },
+    label:   { fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6, display: 'block' },
+    gwBtn:   (ativo) => ({ padding: '10px 22px', borderRadius: 10, border: `2px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#eff6ff' : 'white', color: ativo ? '#1d4ed8' : '#64748b', fontWeight: 700, fontSize: 14, cursor: 'pointer' }),
+    tabBtn:  (ativo) => ({ padding: '7px 18px', borderRadius: 8, border: 'none', background: ativo ? '#0D63DB' : '#f1f5f9', color: ativo ? 'white' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }),
+    badge:   (c) => ({ display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, ...c }),
+  };
+
+  const STATUS_COR = {
+    pendente:  { background: '#fef3c7', color: '#92400e' },
+    pago:      { background: '#dcfce7', color: '#15803d' },
+    rejeitado: { background: '#fee2e2', color: '#991b1b' },
+  };
+
+  return (
+    <div style={{ maxWidth: 860 }}>
+      {/* Gateway ativo */}
+      <div style={S2.card}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 16 }}>Gateway de pagamento ativo</div>
+        <div style={{ fontSize: 13, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
+          <strong>Mercado Pago (principal)</strong> — saldo rende CDI, saque toda sexta-feira para a equipe.<br/>
+          <strong>Asaas (backup)</strong> — ativado automaticamente se MP estiver indisponível, ou manualmente aqui.
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button style={S2.gwBtn(gateway === 'mp')} onClick={() => salvarGateway('mp')}>
+            {gateway === 'mp' ? '✓ ' : ''}Mercado Pago (principal)
+          </button>
+          <button style={S2.gwBtn(gateway === 'asaas')} onClick={() => salvarGateway('asaas')}>
+            {gateway === 'asaas' ? '✓ ' : ''}Asaas (backup)
+          </button>
+          {gwSaving && <span style={{ fontSize: 13, color: '#94a3b8' }}>Salvando…</span>}
+          {gwSaved  && <span style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>✓ Salvo</span>}
+        </div>
+      </div>
+
+      {/* Saldo MP */}
+      <div style={S2.card}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 14 }}>Saldo Mercado Pago</div>
+        {mpLoading ? (
+          <div style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</div>
+        ) : mpSaldo?.error ? (
+          <div style={{ color: '#dc2626', fontSize: 13 }}>⚠️ {mpSaldo.error} — configure MP_ACCESS_TOKEN no Vercel</div>
+        ) : mpSaldo ? (
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {[
+              { label: 'Disponível', value: fmtBRL(mpSaldo.available_balance), cor: '#059669' },
+              { label: 'A liberar', value: fmtBRL(mpSaldo.unavailable_balance), cor: '#d97706' },
+              { label: 'Total', value: fmtBRL((mpSaldo.available_balance || 0) + (mpSaldo.unavailable_balance || 0)), cor: '#0D63DB' },
+            ].map(m => (
+              <div key={m.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 20px', minWidth: 140 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>{m.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: m.cor }}>{m.value}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: '#94a3b8', fontSize: 13 }}>Configure MP_ACCESS_TOKEN no Vercel para ver o saldo.</div>
+        )}
+      </div>
+
+      {/* Saques da equipe */}
+      <div style={S2.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111' }}>Saques da Equipe</div>
+            {sacTab === 'pendente' && saques.length > 0 && (
+              <div style={{ fontSize: 12, color: '#059669', fontWeight: 700, marginTop: 2 }}>
+                Total pendente: {fmtBRL(totalPendente)} — pagamento toda sexta-feira
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['pendente', 'pago', 'rejeitado', 'todos'].map(t => (
+              <button key={t} style={S2.tabBtn(sacTab === t)} onClick={() => setSacTab(t)}>
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {erroSac && <div style={{ background: '#fee2e2', color: '#dc2626', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 12 }}>{erroSac}</div>}
+
+        {sacLoading ? (
+          <div style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</div>
+        ) : saques.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: '24px 0', fontSize: 14 }}>
+            Nenhum saque {sacTab !== 'todos' ? sacTab : ''}.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {saques.map(s => (
+              <div key={s.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{s.nome_solicitante}</div>
+                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                      {s.role} · {new Date(s.solicitado_em).toLocaleDateString('pt-BR')}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>
+                      {s.chave_pix ? <>PIX: <strong>{s.chave_pix}</strong></> : <>{s.banco} Ag. {s.agencia} C. {s.conta} ({s.tipo_conta})</>}
+                    </div>
+                    {s.observacao && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{s.observacao}</div>}
+                    {s.observacao_admin && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3 }}>Admin: {s.observacao_admin}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: '#059669' }}>{fmtBRL(s.valor)}</div>
+                    <div style={S2.badge(STATUS_COR[s.status] || {})}>{s.status}</div>
+                  </div>
+                </div>
+
+                {s.status === 'pendente' && (
+                  <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input
+                      placeholder="URL do comprovante (opcional)"
+                      value={comprovante[s.id] || ''}
+                      onChange={e => setComprovante(p => ({ ...p, [s.id]: e.target.value }))}
+                      style={{ flex: 1, minWidth: 200, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+                    />
+                    <button
+                      onClick={() => aprovarSaque(s.id)}
+                      disabled={aprovando[s.id]}
+                      style={{ padding: '7px 18px', background: aprovando[s.id] ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      {aprovando[s.id] ? 'Aprovando…' : '✓ Pago'}
+                    </button>
+                    <button
+                      onClick={() => rejeitarSaque(s.id)}
+                      style={{ padding: '7px 18px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      ✕ Rejeitar
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // MARKETING TAB — inteligência de buscas, demográficos, SDR e oportunidades
 // (visível APENAS para role === 'admin')
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -5143,7 +5358,7 @@ function MarketingTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Registros', 'CNJ', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Configurações'];
 
 function RegistrosTab() {
   const [transcricoes, setTranscricoes] = useState([]);
@@ -5535,6 +5750,7 @@ export default function Admin() {
         {tab === 'Registros'      && <RegistrosTab />}
         {tab === 'CNJ'            && <CnjTab />}
         {tab === 'Configurações'  && <ConfigTab />}
+        {tab === 'Financeiro'     && <FinanceiroTab />}
         {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}
       </div>
     </div>
