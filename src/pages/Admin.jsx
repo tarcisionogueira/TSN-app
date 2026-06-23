@@ -1077,7 +1077,6 @@ function ConfigTab() {
     else setHonorariosErr('Erro ao salvar: ' + error.message);
   }
 
-  function salvar() {
   const isDirty = dirtyIds.size > 0;
 
   useEffect(() => {
@@ -1541,7 +1540,6 @@ function ConfigTab() {
 
     </div>
   );
-}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
