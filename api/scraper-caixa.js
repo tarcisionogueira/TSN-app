@@ -320,9 +320,9 @@ export default async function handler(req, res) {
 
   for (let i = 0; i < estados.length; i++) {
     const uf = estados[i];
-    // 10s entre estados para simular navegação humana e evitar detecção de bot
-    // (0s no primeiro para não atrasar o início desnecessariamente)
-    if (i > 0) await sleep(10000);
+    // 10s entre estados só quando processa múltiplos em sequência (trigger manual ou legado)
+    // No cron normal (1 estado/chamada) este bloco nunca executa
+    if (i > 0 && estados.length > 1) await sleep(10000);
 
     let tentativas = 0;
     let resultado = null;
