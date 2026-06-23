@@ -108,25 +108,30 @@ const CAIXA_HEADERS = {
 };
 
 async function fetchEstado(uf) {
-  // Tenta URL principal
   const urls = [
     `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf}.csv`,
     `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf.toLowerCase()}.csv`,
   ];
+  let lastStatus = null;
   for (const url of urls) {
     try {
       const res = await fetch(url, {
         headers: CAIXA_HEADERS,
         signal: AbortSignal.timeout(30000),
       });
+      lastStatus = res.status;
       if (!res.ok) continue;
       const buf = await res.arrayBuffer();
       const text = new TextDecoder('latin1').decode(buf);
-      if (text.length > 100) return text; // arquivo válido
-    } catch (_) {}
+      if (text.length > 100) return { csv: text };
+    } catch (e) {
+      return { erro: `Timeout/rede: ${e.message}` };
+    }
   }
-  return null;
+  return { erro: `HTTP ${lastStatus} — Caixa recusou a requisição (possível bloqueio de IP de cloud)` };
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function csvToImoveis(csv, uf) {
   const lines = csv.split('\n').filter(l => l.trim());
@@ -297,13 +302,14 @@ export default async function handler(req, res) {
 
   for (const uf of estados) {
     try {
-      const csv = await fetchEstado(uf);
-      if (!csv) {
+      const resultado = await fetchEstado(uf);
+      if (!resultado?.csv) {
         estadosErro.push(uf);
-        erros.push({ uf, erro: 'CSV não retornado (bloqueio, timeout ou URL inválida)' });
+        erros.push({ uf, erro: resultado?.erro || 'CSV não retornado' });
+        await sleep(2000); // aguarda antes do próximo estado em caso de erro
         continue;
       }
-      const imoveis = csvToImoveis(csv, uf);
+      const imoveis = csvToImoveis(resultado.csv, uf);
       if (imoveis.length === 0) {
         estadosOk.push(uf);
         continue;
