@@ -285,25 +285,84 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase env vars not configured' });
   }
 
-  // Suporta GET (cron) e POST (admin manual)
-  // GET sem ?estados= → deriva o estado pelo minuto UTC (cron roda a cada 2 min às 01h)
-  // GET com ?estados= → processa apenas esses estados (trigger manual por URL)
-  // POST com body.estados → trigger manual do admin
-  let estados = TODOS_ESTADOS;
   const url = new URL(req.url || '', 'http://localhost');
   const qEstados = req.query?.estados || url.searchParams.get('estados');
 
-  if (qEstados) {
-    estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
-  } else if (req.method === 'GET') {
-    // Cron às */2 22 * * * — cada invocação processa 1 estado pelo índice do minuto
-    // 22:00→AC, 22:02→AL, ..., 22:52→TO  (54 min no total)
+  // ── Modo cron (GET sem ?estados=) ──────────────────────────────────────────
+  // Cron */2 22 * * *:
+  //   Minutos 00–52 (índices 0-26) → processa TODOS_ESTADOS[idx]
+  //   Minutos 54–58 (índices 27+)  → slot de retry: reprocessa estados que falharam
+  if (req.method === 'GET' && !qEstados) {
     const minuto = new Date().getUTCMinutes();
     const idx = Math.floor(minuto / 2);
-    if (idx >= TODOS_ESTADOS.length) {
-      return res.status(200).json({ msg: 'idle', minuto, idx });
+
+    if (idx < TODOS_ESTADOS.length) {
+      // ── Rodada normal: 1ª tentativa + retry de 30s se falhar ──────────────
+      const uf = TODOS_ESTADOS[idx];
+      let resultado = await fetchEstado(uf);
+
+      if (!resultado?.csv) {
+        // Falhou: espera 30s (cobre sobrecarga de servidor) e tenta uma vez mais
+        await sleep(30000);
+        resultado = await fetchEstado(uf);
+      }
+
+      if (!resultado?.csv) {
+        // 2ª falha: envia para fila de retry (final da fila — minutos 54-58)
+        await fetch(`${supabaseUrl}/rest/v1/scraper_retry`, {
+          method: 'POST',
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ uf, tentativas: 1, ultimo_erro: resultado?.erro || 'sem CSV', falhou_em: new Date().toISOString() }),
+        }).catch(() => {});
+        return res.status(200).json({ uf, status: 'retry_agendado', erro: resultado?.erro });
+      }
+
+      // Sucesso: processa e remove da fila de retry se estava lá
+      await fetch(`${supabaseUrl}/rest/v1/scraper_retry?uf=eq.${uf}`, {
+        method: 'DELETE',
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' },
+      }).catch(() => {});
+
+      const imoveis = csvToImoveis(resultado.csv, uf);
+      for (let j = 0; j < imoveis.length; j += 100) await upsertBatch(imoveis.slice(j, j + 100), supabaseUrl, serviceKey);
+      return res.status(200).json({ uf, status: 'ok', processados: imoveis.length });
+
+    } else {
+      // ── Slot de retry (minutos 54–58): pega o estado com mais tentativas pendentes ──
+      const retryRes = await fetch(`${supabaseUrl}/rest/v1/scraper_retry?order=tentativas.asc&limit=1`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      });
+      const retryList = retryRes.ok ? await retryRes.json() : [];
+      if (!retryList.length) return res.status(200).json({ msg: 'retry_vazio' });
+
+      const { uf, tentativas } = retryList[0];
+      const resultado = await fetchEstado(uf);
+
+      if (resultado?.csv) {
+        // Retry bem-sucedido: processa e limpa da fila
+        await fetch(`${supabaseUrl}/rest/v1/scraper_retry?uf=eq.${uf}`, {
+          method: 'DELETE',
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' },
+        }).catch(() => {});
+        const imoveis = csvToImoveis(resultado.csv, uf);
+        for (let j = 0; j < imoveis.length; j += 100) await upsertBatch(imoveis.slice(j, j + 100), supabaseUrl, serviceKey);
+        return res.status(200).json({ uf, status: 'retry_ok', processados: imoveis.length, tentativas });
+      } else {
+        // Retry falhou: incrementa tentativas (admin verá no painel)
+        await fetch(`${supabaseUrl}/rest/v1/scraper_retry?uf=eq.${uf}`, {
+          method: 'PATCH',
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ tentativas: tentativas + 1, ultimo_erro: resultado?.erro, falhou_em: new Date().toISOString() }),
+        }).catch(() => {});
+        return res.status(200).json({ uf, status: 'retry_falhou', tentativas: tentativas + 1, erro: resultado?.erro });
+      }
     }
-    estados = [TODOS_ESTADOS[idx]];
+  }
+
+  // ── Modo manual (POST ou GET com ?estados=) ────────────────────────────────
+  let estados = TODOS_ESTADOS;
+  if (qEstados) {
+    estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
   } else if (req.body?.estados?.length > 0) {
     estados = req.body.estados;
   }
@@ -314,30 +373,23 @@ export default async function handler(req, res) {
   let totalProcessados = 0;
   let fotosProcessadas = 0;
   const MAX_FOTOS_POR_RUN = 200;
-
-  // Collect all imoveis first, then upsert, then upload photos
   const todosImoveis = [];
 
   for (let i = 0; i < estados.length; i++) {
     const uf = estados[i];
-    // 10s entre estados só quando processa múltiplos em sequência (trigger manual ou legado)
-    // No cron normal (1 estado/chamada) este bloco nunca executa
-    if (i > 0 && estados.length > 1) await sleep(10000);
+    if (i > 0 && estados.length > 1) await sleep(5000);
 
-    let tentativas = 0;
-    let resultado = null;
-    while (tentativas < 3) {
+    // Modo manual: 1 tentativa. Se falhar, 30s e mais 1 tentativa.
+    let resultado = await fetchEstado(uf);
+    if (!resultado?.csv) {
+      await sleep(30000);
       resultado = await fetchEstado(uf);
-      if (resultado?.csv) break;
-      tentativas++;
-      // Backoff exponencial em caso de bloqueio: 15s, 30s
-      if (tentativas < 3) await sleep(15000 * tentativas);
     }
 
     try {
       if (!resultado?.csv) {
         estadosErro.push(uf);
-        erros.push({ uf, erro: resultado?.erro || 'CSV não retornado após 3 tentativas' });
+        erros.push({ uf, erro: resultado?.erro || 'CSV não retornado' });
         continue;
       }
       const imoveis = csvToImoveis(resultado.csv, uf);
