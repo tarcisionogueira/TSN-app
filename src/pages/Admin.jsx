@@ -3529,6 +3529,8 @@ function ScrapersTab() {
   const [running, setRunning] = useState(false);
   const [resultado, setResultado] = useState(null);
   const [erroMsg, setErroMsg] = useState('');
+  // Scraper por região (igual geocodificação)
+  const [scraperRegiao, setScraperRegiao] = useState({}); // { Norte: {rodando,ok,erros,...} }
 
   // Geocodificação com loop automático
   const [geocRodando, setGeocRodando] = useState(false);
@@ -3544,15 +3546,28 @@ function ScrapersTab() {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
 
-  async function executarScraper() {
+  async function executarScraper(estados = null) {
     setRunning(true); setResultado(null); setErroMsg('');
     try {
-      const r = await apiCall('/api/scraper-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const body = estados ? { estados } : {};
+      const r = await apiCall('/api/scraper-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok) setErroMsg(d.error || 'Erro ao executar o scraper.');
       else { setResultado(d); apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}); }
     } catch (e) { setErroMsg(e.message); }
     setRunning(false);
+  }
+
+  async function executarScraperRegiao(regiao, estados) {
+    setScraperRegiao(g => ({ ...g, [regiao]: { rodando: true, processados: 0, ok: [], erros: [] } }));
+    try {
+      const r = await apiCall('/api/scraper-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estados }) });
+      const d = await r.json();
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, ok: d.estados_ok || [], erros: d.estados_erro || [], detalhes: d.erros || [] } }));
+      apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {});
+    } catch (e) {
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message, ok: [], erros: [] } }));
+    }
   }
 
   async function iniciarGeocLoop(estados = null) {
@@ -3652,27 +3667,60 @@ function ScrapersTab() {
               <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Ativo · CSV público</div>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
-            Importa todos os imóveis do portal da Caixa (27 estados). Fotos e editais via link externo — sem custo de storage.
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10, lineHeight: 1.6 }}>
+            Importa todos os imóveis da Caixa (27 estados). 3s entre estados + retry automático × 3 para evitar bloqueio.
           </div>
           {status && (
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#475569', display: 'flex', gap: 12 }}>
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#475569', display: 'flex', gap: 12 }}>
               <span>📦 <b>{status.total?.toLocaleString('pt-BR') || 0}</b> imóveis</span>
               {status.ultima_atualizacao && <span>🕐 {new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</span>}
             </div>
           )}
           {resultado && (
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#166534' }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#166534' }}>
               ✅ <b>{resultado.processados?.toLocaleString('pt-BR')}</b> importados · {resultado.estados_ok?.length} estados OK
-              {resultado.estados_erro?.length > 0 && <span style={{ color: '#dc2626' }}> · {resultado.estados_erro.length} erros</span>}
+              {resultado.estados_erro?.length > 0 && (
+                <div style={{ color: '#dc2626', marginTop: 4 }}>
+                  ❌ Falhas: {resultado.estados_erro.join(', ')}
+                  {resultado.erros?.[0] && <div style={{ marginTop: 2, fontSize: 11 }}>{resultado.erros[0].erro}</div>}
+                </div>
+              )}
             </div>
           )}
-          {erroMsg && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#dc2626' }}>⚠️ {erroMsg}</div>}
-          <button onClick={executarScraper} disabled={running}
-            style={{ width: '100%', padding: '10px', background: running ? '#94a3b8' : '#c2410c', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: running ? 'default' : 'pointer' }}>
-            {running ? '⏳ Importando...' : '🔄 Importar agora'}
+          {erroMsg && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#dc2626' }}>⚠️ {erroMsg}</div>}
+
+          <button onClick={() => executarScraper()} disabled={running}
+            style={{ width: '100%', padding: '9px', background: running ? '#94a3b8' : '#c2410c', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: running ? 'default' : 'pointer', marginBottom: 10 }}>
+            {running ? '⏳ Importando todos os estados...' : '🔄 Importar todos (27 estados)'}
           </button>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>Cron automático: todo dia às 01:00</div>
+
+          {/* Workers por região */}
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>Por região (menos risco de bloqueio):</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {Object.entries(REGIOES_ESTADOS).map(([regiao, ests]) => {
+              const r = scraperRegiao[regiao] || {};
+              return (
+                <div key={regiao} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 7, padding: '5px 8px', fontSize: 11 }}>
+                  <span style={{ minWidth: 90, fontWeight: 700, color: '#334155' }}>{regiao}</span>
+                  {r.rodando ? (
+                    <span style={{ color: '#c2410c' }}>⏳ Importando...</span>
+                  ) : r.processados != null ? (
+                    <>
+                      <span style={{ color: '#059669' }}>✅ {r.processados?.toLocaleString('pt-BR')} · {r.ok?.length} ok</span>
+                      {r.erros?.length > 0 && <span style={{ color: '#dc2626' }}> · {r.erros.join(',')} falhou</span>}
+                      <button onClick={() => executarScraperRegiao(regiao, ests)} style={{ marginLeft: 'auto', padding: '2px 8px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>↺</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ color: '#94a3b8' }}>{ests.join(', ')}</span>
+                      <button onClick={() => executarScraperRegiao(regiao, ests)} style={{ marginLeft: 'auto', padding: '2px 8px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>▶</button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>Cron automático: todo dia às 01:00</div>
         </div>
 
         {/* ── Geocodificação ── */}

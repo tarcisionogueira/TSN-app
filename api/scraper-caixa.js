@@ -300,13 +300,25 @@ export default async function handler(req, res) {
   // Collect all imoveis first, then upsert, then upload photos
   const todosImoveis = [];
 
-  for (const uf of estados) {
+  for (let i = 0; i < estados.length; i++) {
+    const uf = estados[i];
+    // Delay entre estados para não disparar detecção de bot da Caixa
+    // Primeiro estado sem delay; demais: 3s (simula navegação humana)
+    if (i > 0) await sleep(3000);
+
+    let tentativas = 0;
+    let resultado = null;
+    while (tentativas < 3) {
+      resultado = await fetchEstado(uf);
+      if (resultado?.csv) break;
+      tentativas++;
+      if (tentativas < 3) await sleep(5000 * tentativas); // backoff: 5s, 10s
+    }
+
     try {
-      const resultado = await fetchEstado(uf);
       if (!resultado?.csv) {
         estadosErro.push(uf);
-        erros.push({ uf, erro: resultado?.erro || 'CSV não retornado' });
-        await sleep(2000); // aguarda antes do próximo estado em caso de erro
+        erros.push({ uf, erro: resultado?.erro || 'CSV não retornado após 3 tentativas' });
         continue;
       }
       const imoveis = csvToImoveis(resultado.csv, uf);
@@ -314,19 +326,13 @@ export default async function handler(req, res) {
         estadosOk.push(uf);
         continue;
       }
-      for (let i = 0; i < imoveis.length; i += 100) {
-        const chunk = imoveis.slice(i, i + 100);
+      for (let j = 0; j < imoveis.length; j += 100) {
+        const chunk = imoveis.slice(j, j + 100);
         await upsertBatch(chunk, supabaseUrl, serviceKey);
       }
       totalProcessados += imoveis.length;
       todosImoveis.push(...imoveis);
       estadosOk.push(uf);
-      // Dispara geocodificação em background para novos imóveis (sem aguardar)
-      fetch(`${process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app'}/api/geocodificar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limite: Math.min(imoveis.length, 50) }),
-      }).catch(() => {});
     } catch (e) {
       estadosErro.push(uf);
       erros.push({ uf, erro: e.message });
