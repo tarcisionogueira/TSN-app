@@ -1,3 +1,4 @@
+import { getUser, getUserRole } from './_auth.js';
 // Define ASAAS_ENV=sandbox na Vercel para testar sem cobrar de verdade.
 // Em produção (default) usa a URL real do Asaas.
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
@@ -82,6 +83,9 @@ async function asaasPut(path, body) {
 }
 
 export default async function handler(req, res) {
+
+  const user = await getUser(req);
+  if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   if (!API_KEY) {

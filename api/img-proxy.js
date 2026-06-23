@@ -6,23 +6,39 @@ export default async function handler(req) {
 
   if (!url) return new Response('Missing url', { status: 400 });
 
-  // Só permite domínios conhecidos de leiloeiros
-  const allowed = [
+  // Whitelist exata de hostnames permitidos (sem substring match para evitar SSRF)
+  const ALLOWED_HOSTS = new Set([
     'venda-imoveis.caixa.gov.br',
     'imovelx.caixa.gov.br',
     'www.caixa.gov.br',
+    'leiloes.superbid.net',
+    'img.superbid.net',
+    'www.superbid.net',
     'superbid.net',
     'sold.com.br',
+    'www.sold.com.br',
     'leiloeiro.com.br',
-  ];
+    'www.leiloeiro.com.br',
+    'megaleiloes.com.br',
+    'www.megaleiloes.com.br',
+    'zukerman.com.br',
+    'www.zukerman.com.br',
+    'eleiloes.com.br',
+    'www.eleiloes.com.br',
+  ]);
   let targetUrl;
   try {
     targetUrl = new URL(url);
   } catch {
     return new Response('Invalid url', { status: 400 });
   }
-  if (!allowed.some(d => targetUrl.hostname.includes(d))) {
+  // Exact match — impede bypass via evil-venda-imoveis.caixa.gov.br
+  if (!ALLOWED_HOSTS.has(targetUrl.hostname)) {
     return new Response('Domain not allowed', { status: 403 });
+  }
+  // Só HTTPS
+  if (targetUrl.protocol !== 'https:') {
+    return new Response('Only HTTPS allowed', { status: 403 });
   }
 
   try {

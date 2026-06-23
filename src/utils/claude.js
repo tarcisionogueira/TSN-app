@@ -1,3 +1,4 @@
+import { apiCall } from './apiCall';
 // Cliente Claude — suporta dev (VITE_CLAUDE_KEY) e produção (/api/claude via Vercel)
 const DEV_KEY = import.meta.env.VITE_CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
@@ -18,7 +19,7 @@ async function callAPI(payload, useSearch = false) {
     return r.json();
   }
   // Produção: via Edge Function (seguro)
-  const r = await fetch('/api/claude', {
+  const r = await apiCall('/api/claude, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, useSearch }),

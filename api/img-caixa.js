@@ -64,6 +64,12 @@ export default async function handler(req) {
       imgUrl = `https://venda-imoveis.caixa.gov.br${imgUrl}`;
     }
 
+    // Valida que a URL final é estritamente do domínio da Caixa
+    const parsedImg = new URL(imgUrl);
+    if (parsedImg.hostname !== 'venda-imoveis.caixa.gov.br') {
+      return new Response('URL de imagem inválida', { status: 403 });
+    }
+
     // Busca a imagem e faz proxy
     const imgResp = await fetch(imgUrl, {
       headers: { 'Referer': detalheUrl },

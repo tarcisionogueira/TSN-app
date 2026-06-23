@@ -1,9 +1,13 @@
 export const config = { runtime: 'edge' };
+import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 const DAILY_API = 'https://api.daily.co/v1';
 const DOMAIN = 'tsn-reunioes';
 
 export default async function handler(req) {
+
+  const user = await getUser(req);
+  if (!user) return unauthorized();
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const DAILY_KEY = process.env.DAILY_API_KEY;

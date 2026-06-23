@@ -1,4 +1,5 @@
 export const config = { runtime: 'edge' };
+import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -12,6 +13,11 @@ async function sbGet(path) {
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const user = await getUser(req);
+  if (!user) return unauthorized();
+  const role = await getUserRole(user.id);
+  if (role !== 'admin') return forbidden();
 
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return new Response(JSON.stringify({ error: 'CLAUDE_KEY não configurada' }), { status: 500 });

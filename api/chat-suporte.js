@@ -1,4 +1,5 @@
 export const config = { runtime: 'edge' };
+import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 const SYSTEM = `Você é o assistente de suporte da TSN Ativos, plataforma especializada em análise de imóveis em leilão judicial e extrajudicial no Brasil.
 
@@ -40,6 +41,9 @@ SOMENTE encaminhe quando for absolutamente necessário — ações na conta do c
 - Sempre pergunte "Isso esclareceu sua dúvida?" ou ofereça aprofundar o tema ao final de respostas longas`;
 
 export default async function handler(req) {
+
+  const user = await getUser(req);
+  if (!user) return unauthorized();
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const apiKey = process.env.CLAUDE_KEY;
@@ -80,7 +84,7 @@ export default async function handler(req) {
     data = await res.json();
   } catch (_) {
     return new Response(JSON.stringify({ resposta: 'Desculpe, não consegui processar sua mensagem no momento. Nossa equipe irá atendê-lo em breve.', escalar: true }), {
-      status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_BASE_URL || 'https://bidprobrasil.com.br' },
     });
   }
 
@@ -93,6 +97,6 @@ export default async function handler(req) {
 
   return new Response(JSON.stringify({ resposta, escalar }), {
     status: 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_BASE_URL || 'https://bidprobrasil.com.br' },
   });
 }

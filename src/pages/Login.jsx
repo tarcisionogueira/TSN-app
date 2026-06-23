@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { trackCadastro } from '../utils/gtag';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
+import { apiCall } from '../utils/apiCall';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -81,7 +82,7 @@ export default function Login() {
   async function checarEmail(email) {
     if (!email || !email.includes('@')) return;
     try {
-      const res = await fetch('/api/verificar-cpf', {
+      const res = await apiCall('/api/verificar-cpf, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -101,7 +102,7 @@ export default function Login() {
         : produtoParam
         ? { tipo: produtoParam.split(':')[0], id: produtoParam.split(':')[1] }
         : null;
-      const res = await fetch('/api/verificar-cpf', {
+      const res = await apiCall('/api/verificar-cpf, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf: cpfLimpo, produto }),

@@ -1,3 +1,4 @@
+import { getUser, getUserRole } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 
 // Dados fixos da empresa contratante
@@ -43,6 +44,9 @@ const PADROES = {
 };
 
 export default async function handler(req, res) {
+
+  const user = await getUser(req);
+  if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
   const { descricao: descricaoRaw, tipo, titulo, arquivos = [], respostas } = req.body || {};

@@ -11,15 +11,17 @@ import {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  // Verifica token secreto configurado no painel Asaas
+  // Verifica token secreto — rejeita sempre se não configurado ou inválido
   const webhookToken = process.env.ASAAS_WEBHOOK_TOKEN;
-  if (webhookToken) {
-    const received = req.headers['asaas-access-token']
-      || req.headers['authorization']?.replace('Bearer ', '');
-    if (received !== webhookToken) {
-      console.warn('[asaas] token inválido');
-      return res.status(401).json({ error: 'Não autorizado' });
-    }
+  if (!webhookToken) {
+    console.error('[asaas] ASAAS_WEBHOOK_TOKEN não configurado — rejeitando webhook');
+    return res.status(500).json({ error: 'Webhook não configurado' });
+  }
+  const received = req.headers['asaas-access-token']
+    || req.headers['authorization']?.replace('Bearer ', '');
+  if (!received || received !== webhookToken) {
+    console.warn('[asaas] token inválido ou ausente');
+    return res.status(401).json({ error: 'Não autorizado' });
   }
 
   const event = req.body;

@@ -1,4 +1,5 @@
 export const config = { runtime: 'edge' };
+import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -11,6 +12,9 @@ function sb(path, opts = {}) {
 }
 
 export default async function handler(req) {
+
+  const user = await getUser(req);
+  if (!user) return unauthorized();
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   if (!SVC) return new Response(JSON.stringify({ error: 'Configuração ausente' }), { status: 500 });
 

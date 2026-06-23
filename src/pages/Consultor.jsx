@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlanos } from '../contexts/PlanosContext';
 import { supabase } from '../utils/supabase';
 import { fmt } from '../utils/calculos';
+import { apiCall } from '../utils/apiCall';
 
 const ROLES_CONSULTOR = ['consultor', 'admin'];
 
@@ -260,7 +261,7 @@ export default function Consultor() {
     const reuniaoEm = `${reuniaoForm.data}T${reuniaoForm.hora}:00`;
     const fakeId = `consultor-${user.id.slice(0,8)}-${Date.now()}`;
     try {
-      const res = await fetch('/api/criar-sala-reuniao', {
+      const res = await apiCall('/api/criar-sala-reuniao, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ solicitacaoId: fakeId, reuniaoEm, duracaoMin: Number(reuniaoForm.duracao) }),
@@ -276,7 +277,7 @@ export default function Consultor() {
     setEstendendo(true);
     setEstendeuMsg('');
     try {
-      const res = await fetch('/api/estender-reuniao', {
+      const res = await apiCall('/api/estender-reuniao, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomName: reuniaoInfo.roomName, minutosExtras: min }),

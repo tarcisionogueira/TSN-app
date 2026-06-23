@@ -4,6 +4,7 @@ import { Calculator, Gavel, TrendingUp, Target, Lock, Share2, Copy, Check, Info 
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { calcularMetricasCenario, calcularTetoLance, fmt, fmtPct } from '../utils/calculos';
+import { apiCall } from '../utils/apiCall';
 
 const ROLES_COM_ACESSO = ['top1', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
 
@@ -98,7 +99,7 @@ export default function Calculadora() {
     setLeadMsg('');
     try {
       const ref = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
-      const res = await fetch('/api/verificar-cpf', {
+      const res = await apiCall('/api/verificar-cpf, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf: leadCpf, email: leadEmail }),

@@ -1,4 +1,5 @@
 export const config = { runtime: 'edge' };
+import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -13,11 +14,14 @@ function sb(path, opts = {}) {
 }
 
 export default async function handler(req) {
+
+  const user = await getUser(req);
+  if (!user) return unauthorized();
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   if (!SVC) return new Response(JSON.stringify({ error: 'Configuração ausente' }), { status: 500 });
 
   const { cpf, email, produto } = await req.json();
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_BASE_URL || 'https://bidprobrasil.com.br' };
 
   // ── Verificação de email único ──
   if (email && !cpf) {

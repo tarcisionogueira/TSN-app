@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiCall } from '../utils/apiCall';
 
 const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -29,7 +30,7 @@ export default function AdminFinanceiro() {
   async function loadFinancas() {
     setLoadingFin(true);
     try {
-      const res = await fetch('/api/asaas', {
+      const res = await apiCall('/api/asaas, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'financas' }),
@@ -42,7 +43,7 @@ export default function AdminFinanceiro() {
   async function loadExtrato() {
     setLoadingExt(true);
     try {
-      const res = await fetch('/api/asaas', {
+      const res = await apiCall('/api/asaas, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'extrato' }),
@@ -59,7 +60,7 @@ export default function AdminFinanceiro() {
     setPixLoading(true);
     setPixResult(null);
     try {
-      const res = await fetch('/api/asaas', {
+      const res = await apiCall('/api/asaas, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

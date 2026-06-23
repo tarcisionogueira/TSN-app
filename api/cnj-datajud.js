@@ -1,3 +1,4 @@
+import { getUser, getUserRole } from './_auth.js';
 /**
  * API CNJ DataJud — consulta jurídica completa para segurança da operação
  * Busca em tribunal estadual + TRF da região + STJ/STF
@@ -205,6 +206,9 @@ function gerarParecerRisco(processos) {
 }
 
 export default async function handler(req, res) {
+
+  const user = await getUser(req);
+  if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { numero_processo, nome_parte, uf } = req.body || {};
