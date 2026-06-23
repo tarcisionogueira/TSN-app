@@ -16,6 +16,10 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'dados insuficientes' }), { status: 400 });
   }
 
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clienteEmail)) {
+    return new Response(JSON.stringify({ error: 'clienteEmail inválido' }), { status: 400 });
+  }
+
   const dataFormatada = new Date(reuniaoEm).toLocaleString('pt-BR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',

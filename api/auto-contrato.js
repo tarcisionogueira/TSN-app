@@ -109,6 +109,9 @@ export default async function handler(req, res) {
   if (!planoKey || !['assessorado', 'clube'].includes(planoKey)) {
     return res.status(400).json({ error: 'planoKey deve ser assessorado ou clube' });
   }
+  if (emailUsuario && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailUsuario)) {
+    return res.status(400).json({ error: 'emailUsuario inválido' });
+  }
 
   // Tenta buscar nome do perfil do usuário
   let nomeContrato = nomeUsuario || '';

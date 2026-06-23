@@ -10,6 +10,16 @@ export default async function handler(req, res) {
   if (req.method === 'GET') return res.status(200).json({ ok: true });
   if (req.method !== 'POST') return res.status(405).end();
 
+  // Verifica segredo compartilhado enviado pelo Daily.co no header
+  const DAILY_WEBHOOK_SECRET = process.env.DAILY_WEBHOOK_SECRET;
+  if (DAILY_WEBHOOK_SECRET) {
+    const sentSecret = req.headers['x-daily-webhook-secret'] || req.headers['authorization'] || '';
+    const clean = sentSecret.replace(/^Bearer\s+/i, '').trim();
+    if (clean !== DAILY_WEBHOOK_SECRET) {
+      return res.status(401).json({ error: 'Webhook secret inválido' });
+    }
+  }
+
   const event = req.body;
   const tipo = event?.action;
 
