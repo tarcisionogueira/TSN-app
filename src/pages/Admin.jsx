@@ -2475,6 +2475,8 @@ function DashboardTab() {
   const [periodo, setPeriodo] = useState('mes');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
+  const [hcItemAberto, setHcItemAberto] = React.useState(null);
+  const [acaoStatus, setAcaoStatus] = React.useState({});
 
   function getRange(p, ini, fim) {
     const now = new Date();
@@ -2609,8 +2611,6 @@ function DashboardTab() {
   const hcBg  = { ok: '#f0fdf4', aviso: '#fffbeb', erro: '#fef2f2' };
   const hcBorder = { ok: '#bbf7d0', aviso: '#fde68a', erro: '#fecaca' };
   const hcIcon = { ok: '✅', aviso: '⚠️', erro: '🔴' };
-  const [hcItemAberto, setHcItemAberto] = React.useState(null);
-  const [acaoStatus, setAcaoStatus] = React.useState({});
 
   const diagnosticos = {
     'Supabase — conexão': { causa: 'Banco de dados inacessível ou credenciais inválidas.', acoes: ['Verificar SUPABASE_SERVICE_KEY no Vercel', 'Checar status em status.supabase.com', 'Verificar se o projeto Supabase está ativo'] },
