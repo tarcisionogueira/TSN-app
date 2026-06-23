@@ -215,8 +215,30 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         bounds.push([im.latitude, im.longitude]);
       });
 
-      // Auto-zoom: raio ativo → centraliza no centro com zoom proporcional ao raio
-      if (raioAtivo && centroRaio) {
+      // Quando não há pins mas há filtro de cidade: geocodifica a cidade e centraliza
+      if (bounds.length === 0 && filtros.cidades?.length > 0 && filtros.estado) {
+        const cidade = filtros.cidades[0];
+        const query = `${cidade}, ${filtros.estado}, Brasil`;
+        fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`,
+          { headers: { 'User-Agent': 'BidProBrasil/1.0' } }
+        ).then(r => r.json()).then(geo => {
+          if (!geo?.length || !leafletRef.current) return;
+          const lat = parseFloat(geo[0].lat);
+          const lng = parseFloat(geo[0].lon);
+          leafletRef.current.setView([lat, lng], 12);
+          const circle = L.circle([lat, lng], {
+            radius: 3000,
+            color: '#f59e0b',
+            fillColor: '#fef3c7',
+            fillOpacity: 0.25,
+            weight: 2,
+            dashArray: '6 4',
+          });
+          circle.bindPopup(`<div style="font-size:12px"><b>📍 ${cidade}</b><br>Imóveis aguardando geocodificação.<br><span style="color:#92400e">Localização aproximada da cidade.</span></div>`);
+          markersRef.current.addLayer(circle);
+        }).catch(() => {});
+      } else if (raioAtivo && centroRaio) {
         const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
         leafletRef.current.setView([centroRaio.lat, centroRaio.lng], zoom);
       } else if (centroRaio) {
