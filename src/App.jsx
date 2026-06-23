@@ -58,6 +58,7 @@ import Perfil from './pages/Perfil';
 import Comissoes from './pages/Comissoes';
 import Caso from './pages/Caso';
 import CriarContrato from './pages/CriarContrato';
+import ContratosTemplates from './pages/ContratosTemplates';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -203,6 +204,7 @@ function MainLayout() {
           <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin']}><Consultor /></PrivateRoute>} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
           <Route path="/contratos/novo" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><CriarContrato /></PrivateRoute>} />
+          <Route path="/contratos/templates" element={<PrivateRoute roles={['admin']}><ContratosTemplates /></PrivateRoute>} />
           <Route path="/calculadora" element={<Calculadora />} />
           <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />

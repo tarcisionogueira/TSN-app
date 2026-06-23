@@ -189,10 +189,18 @@ export default function Contratos() {
           <p style={{ color: '#64748b', margin: 0, fontSize: 14 }}>Contratos de assessoria, clube de negócios e demais produtos.</p>
         </div>
         {STAFF.includes(role) && (
-          <button onClick={() => nav('/contratos/novo')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            <Plus size={15} /> Novo contrato
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {role === 'admin' && (
+              <button onClick={() => nav('/contratos/templates')}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                <Users size={15} /> Templates equipe
+              </button>
+            )}
+            <button onClick={() => nav('/contratos/novo')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              <Plus size={15} /> Novo contrato
+            </button>
+          </div>
         )}
       </div>
 
