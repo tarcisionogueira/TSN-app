@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
-import { BarChart2, FileText, Clock, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { BarChart2, FileText, Clock, CheckCircle, AlertTriangle, XCircle, Bell, BellOff } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscriptionAtiva } from '../utils/push';
 
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -63,6 +64,36 @@ export default function Perfil() {
   const [mensagem, setMensagem] = useState(null);
   const [relatorios, setRelatorios] = useState([]);
   const [loadRelatorios, setLoadRelatorios] = useState(false);
+
+  // Push notifications
+  const [pushAtivo, setPushAtivo] = useState(false);
+  const [pushSupport, setPushSupport] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushMensagem, setPushMensagem] = useState(null);
+
+  useEffect(() => {
+    setPushSupport(pushSuportado());
+    getSubscriptionAtiva().then(sub => setPushAtivo(!!sub));
+  }, []);
+
+  const togglePush = async () => {
+    setPushLoading(true); setPushMensagem(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (pushAtivo) {
+        await desativarPush(session);
+        setPushAtivo(false);
+        setPushMensagem({ tipo: 'ok', texto: 'Notificações desativadas.' });
+      } else {
+        await ativarPush(session);
+        setPushAtivo(true);
+        setPushMensagem({ tipo: 'ok', texto: 'Notificações ativadas! Você receberá alertas de imóveis e novidades.' });
+      }
+    } catch (e) {
+      setPushMensagem({ tipo: 'erro', texto: e.message });
+    }
+    setPushLoading(false);
+  };
 
   // LGPD states
   const [baixando, setBaixando] = useState(false);
@@ -410,6 +441,28 @@ export default function Perfil() {
             </button>
           </form>
         </div>
+
+        {/* Seção Push Notifications */}
+        {pushSupport && (
+          <div style={{ background: 'white', borderRadius: 14, padding: 24, marginTop: 24, border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              {pushAtivo ? <Bell size={18} color="#0D63DB" /> : <BellOff size={18} color="#94a3b8" />}
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#111111' }}>Notificações Push</div>
+            </div>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px' }}>
+              Receba alertas de novos imóveis, atualizações dos seus casos e avisos importantes diretamente no seu navegador — mesmo com o site fechado.
+            </p>
+            {pushMensagem && (
+              <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13, background: pushMensagem.tipo === 'ok' ? '#f0fdf4' : '#fef2f2', color: pushMensagem.tipo === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${pushMensagem.tipo === 'ok' ? '#bbf7d0' : '#fca5a5'}` }}>
+                {pushMensagem.texto}
+              </div>
+            )}
+            <button onClick={togglePush} disabled={pushLoading}
+              style={{ padding: '10px 20px', background: pushAtivo ? '#f1f5f9' : '#0D63DB', color: pushAtivo ? '#475569' : 'white', border: pushAtivo ? '1px solid #e2e8f0' : 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {pushLoading ? 'Aguarde...' : pushAtivo ? <><BellOff size={14} /> Desativar notificações</> : <><Bell size={14} /> Ativar notificações</>}
+            </button>
+          </div>
+        )}
 
         {/* Seção LGPD */}
         <div style={{ background: 'white', borderRadius: 14, padding: 24, marginTop: 24, border: '1px solid #e2e8f0' }}>
