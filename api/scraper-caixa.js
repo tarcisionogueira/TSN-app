@@ -302,9 +302,9 @@ export default async function handler(req, res) {
 
   for (let i = 0; i < estados.length; i++) {
     const uf = estados[i];
-    // Delay entre estados para não disparar detecção de bot da Caixa
-    // Primeiro estado sem delay; demais: 3s (simula navegação humana)
-    if (i > 0) await sleep(3000);
+    // 10s entre estados para simular navegação humana e evitar detecção de bot
+    // (0s no primeiro para não atrasar o início desnecessariamente)
+    if (i > 0) await sleep(10000);
 
     let tentativas = 0;
     let resultado = null;
@@ -312,7 +312,8 @@ export default async function handler(req, res) {
       resultado = await fetchEstado(uf);
       if (resultado?.csv) break;
       tentativas++;
-      if (tentativas < 3) await sleep(5000 * tentativas); // backoff: 5s, 10s
+      // Backoff exponencial em caso de bloqueio: 15s, 30s
+      if (tentativas < 3) await sleep(15000 * tentativas);
     }
 
     try {
