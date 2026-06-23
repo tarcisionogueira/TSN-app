@@ -1131,6 +1131,20 @@ function ConfigTab() {
     setFidConfig(p => ({ ...p, [planoKey]: { ...(p[planoKey] || {}), [field]: value } }));
   }
 
+  async function cancelarSemMulta(assinaturaId) {
+    if (!window.confirm('Cancelar esta assinatura SEM aplicar multa? Esta ação não pode ser desfeita.')) return;
+    const adminId = (await supabase.auth.getUser()).data?.user?.id;
+    const { error } = await supabase.from('plano_assinaturas').update({
+      status:          'cancelado',
+      cancelado_em:    new Date().toISOString(),
+      cancelado_por:   adminId,
+      multa_calculada: 0,
+      multa_aplicada:  0,
+      notas_admin:     'Cancelado sem multa pelo admin',
+    }).eq('id', assinaturaId);
+    if (!error) setAssessorados(prev => prev.filter(a => a.id !== assinaturaId));
+  }
+
   async function estenderAssessorado() {
     if (!extendTarget) return;
     setExtendSaving(true);
@@ -1666,10 +1680,16 @@ function ConfigTab() {
                     </div>
                     {a.imovel_id && <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Imóvel: {a.imovel_id}</div>}
                   </div>
-                  <button onClick={() => { setExtendTarget(a); setExtendMeses(3); }}
-                    style={{ padding: '7px 14px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    + Estender prazo
-                  </button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => { setExtendTarget(a); setExtendMeses(3); }}
+                      style={{ padding: '7px 14px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      + Estender prazo
+                    </button>
+                    <button onClick={() => cancelarSemMulta(a.id)}
+                      style={{ padding: '7px 14px', background: '#f1f5f9', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      Cancelar s/ multa
+                    </button>
+                  </div>
                 </div>
               );
             })}

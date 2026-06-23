@@ -59,6 +59,7 @@ import Comissoes from './pages/Comissoes';
 import Caso from './pages/Caso';
 import CriarContrato from './pages/CriarContrato';
 import ContratosTemplates from './pages/ContratosTemplates';
+import OnrRegistro from './pages/OnrRegistro';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -205,6 +206,8 @@ function MainLayout() {
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
           <Route path="/contratos/novo" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><CriarContrato /></PrivateRoute>} />
           <Route path="/contratos/templates" element={<PrivateRoute roles={['admin']}><ContratosTemplates /></PrivateRoute>} />
+          <Route path="/registro-imovel" element={<PrivateRoute roles={['admin','analista','advogado','consultor']}><OnrRegistro /></PrivateRoute>} />
+          <Route path="/registro-imovel/:imovelId" element={<PrivateRoute roles={['admin','analista','advogado','consultor']}><OnrRegistro /></PrivateRoute>} />
           <Route path="/calculadora" element={<Calculadora />} />
           <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />

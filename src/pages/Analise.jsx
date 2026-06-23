@@ -1305,18 +1305,32 @@ export default function Analise() {
 
       {/* ── GUIA PÓS-ARREMATAÇÃO (aparece somente quando status = arrematado) ── */}
       {d.status === 'arrematado' && (
-        <Section step="7" title="Guia Pós-Arrematação" icon={ClipboardCheck} color="#059669"
-          open={openSec.guia} onToggle={() => toggleSec('guia')}
-          badge={`${d.origem === 'judicial' ? 'Judicial' : 'Extrajudicial'} — checklist completo`}>
-          <div style={{ paddingTop: 14 }}>
-            <GuiaPosArrematacao
-              modalidade={d.origem || 'extrajudicial'}
-              imovelId={d.id}
-              onNavCNJ={() => { toggleSec('cnj'); document.querySelector('[data-sec="cnj"]')?.scrollIntoView({ behavior: 'smooth' }); }}
-              onNavCertidoes={() => { toggleSec('cnj'); }}
-            />
+        <>
+          <Section step="7" title="Guia Pós-Arrematação" icon={ClipboardCheck} color="#059669"
+            open={openSec.guia} onToggle={() => toggleSec('guia')}
+            badge={`${d.origem === 'judicial' ? 'Judicial' : 'Extrajudicial'} — checklist completo`}>
+            <div style={{ paddingTop: 14 }}>
+              <GuiaPosArrematacao
+                modalidade={d.origem || 'extrajudicial'}
+                imovelId={d.id}
+                onNavCNJ={() => { toggleSec('cnj'); document.querySelector('[data-sec="cnj"]')?.scrollIntoView({ behavior: 'smooth' }); }}
+                onNavCertidoes={() => { toggleSec('cnj'); }}
+              />
+            </div>
+          </Section>
+
+          {/* Atalho rápido para ONR */}
+          <div style={{ margin: '8px 0', padding: '14px 18px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#1d4ed8' }}>Registrar imóvel — ONR Digital</div>
+              <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 2 }}>Protocole o registro de transferência de propriedade no cartório via SREI ou presencialmente.</div>
+            </div>
+            <button onClick={() => nav(`/registro-imovel/${d.id}`)}
+              style={{ padding: '9px 18px', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Iniciar registro →
+            </button>
           </div>
-        </Section>
+        </>
       )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>

@@ -247,31 +247,24 @@ export default function Planos() {
                   <div style={{ fontSize: 11, fontWeight: 800, color: plano.cor, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8 }}>{plano.nome}</div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
                     <div style={{ fontSize: 36, fontWeight: 900, color: '#111111' }}>{plano.precoLabel}</div>
-                    <div style={{ fontSize: 13, color: '#94a3b8' }}>{key === 'assessorado' ? '× 12 parcelas' : '/mês'}</div>
+                    <div style={{ fontSize: 13, color: '#94a3b8' }}>{key === 'assessorado' ? 'por arrematação' : '/mês'}</div>
                   </div>
                   {key === 'assessorado' && (
                     <div style={{ marginBottom: 10 }}>
-                      {plano.precoVistaLabel2
-                        ? <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>{plano.precoVistaLabel2}</div>
-                        : <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>ou {plano.precoVistaLabel} à vista <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '1px 7px', marginLeft: 4 }}>20% off</span></div>
-                      }
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Parcelado: juros do cliente a partir da 4ª parcela</div>
+                      <div style={{ fontSize: 13, color: '#64748b' }}>Parcelável em até 12× — juros do cliente a partir da 4ª parcela</div>
                       <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '2px 8px' }}>1 arrematação</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '2px 8px' }}>12 meses · prazo extensível</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '2px 8px' }}>Acesso 12 meses · extensível até a posse</span>
                       </div>
                     </div>
                   )}
                   {key === 'clube' && (
                     <div style={{ marginBottom: 10 }}>
-                      {plano.precoVistaLabel2
-                        ? <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>{plano.precoVistaLabel2}</div>
-                        : <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>ou {plano.precoVistaLabel} à vista <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '1px 7px', marginLeft: 4 }}>20% off</span></div>
-                      }
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Parcelado: juros do cliente a partir da 4ª parcela</div>
+                      <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>Total R$ 60.000 em 12 meses</div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Recorrente mensal ou 12× cartão/PIX (juros a partir da 4ª)</div>
                       <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 10, fontWeight: 700, background: '#d1fae5', color: '#065f46', borderRadius: 6, padding: '2px 8px' }}>Fidelidade 12 meses</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '2px 8px' }}>Multa cancel. antecipado: {plano.multa_cancelamento_pct ?? 30}% saldo</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '2px 8px' }}>Cancel. antecipado: {plano.multa_cancelamento_pct ?? 30}% saldo restante</span>
                       </div>
                     </div>
                   )}
