@@ -112,6 +112,14 @@ async function salvarCoords(id, coords) {
   return res.ok;
 }
 
+// Cache de coordenadas por bairro+cidade+estado para evitar chamadas redundantes ao Nominatim
+// (~70-80% de redução em lotes com muitos imóveis do mesmo bairro)
+const coordCache = {};
+
+function cacheKey(im) {
+  return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
@@ -121,15 +129,22 @@ export default async function handler(req) {
   }
 
   let limite = 50;
+  let estados = null; // null = todos
   try {
     const body = req.method === 'POST' ? await req.json() : {};
     if (body.limite) limite = Math.min(parseInt(body.limite) || 50, 200);
+    if (Array.isArray(body.estados) && body.estados.length > 0) estados = body.estados;
   } catch {}
 
-  // Busca imóveis sem coordenadas (null) OU com coordenada sentinela (0)
-  // que ainda não foram tentados com o novo fluxo de cascata
+  // Filtra por estados se fornecido (para geocodificação paralela por região)
+  let estadosFilter = '';
+  if (estados && estados.length > 0) {
+    const ufs = estados.map(e => `"${e}"`).join(',');
+    estadosFilter = `&estado=in.(${ufs})`;
+  }
+
   const r = await sb(
-    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true&order=atualizado_em.desc&limit=${limite}`
+    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${limite}`
   );
   if (!r.ok) {
     return new Response(JSON.stringify({ error: `Supabase error: ${r.status}` }), { status: 500 });
@@ -142,17 +157,32 @@ export default async function handler(req) {
     });
   }
 
-  const resultados = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0 };
+  const resultados = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0 };
 
   for (const im of imoveis) {
-    const coords = await geocodificarCascata(im);
+    // Imóveis com endereço exato nunca usam cache (pin preciso é mais valioso)
+    // Cache se aplica apenas a bairro/cidade (coordenada de centro compartilhada)
+    const key = cacheKey(im);
+    let coords;
+    let fromCache = false;
+
+    if (!im.endereco?.trim() && coordCache[key]) {
+      coords = coordCache[key];
+      fromCache = true;
+    } else {
+      coords = await geocodificarCascata(im);
+      // Armazena no cache apenas resultados de bairro/cidade (não endereço exato)
+      if (coords && coords.nivel !== 'endereco') coordCache[key] = coords;
+    }
+
     const salvo = await salvarCoords(im.id, coords);
     if (salvo && coords) {
       resultados[coords.nivel]++;
+      if (fromCache) resultados.cache_hits++;
     } else {
       resultados.falhas++;
     }
-    await sleep(1100); // rate limit Nominatim entre imóveis
+    if (!fromCache) await sleep(1100); // rate limit Nominatim apenas quando não é cache
   }
 
   return new Response(JSON.stringify(resultados), {

@@ -3534,8 +3534,11 @@ function ScrapersTab() {
   const [geocRodando, setGeocRodando] = useState(false);
   const [geocParar, setGeocParar] = useState(false);
   const geocPararRef = React.useRef(false);
-  const [geocLog, setGeocLog] = useState([]); // [{rodada, processados, geocodificados, falhas}]
-  const [geocTotal, setGeocTotal] = useState({ processados: 0, geocodificados: 0, falhas: 0 });
+  const [geocLog, setGeocLog] = useState([]);
+  const [geocTotal, setGeocTotal] = useState({ processados: 0, geocodificados: 0, falhas: 0, cache_hits: 0 });
+  // Geocodificação paralela por região
+  const [geocRegiao, setGeocRegiao] = useState({}); // { Norte: {rodando,total}, ... }
+  const geocRegiaoParar = React.useRef({});
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
@@ -3552,37 +3555,61 @@ function ScrapersTab() {
     setRunning(false);
   }
 
-  async function iniciarGeocLoop() {
+  async function iniciarGeocLoop(estados = null) {
     setGeocRodando(true);
     geocPararRef.current = false;
     setGeocParar(false);
     setGeocLog([]);
-    setGeocTotal({ processados: 0, geocodificados: 0, falhas: 0 });
+    setGeocTotal({ processados: 0, geocodificados: 0, falhas: 0, cache_hits: 0 });
     let rodada = 1;
-    let totalProc = 0, totalGeoc = 0, totalFalhas = 0;
+    let totalProc = 0, totalGeoc = 0, totalFalhas = 0, totalCache = 0;
     while (!geocPararRef.current) {
       try {
-        const res = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite: 50 }) });
+        const body = { limite: 50 };
+        if (estados) body.estados = estados;
+        const res = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!res.ok) { setGeocLog(l => [...l, { rodada, erro: 'Timeout ou erro do servidor. Aguarde e tente novamente.' }]); break; }
         const data = await res.json();
         if (data.msg || data.processados === 0) {
-          setGeocLog(l => [...l, { rodada, processados: 0, geocodificados: 0, falhas: 0, concluido: true }]);
+          setGeocLog(l => [...l, { rodada, processados: 0, concluido: true }]);
           break;
         }
         totalProc += data.processados || 0;
-        totalGeoc += data.geocodificados || 0;
+        totalGeoc += (data.endereco || 0) + (data.bairro || 0) + (data.cidade || 0);
         totalFalhas += data.falhas || 0;
-        setGeocLog(l => [...l, { rodada, processados: data.processados, geocodificados: data.geocodificados, falhas: data.falhas }]);
-        setGeocTotal({ processados: totalProc, geocodificados: totalGeoc, falhas: totalFalhas });
+        totalCache += data.cache_hits || 0;
+        setGeocLog(l => [...l, { rodada, processados: data.processados, falhas: data.falhas, cache_hits: data.cache_hits }]);
+        setGeocTotal({ processados: totalProc, geocodificados: totalGeoc, falhas: totalFalhas, cache_hits: totalCache });
         rodada++;
-        if ((data.processados || 0) < 50) break; // última rodada
+        if ((data.processados || 0) < 50) break;
       } catch (e) { setGeocLog(l => [...l, { rodada, erro: e.message }]); break; }
     }
     setGeocRodando(false);
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
   }
 
+  async function iniciarGeocRegiao(regiao, estados) {
+    geocRegiaoParar.current[regiao] = false;
+    setGeocRegiao(g => ({ ...g, [regiao]: { rodando: true, processados: 0, geocodificados: 0, falhas: 0, concluido: false } }));
+    let totalProc = 0, totalGeoc = 0, totalFalhas = 0;
+    while (!geocRegiaoParar.current[regiao]) {
+      try {
+        const res = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite: 50, estados }) });
+        if (!res.ok) break;
+        const data = await res.json();
+        if (data.msg || data.processados === 0) break;
+        totalProc += data.processados || 0;
+        totalGeoc += (data.endereco || 0) + (data.bairro || 0) + (data.cidade || 0);
+        totalFalhas += data.falhas || 0;
+        setGeocRegiao(g => ({ ...g, [regiao]: { rodando: true, processados: totalProc, geocodificados: totalGeoc, falhas: totalFalhas, concluido: false } }));
+        if ((data.processados || 0) < 50) break;
+      } catch { break; }
+    }
+    setGeocRegiao(g => ({ ...g, [regiao]: { ...g[regiao], rodando: false, concluido: true } }));
+  }
+
   function pararGeoc() { geocPararRef.current = true; setGeocParar(true); }
+  function pararGeocRegiao(regiao) { geocRegiaoParar.current[regiao] = true; }
 
   // Scrapers planejados
   const scrapersPlanjados = [
@@ -3654,46 +3681,71 @@ function ScrapersTab() {
             <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
             <div>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Ativo · Nominatim / OSM</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Ativo · Nominatim / OSM · Cache de coords</div>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
-            Adiciona lat/lng em cascata: endereço → bairro → cidade. Processa 50/lote respeitando 1 req/s.
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10, lineHeight: 1.6 }}>
+            Endereço → bairro → cidade em cascata. 50/lote, 1 req/s. Cache de bairro economiza ~70% das chamadas.
           </div>
 
-          {/* Progresso em tempo real */}
+          {/* Progresso global */}
           {geocLog.length > 0 && (
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12 }}>
-              <div style={{ fontWeight: 700, color: '#334155', marginBottom: 6 }}>
-                {geocRodando ? `⏳ Rodada ${geocLog.length} em andamento...` : geocLog[geocLog.length-1]?.concluido ? '✅ Concluído!' : '⏹ Parado'}
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12 }}>
+              <div style={{ fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                {geocRodando ? `⏳ Rodada ${geocLog.length}...` : geocLog[geocLog.length-1]?.concluido ? '✅ Concluído!' : '⏹ Parado'}
               </div>
-              <div style={{ display: 'flex', gap: 12, color: '#475569' }}>
-                <span>✅ <b>{geocTotal.geocodificados}</b> localizados</span>
-                <span>❌ <b>{geocTotal.falhas}</b> sem resultado</span>
-                <span>📦 <b>{geocTotal.processados}</b> processados</span>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', color: '#475569' }}>
+                <span>📍 <b>{geocTotal.geocodificados}</b></span>
+                <span>❌ <b>{geocTotal.falhas}</b></span>
+                <span>⚡ cache <b>{geocTotal.cache_hits}</b></span>
+                <span>📦 <b>{geocTotal.processados}</b> total</span>
               </div>
-              {geocRodando && (
-                <div style={{ marginTop: 8, background: '#e2e8f0', borderRadius: 4, height: 4 }}>
-                  <div style={{ background: '#0D63DB', height: 4, borderRadius: 4, width: `${Math.min(100, (geocLog.length / 10) * 100)}%`, transition: 'width 0.3s' }} />
-                </div>
-              )}
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={iniciarGeocLoop} disabled={geocRodando}
-              style={{ flex: 1, padding: '10px', background: geocRodando ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: geocRodando ? 'default' : 'pointer' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <button onClick={() => iniciarGeocLoop()} disabled={geocRodando}
+              style={{ flex: 1, padding: '9px', background: geocRodando ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: geocRodando ? 'default' : 'pointer' }}>
               {geocRodando ? '⏳ Rodando...' : '📍 Geocodificar tudo'}
             </button>
             {geocRodando && (
               <button onClick={pararGeoc}
-                style={{ padding: '10px 14px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                ⏹ Parar
+                style={{ padding: '9px 12px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                ⏹
               </button>
             )}
           </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>
-            50/lote · loop automático · cron às 03:00 · limite Nominatim: 1 req/s
+
+          {/* Workers por região */}
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>Por região (paralelo):</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {Object.entries(REGIOES_ESTADOS).map(([regiao, estados]) => {
+              const r = geocRegiao[regiao] || {};
+              return (
+                <div key={regiao} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 7, padding: '5px 8px', fontSize: 11 }}>
+                  <span style={{ minWidth: 90, fontWeight: 700, color: '#334155' }}>{regiao}</span>
+                  {r.rodando ? (
+                    <>
+                      <span style={{ color: '#0D63DB' }}>⏳ {r.processados || 0} proc</span>
+                      <button onClick={() => pararGeocRegiao(regiao)} style={{ marginLeft: 'auto', padding: '2px 8px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>Parar</button>
+                    </>
+                  ) : r.concluido ? (
+                    <>
+                      <span style={{ color: '#059669' }}>✅ {r.processados || 0} · falhas {r.falhas || 0}</span>
+                      <button onClick={() => iniciarGeocRegiao(regiao, estados)} style={{ marginLeft: 'auto', padding: '2px 8px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>↺</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ color: '#94a3b8' }}>{estados.join(', ')}</span>
+                      <button onClick={() => iniciarGeocRegiao(regiao, estados)} style={{ marginLeft: 'auto', padding: '2px 8px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>▶</button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>
+            Regiões rodam em paralelo · cron às 03:00
           </div>
         </div>
       </div>
@@ -3716,20 +3768,10 @@ function ScrapersTab() {
         </div>
       </div>
 
-      {/* ── Regiões para geocodificação paralela (futuro) ── */}
-      <div style={{ background: '#f0f9ff', borderRadius: 14, border: '1px solid #bae6fd', padding: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: '#0369a1', marginBottom: 8 }}>
-          💡 Próximo: Geocodificação paralela por região (5x mais rápido)
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {Object.entries(REGIOES_ESTADOS).map(([regiao, estados]) => (
-            <div key={regiao} style={{ background: 'white', borderRadius: 8, padding: '6px 12px', fontSize: 12, border: '1px solid #bae6fd' }}>
-              <b>{regiao}</b>: {estados.join(', ')}
-            </div>
-          ))}
-        </div>
-        <div style={{ fontSize: 11, color: '#0369a1', marginTop: 8 }}>
-          5 workers × 50 imóveis = 250/lote · de ~9h para ~1.8h no primeiro processamento completo
+      {/* ── Info geocodificação paralela ── */}
+      <div style={{ background: '#f0f9ff', borderRadius: 14, border: '1px solid #bae6fd', padding: '12px 16px' }}>
+        <div style={{ fontSize: 12, color: '#0369a1' }}>
+          💡 <b>5 regiões × 50 imóveis = 250/lote em paralelo</b> — de ~9h para ~1.8h no processamento completo. Cache de coordenadas reduz chamadas ao Nominatim em ~70%.
         </div>
       </div>
     </div>

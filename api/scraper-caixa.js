@@ -147,8 +147,26 @@ function csvToImoveis(csv, uf) {
     const descontoPct = parseDesconto(cols[7]);
     const descricao = cols[8] || '';
     const modalidade = cols[9] || '';
-    const linkEdital = cols[10] || '';
+    const linkDocumento = cols[10] || '';
     const linkFoto = cols[11] || '';
+    const nomeLeiloeiro = cols[12]?.trim() || '';
+    const dataLeilaoRaw = cols[13]?.trim() || '';
+
+    const modalidadeNorm = normalizarModalidade(modalidade);
+    const ehVendaDireta = modalidadeNorm === 'venda_direta' ||
+      (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('venda');
+    const leiloeiro = nomeLeiloeiro || 'Caixa Econômica Federal';
+    const linkMatricula = numeroImovel
+      ? `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${numeroImovel}`
+      : null;
+
+    // Parse data do leilão (formato DD/MM/YYYY ou YYYY-MM-DD)
+    let dataLeilao = null;
+    if (dataLeilaoRaw) {
+      const dmY = dataLeilaoRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+      if (dmY) dataLeilao = `${dmY[3]}-${dmY[2]}-${dmY[1]}`;
+      else if (/^\d{4}-\d{2}-\d{2}/.test(dataLeilaoRaw)) dataLeilao = dataLeilaoRaw.slice(0, 10);
+    }
 
     imoveis.push({
       fonte: 'caixa',
@@ -161,13 +179,17 @@ function csvToImoveis(csv, uf) {
       valor_avaliacao: valorAvaliacao,
       valor_minimo: valorMinimo,
       desconto_percentual: descontoPct != null ? Math.round(descontoPct) : null,
-      modalidade: normalizarModalidade(modalidade),
-      link_edital: linkEdital.trim() || null,
+      modalidade: modalidadeNorm,
+      // Caixa venda direta → "regras de venda online"; leiloeiro → edital
+      link_edital: ehVendaDireta ? null : (linkDocumento.trim() || null),
+      link_regras_venda: ehVendaDireta ? (linkDocumento.trim() || null) : null,
+      link_matricula: linkMatricula,
       link_foto: linkFoto.trim() || null,
       descricao: descricao.trim() || null,
       titulo: `${descricao.trim().slice(0, 80) || 'Imóvel'} — ${cidade.trim()}`,
       forma_pagamento: extrairFormaPagamentoCaixa(descricao, modalidade),
-      leiloeiro: 'Caixa Econômica Federal',
+      leiloeiro,
+      data_leilao: dataLeilao,
       ativo: true,
       atualizado_em: new Date().toISOString(),
     });
