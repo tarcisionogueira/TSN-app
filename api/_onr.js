@@ -105,30 +105,46 @@ export async function getSession() {
   return cookieStr;
 }
 
-/** Chama um método AJAX do RI Digital (autenticado ou não). */
+/** Chama um método AJAX do RI Digital. Faz 1 retry automático se sessão expirada. */
 export async function onrAjax(handler, method, payload = {}, requireSession = true) {
-  const sessionCookie = requireSession ? await getSession() : '';
-  const url = `${AJAX}/${handler}.ashx?_method=${method}&_session=${requireSession ? 'yes' : 'no'}`;
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const sessionCookie = requireSession ? await getSession() : '';
+    const url = `${AJAX}/${handler}.ashx?_method=${method}&_session=${requireSession ? 'yes' : 'no'}`;
 
-  const body = new URLSearchParams(
-    Object.entries(payload).map(([k, v]) => [k, String(v ?? '')])
-  );
+    const body = new URLSearchParams(
+      Object.entries(payload).map(([k, v]) => [k, String(v ?? '')])
+    );
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'X-Requested-With': 'XMLHttpRequest',
-      'Origin': BASE,
-      'Referer': `${BASE}/eProtocolo/listagem_contratos.aspx`,
-      'User-Agent': 'Mozilla/5.0 (compatible; TSN-App/1.0)',
-      ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-    },
-    body: body.toString(),
-  });
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Origin': BASE,
+        'Referer': `${BASE}/eProtocolo/listagem_contratos.aspx`,
+        'User-Agent': 'Mozilla/5.0 (compatible; TSN-App/1.0)',
+        ...(sessionCookie ? { Cookie: sessionCookie } : {}),
+      },
+      body: body.toString(),
+    });
 
-  const text = await res.text();
-  try { return JSON.parse(text); } catch { return text; }
+    // Sessão rejeitada pelo servidor → invalida cache e tenta de novo
+    if (requireSession && (res.status === 401 || res.redirected || res.url?.includes('Acesso'))) {
+      invalidateSession();
+      if (tentativa === 0) continue;
+      throw new Error('ONR sessão inválida após retry');
+    }
+
+    const text = await res.text();
+
+    // Resposta HTML de login = sessão expirou silenciosamente
+    if (requireSession && text.includes('txtEmail') && tentativa === 0) {
+      invalidateSession();
+      continue;
+    }
+
+    try { return JSON.parse(text); } catch { return text; }
+  }
 }
 
 /** Invalida o cache de sessão (ex: ao detectar erro 401/redirect). */
