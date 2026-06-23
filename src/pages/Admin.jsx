@@ -3595,8 +3595,6 @@ function ScrapersTab() {
     { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
   ];
 
-  const geocProgresso = geocLog.length > 0 ? geocLog[geocLog.length - 1] : null;
-
   return (
     <div style={{ maxWidth: 900 }}>
       {/* ── Header KPIs ── */}
