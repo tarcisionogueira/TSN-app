@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -780,7 +781,7 @@ function ContratoModal({ chave, planos, onClose }) {
     setEtapa('gerando');
     try {
       const descFull = desc;
-      const r = await fetch('/api/gerar-contrato', {
+      const r = await apiCall('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ titulo: `Contrato — ${nomeContrato}`, tipo: 'servico', descricao: descFull, arquivos: [] }),
@@ -795,7 +796,7 @@ function ContratoModal({ chave, planos, onClose }) {
     if (!instrucaoIA.trim()) return;
     setReescrevendo(true);
     try {
-      const r = await fetch('/api/gerar-contrato', {
+      const r = await apiCall('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -1077,7 +1078,6 @@ function ConfigTab() {
     else setHonorariosErr('Erro ao salvar: ' + error.message);
   }
 
-  function salvar() {
   const isDirty = dirtyIds.size > 0;
 
   useEffect(() => {
@@ -1542,7 +1542,6 @@ function ConfigTab() {
     </div>
   );
 }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONTRATOS TAB — admin gera, aprova e libera contratos para assinatura
@@ -1641,7 +1640,7 @@ function ContratosTab() {
     if (!descricao.trim()) { alert('Descreva o que o contrato deve conter.'); return; }
     setGerandoContrato(true);
     try {
-      const r = await fetch('/api/gerar-contrato', {
+      const r = await apiCall('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -2476,6 +2475,8 @@ function DashboardTab() {
   const [periodo, setPeriodo] = useState('mes');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
+  const [hcItemAberto, setHcItemAberto] = React.useState(null);
+  const [acaoStatus, setAcaoStatus] = React.useState({});
 
   function getRange(p, ini, fim) {
     const now = new Date();
@@ -2527,7 +2528,7 @@ function DashboardTab() {
   }
 
   async function rodarHealthCheck() {
-    await fetch('/api/health-check', { method: 'POST' });
+    await apiCall('/api/health-check', { method: 'POST' });
     loadHealth();
   }
 
@@ -2565,7 +2566,7 @@ function DashboardTab() {
 
     async function loadAsaas() {
       try {
-        const res = await fetch('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
+        const res = await apiCall('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
         const data = await res.json();
         if (res.ok) setAsaasDados(data);
         else setAsaasDados({ error: data?.error || 'Erro desconhecido' });
@@ -2610,8 +2611,6 @@ function DashboardTab() {
   const hcBg  = { ok: '#f0fdf4', aviso: '#fffbeb', erro: '#fef2f2' };
   const hcBorder = { ok: '#bbf7d0', aviso: '#fde68a', erro: '#fecaca' };
   const hcIcon = { ok: '✅', aviso: '⚠️', erro: '🔴' };
-  const [hcItemAberto, setHcItemAberto] = React.useState(null);
-  const [acaoStatus, setAcaoStatus] = React.useState({});
 
   const diagnosticos = {
     'Supabase — conexão': { causa: 'Banco de dados inacessível ou credenciais inválidas.', acoes: ['Verificar SUPABASE_SERVICE_KEY no Vercel', 'Checar status em status.supabase.com', 'Verificar se o projeto Supabase está ativo'] },
@@ -3331,7 +3330,7 @@ function SystemStatusCard() {
   const [status, setStatus] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   React.useEffect(() => {
-    fetch('/api/system-status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
+    apiCall('/api/system-status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
   const GRUPOS = {
     geral:  { label: 'Geral', items: ['baseUrl', 'cron'] },
@@ -3517,44 +3516,45 @@ function TourTab() {
 }
 
 // ─── Aba Scrapers ─────────────────────────────────────────────────────────────
+const TODOS_ESTADOS_SCRAPER = [
+  'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA',
+  'MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN',
+  'RO','RR','RS','SC','SE','SP','TO',
+];
+
+const REGIOES_ESTADOS = {
+  'Norte':        ['AC','AM','AP','PA','RO','RR','TO'],
+  'Nordeste':     ['AL','BA','CE','MA','PB','PE','PI','RN','SE'],
+  'Centro-Oeste': ['DF','GO','MS','MT'],
+  'Sudeste':      ['ES','MG','RJ','SP'],
+  'Sul':          ['PR','RS','SC'],
+};
+
 function ScrapersTab() {
   const [status, setStatus] = useState(null);
-  const [running, setRunning] = useState(false);
-  const [resultado, setResultado] = useState(null);
-  const [erroMsg, setErroMsg] = useState('');
-  const [geocStatus, setGeocStatus] = React.useState(null);
-  const [geocLoading, setGeocLoading] = React.useState(false);
-
-  async function rodarGeocodificacao(limite = 50) {
-    setGeocLoading(true);
-    setGeocStatus(null);
-    try {
-      const res = await fetch('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite }) });
-      const data = await res.json();
-      setGeocStatus(data);
-    } catch (e) {
-      setGeocStatus({ error: e.message });
-    }
-    setGeocLoading(false);
-  }
+  // Estado de execução manual por região (scraper e geocodificação)
+  const [scraperRegiao, setScraperRegiao] = useState({});
+  const [geocRegiao, setGeocRegiao] = useState({});
 
   useEffect(() => {
-    fetch('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
+    apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
 
-  async function executarScraper() {
-    setRunning(true); setResultado(null); setErroMsg('');
+  // Trigger manual de uma região do scraper (1 chamada por região, server gerencia delay entre estados)
+  async function triggerScraper(regiao, estados) {
+    setScraperRegiao(g => ({ ...g, [regiao]: { rodando: true } }));
     try {
-      const r = await fetch('/api/scraper-caixa', {
+      const r = await apiCall('/api/scraper-caixa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ estados }),
       });
       const d = await r.json();
-      if (!r.ok) { setErroMsg(d.error || 'Erro ao executar o scraper.'); }
-      else { setResultado(d); fetch('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}); }
-    } catch (e) { setErroMsg(e.message); }
-    setRunning(false);
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, ok: d.estados_ok || [], erros: d.estados_erro || [], primeiroErro: d.erros?.[0]?.erro } }));
+      apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {});
+    } catch (e) {
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
+    }
   }
 
   // Trigger manual de geocodificação por estado (1 lote, retorna imediatamente)
@@ -3594,95 +3594,117 @@ function ScrapersTab() {
     { nome: 'TopLeilões', volume: '~1-2k', status: 'planejado' },
     { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
   ];
+
   return (
-    <div style={{ maxWidth: 640 }}>
-      <h3 style={{ margin: '0 0 20px', fontWeight: 800, color: '#111111' }}>Importar Imóveis de Leilão</h3>
-
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '24px', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🏦</div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#111111', marginBottom: 4 }}>Caixa Econômica Federal</div>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-              Importa imóveis disponíveis para venda diretamente do portal da Caixa para todos os estados do Brasil.
-              Os dados são atualizados na tabela <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, fontSize: 12 }}>imoveis_leilao</code>.
-            </p>
+    <div style={{ maxWidth: 900 }}>
+      {/* ── Header KPIs ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+        {[
+          { label: 'Imóveis no banco',    valor: status?.total?.toLocaleString('pt-BR') || '—', icon: '🏠', cor: '#0D63DB' },
+          { label: 'Última atualização',  valor: status?.ultima_atualizacao ? new Date(status.ultima_atualizacao).toLocaleDateString('pt-BR') : '—', icon: '🕐', cor: '#059669' },
+          { label: 'Scraper (UTC)',        valor: '22:00–22:52', icon: '⏰', cor: '#7c3aed' },
+          { label: 'Geocod (UTC)',         valor: '00:00–04:20', icon: '📍', cor: '#d97706' },
+        ].map(k => (
+          <div key={k.label} style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '14px 16px' }}>
+            <div style={{ fontSize: 18, marginBottom: 4 }}>{k.icon}</div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: k.cor }}>{k.valor}</div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{k.label}</div>
           </div>
-        </div>
-        {status && (
-          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#475569', display: 'flex', gap: 20 }}>
-            <span>📦 <strong>{status.total?.toLocaleString('pt-BR') || 0}</strong> imóveis no banco</span>
-            {status.ultima_atualizacao && (
-              <span>🕐 Atualizado em {new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</span>
-            )}
-          </div>
-        )}
-        {resultado && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
-            ✅ <strong>{resultado.processados?.toLocaleString('pt-BR')}</strong> imóveis importados —
-            {resultado.estados_ok?.length} estados OK{resultado.estados_erro?.length > 0 ? `, ${resultado.estados_erro.length} com erro` : ''}
-          </div>
-        )}
-        {erroMsg && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#dc2626' }}>
-            ⚠️ {erroMsg}
-          </div>
-        )}
-        <button onClick={executarScraper} disabled={running}
-          style={{ padding: '11px 24px', background: running ? '#94a3b8' : '#c2410c', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: running ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {running ? '⏳ Buscando imóveis...' : '🔄 Buscar imóveis Caixa'}
-        </button>
-        <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>
-          Pode levar até 60 segundos. Cobre todos os 27 estados.
-        </p>
+        ))}
       </div>
 
-      {/* ── Geocodificação ── */}
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '24px', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🗺️</div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#111111', marginBottom: 4 }}>Geocodificação de Imóveis</div>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-              Adiciona latitude/longitude aos imóveis sem coordenadas via Nominatim (OpenStreetMap).
-              Necessário para exibir imóveis no mapa. Processa 50 por vez respeitando o limite de 1 req/seg.
-            </p>
-          </div>
+      {status && (
+        <div style={{ background: '#f8fafc', borderRadius: 10, padding: '8px 16px', marginBottom: 16, fontSize: 12, color: '#475569', display: 'flex', gap: 16 }}>
+          <span>📦 <b>{status.total?.toLocaleString('pt-BR') || 0}</b> imóveis no banco</span>
+          {status.ultima_atualizacao && <span>🕐 Última importação: <b>{new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</b></span>}
         </div>
-        {geocStatus && !geocStatus.error && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
-            ✅ <strong>{geocStatus.processados}</strong> imóveis processados —
-            <strong> {geocStatus.geocodificados}</strong> com coordenadas · <strong>{geocStatus.falhas}</strong> sem resultado
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        {/* ── Scraper Caixa ── */}
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏦</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>Scraper Caixa · 27 estados</div>
+              <div style={{ fontSize: 10, color: '#10b981', fontWeight: 700 }}>● Automático · 22:00–22:52 UTC · retry × 3</div>
+            </div>
           </div>
-        )}
-        {geocStatus?.error && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#dc2626' }}>
-            ⚠️ {geocStatus.error}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 340, overflowY: 'auto' }}>
+            {AGENDA_SCRAPER.map(({ uf, hora }) => {
+              const r = scraperRegiao[uf] || {};
+              return (
+                <div key={uf} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
+                  <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
+                  <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
+                  {r.rodando ? (
+                    <span style={{ color: '#c2410c', fontSize: 10 }}>⏳ importando...</span>
+                  ) : r.processados != null ? (
+                    <span style={{ color: r.erros?.length ? '#dc2626' : '#059669', fontSize: 10 }}>
+                      {r.erros?.length ? `❌ erro` : `✅ ${r.processados?.toLocaleString('pt-BR')}`}
+                    </span>
+                  ) : null}
+                  <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
+                    style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                    {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        )}
-        {geocStatus?.msg && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
-            ✅ {geocStatus.msg}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => rodarGeocodificacao(50)} disabled={geocLoading}
-            style={{ padding: '11px 24px', background: geocLoading ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: geocLoading ? 'default' : 'pointer' }}>
-            {geocLoading ? '⏳ Geocodificando...' : '📍 Geocodificar 50 imóveis'}
-          </button>
-          <button onClick={() => rodarGeocodificacao(200)} disabled={geocLoading}
-            style={{ padding: '11px 24px', background: geocLoading ? '#94a3b8' : '#084BA6', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: geocLoading ? 'default' : 'pointer' }}>
-            {geocLoading ? '⏳ Geocodificando...' : '📍 Geocodificar 200 imóveis'}
-          </button>
+          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>Cron automático · use ▶ para forçar um estado manualmente</div>
         </div>
-        <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>
-          50 imóveis ≈ 1 min · 200 imóveis ≈ 4 min. Roda automaticamente toda noite às 3h.
-          Marco de troca para Google Maps: 5.000 imóveis ativos ou 500 novos/mês.
-        </p>
+
+        {/* ── Geocodificação ── */}
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🗺️</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>Geocodificação · 27 estados</div>
+              <div style={{ fontSize: 10, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–04:20 UTC · cache ~70%</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 340, overflowY: 'auto' }}>
+            {AGENDA_GEOCOD.map(({ uf, hora }) => {
+              const r = geocRegiao[uf] || {};
+              return (
+                <div key={uf} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
+                  <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
+                  <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
+                  {r.rodando ? (
+                    <span style={{ color: '#0D63DB', fontSize: 10 }}>⏳ geocodificando...</span>
+                  ) : r.processados != null ? (
+                    <span style={{ color: r.concluido ? '#059669' : '#0D63DB', fontSize: 10 }}>
+                      {r.concluido ? '✅ OK' : `📍 ${r.processados} proc`}
+                    </span>
+                  ) : null}
+                  <button onClick={() => triggerGeoc(uf)} disabled={r.rodando}
+                    style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                    {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>Cron automático · use ▶ para forçar um estado manualmente</div>
+        </div>
       </div>
 
-      <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: '16px 18px', fontSize: 13, color: '#64748b' }}>
-        <strong style={{ color: '#475569' }}>Próximos scrapers previstos:</strong> Santander · Biassi · Zuk · MGL · HastaPública · TopLeilões · eLeilões
+      {/* ── Próximos Scrapers ── */}
+      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, color: '#111', marginBottom: 4 }}>🚀 Roadmap de Scrapers</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+          Volume estimado ao integrar todos os leiloeiros: <b>~50.000–80.000 imóveis</b>.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          {scrapersPlanjados.map(s => (
+            <div key={s.nome} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', border: '1px dashed #cbd5e1' }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#334155' }}>{s.nome}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{s.volume} imóveis</div>
+              <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>Em breve</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -4027,7 +4049,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
     // Cria sala Daily.co com transcrição forçada
     let linkFinal = meetLink;
     try {
-      const r = await fetch('/api/criar-sala-reuniao', {
+      const r = await apiCall('/api/criar-sala-reuniao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ solicitacaoId: sol.id, reuniaoEm, duracaoMin: reuniaoDuracao }),
@@ -4051,7 +4073,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
     }).eq('id', sol.id);
 
     try {
-      await fetch('/api/notificar-reuniao', {
+      await apiCall('/api/notificar-reuniao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5288,7 +5310,7 @@ function CnjTab() {
     if (params) {
       setChat(prev => [...prev, { role: 'assistant', content: `🔍 Consultando DataJud com os dados encontrados na sua pergunta...` }]);
       try {
-        const r = await fetch('/api/cnj-datajud', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
+        const r = await apiCall('/api/cnj-datajud', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
         const data = await r.json();
         if (r.ok) {
           cnj = data;
@@ -5303,7 +5325,7 @@ function CnjTab() {
     }
 
     try {
-      const r = await fetch('/api/admin-chat', {
+      const r = await apiCall('/api/admin-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mensagem: texto,
