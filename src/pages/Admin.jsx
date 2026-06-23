@@ -3557,6 +3557,43 @@ function ScrapersTab() {
     setRunning(false);
   }
 
+  // Trigger manual de geocodificação por estado (1 lote, retorna imediatamente)
+  async function triggerGeoc(uf) {
+    setGeocRegiao(g => ({ ...g, [uf]: { rodando: true } }));
+    try {
+      const r = await apiCall('/api/geocodificar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estados: [uf] }),
+      });
+      const d = await r.json();
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: !d.processados } }));
+    } catch (e) {
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
+    }
+  }
+
+  // Lista de estados com horários do cron (UTC)
+  const AGENDA_SCRAPER = TODOS_ESTADOS_SCRAPER.map((uf, i) => {
+    const h = 22, m = i * 2;
+    return { uf, hora: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` };
+  });
+  const AGENDA_GEOCOD = TODOS_ESTADOS_SCRAPER.map((uf, i) => {
+    const horaTotal = Math.floor(i / 6); // 0,1,2,3,4
+    const minuto = (i % 6) * 10;
+    return { uf, hora: `${String(horaTotal).padStart(2,'0')}:${String(minuto).padStart(2,'0')}` };
+  });
+
+  // Scrapers planejados
+  const scrapersPlanjados = [
+    { nome: 'Santander', volume: '~8-15k', status: 'planejado' },
+    { nome: 'Biassi', volume: '~3-5k', status: 'planejado' },
+    { nome: 'Zuk', volume: '~1.5-3k', status: 'planejado' },
+    { nome: 'MGL Leilões', volume: '~800-1.5k', status: 'planejado' },
+    { nome: 'HastaPública', volume: '~2-4k', status: 'planejado' },
+    { nome: 'TopLeilões', volume: '~1-2k', status: 'planejado' },
+    { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
+  ];
   return (
     <div style={{ maxWidth: 640 }}>
       <h3 style={{ margin: '0 0 20px', fontWeight: 800, color: '#111111' }}>Importar Imóveis de Leilão</h3>
