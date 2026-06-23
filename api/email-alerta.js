@@ -1,5 +1,7 @@
 export const config = { runtime: 'edge' };
 
+import { getAuthUser, unauthorized } from './_auth.js';
+
 function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl) {
   const unsubToken = btoa(`${userId}:unsubscribe`);
 
@@ -228,8 +230,6 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl)
 </body>
 </html>`;
 }
-
-import { getAuthUser, unauthorized } from './_auth.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
