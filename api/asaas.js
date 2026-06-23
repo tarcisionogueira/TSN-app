@@ -81,6 +81,21 @@ async function asaasPut(path, body) {
   return data;
 }
 
+async function getAuthUserNode(req) {
+  const auth = req.headers.authorization || req.headers['authorization'] || '';
+  const token = auth.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+  try {
+    const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: ANON_KEY, Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) return null;
+    return r.json();
+  } catch { return null; }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -88,7 +103,18 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Chave do Asaas não configurada no servidor (ASAAS_API_KEY).' });
   }
 
+  // Ações do usuário exigem autenticação
   const { action, ...body } = req.body;
+  const userActions = ['criar_assinatura', 'gerenciar_assinatura', 'criar_cobranca_avulsa', 'cancelar_assinatura'];
+  if (userActions.includes(action)) {
+    const authUser = await getAuthUserNode(req);
+    if (!authUser?.id) return res.status(401).json({ error: 'Não autorizado' });
+    // Garante que o email da requisição pertence ao usuário autenticado
+    const emailBody = body.email;
+    if (emailBody && authUser.email !== emailBody) {
+      return res.status(403).json({ error: 'Email não corresponde ao usuário autenticado' });
+    }
+  }
 
   try {
     const PLANOS = await getPlanosConfig();

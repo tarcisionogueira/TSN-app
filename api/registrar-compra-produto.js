@@ -1,5 +1,7 @@
 export const config = { runtime: 'edge' };
 
+import { getAuthUser, unauthorized } from './_auth.js';
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
 
@@ -15,10 +17,20 @@ export default async function handler(req) {
   if (!SVC) return new Response(JSON.stringify({ error: 'Configuração ausente' }), { status: 500 });
 
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+
+  // Valida autenticação — rejeita requisições sem token válido
+  const authUser = await getAuthUser(req);
+  if (!authUser?.id) return unauthorized();
+
   const { user_id, produto_tipo, produto_id, valor, ref_codigo } = await req.json();
 
   if (!user_id || !produto_tipo || !produto_id) {
     return new Response(JSON.stringify({ error: 'Dados incompletos' }), { status: 400, headers });
+  }
+
+  // Garante que o usuário autenticado só pode registrar compra para si mesmo
+  if (authUser.id !== user_id) {
+    return new Response(JSON.stringify({ error: 'Ação não permitida' }), { status: 403, headers });
   }
 
   // Verifica se já existe compra ativa para evitar duplicata
@@ -36,7 +48,7 @@ export default async function handler(req) {
   });
   const inserido = await ri.json();
 
-  // Vincula indicação se vier com ref do consultor (usuário já existente comprando produto avulso)
+  // Vincula indicação se vier com ref do consultor
   if (ref_codigo) {
     try {
       await sb('rpc/vincular_indicacao_compra', {

@@ -1,5 +1,7 @@
 export const config = { runtime: 'edge' };
 
+import { getAuthUser, unauthorized } from './_auth.js';
+
 const SYSTEM = `Você é o assistente de suporte da TSN Ativos, plataforma especializada em análise de imóveis em leilão judicial e extrajudicial no Brasil.
 
 ## Seu objetivo principal:
@@ -41,6 +43,10 @@ SOMENTE encaminhe quando for absolutamente necessário — ações na conta do c
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  // Requer usuário autenticado para evitar consumo indevido da API Claude
+  const authUser = await getAuthUser(req);
+  if (!authUser?.id) return unauthorized('Faça login para usar o suporte.');
 
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return new Response(JSON.stringify({ error: 'CLAUDE_KEY not configured' }), {

@@ -185,7 +185,7 @@ export default function Calculadora() {
   const m = useMemo(() => calcularMetricasCenario(inputs, vArr, isAVista), [inputs, vArr, isAVista]);
   const teto = useMemo(() => calcularTetoLance(inputs, isAVista, Number(metaRoi) || 0, vMerc), [inputs, isAVista, metaRoi, vMerc]);
 
-  const descontoAvaliacao = vAval > 0 ? (1 - vArr / vAval) * 100 : 0;
+  const descontoAvaliacao = vAval > 0 && vArr > 0 ? (1 - vArr / vAval) * 100 : 0;
 
   // Custos do leilão = leiloeiro + honorários + ITBI+registro (sem débitos/reforma — esses são do imóvel)
   const custosLeilao = m.taxaLeiloeiro + m.honorarios + m.itbiRegistro;
