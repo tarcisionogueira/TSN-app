@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { CheckCircle2, ArrowRight, Loader2, AlertCircle, Eye, EyeOff, Camera, Upload, RefreshCw } from 'lucide-react';
+import { apiCall } from '../utils/apiCall';
 
 const ROLE_CONFIG = {
   analista: {
@@ -147,7 +148,7 @@ function PastoFoto({ cor, instrucao, validacao_prompt, onCapturada }) {
     setValidacaoOk(null);
     setMsgValidacao('');
     try {
-      const res = await fetch('/api/validar-selfie', {
+      const res = await apiCall('/api/validar-selfie', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imagem: dataUrl, validacao_prompt }),

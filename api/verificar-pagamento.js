@@ -1,3 +1,4 @@
+import { getUser, getUserRole } from './_auth.js';
 // Verifica com o Asaas se a assinatura/cobrança avulsa foi paga.
 // Chamado pelo Checkout a cada 8s para liberar o fluxo sem depender do clique do usuário.
 
@@ -19,6 +20,9 @@ async function asaasGet(path) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   if (!API_KEY) return res.status(500).json({ error: 'ASAAS_API_KEY não configurada' });
+
+  const user = await getUser(req);
+  if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
 
   const { subscriptionId, paymentId } = req.body || {};
   if (!subscriptionId && !paymentId) {

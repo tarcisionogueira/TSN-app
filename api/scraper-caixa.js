@@ -108,25 +108,30 @@ const CAIXA_HEADERS = {
 };
 
 async function fetchEstado(uf) {
-  // Tenta URL principal
   const urls = [
     `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf}.csv`,
     `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf.toLowerCase()}.csv`,
   ];
+  let lastStatus = null;
   for (const url of urls) {
     try {
       const res = await fetch(url, {
         headers: CAIXA_HEADERS,
         signal: AbortSignal.timeout(30000),
       });
+      lastStatus = res.status;
       if (!res.ok) continue;
       const buf = await res.arrayBuffer();
       const text = new TextDecoder('latin1').decode(buf);
-      if (text.length > 100) return text; // arquivo válido
-    } catch (_) {}
+      if (text.length > 100) return { csv: text };
+    } catch (e) {
+      return { erro: `Timeout/rede: ${e.message}` };
+    }
   }
-  return null;
+  return { erro: `HTTP ${lastStatus} — Caixa recusou a requisição (possível bloqueio de IP de cloud)` };
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function csvToImoveis(csv, uf) {
   const lines = csv.split('\n').filter(l => l.trim());
@@ -147,8 +152,33 @@ function csvToImoveis(csv, uf) {
     const descontoPct = parseDesconto(cols[7]);
     const descricao = cols[8] || '';
     const modalidade = cols[9] || '';
-    const linkEdital = cols[10] || '';
+    const linkDocumento = cols[10] || '';
     const linkFoto = cols[11] || '';
+    const nomeLeiloeiro = cols[12]?.trim() || '';
+    const dataLeilaoRaw = cols[13]?.trim() || '';
+
+    const modalidadeNorm = normalizarModalidade(modalidade);
+    const ehVendaDireta = modalidadeNorm === 'venda_direta' ||
+      (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('venda');
+    const leiloeiro = nomeLeiloeiro || 'Caixa Econômica Federal';
+
+    // URL da página do imóvel no portal da Caixa (funciona para todos os imóveis)
+    const urlLote = numeroImovel
+      ? `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroImovel}`
+      : null;
+
+    // Matrícula do imóvel no cartório (portal da Caixa)
+    const linkMatricula = numeroImovel
+      ? `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${numeroImovel}`
+      : null;
+
+    // Parse data do leilão (formato DD/MM/YYYY ou YYYY-MM-DD)
+    let dataLeilao = null;
+    if (dataLeilaoRaw) {
+      const dmY = dataLeilaoRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+      if (dmY) dataLeilao = `${dmY[3]}-${dmY[2]}-${dmY[1]}`;
+      else if (/^\d{4}-\d{2}-\d{2}/.test(dataLeilaoRaw)) dataLeilao = dataLeilaoRaw.slice(0, 10);
+    }
 
     imoveis.push({
       fonte: 'caixa',
@@ -161,13 +191,18 @@ function csvToImoveis(csv, uf) {
       valor_avaliacao: valorAvaliacao,
       valor_minimo: valorMinimo,
       desconto_percentual: descontoPct != null ? Math.round(descontoPct) : null,
-      modalidade: normalizarModalidade(modalidade),
-      link_edital: linkEdital.trim() || null,
+      modalidade: modalidadeNorm,
+      // Caixa venda direta → "regras de venda online"; leiloeiro → edital
+      link_edital: ehVendaDireta ? null : (linkDocumento.trim() || null),
+      link_regras_venda: ehVendaDireta ? (linkDocumento.trim() || null) : null,
+      link_matricula: linkMatricula,
+      url_lote: urlLote,
       link_foto: linkFoto.trim() || null,
       descricao: descricao.trim() || null,
       titulo: `${descricao.trim().slice(0, 80) || 'Imóvel'} — ${cidade.trim()}`,
       forma_pagamento: extrairFormaPagamentoCaixa(descricao, modalidade),
-      leiloeiro: 'Caixa Econômica Federal',
+      leiloeiro,
+      data_leilao: dataLeilao,
       ativo: true,
       atualizado_em: new Date().toISOString(),
     });
@@ -250,8 +285,85 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase env vars not configured' });
   }
 
+  const url = new URL(req.url || '', 'http://localhost');
+  const qEstados = req.query?.estados || url.searchParams.get('estados');
+
+  // ── Modo cron (GET sem ?estados=) ──────────────────────────────────────────
+  // Cron */2 22 * * *:
+  //   Minutos 00–52 (índices 0-26) → processa TODOS_ESTADOS[idx]
+  //   Minutos 54–58 (índices 27+)  → slot de retry: reprocessa estados que falharam
+  if (req.method === 'GET' && !qEstados) {
+    const minuto = new Date().getUTCMinutes();
+    const idx = Math.floor(minuto / 2);
+
+    if (idx < TODOS_ESTADOS.length) {
+      // ── Rodada normal: 1ª tentativa + retry de 30s se falhar ──────────────
+      const uf = TODOS_ESTADOS[idx];
+      let resultado = await fetchEstado(uf);
+
+      if (!resultado?.csv) {
+        // Falhou: espera 30s (cobre sobrecarga de servidor) e tenta uma vez mais
+        await sleep(30000);
+        resultado = await fetchEstado(uf);
+      }
+
+      if (!resultado?.csv) {
+        // 2ª falha: envia para fila de retry (final da fila — minutos 54-58)
+        await fetch(`${supabaseUrl}/rest/v1/scraper_retry`, {
+          method: 'POST',
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ uf, tentativas: 1, ultimo_erro: resultado?.erro || 'sem CSV', falhou_em: new Date().toISOString() }),
+        }).catch(() => {});
+        return res.status(200).json({ uf, status: 'retry_agendado', erro: resultado?.erro });
+      }
+
+      // Sucesso: processa e remove da fila de retry se estava lá
+      await fetch(`${supabaseUrl}/rest/v1/scraper_retry?uf=eq.${uf}`, {
+        method: 'DELETE',
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' },
+      }).catch(() => {});
+
+      const imoveis = csvToImoveis(resultado.csv, uf);
+      for (let j = 0; j < imoveis.length; j += 100) await upsertBatch(imoveis.slice(j, j + 100), supabaseUrl, serviceKey);
+      return res.status(200).json({ uf, status: 'ok', processados: imoveis.length });
+
+    } else {
+      // ── Slot de retry (minutos 54–58): pega o estado com mais tentativas pendentes ──
+      const retryRes = await fetch(`${supabaseUrl}/rest/v1/scraper_retry?order=tentativas.asc&limit=1`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      });
+      const retryList = retryRes.ok ? await retryRes.json() : [];
+      if (!retryList.length) return res.status(200).json({ msg: 'retry_vazio' });
+
+      const { uf, tentativas } = retryList[0];
+      const resultado = await fetchEstado(uf);
+
+      if (resultado?.csv) {
+        // Retry bem-sucedido: processa e limpa da fila
+        await fetch(`${supabaseUrl}/rest/v1/scraper_retry?uf=eq.${uf}`, {
+          method: 'DELETE',
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' },
+        }).catch(() => {});
+        const imoveis = csvToImoveis(resultado.csv, uf);
+        for (let j = 0; j < imoveis.length; j += 100) await upsertBatch(imoveis.slice(j, j + 100), supabaseUrl, serviceKey);
+        return res.status(200).json({ uf, status: 'retry_ok', processados: imoveis.length, tentativas });
+      } else {
+        // Retry falhou: incrementa tentativas (admin verá no painel)
+        await fetch(`${supabaseUrl}/rest/v1/scraper_retry?uf=eq.${uf}`, {
+          method: 'PATCH',
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ tentativas: tentativas + 1, ultimo_erro: resultado?.erro, falhou_em: new Date().toISOString() }),
+        }).catch(() => {});
+        return res.status(200).json({ uf, status: 'retry_falhou', tentativas: tentativas + 1, erro: resultado?.erro });
+      }
+    }
+  }
+
+  // ── Modo manual (POST ou GET com ?estados=) ────────────────────────────────
   let estados = TODOS_ESTADOS;
-  if (req.method === 'POST' && req.body?.estados?.length > 0) {
+  if (qEstados) {
+    estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
+  } else if (req.body?.estados?.length > 0) {
     estados = req.body.estados;
   }
 
@@ -261,36 +373,37 @@ export default async function handler(req, res) {
   let totalProcessados = 0;
   let fotosProcessadas = 0;
   const MAX_FOTOS_POR_RUN = 200;
-
-  // Collect all imoveis first, then upsert, then upload photos
   const todosImoveis = [];
 
-  for (const uf of estados) {
+  for (let i = 0; i < estados.length; i++) {
+    const uf = estados[i];
+    if (i > 0 && estados.length > 1) await sleep(5000);
+
+    // Modo manual: 1 tentativa. Se falhar, 30s e mais 1 tentativa.
+    let resultado = await fetchEstado(uf);
+    if (!resultado?.csv) {
+      await sleep(30000);
+      resultado = await fetchEstado(uf);
+    }
+
     try {
-      const csv = await fetchEstado(uf);
-      if (!csv) {
+      if (!resultado?.csv) {
         estadosErro.push(uf);
-        erros.push({ uf, erro: 'CSV não retornado (bloqueio, timeout ou URL inválida)' });
+        erros.push({ uf, erro: resultado?.erro || 'CSV não retornado' });
         continue;
       }
-      const imoveis = csvToImoveis(csv, uf);
+      const imoveis = csvToImoveis(resultado.csv, uf);
       if (imoveis.length === 0) {
         estadosOk.push(uf);
         continue;
       }
-      for (let i = 0; i < imoveis.length; i += 100) {
-        const chunk = imoveis.slice(i, i + 100);
+      for (let j = 0; j < imoveis.length; j += 100) {
+        const chunk = imoveis.slice(j, j + 100);
         await upsertBatch(chunk, supabaseUrl, serviceKey);
       }
       totalProcessados += imoveis.length;
       todosImoveis.push(...imoveis);
       estadosOk.push(uf);
-      // Dispara geocodificação em background para novos imóveis (sem aguardar)
-      fetch(`${process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app'}/api/geocodificar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limite: Math.min(imoveis.length, 50) }),
-      }).catch(() => {});
     } catch (e) {
       estadosErro.push(uf);
       erros.push({ uf, erro: e.message });

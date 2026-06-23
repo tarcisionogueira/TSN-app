@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, CheckCircle2, Send, Paperclip, Bot, Loader2, ChevronLeft } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { apiCall } from '../utils/apiCall';
 
 const STATUS = {
   aberto: { label: 'Aberto', cor: '#10b981', bg: '#d1fae5' },
@@ -67,7 +68,7 @@ export default function MeusChamados() {
     // Aciona IA
     setLoadingIA(true);
     try {
-      const res = await fetch('/api/chat-suporte', {
+      const res = await apiCall('/api/chat-suporte', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensagens: novaLista }),
       });

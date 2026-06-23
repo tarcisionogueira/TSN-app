@@ -38,7 +38,7 @@ export default function ImovelDetalhe() {
           estado: data.estado, cidade: data.cidade, bairro: data.bairro, endereco: data.endereco,
           valorAvaliacao: data.valor_avaliacao, valorMinimo: data.valor_minimo,
           descontoPercentual: data.desconto_percentual, areaM2: data.area_m2, descricao: data.descricao,
-          urlLote: data.url_lote || data.link_edital, linkEdital: data.link_edital, linkMatricula: data.link_matricula,
+          urlLote: data.url_lote || data.link_edital || data.link_regras_venda, linkEdital: data.link_edital, linkMatricula: data.link_matricula, linkRegrasVenda: data.link_regras_venda,
           foto: data.link_foto, leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
           pagamento: [data.forma_pagamento], fonte: data.fonte,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
@@ -187,7 +187,7 @@ export default function ImovelDetalhe() {
             )}
 
             {/* Documentos */}
-            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula) && (
+            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda) && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Documentos
@@ -218,18 +218,24 @@ export default function ImovelDetalhe() {
                 )}
 
                 {/* Botões de PDF */}
-                {(imovel.linkEdital || imovel.linkMatricula) && (
+                {(imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                     {imovel.linkEdital && (
                       <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#084BA6', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        📄 Abrir Edital (PDF)
+                        📄 Edital
+                      </a>
+                    )}
+                    {imovel.linkRegrasVenda && (
+                      <a href={imovel.linkRegrasVenda} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                        📋 Regras de Venda Online
                       </a>
                     )}
                     {imovel.linkMatricula && (
                       <a href={imovel.linkMatricula} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        📄 Abrir Matrícula (PDF)
+                        📄 Matrícula
                       </a>
                     )}
                   </div>
@@ -264,7 +270,7 @@ export default function ImovelDetalhe() {
                 <div style={{ marginBottom: 10 }}>
                   <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#111111', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
-                    <ExternalLink size={15} /> Ir ao leiloeiro
+                    <ExternalLink size={15} /> {imovel.fonte === 'caixa' ? 'Ver no portal da Caixa' : 'Ir ao leiloeiro'}
                   </a>
                   <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
                     ⚠️ Se o link estiver expirado, o imóvel pode ter sido vendido.{' '}

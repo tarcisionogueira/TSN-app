@@ -6,6 +6,7 @@ import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
+import { apiCall } from '../utils/apiCall';
 
 const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
 
@@ -118,7 +119,7 @@ export default function Checkout() {
     setVerificando(true);
     const verificar = async () => {
       try {
-        const res = await fetch('/api/verificar-pagamento', {
+        const res = await apiCall('/api/verificar-pagamento', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(asaasIds),
@@ -230,7 +231,7 @@ export default function Checkout() {
     setLoading(true);
     setErro('');
     try {
-      const res = await fetch('/api/asaas', {
+      const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -266,7 +267,7 @@ export default function Checkout() {
     setLoading(true);
     setErro('');
     try {
-      const res = await fetch('/api/asaas', {
+      const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'gerenciar_assinatura', email: user.email, plano: planoKey }),
@@ -291,7 +292,7 @@ export default function Checkout() {
     setPago(true);
     if (planoKey === 'assessorado' || planoKey === 'clube') {
       try {
-        const res = await fetch('/api/auto-contrato', {
+        const res = await apiCall('/api/auto-contrato', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

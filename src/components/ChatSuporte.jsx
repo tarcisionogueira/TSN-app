@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, X, Send, Paperclip, Bot, Loader2, UserCheck } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { apiCall } from '../utils/apiCall';
 
 const STAFF_ROLES = ['admin', 'analista', 'consultor', 'advogado'];
 // Inatividade: avisar após 2min, fechar após 30min (em ms)
@@ -155,7 +156,7 @@ export default function ChatSuporte() {
   async function dispararIA(tk, msgs) {
     setLoadingIA(true);
     try {
-      const res = await fetch('/api/chat-suporte', {
+      const res = await apiCall('/api/chat-suporte', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensagens: msgs, memoria: memoriaIA }),
       });
@@ -208,7 +209,7 @@ export default function ChatSuporte() {
     clearTimeout(avisoTimer.current);
     clearTimeout(fecharTimer.current);
     // Gera resumo em background para memória futura
-    if (user?.id) fetch('/api/resumir-ticket', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticketId: ticket.id, userId: user.id }) });
+    if (user?.id) apiCall('/api/resumir-ticket', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticketId: ticket.id, userId: user.id }) });
   }
 
   function handlePaste(e) {

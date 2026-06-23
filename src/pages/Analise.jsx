@@ -17,6 +17,7 @@ import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import RiscoJuridico from '../components/RiscoJuridico';
 import Lancamentos from '../components/Lancamentos';
 import { gerarPDF } from '../components/RelatorioPDF';
+import { apiCall } from '../utils/apiCall';
 
 const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
@@ -170,7 +171,7 @@ export default function Analise() {
     if (!d.estado) { setCnjErro('Preencha o Estado do imóvel (Etapa 2) para determinar o tribunal.'); return; }
     setLoadCnj(true); setCnjErro(''); setCnjResultados(null);
     try {
-      const res = await fetch('/api/cnj-datajud', {
+      const res = await apiCall('/api/cnj-datajud', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ numero_processo: cnjNumero.trim(), nome_parte: cnjNome.trim(), uf: d.estado }),

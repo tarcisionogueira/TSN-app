@@ -1,4 +1,5 @@
 export const config = { runtime: 'edge' };
+import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -61,6 +62,11 @@ async function check(nome, fn) {
 }
 
 export default async function handler(req) {
+
+  const user = await getUser(req);
+  if (!user) return unauthorized();
+  const role = await getUserRole(user.id);
+  if (role !== 'admin') return forbidden();
   // Permite chamada manual (POST) ou cron (GET)
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 

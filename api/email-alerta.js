@@ -229,14 +229,26 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl)
 </html>`;
 }
 
+import { getAuthUser, unauthorized } from './_auth.js';
+
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const authUser = await getAuthUser(req);
+  if (!authUser?.id) return unauthorized('Faça login para receber alertas.');
 
   const RESEND_KEY = process.env.RESEND_API_KEY;
   if (!RESEND_KEY) return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500 });
 
   const { userId, userEmail, userName, imoveis, filtros, filtroDesc } = await req.json();
   if (!userEmail || !imoveis?.length) return new Response(JSON.stringify({ error: 'dados insuficientes' }), { status: 400 });
+
+  // Garante que o e-mail destino pertence ao usuário autenticado
+  if (authUser.email !== userEmail) {
+    return new Response(JSON.stringify({ error: 'E-mail não corresponde ao usuário autenticado' }), {
+      status: 403, headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const baseUrl = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
   const html = gerarEmailHTML(userName || 'Investidor', imoveis, filtros || {}, filtroDesc, userId, baseUrl);

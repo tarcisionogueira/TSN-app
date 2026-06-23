@@ -1,8 +1,19 @@
 export const config = { runtime: 'edge' };
 
 // Chame esse endpoint UMA VEZ para registrar o webhook no Daily.co
-// GET /api/setup-daily-webhook (somente admin)
+// GET /api/setup-daily-webhook?secret=CRON_SECRET (somente admin)
 export default async function handler(req) {
+  const CRON_SECRET = process.env.CRON_SECRET;
+  if (CRON_SECRET) {
+    const url = new URL(req.url);
+    const sentSecret = url.searchParams.get('secret') || req.headers.get('x-cron-secret') || '';
+    if (sentSecret !== CRON_SECRET) {
+      return new Response(JSON.stringify({ error: 'Acesso negado' }), {
+        status: 403, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   const DAILY_KEY = process.env.DAILY_API_KEY;
   const BASE_URL = process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app';
 

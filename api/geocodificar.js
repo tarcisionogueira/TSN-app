@@ -112,6 +112,45 @@ async function salvarCoords(id, coords) {
   return res.ok;
 }
 
+// Cache de coordenadas por bairro+cidade+estado para evitar chamadas redundantes ao Nominatim
+// (~70-80% de redução em lotes com muitos imóveis do mesmo bairro)
+const coordCache = {};
+
+function cacheKey(im) {
+  return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
+}
+
+async function processarLote(estadosFilter, lote = 50) {
+  const r = await sb(
+    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
+  );
+  if (!r.ok) return null;
+  const imoveis = await r.json();
+  if (!imoveis.length) return { processados: 0 };
+
+  const res = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0 };
+
+  for (const im of imoveis) {
+    const key = cacheKey(im);
+    let coords, fromCache = false;
+
+    if (!im.endereco?.trim() && coordCache[key]) {
+      coords = coordCache[key];
+      fromCache = true;
+    } else {
+      coords = await geocodificarCascata(im);
+      if (coords && coords.nivel !== 'endereco') coordCache[key] = coords;
+    }
+
+    const salvo = await salvarCoords(im.id, coords);
+    if (salvo && coords) { res[coords.nivel]++; if (fromCache) res.cache_hits++; }
+    else res.falhas++;
+    if (!fromCache) await sleep(1100);
+  }
+
+  return res;
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
@@ -120,42 +159,74 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Supabase env vars not configured' }), { status: 500 });
   }
 
-  let limite = 50;
-  try {
-    const body = req.method === 'POST' ? await req.json() : {};
-    if (body.limite) limite = Math.min(parseInt(body.limite) || 50, 200);
-  } catch {}
+  // GET sem ?estados= → cron */10 3,4,5,6,7 * * * — deriva estado pelo horário UTC
+  // GET com ?estados= → trigger manual por URL
+  // POST → admin manual (1 lote, retorna imediatamente para o painel monitorar)
+  const ESTADOS_GEOCOD = [
+    'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA',
+    'MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN',
+    'RO','RR','RS','SC','SE','SP','TO',
+  ];
+  const url = new URL(req.url, 'http://localhost');
+  const qEstados = url.searchParams.get('estados');
+  let estados = null;
+  let modoManual = false;
 
-  // Busca imóveis sem coordenadas (null) OU com coordenada sentinela (0)
-  // que ainda não foram tentados com o novo fluxo de cascata
-  const r = await sb(
-    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true&order=atualizado_em.desc&limit=${limite}`
-  );
-  if (!r.ok) {
-    return new Response(JSON.stringify({ error: `Supabase error: ${r.status}` }), { status: 500 });
-  }
-  const imoveis = await r.json();
-
-  if (!imoveis.length) {
-    return new Response(JSON.stringify({ processados: 0, msg: 'Nenhum imóvel pendente de geocodificação' }), {
-      status: 200, headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const resultados = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0 };
-
-  for (const im of imoveis) {
-    const coords = await geocodificarCascata(im);
-    const salvo = await salvarCoords(im.id, coords);
-    if (salvo && coords) {
-      resultados[coords.nivel]++;
-    } else {
-      resultados.falhas++;
+  if (qEstados) {
+    estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
+  } else if (req.method === 'GET') {
+    // Cron */10 0,1,2,3,4 * * * — cada invocação processa 1 estado pelo horário UTC
+    // 00:00→AC, 00:10→AL, ..., 04:20→TO  (27 estados em 270 min)
+    const now = new Date();
+    const hora = now.getUTCHours(); // 0,1,2,3,4
+    const minuto = now.getUTCMinutes();
+    const idx = hora * 6 + Math.floor(minuto / 10);
+    if (idx < 0 || idx >= ESTADOS_GEOCOD.length) {
+      return new Response(JSON.stringify({ msg: 'idle', hora, minuto, idx }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
     }
-    await sleep(1100); // rate limit Nominatim entre imóveis
+    estados = [ESTADOS_GEOCOD[idx]];
+  } else if (req.method === 'POST') {
+    try {
+      const body = await req.json();
+      if (Array.isArray(body.estados) && body.estados.length > 0) estados = body.estados;
+    } catch {}
+    modoManual = true;
   }
 
-  return new Response(JSON.stringify(resultados), {
+  const estadosFilter = estados?.length
+    ? `&estado=in.(${estados.map(e => `"${e}"`).join(',')})`
+    : '';
+
+  // Modo cron (GET): loop até acabar todos os pendentes ou restar <30s de margem
+  // Modo manual (POST): processa 1 lote de 50 e retorna (para o admin monitorar em tempo real)
+  if (modoManual) {
+    const res = await processarLote(estadosFilter, 50);
+    if (!res) return new Response(JSON.stringify({ error: 'Supabase error' }), { status: 500 });
+    if (!res.processados) return new Response(JSON.stringify({ processados: 0, msg: 'Nenhum imóvel pendente' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
+
+  // Modo cron: loop interno — processa tudo que couber em ~270s (margem de 30s antes do timeout)
+  const LIMITE_MS = 270_000;
+  const inicio = Date.now();
+  const total = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
+
+  while (Date.now() - inicio < LIMITE_MS) {
+    const res = await processarLote(estadosFilter, 50);
+    if (!res || res.processados === 0) break; // sem mais pendentes
+    total.processados += res.processados;
+    total.endereco    += res.endereco;
+    total.bairro      += res.bairro;
+    total.cidade      += res.cidade;
+    total.falhas      += res.falhas;
+    total.cache_hits  += res.cache_hits;
+    total.lotes++;
+    if (res.processados < 50) break; // último lote
+  }
+
+  return new Response(JSON.stringify(total), {
     status: 200,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });

@@ -1,3 +1,4 @@
+import { getUser, getUserRole } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -99,11 +100,17 @@ _______________________________________
 Assinatura`;
 
 export default async function handler(req, res) {
+
+  const user = await getUser(req);
+  if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
   const { userId, planoKey, nomeUsuario, emailUsuario } = req.body || {};
   if (!planoKey || !['assessorado', 'clube'].includes(planoKey)) {
     return res.status(400).json({ error: 'planoKey deve ser assessorado ou clube' });
+  }
+  if (emailUsuario && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailUsuario)) {
+    return res.status(400).json({ error: 'emailUsuario inválido' });
   }
 
   // Tenta buscar nome do perfil do usuário

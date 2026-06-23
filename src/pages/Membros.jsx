@@ -7,6 +7,7 @@ import {
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { apiCall } from '../utils/apiCall';
 
 // Progresso salvo no localStorage (fallback)
 function getProgressoLocal() {
@@ -424,7 +425,7 @@ export default function Membros() {
                     if (!user?.email) return;
                     setCancelando(true);
                     try {
-                      const r = await fetch('/api/asaas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'cancelar_assinatura', email: user.email }) });
+                      const r = await apiCall('/api/asaas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'cancelar_assinatura', email: user.email }) });
                       const d = await r.json();
                       if (!r.ok) throw new Error(d.error || 'Erro ao cancelar');
                       setCancelMsg('Plano cancelado com sucesso. Você mantém o acesso até o fim do período pago.');

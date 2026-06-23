@@ -27,14 +27,32 @@ export default function Privacidade() {
         <h2 style={h2}>3. Compartilhamento</h2>
         <p>Compartilhamos dados apenas com prestadores essenciais à operação — processador de pagamentos (Asaas), infraestrutura (Supabase) e, quando aplicável, escritório jurídico parceiro para a assessoria contratada. Não vendemos seus dados.</p>
 
-        <h2 style={h2}>4. Seus direitos</h2>
-        <p>Você pode, a qualquer momento, solicitar acesso, correção, portabilidade ou exclusão dos seus dados, bem como revogar o consentimento. Basta enviar um pedido para o contato abaixo.</p>
+        <h2 style={h2}>4. Seus direitos (LGPD Art. 18)</h2>
+        <p>Em conformidade com o Art. 18 da LGPD, você tem os seguintes direitos em relação aos seus dados pessoais, exercíveis a qualquer momento:</p>
+        <ul style={{ paddingLeft: 20, marginTop: 8 }}>
+          <li style={{ marginBottom: 8 }}><strong>Acesso e portabilidade:</strong> Você pode baixar uma cópia completa de todos os seus dados pessoais diretamente na página <strong>Meu Perfil</strong>, clicando em "Baixar meus dados". O arquivo é gerado instantaneamente no formato JSON.</li>
+          <li style={{ marginBottom: 8 }}><strong>Retificação:</strong> Você pode corrigir seu nome a qualquer momento na página Meu Perfil. Para alteração de e-mail, entre em contato com o DPO.</li>
+          <li style={{ marginBottom: 8 }}><strong>Exclusão (direito ao esquecimento):</strong> Você pode solicitar a exclusão da sua conta diretamente na página <strong>Meu Perfil</strong>, na seção "Seus Dados (LGPD)". Seus dados pessoais (nome, CPF, telefone) serão anonimizados imediatamente. Registros financeiros são mantidos pelo prazo legal (veja seção 5). Sua sessão será encerrada automaticamente.</li>
+          <li style={{ marginBottom: 8 }}><strong>Revogação do consentimento:</strong> Você pode revogar o consentimento a qualquer momento, o que implicará na impossibilidade de uso dos serviços que dele dependem.</li>
+          <li style={{ marginBottom: 8 }}><strong>Oposição:</strong> Você pode se opor ao tratamento de dados realizado com fundamento em legítimo interesse.</li>
+        </ul>
+        <p style={{ marginTop: 12 }}>Respondemos a solicitações de direitos no prazo de <strong>até 15 dias úteis</strong>, conforme previsto no Art. 18 da LGPD.</p>
 
-        <h2 style={h2}>5. Segurança e retenção</h2>
-        <p>Adotamos medidas técnicas para proteger seus dados. Eles são mantidos enquanto a conta estiver ativa e pelo prazo exigido por obrigações legais e fiscais.</p>
+        <h2 style={h2}>5. Segurança e retenção de dados</h2>
+        <p>Adotamos medidas técnicas e organizacionais para proteger seus dados contra acesso não autorizado, perda ou destruição, incluindo criptografia em trânsito (TLS) e autenticação segura.</p>
+        <p style={{ marginTop: 10 }}>Prazos de retenção:</p>
+        <ul style={{ paddingLeft: 20, marginTop: 8 }}>
+          <li style={{ marginBottom: 6 }}><strong>Dados financeiros e registros de compras:</strong> mantidos por <strong>5 anos</strong> após o encerramento da conta, em cumprimento às obrigações legais e fiscais (Lei nº 9.613/98 e legislação tributária aplicável).</li>
+          <li style={{ marginBottom: 6 }}><strong>Dados pessoais, histórico de buscas, alertas e filtros salvos:</strong> excluídos ou anonimizados imediatamente no encerramento da conta.</li>
+          <li style={{ marginBottom: 6 }}><strong>Dados de suporte (chamados):</strong> mantidos por até 2 anos para fins de auditoria.</li>
+        </ul>
 
-        <h2 style={h2}>6. Encarregado (DPO) / Contato</h2>
-        <p>Para exercer seus direitos ou tirar dúvidas sobre privacidade, contate <a href="mailto:tarcisioaraujo@reimob.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>tarcisioaraujo@reimob.com.br</a>.</p>
+        <h2 style={h2}>6. Encarregado pelo Tratamento de Dados (DPO)</h2>
+        <p>Em cumprimento ao Art. 41 da LGPD, designamos um Encarregado pelo Tratamento de Dados Pessoais (Data Protection Officer — DPO). Para exercer seus direitos, esclarecer dúvidas sobre privacidade ou registrar reclamações, entre em contato:</p>
+        <p style={{ marginTop: 10 }}>
+          <strong>E-mail:</strong> <a href="mailto:tarcisioaraujo@reimob.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>tarcisioaraujo@reimob.com.br</a><br />
+          <strong>Prazo de resposta:</strong> até 15 dias úteis (LGPD Art. 18, §5º)
+        </p>
       </div>
     </div>
   );

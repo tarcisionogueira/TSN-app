@@ -19,7 +19,7 @@ import {
 
 function verificarAssinatura(req) {
   const secret = process.env.PAGARME_WEBHOOK_SECRET;
-  if (!secret) return true; // sem secret configurado: aceita (dev)
+  if (!secret) return false; // sem secret configurado: rejeita sempre
 
   // Pagar.me envia HMAC-SHA256 no header X-Hub-Signature
   const signature = req.headers['x-hub-signature'] || '';

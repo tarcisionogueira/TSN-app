@@ -1,6 +1,10 @@
 export const config = { runtime: 'edge' };
+import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 export default async function handler(req) {
+
+  const user = await getUser(req);
+  if (!user) return unauthorized();
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const RESEND_KEY = process.env.RESEND_API_KEY;
@@ -10,6 +14,10 @@ export default async function handler(req) {
 
   if (!clienteEmail || !reuniaoEm || !meetLink) {
     return new Response(JSON.stringify({ error: 'dados insuficientes' }), { status: 400 });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clienteEmail)) {
+    return new Response(JSON.stringify({ error: 'clienteEmail inválido' }), { status: 400 });
   }
 
   const dataFormatada = new Date(reuniaoEm).toLocaleString('pt-BR', {
