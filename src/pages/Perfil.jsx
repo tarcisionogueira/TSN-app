@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 import { BarChart2, FileText, Clock, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { apiCall } from '../utils/apiCall';
 
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -63,6 +64,13 @@ export default function Perfil() {
   const [relatorios, setRelatorios] = useState([]);
   const [loadRelatorios, setLoadRelatorios] = useState(false);
 
+  // LGPD states
+  const [baixando, setBaixando] = useState(false);
+  const [mostrarConfirmacaoExclusao, setMostrarConfirmacaoExclusao] = useState(false);
+  const [textoConfirmacao, setTextoConfirmacao] = useState('');
+  const [excluindo, setExcluindo] = useState(false);
+  const [lgpdErro, setLgpdErro] = useState(null);
+
   useEffect(() => {
     if (!user?.id) return;
     setLoadRelatorios(true);
@@ -121,6 +129,39 @@ export default function Perfil() {
       setMensagem({ tipo: 'erro', texto: err.message || 'Erro ao salvar alterações.' });
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function baixarDados() {
+    setBaixando(true);
+    setLgpdErro(null);
+    try {
+      const res = await apiCall('/api/lgpd-exportar');
+      const blob = new Blob([JSON.stringify(res, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `meus-dados-bidpro-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setLgpdErro('Erro ao exportar dados. Tente novamente.');
+    } finally {
+      setBaixando(false);
+    }
+  }
+
+  async function excluirConta() {
+    if (textoConfirmacao !== 'EXCLUIR') return;
+    setExcluindo(true);
+    setLgpdErro(null);
+    try {
+      await apiCall('/api/lgpd-excluir', { method: 'POST' });
+      await supabase.auth.signOut();
+      nav('/');
+    } catch (err) {
+      setLgpdErro('Erro ao excluir conta. Tente novamente.');
+      setExcluindo(false);
     }
   }
 
@@ -368,6 +409,96 @@ export default function Perfil() {
               {salvando ? 'Salvando...' : 'Salvar alterações'}
             </button>
           </form>
+        </div>
+
+        {/* Seção LGPD */}
+        <div style={{ background: 'white', borderRadius: 14, padding: 24, marginTop: 24, border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#111111', marginBottom: 6 }}>Seus Dados (LGPD)</div>
+          <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px' }}>
+            Em conformidade com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018), você pode exportar uma cópia de todos os seus dados pessoais ou solicitar a exclusão da sua conta.
+          </p>
+
+          {lgpdErro && (
+            <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 14, fontSize: 13, fontWeight: 600, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+              {lgpdErro}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: mostrarConfirmacaoExclusao ? 16 : 0 }}>
+            <button
+              onClick={baixarDados}
+              disabled={baixando}
+              style={{
+                padding: '10px 18px',
+                background: 'white',
+                color: '#0D63DB',
+                border: '1px solid #0D63DB',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: baixando ? 'not-allowed' : 'pointer',
+                opacity: baixando ? 0.7 : 1,
+              }}>
+              {baixando ? 'Exportando...' : 'Baixar meus dados'}
+            </button>
+            <button
+              onClick={() => { setMostrarConfirmacaoExclusao(v => !v); setTextoConfirmacao(''); setLgpdErro(null); }}
+              style={{
+                padding: '10px 18px',
+                background: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}>
+              Excluir minha conta
+            </button>
+          </div>
+
+          {mostrarConfirmacaoExclusao && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 8 }}>Tem certeza? Esta ação é irreversível.</div>
+              <p style={{ fontSize: 12, color: '#7f1d1d', margin: '0 0 12px', lineHeight: 1.6 }}>
+                Seus dados pessoais serão anonimizados. Registros financeiros são mantidos por 5 anos por obrigação legal. Você será desconectado imediatamente.
+              </p>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>
+                  Digite <strong>EXCLUIR</strong> para confirmar:
+                </label>
+                <input
+                  type="text"
+                  value={textoConfirmacao}
+                  onChange={e => setTextoConfirmacao(e.target.value)}
+                  placeholder="EXCLUIR"
+                  style={{ padding: '8px 12px', border: '1px solid #fca5a5', borderRadius: 6, fontSize: 13, width: '100%', boxSizing: 'border-box', outline: 'none' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={excluirConta}
+                  disabled={textoConfirmacao !== 'EXCLUIR' || excluindo}
+                  style={{
+                    padding: '9px 18px',
+                    background: textoConfirmacao === 'EXCLUIR' ? '#dc2626' : '#94a3b8',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: textoConfirmacao === 'EXCLUIR' && !excluindo ? 'pointer' : 'not-allowed',
+                  }}>
+                  {excluindo ? 'Excluindo...' : 'Confirmar exclusão'}
+                </button>
+                <button
+                  onClick={() => { setMostrarConfirmacaoExclusao(false); setTextoConfirmacao(''); }}
+                  style={{ padding: '9px 18px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
