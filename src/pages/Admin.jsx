@@ -3516,26 +3516,26 @@ function TourTab() {
 }
 
 // ─── Aba Scrapers ─────────────────────────────────────────────────────────────
+const REGIOES_ESTADOS = {
+  'Norte':       ['AC','AM','AP','PA','RO','RR','TO'],
+  'Nordeste':    ['AL','BA','CE','MA','PB','PE','PI','RN','SE'],
+  'Centro-Oeste':['DF','GO','MS','MT'],
+  'Sudeste':     ['ES','MG','RJ','SP'],
+  'Sul':         ['PR','RS','SC'],
+};
+
 function ScrapersTab() {
   const [status, setStatus] = useState(null);
   const [running, setRunning] = useState(false);
   const [resultado, setResultado] = useState(null);
   const [erroMsg, setErroMsg] = useState('');
-  const [geocStatus, setGeocStatus] = React.useState(null);
-  const [geocLoading, setGeocLoading] = React.useState(false);
 
-  async function rodarGeocodificacao(limite = 50) {
-    setGeocLoading(true);
-    setGeocStatus(null);
-    try {
-      const res = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite }) });
-      const data = await res.json();
-      setGeocStatus(data);
-    } catch (e) {
-      setGeocStatus({ error: e.message });
-    }
-    setGeocLoading(false);
-  }
+  // Geocodificação com loop automático
+  const [geocRodando, setGeocRodando] = useState(false);
+  const [geocParar, setGeocParar] = useState(false);
+  const geocPararRef = React.useRef(false);
+  const [geocLog, setGeocLog] = useState([]); // [{rodada, processados, geocodificados, falhas}]
+  const [geocTotal, setGeocTotal] = useState({ processados: 0, geocodificados: 0, falhas: 0 });
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
@@ -3544,107 +3544,193 @@ function ScrapersTab() {
   async function executarScraper() {
     setRunning(true); setResultado(null); setErroMsg('');
     try {
-      const r = await apiCall('/api/scraper-caixa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
+      const r = await apiCall('/api/scraper-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
       const d = await r.json();
-      if (!r.ok) { setErroMsg(d.error || 'Erro ao executar o scraper.'); }
+      if (!r.ok) setErroMsg(d.error || 'Erro ao executar o scraper.');
       else { setResultado(d); apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}); }
     } catch (e) { setErroMsg(e.message); }
     setRunning(false);
   }
 
-  return (
-    <div style={{ maxWidth: 640 }}>
-      <h3 style={{ margin: '0 0 20px', fontWeight: 800, color: '#111111' }}>Importar Imóveis de Leilão</h3>
+  async function iniciarGeocLoop() {
+    setGeocRodando(true);
+    geocPararRef.current = false;
+    setGeocParar(false);
+    setGeocLog([]);
+    setGeocTotal({ processados: 0, geocodificados: 0, falhas: 0 });
+    let rodada = 1;
+    let totalProc = 0, totalGeoc = 0, totalFalhas = 0;
+    while (!geocPararRef.current) {
+      try {
+        const res = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite: 50 }) });
+        if (!res.ok) { setGeocLog(l => [...l, { rodada, erro: 'Timeout ou erro do servidor. Aguarde e tente novamente.' }]); break; }
+        const data = await res.json();
+        if (data.msg || data.processados === 0) {
+          setGeocLog(l => [...l, { rodada, processados: 0, geocodificados: 0, falhas: 0, concluido: true }]);
+          break;
+        }
+        totalProc += data.processados || 0;
+        totalGeoc += data.geocodificados || 0;
+        totalFalhas += data.falhas || 0;
+        setGeocLog(l => [...l, { rodada, processados: data.processados, geocodificados: data.geocodificados, falhas: data.falhas }]);
+        setGeocTotal({ processados: totalProc, geocodificados: totalGeoc, falhas: totalFalhas });
+        rodada++;
+        if ((data.processados || 0) < 50) break; // última rodada
+      } catch (e) { setGeocLog(l => [...l, { rodada, erro: e.message }]); break; }
+    }
+    setGeocRodando(false);
+    apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
+  }
 
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '24px', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🏦</div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#111111', marginBottom: 4 }}>Caixa Econômica Federal</div>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-              Importa imóveis disponíveis para venda diretamente do portal da Caixa para todos os estados do Brasil.
-              Os dados são atualizados na tabela <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, fontSize: 12 }}>imoveis_leilao</code>.
-            </p>
+  function pararGeoc() { geocPararRef.current = true; setGeocParar(true); }
+
+  // Scrapers planejados
+  const scrapersPlanjados = [
+    { nome: 'Santander', volume: '~8-15k', status: 'planejado' },
+    { nome: 'Biassi', volume: '~3-5k', status: 'planejado' },
+    { nome: 'Zuk', volume: '~1.5-3k', status: 'planejado' },
+    { nome: 'MGL Leilões', volume: '~800-1.5k', status: 'planejado' },
+    { nome: 'HastaPública', volume: '~2-4k', status: 'planejado' },
+    { nome: 'TopLeilões', volume: '~1-2k', status: 'planejado' },
+    { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
+  ];
+
+  const geocProgresso = geocLog.length > 0 ? geocLog[geocLog.length - 1] : null;
+
+  return (
+    <div style={{ maxWidth: 900 }}>
+      {/* ── Header KPIs ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+        {[
+          { label: 'Imóveis no banco', valor: status?.total?.toLocaleString('pt-BR') || '—', icon: '🏠', cor: '#0D63DB' },
+          { label: 'Última atualização', valor: status?.ultima_atualizacao ? new Date(status.ultima_atualizacao).toLocaleDateString('pt-BR') : '—', icon: '🕐', cor: '#059669' },
+          { label: 'Cron diário', valor: '01:00', icon: '⏰', cor: '#7c3aed' },
+          { label: 'Geocodificação', valor: '03:00', icon: '📍', cor: '#d97706' },
+        ].map(k => (
+          <div key={k.label} style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
+            <div style={{ fontSize: 20, marginBottom: 6 }}>{k.icon}</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: k.cor }}>{k.valor}</div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{k.label}</div>
           </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        {/* ── Scraper Caixa ── */}
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏦</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Ativo · CSV público</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
+            Importa todos os imóveis do portal da Caixa (27 estados). Fotos e editais via link externo — sem custo de storage.
+          </div>
+          {status && (
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#475569', display: 'flex', gap: 12 }}>
+              <span>📦 <b>{status.total?.toLocaleString('pt-BR') || 0}</b> imóveis</span>
+              {status.ultima_atualizacao && <span>🕐 {new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</span>}
+            </div>
+          )}
+          {resultado && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#166534' }}>
+              ✅ <b>{resultado.processados?.toLocaleString('pt-BR')}</b> importados · {resultado.estados_ok?.length} estados OK
+              {resultado.estados_erro?.length > 0 && <span style={{ color: '#dc2626' }}> · {resultado.estados_erro.length} erros</span>}
+            </div>
+          )}
+          {erroMsg && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#dc2626' }}>⚠️ {erroMsg}</div>}
+          <button onClick={executarScraper} disabled={running}
+            style={{ width: '100%', padding: '10px', background: running ? '#94a3b8' : '#c2410c', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: running ? 'default' : 'pointer' }}>
+            {running ? '⏳ Importando...' : '🔄 Importar agora'}
+          </button>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>Cron automático: todo dia às 01:00</div>
         </div>
-        {status && (
-          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#475569', display: 'flex', gap: 20 }}>
-            <span>📦 <strong>{status.total?.toLocaleString('pt-BR') || 0}</strong> imóveis no banco</span>
-            {status.ultima_atualizacao && (
-              <span>🕐 Atualizado em {new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</span>
+
+        {/* ── Geocodificação ── */}
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Ativo · Nominatim / OSM</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
+            Adiciona lat/lng em cascata: endereço → bairro → cidade. Processa 50/lote respeitando 1 req/s.
+          </div>
+
+          {/* Progresso em tempo real */}
+          {geocLog.length > 0 && (
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12 }}>
+              <div style={{ fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                {geocRodando ? `⏳ Rodada ${geocLog.length} em andamento...` : geocLog[geocLog.length-1]?.concluido ? '✅ Concluído!' : '⏹ Parado'}
+              </div>
+              <div style={{ display: 'flex', gap: 12, color: '#475569' }}>
+                <span>✅ <b>{geocTotal.geocodificados}</b> localizados</span>
+                <span>❌ <b>{geocTotal.falhas}</b> sem resultado</span>
+                <span>📦 <b>{geocTotal.processados}</b> processados</span>
+              </div>
+              {geocRodando && (
+                <div style={{ marginTop: 8, background: '#e2e8f0', borderRadius: 4, height: 4 }}>
+                  <div style={{ background: '#0D63DB', height: 4, borderRadius: 4, width: `${Math.min(100, (geocLog.length / 10) * 100)}%`, transition: 'width 0.3s' }} />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={iniciarGeocLoop} disabled={geocRodando}
+              style={{ flex: 1, padding: '10px', background: geocRodando ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: geocRodando ? 'default' : 'pointer' }}>
+              {geocRodando ? '⏳ Rodando...' : '📍 Geocodificar tudo'}
+            </button>
+            {geocRodando && (
+              <button onClick={pararGeoc}
+                style={{ padding: '10px 14px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                ⏹ Parar
+              </button>
             )}
           </div>
-        )}
-        {resultado && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
-            ✅ <strong>{resultado.processados?.toLocaleString('pt-BR')}</strong> imóveis importados —
-            {resultado.estados_ok?.length} estados OK{resultado.estados_erro?.length > 0 ? `, ${resultado.estados_erro.length} com erro` : ''}
-          </div>
-        )}
-        {erroMsg && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#dc2626' }}>
-            ⚠️ {erroMsg}
-          </div>
-        )}
-        <button onClick={executarScraper} disabled={running}
-          style={{ padding: '11px 24px', background: running ? '#94a3b8' : '#c2410c', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: running ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {running ? '⏳ Buscando imóveis...' : '🔄 Buscar imóveis Caixa'}
-        </button>
-        <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>
-          Pode levar até 60 segundos. Cobre todos os 27 estados.
-        </p>
-      </div>
-
-      {/* ── Geocodificação ── */}
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '24px', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 22 }}>🗺️</div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#111111', marginBottom: 4 }}>Geocodificação de Imóveis</div>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-              Adiciona latitude/longitude aos imóveis sem coordenadas via Nominatim (OpenStreetMap).
-              Necessário para exibir imóveis no mapa. Processa 50 por vez respeitando o limite de 1 req/seg.
-            </p>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>
+            50/lote · loop automático · cron às 03:00 · limite Nominatim: 1 req/s
           </div>
         </div>
-        {geocStatus && !geocStatus.error && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
-            ✅ <strong>{geocStatus.processados}</strong> imóveis processados —
-            <strong> {geocStatus.geocodificados}</strong> com coordenadas · <strong>{geocStatus.falhas}</strong> sem resultado
-          </div>
-        )}
-        {geocStatus?.error && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#dc2626' }}>
-            ⚠️ {geocStatus.error}
-          </div>
-        )}
-        {geocStatus?.msg && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
-            ✅ {geocStatus.msg}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => rodarGeocodificacao(50)} disabled={geocLoading}
-            style={{ padding: '11px 24px', background: geocLoading ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: geocLoading ? 'default' : 'pointer' }}>
-            {geocLoading ? '⏳ Geocodificando...' : '📍 Geocodificar 50 imóveis'}
-          </button>
-          <button onClick={() => rodarGeocodificacao(200)} disabled={geocLoading}
-            style={{ padding: '11px 24px', background: geocLoading ? '#94a3b8' : '#084BA6', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: geocLoading ? 'default' : 'pointer' }}>
-            {geocLoading ? '⏳ Geocodificando...' : '📍 Geocodificar 200 imóveis'}
-          </button>
-        </div>
-        <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>
-          50 imóveis ≈ 1 min · 200 imóveis ≈ 4 min. Roda automaticamente toda noite às 3h.
-          Marco de troca para Google Maps: 5.000 imóveis ativos ou 500 novos/mês.
-        </p>
       </div>
 
-      <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: '16px 18px', fontSize: 13, color: '#64748b' }}>
-        <strong style={{ color: '#475569' }}>Próximos scrapers previstos:</strong> Santander · Biassi · Zuk · MGL · HastaPública · TopLeilões · eLeilões
+      {/* ── Próximos Scrapers ── */}
+      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, color: '#111', marginBottom: 4 }}>🚀 Roadmap de Scrapers</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+          Todos os scrapers usam link/proxy externo — sem custo de storage para fotos e editais.
+          Volume estimado total ao integrar todos: <b>~50.000-80.000 imóveis</b>.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          {scrapersPlanjados.map(s => (
+            <div key={s.nome} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', border: '1px dashed #cbd5e1' }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#334155' }}>{s.nome}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{s.volume} imóveis</div>
+              <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>Em breve</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Regiões para geocodificação paralela (futuro) ── */}
+      <div style={{ background: '#f0f9ff', borderRadius: 14, border: '1px solid #bae6fd', padding: 20 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: '#0369a1', marginBottom: 8 }}>
+          💡 Próximo: Geocodificação paralela por região (5x mais rápido)
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {Object.entries(REGIOES_ESTADOS).map(([regiao, estados]) => (
+            <div key={regiao} style={{ background: 'white', borderRadius: 8, padding: '6px 12px', fontSize: 12, border: '1px solid #bae6fd' }}>
+              <b>{regiao}</b>: {estados.join(', ')}
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: '#0369a1', marginTop: 8 }}>
+          5 workers × 50 imóveis = 250/lote · de ~9h para ~1.8h no primeiro processamento completo
+        </div>
       </div>
     </div>
   );
