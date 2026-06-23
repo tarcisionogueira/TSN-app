@@ -7,7 +7,7 @@
  * Todas são consultas PÚBLICAS — não requerem certificado digital.
  */
 import { getUser } from './_auth.js';
-import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { sanitizeCpfCnpj } from './_sanitize.js';
 
 export const config = { runtime: 'edge' };

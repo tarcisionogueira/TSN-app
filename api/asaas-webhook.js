@@ -60,6 +60,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, ignored: tipo });
   } catch (e) {
     console.error('[asaas-webhook]', e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: 'Erro interno no webhook' });
   }
 }

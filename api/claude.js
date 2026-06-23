@@ -1,6 +1,7 @@
 // Vercel Edge Function — proxy seguro para Claude API (chave nunca exposta no browser)
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
+import { getUser, unauthorized } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
@@ -14,6 +15,10 @@ export default async function handler(req) {
   }
 
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`claude:${ip}`, 30, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const user = await getUser(req);
   if (!user) return unauthorized();

@@ -345,6 +345,6 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('Asaas error:', err.message);
     alertarErro({ rota: '/api/asaas', erro: err.message, extra: { action } });
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Erro interno no processamento' });
   }
 }
