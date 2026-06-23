@@ -148,7 +148,7 @@ function PastoFoto({ cor, instrucao, validacao_prompt, onCapturada }) {
     setValidacaoOk(null);
     setMsgValidacao('');
     try {
-      const res = await apiCall('/api/validar-selfie, {
+      const res = await apiCall('/api/validar-selfie', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imagem: dataUrl, validacao_prompt }),

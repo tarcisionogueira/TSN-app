@@ -19,7 +19,7 @@ async function callAPI(payload, useSearch = false) {
     return r.json();
   }
   // Produção: via Edge Function (seguro)
-  const r = await apiCall('/api/claude, {
+  const r = await apiCall('/api/claude', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, useSearch }),

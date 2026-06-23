@@ -156,7 +156,7 @@ export default function ChatSuporte() {
   async function dispararIA(tk, msgs) {
     setLoadingIA(true);
     try {
-      const res = await apiCall('/api/chat-suporte, {
+      const res = await apiCall('/api/chat-suporte', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensagens: msgs, memoria: memoriaIA }),
       });
@@ -209,7 +209,7 @@ export default function ChatSuporte() {
     clearTimeout(avisoTimer.current);
     clearTimeout(fecharTimer.current);
     // Gera resumo em background para memória futura
-    if (user?.id) apiCall('/api/resumir-ticket, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticketId: ticket.id, userId: user.id }) });
+    if (user?.id) apiCall('/api/resumir-ticket', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticketId: ticket.id, userId: user.id }) });
   }
 
   function handlePaste(e) {

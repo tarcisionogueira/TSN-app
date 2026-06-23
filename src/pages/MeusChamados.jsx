@@ -68,7 +68,7 @@ export default function MeusChamados() {
     // Aciona IA
     setLoadingIA(true);
     try {
-      const res = await apiCall('/api/chat-suporte, {
+      const res = await apiCall('/api/chat-suporte', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensagens: novaLista }),
       });

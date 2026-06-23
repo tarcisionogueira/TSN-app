@@ -119,7 +119,7 @@ export default function Checkout() {
     setVerificando(true);
     const verificar = async () => {
       try {
-        const res = await apiCall('/api/verificar-pagamento, {
+        const res = await apiCall('/api/verificar-pagamento', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(asaasIds),
@@ -231,7 +231,7 @@ export default function Checkout() {
     setLoading(true);
     setErro('');
     try {
-      const res = await apiCall('/api/asaas, {
+      const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -267,7 +267,7 @@ export default function Checkout() {
     setLoading(true);
     setErro('');
     try {
-      const res = await apiCall('/api/asaas, {
+      const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'gerenciar_assinatura', email: user.email, plano: planoKey }),
@@ -292,7 +292,7 @@ export default function Checkout() {
     setPago(true);
     if (planoKey === 'assessorado' || planoKey === 'clube') {
       try {
-        const res = await apiCall('/api/auto-contrato, {
+        const res = await apiCall('/api/auto-contrato', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

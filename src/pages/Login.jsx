@@ -82,7 +82,7 @@ export default function Login() {
   async function checarEmail(email) {
     if (!email || !email.includes('@')) return;
     try {
-      const res = await apiCall('/api/verificar-cpf, {
+      const res = await apiCall('/api/verificar-cpf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -102,7 +102,7 @@ export default function Login() {
         : produtoParam
         ? { tipo: produtoParam.split(':')[0], id: produtoParam.split(':')[1] }
         : null;
-      const res = await apiCall('/api/verificar-cpf, {
+      const res = await apiCall('/api/verificar-cpf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf: cpfLimpo, produto }),

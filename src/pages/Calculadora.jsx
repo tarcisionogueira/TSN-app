@@ -99,7 +99,7 @@ export default function Calculadora() {
     setLeadMsg('');
     try {
       const ref = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
-      const res = await apiCall('/api/verificar-cpf, {
+      const res = await apiCall('/api/verificar-cpf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf: leadCpf, email: leadEmail }),

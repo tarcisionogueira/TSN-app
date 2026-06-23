@@ -781,7 +781,7 @@ function ContratoModal({ chave, planos, onClose }) {
     setEtapa('gerando');
     try {
       const descFull = desc;
-      const r = await apiCall('/api/gerar-contrato, {
+      const r = await apiCall('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ titulo: `Contrato — ${nomeContrato}`, tipo: 'servico', descricao: descFull, arquivos: [] }),
@@ -796,7 +796,7 @@ function ContratoModal({ chave, planos, onClose }) {
     if (!instrucaoIA.trim()) return;
     setReescrevendo(true);
     try {
-      const r = await apiCall('/api/gerar-contrato, {
+      const r = await apiCall('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -1640,7 +1640,7 @@ function ContratosTab() {
     if (!descricao.trim()) { alert('Descreva o que o contrato deve conter.'); return; }
     setGerandoContrato(true);
     try {
-      const r = await apiCall('/api/gerar-contrato, {
+      const r = await apiCall('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -2526,7 +2526,7 @@ function DashboardTab() {
   }
 
   async function rodarHealthCheck() {
-    await apiCall('/api/health-check, { method: 'POST' });
+    await apiCall('/api/health-check', { method: 'POST' });
     loadHealth();
   }
 
@@ -2564,7 +2564,7 @@ function DashboardTab() {
 
     async function loadAsaas() {
       try {
-        const res = await apiCall('/api/asaas, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
+        const res = await apiCall('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
         const data = await res.json();
         if (res.ok) setAsaasDados(data);
         else setAsaasDados({ error: data?.error || 'Erro desconhecido' });
@@ -3330,7 +3330,7 @@ function SystemStatusCard() {
   const [status, setStatus] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   React.useEffect(() => {
-    apiCall('/api/system-status).then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
+    apiCall('/api/system-status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
   const GRUPOS = {
     geral:  { label: 'Geral', items: ['baseUrl', 'cron'] },
@@ -3528,7 +3528,7 @@ function ScrapersTab() {
     setGeocLoading(true);
     setGeocStatus(null);
     try {
-      const res = await apiCall('/api/geocodificar, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite }) });
+      const res = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite }) });
       const data = await res.json();
       setGeocStatus(data);
     } catch (e) {
@@ -3538,20 +3538,20 @@ function ScrapersTab() {
   }
 
   useEffect(() => {
-    apiCall('/api/scraper-status).then(r => r.json()).then(setStatus).catch(() => {});
+    apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
 
   async function executarScraper() {
     setRunning(true); setResultado(null); setErroMsg('');
     try {
-      const r = await apiCall('/api/scraper-caixa, {
+      const r = await apiCall('/api/scraper-caixa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
       const d = await r.json();
       if (!r.ok) { setErroMsg(d.error || 'Erro ao executar o scraper.'); }
-      else { setResultado(d); apiCall('/api/scraper-status).then(r2 => r2.json()).then(setStatus).catch(() => {}); }
+      else { setResultado(d); apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}); }
     } catch (e) { setErroMsg(e.message); }
     setRunning(false);
   }
@@ -3989,7 +3989,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
     // Cria sala Daily.co com transcrição forçada
     let linkFinal = meetLink;
     try {
-      const r = await apiCall('/api/criar-sala-reuniao, {
+      const r = await apiCall('/api/criar-sala-reuniao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ solicitacaoId: sol.id, reuniaoEm, duracaoMin: reuniaoDuracao }),
@@ -4013,7 +4013,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
     }).eq('id', sol.id);
 
     try {
-      await apiCall('/api/notificar-reuniao, {
+      await apiCall('/api/notificar-reuniao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5250,7 +5250,7 @@ function CnjTab() {
     if (params) {
       setChat(prev => [...prev, { role: 'assistant', content: `🔍 Consultando DataJud com os dados encontrados na sua pergunta...` }]);
       try {
-        const r = await apiCall('/api/cnj-datajud, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
+        const r = await apiCall('/api/cnj-datajud', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
         const data = await r.json();
         if (r.ok) {
           cnj = data;
@@ -5265,7 +5265,7 @@ function CnjTab() {
     }
 
     try {
-      const r = await apiCall('/api/admin-chat, {
+      const r = await apiCall('/api/admin-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mensagem: texto,

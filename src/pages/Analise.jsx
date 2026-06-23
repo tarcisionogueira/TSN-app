@@ -171,7 +171,7 @@ export default function Analise() {
     if (!d.estado) { setCnjErro('Preencha o Estado do imóvel (Etapa 2) para determinar o tribunal.'); return; }
     setLoadCnj(true); setCnjErro(''); setCnjResultados(null);
     try {
-      const res = await apiCall('/api/cnj-datajud, {
+      const res = await apiCall('/api/cnj-datajud', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ numero_processo: cnjNumero.trim(), nome_parte: cnjNome.trim(), uf: d.estado }),
