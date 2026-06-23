@@ -251,18 +251,32 @@ export default function Planos() {
                   </div>
                   {key === 'assessorado' && (
                     <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>ou R$ 5.000 à vista <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '1px 7px', marginLeft: 4 }}>20% off</span></div>
+                      {plano.precoVistaLabel2
+                        ? <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>{plano.precoVistaLabel2}</div>
+                        : <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>ou {plano.precoVistaLabel} à vista <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '1px 7px', marginLeft: 4 }}>20% off</span></div>
+                      }
                       <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Parcelado: juros do cliente a partir da 4ª parcela</div>
+                      <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '2px 8px' }}>1 arrematação</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '2px 8px' }}>12 meses · prazo extensível</span>
+                      </div>
                     </div>
                   )}
                   {key === 'clube' && (
                     <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>ou R$ 48.000 à vista <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '1px 7px', marginLeft: 4 }}>20% off</span></div>
+                      {plano.precoVistaLabel2
+                        ? <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>{plano.precoVistaLabel2}</div>
+                        : <div style={{ fontSize: 13, color: '#059669', fontWeight: 700 }}>ou {plano.precoVistaLabel} à vista <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '1px 7px', marginLeft: 4 }}>20% off</span></div>
+                      }
                       <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Parcelado: juros do cliente a partir da 4ª parcela</div>
+                      <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, background: '#d1fae5', color: '#065f46', borderRadius: 6, padding: '2px 8px' }}>Fidelidade 12 meses</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '2px 8px' }}>Multa cancel. antecipado: {plano.multa_cancelamento_pct ?? 30}% saldo</span>
+                      </div>
                     </div>
                   )}
                   <div style={{ display: 'inline-block', background: plano.bg, color: plano.cor, fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 8, marginBottom: 16 }}>
-                    + 10% de honorários sobre a arrematação
+                    + {plano.honorarios_exito_pct ?? plano.honorarios ?? 10}% honorários sobre a arrematação
                   </div>
                   <p style={{ fontSize: 14, color: '#64748b', marginBottom: 20, lineHeight: 1.6 }}>{plano.descricao}</p>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>

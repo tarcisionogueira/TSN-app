@@ -42,6 +42,12 @@ export async function fetchPlanosComConfig() {
       comissao_pct: cfg.comissao_pct ?? 0,
       cobrar: cfg.cobrar,
       ativo: cfg.ativo,
+      fidelidade_meses: cfg.fidelidade_meses ?? null,
+      multa_cancelamento_pct: cfg.multa_cancelamento_pct ?? 0,
+      pagamento_tipo: cfg.pagamento_tipo ?? 'recorrente',
+      acesso_meses: cfg.acesso_meses ?? null,
+      vinculado_arrematacao: cfg.vinculado_arrematacao ?? false,
+      honorarios_exito_pct: cfg.honorarios_exito_pct ?? 0,
       // label de periodicidade para assessorado/clube
       periodicidade: (['assessorado', 'clube'].includes(cfg.plano_key) && vista)
         ? `/mês · 12 meses · ou ${fmt(vista, 0)} à vista`
