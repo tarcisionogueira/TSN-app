@@ -120,6 +120,37 @@ function cacheKey(im) {
   return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
 }
 
+async function processarLote(estadosFilter, lote = 50) {
+  const r = await sb(
+    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
+  );
+  if (!r.ok) return null;
+  const imoveis = await r.json();
+  if (!imoveis.length) return { processados: 0 };
+
+  const res = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0 };
+
+  for (const im of imoveis) {
+    const key = cacheKey(im);
+    let coords, fromCache = false;
+
+    if (!im.endereco?.trim() && coordCache[key]) {
+      coords = coordCache[key];
+      fromCache = true;
+    } else {
+      coords = await geocodificarCascata(im);
+      if (coords && coords.nivel !== 'endereco') coordCache[key] = coords;
+    }
+
+    const salvo = await salvarCoords(im.id, coords);
+    if (salvo && coords) { res[coords.nivel]++; if (fromCache) res.cache_hits++; }
+    else res.falhas++;
+    if (!fromCache) await sleep(1100);
+  }
+
+  return res;
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
@@ -128,72 +159,52 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Supabase env vars not configured' }), { status: 500 });
   }
 
-  let limite = 50;
-  let estados = null; // null = todos
-
-  // Suporta GET (cron) com query params e POST (admin manual) com body
+  // Suporta GET (cron) com ?estados= e POST (admin manual) com body
   const url = new URL(req.url, 'http://localhost');
   const qEstados = url.searchParams.get('estados');
-  if (qEstados) estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
+  let estados = qEstados ? qEstados.split(',').map(s => s.trim()).filter(Boolean) : null;
+  let modoManual = false; // POST do admin = 1 lote só
 
   try {
     if (req.method === 'POST') {
       const body = await req.json();
-      if (body.limite) limite = Math.min(parseInt(body.limite) || 50, 200);
       if (Array.isArray(body.estados) && body.estados.length > 0) estados = body.estados;
+      modoManual = true; // admin não fica em loop — retorna imediatamente
     }
   } catch {}
 
-  // Filtra por estados se fornecido (para geocodificação paralela por região)
-  let estadosFilter = '';
-  if (estados && estados.length > 0) {
-    const ufs = estados.map(e => `"${e}"`).join(',');
-    estadosFilter = `&estado=in.(${ufs})`;
+  const estadosFilter = estados?.length
+    ? `&estado=in.(${estados.map(e => `"${e}"`).join(',')})`
+    : '';
+
+  // Modo cron (GET): loop até acabar todos os pendentes ou restar <30s de margem
+  // Modo manual (POST): processa 1 lote de 50 e retorna (para o admin monitorar em tempo real)
+  if (modoManual) {
+    const res = await processarLote(estadosFilter, 50);
+    if (!res) return new Response(JSON.stringify({ error: 'Supabase error' }), { status: 500 });
+    if (!res.processados) return new Response(JSON.stringify({ processados: 0, msg: 'Nenhum imóvel pendente' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
-  const r = await sb(
-    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${limite}`
-  );
-  if (!r.ok) {
-    return new Response(JSON.stringify({ error: `Supabase error: ${r.status}` }), { status: 500 });
-  }
-  const imoveis = await r.json();
+  // Modo cron: loop interno — processa tudo que couber em ~270s (margem de 30s antes do timeout)
+  const LIMITE_MS = 270_000;
+  const inicio = Date.now();
+  const total = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
 
-  if (!imoveis.length) {
-    return new Response(JSON.stringify({ processados: 0, msg: 'Nenhum imóvel pendente de geocodificação' }), {
-      status: 200, headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const resultados = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0 };
-
-  for (const im of imoveis) {
-    // Imóveis com endereço exato nunca usam cache (pin preciso é mais valioso)
-    // Cache se aplica apenas a bairro/cidade (coordenada de centro compartilhada)
-    const key = cacheKey(im);
-    let coords;
-    let fromCache = false;
-
-    if (!im.endereco?.trim() && coordCache[key]) {
-      coords = coordCache[key];
-      fromCache = true;
-    } else {
-      coords = await geocodificarCascata(im);
-      // Armazena no cache apenas resultados de bairro/cidade (não endereço exato)
-      if (coords && coords.nivel !== 'endereco') coordCache[key] = coords;
-    }
-
-    const salvo = await salvarCoords(im.id, coords);
-    if (salvo && coords) {
-      resultados[coords.nivel]++;
-      if (fromCache) resultados.cache_hits++;
-    } else {
-      resultados.falhas++;
-    }
-    if (!fromCache) await sleep(1100); // rate limit Nominatim apenas quando não é cache
+  while (Date.now() - inicio < LIMITE_MS) {
+    const res = await processarLote(estadosFilter, 50);
+    if (!res || res.processados === 0) break; // sem mais pendentes
+    total.processados += res.processados;
+    total.endereco    += res.endereco;
+    total.bairro      += res.bairro;
+    total.cidade      += res.cidade;
+    total.falhas      += res.falhas;
+    total.cache_hits  += res.cache_hits;
+    total.lotes++;
+    if (res.processados < 50) break; // último lote
   }
 
-  return new Response(JSON.stringify(resultados), {
+  return new Response(JSON.stringify(total), {
     status: 200,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });
