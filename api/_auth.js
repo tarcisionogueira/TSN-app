@@ -4,7 +4,11 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 // Verifica JWT e retorna user, ou null se inválido
 export async function getUser(req) {
-  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  // Suporta Edge (Headers.get) e Node.js serverless (objeto plano)
+  const authHeader = typeof req.headers?.get === 'function'
+    ? req.headers.get('authorization')
+    : req.headers?.['authorization'];
+  const token = authHeader?.replace('Bearer ', '');
   if (!token) return null;
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {

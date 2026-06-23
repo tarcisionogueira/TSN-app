@@ -1,6 +1,5 @@
+export const config = { runtime: 'edge' };
 import { getUser } from './_auth.js';
-
-export const maxDuration = 30;
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
