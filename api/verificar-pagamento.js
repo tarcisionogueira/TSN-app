@@ -52,6 +52,6 @@ export default async function handler(req, res) {
     return res.json({ confirmado: !!pago, status, dueDate: pagamentos[0]?.dueDate });
   } catch (e) {
     console.error('verificar-pagamento:', e.message);
-    return res.status(502).json({ error: e.message });
+    return res.status(502).json({ error: 'Erro ao verificar pagamento' });
   }
 }

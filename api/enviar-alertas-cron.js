@@ -43,11 +43,35 @@ export default async function handler(req) {
         // Only send if user has searched at least 3 times in last 30 days, or it's the first email
         if ((activity?.length || 0) < 3 && (alerta.total_enviados || 0) > 0) continue;
 
-        const host = new URL(req.url).origin;
-        await fetch(`${host}/api/email-alerta`, {
+        // Envia diretamente via Resend (cron não tem token de usuário para autenticar /api/email-alerta)
+        const RESEND_KEY = process.env.RESEND_API_KEY;
+        if (!RESEND_KEY) continue;
+        const FROM = process.env.APP_FROM_EMAIL || 'TSN Ativos <alertas@tsnativos.com.br>';
+        const BASE_URL = process.env.APP_BASE_URL || new URL(req.url).origin;
+        const unsubToken = btoa(`${alerta.user_id}:unsubscribe`);
+        const unsubUrl = `${BASE_URL}/cancelar-alertas?token=${unsubToken}`;
+        const imoveisHtml = imoveis.slice(0, 5).map(im =>
+          `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;">
+            <strong>${im.endereco || im.titulo || 'Imóvel'}</strong><br>
+            <span style="color:#64748b;font-size:13px;">${im.cidade || ''}${im.estado ? ' — ' + im.estado : ''}</span><br>
+            ${im.desconto_percentual ? `<span style="color:#059669;font-weight:700;">${im.desconto_percentual}% abaixo do valor de avaliação</span>` : ''}
+          </div>`
+        ).join('');
+        await fetch('https://api.resend.com/emails', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: alerta.user_id, userEmail, userName, imoveis: imoveis.slice(0, 5), filtroDesc: alerta.descricao }),
+          headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: FROM,
+            to: userEmail,
+            subject: `${imoveis.length} imóveis novos para você — TSN Ativos`,
+            html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:24px 16px;">
+              <h2 style="color:#0f172a;">Olá${userName ? ', ' + userName : ''}!</h2>
+              <p style="color:#475569;">Encontramos imóveis que correspondem ao seu alerta <strong>${alerta.descricao || ''}</strong>:</p>
+              ${imoveisHtml}
+              <p style="margin-top:20px;"><a href="${BASE_URL}" style="background:#0D63DB;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;">Ver todos os imóveis</a></p>
+              <p style="font-size:12px;color:#94a3b8;margin-top:24px;"><a href="${unsubUrl}" style="color:#94a3b8;">Cancelar alertas</a></p>
+            </div>`,
+          }),
         });
 
         await fetch(`${supabaseUrl}/rest/v1/alertas_email?id=eq.${alerta.id}`, {

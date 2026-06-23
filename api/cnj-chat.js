@@ -43,6 +43,7 @@ Seja direto e use linguagem acessível mas precisa. Não mencione IA ou sistemas
     if (!r.ok) throw new Error(data.error?.message || 'Erro na API');
     return new Response(JSON.stringify({ resposta: data.content[0].text }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    console.error('cnj-chat erro:', e.message);
+    return new Response(JSON.stringify({ error: 'Erro interno' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }

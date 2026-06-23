@@ -280,6 +280,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('CNJ DataJud erro:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Erro interno na consulta CNJ' });
   }
 }
