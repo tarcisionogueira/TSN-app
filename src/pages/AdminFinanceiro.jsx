@@ -10,9 +10,8 @@ const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigit
 const LIMITE_BACEN = 500_000;
 
 const CONTAS = [
-  { key: 'asaas', label: 'Asaas', ativo: true },
-  { key: 'pagarme', label: 'Pagar.me', ativo: false },
   { key: 'mercadopago', label: 'Mercado Pago', ativo: false },
+  { key: 'asaas', label: 'Asaas', ativo: true },
 ];
 
 export default function AdminFinanceiro() {
