@@ -1,5 +1,6 @@
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { alertarErro } from './_error-alert.js';
 // Define ASAAS_ENV=sandbox na Vercel para testar sem cobrar de verdade.
 // Em produção (default) usa a URL real do Asaas.
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
@@ -343,6 +344,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Ação inválida' });
   } catch (err) {
     console.error('Asaas error:', err.message);
+    alertarErro({ rota: '/api/asaas', erro: err.message, extra: { action } });
     return res.status(500).json({ error: err.message });
   }
 }

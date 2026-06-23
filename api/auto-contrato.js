@@ -2,6 +2,8 @@ import { getUser, getUserRole } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { sanitizeName, sanitizeEmail } from './_sanitize.js';
+import { alertarErro } from './_error-alert.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -110,11 +112,13 @@ export default async function handler(req, res) {
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { userId, planoKey, nomeUsuario, emailUsuario } = req.body || {};
+  const { userId, planoKey, nomeUsuario: nomeRaw, emailUsuario: emailRaw } = req.body || {};
   if (!planoKey || !['assessorado', 'clube'].includes(planoKey)) {
     return res.status(400).json({ error: 'planoKey deve ser assessorado ou clube' });
   }
-  if (emailUsuario && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailUsuario)) {
+  const nomeUsuario = sanitizeName(nomeRaw, 200);
+  const emailUsuario = sanitizeEmail(emailRaw);
+  if (emailRaw && !emailUsuario) {
     return res.status(400).json({ error: 'emailUsuario inválido' });
   }
 

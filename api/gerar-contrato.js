@@ -2,6 +2,8 @@ import { getUser, getUserRole } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { sanitizeText, sanitizeName } from './_sanitize.js';
+import { alertarErro } from './_error-alert.js';
 
 // Dados fixos da empresa contratante
 const EMPRESA = {
@@ -54,15 +56,11 @@ export default async function handler(req, res) {
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { descricao: descricaoRaw, tipo, titulo, arquivos = [], respostas } = req.body || {};
+  const { descricao: descricaoRaw, tipo, titulo: tituloRaw, arquivos = [], respostas } = req.body || {};
   if (!descricaoRaw) return res.status(400).json({ error: 'descricao obrigatória' });
 
-  // Sanitização de entrada: limita tamanho e remove marcadores de delimitação do sistema
-  // para evitar prompt injection via descricao do usuário
-  const descricao = String(descricaoRaw)
-    .slice(0, 5000)
-    .replace(/<<</g, '«')
-    .replace(/>>>/g, '»');
+  const descricao = sanitizeText(descricaoRaw, 5000);
+  const titulo = sanitizeText(tituloRaw, 200);
 
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Chave de API não configurada' });
@@ -192,6 +190,7 @@ FORMATO DE SAÍDA:
     return res.status(200).json({ conteudo, perguntas });
   } catch (e) {
     console.error('gerar-contrato error:', e.message);
+    alertarErro({ rota: '/api/gerar-contrato', erro: e.message });
     return res.status(500).json({ error: 'Erro interno' });
   }
 }
