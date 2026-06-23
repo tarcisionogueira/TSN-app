@@ -1,3 +1,5 @@
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
+import { auditLog } from './_audit.js';
 // Define ASAAS_ENV=sandbox na Vercel para testar sem cobrar de verdade.
 // Em produção (default) usa a URL real do Asaas.
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
@@ -103,15 +105,20 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Chave do Asaas não configurada no servidor (ASAAS_API_KEY).' });
   }
 
+  const ip = getIP(req);
+  const rl = checkRateLimit(`asaas:${ip}`, 20, 60_000);
+  if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
+
   // Ações do usuário exigem autenticação
   const { action, ...body } = req.body;
   const userActions = ['criar_assinatura', 'gerenciar_assinatura', 'criar_cobranca_avulsa', 'cancelar_assinatura'];
+  let authUser = null;
   if (userActions.includes(action)) {
-    const authUser = await getAuthUserNode(req);
+    authUser = await getAuthUserNode(req);
     if (!authUser?.id) return res.status(401).json({ error: 'Não autorizado' });
-    // Garante que o email da requisição pertence ao usuário autenticado
     const emailBody = body.email;
     if (emailBody && authUser.email !== emailBody) {
+      auditLog({ acao: 'asaas_email_mismatch', user_id: authUser.id, ip, detalhes: { action }, sucesso: false });
       return res.status(403).json({ error: 'Email não corresponde ao usuário autenticado' });
     }
   }
@@ -173,6 +180,7 @@ export default async function handler(req, res) {
         linkPagamento = primeiraFatura?.invoiceUrl || primeiraFatura?.bankSlipUrl || null;
       }
 
+      auditLog({ acao: 'assinatura_criada', user_id: authUser?.id, ip, detalhes: { plano, customerId, subscriptionId, avulso: !!info.avulso }, sucesso: true });
       return res.status(200).json({
         subscriptionId,
         customerId,

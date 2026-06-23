@@ -1,4 +1,6 @@
-import { getUser, getUserRole } from './_auth.js';
+import { getUser } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
+import { auditLog } from './_audit.js';
 // Verifica com o Asaas se a assinatura/cobrança avulsa foi paga.
 // Chamado pelo Checkout a cada 8s para liberar o fluxo sem depender do clique do usuário.
 
@@ -21,6 +23,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   if (!API_KEY) return res.status(500).json({ error: 'ASAAS_API_KEY não configurada' });
 
+  const ip = getIP(req);
+  const rl = checkRateLimit(`verificar-pagamento:${ip}`, 30, 60_000);
+  if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
+
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
 
@@ -31,9 +37,9 @@ export default async function handler(req, res) {
 
   try {
     if (paymentId) {
-      // Pagamento avulso (assessorado_vista / clube_vista)
       const p = await asaasGet(`/payments/${paymentId}`);
       const confirmado = STATUS_PAGO.has(p.status);
+      auditLog({ acao: 'verificar_pagamento', user_id: user.id, ip, detalhes: { paymentId, status: p.status }, sucesso: true });
       return res.json({ confirmado, status: p.status, dueDate: p.dueDate });
     }
 

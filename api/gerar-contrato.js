@@ -1,5 +1,7 @@
 import { getUser, getUserRole } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
+import { auditLog } from './_audit.js';
 
 // Dados fixos da empresa contratante
 const EMPRESA = {
@@ -44,6 +46,9 @@ const PADROES = {
 };
 
 export default async function handler(req, res) {
+  const ip = getIP(req);
+  const rl = checkRateLimit(`gerar-contrato:${ip}`, 10, 60_000);
+  if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
 
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
