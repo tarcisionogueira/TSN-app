@@ -29,7 +29,10 @@ function verificarAssinatura(req) {
     .update(body)
     .digest('hex');
 
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length) return false;
+  try { return crypto.timingSafeEqual(sigBuf, expBuf); } catch { return false; }
 }
 
 // Normaliza evento Pagar.me para o formato do _webhook-core

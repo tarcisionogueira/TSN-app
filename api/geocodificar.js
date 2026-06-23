@@ -155,6 +155,15 @@ export default async function handler(req) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
   }
+
+  // Protege contra chamadas externas não autorizadas
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const url = new URL(req.url);
+    const sent = req.headers.get('x-cron-secret') || url.searchParams.get('secret') || '';
+    if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
+  }
+
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     return new Response(JSON.stringify({ error: 'Supabase env vars not configured' }), { status: 500 });
   }

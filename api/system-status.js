@@ -1,12 +1,12 @@
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
+import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 
 // Retorna status das configurações sem expor valores reais
 export default async function handler(req) {
 
   const user = await getUser(req);
   if (!user) return unauthorized();
-  const role = await getUserRole(user.id);
+  const role = await getUserRoleById(user.id);
   if (role !== 'admin') return forbidden();
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*' } });
 

@@ -112,7 +112,14 @@ export default async function handler(req, res) {
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { userId, planoKey, nomeUsuario: nomeRaw, emailUsuario: emailRaw } = req.body || {};
+  const { userId: userIdRaw, planoKey, nomeUsuario: nomeRaw, emailUsuario: emailRaw } = req.body || {};
+
+  // Garante que o usuário só pode gerar contrato para si mesmo (exceto admin/consultor)
+  const { getUserRoleById } = await import('./_auth.js');
+  const callerRole = await getUserRoleById(user.id);
+  const isStaff = ['admin', 'consultor', 'analista', 'advogado'].includes(callerRole);
+  const userId = isStaff ? (userIdRaw || user.id) : user.id;
+
   if (!planoKey || !['assessorado', 'clube'].includes(planoKey)) {
     return res.status(400).json({ error: 'planoKey deve ser assessorado ou clube' });
   }

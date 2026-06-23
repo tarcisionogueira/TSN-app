@@ -6,12 +6,10 @@ export const config = { runtime: 'edge' };
 import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 
 export default async function handler(req) {
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ ok: false, mensagem: 'Método não permitido.' }), { status: 405 });
+  if (req.method !== 'POST') return new Response(JSON.stringify({ ok: false, mensagem: 'Método não permitido.' }), { status: 405 });
 
   const user = await getUser(req);
   if (!user) return unauthorized();
-  }
 
   let body;
   try { body = await req.json(); } catch {

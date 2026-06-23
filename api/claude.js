@@ -13,12 +13,10 @@ export default async function handler(req) {
     });
   }
 
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const user = await getUser(req);
   if (!user) return unauthorized();
-  }
 
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) {

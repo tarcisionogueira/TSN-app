@@ -61,9 +61,17 @@ export async function getUser(req) {
 export async function getUserRole(req) {
   const user = await getUser(req);
   if (!user) return null;
+  return getUserRoleById(user.id);
+}
+
+/** Busca role diretamente pelo userId (UUID) — usa service key para evitar falhas de RLS */
+export async function getUserRoleById(userId) {
+  if (!userId) return null;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  const key = SERVICE_KEY || ANON_KEY;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${user.id}&select=role`, {
-      headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` },
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${userId}&select=role`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
