@@ -66,15 +66,19 @@ export default async function handler(req, res) {
     try {
       const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
       const tituloFinal = sanitizeText(tituloRaw, 200) || 'Contrato';
-      const { data, error } = await supabase.from('contratos_link').insert({
+      const { arquivoUrl, arquivoNome, docsExtrasExigidos } = req.body || {};
+    const { data, error } = await supabase.from('contratos_link').insert({
         titulo: tituloFinal,
-        conteudo: sanitizeText(conteudoDireto, 20000),
+        conteudo: conteudoDireto ? sanitizeText(conteudoDireto, 20000) : null,
+        arquivo_url: arquivoUrl || null,
+        arquivo_nome: arquivoNome ? sanitizeText(arquivoNome, 200) : null,
         tipo_contrato: tipo || 'servico',
         status: 'aguardando_assinatura',
         requer_assinatura: true,
         criado_por: user.id,
         assinante_email: sanitizeText(emailAssinante, 200),
         verificacao_identidade: verificacaoIdentidade || 'nenhuma',
+        docs_extras_exigidos: docsExtrasExigidos || [],
         arquivos_referencia: arquivosReferencia || [],
         gerado_por_ia: !!geradoPorIA,
       }).select('token').single();
