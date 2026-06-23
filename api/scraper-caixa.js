@@ -285,8 +285,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase env vars not configured' });
   }
 
+  // Suporta GET (cron) com ?estados=SP,MG e POST (admin manual) com body
   let estados = TODOS_ESTADOS;
-  if (req.method === 'POST' && req.body?.estados?.length > 0) {
+  const qEstados = req.query?.estados || new URL(req.url || '', 'http://localhost').searchParams.get('estados');
+  if (qEstados) {
+    estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
+  } else if (req.method === 'POST' && req.body?.estados?.length > 0) {
     estados = req.body.estados;
   }
 

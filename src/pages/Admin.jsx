@@ -3532,151 +3532,46 @@ const REGIOES_ESTADOS = {
 
 function ScrapersTab() {
   const [status, setStatus] = useState(null);
-  const [running, setRunning] = useState(false);
-  const [resultado, setResultado] = useState(null);
-  const [erroMsg, setErroMsg] = useState('');
-  // Loop estado a estado com 60s de intervalo (controlado pelo cliente)
-  const [scraperLoop, setScraperLoop] = useState(false);
-  const scraperPararRef = React.useRef(false);
-  const [scraperLog, setScraperLog] = useState([]); // [{uf, status, processados, erro, aguardando}]
-  const [scraperUFAtual, setScraperUFAtual] = useState(null);
-  const [scraperContador, setScraperContador] = useState(null); // segundos restantes no intervalo
-
-  // Geocodificação com loop automático
-  const [geocRodando, setGeocRodando] = useState(false);
-  const [geocParar, setGeocParar] = useState(false);
-  const geocPararRef = React.useRef(false);
-  const [geocLog, setGeocLog] = useState([]);
-  const [geocTotal, setGeocTotal] = useState({ processados: 0, geocodificados: 0, falhas: 0, cache_hits: 0 });
-  // Geocodificação paralela por região
-  const [geocRegiao, setGeocRegiao] = useState({}); // { Norte: {rodando,total}, ... }
-  const geocRegiaoParar = React.useRef({});
+  // Estado de execução manual por região (scraper e geocodificação)
+  const [scraperRegiao, setScraperRegiao] = useState({});
+  const [geocRegiao, setGeocRegiao] = useState({});
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
 
-  async function executarScraper() {
-    setRunning(true); setResultado(null); setErroMsg('');
+  // Trigger manual de uma região do scraper (1 chamada por região, server gerencia delay entre estados)
+  async function triggerScraper(regiao, estados) {
+    setScraperRegiao(g => ({ ...g, [regiao]: { rodando: true } }));
     try {
-      const r = await apiCall('/api/scraper-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const r = await apiCall('/api/scraper-caixa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estados }),
+      });
       const d = await r.json();
-      if (!r.ok) setErroMsg(d.error || 'Erro ao executar o scraper.');
-      else { setResultado(d); apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}); }
-    } catch (e) { setErroMsg(e.message); }
-    setRunning(false);
-  }
-
-  // Loop estado a estado: 1 chamada por estado, 60s de intervalo entre eles (no cliente)
-  async function iniciarScraperLoop(lista = TODOS_ESTADOS_SCRAPER) {
-    scraperPararRef.current = false;
-    setScraperLoop(true);
-    setScraperLog([]);
-    setScraperUFAtual(null);
-    setScraperContador(null);
-
-    for (let i = 0; i < lista.length; i++) {
-      if (scraperPararRef.current) break;
-      const uf = lista[i];
-      setScraperUFAtual(uf);
-      setScraperLog(l => [...l, { uf, status: 'rodando' }]);
-
-      try {
-        const r = await apiCall('/api/scraper-caixa', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ estados: [uf] }),
-        });
-        const d = await r.json();
-        const ok = r.ok && (d.estados_ok || []).includes(uf);
-        setScraperLog(l => l.map(e => e.uf === uf && e.status === 'rodando'
-          ? { uf, status: ok ? 'ok' : 'erro', processados: d.processados || 0, erro: d.erros?.[0]?.erro }
-          : e
-        ));
-      } catch (e) {
-        setScraperLog(l => l.map(e2 => e2.uf === uf && e2.status === 'rodando'
-          ? { uf, status: 'erro', erro: e.message }
-          : e2
-        ));
-      }
-
-      // 60s de intervalo entre estados (exceto após o último)
-      if (i < lista.length - 1 && !scraperPararRef.current) {
-        let seg = 60;
-        setScraperContador(seg);
-        const tick = setInterval(() => {
-          seg--;
-          setScraperContador(seg);
-          if (seg <= 0) clearInterval(tick);
-        }, 1000);
-        await new Promise(r => setTimeout(r, 60000));
-        clearInterval(tick);
-        setScraperContador(null);
-      }
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, ok: d.estados_ok || [], erros: d.estados_erro || [], primeiroErro: d.erros?.[0]?.erro } }));
+      apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {});
+    } catch (e) {
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
     }
-
-    setScraperLoop(false);
-    setScraperUFAtual(null);
-    apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
   }
 
-  function pararScraperLoop() { scraperPararRef.current = true; }
-
-  async function iniciarGeocLoop(estados = null) {
-    setGeocRodando(true);
-    geocPararRef.current = false;
-    setGeocParar(false);
-    setGeocLog([]);
-    setGeocTotal({ processados: 0, geocodificados: 0, falhas: 0, cache_hits: 0 });
-    let rodada = 1;
-    let totalProc = 0, totalGeoc = 0, totalFalhas = 0, totalCache = 0;
-    while (!geocPararRef.current) {
-      try {
-        const body = { limite: 50 };
-        if (estados) body.estados = estados;
-        const res = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (!res.ok) { setGeocLog(l => [...l, { rodada, erro: 'Timeout ou erro do servidor. Aguarde e tente novamente.' }]); break; }
-        const data = await res.json();
-        if (data.msg || data.processados === 0) {
-          setGeocLog(l => [...l, { rodada, processados: 0, concluido: true }]);
-          break;
-        }
-        totalProc += data.processados || 0;
-        totalGeoc += (data.endereco || 0) + (data.bairro || 0) + (data.cidade || 0);
-        totalFalhas += data.falhas || 0;
-        totalCache += data.cache_hits || 0;
-        setGeocLog(l => [...l, { rodada, processados: data.processados, falhas: data.falhas, cache_hits: data.cache_hits }]);
-        setGeocTotal({ processados: totalProc, geocodificados: totalGeoc, falhas: totalFalhas, cache_hits: totalCache });
-        rodada++;
-        if ((data.processados || 0) < 50) break;
-      } catch (e) { setGeocLog(l => [...l, { rodada, erro: e.message }]); break; }
+  // Trigger manual de geocodificação por região (1 lote de 50 por chamada)
+  async function triggerGeoc(regiao, estados) {
+    setGeocRegiao(g => ({ ...g, [regiao]: { rodando: true, processados: 0 } }));
+    try {
+      const r = await apiCall('/api/geocodificar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limite: 50, estados }),
+      });
+      const d = await r.json();
+      setGeocRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: d.processados === 0 } }));
+    } catch (e) {
+      setGeocRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
     }
-    setGeocRodando(false);
-    apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
   }
-
-  async function iniciarGeocRegiao(regiao, estados) {
-    geocRegiaoParar.current[regiao] = false;
-    setGeocRegiao(g => ({ ...g, [regiao]: { rodando: true, processados: 0, geocodificados: 0, falhas: 0, concluido: false } }));
-    let totalProc = 0, totalGeoc = 0, totalFalhas = 0;
-    while (!geocRegiaoParar.current[regiao]) {
-      try {
-        const res = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limite: 50, estados }) });
-        if (!res.ok) break;
-        const data = await res.json();
-        if (data.msg || data.processados === 0) break;
-        totalProc += data.processados || 0;
-        totalGeoc += (data.endereco || 0) + (data.bairro || 0) + (data.cidade || 0);
-        totalFalhas += data.falhas || 0;
-        setGeocRegiao(g => ({ ...g, [regiao]: { rodando: true, processados: totalProc, geocodificados: totalGeoc, falhas: totalFalhas, concluido: false } }));
-        if ((data.processados || 0) < 50) break;
-      } catch { break; }
-    }
-    setGeocRegiao(g => ({ ...g, [regiao]: { ...g[regiao], rodando: false, concluido: true } }));
-  }
-
-  function pararGeoc() { geocPararRef.current = true; setGeocParar(true); }
-  function pararGeocRegiao(regiao) { geocRegiaoParar.current[regiao] = true; }
 
   // Scrapers planejados
   const scrapersPlanjados = [
@@ -3712,153 +3607,107 @@ function ScrapersTab() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         {/* ── Scraper Caixa ── */}
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏦</div>
             <div>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Ativo · CSV público</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · Cron 01h por região</div>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10, lineHeight: 1.6 }}>
-            1 estado por chamada · 60s entre estados · retry × 3 automático. Total: ~30 min para os 27 estados.
-          </div>
           {status && (
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#475569', display: 'flex', gap: 12 }}>
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '7px 12px', marginBottom: 10, fontSize: 12, color: '#475569', display: 'flex', gap: 12 }}>
               <span>📦 <b>{status.total?.toLocaleString('pt-BR') || 0}</b> imóveis</span>
               {status.ultima_atualizacao && <span>🕐 {new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</span>}
             </div>
           )}
-          {erroMsg && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#dc2626' }}>⚠️ {erroMsg}</div>}
-
-          {/* Progresso do loop */}
-          {scraperLog.length > 0 && (
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, maxHeight: 160, overflowY: 'auto' }}>
-              {/* Estado atual */}
-              {scraperUFAtual && (
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#c2410c', marginBottom: 6 }}>
-                  {scraperContador != null
-                    ? `⏳ Aguardando ${scraperContador}s para próximo estado...`
-                    : `⏳ Importando ${scraperUFAtual}...`}
-                </div>
-              )}
-              {/* Log de estados */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {scraperLog.map((e, i) => (
-                  <span key={i} title={e.erro || `${e.processados || 0} imóveis`}
-                    style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 5,
-                      background: e.status === 'ok' ? '#dcfce7' : e.status === 'erro' ? '#fee2e2' : '#fef9c3',
-                      color: e.status === 'ok' ? '#166534' : e.status === 'erro' ? '#dc2626' : '#92400e' }}>
-                    {e.uf} {e.status === 'ok' ? '✓' : e.status === 'erro' ? '✗' : '…'}
-                  </span>
-                ))}
-              </div>
-              {/* Resumo */}
-              {!scraperLoop && (
-                <div style={{ marginTop: 8, fontSize: 11, color: '#475569', display: 'flex', gap: 12 }}>
-                  <span>✅ {scraperLog.filter(e => e.status === 'ok').length} ok</span>
-                  <span>❌ {scraperLog.filter(e => e.status === 'erro').length} erros</span>
-                  <span>📦 {scraperLog.reduce((s, e) => s + (e.processados || 0), 0).toLocaleString('pt-BR')} importados</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <button onClick={() => iniciarScraperLoop()} disabled={scraperLoop || running}
-              style={{ flex: 1, padding: '9px', background: scraperLoop ? '#94a3b8' : '#c2410c', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: (scraperLoop || running) ? 'default' : 'pointer' }}>
-              {scraperLoop ? `⏳ ${scraperUFAtual ? `Processando ${scraperUFAtual}` : 'Aguardando...'}` : '🔄 Importar (27 estados · 60s intervalo)'}
-            </button>
-            {scraperLoop && (
-              <button onClick={pararScraperLoop}
-                style={{ padding: '9px 12px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                ⏹
-              </button>
-            )}
+          {/* Agenda automática */}
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+            Agenda automática (10s entre estados · retry × 3):
           </div>
-          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>Cron automático: todo dia às 01:00 · mantenha a aba aberta durante o loop</div>
-        </div>
-
-        {/* ── Geocodificação ── */}
-        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Ativo · Nominatim / OSM · Cache de coords</div>
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10, lineHeight: 1.6 }}>
-            Endereço → bairro → cidade em cascata. 50/lote, 1 req/s. Cache de bairro economiza ~70% das chamadas.
-          </div>
-
-          {/* Progresso global */}
-          {geocLog.length > 0 && (
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12 }}>
-              <div style={{ fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                {geocRodando ? `⏳ Rodada ${geocLog.length}...` : geocLog[geocLog.length-1]?.concluido ? '✅ Concluído!' : '⏹ Parado'}
-              </div>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', color: '#475569' }}>
-                <span>📍 <b>{geocTotal.geocodificados}</b></span>
-                <span>❌ <b>{geocTotal.falhas}</b></span>
-                <span>⚡ cache <b>{geocTotal.cache_hits}</b></span>
-                <span>📦 <b>{geocTotal.processados}</b> total</span>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <button onClick={() => iniciarGeocLoop()} disabled={geocRodando}
-              style={{ flex: 1, padding: '9px', background: geocRodando ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: geocRodando ? 'default' : 'pointer' }}>
-              {geocRodando ? '⏳ Rodando...' : '📍 Geocodificar tudo'}
-            </button>
-            {geocRodando && (
-              <button onClick={pararGeoc}
-                style={{ padding: '9px 12px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                ⏹
-              </button>
-            )}
-          </div>
-
-          {/* Workers por região */}
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>Por região (paralelo):</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {Object.entries(REGIOES_ESTADOS).map(([regiao, estados]) => {
-              const r = geocRegiao[regiao] || {};
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+            {[
+              { regiao: 'Norte',        hora: '01:00', estados: REGIOES_ESTADOS['Norte'] },
+              { regiao: 'Nordeste',     hora: '01:08', estados: REGIOES_ESTADOS['Nordeste'] },
+              { regiao: 'Centro-Oeste', hora: '01:18', estados: REGIOES_ESTADOS['Centro-Oeste'] },
+              { regiao: 'Sudeste',      hora: '01:24', estados: REGIOES_ESTADOS['Sudeste'] },
+              { regiao: 'Sul',          hora: '01:30', estados: REGIOES_ESTADOS['Sul'] },
+            ].map(({ regiao, hora, estados }) => {
+              const r = scraperRegiao[regiao] || {};
               return (
-                <div key={regiao} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 7, padding: '5px 8px', fontSize: 11 }}>
+                <div key={regiao} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 7, padding: '5px 10px', fontSize: 11 }}>
+                  <span style={{ minWidth: 24, color: '#94a3b8', fontWeight: 600 }}>{hora}</span>
                   <span style={{ minWidth: 90, fontWeight: 700, color: '#334155' }}>{regiao}</span>
                   {r.rodando ? (
-                    <>
-                      <span style={{ color: '#0D63DB' }}>⏳ {r.processados || 0} proc</span>
-                      <button onClick={() => pararGeocRegiao(regiao)} style={{ marginLeft: 'auto', padding: '2px 8px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>Parar</button>
-                    </>
-                  ) : r.concluido ? (
-                    <>
-                      <span style={{ color: '#059669' }}>✅ {r.processados || 0} · falhas {r.falhas || 0}</span>
-                      <button onClick={() => iniciarGeocRegiao(regiao, estados)} style={{ marginLeft: 'auto', padding: '2px 8px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>↺</button>
-                    </>
+                    <span style={{ color: '#c2410c' }}>⏳ importando...</span>
+                  ) : r.processados != null ? (
+                    <span style={{ color: r.erros?.length ? '#dc2626' : '#059669' }}>
+                      {r.erros?.length ? `❌ ${r.erros.join(',')}` : `✅ ${r.processados?.toLocaleString('pt-BR')} imóveis`}
+                    </span>
                   ) : (
-                    <>
-                      <span style={{ color: '#94a3b8' }}>{estados.join(', ')}</span>
-                      <button onClick={() => iniciarGeocRegiao(regiao, estados)} style={{ marginLeft: 'auto', padding: '2px 8px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>▶</button>
-                    </>
+                    <span style={{ color: '#94a3b8' }}>{estados.join(', ')}</span>
                   )}
+                  <button onClick={() => triggerScraper(regiao, estados)} disabled={r.rodando}
+                    style={{ marginLeft: 'auto', padding: '2px 8px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                    {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
+                  </button>
                 </div>
               );
             })}
           </div>
-          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>
-            Regiões rodam em paralelo · cron às 03:00
+          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>Cron automático diário · nenhuma ação manual necessária</div>
+        </div>
+
+        {/* ── Geocodificação ── */}
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · Cron 03h por região</div>
+            </div>
           </div>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+            Agenda automática (50/lote · cache de bairro ~70% menos chamadas):
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+            {[
+              { regiao: 'Norte',        hora: '03:00', estados: REGIOES_ESTADOS['Norte'] },
+              { regiao: 'Nordeste',     hora: '03:10', estados: REGIOES_ESTADOS['Nordeste'] },
+              { regiao: 'Centro-Oeste', hora: '03:20', estados: REGIOES_ESTADOS['Centro-Oeste'] },
+              { regiao: 'Sudeste',      hora: '03:30', estados: REGIOES_ESTADOS['Sudeste'] },
+              { regiao: 'Sul',          hora: '03:40', estados: REGIOES_ESTADOS['Sul'] },
+            ].map(({ regiao, hora, estados }) => {
+              const r = geocRegiao[regiao] || {};
+              return (
+                <div key={regiao} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 7, padding: '5px 10px', fontSize: 11 }}>
+                  <span style={{ minWidth: 24, color: '#94a3b8', fontWeight: 600 }}>{hora}</span>
+                  <span style={{ minWidth: 90, fontWeight: 700, color: '#334155' }}>{regiao}</span>
+                  {r.rodando ? (
+                    <span style={{ color: '#0D63DB' }}>⏳ processando...</span>
+                  ) : r.processados != null ? (
+                    <span style={{ color: r.concluido ? '#059669' : '#0D63DB' }}>
+                      {r.concluido ? '✅ concluído' : `📍 ${r.processados} · cache ${r.cache_hits || 0}`}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#94a3b8' }}>{estados.join(', ')}</span>
+                  )}
+                  <button onClick={() => triggerGeoc(regiao, estados)} disabled={r.rodando}
+                    style={{ marginLeft: 'auto', padding: '2px 8px', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                    {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>Cron automático diário · use ▶ para forçar manualmente uma região</div>
         </div>
       </div>
 
       {/* ── Próximos Scrapers ── */}
       <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20, marginBottom: 16 }}>
         <div style={{ fontWeight: 800, fontSize: 14, color: '#111', marginBottom: 4 }}>🚀 Roadmap de Scrapers</div>
-        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
-          Todos os scrapers usam link/proxy externo — sem custo de storage para fotos e editais.
-          Volume estimado total ao integrar todos: <b>~50.000-80.000 imóveis</b>.
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+          Volume estimado ao integrar todos os leiloeiros: <b>~50.000–80.000 imóveis</b>.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           {scrapersPlanjados.map(s => (
@@ -3868,13 +3717,6 @@ function ScrapersTab() {
               <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>Em breve</div>
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* ── Info geocodificação paralela ── */}
-      <div style={{ background: '#f0f9ff', borderRadius: 14, border: '1px solid #bae6fd', padding: '12px 16px' }}>
-        <div style={{ fontSize: 12, color: '#0369a1' }}>
-          💡 <b>5 regiões × 50 imóveis = 250/lote em paralelo</b> — de ~9h para ~1.8h no processamento completo. Cache de coordenadas reduz chamadas ao Nominatim em ~70%.
         </div>
       </div>
     </div>

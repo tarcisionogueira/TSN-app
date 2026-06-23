@@ -130,10 +130,18 @@ export default async function handler(req) {
 
   let limite = 50;
   let estados = null; // null = todos
+
+  // Suporta GET (cron) com query params e POST (admin manual) com body
+  const url = new URL(req.url, 'http://localhost');
+  const qEstados = url.searchParams.get('estados');
+  if (qEstados) estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
+
   try {
-    const body = req.method === 'POST' ? await req.json() : {};
-    if (body.limite) limite = Math.min(parseInt(body.limite) || 50, 200);
-    if (Array.isArray(body.estados) && body.estados.length > 0) estados = body.estados;
+    if (req.method === 'POST') {
+      const body = await req.json();
+      if (body.limite) limite = Math.min(parseInt(body.limite) || 50, 200);
+      if (Array.isArray(body.estados) && body.estados.length > 0) estados = body.estados;
+    }
   } catch {}
 
   // Filtra por estados se fornecido (para geocodificação paralela por região)
