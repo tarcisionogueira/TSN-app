@@ -159,19 +159,41 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Supabase env vars not configured' }), { status: 500 });
   }
 
-  // Suporta GET (cron) com ?estados= e POST (admin manual) com body
+  // GET sem ?estados= → cron */10 3,4,5,6,7 * * * — deriva estado pelo horário UTC
+  // GET com ?estados= → trigger manual por URL
+  // POST → admin manual (1 lote, retorna imediatamente para o painel monitorar)
+  const ESTADOS_GEOCOD = [
+    'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA',
+    'MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN',
+    'RO','RR','RS','SC','SE','SP','TO',
+  ];
   const url = new URL(req.url, 'http://localhost');
   const qEstados = url.searchParams.get('estados');
-  let estados = qEstados ? qEstados.split(',').map(s => s.trim()).filter(Boolean) : null;
-  let modoManual = false; // POST do admin = 1 lote só
+  let estados = null;
+  let modoManual = false;
 
-  try {
-    if (req.method === 'POST') {
+  if (qEstados) {
+    estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
+  } else if (req.method === 'GET') {
+    // Cron */10 0,1,2,3,4 * * * — cada invocação processa 1 estado pelo horário UTC
+    // 00:00→AC, 00:10→AL, ..., 04:20→TO  (27 estados em 270 min)
+    const now = new Date();
+    const hora = now.getUTCHours(); // 0,1,2,3,4
+    const minuto = now.getUTCMinutes();
+    const idx = hora * 6 + Math.floor(minuto / 10);
+    if (idx < 0 || idx >= ESTADOS_GEOCOD.length) {
+      return new Response(JSON.stringify({ msg: 'idle', hora, minuto, idx }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    estados = [ESTADOS_GEOCOD[idx]];
+  } else if (req.method === 'POST') {
+    try {
       const body = await req.json();
       if (Array.isArray(body.estados) && body.estados.length > 0) estados = body.estados;
-      modoManual = true; // admin não fica em loop — retorna imediatamente
-    }
-  } catch {}
+    } catch {}
+    modoManual = true;
+  }
 
   const estadosFilter = estados?.length
     ? `&estado=in.(${estados.map(e => `"${e}"`).join(',')})`

@@ -3557,21 +3557,32 @@ function ScrapersTab() {
     }
   }
 
-  // Trigger manual de geocodificação por região (1 lote de 50 por chamada)
-  async function triggerGeoc(regiao, estados) {
-    setGeocRegiao(g => ({ ...g, [regiao]: { rodando: true, processados: 0 } }));
+  // Trigger manual de geocodificação por estado (1 lote, retorna imediatamente)
+  async function triggerGeoc(uf) {
+    setGeocRegiao(g => ({ ...g, [uf]: { rodando: true } }));
     try {
       const r = await apiCall('/api/geocodificar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limite: 50, estados }),
+        body: JSON.stringify({ estados: [uf] }),
       });
       const d = await r.json();
-      setGeocRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: d.processados === 0 } }));
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: !d.processados } }));
     } catch (e) {
-      setGeocRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
     }
   }
+
+  // Lista de estados com horários do cron (UTC)
+  const AGENDA_SCRAPER = TODOS_ESTADOS_SCRAPER.map((uf, i) => {
+    const h = 22, m = i * 2;
+    return { uf, hora: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` };
+  });
+  const AGENDA_GEOCOD = TODOS_ESTADOS_SCRAPER.map((uf, i) => {
+    const horaTotal = Math.floor(i / 6); // 0,1,2,3,4
+    const minuto = (i % 6) * 10;
+    return { uf, hora: `${String(horaTotal).padStart(2,'0')}:${String(minuto).padStart(2,'0')}` };
+  });
 
   // Scrapers planejados
   const scrapersPlanjados = [
@@ -3589,117 +3600,95 @@ function ScrapersTab() {
   return (
     <div style={{ maxWidth: 900 }}>
       {/* ── Header KPIs ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Imóveis no banco', valor: status?.total?.toLocaleString('pt-BR') || '—', icon: '🏠', cor: '#0D63DB' },
-          { label: 'Última atualização', valor: status?.ultima_atualizacao ? new Date(status.ultima_atualizacao).toLocaleDateString('pt-BR') : '—', icon: '🕐', cor: '#059669' },
-          { label: 'Cron diário', valor: '01:00', icon: '⏰', cor: '#7c3aed' },
-          { label: 'Geocodificação', valor: '03:00', icon: '📍', cor: '#d97706' },
+          { label: 'Imóveis no banco',    valor: status?.total?.toLocaleString('pt-BR') || '—', icon: '🏠', cor: '#0D63DB' },
+          { label: 'Última atualização',  valor: status?.ultima_atualizacao ? new Date(status.ultima_atualizacao).toLocaleDateString('pt-BR') : '—', icon: '🕐', cor: '#059669' },
+          { label: 'Scraper (UTC)',        valor: '22:00–22:52', icon: '⏰', cor: '#7c3aed' },
+          { label: 'Geocod (UTC)',         valor: '00:00–04:20', icon: '📍', cor: '#d97706' },
         ].map(k => (
-          <div key={k.label} style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
-            <div style={{ fontSize: 20, marginBottom: 6 }}>{k.icon}</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: k.cor }}>{k.valor}</div>
+          <div key={k.label} style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '14px 16px' }}>
+            <div style={{ fontSize: 18, marginBottom: 4 }}>{k.icon}</div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: k.cor }}>{k.valor}</div>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{k.label}</div>
           </div>
         ))}
       </div>
 
+      {status && (
+        <div style={{ background: '#f8fafc', borderRadius: 10, padding: '8px 16px', marginBottom: 16, fontSize: 12, color: '#475569', display: 'flex', gap: 16 }}>
+          <span>📦 <b>{status.total?.toLocaleString('pt-BR') || 0}</b> imóveis no banco</span>
+          {status.ultima_atualizacao && <span>🕐 Última importação: <b>{new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</b></span>}
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         {/* ── Scraper Caixa ── */}
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏦</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏦</div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · Cron 01h por região</div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>Scraper Caixa · 27 estados</div>
+              <div style={{ fontSize: 10, color: '#10b981', fontWeight: 700 }}>● Automático · 22:00–22:52 UTC · retry × 3</div>
             </div>
           </div>
-          {status && (
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '7px 12px', marginBottom: 10, fontSize: 12, color: '#475569', display: 'flex', gap: 12 }}>
-              <span>📦 <b>{status.total?.toLocaleString('pt-BR') || 0}</b> imóveis</span>
-              {status.ultima_atualizacao && <span>🕐 {new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</span>}
-            </div>
-          )}
-          {/* Agenda automática */}
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-            Agenda automática (10s entre estados · retry × 3):
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
-            {[
-              { regiao: 'Norte',        hora: '01:00', estados: REGIOES_ESTADOS['Norte'] },
-              { regiao: 'Nordeste',     hora: '01:08', estados: REGIOES_ESTADOS['Nordeste'] },
-              { regiao: 'Centro-Oeste', hora: '01:18', estados: REGIOES_ESTADOS['Centro-Oeste'] },
-              { regiao: 'Sudeste',      hora: '01:24', estados: REGIOES_ESTADOS['Sudeste'] },
-              { regiao: 'Sul',          hora: '01:30', estados: REGIOES_ESTADOS['Sul'] },
-            ].map(({ regiao, hora, estados }) => {
-              const r = scraperRegiao[regiao] || {};
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 340, overflowY: 'auto' }}>
+            {AGENDA_SCRAPER.map(({ uf, hora }) => {
+              const r = scraperRegiao[uf] || {};
               return (
-                <div key={regiao} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 7, padding: '5px 10px', fontSize: 11 }}>
-                  <span style={{ minWidth: 24, color: '#94a3b8', fontWeight: 600 }}>{hora}</span>
-                  <span style={{ minWidth: 90, fontWeight: 700, color: '#334155' }}>{regiao}</span>
+                <div key={uf} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
+                  <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
+                  <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
                   {r.rodando ? (
-                    <span style={{ color: '#c2410c' }}>⏳ importando...</span>
+                    <span style={{ color: '#c2410c', fontSize: 10 }}>⏳ importando...</span>
                   ) : r.processados != null ? (
-                    <span style={{ color: r.erros?.length ? '#dc2626' : '#059669' }}>
-                      {r.erros?.length ? `❌ ${r.erros.join(',')}` : `✅ ${r.processados?.toLocaleString('pt-BR')} imóveis`}
+                    <span style={{ color: r.erros?.length ? '#dc2626' : '#059669', fontSize: 10 }}>
+                      {r.erros?.length ? `❌ erro` : `✅ ${r.processados?.toLocaleString('pt-BR')}`}
                     </span>
-                  ) : (
-                    <span style={{ color: '#94a3b8' }}>{estados.join(', ')}</span>
-                  )}
-                  <button onClick={() => triggerScraper(regiao, estados)} disabled={r.rodando}
-                    style={{ marginLeft: 'auto', padding: '2px 8px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                  ) : null}
+                  <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
+                    style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
                     {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
                   </button>
                 </div>
               );
             })}
           </div>
-          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>Cron automático diário · nenhuma ação manual necessária</div>
+          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>Cron automático · use ▶ para forçar um estado manualmente</div>
         </div>
 
         {/* ── Geocodificação ── */}
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🗺️</div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · Cron 03h por região</div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>Geocodificação · 27 estados</div>
+              <div style={{ fontSize: 10, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–04:20 UTC · cache ~70%</div>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-            Agenda automática (50/lote · cache de bairro ~70% menos chamadas):
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
-            {[
-              { regiao: 'Norte',        hora: '03:00', estados: REGIOES_ESTADOS['Norte'] },
-              { regiao: 'Nordeste',     hora: '03:10', estados: REGIOES_ESTADOS['Nordeste'] },
-              { regiao: 'Centro-Oeste', hora: '03:20', estados: REGIOES_ESTADOS['Centro-Oeste'] },
-              { regiao: 'Sudeste',      hora: '03:30', estados: REGIOES_ESTADOS['Sudeste'] },
-              { regiao: 'Sul',          hora: '03:40', estados: REGIOES_ESTADOS['Sul'] },
-            ].map(({ regiao, hora, estados }) => {
-              const r = geocRegiao[regiao] || {};
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 340, overflowY: 'auto' }}>
+            {AGENDA_GEOCOD.map(({ uf, hora }) => {
+              const r = geocRegiao[uf] || {};
               return (
-                <div key={regiao} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 7, padding: '5px 10px', fontSize: 11 }}>
-                  <span style={{ minWidth: 24, color: '#94a3b8', fontWeight: 600 }}>{hora}</span>
-                  <span style={{ minWidth: 90, fontWeight: 700, color: '#334155' }}>{regiao}</span>
+                <div key={uf} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
+                  <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
+                  <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
                   {r.rodando ? (
-                    <span style={{ color: '#0D63DB' }}>⏳ processando...</span>
+                    <span style={{ color: '#0D63DB', fontSize: 10 }}>⏳ geocodificando...</span>
                   ) : r.processados != null ? (
-                    <span style={{ color: r.concluido ? '#059669' : '#0D63DB' }}>
-                      {r.concluido ? '✅ concluído' : `📍 ${r.processados} · cache ${r.cache_hits || 0}`}
+                    <span style={{ color: r.concluido ? '#059669' : '#0D63DB', fontSize: 10 }}>
+                      {r.concluido ? '✅ OK' : `📍 ${r.processados} proc`}
                     </span>
-                  ) : (
-                    <span style={{ color: '#94a3b8' }}>{estados.join(', ')}</span>
-                  )}
-                  <button onClick={() => triggerGeoc(regiao, estados)} disabled={r.rodando}
-                    style={{ marginLeft: 'auto', padding: '2px 8px', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                  ) : null}
+                  <button onClick={() => triggerGeoc(uf)} disabled={r.rodando}
+                    style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
                     {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
                   </button>
                 </div>
               );
             })}
           </div>
-          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>Cron automático diário · use ▶ para forçar manualmente uma região</div>
+          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>Cron automático · use ▶ para forçar um estado manualmente</div>
         </div>
       </div>
 

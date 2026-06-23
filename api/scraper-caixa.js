@@ -285,12 +285,26 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase env vars not configured' });
   }
 
-  // Suporta GET (cron) com ?estados=SP,MG e POST (admin manual) com body
+  // Suporta GET (cron) e POST (admin manual)
+  // GET sem ?estados= → deriva o estado pelo minuto UTC (cron roda a cada 2 min às 01h)
+  // GET com ?estados= → processa apenas esses estados (trigger manual por URL)
+  // POST com body.estados → trigger manual do admin
   let estados = TODOS_ESTADOS;
-  const qEstados = req.query?.estados || new URL(req.url || '', 'http://localhost').searchParams.get('estados');
+  const url = new URL(req.url || '', 'http://localhost');
+  const qEstados = req.query?.estados || url.searchParams.get('estados');
+
   if (qEstados) {
     estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
-  } else if (req.method === 'POST' && req.body?.estados?.length > 0) {
+  } else if (req.method === 'GET') {
+    // Cron às */2 22 * * * — cada invocação processa 1 estado pelo índice do minuto
+    // 22:00→AC, 22:02→AL, ..., 22:52→TO  (54 min no total)
+    const minuto = new Date().getUTCMinutes();
+    const idx = Math.floor(minuto / 2);
+    if (idx >= TODOS_ESTADOS.length) {
+      return res.status(200).json({ msg: 'idle', minuto, idx });
+    }
+    estados = [TODOS_ESTADOS[idx]];
+  } else if (req.body?.estados?.length > 0) {
     estados = req.body.estados;
   }
 
