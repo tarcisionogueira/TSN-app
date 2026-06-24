@@ -61,7 +61,7 @@ export default async function handler(req) {
       countHead('imoveis_leilao?ativo=eq.true'),
       countHead('imoveis_leilao?ativo=eq.true&latitude=is.null'),
       countHead('imoveis_leilao?ativo=eq.true&latitude=eq.0'),
-      countHead('imoveis_leilao?ativo=eq.true&latitude=gt.0'),
+      countHead('imoveis_leilao?ativo=eq.true&latitude=not.is.null&latitude=neq.0'),
       countHead('imoveis_leilao?ativo=eq.true&link_foto=like.*supabase*'),
     ]);
     const semGeoTotal = { ok: semGeoNull.ok && semGeoZero.ok, count: (semGeoNull.count || 0) + (semGeoZero.count || 0) };
@@ -106,7 +106,7 @@ export default async function handler(req) {
     const [semNull, semZero, comCoords] = await Promise.all([
       countHead('imoveis_leilao?ativo=eq.true&latitude=is.null'),
       countHead('imoveis_leilao?ativo=eq.true&latitude=eq.0'),
-      countHead('imoveis_leilao?ativo=eq.true&latitude=gt.0'),
+      countHead('imoveis_leilao?ativo=eq.true&latitude=not.is.null&latitude=neq.0'),
     ]);
     resultado.geocodificacao = {
       sem_coords_null: semNull,

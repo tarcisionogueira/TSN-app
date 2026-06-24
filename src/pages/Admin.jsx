@@ -3912,9 +3912,9 @@ function ScrapersTab() {
     // Contador de imóveis geocodificados (coluna: latitude)
     // Sem coordenadas = latitude IS NULL (nunca processado) + latitude=0 (falhou)
     Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
     ]).then(([comGeo, semNull, semZero]) => {
       const com = comGeo.count || 0;
       const sem = (semNull.count || 0) + (semZero.count || 0);
@@ -3980,17 +3980,16 @@ function ScrapersTab() {
         return;
       }
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: d.processados === 0 } }));
-      if (d.processados > 0) {
-        Promise.all([
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
-        ]).then(([comGeo, semNull, semZero]) => {
-          const com = comGeo.count || 0;
-          const sem = (semNull.count || 0) + (semZero.count || 0);
-          setGeoStats({ com, sem, total: com + sem });
-        });
-      }
+      // Sempre atualiza contador após qualquer run (mesmo 0 proc — para refletir estado real)
+      Promise.all([
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
+      ]).then(([comGeo, semNull, semZero]) => {
+        const com = comGeo.count || 0;
+        const sem = (semNull.count || 0) + (semZero.count || 0);
+        setGeoStats({ com, sem, total: com + sem });
+      });
     } catch (e) {
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
     }
@@ -4069,9 +4068,9 @@ function ScrapersTab() {
     setGeocTodos(g => ({ ...g, rodando: false }));
     // Atualiza contador após processar
     Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
     ]).then(([comGeo, semNull, semZero]) => {
       const com = comGeo.count || 0;
       const sem = (semNull.count || 0) + (semZero.count || 0);
