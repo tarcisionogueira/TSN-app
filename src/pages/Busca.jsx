@@ -44,6 +44,7 @@ const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFra
 function LazyImage({ src, alt, style }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
+  const [erro, setErro] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -54,13 +55,17 @@ function LazyImage({ src, alt, style }) {
     return () => obs.disconnect();
   }, []);
   return (
-    <div ref={ref} style={{ ...style, background:'#f1f5f9', overflow:'hidden', flexShrink:0 }}>
-      {visible && src && (
-        <img src={src} alt={alt} loading="lazy"
-          style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
-          onError={e => { e.currentTarget.style.display = 'none'; }}
-        />
-      )}
+    <div ref={ref} style={{ ...style, background:'#f1f5f9', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      {visible && src && !erro
+        ? <img src={src} alt={alt} loading="lazy"
+            style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+            onError={() => setErro(true)}
+          />
+        : <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, color:'#cbd5e1', width:'100%', height:'100%' }}>
+            <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6"/></svg>
+            <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600 }}>Sem foto</span>
+          </div>
+      }
     </div>
   );
 }
