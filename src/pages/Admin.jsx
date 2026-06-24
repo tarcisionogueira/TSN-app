@@ -3918,8 +3918,8 @@ function ScrapersTab() {
   }, [abaAtiva]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // Contagem de imóveis por fonte (leiloeiros)
-    Promise.all(['mega','sold','superbid','bb'].map(async fonte => {
+    // Contagem de imóveis por fonte (caixa + leiloeiros)
+    Promise.all(['caixa','mega','sold','superbid','bb'].map(async fonte => {
       const { count } = await supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', fonte);
       return [fonte, count || 0];
     })).then(entries => setLeiloeiroContagem(Object.fromEntries(entries)));
@@ -4268,7 +4268,13 @@ function ScrapersTab() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 10, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>🏦</div>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</span>
+                    {leiloeiroContagem['caixa'] != null && (
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#c2410c', lineHeight: 1 }}>{leiloeiroContagem['caixa'].toLocaleString('pt-BR')}</span>
+                    )}
+                    {leiloeiroContagem['caixa'] != null && <span style={{ fontSize: 10, color: '#94a3b8' }}>imóveis no banco</span>}
+                  </div>
                   <div style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>● CSV · 27 estados · cron 22:00–22:52 UTC · retry ×3</div>
                 </div>
               </div>
