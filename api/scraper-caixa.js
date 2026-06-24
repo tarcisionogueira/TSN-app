@@ -404,7 +404,7 @@ export default async function handler(req, res) {
         for (let k = 0; k < Math.ceil(idsAtivos.length / 500); k++) {
           const chunk = idsAtivos.slice(k * 500, (k + 1) * 500);
           await fetch(
-            `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&fonte_id=not.in.(${chunk.map(id => `"${id}"`).join(',')})`,
+            `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&ativo=eq.true&fonte_id=not.in.(${chunk.map(id => `"${id}"`).join(',')})`,
             { method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' } }
           ).catch(() => {});
         }
@@ -436,7 +436,7 @@ export default async function handler(req, res) {
           for (let k = 0; k < Math.ceil(idsAtivos.length / 500); k++) {
             const chunk = idsAtivos.slice(k * 500, (k + 1) * 500);
             await fetch(
-              `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&fonte_id=not.in.(${chunk.map(id => `"${id}"`).join(',')})`,
+              `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&ativo=eq.true&fonte_id=not.in.(${chunk.map(id => `"${id}"`).join(',')})`,
               { method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' } }
             ).catch(() => {});
           }
