@@ -4452,158 +4452,176 @@ function ScrapersTab() {
         </div>
       )}
 
-      {/* ═══ ABA FONTES (Caixa + Leiloeiros unificados) ═══ */}
+      {/* ═══ ABA FONTES ═══ */}
       {abaAtiva === 'fontes' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* ── Caixa Econômica Federal ── */}
-          <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>🏦</div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                    <span style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</span>
-                    {leiloeiroContagem['caixa'] != null && (
-                      <span style={{ fontSize: 18, fontWeight: 900, color: '#c2410c', lineHeight: 1 }}>{leiloeiroContagem['caixa'].toLocaleString('pt-BR')}</span>
-                    )}
-                    {leiloeiroContagem['caixa'] != null && <span style={{ fontSize: 10, color: '#94a3b8' }}>imóveis no banco</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>● CSV · 27 estados · cron 22:00–22:52 UTC · retry ×3</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={() => rodarSysDebug('scraper')} disabled={sysDebugRodando['scraper']}
-                  style={{ padding: '5px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                  {sysDebugRodando['scraper'] ? '⏳' : '🔍 Diagnóstico'}
-                </button>
-                <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)} disabled={caixaTodos.rodando}
-                  style={{ padding: '6px 13px', borderRadius: 8, background: caixaTodos.rodando ? '#f1f5f9' : '#fff7ed', color: caixaTodos.rodando ? '#94a3b8' : '#c2410c', fontWeight: 700, fontSize: 12, cursor: caixaTodos.rodando ? 'default' : 'pointer', border: `1px solid ${caixaTodos.rodando ? '#e2e8f0' : '#fed7aa'}` }}>
-                  {caixaTodos.rodando ? `⏳ ${caixaTodos.ufAtual} [${caixaTodos.atual}/${caixaTodos.total}]` : '▶ Executar todos'}
-                </button>
-              </div>
-            </div>
-            <BarraProgresso visivel={caixaTodos.rodando || (caixaTodos.total > 0 && !caixaTodos.rodando)} atual={caixaTodos.atual} total={caixaTodos.total}
-              label={caixaTodos.rodando ? `Agendando ${caixaTodos.ufAtual}...` : `✅ ${caixaTodos.atual} estados agendados`}
-              sublabel={caixaTodos.rodando ? 'Disparando workflows — não feche esta aba' : 'Scraper rodando em background · resultado em ~10 min'} cor="#c2410c" />
-            {sysDebug['scraper'] && (
-              <div style={{ marginBottom: 10, background: sysDebug['scraper'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${sysDebug['scraper'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
-                <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['scraper'].status === 200 ? '#059669' : '#dc2626' }}>
-                  {sysDebug['scraper'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['scraper'].status})`}
-                  <button onClick={() => setSysDebug(s => ({ ...s, scraper: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
-                </div>
-                <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 180, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['scraper'].body, null, 2)} />
-              </div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 12, color: '#64748b' }}>
-                {Object.values(scraperRegiao).filter(r => r.agendado).length > 0
-                  ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ {Object.values(scraperRegiao).filter(r => r.agendado).length} estados agendados</span>
-                  : <span>Cron diário automático · ▶ para forçar por estado</span>}
-                {Object.values(scraperRegiao).filter(r => r.erro).length > 0 &&
-                  <span style={{ color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>· ❌ {Object.values(scraperRegiao).filter(r => r.erro).length} erros</span>}
-              </div>
-              <button onClick={() => toggleExpandir('caixa')} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-                {estadosExpandidos.caixa ? '▲ Recolher' : '▼ Ver 27 estados'}
-              </button>
-            </div>
-            {estadosExpandidos.caixa && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 10 }}>
-                {AGENDA_SCRAPER.map(({ uf, hora }) => {
-                  const r = scraperRegiao[uf] || {};
-                  return (
-                    <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#f8fafc', borderRadius: 8, padding: '7px 10px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#e2e8f0'}` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
-                        <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
-                          style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 9 }}>
-                          {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
-                        </button>
+          {/* Grade unificada de todas as fontes */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+
+            {/* ── Caixa Econômica Federal ── */}
+            {(() => {
+              const total = status?.total ?? null;
+              const temDados = total > 0;
+              const erros = Object.values(scraperRegiao).filter(r => r.erro).length;
+              const agendados = Object.values(scraperRegiao).filter(r => r.agendado).length;
+              return (
+                <div style={{ background: '#fff7ed', borderRadius: 12, border: '1px solid #fed7aa', padding: '14px 16px', gridColumn: '1 / -1' }}>
+                  {/* Cabeçalho */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 22 }}>🏦</span>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
+                        <div style={{ fontSize: 11, color: '#92400e', fontWeight: 600 }}>● CSV · 27 arquivos (1 por estado) · cron 22:00–22:52 UTC · retry ×3</div>
                       </div>
-                      <div style={{ fontSize: 9, color: '#94a3b8' }}>{hora} UTC</div>
-                      {r.agendado && <div style={{ fontSize: 9, color: '#059669', fontWeight: 700 }}>🚀 Agendado</div>}
-                      {r.erro && <div style={{ fontSize: 9, color: '#dc2626' }} title={r.erro}>❌ Erro</div>}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: temDados ? '#fed7aa' : '#f1f5f9', color: temDados ? '#c2410c' : '#94a3b8' }}>
+                        {erros > 0 ? `❌ ${erros} erros` : agendados > 0 ? `● ${agendados} agendados` : temDados ? '● Ativo' : '○ Sem dados'}
+                      </span>
+                      <button onClick={() => rodarSysDebug('scraper')} disabled={sysDebugRodando['scraper']}
+                        style={{ padding: '4px 10px', borderRadius: 7, background: '#fff', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+                        {sysDebugRodando['scraper'] ? '⏳' : '🔍 Diagnóstico'}
+                      </button>
+                      <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)} disabled={caixaTodos.rodando}
+                        style={{ padding: '5px 12px', borderRadius: 7, background: caixaTodos.rodando ? '#f1f5f9' : '#c2410c', color: caixaTodos.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: caixaTodos.rodando ? 'default' : 'pointer', border: 'none' }}>
+                        {caixaTodos.rodando ? `⏳ ${caixaTodos.ufAtual} [${caixaTodos.atual}/${caixaTodos.total}]` : '▶ Executar todos'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Contador + progresso */}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: '#c2410c', lineHeight: 1 }}>
+                      {total != null ? total.toLocaleString('pt-BR') : '—'}
+                    </span>
+                    <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>imóveis no banco</span>
+                  </div>
+
+                  <BarraProgresso visivel={caixaTodos.rodando || (caixaTodos.total > 0 && !caixaTodos.rodando)} atual={caixaTodos.atual} total={caixaTodos.total}
+                    label={caixaTodos.rodando ? `Agendando ${caixaTodos.ufAtual}...` : `✅ ${caixaTodos.atual} estados agendados`}
+                    sublabel={caixaTodos.rodando ? 'Disparando workflows — não feche esta aba' : 'Scraper rodando em background · resultado em ~10 min'} cor="#c2410c" />
+
+                  {sysDebug['scraper'] && (
+                    <div style={{ marginBottom: 8, background: sysDebug['scraper'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '8px 12px', border: `1px solid ${sysDebug['scraper'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+                      <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['scraper'].status === 200 ? '#059669' : '#dc2626' }}>
+                        {sysDebug['scraper'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['scraper'].status})`}
+                        <button onClick={() => setSysDebug(s => ({ ...s, scraper: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
+                      </div>
+                      <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 160, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['scraper'].body, null, 2)} />
+                    </div>
+                  )}
+
+                  {/* 27 estados expansíveis */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                    <span style={{ fontSize: 11, color: '#92400e' }}>
+                      {agendados > 0 ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ {agendados} estados agendados</span> : 'Cron diário automático · ▶ para forçar por estado'}
+                      {erros > 0 && <span style={{ color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>· ❌ {erros} com erro</span>}
+                    </span>
+                    <button onClick={() => toggleExpandir('caixa')} style={{ fontSize: 11, color: '#c2410c', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+                      {estadosExpandidos.caixa ? '▲ Recolher' : `▼ Ver 27 estados${erros > 0 ? ` (${erros} ❌)` : ''}`}
+                    </button>
+                  </div>
+                  {estadosExpandidos.caixa && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5, marginTop: 10 }}>
+                      {AGENDA_SCRAPER.map(({ uf, hora }) => {
+                        const r = scraperRegiao[uf] || {};
+                        return (
+                          <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#fffbeb', borderRadius: 7, padding: '6px 8px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#fed7aa'}` }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontWeight: 800, fontSize: 12, color: '#334155' }}>{uf}</span>
+                              <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
+                                style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 8 }}>
+                                {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
+                              </button>
+                            </div>
+                            <div style={{ fontSize: 8, color: '#94a3b8' }}>{hora} UTC</div>
+                            {r.agendado && <div style={{ fontSize: 8, color: '#059669', fontWeight: 700 }}>🚀 Agendado</div>}
+                            {r.erro && <div style={{ fontSize: 8, color: '#dc2626', fontWeight: 700 }} title={r.erro}>❌ {r.erro.slice(0, 20)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── Leiloeiros (Puppeteer + Parceiros API) ── */}
+            {[
+              { fonte: 'mega',     nome: 'Mega Leilões',    cor: '#0D63DB', desc: 'Residenciais e comerciais',   tipo: 'scraper' },
+              { fonte: 'sold',     nome: 'Sold Leilões',    cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros', tipo: 'scraper' },
+              { fonte: 'superbid', nome: 'Superbid',        cor: '#059669', desc: 'Maior marketplace do Brasil', tipo: 'scraper' },
+              { fonte: 'bb',       nome: 'Banco do Brasil', cor: '#d97706', desc: 'Carteira imobiliária do BB',  tipo: 'scraper' },
+              // Parceiros via API aparecem aqui conforme se conectam
+              ...parceiros.filter(p => p.status === 'ativo').map(p => ({
+                fonte: `parceiro_${p.id}`,
+                nome: p.nome_fantasia || p.nome,
+                cor: '#ea580c',
+                desc: `API · token ativo`,
+                tipo: 'parceiro',
+                parceiro: p,
+              })),
+            ].map(s => {
+              const total = leiloeiroContagem[s.fonte] ?? 0;
+              const temDados = total > 0;
+              const debugKey = `leiloeiro_${s.fonte}`;
+              return (
+                <div key={s.fonte} style={{ background: `${s.cor}08`, borderRadius: 12, border: `1px solid ${s.cor}22`, padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>{s.nome}</div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{s.desc}</div>
+                    </div>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: temDados ? `${s.cor}22` : '#f1f5f9', color: temDados ? s.cor : '#94a3b8', whiteSpace: 'nowrap' }}>
+                      {temDados ? '● Ativo' : s.tipo === 'parceiro' ? '● Conectado' : '○ Sem dados'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: temDados ? s.cor : '#94a3b8', lineHeight: 1 }}>
+                    {total.toLocaleString('pt-BR')}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, marginBottom: 10 }}>imóveis no banco</div>
+                  <button onClick={() => rodarSysDebug(debugKey)} disabled={sysDebugRodando[debugKey]}
+                    style={{ padding: '4px 10px', borderRadius: 6, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+                    {sysDebugRodando[debugKey] ? '⏳' : '🔍 Diagnóstico'}
+                  </button>
+                  {sysDebug[debugKey] && (
+                    <div style={{ marginTop: 8, background: sysDebug[debugKey].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '8px 10px', border: `1px solid ${sysDebug[debugKey].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+                      <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, color: sysDebug[debugKey].status === 200 ? '#059669' : '#dc2626', display: 'flex', justifyContent: 'space-between' }}>
+                        {sysDebug[debugKey].status === 200 ? '✅ OK' : `❌ Erro (${sysDebug[debugKey].status})`}
+                        <button onClick={() => setSysDebug(d => ({ ...d, [debugKey]: null }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 10 }}>✕</button>
+                      </div>
+                      <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 9, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 120, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug[debugKey].body, null, 2)} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
           </div>
 
-          {/* ── Leiloeiros via Puppeteer ── */}
-          <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>🏛️</div>
+          {/* Scraper Puppeteer status */}
+          {(puppeteerStatus?.erro || puppeteerStatus?.agendado || sysDebug['banco']) && (
+            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '12px 16px', fontSize: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#475569', marginBottom: 6 }}>Puppeteer · cron 07:00 BRT</div>
+              {puppeteerStatus?.erro && <div style={{ color: '#ef4444', marginBottom: 6 }}>⚠️ {puppeteerStatus.erro}</div>}
+              {puppeteerStatus?.agendado && <div style={{ color: '#059669', marginBottom: 6 }}>✅ {puppeteerStatus.msg}</div>}
+              {sysDebug['banco'] && (
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Leiloeiros Privados (Puppeteer)</div>
-                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>● HTML · cron 07:00 BRT · IPs Microsoft desbloqueados</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={() => rodarSysDebug('banco')} disabled={sysDebugRodando['banco']}
-                  style={{ padding: '5px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                  {sysDebugRodando['banco'] ? '⏳' : '🔍 Diagnóstico'}
-                </button>
-                <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
-                  style={{ padding: '6px 13px', borderRadius: 8, background: puppeteerStatus?.agendado ? '#f0fdf4' : '#0D63DB', color: puppeteerStatus?.agendado ? '#059669' : 'white', fontWeight: 700, fontSize: 12, cursor: puppeteerStatus?.rodando ? 'default' : 'pointer', border: puppeteerStatus?.agendado ? '1px solid #bbf7d0' : 'none' }}>
-                  {puppeteerStatus?.rodando ? '⏳ Disparando...' : puppeteerStatus?.agendado ? '🚀 Agendado' : '▶ Executar agora'}
-                </button>
-              </div>
-            </div>
-            {sysDebug['banco'] && (
-              <div style={{ marginBottom: 12, background: sysDebug['banco'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${sysDebug['banco'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
-                <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['banco'].status === 200 ? '#059669' : '#dc2626' }}>
-                  {sysDebug['banco'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['banco'].status})`}
-                  <button onClick={() => setSysDebug(s => ({ ...s, banco: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
-                </div>
-                <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 180, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['banco'].body, null, 2)} />
-              </div>
-            )}
-            {puppeteerStatus?.erro && <div style={{ fontSize: 12, color: '#ef4444', background: '#fef2f2', padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>⚠️ {puppeteerStatus.erro}</div>}
-            {puppeteerStatus?.agendado && <div style={{ fontSize: 12, color: '#059669', background: '#f0fdf4', padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>✅ {puppeteerStatus.msg}</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-              {[
-                { fonte: 'mega',     nome: 'Mega Leilões',    cor: '#0D63DB', desc: 'Imóveis residenciais e comerciais' },
-                { fonte: 'sold',     nome: 'Sold Leilões',    cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros bancos' },
-                { fonte: 'superbid', nome: 'Superbid',        cor: '#059669', desc: 'Maior marketplace de leilões do Brasil' },
-                { fonte: 'bb',       nome: 'Banco do Brasil', cor: '#d97706', desc: 'Carteira imobiliária do BB' },
-              ].map(s => {
-                const total = leiloeiroContagem[s.fonte];
-                const temDados = total != null && total > 0;
-                return (
-                  <div key={s.fonte} style={{ background: `${s.cor}06`, borderRadius: 10, padding: '12px 14px', border: `1px solid ${s.cor}22` }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <div>
-                        <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>{s.nome}</div>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{s.desc}</div>
-                      </div>
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: temDados ? `${s.cor}22` : '#f1f5f9', color: temDados ? s.cor : '#94a3b8', whiteSpace: 'nowrap' }}>
-                        {temDados ? '● Ativo' : total === 0 ? '○ Sem dados' : '…'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: s.cor, lineHeight: 1 }}>
-                      {total != null ? total.toLocaleString('pt-BR') : '—'}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>imóveis no banco</div>
-                    <button onClick={() => rodarSysDebug(`leiloeiro_${s.fonte}`)} disabled={sysDebugRodando[`leiloeiro_${s.fonte}`]}
-                      style={{ marginTop: 8, padding: '4px 10px', borderRadius: 6, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
-                      {sysDebugRodando[`leiloeiro_${s.fonte}`] ? '⏳' : '🔍 Diagnóstico'}
-                    </button>
-                    {sysDebug[`leiloeiro_${s.fonte}`] && (
-                      <div style={{ marginTop: 8, background: sysDebug[`leiloeiro_${s.fonte}`].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '8px 10px', border: `1px solid ${sysDebug[`leiloeiro_${s.fonte}`].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
-                        <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, color: sysDebug[`leiloeiro_${s.fonte}`].status === 200 ? '#059669' : '#dc2626', display: 'flex', justifyContent: 'space-between' }}>
-                          {sysDebug[`leiloeiro_${s.fonte}`].status === 200 ? '✅ OK' : `❌ Erro (${sysDebug[`leiloeiro_${s.fonte}`].status})`}
-                          <button onClick={() => setSysDebug(d => ({ ...d, [`leiloeiro_${s.fonte}`]: null }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 10 }}>✕</button>
-                        </div>
-                        <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 9, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 140, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug[`leiloeiro_${s.fonte}`].body, null, 2)} />
-                      </div>
-                    )}
+                  <div style={{ fontWeight: 700, fontSize: 11, color: sysDebug['banco'].status === 200 ? '#059669' : '#dc2626' }}>
+                    {sysDebug['banco'].status === 200 ? '✅ OK' : `❌ Erro (${sysDebug['banco'].status})`}
+                    <button onClick={() => setSysDebug(s => ({ ...s, banco: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
                   </div>
-                );
-              })}
+                  <textarea readOnly style={{ fontSize: 10, width: '100%', maxHeight: 140, background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace' }} value={JSON.stringify(sysDebug['banco'].body, null, 2)} />
+                </div>
+              )}
+              <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
+                style={{ marginTop: 8, padding: '5px 12px', borderRadius: 7, background: '#0D63DB', color: 'white', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer' }}>
+                {puppeteerStatus?.rodando ? '⏳' : '▶ Executar Puppeteer agora'}
+              </button>
             </div>
-          </div>
+          )}
         </div>
       )}
 
