@@ -146,7 +146,7 @@ export default function LeiloeiroPortal() {
             )}
             <button onClick={gerarWebhookKey} disabled={gerandoKey}
               style={{ padding: '10px 16px', background: '#ea580c', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, flexShrink: 0, opacity: gerandoKey ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <RefreshCw size={13} /> {webhookKey ? 'Reger' : 'Gerar chave'}
+              <RefreshCw size={13} /> {webhookKey ? 'Gerar nova chave' : 'Gerar chave'}
             </button>
           </div>
           {webhookKey && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>⚠️ Tratar como senha. Não compartilhe publicamente.</div>}

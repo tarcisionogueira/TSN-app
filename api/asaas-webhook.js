@@ -19,7 +19,9 @@ export default async function handler(req, res) {
   }
   const received = req.headers['asaas-access-token']
     || req.headers['authorization']?.replace('Bearer ', '');
-  if (!received || received !== webhookToken) {
+  const tokOk = received && received.length === webhookToken.length &&
+    require('crypto').timingSafeEqual(Buffer.from(received), Buffer.from(webhookToken));
+  if (!tokOk) {
     console.warn('[asaas] token inválido ou ausente');
     return res.status(401).json({ error: 'Não autorizado' });
   }

@@ -398,16 +398,16 @@ export default function Analise() {
       } catch { /* portfólio local já foi salvo — erro de rede não bloqueia o usuário */ }
     }
 
-    // Contabiliza análise para top1 (só conta ao salvar pela primeira vez)
-    if (role === 'top1' && user && isNovo) {
-      const mes = mesAtual();
-      const novoCount = analisesUsadas + 1;
+    // Contabiliza análise ao salvar pela primeira vez
+    if (user && isNovo) {
       if (role === 'explorador') {
         const novoBonus = Math.max(0, analisesBonus - 1);
         await supabase.from('perfis').update({ analises_bonus: novoBonus }).eq('id', user.id);
         setAnalisesBonus(novoBonus);
         if (novoBonus <= 0) setAnalisesBloqueado(true);
-      } else {
+      } else if (role === 'top1') {
+        const mes = mesAtual();
+        const novoCount = analisesUsadas + 1;
         await supabase.from('perfis').update({ analises_mes: mes, analises_count: novoCount }).eq('id', user.id);
         setAnalisesUsadas(novoCount);
         if (novoCount >= limiteRole) setAnalisesBloqueado(true);

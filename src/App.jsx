@@ -238,12 +238,12 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/checkout" element={<Checkout />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/admin/financeiro" element={<AdminFinanceiro />} />
+          <Route path="/admin" element={<PrivateRoute roles={['admin']}><Admin /></PrivateRoute>} />
+          <Route path="/admin/financeiro" element={<PrivateRoute roles={['admin']}><AdminFinanceiro /></PrivateRoute>} />
           <Route path="/promo/:codigo" element={<Promo />} />
           <Route path="/convite/:codigo" element={<Convite />} />
           <Route path="/convite-equipe/:token" element={<ConviteEquipe />} />
-          <Route path="/leiloeiro" element={<LeiloeiroPortal />} />
+          <Route path="/leiloeiro" element={<PrivateRoute roles={['leiloeiro','admin']}><LeiloeiroPortal /></PrivateRoute>} />
           <Route path="/c/:token" element={<ContratoLink />} />
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />
           <Route path="*" element={<MainLayout />} />

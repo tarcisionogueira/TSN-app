@@ -112,7 +112,7 @@ export default async function handler(req, res) {
 
   // Ações do usuário exigem autenticação
   const { action, ...body } = req.body;
-  const userActions = ['criar_assinatura', 'gerenciar_assinatura', 'criar_cobranca_avulsa', 'cancelar_assinatura'];
+  const userActions = ['criar_assinatura', 'gerenciar_assinatura', 'criar_cobranca_avulsa', 'cancelar_assinatura', 'sync_customer'];
   let authUser = null;
   if (userActions.includes(action)) {
     authUser = await getAuthUserNode(req);
@@ -184,6 +184,7 @@ export default async function handler(req, res) {
       auditLog({ acao: 'assinatura_criada', user_id: authUser?.id, ip, detalhes: { plano, customerId, subscriptionId, avulso: !!info.avulso }, sucesso: true });
       return res.status(200).json({
         subscriptionId,
+        paymentId: info.avulso ? cobranca?.id : undefined,
         customerId,
         linkPagamento,
         avulso: !!info.avulso,
@@ -304,6 +305,14 @@ export default async function handler(req, res) {
       }
 
       return res.status(200).json({ customerId });
+    }
+
+    // Ações financeiras exigem role admin
+    if (['financas', 'extrato', 'transferir_pix'].includes(action)) {
+      const adminUser = await getAuthUserNode(req);
+      if (!adminUser?.id) return res.status(401).json({ error: 'Não autorizado' });
+      const { data: perfil } = await supabase.from('perfis').select('role').eq('id', adminUser.id).single();
+      if (perfil?.role !== 'admin') return res.status(403).json({ error: 'Acesso restrito a administradores' });
     }
 
     if (action === 'financas') {

@@ -68,7 +68,7 @@ export default function ChatSuporte() {
       if (avisouInatividade.current) return;
       avisouInatividade.current = true;
       await supabase.from('chamados_mensagens').insert({
-        chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
+        chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'TSN Assistente',
         conteudo: 'Ainda está por aqui? Estou disponível para continuar ajudando. Caso não haja resposta nos próximos 28 minutos, este atendimento será encerrado automaticamente.',
         anexos: [],
       });
@@ -81,7 +81,7 @@ export default function ChatSuporte() {
       }).eq('id', ticket.id).in('status', ['aberto', 'em_atendimento']);
       if (!errFim) {
         await supabase.from('chamados_mensagens').insert({
-          chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
+          chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'TSN Assistente',
           conteudo: 'Este atendimento foi encerrado por inatividade. Se precisar de mais ajuda, abra um novo chamado.',
           anexos: [],
         });
@@ -149,7 +149,10 @@ export default function ChatSuporte() {
     setMensagens(novaLista);
     setTexto(''); setAnexos([]);
     resetTimers();
-    await dispararIA(ticket, novaLista);
+    // Só aciona IA se não houver atendente humano assumindo o chamado
+    if (ticket.status !== 'em_atendimento') {
+      await dispararIA(ticket, novaLista);
+    }
     setEnviando(false);
   }
 
@@ -164,7 +167,7 @@ export default function ChatSuporte() {
       if (resposta) {
         await supabase.from('chamados_mensagens').insert({
           chamado_id: tk.id, autor_tipo: 'ia',
-          autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
+          autor_nome: 'TSN Assistente', conteudo: resposta, anexos: [],
         });
         if (escalar) {
           setPrecisaAtendente(true);
@@ -174,7 +177,7 @@ export default function ChatSuporte() {
       }
     } catch (_) {
       await supabase.from('chamados_mensagens').insert({
-        chamado_id: tk.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
+        chamado_id: tk.id, autor_tipo: 'ia', autor_nome: 'TSN Assistente',
         conteudo: 'Não consegui processar sua mensagem no momento. Um membro da equipe irá atendê-lo em breve.',
         anexos: [],
       });
@@ -201,7 +204,7 @@ export default function ChatSuporte() {
       atualizado_em: new Date().toISOString(),
     }).eq('id', ticket.id);
     await supabase.from('chamados_mensagens').insert({
-      chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
+      chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'TSN Assistente',
       conteudo: 'Ótimo! Fico feliz em ter ajudado. Este atendimento foi encerrado. Se tiver mais dúvidas, estarei por aqui.',
       anexos: [],
     });
@@ -348,7 +351,7 @@ export default function ChatSuporte() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
                       {m.autor_tipo !== 'cliente' && <AvatarIA />}
                       <span style={{ fontSize: 10, color: '#94a3b8' }}>
-                        {m.autor_tipo === 'ia' ? 'BidPro Assistente'
+                        {m.autor_tipo === 'ia' ? 'TSN Assistente'
                           : m.autor_tipo === 'atendente' ? (m.autor_nome || 'Equipe BidPro')
                           : m.autor_tipo === 'sistema' ? 'Sistema'
                           : 'Você'} · {fmtHora(m.criado_em)}
