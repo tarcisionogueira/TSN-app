@@ -38,11 +38,6 @@ export default function Comissoes() {
   const [msgSaque, setMsgSaque] = useState(null);
   const [showSaqueForm, setShowSaqueForm] = useState(false);
 
-  useEffect(() => {
-    if (!ROLES_ELEGÍVEIS.includes(role)) { nav('/'); return; }
-    carregar();
-  }, [role]);
-
   const [cfinConfig, setCfinConfig] = useState({});  // config financeira por gateway
 
   const carregar = useCallback(async () => {
@@ -50,12 +45,12 @@ export default function Comissoes() {
     const [{ data: c }, { data: s }, { data: p }, { data: cf }] = await Promise.all([
       supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
       supabase.from('saques').select('*').eq('usuario_id', user.id).order('criado_em', { ascending: false }),
-      supabase.from('perfis').select('pix_key').eq('id', user.id).maybeSingle(),
+      supabase.from('perfis').select('chave_pix').eq('id', user.id).maybeSingle(),
       supabase.from('config_financeira').select('*'),
     ]);
     setComissoes(c || []);
     setSaques(s || []);
-    const k = p?.pix_key || '';
+    const k = p?.chave_pix || '';
     setPixKey(k);
     setPixKeySalva(k);
     if (cf) {
@@ -66,10 +61,15 @@ export default function Comissoes() {
     setLoading(false);
   }, [user.id]);
 
+  useEffect(() => {
+    if (!ROLES_ELEGÍVEIS.includes(role)) { nav('/'); return; }
+    carregar();
+  }, [role, carregar]);
+
   async function salvarPix() {
     setSalvandoPix(true);
     setMsgPix(null);
-    const { error } = await supabase.from('perfis').update({ pix_key: pixKey.trim() }).eq('id', user.id);
+    const { error } = await supabase.from('perfis').update({ chave_pix: pixKey.trim() }).eq('id', user.id);
     if (error) setMsgPix({ tipo: 'erro', txt: 'Erro ao salvar.' });
     else { setPixKeySalva(pixKey.trim()); setMsgPix({ tipo: 'ok', txt: 'Chave PIX salva!' }); }
     setSalvandoPix(false);
@@ -107,7 +107,7 @@ export default function Comissoes() {
 
   // Agrupamento por gateway
   const porGateway = comissoes.reduce((acc, c) => {
-    const g = c.asaas_payment_id?.startsWith('pay_') ? 'pagar.me' : 'asaas';
+    const g = c.asaas_payment_id?.startsWith('pay_') ? 'pagarme' : 'asaas';
     if (!acc[g]) acc[g] = { total: 0, qtd: 0 };
     acc[g].total += Number(c.valor_comissao);
     acc[g].qtd++;

@@ -142,7 +142,9 @@ export default async function handler(req, res) {
     ? 'Contrato de Assessoria para Aquisição de Imóvel em Leilão'
     : 'Contrato de Adesão ao Clube de Negócios TSN Ativos';
 
-  const conteudo = planoKey === 'assessorado' ? TEMPLATE_ASSESSORADO : TEMPLATE_CLUBE;
+  const conteudo = (planoKey === 'assessorado' ? TEMPLATE_ASSESSORADO : TEMPLATE_CLUBE)
+    .replace(/\[NOME DO SIGNATÁRIO\]/gi, nomeContrato)
+    .replace(/\[NOME\]/gi, nomeContrato);
 
   const { data, error } = await supabase
     .from('contratos_link')
@@ -150,8 +152,9 @@ export default async function handler(req, res) {
       titulo,
       conteudo,
       tipo_contrato: 'servico',
-      status: 'aguardando',
-      criado_por: null,
+      status: 'aguardando_assinatura',
+      requer_assinatura: true,
+      criado_por: userId || null,
       assinante_email: emailUsuario || null,
     })
     .select('token')

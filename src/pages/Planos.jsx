@@ -29,13 +29,13 @@ export default function Planos() {
     if (!plano) return;
     if (plano.preco === 0) { nav(user ? '/membros' : '/login'); return; }
     const params = new URLSearchParams({ plano: key });
-    nav(user ? `/checkout?${params}` : `/login?next=/checkout?plano=${key}`);
+    nav(user ? `/checkout?${params}` : `/login?next=${encodeURIComponent(`/checkout?plano=${key}`)}`);
   };
 
   const irAnual = (key) => {
     const aKey = `${key}_anual`;
     const params = new URLSearchParams({ plano: aKey });
-    nav(user ? `/checkout?${params}` : `/login?next=/checkout?plano=${aKey}`);
+    nav(user ? `/checkout?${params}` : `/login?next=${encodeURIComponent(`/checkout?plano=${aKey}`)}`);
   };
 
   const atual = (key) => user && (key === role || `${key}_anual` === role);

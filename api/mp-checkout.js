@@ -41,7 +41,7 @@ export default async function handler(req, res) {
       payment_method_id: metodoPagamento || 'pix',
       payer: { email: String(email) },
       metadata: { user_id: user.id, plano_id: planoId || null, origem: 'tsn-app' },
-      notification_url: `${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : ''}/api/mp-webhook`,
+      notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'TSN BIDPRO',
     };
 

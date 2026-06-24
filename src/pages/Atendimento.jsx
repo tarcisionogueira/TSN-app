@@ -4,9 +4,10 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_CFG = {
-  aberto:         { label: 'Aberto',         cor: '#10b981', bg: '#d1fae5' },
-  em_atendimento: { label: 'Em atendimento', cor: '#0D63DB', bg: '#dbeafe' },
-  finalizado:     { label: 'Finalizado',     cor: '#64748b', bg: '#f1f5f9' },
+  aberto:               { label: 'Aberto',             cor: '#10b981', bg: '#d1fae5' },
+  aguardando_atendente: { label: 'Aguarda atendente',  cor: '#f59e0b', bg: '#fef3c7' },
+  em_atendimento:       { label: 'Em atendimento',     cor: '#0D63DB', bg: '#dbeafe' },
+  finalizado:           { label: 'Finalizado',         cor: '#64748b', bg: '#f1f5f9' },
 };
 
 export default function Atendimento() {
@@ -52,11 +53,11 @@ export default function Atendimento() {
   async function carregarChamados() {
     setLoading(true);
     let q = supabase.from('chamados').select('*').order('criado_em', { ascending: true });
-    if (filtro === 'pendentes') q = q.in('status', ['aberto', 'em_atendimento']);
+    if (filtro === 'pendentes') q = q.in('status', ['aberto', 'aguardando_atendente', 'em_atendimento']);
     else if (filtro !== 'todos') q = q.eq('status', filtro);
     const { data, error } = await q;
     if (!error) {
-      const ordem = { aberto: 0, em_atendimento: 1, finalizado: 2 };
+      const ordem = { aguardando_atendente: 0, aberto: 1, em_atendimento: 2, finalizado: 3 };
       const sorted = (data || []).sort((a, b) => (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9));
       setChamados(sorted);
     }
@@ -238,7 +239,7 @@ export default function Atendimento() {
                   <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: s?.bg, color: s?.cor }}>{s?.label}</span>
                 );
               })()}
-              {chamadoAtivo.status === 'aberto' && (
+              {['aberto', 'aguardando_atendente'].includes(chamadoAtivo.status) && (
                 <button onClick={assumirChamado}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                   <UserCheck size={14} /> Assumir

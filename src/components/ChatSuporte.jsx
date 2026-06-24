@@ -53,16 +53,30 @@ export default function ChatSuporte() {
         event: 'INSERT', schema: 'public', table: 'chamados_mensagens',
         filter: `chamado_id=eq.${ticket.id}`,
       }, p => setMensagens(prev => prev.find(m => m.id === p.new.id) ? prev : [...prev, p.new]))
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'chamados',
+        filter: `id=eq.${ticket.id}`,
+      }, p => {
+        setTicket(prev => prev ? { ...prev, ...p.new } : prev);
+        // Desmonta timers quando atendente humano assume
+        if (['em_atendimento', 'aguardando_atendente'].includes(p.new.status)) {
+          clearTimeout(avisoTimer.current);
+          clearTimeout(fecharTimer.current);
+        }
+      })
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [ticket?.id]);
 
-  // Timers de inatividade — reiniciados a cada mensagem do cliente
+  // Timers de inatividade — só atuam em chamados 'aberto' (IA respondendo)
+  // Quando um atendente humano assumiu, timers são desarmados
   const resetTimers = useCallback(() => {
     clearTimeout(avisoTimer.current);
     clearTimeout(fecharTimer.current);
     avisouInatividade.current = false;
     if (!ticket) return;
+    // Não arma timers se um humano já está envolvido
+    if (['em_atendimento', 'aguardando_atendente'].includes(ticket.status)) return;
 
     avisoTimer.current = setTimeout(async () => {
       if (avisouInatividade.current) return;
@@ -75,10 +89,11 @@ export default function ChatSuporte() {
     }, AVISO_MS);
 
     fecharTimer.current = setTimeout(async () => {
+      // Só fecha se ainda estiver 'aberto' — nunca interrompe atendente humano
       const { error: errFim } = await supabase.from('chamados').update({
         status: 'finalizado', atendente_nome: 'Sistema (inatividade)',
         atualizado_em: new Date().toISOString(),
-      }).eq('id', ticket.id).in('status', ['aberto', 'em_atendimento']);
+      }).eq('id', ticket.id).eq('status', 'aberto');
       if (!errFim) {
         await supabase.from('chamados_mensagens').insert({
           chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'TSN Assistente',
@@ -88,7 +103,7 @@ export default function ChatSuporte() {
         setTicket(p => p ? { ...p, status: 'finalizado' } : p);
       }
     }, FECHAR_MS);
-  }, [ticket?.id]);
+  }, [ticket?.id, ticket?.status]);
 
   useEffect(() => {
     return () => { clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current); };
@@ -149,8 +164,8 @@ export default function ChatSuporte() {
     setMensagens(novaLista);
     setTexto(''); setAnexos([]);
     resetTimers();
-    // Só aciona IA se não houver atendente humano assumindo o chamado
-    if (ticket.status !== 'em_atendimento') {
+    // Só aciona IA se não houver atendente humano ou solicitação pendente
+    if (!['em_atendimento', 'aguardando_atendente'].includes(ticket.status)) {
       await dispararIA(ticket, novaLista);
     }
     setEnviando(false);
@@ -188,12 +203,16 @@ export default function ChatSuporte() {
 
   async function solicitarAtendente() {
     if (!ticket) return;
+    await supabase.from('chamados').update({
+      status: 'aguardando_atendente',
+      atualizado_em: new Date().toISOString(),
+    }).eq('id', ticket.id);
     await supabase.from('chamados_mensagens').insert({
       chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'Sistema',
       conteudo: '— Cliente solicitou atendimento humano. Um membro da equipe assumirá em breve. —',
       anexos: [],
     });
-    await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', ticket.id);
+    setTicket(prev => ({ ...prev, status: 'aguardando_atendente' }));
     setPrecisaAtendente(false);
   }
 

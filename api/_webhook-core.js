@@ -165,10 +165,13 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
 export async function processarVencido({ gatewayCustomerId, email, gateway }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente && !cliente.inadimplente_desde) {
-    await supabase
-      .from('perfis')
-      .update({ inadimplente_desde: new Date().toISOString().slice(0, 10) })
-      .eq('id', cliente.id);
+    const ROLES_PAGANTES = ['top1', 'top2', 'assessorado', 'clube', 'top1_anual', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+    const update = { inadimplente_desde: new Date().toISOString().slice(0, 10) };
+    if (ROLES_PAGANTES.includes(cliente.role)) {
+      update.role_anterior = cliente.role;
+      update.role = 'explorador';
+    }
+    await supabase.from('perfis').update(update).eq('id', cliente.id);
   }
   return { ok: true };
 }
@@ -177,10 +180,18 @@ export async function processarVencido({ gatewayCustomerId, email, gateway }) {
 export async function processarRecusado({ gatewayCustomerId, email, motivo, gateway }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente) {
-    await supabase.from('perfis').update({
+    const ROLES_PAGANTES = ['top1', 'top2', 'assessorado', 'clube', 'top1_anual', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+    const update = {
       pagamento_erro:      motivo || 'RECUSADO',
       pagamento_erro_data: new Date().toISOString(),
-    }).eq('id', cliente.id);
+    };
+    // Só suspende se ainda não está inadimplente (evita sobrescrever role_anterior já salvo)
+    if (ROLES_PAGANTES.includes(cliente.role) && !cliente.inadimplente_desde) {
+      update.inadimplente_desde = new Date().toISOString().slice(0, 10);
+      update.role_anterior = cliente.role;
+      update.role = 'explorador';
+    }
+    await supabase.from('perfis').update(update).eq('id', cliente.id);
   }
   return { ok: true };
 }

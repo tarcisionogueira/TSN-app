@@ -143,7 +143,7 @@ export default function MapaImoveis() {
           <span style={{ fontWeight: 700, fontSize: 16 }}>Mapa de Imóveis</span>
           {!loading && <span style={{ fontSize: 12, color: '#60a5fa', background: '#1e293b', padding: '2px 10px', borderRadius: 20 }}>{imoveis.length} imóveis no mapa</span>}
         </div>
-        <button onClick={() => navigate('/busca')} style={{ fontSize: 12, padding: '5px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>
+        <button onClick={() => navigate('/buskar')} style={{ fontSize: 12, padding: '5px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>
           Ver lista →
         </button>
       </div>
