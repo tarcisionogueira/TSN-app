@@ -734,43 +734,45 @@ export default function Busca() {
             <div style={{ padding:14, display:'flex', flexDirection:'column', gap:12 }}>
               <div>
                 <label style={lbl}>Tipo de Imóvel</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {[
                     { val: 'apartamento', label: 'Apartamento' },
                     { val: 'casa', label: 'Casa' },
                     { val: 'terreno', label: 'Terreno' },
                     { val: 'comercial', label: 'Comercial' },
-                  ].map(({ val, label }) => (
-                    <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-                      <input type="checkbox" checked={filtros.tipos?.includes(val) || false}
-                        onChange={e => {
-                          const arr = filtros.tipos || [];
-                          setFiltrosPersist(p => ({ ...p, tipos: e.target.checked ? [...arr, val] : arr.filter(v => v !== val) }));
-                        }}
-                      />
-                      {label}
-                    </label>
-                  ))}
+                  ].map(({ val, label }) => {
+                    const ativo = filtros.tipos?.includes(val);
+                    return (
+                      <button key={val} onClick={() => {
+                        const arr = filtros.tipos || [];
+                        setFiltrosPersist(p => ({ ...p, tipos: ativo ? arr.filter(v => v !== val) : [...arr, val] }));
+                      }}
+                        style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div>
                 <label style={lbl}>Modalidade</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {[
                     { val: 'extrajudicial', label: 'Extrajudicial' },
                     { val: 'judicial', label: 'Judicial' },
                     { val: 'venda_direta', label: 'Venda Direta' },
-                  ].map(({ val, label }) => (
-                    <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-                      <input type="checkbox" checked={filtros.modalidades?.includes(val) || false}
-                        onChange={e => {
-                          const arr = filtros.modalidades || [];
-                          setFiltrosPersist(p => ({ ...p, modalidades: e.target.checked ? [...arr, val] : arr.filter(v => v !== val) }));
-                        }}
-                      />
-                      {label}
-                    </label>
-                  ))}
+                  ].map(({ val, label }) => {
+                    const ativo = filtros.modalidades?.includes(val);
+                    return (
+                      <button key={val} onClick={() => {
+                        const arr = filtros.modalidades || [];
+                        setFiltrosPersist(p => ({ ...p, modalidades: ativo ? arr.filter(v => v !== val) : [...arr, val] }));
+                      }}
+                        style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div>

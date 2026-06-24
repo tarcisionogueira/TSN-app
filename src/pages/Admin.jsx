@@ -3924,7 +3924,15 @@ function ScrapersTab() {
         body: JSON.stringify({ estados: [uf] }),
       });
       const d = await r.json();
-      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: !d.processados } }));
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: d.processados === 0 } }));
+      if (d.processados > 0) {
+        Promise.all([
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).or('latitude.is.null,latitude.eq.0'),
+        ]).then(([comGeo, semGeo]) => {
+          setGeoStats({ com: comGeo.count || 0, sem: semGeo.count || 0, total: (comGeo.count || 0) + (semGeo.count || 0) });
+        });
+      }
     } catch (e) {
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
     }
@@ -3940,7 +3948,7 @@ function ScrapersTab() {
       const uf = UFS_GEOCOD_ORDEM[i];
       setGeocTodos(g => ({ ...g, atual: i + 1, ufAtual: uf }));
       try {
-        const r = await apiCall('/api/geocodificar', { method: 'POST', body: JSON.stringify({ estados: [uf] }) });
+        const r = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estados: [uf] }) });
         const d = await r.json();
         processadosTotal += d.processados || 0;
         setGeocTodos(g => ({ ...g, processadosTotal }));
@@ -3949,6 +3957,13 @@ function ScrapersTab() {
       await new Promise(res => setTimeout(res, 2400));
     }
     setGeocTodos(g => ({ ...g, rodando: false }));
+    // Atualiza contador após processar
+    Promise.all([
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).or('latitude.is.null,latitude.eq.0'),
+    ]).then(([comGeo, semGeo]) => {
+      setGeoStats({ com: comGeo.count || 0, sem: semGeo.count || 0, total: (comGeo.count || 0) + (semGeo.count || 0) });
+    });
   }
 
   // Lista de estados com horários do cron (UTC)

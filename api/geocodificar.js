@@ -157,9 +157,10 @@ async function isAdminUser(req) {
   const token = auth.replace('Bearer ', '').trim();
   if (!token) return false;
   try {
+    // Usar o JWT do usuário como apikey para que o RLS filtre pelo usuário autenticado
     const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?select=role&limit=1`, {
       headers: {
-        apikey: SUPABASE_SERVICE_KEY,
+        apikey: token,
         Authorization: `Bearer ${token}`,
       },
     });
