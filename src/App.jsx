@@ -42,6 +42,7 @@ import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
 import Login from './pages/Login';
+import RedefinirSenha from './pages/RedefinirSenha';
 import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
 import AdminFinanceiro from './pages/AdminFinanceiro';
@@ -238,6 +239,7 @@ export default function App() {
         <PlanosProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/redefinir-senha" element={<RedefinirSenha />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/admin" element={<PrivateRoute roles={['admin']}><Admin /></PrivateRoute>} />
           <Route path="/admin/financeiro" element={<PrivateRoute roles={['admin']}><AdminFinanceiro /></PrivateRoute>} />
