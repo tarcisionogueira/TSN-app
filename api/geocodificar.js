@@ -123,7 +123,7 @@ function cacheKey(im) {
 
 async function processarLote(estadosFilter, lote = 50) {
   const r = await sb(
-    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
+    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&latitude=is.null&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
   );
   if (!r.ok) return null;
   const imoveis = await r.json();

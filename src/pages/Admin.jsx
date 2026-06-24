@@ -3872,6 +3872,24 @@ const REGIOES_ESTADOS = {
   'Sul':          ['PR','RS','SC'],
 };
 
+// ── Barra de progresso reutilizável ──────────────────────────────────────
+function BarraProgresso({ atual, total, label, sublabel, cor = '#0D63DB', visivel = true }) {
+  if (!visivel) return null;
+  const pct = total > 0 ? Math.round((atual / total) * 100) : 0;
+  return (
+    <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14, border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+        <span>{label}</span>
+        <span style={{ color: cor }}>{pct}% · {atual}/{total}</span>
+      </div>
+      <div style={{ background: '#e2e8f0', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 6, transition: 'width 0.4s ease' }} />
+      </div>
+      {sublabel && <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>{sublabel}</div>}
+    </div>
+  );
+}
+
 function ScrapersTab() {
   const [status, setStatus] = useState(null);
   const [geoStats, setGeoStats] = useState({ com: 0, sem: 0, total: 0 });
@@ -3894,7 +3912,7 @@ function ScrapersTab() {
     // Contador de imóveis geocodificados (coluna: latitude)
     Promise.all([
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).or('latitude.is.null,latitude.eq.0'),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
     ]).then(([comGeo, semGeo]) => {
       const com = comGeo.count || 0;
       const sem = semGeo.count || 0;
@@ -3959,7 +3977,7 @@ function ScrapersTab() {
       if (d.processados > 0) {
         Promise.all([
           supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).or('latitude.is.null,latitude.eq.0'),
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
         ]).then(([comGeo, semGeo]) => {
           setGeoStats({ com: comGeo.count || 0, sem: semGeo.count || 0, total: (comGeo.count || 0) + (semGeo.count || 0) });
         });
@@ -4014,24 +4032,6 @@ function ScrapersTab() {
             </pre>
           </div>
         )}
-      </div>
-    );
-  }
-
-  // ── Barra de progresso reutilizável ──────────────────────────────────────
-  function BarraProgresso({ atual, total, label, sublabel, cor = '#0D63DB', visivel = true }) {
-    if (!visivel) return null;
-    const pct = total > 0 ? Math.round((atual / total) * 100) : 0;
-    return (
-      <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14, border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
-          <span>{label}</span>
-          <span style={{ color: cor }}>{pct}% · {atual}/{total}</span>
-        </div>
-        <div style={{ background: '#e2e8f0', borderRadius: 6, height: 8, overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 6, transition: 'width 0.4s ease' }} />
-        </div>
-        {sublabel && <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>{sublabel}</div>}
       </div>
     );
   }
@@ -4181,11 +4181,17 @@ function ScrapersTab() {
                 <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático via GitHub Actions · 22:00–22:52 UTC · retry ×3</div>
               </div>
             </div>
-            <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)}
-              disabled={caixaTodos.rodando}
-              style={{ padding: '7px 14px', borderRadius: 8, background: caixaTodos.rodando ? '#f1f5f9' : '#fff7ed', color: caixaTodos.rodando ? '#94a3b8' : '#c2410c', fontWeight: 700, fontSize: 12, cursor: caixaTodos.rodando ? 'default' : 'pointer', border: `1px solid ${caixaTodos.rodando ? '#e2e8f0' : '#fed7aa'}` }}>
-              {caixaTodos.rodando ? `⏳ Agendando ${caixaTodos.ufAtual}... [${caixaTodos.atual}/${caixaTodos.total}]` : '▶ Executar todos agora'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={() => rodarSysDebug('scraper')} disabled={sysDebugRodando['scraper']}
+                style={{ padding: '5px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {sysDebugRodando['scraper'] ? '⏳' : '🔍 Diagnóstico'}
+              </button>
+              <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)}
+                disabled={caixaTodos.rodando}
+                style={{ padding: '7px 14px', borderRadius: 8, background: caixaTodos.rodando ? '#f1f5f9' : '#fff7ed', color: caixaTodos.rodando ? '#94a3b8' : '#c2410c', fontWeight: 700, fontSize: 12, cursor: caixaTodos.rodando ? 'default' : 'pointer', border: `1px solid ${caixaTodos.rodando ? '#e2e8f0' : '#fed7aa'}` }}>
+                {caixaTodos.rodando ? `⏳ Agendando ${caixaTodos.ufAtual}... [${caixaTodos.atual}/${caixaTodos.total}]` : '▶ Executar todos agora'}
+              </button>
+            </div>
           </div>
           <BarraProgresso
             visivel={caixaTodos.rodando || (caixaTodos.total > 0 && !caixaTodos.rodando)}
@@ -4270,10 +4276,16 @@ function ScrapersTab() {
               <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação — Nominatim / OSM</div>
               <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–09:59 UTC (21h–07h BRT) · cache ~70% · cascade 3 níveis</div>
             </div>
-            <button onClick={geocodificarTodos} disabled={geocTodos.rodando}
-              style={{ padding: '7px 14px', borderRadius: 8, background: geocTodos.rodando ? '#f1f5f9' : '#0D63DB', color: geocTodos.rodando ? '#94a3b8' : 'white', border: 'none', cursor: geocTodos.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-              {geocTodos.rodando ? `⏳ Processando UF [${geocTodos.atual}/27]...` : '▶ Geocodificar todos'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={() => rodarSysDebug('geocod')} disabled={sysDebugRodando['geocod']}
+                style={{ padding: '5px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {sysDebugRodando['geocod'] ? '⏳' : '🔍 Diagnóstico'}
+              </button>
+              <button onClick={geocodificarTodos} disabled={geocTodos.rodando}
+                style={{ padding: '7px 14px', borderRadius: 8, background: geocTodos.rodando ? '#f1f5f9' : '#0D63DB', color: geocTodos.rodando ? '#94a3b8' : 'white', border: 'none', cursor: geocTodos.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                {geocTodos.rodando ? `⏳ Processando UF [${geocTodos.atual}/27]...` : '▶ Geocodificar todos'}
+              </button>
+            </div>
           </div>
 
           {/* Resumo por nível */}
