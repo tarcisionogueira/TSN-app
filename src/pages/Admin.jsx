@@ -3918,26 +3918,32 @@ function ScrapersTab() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 340, overflowY: 'auto' }}>
             {AGENDA_SCRAPER.map(({ uf, hora }) => {
               const r = scraperRegiao[uf] || {};
+              const debugInfo = r.processados === 0 && r.todosErros?.length > 0 ? r.todosErros[0] : null;
               return (
-                <div key={uf} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
-                  <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
-                  <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
-                  {r.rodando ? (
-                    <span style={{ color: '#c2410c', fontSize: 10 }}>⏳ importando...</span>
-                  ) : r.processados != null ? (
-                    <>
+                <div key={uf} style={{ background: '#f8fafc', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
+                    <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
+                    {r.rodando ? (
+                      <span style={{ color: '#c2410c', fontSize: 10 }}>⏳ importando...</span>
+                    ) : r.processados != null ? (
                       <span style={{ color: r.erros?.length ? '#dc2626' : r.processados === 0 ? '#d97706' : '#059669', fontSize: 10 }}>
-                        {r.erros?.length ? `❌ erro` : r.processados === 0 ? `⚠️ 0 imóveis` : `✅ ${r.processados?.toLocaleString('pt-BR')}`}
+                        {r.erros?.length ? `❌ ${r.primeiroErro || 'erro'}` : r.processados === 0 ? `⚠️ 0 imóveis` : `✅ ${r.processados?.toLocaleString('pt-BR')}`}
                       </span>
-                      {r.processados === 0 && r.todosErros?.length > 0 && (
-                        <span title={r.todosErros[0]?.csv_primeiras_linhas?.join(' | ') || r.todosErros[0]?.erro} style={{ cursor: 'help', fontSize: 9, color: '#d97706' }}>ℹ️</span>
-                      )}
-                    </>
-                  ) : null}
-                  <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
-                    style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
-                    {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
-                  </button>
+                    ) : null}
+                    <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
+                      style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                      {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
+                    </button>
+                  </div>
+                  {debugInfo && (
+                    <div style={{ marginTop: 4, padding: '6px 8px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 4, fontSize: 9, color: '#92400e', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                      <div style={{ fontWeight: 700, marginBottom: 2 }}>CSV raw ({debugInfo.csv_tamanho} bytes):</div>
+                      {(debugInfo.csv_primeiras_linhas || [debugInfo.erro]).map((l, i) => (
+                        <div key={i} style={{ opacity: i === 0 ? 1 : 0.7 }}>{l?.slice(0, 200)}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
