@@ -305,11 +305,40 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Protege contra chamadas externas não autorizadas
+  // Protege contra chamadas externas não autorizadas.
+  // Aceita: (1) CRON_SECRET no header/query, (2) JWT de admin via Authorization.
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const sent = req.headers['x-cron-secret'] || new URL(req.url, 'http://localhost').searchParams.get('secret') || '';
-    if (sent !== cronSecret) return res.status(401).json({ error: 'Não autorizado' });
+    if (sent !== cronSecret) {
+      // Fallback: aceitar JWT de usuário admin (chamada manual pelo painel)
+      const authHeader = req.headers['authorization'] || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      let isAdmin = false;
+      if (token) {
+        try {
+          const supabaseUrl = process.env.VITE_SUPABASE_URL;
+          const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+          const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+            headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            const profileRes = await fetch(`${supabaseUrl}/rest/v1/perfis?id=eq.${userData.id}&select=role`, {
+              headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+              signal: AbortSignal.timeout(5000),
+            });
+            if (profileRes.ok) {
+              const profiles = await profileRes.json();
+              const role = profiles?.[0]?.role;
+              isAdmin = role === 'admin' || role === 'analista';
+            }
+          }
+        } catch (_) {}
+      }
+      if (!isAdmin) return res.status(401).json({ error: 'Não autorizado' });
+    }
   }
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
