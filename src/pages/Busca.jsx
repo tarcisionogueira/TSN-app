@@ -273,7 +273,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       {!carregando && imoveisMapa.length === 0 && semCoordenadas && (
         <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '10px 18px', borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', fontSize: 12, color: '#64748b', textAlign: 'center', maxWidth: 320 }}>
           <div style={{ fontWeight: 700, color: '#334155', marginBottom: 3 }}>📍 {totalLista} imóvel(is) encontrado(s) sem localização</div>
-          <div>As coordenadas ainda não foram cadastradas. A geocodificação automática ocorre às 3h.</div>
+          <div>Coordenadas ainda não cadastradas. A geocodificação automática ocorre entre 21h e 7h (BRT) — os pins aparecem após o processamento noturno.</div>
         </div>
       )}
       {!carregando && imoveisMapa.length === 0 && !semCoordenadas && (

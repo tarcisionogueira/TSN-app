@@ -151,17 +151,47 @@ async function processarLote(estadosFilter, lote = 50) {
   return res;
 }
 
+async function isAdminUser(req) {
+  // Valida JWT do usuário Supabase e verifica role=admin no perfil
+  const auth = req.headers.get('authorization') || '';
+  const token = auth.replace('Bearer ', '').trim();
+  if (!token) return false;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?select=role&limit=1`, {
+      headers: {
+        apikey: SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!r.ok) return false;
+    const rows = await r.json();
+    return rows?.[0]?.role === 'admin';
+  } catch { return false; }
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
   }
 
   // Protege contra chamadas externas não autorizadas
+  // POST manual do Admin: aceita JWT de usuário admin (sem precisar de CRON_SECRET)
+  // GET/cron: exige CRON_SECRET
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const url = new URL(req.url);
-    const sent = req.headers.get('x-cron-secret') || url.searchParams.get('secret') || '';
-    if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
+  if (req.method === 'POST') {
+    const sentCron = req.headers.get('x-cron-secret') || '';
+    const cronOk = cronSecret && sentCron === cronSecret;
+    if (!cronOk) {
+      const adminOk = await isAdminUser(req);
+      if (!adminOk) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
+    }
+  } else {
+    // GET: apenas cron ou secret na URL
+    if (cronSecret) {
+      const url = new URL(req.url);
+      const sent = req.headers.get('x-cron-secret') || url.searchParams.get('secret') || '';
+      if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
+    }
   }
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
