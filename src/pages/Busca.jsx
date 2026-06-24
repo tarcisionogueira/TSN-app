@@ -6,7 +6,7 @@ import {
   ArrowRight, X,
 } from 'lucide-react';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
-import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
+import { buscarCidadesEstado, RAIOS_KM } from '../data/cidades';
 import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoBadge } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -344,6 +344,8 @@ export default function Busca() {
   const [showSalvarModal, setShowSalvarModal] = useState(false);
   const [buscaCidade, setBuscaCidade] = useState('');
   const [dropdownIndex, setDropdownIndex] = useState(-1);
+  const [cidadesEstado, setCidadesEstado] = useState([]);
+  const [cidadesCarregando, setCidadesCarregando] = useState(false);
   const [resultados, setResultados] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
@@ -368,6 +370,17 @@ export default function Busca() {
   const [centroBusca, setCentroBusca] = useState(null);
   const [raioAtivoBusca, setRaioAtivoBusca] = useState(false);
   const [raioKmBusca, setRaioKmBusca] = useState(50);
+
+  // Busca cidades do estado selecionado via IBGE
+  useEffect(() => {
+    if (!filtros.estado) { setCidadesEstado([]); return; }
+    let cancelled = false;
+    setCidadesCarregando(true);
+    buscarCidadesEstado(filtros.estado).then(lista => {
+      if (!cancelled) { setCidadesEstado(lista); setCidadesCarregando(false); }
+    });
+    return () => { cancelled = true; };
+  }, [filtros.estado]);
 
   // Ao trocar para mapa com cidade selecionada, geocodifica para auto-zoom
   useEffect(() => {
@@ -806,7 +819,7 @@ export default function Busca() {
                 )}
                 {(() => {
                   const cidadesFiltradas = filtros.estado
-                    ? (CIDADES_POR_ESTADO[filtros.estado] || []).filter(c => c.toLowerCase().includes(buscaCidade.toLowerCase()) && !filtros.cidades.includes(c))
+                    ? cidadesEstado.filter(c => c.toLowerCase().includes(buscaCidade.toLowerCase()) && !filtros.cidades.includes(c))
                     : [];
                   const handleKeyDown = (e) => {
                     if (!cidadesFiltradas.length) return;
@@ -834,8 +847,8 @@ export default function Busca() {
                         value={buscaCidade}
                         onChange={e=>{ setBuscaCidade(e.target.value); setDropdownIndex(-1); }}
                         onKeyDown={handleKeyDown}
-                        placeholder={filtros.estado ? 'Buscar cidade (opcional)...' : 'Selecione um estado primeiro'}
-                        disabled={!filtros.estado}
+                        placeholder={!filtros.estado ? 'Selecione um estado primeiro' : cidadesCarregando ? 'Carregando cidades...' : 'Buscar cidade (opcional)...'}
+                        disabled={!filtros.estado || cidadesCarregando}
                         style={{ ...inp, marginBottom:4 }}
                         autoComplete="off"
                       />
@@ -851,7 +864,7 @@ export default function Busca() {
                             </button>
                           ))}
                           {cidadesFiltradas.length === 0 && (
-                            <div style={{ padding:'8px 12px', fontSize:11, color:'#94a3b8' }}>Nenhuma cidade encontrada</div>
+                            <div style={{ padding:'8px 12px', fontSize:11, color:'#94a3b8' }}>{cidadesCarregando ? 'Carregando...' : 'Nenhuma cidade encontrada'}</div>
                           )}
                         </div>
                       )}

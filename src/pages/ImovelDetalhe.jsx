@@ -331,6 +331,7 @@ export default function ImovelDetalhe() {
   const desc = imovel.descontoPercentual || 0;
   const descColor = desc >= 40 ? '#15803d' : desc >= 20 ? '#92400e' : '#dc2626';
   const descBg    = desc >= 40 ? '#dcfce7' : desc >= 20 ? '#fef9c3' : '#fee2e2';
+  const PLANOS_ANALISE = ['admin', 'analista', 'assessorado'];
   const podeFazerAnalise = PLANOS_ANALISE.includes(role);
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
 
