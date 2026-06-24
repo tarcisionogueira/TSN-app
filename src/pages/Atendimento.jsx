@@ -31,7 +31,10 @@ export default function Atendimento() {
   // Realtime: novos chamados e atualizações
   useEffect(() => {
     const ch = supabase.channel('fila-suporte')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chamados' }, () => carregarChamados())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chamados' }, (p) => {
+        carregarChamados();
+        if (p.new?.id) setChamadoAtivo(prev => prev?.id === p.new.id ? { ...prev, ...p.new } : prev);
+      })
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [filtro]);

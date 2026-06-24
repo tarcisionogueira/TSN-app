@@ -37,15 +37,15 @@ export function mapearPlano(valor, descricao = '') {
   if (dentroFaixa(v, 49.9))  return { plano: 'top2', role: 'top2' };
   if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // anual à vista
 
+  // Leilão Club — verificar ANTES de assessorado pois ambos têm opção de R$5.000
+  if (dentroFaixa(v, 5000) && desc.includes('clube')) return { plano: 'clube', role: 'clube' };
+  if (dentroFaixa(v, 48000, 100)) return { plano: 'clube', role: 'clube' };
+  if (dentroFaixa(v, 60000, 200)) return { plano: 'clube', role: 'clube' };
+
   // Assessoria — parcela mensal ou à vista
   if (dentroFaixa(v, 500))   return { plano: 'assessorado', role: 'assessorado' };
   if (dentroFaixa(v, 5000))  return { plano: 'assessorado', role: 'assessorado' };
   if (dentroFaixa(v, 6000, 60)) return { plano: 'assessorado', role: 'assessorado' };
-
-  // Leilão Club — parcela mensal ou à vista
-  if (dentroFaixa(v, 5000) && desc.includes('clube')) return { plano: 'clube', role: 'clube' };
-  if (dentroFaixa(v, 48000, 100)) return { plano: 'clube', role: 'clube' };
-  if (dentroFaixa(v, 60000, 200)) return { plano: 'clube', role: 'clube' };
 
   return null;
 }

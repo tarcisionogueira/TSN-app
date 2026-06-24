@@ -91,6 +91,7 @@ export default function Checkout() {
   const [gatewayUsado, setGatewayUsado] = useState(null); // 'mp' | 'asaas'
   const [ofertandoFallback, setOfertandoFallback] = useState(false); // cliente recusado no MP, oferece Asaas
   const pollingRef = React.useRef(null);
+  const jaConfirmouRef = React.useRef(false);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
   const temToggleAnual = planoKey === 'top2'; // top1 removido do produto
@@ -116,6 +117,14 @@ export default function Checkout() {
     if (!plano && planoKey !== 'explorador') nav('/');
   }, [planoKey]);
 
+  // Ativa plano quando MP redireciona de volta com status=approved
+  useEffect(() => {
+    if (mpStatus === 'approved' && !jaConfirmouRef.current) {
+      jaConfirmouRef.current = true;
+      confirmarPagamento();
+    }
+  }, [mpStatus]);
+
   // Polling automático — verifica a cada 8s se o Asaas confirmou o pagamento
   useEffect(() => {
     if (!asaasIds || pago) return;
@@ -129,7 +138,8 @@ export default function Checkout() {
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (data.confirmado) {
+        if (data.confirmado && !jaConfirmouRef.current) {
+          jaConfirmouRef.current = true;
           clearInterval(pollingRef.current);
           setVerificando(false);
           confirmarPagamento();

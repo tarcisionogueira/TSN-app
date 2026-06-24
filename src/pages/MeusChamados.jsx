@@ -57,10 +57,15 @@ export default function MeusChamados() {
   async function enviarMensagem() {
     if ((!texto.trim() && !anexos.length) || !chamadoAtivo) return;
     setEnviando(true);
-    const { data: msg } = await supabase.from('chamados_mensagens').insert({
+    const { data: msg, error: errMsg } = await supabase.from('chamados_mensagens').insert({
       chamado_id: chamadoAtivo.id, autor_id: user.id, autor_nome: nomeUsuario,
       autor_tipo: 'cliente', conteudo: texto || '[anexo]', anexos,
     }).select().single();
+    if (errMsg) {
+      alert('Erro ao enviar mensagem. Tente novamente.');
+      setEnviando(false);
+      return;
+    }
     const novaLista = msg ? [...mensagens, msg] : mensagens;
     setMensagens(novaLista);
     setTexto(''); setAnexos([]);
