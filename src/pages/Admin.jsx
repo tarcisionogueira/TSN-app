@@ -3977,8 +3977,9 @@ function ScrapersTab() {
   // Trigger manual de geocodificação por estado (1 lote, retorna imediatamente)
   async function triggerGeoc(uf) {
     setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: 0, falhas: 0 } }));
-    let totalProc = 0, totalFalhas = 0, loops = 0;
-    const MAX_LOOPS = 100; // 100 × 5 = 500 imóveis por estado por clique
+    let totalProc = 0, totalFalhas = 0, loops = 0, timeoutsConsecutivos = 0;
+    const MAX_LOOPS = 2000; // sem limite prático — para só quando não há mais pendentes
+    const MAX_TIMEOUTS = 5; // aborta após 5 timeouts seguidos sem progresso
     try {
       while (loops < MAX_LOOPS) {
         const r = await apiCall('/api/geocodificar', {
@@ -3988,11 +3989,17 @@ function ScrapersTab() {
         });
         let d;
         try { d = await r.json(); } catch {
-          const txt = await r.text().catch(() => `HTTP ${r.status}`);
-          setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `Timeout (${r.status})`, processados: totalProc, falhas: totalFalhas } }));
-          console.warn('geocod parse error SP:', txt.slice(0, 200));
-          break;
+          // Timeout da Vercel (30s) — os imóveis não foram gravados, ainda estão na fila
+          timeoutsConsecutivos++;
+          setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: totalProc, falhas: totalFalhas, aviso: `⚡ ${timeoutsConsecutivos} timeout(s) — retentando...` } }));
+          if (timeoutsConsecutivos >= MAX_TIMEOUTS) {
+            setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `${MAX_TIMEOUTS} timeouts consecutivos`, processados: totalProc, falhas: totalFalhas } }));
+            break;
+          }
+          await new Promise(res => setTimeout(res, 2000)); // pausa antes de retentar
+          continue;
         }
+        timeoutsConsecutivos = 0; // reset ao receber resposta válida
         if (!r.ok || d.error) {
           setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d.error || `HTTP ${r.status}`, processados: totalProc, falhas: totalFalhas } }));
           return;
@@ -4091,15 +4098,24 @@ function ScrapersTab() {
       const uf = UFS_GEOCOD_ORDEM[i];
       setGeocTodos(g => ({ ...g, atual: i + 1, ufAtual: uf }));
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: 0, falhas: 0 } }));
-      let ufProc = 0, ufFalhas = 0, ufLoops = 0;
+      let ufProc = 0, ufFalhas = 0, ufLoops = 0, ufTimeouts = 0;
+      const MAX_UF_TIMEOUTS = 5;
       try {
-        while (ufLoops < 40) { // até 40 × 5 = 200 imóveis por estado no "todos"
+        while (true) { // para quando não há mais pendentes ou muitos timeouts
           const r = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estados: [uf] }) });
           let d;
           try { d = await r.json(); } catch {
-            setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `Timeout (${r.status})`, processados: ufProc, falhas: ufFalhas } }));
-            break;
+            // Timeout — imóveis não foram gravados, ainda estão na fila; retentar
+            ufTimeouts++;
+            setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: ufProc, falhas: ufFalhas, aviso: `⚡ ${ufTimeouts} timeout(s)` } }));
+            if (ufTimeouts >= MAX_UF_TIMEOUTS) {
+              setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `${MAX_UF_TIMEOUTS} timeouts`, processados: ufProc, falhas: ufFalhas } }));
+              break;
+            }
+            await new Promise(res => setTimeout(res, 2000));
+            continue;
           }
+          ufTimeouts = 0;
           if (!r.ok || d.error) {
             setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d?.error || `Erro ${r.status}`, processados: ufProc, falhas: ufFalhas } }));
             break;
@@ -4448,8 +4464,8 @@ function ScrapersTab() {
                         <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: '60%', background: '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
                         </div>
-                        <div style={{ fontSize: 10, color: '#0D63DB', fontWeight: 800, marginTop: 3 }}>
-                          ⏳ {(r.processados || 0).toLocaleString('pt-BR')} / {(geocPendentes[uf] || '?').toLocaleString?.('pt-BR') ?? geocPendentes[uf] ?? '?'}
+                        <div style={{ fontSize: 10, color: r.aviso ? '#d97706' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          {r.aviso ? r.aviso + ' · ' : '⏳ '}{(r.processados || 0).toLocaleString('pt-BR')} / {geocPendentes[uf] != null ? geocPendentes[uf].toLocaleString('pt-BR') : '?'}
                         </div>
                       </div>
                     )}
