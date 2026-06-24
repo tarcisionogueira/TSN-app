@@ -394,6 +394,13 @@ export default async function handler(req, res) {
       }
       const imoveis = csvToImoveis(resultado.csv, uf);
       if (imoveis.length === 0) {
+        const linhas = resultado.csv.split('\n').filter(l => l.trim()).slice(0, 5);
+        erros.push({
+          uf,
+          erro: 'CSV recebido mas 0 imóveis parseados',
+          csv_tamanho: resultado.csv.length,
+          csv_primeiras_linhas: linhas,
+        });
         estadosOk.push(uf);
         continue;
       }

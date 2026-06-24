@@ -3550,7 +3550,7 @@ function ScrapersTab() {
         body: JSON.stringify({ estados }),
       });
       const d = await r.json();
-      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, ok: d.estados_ok || [], erros: d.estados_erro || [], primeiroErro: d.erros?.[0]?.erro } }));
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, ok: d.estados_ok || [], erros: d.estados_erro || [], todosErros: d.erros || [], primeiroErro: d.erros?.[0]?.erro } }));
       apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {});
     } catch (e) {
       setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
@@ -3640,9 +3640,14 @@ function ScrapersTab() {
                   {r.rodando ? (
                     <span style={{ color: '#c2410c', fontSize: 10 }}>⏳ importando...</span>
                   ) : r.processados != null ? (
-                    <span style={{ color: r.erros?.length ? '#dc2626' : '#059669', fontSize: 10 }}>
-                      {r.erros?.length ? `❌ erro` : `✅ ${r.processados?.toLocaleString('pt-BR')}`}
-                    </span>
+                    <>
+                      <span style={{ color: r.erros?.length ? '#dc2626' : r.processados === 0 ? '#d97706' : '#059669', fontSize: 10 }}>
+                        {r.erros?.length ? `❌ erro` : r.processados === 0 ? `⚠️ 0 imóveis` : `✅ ${r.processados?.toLocaleString('pt-BR')}`}
+                      </span>
+                      {r.processados === 0 && r.todosErros?.length > 0 && (
+                        <span title={r.todosErros[0]?.csv_primeiras_linhas?.join(' | ') || r.todosErros[0]?.erro} style={{ cursor: 'help', fontSize: 9, color: '#d97706' }}>ℹ️</span>
+                      )}
+                    </>
                   ) : null}
                   <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
                     style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
