@@ -1,0 +1,40 @@
+name: Scraper Caixa
+
+on:
+  schedule:
+    - cron: '0 9 * * *'   # 6h BRT (9h UTC) — todo dia
+  workflow_dispatch:
+    inputs:
+      ufs:
+        description: 'Estados (ex: SP,RJ,MG) — vazio = todos'
+        required: false
+        default: ''
+
+jobs:
+  scraper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Caixa scraper
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          UFS: ${{ github.event.inputs.ufs }}
+        run: node scripts/scraper-caixa.mjs ${{ github.event.inputs.ufs }}
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "Scraper Caixa falhou em $(date). Verifique os logs do GitHub Actions."

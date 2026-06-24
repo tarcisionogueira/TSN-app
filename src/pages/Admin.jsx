@@ -3826,19 +3826,19 @@ function ScrapersTab() {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
 
-  // Trigger manual de uma região do scraper (1 chamada por região, server gerencia delay entre estados)
+  // Trigger manual via GitHub Actions (IPs não bloqueados pela Caixa)
   async function triggerScraper(regiao, estados) {
     setScraperRegiao(g => ({ ...g, [regiao]: { rodando: true } }));
     try {
-      const r = await apiCall('/api/scraper-caixa', {
+      const r = await apiCall('/api/trigger-scraper', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estados }),
       });
       const d = await r.json();
-      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, ok: d.estados_ok || [], erros: d.estados_erro || [], todosErros: d.erros || [], primeiroErro: d.erros?.[0]?.erro } }));
-      if (d.processados === 0 && d.erros?.length > 0) setUltimoDebug({ uf: regiao, ...d.erros[0] });
-      apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {});
+      if (!d.ok) throw new Error(d.error || 'Erro ao disparar workflow');
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, msg: d.msg, agendado: true } }));
+      setTimeout(() => apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}), 5000);
     } catch (e) {
       setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
     }
@@ -3942,15 +3942,15 @@ function ScrapersTab() {
                     <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
                     <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
                     {r.rodando ? (
-                      <span style={{ color: '#c2410c', fontSize: 10 }}>⏳ importando...</span>
-                    ) : r.processados != null ? (
-                      <span style={{ color: r.erros?.length ? '#dc2626' : r.processados === 0 ? '#d97706' : '#059669', fontSize: 10 }}>
-                        {r.erros?.length ? `❌ ${r.primeiroErro || 'erro'}` : r.processados === 0 ? `⚠️ 0 imóveis` : `✅ ${r.processados?.toLocaleString('pt-BR')}`}
-                      </span>
+                      <span style={{ color: '#c2410c', fontSize: 10 }}>⏳ disparando...</span>
+                    ) : r.agendado ? (
+                      <span style={{ color: '#7c3aed', fontSize: 10 }}>🚀 agendado via GitHub Actions</span>
+                    ) : r.erro ? (
+                      <span style={{ color: '#dc2626', fontSize: 10 }}>❌ {r.erro.slice(0, 60)}</span>
                     ) : null}
                     <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
                       style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
-                      {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
+                      {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
                     </button>
                   </div>
                   {debugInfo && (
