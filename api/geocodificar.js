@@ -152,20 +152,27 @@ async function processarLote(estadosFilter, lote = 50) {
 }
 
 async function isAdminUser(req) {
-  // Valida JWT do usuário Supabase e verifica role=admin no perfil
   const auth = req.headers.get('authorization') || '';
   const token = auth.replace('Bearer ', '').trim();
   if (!token) return false;
   try {
-    // Usar o JWT do usuário como apikey para que o RLS filtre pelo usuário autenticado
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?select=role&limit=1`, {
-      headers: {
-        apikey: token,
-        Authorization: `Bearer ${token}`,
-      },
+    // 1. Valida o JWT via endpoint auth e obtém o user_id
+    const authR = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
     });
-    if (!r.ok) return false;
-    const rows = await r.json();
+    if (!authR.ok) return false;
+    const userData = await authR.json();
+    const userId = userData?.id;
+    if (!userId) return false;
+
+    // 2. Busca perfil do usuário pelo user_id usando service key (bypassa RLS corretamente)
+    const perfisR = await fetch(`${SUPABASE_URL}/rest/v1/perfis?select=role&id=eq.${userId}&limit=1`, {
+      headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!perfisR.ok) return false;
+    const rows = await perfisR.json();
     return rows?.[0]?.role === 'admin';
   } catch { return false; }
 }
