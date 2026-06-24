@@ -3882,6 +3882,8 @@ function ScrapersTab() {
   const [abaAtiva, setAbaAtiva] = useState(() => sessionStorage.getItem('scraper_aba') || 'caixa');
   const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
+  const [geocDebug, setGeocDebug] = useState(null);
+  const [geocDebugRodando, setGeocDebugRodando] = useState(false);
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
@@ -3936,6 +3938,19 @@ function ScrapersTab() {
     } catch (e) {
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
     }
+  }
+
+  async function rodarGeocDebug() {
+    setGeocDebugRodando(true);
+    setGeocDebug(null);
+    try {
+      const r = await apiCall('/api/geocod-debug', { method: 'GET' });
+      const d = await r.json();
+      setGeocDebug({ status: r.status, body: d });
+    } catch (e) {
+      setGeocDebug({ status: 'erro', body: { erro: e.message } });
+    }
+    setGeocDebugRodando(false);
   }
 
   const UFS_GEOCOD_ORDEM = ['SP','MG','PR','RS','RJ','SC','BA','GO','CE','PE','MT','MS','ES','PA','MA','RN','PB','AL','PI','SE','TO','RO','AM','DF','AC','AP','RR'];
@@ -4159,11 +4174,26 @@ function ScrapersTab() {
               <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação — Nominatim / OSM</div>
               <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–09:59 UTC (21h–07h BRT) · cache ~70% · cascade 3 níveis</div>
             </div>
+            <button onClick={rodarGeocDebug} disabled={geocDebugRodando}
+              style={{ padding: '7px 12px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {geocDebugRodando ? '⏳' : '🔍 Diagnóstico'}
+            </button>
             <button onClick={geocodificarTodos} disabled={geocTodos.rodando}
               style={{ padding: '7px 14px', borderRadius: 8, background: geocTodos.rodando ? '#f1f5f9' : '#0D63DB', color: geocTodos.rodando ? '#94a3b8' : 'white', border: 'none', cursor: geocTodos.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
               {geocTodos.rodando ? `⏳ Processando UF [${geocTodos.atual}/27]...` : '▶ Geocodificar todos'}
             </button>
           </div>
+
+          {geocDebug && (
+            <div style={{ marginBottom: 14, background: geocDebug.status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 10, padding: '12px 14px', border: `1px solid ${geocDebug.status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+              <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6, color: geocDebug.status === 200 ? '#059669' : '#dc2626' }}>
+                {geocDebug.status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (status ${geocDebug.status})`}
+              </div>
+              <pre style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 200, overflow: 'auto' }}>
+                {JSON.stringify(geocDebug.body, null, 2)}
+              </pre>
+            </div>
+          )}
 
           {/* Resumo por nível */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
