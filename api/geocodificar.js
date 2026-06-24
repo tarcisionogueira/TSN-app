@@ -210,7 +210,7 @@ function cacheKey(im) {
   return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
 }
 
-async function processarLote(estadosFilter, lote = 50) {
+async function processarLote(estadosFilter, lote = 50, limiteMs = null) {
   // Busca imóveis pendentes: latitude IS NULL (nunca geocodificados) OU latitude=0 (tentativa anterior falhou)
   // Usa duas queries separadas para evitar a sintaxe `or=()` do PostgREST que falha com parâmetros combinados
   // Sem filtro ativo — service key vê tudo; geocodifica independente do status
@@ -230,9 +230,12 @@ async function processarLote(estadosFilter, lote = 50) {
   }
   if (!imoveis.length) return { processados: 0 };
 
-  const res = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0 };
+  const res = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, rua: 0, falhas: 0, cache_hits: 0 };
+  const inicioLote = Date.now();
 
   for (const im of imoveis) {
+    // Guard de tempo: para antes de estourar o limite do Edge (30s no Vercel Hobby)
+    if (limiteMs && (Date.now() - inicioLote) > limiteMs) break;
     const key = cacheKey(im);
     let coords, fromCache = false;
 
@@ -353,8 +356,9 @@ export default async function handler(req) {
   // Modo manual: lote pequeno (10) para caber no limite de 30s do Edge Hobby
   // O frontend chama em loop até processados=0
   if (modoManual) {
-    const res = await processarLote(estadosFilter, 10);
-    if (!res) return new Response(JSON.stringify({ error: 'Supabase error' }), { status: 500 });
+    // Lote 5: pior caso = 5 × (ViaCEP 5s + 4 × Nominatim 1.32s) = ~51s → limitado pelo guard interno de 22s
+    const res = await processarLote(estadosFilter, 5, 22_000);
+    if (!res) return new Response(JSON.stringify({ error: 'Supabase error ao buscar imóveis pendentes' }), { status: 500 });
     return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
