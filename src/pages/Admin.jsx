@@ -3921,7 +3921,7 @@ function ScrapersTab() {
     // Contagem de imóveis por fonte
     // Caixa: imóveis antigos têm fonte=NULL mas fonte_id começa com 'caixa_'
     Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).or('fonte.eq.caixa,fonte_id.like.caixa_%'),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).ilike('fonte_id', 'caixa_%'),
       ...['mega','sold','superbid','bb'].map(f =>
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', f)
       ),
