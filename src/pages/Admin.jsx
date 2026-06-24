@@ -4036,9 +4036,7 @@ function ScrapersTab() {
             <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: resultado.status === 200 ? '#059669' : '#dc2626' }}>
               {resultado.status === 200 ? '✅ OK' : `❌ Erro (${resultado.status})`}
             </div>
-            <pre style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 220, overflow: 'auto' }}>
-              {JSON.stringify(resultado.body, null, 2)}
-            </pre>
+            <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 220, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(resultado.body, null, 2)} />
           </div>
         )}
       </div>
@@ -4218,7 +4216,7 @@ function ScrapersTab() {
                 {sysDebug['scraper'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['scraper'].status})`}
                 <button onClick={() => setSysDebug(s => ({ ...s, scraper: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
               </div>
-              <pre style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 220, overflow: 'auto' }}>{JSON.stringify(sysDebug['scraper'].body, null, 2)}</pre>
+              <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 220, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['scraper'].body, null, 2)} />
             </div>
           )}
           {scraperRegiao['todos']?.erro && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 10 }}>⚠️ {scraperRegiao['todos'].erro}</div>}
@@ -4314,7 +4312,7 @@ function ScrapersTab() {
                 {sysDebug['geocod'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['geocod'].status})`}
                 <button onClick={() => setSysDebug(s => ({ ...s, geocod: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
               </div>
-              <pre style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 220, overflow: 'auto' }}>{JSON.stringify(sysDebug['geocod'].body, null, 2)}</pre>
+              <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 220, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['geocod'].body, null, 2)} />
             </div>
           )}
 
