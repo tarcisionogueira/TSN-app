@@ -3882,6 +3882,8 @@ function ScrapersTab() {
   const [abaAtiva, setAbaAtiva] = useState(() => sessionStorage.getItem('scraper_aba') || 'caixa');
   const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
+  // Progresso "executar todos" do Caixa (estado a estado)
+  const [caixaTodos, setCaixaTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '' });
   const [geocDebug, setGeocDebug] = useState(null);
   const [geocDebugRodando, setGeocDebugRodando] = useState(false);
   const [sysDebug, setSysDebug] = useState({});
@@ -3900,21 +3902,46 @@ function ScrapersTab() {
     });
   }, []);
 
-  // Trigger manual via GitHub Actions (IPs não bloqueados pela Caixa)
+  // Trigger manual via GitHub Actions — estado por estado com barra de progresso
   async function triggerScraper(regiao, estados) {
-    setScraperRegiao(g => ({ ...g, [regiao]: { rodando: true } }));
-    try {
-      const r = await apiCall('/api/trigger-scraper', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estados }),
-      });
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error || 'Erro ao disparar workflow');
-      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, msg: d.msg, agendado: true } }));
+    if (regiao === 'todos' && estados.length > 1) {
+      // Modo "todos": dispara estado a estado mostrando progresso
+      const total = estados.length;
+      setCaixaTodos({ rodando: true, atual: 0, total, ufAtual: estados[0] });
+      for (let i = 0; i < estados.length; i++) {
+        const uf = estados[i];
+        setCaixaTodos(p => ({ ...p, atual: i + 1, ufAtual: uf }));
+        setScraperRegiao(g => ({ ...g, [uf]: { rodando: true } }));
+        try {
+          const r = await apiCall('/api/trigger-scraper', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estados: [uf] }),
+          });
+          const d = await r.json();
+          if (!d.ok) throw new Error(d.error || 'Erro');
+          setScraperRegiao(g => ({ ...g, [uf]: { rodando: false, agendado: true, msg: d.msg } }));
+        } catch (e) {
+          setScraperRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
+        }
+        if (i < estados.length - 1) await new Promise(res => setTimeout(res, 800));
+      }
+      setCaixaTodos(p => ({ ...p, rodando: false }));
       setTimeout(() => apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}), 5000);
-    } catch (e) {
-      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
+    } else {
+      // Modo estado único
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: true } }));
+      try {
+        const r = await apiCall('/api/trigger-scraper', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estados }),
+        });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'Erro ao disparar workflow');
+        setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, msg: d.msg, agendado: true } }));
+        setTimeout(() => apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}), 5000);
+      } catch (e) {
+        setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
+      }
     }
   }
 
@@ -3991,6 +4018,24 @@ function ScrapersTab() {
     );
   }
 
+  // ── Barra de progresso reutilizável ──────────────────────────────────────
+  function BarraProgresso({ atual, total, label, sublabel, cor = '#0D63DB', visivel = true }) {
+    if (!visivel) return null;
+    const pct = total > 0 ? Math.round((atual / total) * 100) : 0;
+    return (
+      <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14, border: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+          <span>{label}</span>
+          <span style={{ color: cor }}>{pct}% · {atual}/{total}</span>
+        </div>
+        <div style={{ background: '#e2e8f0', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 6, transition: 'width 0.4s ease' }} />
+        </div>
+        {sublabel && <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>{sublabel}</div>}
+      </div>
+    );
+  }
+
   const UFS_GEOCOD_ORDEM = ['SP','MG','PR','RS','RJ','SC','BA','GO','CE','PE','MT','MS','ES','PA','MA','RN','PB','AL','PI','SE','TO','RO','AM','DF','AC','AP','RR'];
 
   async function geocodificarTodos() {
@@ -4000,13 +4045,18 @@ function ScrapersTab() {
     for (let i = 0; i < UFS_GEOCOD_ORDEM.length; i++) {
       const uf = UFS_GEOCOD_ORDEM[i];
       setGeocTodos(g => ({ ...g, atual: i + 1, ufAtual: uf }));
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: true } }));
       try {
         const r = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estados: [uf] }) });
         const d = await r.json();
-        processadosTotal += d.processados || 0;
+        const proc = d.processados || 0;
+        processadosTotal += proc;
         setGeocTodos(g => ({ ...g, processadosTotal }));
-        if ((d.processados || 0) === 0) { continue; }
-      } catch (e) { /* avança para o próximo */ }
+        setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: proc, falhas: d.falhas || 0, concluido: proc === 0 } }));
+        if (proc === 0) { continue; }
+      } catch (e) {
+        setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
+      }
       await new Promise(res => setTimeout(res, 2400));
     }
     setGeocTodos(g => ({ ...g, rodando: false }));
@@ -4132,12 +4182,18 @@ function ScrapersTab() {
               </div>
             </div>
             <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)}
-              disabled={scraperRegiao['todos']?.rodando}
-              style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#fff7ed', color: '#c2410c', fontWeight: 700, fontSize: 12, cursor: 'pointer', border: '1px solid #fed7aa' }}>
-              ▶ Executar todos agora
+              disabled={caixaTodos.rodando}
+              style={{ padding: '7px 14px', borderRadius: 8, background: caixaTodos.rodando ? '#f1f5f9' : '#fff7ed', color: caixaTodos.rodando ? '#94a3b8' : '#c2410c', fontWeight: 700, fontSize: 12, cursor: caixaTodos.rodando ? 'default' : 'pointer', border: `1px solid ${caixaTodos.rodando ? '#e2e8f0' : '#fed7aa'}` }}>
+              {caixaTodos.rodando ? `⏳ Agendando ${caixaTodos.ufAtual}... [${caixaTodos.atual}/${caixaTodos.total}]` : '▶ Executar todos agora'}
             </button>
           </div>
-          {scraperRegiao['todos']?.agendado && <div style={{ fontSize: 11, color: '#7c3aed', marginBottom: 10 }}>🚀 Workflow agendado via GitHub Actions</div>}
+          <BarraProgresso
+            visivel={caixaTodos.rodando || (caixaTodos.total > 0 && !caixaTodos.rodando)}
+            atual={caixaTodos.atual} total={caixaTodos.total}
+            label={caixaTodos.rodando ? `Agendando ${caixaTodos.ufAtual}...` : `✅ ${caixaTodos.atual} estados agendados no GitHub Actions`}
+            sublabel={caixaTodos.rodando ? 'Disparando workflows — não feche esta aba' : 'Scraper rodando em background · resultado em ~10 min'}
+            cor="#c2410c"
+          />
           {scraperRegiao['todos']?.erro && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 10 }}>⚠️ {scraperRegiao['todos'].erro}</div>}
 
           {/* Grid de estados 4 colunas */}
@@ -4234,18 +4290,13 @@ function ScrapersTab() {
             ))}
           </div>
 
-          {geocTodos.rodando && (
-            <div style={{ marginBottom: 14, background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#334155', fontWeight: 700, marginBottom: 8 }}>
-                <span>🗺️ Geocodificando {geocTodos.ufAtual}...</span>
-                <span>{geocTodos.atual}/{geocTodos.total} estados · {geocTodos.processadosTotal} imóveis</span>
-              </div>
-              <div style={{ background: '#e2e8f0', borderRadius: 6, height: 10, overflow: 'hidden' }}>
-                <div style={{ width: `${geocTodos.total > 0 ? (geocTodos.atual/geocTodos.total)*100 : 0}%`, height: '100%', background: '#0D63DB', borderRadius: 6, transition: 'width 0.5s' }} />
-              </div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>Respeitando limite de 1 req/s do Nominatim · não feche esta aba</div>
-            </div>
-          )}
+          <BarraProgresso
+            visivel={geocTodos.rodando || (geocTodos.total > 0 && !geocTodos.rodando)}
+            atual={geocTodos.atual} total={geocTodos.total}
+            label={geocTodos.rodando ? `Geocodificando ${geocTodos.ufAtual}...` : `✅ Concluído — ${geocTodos.processadosTotal} imóveis geocodificados`}
+            sublabel={geocTodos.rodando ? `${geocTodos.processadosTotal} imóveis processados · respeitando 1 req/s Nominatim · não feche esta aba` : 'Atualização do mapa disponível'}
+            cor="#0D63DB"
+          />
 
           {/* Grid de estados */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
