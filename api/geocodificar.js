@@ -102,6 +102,13 @@ function extrairNumero(endereco) {
   return m ? m[1] : null;
 }
 
+async function geocodificarCidade(cidade, estado) {
+  if (!cidade?.trim()) return null;
+  const query = [cidade, estado, 'Brasil'].filter(Boolean).join(', ');
+  const coords = await nominatim(query);
+  return coords ? { ...coords, nivel: 'cidade' } : null;
+}
+
 async function geocodificarCascata(im) {
   let { endereco, bairro, cidade, estado, cep } = im;
 
@@ -210,9 +217,10 @@ function cacheKey(im) {
   return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
 }
 
-async function processarLote(estadosFilter, lote = 50, limiteMs = null, somenteNovos = false) {
+async function processarLote(estadosFilter, lote = 50, limiteMs = null, somenteNovos = false, modoRapido = false) {
   // somenteNovos=true (cron): só latitude IS NULL — nunca tentados. Não reprocessa falhas (lat=0).
   // somenteNovos=false (manual): inclui lat=0 para retentar imóveis que falharam antes.
+  // modoRapido=true (cron): geocodifica só por cidade usando cache em memória — muito mais rápido.
   const base = `imoveis_leilao?select=id,cidade,estado,endereco,bairro,cep${estadosFilter}&order=atualizado_em.asc&limit=${lote}`;
   let imoveis;
   if (somenteNovos) {
@@ -244,18 +252,32 @@ async function processarLote(estadosFilter, lote = 50, limiteMs = null, somenteN
     const key = cacheKey(im);
     let coords, fromCache = false;
 
-    if (!im.endereco?.trim() && coordCache[key]) {
-      coords = coordCache[key];
-      fromCache = true;
+    if (modoRapido) {
+      // Cron rápido: só cidade — usa cache em memória para evitar chamadas repetidas ao Nominatim
+      // Permite processar 15-20 imóveis por run (vs 2-3 no modo completo)
+      if (coordCache[key]) {
+        coords = coordCache[key];
+        fromCache = true;
+      } else {
+        coords = await geocodificarCidade(im.cidade, im.estado);
+        if (coords) coordCache[key] = coords;
+        // sleep só quando faz chamada real ao Nominatim
+        if (!fromCache) await sleep(1320);
+      }
     } else {
-      coords = await geocodificarCascata(im);
-      if (coords && coords.nivel !== 'endereco') coordCache[key] = coords;
+      if (!im.endereco?.trim() && coordCache[key]) {
+        coords = coordCache[key];
+        fromCache = true;
+      } else {
+        coords = await geocodificarCascata(im);
+        if (coords && coords.nivel !== 'endereco') coordCache[key] = coords;
+      }
+      if (!fromCache) await sleep(1320);
     }
 
     const salvo = await salvarCoords(im.id, coords);
     if (salvo && coords) { res[coords.nivel]++; if (fromCache) res.cache_hits++; }
     else res.falhas++;
-    if (!fromCache) await sleep(1320);
   }
 
   return res;
@@ -368,7 +390,7 @@ export default async function handler(req) {
   const total = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
 
   while (Date.now() - inicio < LIMITE_MS) {
-    const res = await processarLote(estadosFilter, 50, null, true); // cron: só latitude IS NULL
+    const res = await processarLote(estadosFilter, 50, null, true, true); // cron: somenteNovos + modoRapido
     if (!res || res.processados === 0) break; // sem mais pendentes
     total.processados += res.processados;
     total.endereco    += res.endereco;
