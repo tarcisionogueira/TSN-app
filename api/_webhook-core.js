@@ -17,6 +17,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { alertarErro } from './_error-alert.js';
 
 export const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -134,6 +135,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
             .from('comissoes')
             .select('id')
             .eq('asaas_payment_id', gatewayPaymentId)
+            .eq('origem', 'assinatura')
             .maybeSingle();
 
           if (!existente) {
@@ -155,6 +157,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
       }
     } catch (e) {
       console.error(`[${gateway}] comissao:`, e.message);
+      alertarErro(`[${gateway}] Falha ao registrar comissão de afiliado: ${e.message}`, { cliente_id: cliente?.id, indicado_por: cliente?.indicado_por }).catch(() => {});
     }
   }
 

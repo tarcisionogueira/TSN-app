@@ -1,4 +1,5 @@
 import { getAuthUser, unauthorized, forbidden } from './_auth.js';
+import { sanitizeText } from './_sanitize.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -177,7 +178,8 @@ export default async function handler(req) {
 
     // Sub-resource: save_doc
     if (url.searchParams.get('save_doc') === '1') {
-      const { arrematacao_id, imovel_id, tipo, nome, url: fileUrl, tamanho_kb, doc_type } = body;
+      const { arrematacao_id, imovel_id, tipo, url: fileUrl, tamanho_kb, doc_type } = body;
+      const nome = sanitizeText(body.nome, 300);
       if (!nome || !fileUrl) return json({ error: 'nome e url são obrigatórios' }, 400);
 
       if (doc_type === 'imovel_anexo') {

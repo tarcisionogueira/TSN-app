@@ -69,7 +69,7 @@ export default async function handler(req, res) {
   const status = pagamento.status;
   const payer = pagamento.payer || {};
   const contexto = {
-    gateway: 'mercadopago',
+    gateway: 'asaas',
     valor: pagamento.transaction_amount || 0,
     descricao: pagamento.description || '',
     email: payer.email || null,

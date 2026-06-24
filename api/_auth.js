@@ -20,7 +20,8 @@ export async function getAuthUser(req) {
     });
     if (!res.ok) return null;
     return res.json();
-  } catch {
+  } catch (e) {
+    if (e?.name !== 'TimeoutError') console.error('[_auth] getAuthUser:', e?.message);
     return null;
   }
 }
@@ -53,7 +54,8 @@ export async function getUser(req) {
     });
     if (!res.ok) return null;
     return res.json();
-  } catch {
+  } catch (e) {
+    if (e?.name !== 'TimeoutError') console.error('[_auth] getUser:', e?.message);
     return null;
   }
 }

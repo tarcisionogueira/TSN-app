@@ -50,19 +50,12 @@ export default async function handler(req, res) {
   const pendentes = await pendRes.json();
   if (pendentes?.length > 0) return res.status(400).json({ error: 'Já existe um saque pendente em análise.' });
 
-  // Cria solicitação de saque + bloqueia o valor
-  const [insertRes, updateRes] = await Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/saques`, {
-      method: 'POST',
-      headers: { ...headers, Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: user.id, valor: valorNum, chave_pix: chavePix, banco_nome: bancoNome || null, status: 'pendente' }),
-    }),
-    fetch(`${SUPABASE_URL}/rest/v1/saldos_profissionais?user_id=eq.${user.id}`, {
-      method: 'PATCH',
-      headers: { ...headers, Prefer: 'return=minimal' },
-      body: JSON.stringify({ saldo_disponivel: saldoDisp - valorNum, saldo_retido: (Number(saldo?.saldo_retido || 0)) + valorNum }),
-    }),
-  ]);
+  // Cria solicitação de saque primeiro — só bloqueia saldo se insert OK
+  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/saques`, {
+    method: 'POST',
+    headers: { ...headers, Prefer: 'return=representation' },
+    body: JSON.stringify({ user_id: user.id, valor: valorNum, chave_pix: chavePix, banco_nome: bancoNome || null, status: 'pendente' }),
+  });
 
   if (!insertRes.ok) {
     console.error('[solicitar-saque] erro insert:', await insertRes.text());
@@ -70,6 +63,20 @@ export default async function handler(req, res) {
   }
 
   const [saque] = await insertRes.json();
+
+  // Só bloqueia saldo após confirmar que o registro foi criado com sucesso
+  const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/saldos_profissionais?user_id=eq.${user.id}`, {
+    method: 'PATCH',
+    headers: { ...headers, Prefer: 'return=minimal' },
+    body: JSON.stringify({ saldo_disponivel: saldoDisp - valorNum, saldo_retido: (Number(saldo?.saldo_retido || 0)) + valorNum }),
+  });
+
+  if (!updateRes.ok) {
+    // Reverte o saque criado para evitar inconsistência
+    await fetch(`${SUPABASE_URL}/rest/v1/saques?id=eq.${saque?.id}`, { method: 'DELETE', headers });
+    console.error('[solicitar-saque] erro update saldo — saque revertido');
+    return res.status(500).json({ error: 'Erro ao atualizar saldo' });
+  }
   await auditLog({ acao: 'saque_solicitado', user_id: user.id, ip, detalhes: { valor: valorNum, saque_id: saque?.id }, sucesso: true });
 
   return res.status(200).json({ ok: true, mensagem: 'Solicitação registrada. O pagamento será processado em até 2 dias úteis.', saqueId: saque?.id });

@@ -81,20 +81,27 @@ export default async function handler(req, res) {
     const mpData = await mpRes.json();
     const mpOk = mpRes.ok && (mpData.status === 'approved' || mpData.status === 'pending');
 
-    // Marcar saque como processado no banco independente de ter ido por MP ou não (admin controla)
+    // Só marca como pago no banco se o PIX foi enviado com sucesso (ou não havia MP configurado)
+    if (!mpOk) {
+      console.error('[aprovar-saque] MP retornou erro — saque NÃO marcado como pago', mpData);
+      return res.status(502).json({ error: 'Falha ao enviar PIX via Mercado Pago. Saque não processado.', mpStatus: mpData?.status, mpError: mpData?.message });
+    }
+
     const saldoRes = await fetch(`${SUPABASE_URL}/rest/v1/saldos_profissionais?user_id=eq.${saque.user_id}&select=saldo_retido`, { headers: hdr });
     const [saldo] = await saldoRes.json();
 
-    await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/saques?id=eq.${saqueId}`, {
-        method: 'PATCH', headers: { ...hdr, Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: 'pago', aprovado_por: user.id, mp_payment_id: mpData?.id ? String(mpData.id) : null, processado_em: new Date().toISOString() }),
-      }),
-      fetch(`${SUPABASE_URL}/rest/v1/saldos_profissionais?user_id=eq.${saque.user_id}`, {
-        method: 'PATCH', headers: { ...hdr, Prefer: 'return=minimal' },
-        body: JSON.stringify({ saldo_retido: Math.max(0, Number(saldo?.saldo_retido || 0) - Number(saque.valor)) }),
-      }),
-    ]);
+    // Sequencial: atualiza saque primeiro, depois saldo
+    const updateSaque = await fetch(`${SUPABASE_URL}/rest/v1/saques?id=eq.${saqueId}`, {
+      method: 'PATCH', headers: { ...hdr, Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'pago', aprovado_por: user.id, mp_payment_id: mpData?.id ? String(mpData.id) : null, processado_em: new Date().toISOString() }),
+    });
+    if (!updateSaque.ok) console.error('[aprovar-saque] erro ao atualizar status saque:', await updateSaque.text());
+
+    const updateSaldo = await fetch(`${SUPABASE_URL}/rest/v1/saldos_profissionais?user_id=eq.${saque.user_id}`, {
+      method: 'PATCH', headers: { ...hdr, Prefer: 'return=minimal' },
+      body: JSON.stringify({ saldo_retido: Math.max(0, Number(saldo?.saldo_retido || 0) - Number(saque.valor)) }),
+    });
+    if (!updateSaldo.ok) console.error('[aprovar-saque] erro ao atualizar saldo retido:', await updateSaldo.text());
 
     await auditLog({ acao: 'saque_aprovado', user_id: user.id, ip, detalhes: { saque_id: saqueId, mp_ok: mpOk, mp_status: mpData?.status }, sucesso: true });
     return res.status(200).json({ ok: true, mensagem: 'Saque aprovado e processado.', mpStatus: mpData?.status || 'manual' });
