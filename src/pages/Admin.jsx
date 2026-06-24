@@ -4381,7 +4381,7 @@ function ScrapersTab() {
             <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação — Nominatim / OSM</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–09:59 UTC (21h–07h BRT) · CEP+Correios → endereço → rua → bairro → cidade</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 24h contínuo · a cada 10min · CEP+Correios → endereço → rua → bairro → cidade</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button onClick={() => rodarSysDebug('geocod')} disabled={sysDebugRodando['geocod']}
@@ -4436,19 +4436,21 @@ function ScrapersTab() {
                 ? <span style={{ color: '#0D63DB', fontWeight: 700 }}>⏳ Processando {geocTodos.ufAtual}... · <b>{geocTodos.processadosTotal.toLocaleString('pt-BR')}</b> / {Object.values(geocPendentes).reduce((a, b) => a + b, 0).toLocaleString('pt-BR')} processados</span>
                 : geocTodos.total > 0
                   ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ Sessão concluída · {geocTodos.processadosTotal.toLocaleString('pt-BR')} imóveis geocodificados</span>
-                  : <span>Cron 00:00–09:59 UTC · clique ▶ para forçar por estado</span>}
+                  : <span>Cron 24h · a cada 10min · clique ▶ para forçar um estado agora</span>}
             </div>
-            <button onClick={() => toggleExpandir('geocod')} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+            <button onClick={() => { toggleExpandir('geocod'); if (!estadosExpandidos.geocod && Object.keys(geocPendentes).length === 0) carregarPendentes(); }} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
               {estadosExpandidos.geocod ? '▲ Recolher estados' : '▼ Ver todos os estados (27)'}
             </button>
           </div>
 
           {estadosExpandidos.geocod && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-              {AGENDA_GEOCOD.map(({ uf, hora }) => {
+              {UFS_GEOCOD_ORDEM.map(uf => {
                 const r = geocRegiao[uf] || {};
+                const pendentes = geocPendentes[uf];
                 const temErro = !!r.erro;
                 const temResultado = r.processados != null && !r.rodando;
+                const pctFeito = pendentes > 0 ? Math.min(100, Math.round((r.processados / pendentes) * 100)) : (r.concluido ? 100 : 0);
                 return (
                   <div key={uf} style={{ background: temErro ? '#fef2f2' : temResultado ? '#eff6ff' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${temErro ? '#fecaca' : temResultado ? '#bfdbfe' : '#e2e8f0'}` }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -4458,24 +4460,31 @@ function ScrapersTab() {
                         {r.rodando ? '…' : temResultado ? '↺' : '▶'}
                       </button>
                     </div>
-                    <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
+                    {/* Pendentes antes de processar */}
+                    {!r.rodando && !temResultado && !temErro && (
+                      <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                        {pendentes != null ? `${pendentes.toLocaleString('pt-BR')} pendentes` : '…'}
+                      </div>
+                    )}
                     {r.rodando && (
-                      <div style={{ marginTop: 4 }}>
-                        <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: '60%', background: '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                      <div style={{ marginTop: 3 }}>
+                        <div style={{ background: '#dbeafe', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: '55%', background: '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
                         </div>
-                        <div style={{ fontSize: 10, color: r.aviso ? '#d97706' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
-                          {r.aviso ? r.aviso + ' · ' : '⏳ '}{(r.processados || 0).toLocaleString('pt-BR')} / {geocPendentes[uf] != null ? geocPendentes[uf].toLocaleString('pt-BR') : '?'}
+                        <div style={{ fontSize: 9, color: r.aviso ? '#d97706' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          {r.aviso ? r.aviso + ' · ' : '⏳ '}{(r.processados || 0).toLocaleString('pt-BR')} / {pendentes != null ? pendentes.toLocaleString('pt-BR') : '?'}
                         </div>
                       </div>
                     )}
                     {temResultado && !temErro && (
-                      <div style={{ marginTop: 4 }}>
+                      <div style={{ marginTop: 3 }}>
                         <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: r.concluido ? '100%' : `${Math.min(100, (r.processados / 200) * 100)}%`, background: r.concluido ? '#10b981' : '#0D63DB', borderRadius: 4 }} />
+                          <div style={{ height: '100%', width: `${pctFeito}%`, background: r.concluido ? '#10b981' : '#0D63DB', borderRadius: 4 }} />
                         </div>
-                        <div style={{ fontSize: 10, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
-                          {r.concluido ? '✅ 0 pendentes' : `📍 ${r.processados.toLocaleString('pt-BR')} / ${geocPendentes[uf] != null ? geocPendentes[uf].toLocaleString('pt-BR') : '?'} · ${r.falhas || 0} falhas`}
+                        <div style={{ fontSize: 9, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          {r.concluido
+                            ? '✅ fila zerada'
+                            : `📍 ${r.processados.toLocaleString('pt-BR')} / ${pendentes != null ? pendentes.toLocaleString('pt-BR') : '?'}${r.falhas ? ` · ${r.falhas} falhas` : ''}`}
                         </div>
                       </div>
                     )}
@@ -4488,7 +4497,7 @@ function ScrapersTab() {
             </div>
           )}
           <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
-            Cascata 5 níveis: CEP+Correios → endereço → rua s/nº → bairro → cidade · ▶ força 1 lote manualmente
+            Cascata 5 níveis: CEP+Correios → endereço → rua s/nº → bairro → cidade · cron 24h automático · ▶ processa até zerar
           </div>
         </div>
       )}
