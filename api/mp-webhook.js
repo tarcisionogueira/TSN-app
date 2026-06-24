@@ -8,10 +8,33 @@
 
 export const config = { runtime: 'edge' };
 
-const MP_URL      = 'https://api.mercadopago.com';
-const TOKEN       = (process.env.MP_ACCESS_TOKEN || '').trim();
-const SUPABASE    = process.env.VITE_SUPABASE_URL;
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const MP_URL        = 'https://api.mercadopago.com';
+const TOKEN         = (process.env.MP_ACCESS_TOKEN || '').trim();
+const WEBHOOK_SECRET = (process.env.MP_WEBHOOK_SECRET || '').trim();
+const SUPABASE      = process.env.VITE_SUPABASE_URL;
+const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY;
+
+/** Valida assinatura HMAC-SHA256 do MP (header x-signature) */
+async function validarAssinatura(req, rawBody) {
+  if (!WEBHOOK_SECRET) return true; // sem secret configurado, aceita (não recomendado em prod)
+  const xSignature = req.headers.get('x-signature') || '';
+  const xRequestId = req.headers.get('x-request-id') || '';
+  const { searchParams } = new URL(req.url);
+  const dataId = searchParams.get('data.id') || '';
+
+  // MP monta o template: ts=<ts>&v1=<hash>
+  // e o manifest: id:<data.id>;request-id:<x-request-id>;ts:<ts>;
+  const parts = Object.fromEntries(xSignature.split(',').map(p => p.trim().split('=')));
+  const ts = parts['ts'] || '';
+  const v1 = parts['v1'] || '';
+  if (!ts || !v1) return false;
+
+  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(manifest));
+  const computed = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return computed === v1;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -189,9 +212,19 @@ async function desativarPlano(userId, planoKey) {
 export default async function handler(req) {
   if (req.method === 'GET') return new Response('ok', { status: 200 }); // MP valida com GET
 
-  const { searchParams } = new URL(req.url);
+  // Lê o body como texto para validar assinatura antes de parsear
+  const rawBody = await req.text();
   let body = {};
-  try { body = await req.json(); } catch {}
+  try { body = JSON.parse(rawBody); } catch {}
+
+  // Valida assinatura HMAC — rejeita notificações não autorizadas
+  const assinaturaValida = await validarAssinatura(req, rawBody);
+  if (!assinaturaValida) {
+    console.warn('[mp-webhook] assinatura inválida — ignorado');
+    return new Response('unauthorized', { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
 
   // MP envia type via body ou query
   const type = body.type || searchParams.get('topic');
