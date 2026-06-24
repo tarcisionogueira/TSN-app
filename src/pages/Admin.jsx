@@ -521,7 +521,7 @@ function UsuariosTab() {
     return (u.nome || '').toLowerCase().includes(q) || (u.cpf || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
   });
 
-  const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top1: '#0D63DB', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626' };
+  const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top1: '#0D63DB', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626', leiloeiro: '#ea580c' };
   const fmtData = v => v ? new Date(v).toLocaleDateString('pt-BR') : '—';
 
   return (
@@ -3953,7 +3953,7 @@ function SdrTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // EQUIPE TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-const ROLE_BADGE_COLORS = { admin: { bg: '#fef3c7', color: '#92400e' }, analista: { bg: '#dbeafe', color: '#084BA6' }, consultor: { bg: '#d1fae5', color: '#065f46' }, advogado: { bg: '#ede9fe', color: '#5b21b6' } };
+const ROLE_BADGE_COLORS = { admin: { bg: '#fef3c7', color: '#92400e' }, analista: { bg: '#dbeafe', color: '#084BA6' }, consultor: { bg: '#d1fae5', color: '#065f46' }, advogado: { bg: '#ede9fe', color: '#5b21b6' }, leiloeiro: { bg: '#fff7ed', color: '#c2410c' } };
 
 const CHECKLIST_ITEMS = [
   { key: 'leiloeiro_habilitado',  label: 'Leiloeiro habilitado verificado (JUCESP/CRA)' },
@@ -4423,18 +4423,20 @@ function EquipeTab() {
     { label: '🔍 Convidar Analista',   roles: ['analista'],  bg: '#0D63DB' },
     { label: '⚖️ Convidar Advogado',   roles: ['advogado'],  bg: '#7c3aed' },
     { label: '🤝 Convidar Consultor',  roles: ['consultor'], bg: '#059669' },
+    { label: '🔨 Convidar Leiloeiro',  roles: ['leiloeiro'], bg: '#ea580c' },
   ];
 
   return (
     <div>
       {/* ── SECTION A ─────────────────────────────────────────────────────────── */}
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 14, marginBottom: 24 }}>
         {[
           ['Total Equipe', membros.length, '#111111'],
           ['Analistas', membros.filter(m=>m.role==='analista').length, '#0D63DB'],
           ['Advogados', membros.filter(m=>m.role==='advogado').length, '#7c3aed'],
           ['Consultores', membros.filter(m=>m.role==='consultor').length, '#059669'],
+          ['Leiloeiros', membros.filter(m=>m.role==='leiloeiro').length, '#ea580c'],
           ['Finalizados Hoje', finalizadosHoje, '#f59e0b'],
         ].map(([l,v,c]) => (
           <div key={l} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px' }}>
@@ -5695,8 +5697,19 @@ function CnjTab() {
   );
 }
 
+const ROLES_SIMULAVEIS = [
+  { key: 'explorador', label: '🔍 Explorador',      cor: '#64748b' },
+  { key: 'top2',       label: '💎 Investidor Pro',   cor: '#0D63DB' },
+  { key: 'assessorado',label: '🏠 Assessorado',      cor: '#d97706' },
+  { key: 'clube',      label: '⭐ Leilão Club',      cor: '#6366f1' },
+  { key: 'analista',   label: '🔍 Analista',         cor: '#f59e0b' },
+  { key: 'advogado',   label: '⚖️ Advogado',         cor: '#7c3aed' },
+  { key: 'consultor',  label: '🤝 Consultor',        cor: '#059669' },
+  { key: 'leiloeiro',  label: '🔨 Leiloeiro',        cor: '#ea580c' },
+];
+
 export default function Admin() {
-  const { role, loading } = useAuth();
+  const { role, loading, simularRole, roleSimulado } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState('Dashboard');
 
@@ -5724,6 +5737,26 @@ export default function Admin() {
         <button style={{ ...S.btn('outline'), background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontSize: 13 }} onClick={() => navigate('/buscar')}>
           ← Voltar ao app
         </button>
+      </div>
+
+      {/* Simulador de Role */}
+      <div style={{ background: '#1e1b4b', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderBottom: '1px solid #312e81' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 1 }}>🎭 Simular como:</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {ROLES_SIMULAVEIS.map(r => (
+            <button key={r.key} onClick={() => simularRole(roleSimulado === r.key ? null : r.key)}
+              style={{ padding: '4px 12px', borderRadius: 20, border: 'none', fontWeight: 700, fontSize: 11, cursor: 'pointer', background: roleSimulado === r.key ? r.cor : 'rgba(255,255,255,0.08)', color: roleSimulado === r.key ? 'white' : '#94a3b8', transition: 'all 0.15s' }}>
+              {r.label}
+            </button>
+          ))}
+          {roleSimulado && (
+            <button onClick={() => simularRole(null)}
+              style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid rgba(255,100,100,0.4)', background: 'rgba(220,38,38,0.15)', color: '#fca5a5', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>
+              ✕ Sair da simulação
+            </button>
+          )}
+        </div>
+        <span style={{ fontSize: 11, color: '#475569', marginLeft: 'auto' }}>Só muda a visualização — dados reais não são alterados</span>
       </div>
 
       <div style={S.body}>

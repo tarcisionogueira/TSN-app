@@ -50,7 +50,7 @@ export default function Privacidade() {
         <h2 style={h2}>6. Encarregado pelo Tratamento de Dados (DPO)</h2>
         <p>Em cumprimento ao Art. 41 da LGPD, designamos um Encarregado pelo Tratamento de Dados Pessoais (Data Protection Officer — DPO). Para exercer seus direitos, esclarecer dúvidas sobre privacidade ou registrar reclamações, entre em contato:</p>
         <p style={{ marginTop: 10 }}>
-          <strong>E-mail:</strong> <a href="mailto:suporte@tsn.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>suporte@tsn.com.br</a><br />
+          <strong>E-mail:</strong> <a href="mailto:privacidade@bidprobrasil.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>privacidade@bidprobrasil.com.br</a><br />
           <strong>Prazo de resposta:</strong> até 15 dias úteis (LGPD Art. 18, §5º)
         </p>
       </div>
