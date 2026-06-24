@@ -49,6 +49,7 @@ import MapaImoveis from './pages/MapaImoveis';
 import Promo from './pages/Promo';
 import Convite from './pages/Convite';
 import ConviteEquipe from './pages/ConviteEquipe';
+import ConviteLeiloeiro from './pages/ConviteLeiloeiro';
 import LeiloeiroPortal from './pages/LeiloeiroPortal';
 import EbookPage from './pages/EbookPage';
 import ContratoLink from './pages/ContratoLink';
@@ -243,6 +244,8 @@ export default function App() {
           <Route path="/promo/:codigo" element={<Promo />} />
           <Route path="/convite/:codigo" element={<Convite />} />
           <Route path="/convite-equipe/:token" element={<ConviteEquipe />} />
+          <Route path="/cadastro-parceiro/:token" element={<ConviteLeiloeiro />} />
+          <Route path="/leiloeiro/:token" element={<ConviteLeiloeiro />} />
           <Route path="/leiloeiro" element={<PrivateRoute roles={['leiloeiro','admin']}><LeiloeiroPortal /></PrivateRoute>} />
           <Route path="/c/:token" element={<ContratoLink />} />
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />

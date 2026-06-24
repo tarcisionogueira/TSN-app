@@ -3890,6 +3890,167 @@ function BarraProgresso({ atual, total, label, sublabel, cor = '#0D63DB', visive
   );
 }
 
+function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
+  const [loading, setLoading] = useState(false);
+  const [modalNovo, setModalNovo] = useState(false);
+  const [novoNome, setNovoNome] = useState('');
+  const [novoEmail, setNovoEmail] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [copiado, setCopiado] = useState('');
+  const [contagens, setContagens] = useState({});
+
+  const carregar = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('leiloeiros_parceiros').select('*').order('criado_em', { ascending: false });
+    setParceiros(data || []);
+    // Contar imóveis por parceiro
+    if (data?.length) {
+      const res = await Promise.all(
+        data.map(p =>
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', `parceiro_${p.id}`)
+        )
+      );
+      const mapa = {};
+      data.forEach((p, i) => { mapa[p.id] = res[i].count || 0; });
+      setContagens(mapa);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { carregar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const criarParceiro = async () => {
+    if (!novoNome.trim() || !novoEmail.trim()) return;
+    setSalvando(true);
+    await supabase.from('leiloeiros_parceiros').insert({ nome: novoNome.trim(), email: novoEmail.trim() });
+    setSalvando(false);
+    setModalNovo(false);
+    setNovoNome('');
+    setNovoEmail('');
+    carregar();
+  };
+
+  const alterarStatus = async (id, status) => {
+    await supabase.from('leiloeiros_parceiros').update({ status }).eq('id', id);
+    carregar();
+  };
+
+  const copiarLink = (token, key) => {
+    const url = `${window.location.origin}/#/leiloeiro/${token}`;
+    navigator.clipboard.writeText(url);
+    setCopiado(key);
+    setTimeout(() => setCopiado(''), 1800);
+  };
+
+  const copiarToken = (token, key) => {
+    navigator.clipboard.writeText(token);
+    setCopiado(key + '_token');
+    setTimeout(() => setCopiado(''), 1800);
+  };
+
+  const STATUS_COR = { ativo: '#10b981', pendente: '#f59e0b', inativo: '#94a3b8', suspenso: '#dc2626' };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#111111' }}>Leiloeiros Parceiros</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Cada parceiro recebe um token único para enviar lotes via API</div>
+        </div>
+        <button onClick={() => setModalNovo(true)}
+          style={{ padding: '8px 16px', background: '#ea580c', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          + Novo Parceiro
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Carregando…</div>
+      ) : parceiros.length === 0 ? (
+        <div style={{ background: 'white', borderRadius: 14, border: '1px dashed #e2e8f0', padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🔨</div>
+          <div style={{ fontWeight: 700, color: '#475569', marginBottom: 6 }}>Nenhum parceiro cadastrado</div>
+          <div style={{ fontSize: 13 }}>Crie um parceiro e envie o link de cadastro para o leiloeiro.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {parceiros.map(p => (
+            <div key={p.id} style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 800, fontSize: 14, color: '#111111' }}>{p.nome}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: STATUS_COR[p.status] + '22', color: STATUS_COR[p.status] }}>
+                      {p.status}
+                    </span>
+                    {contagens[p.id] > 0 && (
+                      <span style={{ fontSize: 10, color: '#64748b' }}>{contagens[p.id].toLocaleString('pt-BR')} imóveis</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>{p.email} {p.cnpj && `· CNPJ ${p.cnpj}`} {p.municipio && `· ${p.municipio}/${p.uf}`}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                    Criado em {new Date(p.criado_em).toLocaleDateString('pt-BR')}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button onClick={() => copiarLink(p.token, p.id)}
+                    style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: '1px solid #e2e8f0', borderRadius: 8, background: copiado === p.id ? '#f0fdf4' : '#f8fafc', color: copiado === p.id ? '#16a34a' : '#475569', cursor: 'pointer' }}>
+                    {copiado === p.id ? '✓ Link copiado' : '🔗 Link cadastro'}
+                  </button>
+                  <button onClick={() => copiarToken(p.token, p.id)}
+                    style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: '1px solid #e2e8f0', borderRadius: 8, background: copiado === p.id + '_token' ? '#f0fdf4' : '#f8fafc', color: copiado === p.id + '_token' ? '#16a34a' : '#475569', cursor: 'pointer' }}>
+                    {copiado === p.id + '_token' ? '✓ Token copiado' : '🔑 Token API'}
+                  </button>
+                  {p.status === 'ativo' ? (
+                    <button onClick={() => alterarStatus(p.id, 'suspenso')}
+                      style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: '1px solid #fecaca', borderRadius: 8, background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}>
+                      Suspender
+                    </button>
+                  ) : (
+                    <button onClick={() => alterarStatus(p.id, 'ativo')}
+                      style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: '1px solid #bbf7d0', borderRadius: 8, background: '#f0fdf4', color: '#16a34a', cursor: 'pointer' }}>
+                      Ativar
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modalNovo && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setModalNovo(false)}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 28, width: '100%', maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Novo Parceiro Leiloeiro</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>Um link de cadastro será gerado para o leiloeiro completar os dados.</div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Nome *</label>
+              <input value={novoNome} onChange={e => setNovoNome(e.target.value)} placeholder="Nome da empresa ou pessoa"
+                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 4 }}>E-mail *</label>
+              <input type="email" value={novoEmail} onChange={e => setNovoEmail(e.target.value)} placeholder="contato@leiloeiro.com.br"
+                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setModalNovo(false)}
+                style={{ flex: 1, padding: 10, background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, color: '#475569' }}>
+                Cancelar
+              </button>
+              <button onClick={criarParceiro} disabled={salvando || !novoNome.trim() || !novoEmail.trim()}
+                style={{ flex: 2, padding: 10, background: salvando ? '#94a3b8' : '#ea580c', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
+                {salvando ? 'Criando…' : 'Criar parceiro'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScrapersTab() {
   const [status, setStatus] = useState(null);
   const [geoStats, setGeoStats] = useState({ com: 0, sem: 0, total: 0 });
@@ -3904,6 +4065,9 @@ function ScrapersTab() {
   const [leiloeiroContagem, setLeiloeiroContagem] = useState({}); // fonte → total imóveis no banco
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
   const [geocPendentes, setGeocPendentes] = useState({});
+  const [parceiros, setParceiros] = useState([]);
+  const [gerandoConviteLeiloeiro, setGerandoConviteLeiloeiro] = useState(false);
+  const [linkLeiloeiro, setLinkLeiloeiro] = useState(null);
   // Progresso "executar todos" do Caixa (estado a estado)
   const [caixaTodos, setCaixaTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '' });
   const [geocDebug, setGeocDebug] = useState(null);
@@ -3921,7 +4085,7 @@ function ScrapersTab() {
     // Contagem de imóveis por fonte
     // Caixa: imóveis antigos têm fonte=NULL mas fonte_id começa com 'caixa_'
     Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).ilike('fonte_id', 'caixa_%'),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).or('fonte.eq.caixa,fonte.is.null'),
       ...['mega','sold','superbid','bb'].map(f =>
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', f)
       ),
@@ -4211,9 +4375,10 @@ function ScrapersTab() {
   const geoPct = geoStats.total > 0 ? Math.round((geoStats.com / geoStats.total) * 100) : 0;
 
   const ABAS = [
-    { key: 'fontes',  label: '🏛️ Fontes', desc: 'Caixa · Mega · Sold · Superbid · BB' },
-    { key: 'geocod',  label: '📍 Geocodificação', desc: `${geoStats.com.toLocaleString('pt-BR')} / ${geoStats.total.toLocaleString('pt-BR')} imóveis` },
-    { key: 'roadmap', label: '🚀 Roadmap', desc: '7 fontes planejadas' },
+    { key: 'fontes',    label: '🏛️ Fontes',         desc: 'Caixa · Mega · Sold · Superbid · BB' },
+    { key: 'geocod',    label: '📍 Geocodificação',  desc: `${geoStats.com.toLocaleString('pt-BR')} / ${geoStats.total.toLocaleString('pt-BR')} imóveis` },
+    { key: 'parceiros', label: '🤝 Parceiros',       desc: `${parceiros.length} leiloeiros` },
+    { key: 'roadmap',   label: '🚀 Roadmap',         desc: '7 fontes planejadas' },
   ];
 
   return (
@@ -4557,6 +4722,11 @@ function ScrapersTab() {
             Cascata 5 níveis: CEP+Correios → endereço → rua s/nº → bairro → cidade · cron 24h automático · ▶ processa até zerar
           </div>
         </div>
+      )}
+
+      {/* ═══ ABA PARCEIROS ═══ */}
+      {abaAtiva === 'parceiros' && (
+        <ParceirosLeiloeiroTab parceiros={parceiros} setParceiros={setParceiros} />
       )}
 
       {/* ═══ ABA ROADMAP ═══ */}
