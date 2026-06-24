@@ -3986,7 +3986,13 @@ function ScrapersTab() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ estados: [uf] }),
         });
-        const d = await r.json();
+        let d;
+        try { d = await r.json(); } catch {
+          const txt = await r.text().catch(() => `HTTP ${r.status}`);
+          setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `Timeout (${r.status})`, processados: totalProc, falhas: totalFalhas } }));
+          console.warn('geocod parse error SP:', txt.slice(0, 200));
+          break;
+        }
         if (!r.ok || d.error) {
           setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d.error || `HTTP ${r.status}`, processados: totalProc, falhas: totalFalhas } }));
           return;
@@ -4089,14 +4095,13 @@ function ScrapersTab() {
       try {
         while (ufLoops < 40) { // até 40 × 5 = 200 imóveis por estado no "todos"
           const r = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estados: [uf] }) });
-          if (!r.ok) {
-            const errTxt = await r.text().catch(() => `HTTP ${r.status}`);
-            setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `Erro ${r.status}: ${errTxt.slice(0, 80)}`, processados: ufProc, falhas: ufFalhas } }));
+          let d;
+          try { d = await r.json(); } catch {
+            setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `Timeout (${r.status})`, processados: ufProc, falhas: ufFalhas } }));
             break;
           }
-          const d = await r.json();
-          if (d.error) {
-            setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d.error, processados: ufProc, falhas: ufFalhas } }));
+          if (!r.ok || d.error) {
+            setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d?.error || `Erro ${r.status}`, processados: ufProc, falhas: ufFalhas } }));
             break;
           }
           ufProc += d.processados || 0;
