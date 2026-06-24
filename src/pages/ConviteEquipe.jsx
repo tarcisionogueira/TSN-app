@@ -35,6 +35,17 @@ const ROLE_CONFIG = {
       { key: 'carteira', label: 'Possui carteira de clientes investidores?', tipo: 'select', opts: ['Sim, ativa','Em construção','Não ainda'] },
     ],
   },
+  leiloeiro: {
+    emoji: '🔨',
+    label: 'Leiloeiro Oficial',
+    cor: '#ea580c',
+    descricao: 'Você foi convidado como Leiloeiro Parceiro da plataforma TSN. Conecte seus imóveis e amplie o alcance dos seus leilões para toda a nossa base de investidores.',
+    passos_extras: [
+      { key: 'junta', label: 'Qual é a sua Junta Comercial de credenciamento?', tipo: 'select', opts: ['JUCESP (SP)','JUCERJ (RJ)','JUCEMG (MG)','JUCESE (SE)','JUCEMA (MA)','JUCEPA (PA)','JUCEBA (BA)','JUCEPE (PE)','JUCEAM (AM)','JUCEGO (GO)','Outra'] },
+      { key: 'matricula', label: 'Número da matrícula de leiloeiro oficial', tipo: 'text', placeholder: 'Ex: 0123-SP' },
+      { key: 'site', label: 'URL do seu site ou plataforma de leilões', tipo: 'text', placeholder: 'https://seuleilao.com.br' },
+    ],
+  },
   admin: {
     emoji: '🛡️',
     label: 'Administrador',

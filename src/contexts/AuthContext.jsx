@@ -3,7 +3,8 @@ import { supabase } from '../utils/supabase';
 
 const AuthContext = createContext(null);
 
-const IMPERSONATE_KEY = 'tsn_impersonate';
+const IMPERSONATE_KEY  = 'tsn_impersonate';
+const SIM_ROLE_KEY     = 'tsn_sim_role';
 const LAST_ACTIVITY_KEY = 'tsn_last_activity';
 const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24h
 
@@ -63,6 +64,8 @@ export function AuthProvider({ children }) {
   const [loading, setLoading]       = useState(true);
   // Modo suporte: admin/analista visualizando a conta de um cliente
   const [impersonate, setImpersonate] = useState(loadImpersonate);
+  // Simulação de role: admin testa a UI como outro tipo de usuário
+  const [roleSimulado, setRoleSimulado] = useState(() => sessionStorage.getItem(SIM_ROLE_KEY) || null);
 
   useEffect(() => {
     // Verificar expiração de 24h na carga inicial
@@ -144,9 +147,14 @@ export function AuthProvider({ children }) {
     setImpersonate(null);
   };
 
-  // Identidade/role efetivos: durante o suporte, refletem o cliente visualizado
+  const simularRole = (r) => {
+    if (r) { sessionStorage.setItem(SIM_ROLE_KEY, r); setRoleSimulado(r); }
+    else   { sessionStorage.removeItem(SIM_ROLE_KEY); setRoleSimulado(null); }
+  };
+
+  // Identidade/role efetivos: simulação > suporte > real
   const effectiveUserId = impersonate?.id || user?.id || null;
-  const effectiveRole   = impersonate?.role || role;
+  const effectiveRole   = (role === 'admin' && roleSimulado) ? roleSimulado : (impersonate?.role || role);
   const podeImpersonar  = role === 'admin' || role === 'analista';
 
   return (
@@ -156,6 +164,7 @@ export function AuthProvider({ children }) {
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,
       effectiveUserId, effectiveRole,
+      roleSimulado, simularRole,
     }}>
       {children}
     </AuthContext.Provider>

@@ -32,7 +32,7 @@ export default function Termos() {
         <p>O usuário pode cancelar a assinatura a qualquer momento, respeitada eventual fidelidade contratada. O acesso permanece ativo até o fim do ciclo já pago.</p>
 
         <h2 style={h2}>6. Contato</h2>
-        <p>Dúvidas sobre estes termos podem ser enviadas para <a href="mailto:tarcisioaraujo@reimob.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>tarcisioaraujo@reimob.com.br</a>.</p>
+        <p>Dúvidas sobre estes termos podem ser enviadas para <a href="mailto:privacidade@bidprobrasil.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>privacidade@bidprobrasil.com.br</a>.</p>
       </div>
     </div>
   );

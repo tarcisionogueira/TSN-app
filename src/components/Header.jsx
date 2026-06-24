@@ -136,7 +136,7 @@ const ROLE_LABELS_STATIC = {
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { user, role, loading, impersonate, encerrarSuporte } = useAuth();
+  const { user, role, loading, impersonate, encerrarSuporte, roleSimulado, simularRole } = useAuth();
   const planosCtx = usePlanos();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -218,13 +218,23 @@ export default function Header() {
 
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 100 }}>
-      {/* Banner do modo suporte (admin/analista visualizando a conta de um cliente) */}
+      {/* Banner do modo suporte */}
       {impersonate && (
         <div style={{ background: '#d97706', color: 'white', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
           <Eye size={15} /> Modo suporte — visualizando a conta de <strong>{impersonate.nome}</strong>
           <button onClick={encerrarSuporte}
             style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             Sair do modo suporte
+          </button>
+        </div>
+      )}
+      {/* Banner de simulação de role (apenas admin) */}
+      {roleSimulado && (
+        <div style={{ background: '#7c3aed', color: 'white', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
+          🎭 Simulando como <strong style={{ textTransform: 'capitalize' }}>{roleSimulado}</strong> — a interface está sendo exibida conforme esse perfil veria
+          <button onClick={() => simularRole(null)}
+            style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            Voltar ao Admin
           </button>
         </div>
       )}

@@ -65,6 +65,7 @@ export default function Checkout() {
   const planoKey = params.get('plano');
   const promoCode = params.get('promo')?.toUpperCase() || '';
   const refCode = params.get('ref') || '';
+  const mpStatus = params.get('status'); // 'approved' | 'rejected' | 'pending' — vindo do redirect MP
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   const plano = PLANOS[planoKey];
 
@@ -87,10 +88,12 @@ export default function Checkout() {
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [asaasIds, setAsaasIds] = useState(null); // { subscriptionId, paymentId }
   const [verificando, setVerificando] = useState(false);
+  const [gatewayUsado, setGatewayUsado] = useState(null); // 'mp' | 'asaas'
+  const [ofertandoFallback, setOfertandoFallback] = useState(false); // cliente recusado no MP, oferece Asaas
   const pollingRef = React.useRef(null);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
-  const temToggleAnual = planoKey === 'top2' || planoKey === 'top1';
+  const temToggleAnual = planoKey === 'top2'; // top1 removido do produto
   const planoApiKey = temModalidade && modalidade === 'vista'
     ? `${planoKey}_vista`
     : temToggleAnual && modalidade === 'anual' ? `${planoKey}_anual` : planoKey;
@@ -227,36 +230,72 @@ export default function Checkout() {
     } catch (_) {}
   };
 
-  const gerarLink = async () => {
+  // Tenta pagar via Asaas (backup) com dados já preenchidos
+  const pagarAsaas = async () => {
     setLoading(true);
     setErro('');
+    setOfertandoFallback(false);
     try {
       const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'criar_assinatura',
-          nome: nomeUsuario,
-          email: user.email,
-          cpf: cpfUsuario,
-          plano: planoApiKey,
-        }),
+        body: JSON.stringify({ action: 'criar_assinatura', nome: nomeUsuario, email: user.email, cpf: cpfUsuario, plano: planoApiKey }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar cobrança');
+      setGatewayUsado('asaas');
       const link = data.linkPagamento;
       setLinkPagamento(link);
-      // Log de aceite dos termos para proteção contra chargeback
       await logAceite(planoApiKey, plano.preco, data);
-      // Abre o link do Asaas em nova aba automaticamente
       if (link) window.location.href = link;
-      // Salva IDs para polling de verificação
       const ids = { subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null };
       setAsaasIds(ids);
-      // Salva o ID do customer Asaas no perfil
       if (data.customerId && user?.id) {
         supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id).then(() => {});
       }
+    } catch (err) {
+      setErro(err.message);
+    }
+    setLoading(false);
+  };
+
+  const gerarLink = async () => {
+    setLoading(true);
+    setErro('');
+    setOfertandoFallback(false);
+
+    // Verifica se MP está ativo (admin pode desligar manualmente no painel)
+    const { data: cfgRows } = await supabase.from('config_financeira').select('gateway,ativo');
+    const mpDesligadoManualmente = cfgRows?.find(r => r.gateway === 'mp')?.ativo === false;
+
+    if (!mpDesligadoManualmente) {
+      // ── Tenta Mercado Pago primeiro ───────────────────────────────────
+      try {
+        const planoRecorrente = ['clube', 'top1', 'top2'].includes(planoApiKey);
+        const action = planoRecorrente ? 'criar_assinatura' : 'criar_preferencia';
+        const res = await apiCall('/api/mp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, plano: planoApiKey, email: user.email, nome: nomeUsuario, cpf: cpfUsuario }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'MP indisponível');
+        const link = data.initPoint || data.init_point;
+        setGatewayUsado('mp');
+        setLinkPagamento(link);
+        await logAceite(planoApiKey, plano.preco, { mp_preference_id: data.preferenceId || data.assinaturaId });
+        if (link) window.location.href = link;
+        setLoading(false);
+        return;
+      } catch (mpErr) {
+        // MP falhou — fallback automático para Asaas sem mostrar erro ao cliente
+        console.warn('[checkout] MP falhou, tentando Asaas:', mpErr.message);
+      }
+    }
+
+    // ── Asaas (backup automático) ─────────────────────────────────────
+    try {
+      await pagarAsaas();
     } catch (err) {
       setErro(err.message);
     }
@@ -335,6 +374,23 @@ export default function Checkout() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
 
+      {/* Banner: MP rejeitou o pagamento — oferece Asaas com 1 clique */}
+      {mpStatus === 'rejected' && !ofertandoFallback && gatewayUsado !== 'asaas' && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 998, background: '#fef3c7', borderBottom: '2px solid #f59e0b', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, color: '#92400e', fontWeight: 600 }}>
+            ⚠️ Pagamento não aprovado no Mercado Pago. Tente finalizar pelo Asaas (link bancário seguro) — seus dados já estão preenchidos.
+          </span>
+          <button
+            onClick={pagarAsaas}
+            disabled={loading}
+            style={{ padding: '8px 20px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {loading ? 'Aguarde…' : 'Continuar pelo Asaas →'}
+          </button>
+          <button onClick={() => window.history.replaceState({}, '', window.location.pathname + '?plano=' + planoKey)}
+            style={{ background: 'none', border: 'none', color: '#92400e', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+        </div>
+      )}
+
       {/* Popup de erro — overlay sobre o checkout */}
       {erro && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
@@ -362,10 +418,10 @@ export default function Checkout() {
                 style={{ padding: '10px 20px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <RefreshCw size={14} /> Tentar novamente
               </button>
-              <a href="https://wa.me/5571996502234" target="_blank" rel="noreferrer"
-                style={{ padding: '10px 20px', background: '#25d366', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+                style={{ padding: '10px 20px', background: '#0D63DB', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                 💬 Falar com suporte
-              </a>
+              </button>
             </div>
           </div>
         </div>
@@ -441,8 +497,8 @@ export default function Checkout() {
           {temModalidade && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
               {[
-                { key: 'mensal', label: planoKey === 'assessorado' ? '12× R$ 500 (total R$ 6.000)' : '12× R$ 5.000 (total R$ 60.000)' },
-                { key: 'vista',  label: planoKey === 'assessorado' ? 'À vista R$ 5.000 (20% off)' : 'À vista R$ 48.000 (20% off)' },
+                { key: 'mensal', label: planoKey === 'assessorado' ? 'Parcelado em até 12× no cartão' : '12× R$ 5.000 (total R$ 60.000)' },
+                { key: 'vista',  label: planoKey === 'assessorado' ? 'À vista R$ 5.000 (PIX ou cartão)' : 'À vista R$ 48.000 (20% off)' },
               ].map(({ key, label }) => (
                 <button key={key} onClick={() => setModalidade(key)}
                   style={{ flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',

@@ -122,8 +122,11 @@ async function fetchEstado(uf) {
       lastStatus = res.status;
       if (!res.ok) continue;
       const buf = await res.arrayBuffer();
-      const text = new TextDecoder('latin1').decode(buf);
-      if (text.length > 100) return { csv: text };
+      // Tentar windows-1252 (padrão Caixa); fallback para UTF-8 se BOM presente
+      const bytes = new Uint8Array(buf);
+      const hasBomUtf8 = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
+      const text = new TextDecoder(hasBomUtf8 ? 'utf-8' : 'windows-1252').decode(buf);
+      if (text.length > 100) return { csv: text, encoding: hasBomUtf8 ? 'utf-8' : 'windows-1252' };
     } catch (e) {
       return { erro: `Timeout/rede: ${e.message}` };
     }
@@ -133,13 +136,37 @@ async function fetchEstado(uf) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+function detectarSeparador(header) {
+  const semis = (header.match(/;/g) || []).length;
+  const commas = (header.match(/,/g) || []).length;
+  return semis >= commas ? ';' : ',';
+}
+
+function parseCsvLineWith(line, sep) {
+  if (sep === ';') return parseCsvLine(line);
+  const fields = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQuote = !inQuote; }
+    else if (ch === sep && !inQuote) { fields.push(cur.trim()); cur = ''; }
+    else { cur += ch; }
+  }
+  fields.push(cur.trim());
+  return fields;
+}
+
 function csvToImoveis(csv, uf) {
-  const lines = csv.split('\n').filter(l => l.trim());
+  // Remove BOM UTF-8 se presente
+  const csvClean = csv.replace(/^﻿/, '');
+  const lines = csvClean.split('\n').map(l => l.replace(/\r$/, '')).filter(l => l.trim());
   if (lines.length < 2) return [];
+  const sep = detectarSeparador(lines[0]);
   const imoveis = [];
   // Skip header (first line)
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseCsvLine(lines[i]);
+    const cols = parseCsvLineWith(lines[i], sep);
     if (cols.length < 5) continue;
     const numeroImovel = cols[0] || '';
     if (!numeroImovel) continue;
@@ -401,6 +428,13 @@ export default async function handler(req, res) {
       }
       const imoveis = csvToImoveis(resultado.csv, uf);
       if (imoveis.length === 0) {
+        const linhas = resultado.csv.split('\n').filter(l => l.trim()).slice(0, 5);
+        erros.push({
+          uf,
+          erro: 'CSV recebido mas 0 imóveis parseados',
+          csv_tamanho: resultado.csv.length,
+          csv_primeiras_linhas: linhas,
+        });
         estadosOk.push(uf);
         continue;
       }
