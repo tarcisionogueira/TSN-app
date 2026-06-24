@@ -129,8 +129,26 @@ export function AuthProvider({ children }) {
       }
     });
 
+    // Realtime: detecta mudança de role/inadimplência pelo webhook sem precisar de refresh
+    let perfilChannel = null;
+    supabase.auth.getSession().then(({ data }) => {
+      const uid = data.session?.user?.id;
+      if (!uid) return;
+      perfilChannel = supabase.channel(`perfil-role-${uid}`)
+        .on('postgres_changes', {
+          event: 'UPDATE', schema: 'public', table: 'perfis', filter: `id=eq.${uid}`,
+        }, async () => {
+          const p = await fetchPerfil(uid);
+          setRole(p.role);
+          setAtivo(p.ativo);
+          setInad(p.inadimplenteDias);
+        })
+        .subscribe();
+    });
+
     return () => {
       subscription.unsubscribe();
+      if (perfilChannel) supabase.removeChannel(perfilChannel);
       window.removeEventListener('click', onActivity);
       window.removeEventListener('keydown', onActivity);
     };

@@ -3817,14 +3817,25 @@ const REGIOES_ESTADOS = {
 
 function ScrapersTab() {
   const [status, setStatus] = useState(null);
-  // Estado de execução manual por região (scraper e geocodificação)
+  const [geoStats, setGeoStats] = useState({ com: 0, sem: 0, total: 0 });
   const [scraperRegiao, setScraperRegiao] = useState({});
   const [geocRegiao, setGeocRegiao] = useState({});
   const [ultimoDebug, setUltimoDebug] = useState(null);
   const [puppeteerStatus, setPuppeteerStatus] = useState(null);
+  const [abaAtiva, setAbaAtiva] = useState(() => sessionStorage.getItem('scraper_aba') || 'caixa');
+  const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
+    // Contador de imóveis geocodificados (coluna: latitude)
+    Promise.all([
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).or('latitude.is.null,latitude.eq.0'),
+    ]).then(([comGeo, semGeo]) => {
+      const com = comGeo.count || 0;
+      const sem = semGeo.count || 0;
+      setGeoStats({ com, sem, total: com + sem });
+    });
   }, []);
 
   // Trigger manual via GitHub Actions (IPs não bloqueados pela Caixa)
@@ -3895,35 +3906,62 @@ function ScrapersTab() {
     { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
   ];
 
+  const geoPct = geoStats.total > 0 ? Math.round((geoStats.com / geoStats.total) * 100) : 0;
+
+  const ABAS = [
+    { key: 'caixa',      label: '🏦 Caixa Econômica', desc: '27 estados · 22h UTC' },
+    { key: 'leiloeiros', label: '🏛️ Leiloeiros',       desc: 'Mega · Sold · Superbid · BB' },
+    { key: 'geocod',     label: '📍 Geocodificação',    desc: `${geoStats.com.toLocaleString('pt-BR')} / ${geoStats.total.toLocaleString('pt-BR')} imóveis` },
+    { key: 'roadmap',    label: '🚀 Roadmap',           desc: '7 fontes planejadas' },
+  ];
+
   return (
-    <div style={{ maxWidth: 900 }}>
-      {/* ── Header KPIs ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+    <div style={{ maxWidth: 860 }}>
+      {/* ── KPIs ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Imóveis no banco',    valor: status?.total?.toLocaleString('pt-BR') || '—', icon: '🏠', cor: '#0D63DB' },
-          { label: 'Última atualização',  valor: status?.ultima_atualizacao ? new Date(status.ultima_atualizacao).toLocaleDateString('pt-BR') : '—', icon: '🕐', cor: '#059669' },
-          { label: 'Scraper (UTC)',        valor: '22:00–22:52', icon: '⏰', cor: '#7c3aed' },
-          { label: 'Geocod (UTC)',         valor: '00:00–04:20', icon: '📍', cor: '#d97706' },
+          { label: 'Imóveis no banco',   valor: status?.total?.toLocaleString('pt-BR') || '—',                                                        icon: '🏠', cor: '#0D63DB' },
+          { label: 'Geocodificados',      valor: `${geoStats.com.toLocaleString('pt-BR')} (${geoPct}%)`,                                               icon: '📍', cor: geoPct > 80 ? '#059669' : geoPct > 50 ? '#d97706' : '#dc2626' },
+          { label: 'Última atualização', valor: status?.ultima_atualizacao ? new Date(status.ultima_atualizacao).toLocaleString('pt-BR') : '—',       icon: '🕐', cor: '#475569' },
+          { label: 'Sem coordenadas',    valor: geoStats.sem.toLocaleString('pt-BR'),                                                                  icon: '⚠️', cor: geoStats.sem > 0 ? '#d97706' : '#059669' },
         ].map(k => (
           <div key={k.label} style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '14px 16px' }}>
             <div style={{ fontSize: 18, marginBottom: 4 }}>{k.icon}</div>
-            <div style={{ fontSize: 17, fontWeight: 900, color: k.cor }}>{k.valor}</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{k.label}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: k.cor, lineHeight: 1.2 }}>{k.valor}</div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{k.label}</div>
           </div>
         ))}
       </div>
 
-      {status && (
-        <div style={{ background: '#f8fafc', borderRadius: 10, padding: '8px 16px', marginBottom: 16, fontSize: 12, color: '#475569', display: 'flex', gap: 16 }}>
-          <span>📦 <b>{status.total?.toLocaleString('pt-BR') || 0}</b> imóveis no banco</span>
-          {status.ultima_atualizacao && <span>🕐 Última importação: <b>{new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</b></span>}
+      {/* ── Barra de progresso geocodificação ── */}
+      {geoStats.total > 0 && (
+        <div style={{ background: 'white', borderRadius: 10, border: '1px solid #e2e8f0', padding: '12px 16px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Cobertura de coordenadas GPS</span>
+            <span style={{ fontSize: 12, color: '#64748b' }}>{geoStats.com.toLocaleString('pt-BR')} de {geoStats.total.toLocaleString('pt-BR')} imóveis</span>
+          </div>
+          <div style={{ height: 8, background: '#f1f5f9', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${geoPct}%`, background: geoPct > 80 ? '#10b981' : geoPct > 50 ? '#f59e0b' : '#ef4444', borderRadius: 8, transition: 'width 0.5s' }} />
+          </div>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Imóveis com lat/lng permitem filtro por mapa e raio de busca para os clientes</div>
         </div>
       )}
+
+      {/* ── Abas ── */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+        {ABAS.map(a => (
+          <button key={a.key} onClick={() => mudarAba(a.key)}
+            style={{ padding: '8px 14px', borderRadius: 20, border: `1px solid ${abaAtiva === a.key ? '#0D63DB' : '#e2e8f0'}`, background: abaAtiva === a.key ? '#0D63DB' : 'white', color: abaAtiva === a.key ? 'white' : '#475569', fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}>
+            {a.label}
+            <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 6, opacity: 0.8 }}>{a.desc}</span>
+          </button>
+        ))}
+      </div>
 
       {ultimoDebug && (
         <div style={{ background: '#1e293b', borderRadius: 10, padding: 14, marginBottom: 16, color: '#e2e8f0', fontSize: 11, fontFamily: 'monospace' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontWeight: 700, color: '#fbbf24' }}>🔍 DEBUG SCRAPER — {ultimoDebug.uf} — {ultimoDebug.csv_tamanho} bytes</span>
+            <span style={{ fontWeight: 700, color: '#fbbf24' }}>DEBUG — {ultimoDebug.uf} — {ultimoDebug.csv_tamanho} bytes</span>
             <button onClick={() => setUltimoDebug(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12 }}>✕</button>
           </div>
           {ultimoDebug.csv_primeiras_linhas?.map((l, i) => (
@@ -3935,133 +3973,162 @@ function ScrapersTab() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        {/* ── Scraper Caixa ── */}
+      {/* ═══ ABA CAIXA ═══ */}
+      {abaAtiva === 'caixa' && (
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏦</div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>Scraper Caixa · 27 estados</div>
-              <div style={{ fontSize: 10, color: '#10b981', fontWeight: 700 }}>● Automático · 22:00–22:52 UTC · retry × 3</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏦</div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
+                <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático via GitHub Actions · 22:00–22:52 UTC · retry ×3</div>
+              </div>
             </div>
+            <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)}
+              disabled={scraperRegiao['todos']?.rodando}
+              style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#fff7ed', color: '#c2410c', fontWeight: 700, fontSize: 12, cursor: 'pointer', border: '1px solid #fed7aa' }}>
+              ▶ Executar todos agora
+            </button>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 340, overflowY: 'auto' }}>
+          {scraperRegiao['todos']?.agendado && <div style={{ fontSize: 11, color: '#7c3aed', marginBottom: 10 }}>🚀 Workflow agendado via GitHub Actions</div>}
+          {scraperRegiao['todos']?.erro && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 10 }}>⚠️ {scraperRegiao['todos'].erro}</div>}
+
+          {/* Grid de estados 4 colunas */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
             {AGENDA_SCRAPER.map(({ uf, hora }) => {
               const r = scraperRegiao[uf] || {};
-              const debugInfo = r.processados === 0 && r.todosErros?.length > 0 ? r.todosErros[0] : null;
               return (
-                <div key={uf} style={{ background: '#f8fafc', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
-                    <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
-                    {r.rodando ? (
-                      <span style={{ color: '#c2410c', fontSize: 10 }}>⏳ disparando...</span>
-                    ) : r.agendado ? (
-                      <span style={{ color: '#7c3aed', fontSize: 10 }}>🚀 agendado via GitHub Actions</span>
-                    ) : r.erro ? (
-                      <span style={{ color: '#dc2626', fontSize: 10 }}>❌ {r.erro.slice(0, 60)}</span>
-                    ) : null}
+                <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#e2e8f0'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                    <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
                     <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
-                      style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                      style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
                       {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
                     </button>
                   </div>
-                  {debugInfo && (
-                    <div style={{ marginTop: 4, padding: '6px 8px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 4, fontSize: 9, color: '#92400e', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                      <div style={{ fontWeight: 700, marginBottom: 2 }}>CSV raw ({debugInfo.csv_tamanho} bytes):</div>
-                      {(debugInfo.csv_primeiras_linhas || [debugInfo.erro]).map((l, i) => (
-                        <div key={i} style={{ opacity: i === 0 ? 1 : 0.7 }}>{l?.slice(0, 200)}</div>
-                      ))}
+                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
+                  {r.agendado && <div style={{ fontSize: 9, color: '#059669', fontWeight: 700, marginTop: 2 }}>🚀 Agendado</div>}
+                  {r.erro && <div style={{ fontSize: 9, color: '#dc2626', marginTop: 2 }} title={r.erro}>❌ Erro</div>}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>Cron automático diário · ▶ força execução manual por estado</div>
+        </div>
+      )}
+
+      {/* ═══ ABA LEILOEIROS ═══ */}
+      {abaAtiva === 'leiloeiros' && (
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Scraper de Leiloeiros (Puppeteer)</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>GitHub Actions · diário às 07:00 BRT · extrai HTML de leiloeiros privados</div>
+            </div>
+            <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
+              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: puppeteerStatus?.agendado ? '#f0fdf4' : '#0D63DB', color: puppeteerStatus?.agendado ? '#059669' : 'white', fontWeight: 700, fontSize: 13, cursor: puppeteerStatus?.rodando ? 'default' : 'pointer', border: puppeteerStatus?.agendado ? '1px solid #bbf7d0' : 'none' }}>
+              {puppeteerStatus?.rodando ? '⏳ Disparando...' : puppeteerStatus?.agendado ? '🚀 Agendado' : '▶ Executar agora'}
+            </button>
+          </div>
+          {puppeteerStatus?.erro && <div style={{ fontSize: 12, color: '#ef4444', background: '#fef2f2', padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>⚠️ {puppeteerStatus.erro}</div>}
+          {puppeteerStatus?.agendado && <div style={{ fontSize: 12, color: '#059669', background: '#f0fdf4', padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>✅ {puppeteerStatus.msg}</div>}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            {[
+              { nome: 'Mega Leilões',    volume: '~5–10k', cor: '#0D63DB', desc: 'Imóveis residenciais e comerciais' },
+              { nome: 'Sold Leilões',    volume: '~3–6k',  cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros bancos' },
+              { nome: 'Superbid',        volume: '~8–15k', cor: '#059669', desc: 'Maior marketplace de leilões do Brasil' },
+              { nome: 'Banco do Brasil', volume: '~2–4k',  cor: '#d97706', desc: 'Carteira imobiliária do BB' },
+            ].map(s => (
+              <div key={s.nome} style={{ background: `${s.cor}08`, borderRadius: 12, padding: '14px 16px', border: `1px solid ${s.cor}33` }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>{s.nome}</div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: `${s.cor}22`, color: s.cor }}>Ativo</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{s.desc}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: s.cor }}>{s.volume} imóveis/execução</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 14, padding: '10px 12px', background: '#f8fafc', borderRadius: 8 }}>
+            ℹ️ Puppeteer roda via GitHub Actions (IPs Microsoft não bloqueados pelos leiloeiros). Os imóveis são inseridos/atualizados na tabela <code>imoveis_leilao</code> com as coordenadas e dados completos para busca dos clientes.
+          </div>
+        </div>
+      )}
+
+      {/* ═══ ABA GEOCODIFICAÇÃO ═══ */}
+      {abaAtiva === 'geocod' && (
+        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação — Nominatim / OSM</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–04:20 UTC · cache ~70% · cascade 3 níveis</div>
+            </div>
+          </div>
+
+          {/* Resumo por nível */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+            {[
+              { label: 'Com coordenadas', valor: geoStats.com.toLocaleString('pt-BR'), cor: '#059669', bg: '#f0fdf4' },
+              { label: 'Sem coordenadas', valor: geoStats.sem.toLocaleString('pt-BR'), cor: '#d97706', bg: '#fefce8' },
+              { label: 'Cobertura GPS',   valor: `${geoPct}%`,                          cor: geoPct > 80 ? '#059669' : '#d97706', bg: '#f8fafc' },
+            ].map(k => (
+              <div key={k.label} style={{ background: k.bg, borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: k.cor }}>{k.valor}</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{k.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Grid de estados */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            {AGENDA_GEOCOD.map(({ uf, hora }) => {
+              const r = geocRegiao[uf] || {};
+              return (
+                <div key={uf} style={{ background: r.processados != null ? '#eff6ff' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${r.processados != null ? '#bfdbfe' : '#e2e8f0'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                    <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
+                    <button onClick={() => triggerGeoc(uf)} disabled={r.rodando}
+                      style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                      {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
+                  {r.rodando && <div style={{ fontSize: 9, color: '#0D63DB', fontWeight: 700, marginTop: 2 }}>⏳ Geocodificando...</div>}
+                  {r.processados != null && !r.rodando && (
+                    <div style={{ fontSize: 9, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 700, marginTop: 2 }}>
+                      {r.concluido ? '✅ Completo' : `📍 ${r.processados} proc · ${r.falhas || 0} falhas`}
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>Cron automático · use ▶ para forçar um estado manualmente</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
+            Cascade: endereço → bairro → cidade · ▶ força 1 lote por estado manualmente
+          </div>
         </div>
+      )}
 
-        {/* ── Geocodificação ── */}
+      {/* ═══ ABA ROADMAP ═══ */}
+      {abaAtiva === 'roadmap' && (
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🗺️</div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>Geocodificação · 27 estados</div>
-              <div style={{ fontSize: 10, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–04:20 UTC · cache ~70%</div>
-            </div>
+          <div style={{ fontWeight: 800, fontSize: 14, color: '#111', marginBottom: 4 }}>Próximas integrações</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+            Volume estimado ao integrar todas as fontes: <b style={{ color: '#0D63DB' }}>~50.000–80.000 imóveis</b> no banco.
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 340, overflowY: 'auto' }}>
-            {AGENDA_GEOCOD.map(({ uf, hora }) => {
-              const r = geocRegiao[uf] || {};
-              return (
-                <div key={uf} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
-                  <span style={{ minWidth: 34, color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{hora}</span>
-                  <span style={{ minWidth: 26, fontWeight: 800, color: '#334155' }}>{uf}</span>
-                  {r.rodando ? (
-                    <span style={{ color: '#0D63DB', fontSize: 10 }}>⏳ geocodificando...</span>
-                  ) : r.processados != null ? (
-                    <span style={{ color: r.concluido ? '#059669' : '#0D63DB', fontSize: 10 }}>
-                      {r.concluido ? '✅ OK' : `📍 ${r.processados} proc`}
-                    </span>
-                  ) : null}
-                  <button onClick={() => triggerGeoc(uf)} disabled={r.rodando}
-                    style={{ marginLeft: 'auto', padding: '1px 7px', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
-                    {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
-                  </button>
-                </div>
-              );
-            })}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            {scrapersPlanjados.map(s => (
+              <div key={s.nome} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px dashed #cbd5e1' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#334155' }}>{s.nome}</div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{s.volume} imóveis</div>
+                <div style={{ marginTop: 8, display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>Em breve</div>
+              </div>
+            ))}
           </div>
-          <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>Cron automático · use ▶ para forçar um estado manualmente</div>
         </div>
-      </div>
-
-      {/* ── Scraper Puppeteer (Leiloeiros) ── */}
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>🏛️ Leiloeiros — Scraper Puppeteer</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>GitHub Actions · todo dia às 7h BRT (após Caixa)</div>
-          </div>
-          <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
-            style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: puppeteerStatus?.agendado ? '#6ee7b722' : '#0D63DB', color: puppeteerStatus?.agendado ? '#059669' : 'white', fontWeight: 700, fontSize: 12, cursor: puppeteerStatus?.rodando ? 'default' : 'pointer' }}>
-            {puppeteerStatus?.rodando ? '…' : puppeteerStatus?.agendado ? '🚀 Agendado' : '▶ Executar agora'}
-          </button>
-        </div>
-        {puppeteerStatus?.erro && <div style={{ fontSize: 11, color: '#ef4444', marginBottom: 8 }}>⚠️ {puppeteerStatus.erro}</div>}
-        {puppeteerStatus?.agendado && <div style={{ fontSize: 11, color: '#059669', marginBottom: 8 }}>✅ {puppeteerStatus.msg}</div>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-          {[
-            { nome: 'Mega Leilões', volume: '~5-10k', cor: '#0D63DB' },
-            { nome: 'Sold Leilões', volume: '~3-6k', cor: '#7c3aed' },
-            { nome: 'Superbid', volume: '~8-15k', cor: '#059669' },
-            { nome: 'Banco do Brasil', volume: '~2-4k', cor: '#d97706' },
-          ].map(s => (
-            <div key={s.nome} style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 12px', border: `1px solid ${s.cor}33` }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: '#334155' }}>{s.nome}</div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{s.volume} imóveis</div>
-              <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: `${s.cor}22`, color: s.cor }}>Ativo</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Próximos Scrapers ── */}
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 800, fontSize: 14, color: '#111', marginBottom: 4 }}>🚀 Roadmap de Scrapers</div>
-        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
-          Volume estimado ao integrar todos os leiloeiros: <b>~50.000–80.000 imóveis</b>.
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-          {scrapersPlanjados.map(s => (
-            <div key={s.nome} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', border: '1px dashed #cbd5e1' }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#334155' }}>{s.nome}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{s.volume} imóveis</div>
-              <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#92400e' }}>Em breve</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -6073,7 +6140,8 @@ const ROLES_SIMULAVEIS = [
 export default function Admin() {
   const { role, loading, simularRole, roleSimulado } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState('Dashboard');
+  const [tab, setTab] = useState(() => sessionStorage.getItem('admin_tab') || 'Dashboard');
+  const mudarTab = (t) => { setTab(t); sessionStorage.setItem('admin_tab', t); };
 
   if (loading) {
     return <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p style={{ color: '#64748b' }}>Carregando...</p></div>;
@@ -6124,10 +6192,10 @@ export default function Admin() {
       <div style={S.body}>
         <div style={S.tabs}>
           {TABS.map(t => (
-            <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>{t}</button>
+            <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{t}</button>
           ))}
           {role === 'admin' && (
-            <button style={S.tab(tab === 'Marketing')} onClick={() => setTab('Marketing')}>Marketing</button>
+            <button style={S.tab(tab === 'Marketing')} onClick={() => mudarTab('Marketing')}>Marketing</button>
           )}
         </div>
 

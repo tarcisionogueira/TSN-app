@@ -8,7 +8,7 @@ import {
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
   Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck,
 } from 'lucide-react';
-import { extrairDadosDocumento, analisarMercado, gerarParecer } from '../utils/claude';
+import { extrairDadosDocumento, extrairDadosDocumentoUrl, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
@@ -157,6 +157,7 @@ export default function Analise() {
 
   const [textoDoc, setTextoDoc] = useState('');
   const [textoMatricula, setTextoMatricula] = useState('');
+  const [urlEdital, setUrlEdital] = useState('');
 
   // CNJ DataJud
   const [cnjNumero, setCnjNumero] = useState('');
@@ -293,6 +294,31 @@ export default function Analise() {
 
   const showMsg = (text, type='success') => { setMsg({ text, type }); setTimeout(()=>setMsg({text:'',type:''}), 3500); };
 
+  const aplicarExtracao = (ext) => {
+    if (!ext) return;
+    setD(p => ({
+      ...p, ...ext,
+      valorMercado: ext.valorMercado || (ext.valorAvaliacao ? ext.valorAvaliacao * 1.15 : p.valorMercado),
+      riscos: ext.riscos ? ext.riscos.map(r => ({
+        id: Date.now() + Math.random(), texto: r, tipo:
+          r.toLowerCase().includes('usufruto') || r.toLowerCase().includes('bloqueio') || r.toLowerCase().includes('impedimento') ? 'bloqueante' : 'alerta'
+      })) : p.riscos,
+    }));
+    setOpenSec(p => ({ ...p, doc: false, dados: true, viabilidade: true }));
+    showMsg('Dados extraídos com sucesso!');
+  };
+
+  const analisarUrl = async () => {
+    const url = urlEdital.trim();
+    if (!url || !/^https?:\/\//.test(url)) { showMsg('Informe uma URL válida (https://...).', 'error'); return; }
+    setLoadDoc(true);
+    try {
+      const ext = await extrairDadosDocumentoUrl(url);
+      aplicarExtracao(ext);
+    } catch (e) { showMsg(e.message || 'Erro ao analisar URL.', 'error'); }
+    setLoadDoc(false);
+  };
+
   const extrairDoc = async () => {
     if (!textoDoc.trim() && !textoMatricula.trim()) { showMsg('Cole o texto do edital ou matrícula primeiro.','error'); return; }
     setLoadDoc(true);
@@ -303,18 +329,7 @@ export default function Analise() {
         textoMatricula.trim() ? `=== MATRÍCULA ===\n${textoMatricula.trim()}` : '',
       ].filter(Boolean).join('\n\n');
       const ext = await extrairDadosDocumento(textoCompleto);
-      if (ext) {
-        setD(p => ({
-          ...p, ...ext,
-          valorMercado: ext.valorMercado || (ext.valorAvaliacao ? ext.valorAvaliacao*1.15 : p.valorMercado),
-          riscos: ext.riscos ? ext.riscos.map(r => ({
-            id: Date.now()+Math.random(), texto: r, tipo:
-              r.toLowerCase().includes('usufruto')||r.toLowerCase().includes('bloqueio')||r.toLowerCase().includes('impedimento') ? 'bloqueante' : 'alerta'
-          })) : p.riscos,
-        }));
-        setOpenSec(p => ({ ...p, doc:false, dados:true, viabilidade:true }));
-        showMsg('Dados extraídos com sucesso!');
-      }
+      aplicarExtracao(ext);
     } catch { showMsg('Erro ao extrair dados.','error'); }
     setLoadDoc(false);
   };
@@ -322,8 +337,44 @@ export default function Analise() {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.type==='text/plain') { setTextoDoc(await file.text()); }
-    else { showMsg('Use arquivos .txt ou cole o texto. PDF em breve.','error'); }
+    if (file.type === 'text/plain') {
+      setTextoDoc(await file.text());
+    } else if (file.type === 'application/pdf') {
+      const buf = await file.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      // Extrai via IA diretamente do PDF — sem precisar de texto intermediário
+      setLoadDoc(true);
+      try {
+        const ext = await extrairDadosDocumento('', b64);
+        if (ext) {
+          setTextoDoc(`[PDF: ${file.name}]`);
+          setD(p => ({
+            ...p,
+            nome: ext.nome || p.nome, tipo: ext.tipo || p.tipo,
+            endereco: ext.endereco || p.endereco, cidade: ext.cidade || p.cidade,
+            estado: ext.estado || p.estado, cep: ext.cep || p.cep,
+            valorAvaliacao: ext.valorAvaliacao || p.valorAvaliacao,
+            valorArrematacao: ext.valorArrematacao || p.valorArrematacao,
+            areaM2: ext.areaM2 || p.areaM2, areaTerrenoM2: ext.areaTerrenoM2 || p.areaTerrenoM2,
+            debitosAssumidos: ext.debitosAssumidos ?? p.debitosAssumidos,
+            iptuMensal: ext.iptuMensal ?? p.iptuMensal,
+            condominioMensal: ext.condominioMensal ?? p.condominioMensal,
+            laudemio: ext.laudemio ?? p.laudemio, foreiro: ext.foreiro ?? p.foreiro,
+            taxaLeiloeiroPercentual: ext.taxaLeiloeiroPercentual || p.taxaLeiloeiroPercentual,
+            somenteAVista: ext.somenteAVista ?? p.somenteAVista,
+            origem: ext.origem || p.origem, leiloeiro: ext.leiloeiro || p.leiloeiro,
+            dataLeilao: ext.dataLeilao || p.dataLeilao,
+            riscos: ext.riscos?.length ? ext.riscos.map(r => ({ id: Date.now()+Math.random(), texto: r, tipo: r.toLowerCase().includes('usufruto')||r.toLowerCase().includes('bloqueio')||r.toLowerCase().includes('impedimento') ? 'bloqueante' : 'alerta' })) : p.riscos,
+            observacoes: ext.observacoes || p.observacoes,
+          }));
+          setOpenSec(p => ({ ...p, doc: false, dados: true, viabilidade: true }));
+          showMsg(`PDF lido pela IA: ${file.name}`);
+        }
+      } catch { showMsg('Erro ao processar PDF.', 'error'); }
+      setLoadDoc(false);
+    } else {
+      showMsg('Use arquivos .pdf ou .txt.', 'error');
+    }
   };
 
   const analisarMercadoClick = async () => {
@@ -504,11 +555,21 @@ export default function Analise() {
           <textarea value={textoDoc} onChange={e=>setTextoDoc(e.target.value)} rows={7}
             placeholder="Cole aqui o texto do edital do leilão. A extração irá capturar endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, datas e muito mais..."
             style={{ width:'100%', padding:'12px', border:'1px solid #e2e8f0', borderRadius:10, fontSize:13, color:'#111111', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
+          {/* URL do edital/lote */}
+          <div style={{ display:'flex', gap:6 }}>
+            <input value={urlEdital} onChange={e=>setUrlEdital(e.target.value)} placeholder="URL do edital ou página do lote (https://...)"
+              style={{ flex:1, padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:13, color:'#111' }}
+              onKeyDown={e=>{ if(e.key==='Enter' && !loadDoc) analisarUrl(); }}/>
+            <button onClick={analisarUrl} disabled={loadDoc||analisesBloqueado||!urlEdital.trim()}
+              style={{ padding:'9px 14px', background:urlEdital.trim()&&!analisesBloqueado?'#7c3aed':'#e2e8f0', color:urlEdital.trim()&&!analisesBloqueado?'white':'#94a3b8', border:'none', borderRadius:9, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+              {loadDoc ? '⏳' : <><Search size={13}/> Analisar URL</>}
+            </button>
+          </div>
           <div style={{ display:'flex', gap:8 }}>
             <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #e2e8f0', borderRadius:10, color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer', transition:'border-color 0.2s' }}
               onMouseEnter={e=>e.currentTarget.style.borderColor='#0D63DB'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
-              <UploadCloud size={16}/> Upload .TXT
-              <input type="file" accept=".txt" onChange={handleFileUpload} style={{display:'none'}}/>
+              <UploadCloud size={16}/> Upload PDF ou .TXT
+              <input type="file" accept=".pdf,.txt" onChange={handleFileUpload} style={{display:'none'}}/>
             </label>
             <button onClick={extrairDoc} disabled={loadDoc||analisesBloqueado||(!textoDoc.trim()&&!textoMatricula.trim())}
               style={{ flex:2, padding:'10px', background:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'#0D63DB':'#e2e8f0', color:(textoDoc.trim()||textoMatricula.trim())&&!analisesBloqueado?'white':'#94a3b8', border:'none', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
@@ -517,7 +578,7 @@ export default function Analise() {
           </div>
           <div style={{ display:'flex', gap:8, fontSize:11, color:'#94a3b8' }}>
             <Info size={12} style={{flexShrink:0,marginTop:1}}/>
-            <span>Extrai: endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, laudêmio, datas e muito mais.</span>
+            <span>Cole a URL do lote, faça upload de PDF/TXT ou cole o texto do edital. A IA extrai todos os dados sem armazenar o arquivo.</span>
           </div>
         </div>
       </Section>
@@ -533,8 +594,17 @@ export default function Analise() {
               placeholder="Cole aqui o texto da matrícula do imóvel (certidão de inteiro teor). A análise identificará automaticamente ônus reais, hipotecas, penhoras, usufrutos, alienação fiduciária e histórico de proprietários..."
               style={{ width:'100%', padding:'12px', border:'1px solid #c4b5fd', borderRadius:10, fontSize:13, color:'#111111', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
             <label style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #c4b5fd', borderRadius:10, color:'#7c3aed', fontSize:13, fontWeight:600, cursor:'pointer' }}>
-              <UploadCloud size={16}/> Upload matrícula .TXT
-              <input type="file" accept=".txt" onChange={async e => { const f = e.target.files[0]; if (f) setTextoMatricula(await f.text()); }} style={{display:'none'}}/>
+              <UploadCloud size={16}/> Upload matrícula PDF ou .TXT
+              <input type="file" accept=".pdf,.txt" onChange={async e => {
+                const f = e.target.files[0]; if (!f) return;
+                if (f.type === 'application/pdf') {
+                  const buf = await f.arrayBuffer();
+                  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+                  const ext = await extrairDadosDocumento('', b64).catch(() => null);
+                  if (ext?.observacoes) setTextoMatricula(ext.observacoes);
+                  else setTextoMatricula(`[PDF matrícula: ${f.name}]`);
+                } else { setTextoMatricula(await f.text()); }
+              }} style={{display:'none'}}/>
             </label>
           </div>
         </Section>

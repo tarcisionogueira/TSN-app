@@ -64,7 +64,7 @@ async function salvarImoveis(imoveis, fonte) {
 
   const { error } = await supabase
     .from('imoveis_leilao')
-    .upsert(rows, { onConflict: 'fonte,fonte_id', ignoreDuplicates: false });
+    .upsert(rows, { onConflict: 'fonte_id', ignoreDuplicates: false });
 
   if (error) console.error(`  Erro ao salvar ${fonte}:`, error.message);
   else console.log(`  ✅ ${fonte}: ${rows.length} imóveis salvos`);
@@ -498,10 +498,9 @@ async function scraperBancoBrasil(browser, pageNum = 1) {
   });
 
   try {
-    // Tenta primeiro o portal de licitações e leilões do BB
-    const url = pageNum === 1
-      ? 'https://licitacoes-e-leiloes.bb.com.br/imoveis'
-      : `https://licitacoes-e-leiloes.bb.com.br/imoveis?pagina=${pageNum}`;
+    // Portal de venda de imóveis do BB (licitacoes-e-leiloes.bb.com.br mudou de domínio)
+    const base = 'https://www43.bb.com.br/portalbb/leiloes';
+    const url = pageNum === 1 ? base : `${base}?pagina=${pageNum}`;
 
     const respostas = await capturarRespostasJSON(page, url, {
       waitSelector: '[class*="card"], [class*="lote"], [class*="produto"], article',

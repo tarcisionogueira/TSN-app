@@ -2,7 +2,7 @@ import { apiCall } from './apiCall';
 // Cliente Claude — suporta dev (VITE_CLAUDE_KEY) e produção (/api/claude via Vercel)
 const DEV_KEY = import.meta.env.VITE_CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
-const MODEL_FAST = 'claude-haiku-4-5-20251001';
+const MODEL_FAST = 'claude-haiku-4-5';
 
 async function callAPI(payload, useSearch = false) {
   if (DEV_KEY) {
@@ -158,9 +158,40 @@ Retorne JSON: {"leiloeiros": [{"nome": "...", "site": "url ou null", "telefone":
   return parseJSON(extractText(data)) || { leiloeiros: [], fonteJunta: '' };
 }
 
-// Extrai dados do edital/matrícula
-export async function extrairDadosDocumento(texto) {
-  const prompt = `Analise o texto abaixo (edital ou matrícula de imóvel em leilão) e extraia os dados estruturados.
+// Extrai dados de uma URL (PDF ou página HTML) sem armazenar nada
+export async function extrairDadosDocumentoUrl(url) {
+  const instrucao = getInstrucaoExtracao();
+
+  // PDF URL: Claude lê diretamente via URL source (sem armazenamento)
+  if (/\.pdf($|\?)/i.test(url) || url.includes('pdf')) {
+    const content = [
+      { type: 'document', source: { type: 'url', url } },
+      { type: 'text', text: instrucao },
+    ];
+    const data = await callAPI({ model: MODEL_FAST, max_tokens: 2048, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
+    return parseJSON(extractText(data));
+  }
+
+  // Página HTML: busca via servidor (evita CORS) → extrai texto → análise
+  const r = await apiCall('/api/fetch-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+
+  let content;
+  if (d.type === 'pdf') {
+    content = [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: d.base64 } },
+      { type: 'text', text: instrucao },
+    ];
+  } else {
+    content = `${instrucao}\n\nCONTEÚDO DA PÁGINA:\n${d.texto}`;
+  }
+  const data = await callAPI({ model: MODEL_FAST, max_tokens: 2048, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
+  return parseJSON(extractText(data));
+}
+
+function getInstrucaoExtracao() {
+  return `Analise o documento (edital ou matrícula de imóvel em leilão) e extraia os dados estruturados.
 Retorne APENAS JSON:
 {
   "nome": "identificação curta",
@@ -185,15 +216,27 @@ Retorne APENAS JSON:
   "dataLeilao": "DD/MM/AAAA",
   "riscos": ["liste todos os gravames, ônus, pendências, usufrutos, hipotecas, penhoras, etc encontrados no texto"],
   "observacoes": "outras informações relevantes"
+}`;
 }
 
-TEXTO DO DOCUMENTO:
-${texto.substring(0, 6000)}`;
+// Extrai dados do edital/matrícula — aceita texto puro ou PDF (base64)
+export async function extrairDadosDocumento(texto, pdfBase64 = null) {
+  const instrucao = getInstrucaoExtracao();
+
+  let content;
+  if (pdfBase64) {
+    content = [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
+      { type: 'text', text: instrucao },
+    ];
+  } else {
+    content = `${instrucao}\n\nTEXTO DO DOCUMENTO:\n${texto.substring(0, 6000)}`;
+  }
 
   const data = await callAPI({
     model: MODEL_FAST,
     max_tokens: 2048,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{ role: 'user', content }],
     system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.',
   });
 
