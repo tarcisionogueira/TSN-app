@@ -56,23 +56,29 @@ export default async function handler(req) {
   const resultado = { modulo, timestamp: new Date().toISOString() };
 
   if (modulo === 'geral' || modulo === 'banco') {
-    const [total, ativos, semGeo, comGeo, comFoto] = await Promise.all([
+    const [total, ativos, semGeoNull, semGeoZero, comGeo, comFoto] = await Promise.all([
       countHead('imoveis_leilao'),
       countHead('imoveis_leilao?ativo=eq.true'),
-      countHead('imoveis_leilao?ativo=eq.true&or=(latitude.is.null,latitude.eq.0)'),
-      countHead('imoveis_leilao?ativo=eq.true&latitude=not.is.null&latitude=neq.0'),
+      countHead('imoveis_leilao?ativo=eq.true&latitude=is.null'),
+      countHead('imoveis_leilao?ativo=eq.true&latitude=eq.0'),
+      countHead('imoveis_leilao?ativo=eq.true&latitude=gt.0'),
       countHead('imoveis_leilao?ativo=eq.true&link_foto=like.*supabase*'),
     ]);
-    resultado.banco = { total, ativos, geocodificacao: { sem_coords: semGeo, com_coords: comGeo }, fotos: { com_foto: comFoto } };
+    const semGeoTotal = { ok: semGeoNull.ok && semGeoZero.ok, count: (semGeoNull.count || 0) + (semGeoZero.count || 0) };
+    resultado.banco = { total, ativos, geocodificacao: { sem_coords_null: semGeoNull, sem_coords_zero: semGeoZero, sem_coords_total: semGeoTotal, com_coords: comGeo }, fotos: { com_foto: comFoto } };
 
-    // Contagem por fonte (caixa vs leiloeiros)
+    // Contagem por fonte — sem filtro de ativo para ver distribuição real
     try {
-      const fontesR = await sb('imoveis_leilao?select=fonte&ativo=eq.true');
+      const fontesR = await sb('imoveis_leilao?select=fonte,ativo');
       if (fontesR.ok) {
         const rows = await fontesR.json();
-        const por_fonte = {};
-        rows.forEach(r => { por_fonte[r.fonte] = (por_fonte[r.fonte] || 0) + 1; });
+        const por_fonte = {}, por_fonte_ativo = {};
+        rows.forEach(r => {
+          por_fonte[r.fonte] = (por_fonte[r.fonte] || 0) + 1;
+          if (r.ativo) por_fonte_ativo[r.fonte] = (por_fonte_ativo[r.fonte] || 0) + 1;
+        });
         resultado.banco.por_fonte = por_fonte;
+        resultado.banco.por_fonte_ativo = por_fonte_ativo;
       }
     } catch (_) {}
   }

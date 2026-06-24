@@ -3975,6 +3975,10 @@ function ScrapersTab() {
         body: JSON.stringify({ estados: [uf] }),
       });
       const d = await r.json();
+      if (!r.ok || d.error) {
+        setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d.error || `HTTP ${r.status}` } }));
+        return;
+      }
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: d.processados === 0 } }));
       if (d.processados > 0) {
         Promise.all([
@@ -4208,6 +4212,15 @@ function ScrapersTab() {
             sublabel={caixaTodos.rodando ? 'Disparando workflows — não feche esta aba' : 'Scraper rodando em background · resultado em ~10 min'}
             cor="#c2410c"
           />
+          {sysDebug['scraper'] && (
+            <div style={{ marginBottom: 12, background: sysDebug['scraper'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${sysDebug['scraper'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+              <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['scraper'].status === 200 ? '#059669' : '#dc2626' }}>
+                {sysDebug['scraper'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['scraper'].status})`}
+                <button onClick={() => setSysDebug(s => ({ ...s, scraper: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
+              </div>
+              <pre style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 220, overflow: 'auto' }}>{JSON.stringify(sysDebug['scraper'].body, null, 2)}</pre>
+            </div>
+          )}
           {scraperRegiao['todos']?.erro && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 10 }}>⚠️ {scraperRegiao['todos'].erro}</div>}
 
           {/* Grid de estados 4 colunas */}
@@ -4294,6 +4307,16 @@ function ScrapersTab() {
               </button>
             </div>
           </div>
+
+          {sysDebug['geocod'] && (
+            <div style={{ marginBottom: 12, background: sysDebug['geocod'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${sysDebug['geocod'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+              <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['geocod'].status === 200 ? '#059669' : '#dc2626' }}>
+                {sysDebug['geocod'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['geocod'].status})`}
+                <button onClick={() => setSysDebug(s => ({ ...s, geocod: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
+              </div>
+              <pre style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 220, overflow: 'auto' }}>{JSON.stringify(sysDebug['geocod'].body, null, 2)}</pre>
+            </div>
+          )}
 
           {/* Resumo por nível */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>

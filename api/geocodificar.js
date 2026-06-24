@@ -124,7 +124,8 @@ function cacheKey(im) {
 async function processarLote(estadosFilter, lote = 50) {
   // Busca imóveis pendentes: latitude IS NULL (nunca geocodificados) OU latitude=0 (tentativa anterior falhou)
   // Usa duas queries separadas para evitar a sintaxe `or=()` do PostgREST que falha com parâmetros combinados
-  const base = `imoveis_leilao?select=id,cidade,estado,endereco,bairro&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`;
+  // Sem filtro ativo — service key vê tudo; geocodifica independente do status
+  const base = `imoveis_leilao?select=id,cidade,estado,endereco,bairro${estadosFilter}&order=atualizado_em.desc&limit=${lote}`;
   const [r1, r2] = await Promise.all([
     sb(`${base}&latitude=is.null`),
     sb(`${base}&latitude=eq.0`),
