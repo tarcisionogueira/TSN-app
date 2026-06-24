@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FileText, Sparkles, Upload, Camera, UserCheck, ChevronRight, X, CheckCircle2, Loader2, AlertTriangle, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -37,17 +37,22 @@ const TIPOS_CONTRATO = [
 
 export default function CriarContrato() {
   const nav = useNavigate();
+  const loc = useLocation();
   const isMobile = useIsMobile();
   const { user, role } = useAuth();
 
+  // Pré-preenchimento via navigation state (ex: vindo da tela de arrematação)
+  const _preState = loc.state || {};
+  const _tipoInicial = _preState.tipo === 'procuracao' ? 'Procuração / representação legal' : 'Prestação de Serviços';
+
   // Passo: 'modo' → 'detalhes' → 'identidade' → 'revisao' → 'enviado'
-  const [passo, setPasso] = useState('modo');
-  const [modo, setModo] = useState(null); // 'assinar' | 'gerar'
+  const [passo, setPasso] = useState(_preState.tipo ? 'detalhes' : 'modo');
+  const [modo, setModo] = useState(_preState.tipo ? 'gerar' : null); // 'assinar' | 'gerar'
 
   // Campos comuns
-  const [titulo, setTitulo] = useState('');
-  const [emailAssinante, setEmailAssinante] = useState('');
-  const [tipoContrato, setTipoContrato] = useState('Prestação de Serviços');
+  const [titulo, setTitulo] = useState(_preState.titulo || '');
+  const [emailAssinante, setEmailAssinante] = useState(_preState.emailAssinante || '');
+  const [tipoContrato, setTipoContrato] = useState(_tipoInicial);
   const [verificacao, setVerificacao] = useState('nenhuma');
   const [docsExtras, setDocsExtras] = useState([]); // ids dos docs extras exigidos
 
@@ -57,7 +62,7 @@ export default function CriarContrato() {
   const [arquivoUrl, setArquivoUrl] = useState('');
 
   // Modo gerar
-  const [descricaoIA, setDescricaoIA] = useState('');
+  const [descricaoIA, setDescricaoIA] = useState(_preState.contexto || '');
   const [partesInfo, setPartesInfo] = useState('');
   const [contratoGerado, setContratoGerado] = useState('');
   const [gerandoIA, setGerandoIA] = useState(false);

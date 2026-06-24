@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
@@ -139,6 +139,13 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
           {arr && <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 999, background: statusInfo.bg, color: statusInfo.color }}>{statusInfo.label}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {arr && (podeEscrever || role === 'advogado') && (
+            <button
+              onClick={() => nav('/contratos/novo', { state: { tipo: 'procuracao', contexto: `Procuração para arrematação do imóvel: ${imovelTitulo}. Processo nº ${arr.numero_processo || 'não informado'}. Arrematante: ${arr.arrematante_nome || arr.arrematante_id}.` } })}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: 'none', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              <ScrollText size={12} /> Gerar Procuração
+            </button>
+          )}
           {arr && podeEscrever && arr.status === 'em_processo' && (
             <button onClick={() => atualizarStatus('finalizado')} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#dcfce7', color: '#166534', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>✓ Finalizar</button>
           )}

@@ -172,8 +172,19 @@ export async function processarVencido({ gatewayCustomerId, email, gateway }) {
       update.role = 'explorador';
     }
     await supabase.from('perfis').update(update).eq('id', cliente.id);
+    // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
+    await setExpiracaoDocumentos(cliente.id);
   }
   return { ok: true };
+}
+
+async function setExpiracaoDocumentos(userId) {
+  const expira = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  // Só seta em docs que ainda não têm expira_em (não sobrescreve prazo já existente)
+  await supabase.from('usuario_docs')
+    .update({ expira_em: expira })
+    .eq('user_id', userId)
+    .is('expira_em', null);
 }
 
 // ── PAGAMENTO RECUSADO ────────────────────────────────────────────────────────
@@ -190,8 +201,12 @@ export async function processarRecusado({ gatewayCustomerId, email, motivo, gate
       update.inadimplente_desde = new Date().toISOString().slice(0, 10);
       update.role_anterior = cliente.role;
       update.role = 'explorador';
+      await supabase.from('perfis').update(update).eq('id', cliente.id);
+      // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
+      await setExpiracaoDocumentos(cliente.id);
+    } else {
+      await supabase.from('perfis').update(update).eq('id', cliente.id);
     }
-    await supabase.from('perfis').update(update).eq('id', cliente.id);
   }
   return { ok: true };
 }
