@@ -1,5 +1,6 @@
 // Endpoint de diagnóstico: verifica auth e conta imóveis pendentes de geocodificação
 // Removível após debug. Acessível apenas por admin.
+export const config = { runtime: 'edge' };
 export const maxDuration = 30;
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;

@@ -1,3 +1,4 @@
+export const config = { runtime: 'edge' };
 export const maxDuration = 300;
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
