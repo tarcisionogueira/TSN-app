@@ -3822,7 +3822,8 @@ function ScrapersTab() {
   const [geocRegiao, setGeocRegiao] = useState({});
   const [ultimoDebug, setUltimoDebug] = useState(null);
   const [puppeteerStatus, setPuppeteerStatus] = useState(null);
-  const [abaAtiva, setAbaAtiva] = useState('caixa');
+  const [abaAtiva, setAbaAtiva] = useState(() => sessionStorage.getItem('scraper_aba') || 'caixa');
+  const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
@@ -3949,7 +3950,7 @@ function ScrapersTab() {
       {/* ── Abas ── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
         {ABAS.map(a => (
-          <button key={a.key} onClick={() => setAbaAtiva(a.key)}
+          <button key={a.key} onClick={() => mudarAba(a.key)}
             style={{ padding: '8px 14px', borderRadius: 20, border: `1px solid ${abaAtiva === a.key ? '#0D63DB' : '#e2e8f0'}`, background: abaAtiva === a.key ? '#0D63DB' : 'white', color: abaAtiva === a.key ? 'white' : '#475569', fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}>
             {a.label}
             <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 6, opacity: 0.8 }}>{a.desc}</span>
@@ -6139,7 +6140,8 @@ const ROLES_SIMULAVEIS = [
 export default function Admin() {
   const { role, loading, simularRole, roleSimulado } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState('Dashboard');
+  const [tab, setTab] = useState(() => sessionStorage.getItem('admin_tab') || 'Dashboard');
+  const mudarTab = (t) => { setTab(t); sessionStorage.setItem('admin_tab', t); };
 
   if (loading) {
     return <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p style={{ color: '#64748b' }}>Carregando...</p></div>;
@@ -6190,10 +6192,10 @@ export default function Admin() {
       <div style={S.body}>
         <div style={S.tabs}>
           {TABS.map(t => (
-            <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>{t}</button>
+            <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{t}</button>
           ))}
           {role === 'admin' && (
-            <button style={S.tab(tab === 'Marketing')} onClick={() => setTab('Marketing')}>Marketing</button>
+            <button style={S.tab(tab === 'Marketing')} onClick={() => mudarTab('Marketing')}>Marketing</button>
           )}
         </div>
 

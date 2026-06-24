@@ -8,7 +8,7 @@ import {
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
   Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck,
 } from 'lucide-react';
-import { extrairDadosDocumento, analisarMercado, gerarParecer } from '../utils/claude';
+import { extrairDadosDocumento, extrairDadosDocumentoUrl, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
@@ -157,6 +157,7 @@ export default function Analise() {
 
   const [textoDoc, setTextoDoc] = useState('');
   const [textoMatricula, setTextoMatricula] = useState('');
+  const [urlEdital, setUrlEdital] = useState('');
 
   // CNJ DataJud
   const [cnjNumero, setCnjNumero] = useState('');
@@ -293,6 +294,31 @@ export default function Analise() {
 
   const showMsg = (text, type='success') => { setMsg({ text, type }); setTimeout(()=>setMsg({text:'',type:''}), 3500); };
 
+  const aplicarExtracao = (ext) => {
+    if (!ext) return;
+    setD(p => ({
+      ...p, ...ext,
+      valorMercado: ext.valorMercado || (ext.valorAvaliacao ? ext.valorAvaliacao * 1.15 : p.valorMercado),
+      riscos: ext.riscos ? ext.riscos.map(r => ({
+        id: Date.now() + Math.random(), texto: r, tipo:
+          r.toLowerCase().includes('usufruto') || r.toLowerCase().includes('bloqueio') || r.toLowerCase().includes('impedimento') ? 'bloqueante' : 'alerta'
+      })) : p.riscos,
+    }));
+    setOpenSec(p => ({ ...p, doc: false, dados: true, viabilidade: true }));
+    showMsg('Dados extraídos com sucesso!');
+  };
+
+  const analisarUrl = async () => {
+    const url = urlEdital.trim();
+    if (!url || !/^https?:\/\//.test(url)) { showMsg('Informe uma URL válida (https://...).', 'error'); return; }
+    setLoadDoc(true);
+    try {
+      const ext = await extrairDadosDocumentoUrl(url);
+      aplicarExtracao(ext);
+    } catch (e) { showMsg(e.message || 'Erro ao analisar URL.', 'error'); }
+    setLoadDoc(false);
+  };
+
   const extrairDoc = async () => {
     if (!textoDoc.trim() && !textoMatricula.trim()) { showMsg('Cole o texto do edital ou matrícula primeiro.','error'); return; }
     setLoadDoc(true);
@@ -303,18 +329,7 @@ export default function Analise() {
         textoMatricula.trim() ? `=== MATRÍCULA ===\n${textoMatricula.trim()}` : '',
       ].filter(Boolean).join('\n\n');
       const ext = await extrairDadosDocumento(textoCompleto);
-      if (ext) {
-        setD(p => ({
-          ...p, ...ext,
-          valorMercado: ext.valorMercado || (ext.valorAvaliacao ? ext.valorAvaliacao*1.15 : p.valorMercado),
-          riscos: ext.riscos ? ext.riscos.map(r => ({
-            id: Date.now()+Math.random(), texto: r, tipo:
-              r.toLowerCase().includes('usufruto')||r.toLowerCase().includes('bloqueio')||r.toLowerCase().includes('impedimento') ? 'bloqueante' : 'alerta'
-          })) : p.riscos,
-        }));
-        setOpenSec(p => ({ ...p, doc:false, dados:true, viabilidade:true }));
-        showMsg('Dados extraídos com sucesso!');
-      }
+      aplicarExtracao(ext);
     } catch { showMsg('Erro ao extrair dados.','error'); }
     setLoadDoc(false);
   };
@@ -540,6 +555,16 @@ export default function Analise() {
           <textarea value={textoDoc} onChange={e=>setTextoDoc(e.target.value)} rows={7}
             placeholder="Cole aqui o texto do edital do leilão. A extração irá capturar endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, datas e muito mais..."
             style={{ width:'100%', padding:'12px', border:'1px solid #e2e8f0', borderRadius:10, fontSize:13, color:'#111111', resize:'vertical', boxSizing:'border-box', lineHeight:1.6, fontFamily:'inherit' }}/>
+          {/* URL do edital/lote */}
+          <div style={{ display:'flex', gap:6 }}>
+            <input value={urlEdital} onChange={e=>setUrlEdital(e.target.value)} placeholder="URL do edital ou página do lote (https://...)"
+              style={{ flex:1, padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:13, color:'#111' }}
+              onKeyDown={e=>{ if(e.key==='Enter' && !loadDoc) analisarUrl(); }}/>
+            <button onClick={analisarUrl} disabled={loadDoc||analisesBloqueado||!urlEdital.trim()}
+              style={{ padding:'9px 14px', background:urlEdital.trim()&&!analisesBloqueado?'#7c3aed':'#e2e8f0', color:urlEdital.trim()&&!analisesBloqueado?'white':'#94a3b8', border:'none', borderRadius:9, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+              {loadDoc ? '⏳' : <><Search size={13}/> Analisar URL</>}
+            </button>
+          </div>
           <div style={{ display:'flex', gap:8 }}>
             <label style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:7, padding:'10px', border:'2px dashed #e2e8f0', borderRadius:10, color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer', transition:'border-color 0.2s' }}
               onMouseEnter={e=>e.currentTarget.style.borderColor='#0D63DB'} onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
@@ -553,7 +578,7 @@ export default function Analise() {
           </div>
           <div style={{ display:'flex', gap:8, fontSize:11, color:'#94a3b8' }}>
             <Info size={12} style={{flexShrink:0,marginTop:1}}/>
-            <span>Extrai: endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, laudêmio, datas e muito mais.</span>
+            <span>Cole a URL do lote, faça upload de PDF/TXT ou cole o texto do edital. A IA extrai todos os dados sem armazenar o arquivo.</span>
           </div>
         </div>
       </Section>

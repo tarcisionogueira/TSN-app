@@ -158,9 +158,40 @@ Retorne JSON: {"leiloeiros": [{"nome": "...", "site": "url ou null", "telefone":
   return parseJSON(extractText(data)) || { leiloeiros: [], fonteJunta: '' };
 }
 
-// Extrai dados do edital/matrícula — aceita texto puro ou PDF (base64)
-export async function extrairDadosDocumento(texto, pdfBase64 = null) {
-  const instrucao = `Analise o documento (edital ou matrícula de imóvel em leilão) e extraia os dados estruturados.
+// Extrai dados de uma URL (PDF ou página HTML) sem armazenar nada
+export async function extrairDadosDocumentoUrl(url) {
+  const instrucao = getInstrucaoExtracao();
+
+  // PDF URL: Claude lê diretamente via URL source (sem armazenamento)
+  if (/\.pdf($|\?)/i.test(url) || url.includes('pdf')) {
+    const content = [
+      { type: 'document', source: { type: 'url', url } },
+      { type: 'text', text: instrucao },
+    ];
+    const data = await callAPI({ model: MODEL_FAST, max_tokens: 2048, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
+    return parseJSON(extractText(data));
+  }
+
+  // Página HTML: busca via servidor (evita CORS) → extrai texto → análise
+  const r = await apiCall('/api/fetch-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+
+  let content;
+  if (d.type === 'pdf') {
+    content = [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: d.base64 } },
+      { type: 'text', text: instrucao },
+    ];
+  } else {
+    content = `${instrucao}\n\nCONTEÚDO DA PÁGINA:\n${d.texto}`;
+  }
+  const data = await callAPI({ model: MODEL_FAST, max_tokens: 2048, messages: [{ role: 'user', content }], system: 'Extraia dados de documentos imobiliários. Retorne apenas JSON válido.' });
+  return parseJSON(extractText(data));
+}
+
+function getInstrucaoExtracao() {
+  return `Analise o documento (edital ou matrícula de imóvel em leilão) e extraia os dados estruturados.
 Retorne APENAS JSON:
 {
   "nome": "identificação curta",
@@ -186,6 +217,11 @@ Retorne APENAS JSON:
   "riscos": ["liste todos os gravames, ônus, pendências, usufrutos, hipotecas, penhoras, etc encontrados no texto"],
   "observacoes": "outras informações relevantes"
 }`;
+}
+
+// Extrai dados do edital/matrícula — aceita texto puro ou PDF (base64)
+export async function extrairDadosDocumento(texto, pdfBase64 = null) {
+  const instrucao = getInstrucaoExtracao();
 
   let content;
   if (pdfBase64) {

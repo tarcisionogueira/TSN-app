@@ -323,7 +323,17 @@ export default function Busca() {
       pagamento: _urlParams.pagamento ? _urlParams.pagamento.split(',').filter(Boolean) : [],
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [filtros, setFiltros] = useState(filtrosFromUrl || FILTROS_INICIAL);
+  // Persiste filtros no sessionStorage para manter estado no F5
+  const _filtrosInicio = React.useMemo(() => {
+    if (filtrosFromUrl) return filtrosFromUrl;
+    try { const s = sessionStorage.getItem('busca_filtros'); return s ? JSON.parse(s) : FILTROS_INICIAL; } catch { return FILTROS_INICIAL; }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [filtros, setFiltros] = useState(_filtrosInicio);
+  const setFiltrosPersist = (fn) => setFiltros(prev => {
+    const next = typeof fn === 'function' ? fn(prev) : fn;
+    try { sessionStorage.setItem('busca_filtros', JSON.stringify(next)); } catch {}
+    return next;
+  });
   const [filtrosSalvos, setFiltrosSalvos] = useState([]);
   const [nomeFiltro, setNomeFiltro] = useState('');
   const [showSalvarModal, setShowSalvarModal] = useState(false);
@@ -335,7 +345,7 @@ export default function Busca() {
   const [buscaFeita, setBuscaFeita] = useState(false);
   const [showFiltros, setShowFiltros] = useState(true);
   const [selecionados, setSelecionados] = useState([]);
-  const [sortBy, setSortBy] = useState('desconto_desc');
+  const [sortBy, setSortBy] = useState(() => { try { return sessionStorage.getItem('busca_sort') || 'desconto_desc'; } catch { return 'desconto_desc'; } });
   const [pagina, setPagina] = useState(1);
   const [totalResultados, setTotalResultados] = useState(0);
   const POR_PAGINA = 20;
@@ -381,7 +391,7 @@ export default function Busca() {
     return () => clearTimeout(timer);
   }, [filtrosFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const up = (name, val) => setFiltros(p => ({ ...p, [name]: val }));
+  const up = (name, val) => setFiltrosPersist(p => ({ ...p, [name]: val }));
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x=>x!==v) : [...filtros.pagamento, v]);
   const toggleSelecionado = (id) => setSelecionados(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
   const isSelecionado = (id) => selecionados.includes(id);
@@ -390,7 +400,8 @@ export default function Busca() {
   const PAGAMENTO_DB = PAGAMENTO_FILTRO_DB;
 
   const limparFiltros = () => {
-    setFiltros(FILTROS_INICIAL);
+    setFiltrosPersist(FILTROS_INICIAL);
+    try { sessionStorage.removeItem('busca_filtros'); sessionStorage.removeItem('busca_sort'); } catch {}
     setBuscaCidade('');
     setSelecionados([]);
     setPagina(1);
@@ -927,7 +938,7 @@ export default function Busca() {
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>Filtros salvos:</span>
             {filtrosSalvos.map(filtro => (
               <span key={filtro.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#084BA6', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                <span onClick={() => setFiltros(filtro.filtros)}>{filtro.nome}</span>
+                <span onClick={() => setFiltrosPersist(filtro.filtros)}>{filtro.nome}</span>
                 <button onClick={() => deletarFiltro(filtro.id)} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center' }}>×</button>
               </span>
             ))}
@@ -976,7 +987,7 @@ export default function Busca() {
           {/* Linha 2: controles (só quando há resultados) */}
           {buscaFeita && !loading && (
             <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', paddingTop:10, borderTop:'1px solid #f1f5f9' }}>
-              <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); setPagina(1); buscarPagina(1, filtros, e.target.value, centroRaio, raioAtivo, raioKmAtivo); }}
+              <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); try { sessionStorage.setItem('busca_sort', e.target.value); } catch {} setPagina(1); buscarPagina(1, filtros, e.target.value, centroRaio, raioAtivo, raioKmAtivo); }}
                 style={{ padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:600, color:'#334155', background:'white', cursor:'pointer' }}>
                 <option value="desconto_desc">Maior desconto primeiro</option>
                 <option value="desconto_asc">Menor desconto primeiro</option>
