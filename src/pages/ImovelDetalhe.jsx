@@ -1,8 +1,287 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+
+const TIPO_ANEXO_LABEL = {
+  edital: 'Edital', auto_arrematacao: 'Auto de Arrematação', carta_arrematacao: 'Carta de Arrematação',
+  matricula: 'Matrícula', contrato: 'Contrato', procuracao: 'Procuração', outro: 'Outro',
+};
+const TIPO_DOC_LABEL = {
+  identidade: 'Identidade/CPF', comprovante_pagamento: 'Comprovante de Pagamento',
+  procuracao: 'Procuração', cnd: 'CND/Certidão', outro: 'Outro',
+};
+const STATUS_ARR = {
+  em_processo: { label: 'Em Processo', bg: '#fef9c3', color: '#92400e' },
+  finalizado:  { label: 'Finalizado',  bg: '#dcfce7', color: '#166534' },
+  cancelado:   { label: 'Cancelado',   bg: '#fee2e2', color: '#991b1b' },
+};
+
+function SecaoArrematacao({ imovelId, imovelTitulo }) {
+  const { user, role } = useAuth();
+  const [dados, setDados] = useState(null); // { arrematacao, anexos, docs }
+  const [loading, setLoading] = useState(true);
+  const [aberto, setAberto] = useState({ processo: true, pessoal: true });
+  const [modalAberto, setModalAberto] = useState(false);
+  const [form, setForm] = useState({ arrematante_email: '', valor_arrematado: '', data_leilao: '', leiloeiro: '', numero_processo: '', observacoes: '' });
+  const [salvando, setSalvando] = useState(false);
+  const [uploadando, setUploadando] = useState({});
+  const inputProcessoRef = useRef();
+  const inputPessoalRef = useRef();
+
+  const ROLES_ESCRITA = ['admin', 'analista'];
+  const ROLES_LEITURA = ['admin', 'analista', 'advogado', 'consultor'];
+  const podeVer = ROLES_LEITURA.includes(role) || dados?.arrematacao?.arrematante_id === user?.id;
+  const podeEscrever = ROLES_ESCRITA.includes(role);
+  const podeAnexo = podeEscrever || role === 'advogado';
+
+  const token = async () => (await supabase.auth.getSession()).data.session?.access_token;
+
+  const carregar = async () => {
+    setLoading(true);
+    try {
+      const t = await token();
+      const r = await fetch(`/api/arrematacoes?imovel_id=${imovelId}`, { headers: { Authorization: `Bearer ${t}` } });
+      if (r.ok) setDados(await r.json());
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { if (user && (ROLES_LEITURA.includes(role) || role === 'assessorado' || role === 'explorador')) carregar(); else setLoading(false); }, [user, role]); // eslint-disable-line
+
+  const registrar = async () => {
+    setSalvando(true);
+    try {
+      // Busca arrematante pelo email
+      const { data: perfis } = await supabase.from('perfis').select('id,nome').ilike('email', form.arrematante_email.trim()).limit(1);
+      if (!perfis?.length) { alert('Usuário não encontrado com esse email'); setSalvando(false); return; }
+      const arrematante_id = perfis[0].id;
+      const t = await token();
+      const r = await fetch('/api/arrematacoes', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imovel_id: imovelId, arrematante_id, valor_arrematado: parseFloat(form.valor_arrematado) || null, data_leilao: form.data_leilao || null, leiloeiro: form.leiloeiro, numero_processo: form.numero_processo, observacoes: form.observacoes }),
+      });
+      if (r.ok) { setModalAberto(false); carregar(); }
+      else { const e = await r.json(); alert(e.error || 'Erro ao registrar'); }
+    } finally { setSalvando(false); }
+  };
+
+  const atualizarStatus = async (status) => {
+    const t = await token();
+    await fetch(`/api/arrematacoes?id=${dados.arrematacao.id}`, {
+      method: 'PATCH', headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    carregar();
+  };
+
+  const uploadAnexo = async (file, tabela) => {
+    if (!file) return;
+    const key = `${tabela}_${file.name}`;
+    setUploadando(u => ({ ...u, [key]: true }));
+    try {
+      const t = await token();
+      const arrId = dados?.arrematacao?.id || 'geral';
+      const tipo = tabela === 'imovel' ? 'outro' : 'outro';
+      const nomeArq = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+      // Pega URL assinada
+      const signR = await fetch(`/api/arrematacoes?signed_url=1&arrematacao_id=${arrId}&tipo=${tipo}&nome=${nomeArq}&tabela=${tabela}`, {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!signR.ok) { alert('Erro ao preparar upload'); return; }
+      const { signedURL, publicUrl } = await signR.json();
+
+      // Upload direto para Storage
+      const upR = await fetch(signedURL, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
+      if (!upR.ok) { alert('Erro no upload'); return; }
+
+      // Salva registro
+      if (tabela === 'imovel') {
+        const r = await fetch(`/api/arrematacoes?anexo=1`, {
+          method: 'POST', headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ arrematacao_id: arrId, imovel_id: imovelId, tipo, nome: file.name, url: publicUrl, tamanho_kb: Math.round(file.size / 1024) }),
+        });
+        if (!r.ok) alert('Erro ao registrar anexo');
+      } else {
+        await supabase.from('usuario_docs').insert({ user_id: user.id, arrematacao_id: arrId, tipo, nome: file.name, url: publicUrl, tamanho_kb: Math.round(file.size / 1024) });
+      }
+      carregar();
+    } finally { setUploadando(u => ({ ...u, [key]: false })); }
+  };
+
+  const deletarAnexo = async (id, tabela) => {
+    if (!confirm('Remover documento?')) return;
+    const t = await token();
+    await fetch(`/api/arrematacoes?id=${id}&tabela=${tabela}`, { method: 'DELETE', headers: { Authorization: `Bearer ${t}` } });
+    carregar();
+  };
+
+  const deletarDocPessoal = async (id) => {
+    if (!confirm('Remover documento?')) return;
+    await supabase.from('usuario_docs').delete().eq('id', id).eq('user_id', user.id);
+    carregar();
+  };
+
+  if (!user || loading) return null;
+  if (!podeVer && !podeEscrever) return null;
+
+  const arr = dados?.arrematacao;
+  const statusInfo = arr ? (STATUS_ARR[arr.status] || STATUS_ARR.em_processo) : null;
+
+  return (
+    <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, marginTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: arr ? 16 : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <UserCheck size={18} color="#7c3aed" />
+          <span style={{ fontWeight: 800, fontSize: 15, color: '#111' }}>Arrematação</span>
+          {arr && <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 999, background: statusInfo.bg, color: statusInfo.color }}>{statusInfo.label}</span>}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {arr && podeEscrever && arr.status === 'em_processo' && (
+            <button onClick={() => atualizarStatus('finalizado')} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#dcfce7', color: '#166534', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>✓ Finalizar</button>
+          )}
+          {arr && podeEscrever && arr.status !== 'cancelado' && (
+            <button onClick={() => atualizarStatus('cancelado')} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#991b1b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>✕ Cancelar</button>
+          )}
+          {!arr && podeEscrever && (
+            <button onClick={() => setModalAberto(true)} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#7c3aed', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>+ Registrar Arrematação</button>
+          )}
+        </div>
+      </div>
+
+      {arr && (
+        <>
+          {/* Info da arrematação */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 20, background: '#f8fafc', borderRadius: 10, padding: 14 }}>
+            {arr.arrematante_nome && <div><div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>ARREMATANTE</div><div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{arr.arrematante_nome}</div></div>}
+            {arr.valor_arrematado && <div><div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>VALOR ARREMATADO</div><div style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>R$ {Number(arr.valor_arrematado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div></div>}
+            {arr.data_leilao && <div><div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>DATA DO LEILÃO</div><div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{new Date(arr.data_leilao + 'T12:00:00').toLocaleDateString('pt-BR')}</div></div>}
+            {arr.leiloeiro && <div><div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>LEILOEIRO</div><div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{arr.leiloeiro}</div></div>}
+            {arr.numero_processo && <div><div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Nº PROCESSO</div><div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{arr.numero_processo}</div></div>}
+          </div>
+          {arr.observacoes && <div style={{ fontSize: 13, color: '#475569', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>{arr.observacoes}</div>}
+
+          {/* Documentos do processo */}
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, marginBottom: 12 }}>
+            <button onClick={() => setAberto(a => ({ ...a, processo: !a.processo }))} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, color: '#111' }}>
+                <Paperclip size={14} color="#7c3aed" /> Documentos do Processo
+                <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>({(dados.anexos || []).length})</span>
+              </div>
+              {aberto.processo ? <ChevronUp size={15} color="#94a3b8" /> : <ChevronDown size={15} color="#94a3b8" />}
+            </button>
+            {aberto.processo && (
+              <div style={{ padding: '0 16px 14px' }}>
+                {(dados.anexos || []).length === 0 && <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>Nenhum documento adicionado.</div>}
+                {(dados.anexos || []).map(a => (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FileText size={14} color="#7c3aed" />
+                      <a href={a.url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0D63DB', fontWeight: 600, textDecoration: 'none' }}>{a.nome}</a>
+                      <span style={{ fontSize: 11, color: '#94a3b8' }}>{TIPO_ANEXO_LABEL[a.tipo] || a.tipo}</span>
+                    </div>
+                    {podeEscrever && <button onClick={() => deletarAnexo(a.id, 'imovel_anexos')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={13} /></button>}
+                  </div>
+                ))}
+                {podeAnexo && (
+                  <div style={{ marginTop: 10 }}>
+                    <input ref={inputProcessoRef} type="file" style={{ display: 'none' }} onChange={e => { uploadAnexo(e.target.files[0], 'imovel'); e.target.value = ''; }} />
+                    <button onClick={() => inputProcessoRef.current?.click()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, border: '1px dashed #c4b5fd', background: '#faf5ff', color: '#7c3aed', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                      <Upload size={13} /> Adicionar documento
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Documentos pessoais (só o arrematante e admin/analista) */}
+          {(arr.arrematante_id === user?.id || podeEscrever) && (
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 10 }}>
+              <button onClick={() => setAberto(a => ({ ...a, pessoal: !a.pessoal }))} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, color: '#111' }}>
+                  👤 Meus Documentos
+                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>({(dados.docs || []).length}) · privado</span>
+                </div>
+                {aberto.pessoal ? <ChevronUp size={15} color="#94a3b8" /> : <ChevronDown size={15} color="#94a3b8" />}
+              </button>
+              {aberto.pessoal && (
+                <div style={{ padding: '0 16px 14px' }}>
+                  {(dados.docs || []).length === 0 && <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>Nenhum documento pessoal adicionado.</div>}
+                  {(dados.docs || []).map(d => (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <FileText size={14} color="#0891b2" />
+                        <a href={d.url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#0D63DB', fontWeight: 600, textDecoration: 'none' }}>{d.nome}</a>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{TIPO_DOC_LABEL[d.tipo] || d.tipo}</span>
+                      </div>
+                      <button onClick={() => deletarDocPessoal(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 10 }}>
+                    <input ref={inputPessoalRef} type="file" style={{ display: 'none' }} onChange={async e => {
+                      const file = e.target.files[0]; if (!file) return;
+                      const key = `pessoal_${file.name}`; setUploadando(u => ({ ...u, [key]: true }));
+                      try {
+                        const t = await token();
+                        const arrId = dados?.arrematacao?.id || 'geral';
+                        const nomeArq = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+                        const signR = await fetch(`/api/arrematacoes?signed_url=1&arrematacao_id=${arrId}&tipo=outro&nome=${nomeArq}&tabela=usuario`, { headers: { Authorization: `Bearer ${t}` } });
+                        if (!signR.ok) { alert('Erro ao preparar upload'); return; }
+                        const { signedURL, publicUrl } = await signR.json();
+                        const upR = await fetch(signedURL, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
+                        if (!upR.ok) { alert('Erro no upload'); return; }
+                        await supabase.from('usuario_docs').insert({ user_id: user.id, arrematacao_id: arrId, tipo: 'outro', nome: file.name, url: publicUrl, tamanho_kb: Math.round(file.size / 1024) });
+                        carregar();
+                      } finally { setUploadando(u => ({ ...u, [key]: false })); e.target.value = ''; }
+                    }} />
+                    <button onClick={() => inputPessoalRef.current?.click()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, border: '1px dashed #bae6fd', background: '#f0f9ff', color: '#0891b2', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                      <Upload size={13} /> Adicionar meu documento
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Modal registrar arrematação */}
+      {modalAberto && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setModalAberto(false); }}>
+          <div style={{ background: 'white', borderRadius: 14, padding: 28, width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Registrar Arrematação</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>{imovelTitulo}</div>
+            {[
+              { label: 'E-mail do arrematante *', key: 'arrematante_email', type: 'email', placeholder: 'usuario@email.com' },
+              { label: 'Valor arrematado (R$)', key: 'valor_arrematado', type: 'number', placeholder: '0,00' },
+              { label: 'Data do leilão', key: 'data_leilao', type: 'date' },
+              { label: 'Leiloeiro', key: 'leiloeiro', type: 'text', placeholder: 'Nome do leiloeiro' },
+              { label: 'Nº do Processo', key: 'numero_processo', type: 'text', placeholder: '0000000-00.0000.0.00.0000' },
+            ].map(({ label, key, type, placeholder }) => (
+              <div key={key} style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>{label}</label>
+                <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={placeholder}
+                  style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none' }} />
+              </div>
+            ))}
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Observações</label>
+              <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} rows={3} placeholder="Informações adicionais..."
+                style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', resize: 'vertical', outline: 'none' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setModalAberto(false)} style={{ flex: 1, padding: 10, borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', fontWeight: 600, fontSize: 13, cursor: 'pointer', color: '#475569' }}>Cancelar</button>
+              <button onClick={registrar} disabled={salvando || !form.arrematante_email} style={{ flex: 2, padding: 10, borderRadius: 8, border: 'none', background: salvando ? '#c4b5fd' : '#7c3aed', color: 'white', fontWeight: 700, fontSize: 13, cursor: salvando ? 'default' : 'pointer' }}>{salvando ? 'Salvando...' : 'Registrar Arrematação'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
 const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', venda_direta:'Venda Direta', licitacao_aberta:'Licitação Aberta', extrajudicial:'Extrajudicial', judicial:'Judicial' };
@@ -337,6 +616,11 @@ export default function ImovelDetalhe() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Seção Arrematação — visível para roles com acesso ou se for o arrematante */}
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 40px' }}>
+        <SecaoArrematacao imovelId={id} imovelTitulo={imovel.titulo} />
       </div>
 
       <style>{`
