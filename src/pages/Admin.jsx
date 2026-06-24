@@ -3918,11 +3918,22 @@ function ScrapersTab() {
   }, [abaAtiva]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // Contagem de imóveis por fonte (caixa + leiloeiros)
-    Promise.all(['caixa','mega','sold','superbid','bb'].map(async fonte => {
-      const { count } = await supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', fonte);
-      return [fonte, count || 0];
-    })).then(entries => setLeiloeiroContagem(Object.fromEntries(entries)));
+    // Contagem de imóveis por fonte
+    // Caixa: imóveis antigos têm fonte=NULL mas fonte_id começa com 'caixa_'
+    Promise.all([
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).or('fonte.eq.caixa,fonte_id.like.caixa_%'),
+      ...['mega','sold','superbid','bb'].map(f =>
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', f)
+      ),
+    ]).then(([caixa, mega, sold, superbid, bb]) => {
+      setLeiloeiroContagem({
+        caixa:    caixa.count    || 0,
+        mega:     mega.count     || 0,
+        sold:     sold.count     || 0,
+        superbid: superbid.count || 0,
+        bb:       bb.count       || 0,
+      });
+    });
   }, []);
 
   useEffect(() => {
