@@ -168,13 +168,16 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Supabase env vars not configured' }), { status: 500 });
   }
 
-  // GET sem ?estados= → cron */10 3,4,5,6,7 * * * — deriva estado pelo horário UTC
+  // GET sem ?estados= → cron */10 0-9 * * * — deriva estado pelo horário UTC
+  // Ordem por volume estimado (maiores praças primeiro) — ciclo de 270 min
+  // A janela de 10h (00:00–09:59 UTC = 21:00–06:59 BRT) permite ~2 ciclos completos/noite
   // GET com ?estados= → trigger manual por URL
   // POST → admin manual (1 lote, retorna imediatamente para o painel monitorar)
   const ESTADOS_GEOCOD = [
-    'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA',
-    'MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN',
-    'RO','RR','RS','SC','SE','SP','TO',
+    // Maiores volumes de imóveis (Caixa + leiloeiros) primeiro
+    'SP','MG','PR','RS','RJ','SC','BA','GO','CE','PE',
+    'MT','MS','ES','PA','MA','RN','PB','AL','PI','SE',
+    'TO','RO','AM','DF','AC','AP','RR',
   ];
   const url = new URL(req.url, 'http://localhost');
   const qEstados = url.searchParams.get('estados');
@@ -184,17 +187,14 @@ export default async function handler(req) {
   if (qEstados) {
     estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
   } else if (req.method === 'GET') {
-    // Cron */10 0,1,2,3,4 * * * — cada invocação processa 1 estado pelo horário UTC
-    // 00:00→AC, 00:10→AL, ..., 04:20→TO  (27 estados em 270 min)
+    // Cron */10 0-9 * * * — cada invocação processa 1 estado pelo slot de 10min
+    // 27 estados × 10min = 270min = 1 ciclo. Em 10h (600min) → ~2 ciclos completos
+    // idx é módulo 27 para reiniciar o ciclo e processar grandes estados 2× por noite
     const now = new Date();
-    const hora = now.getUTCHours(); // 0,1,2,3,4
+    const hora = now.getUTCHours(); // 0..9
     const minuto = now.getUTCMinutes();
-    const idx = hora * 6 + Math.floor(minuto / 10);
-    if (idx < 0 || idx >= ESTADOS_GEOCOD.length) {
-      return new Response(JSON.stringify({ msg: 'idle', hora, minuto, idx }), {
-        status: 200, headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const slotGlobal = hora * 6 + Math.floor(minuto / 10); // 0..59
+    const idx = slotGlobal % ESTADOS_GEOCOD.length; // reinicia ciclo após 270min
     estados = [ESTADOS_GEOCOD[idx]];
   } else if (req.method === 'POST') {
     try {
