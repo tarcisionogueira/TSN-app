@@ -3901,6 +3901,8 @@ function ScrapersTab() {
   const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
   const [estadosExpandidos, setEstadosExpandidos] = useState({ caixa: false, geocod: false });
   const toggleExpandir = (aba) => setEstadosExpandidos(e => ({ ...e, [aba]: !e[aba] }));
+  const [leiloeiroExpandido, setLeiloeiroExpandido] = useState(null); // chave do leiloeiro expandido
+  const [leiloeiroEstados, setLeiloeiroEstados] = useState({}); // fonte → { UF: count }
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
   const [geocPendentes, setGeocPendentes] = useState({});
   // Progresso "executar todos" do Caixa (estado a estado)
@@ -4160,6 +4162,21 @@ function ScrapersTab() {
     return { uf, hora: `${String(horaTotal).padStart(2,'0')}:${String(minuto).padStart(2,'0')}` };
   });
 
+  async function expandirLeiloeiro(fonte) {
+    if (leiloeiroExpandido === fonte) { setLeiloeiroExpandido(null); return; }
+    setLeiloeiroExpandido(fonte);
+    if (leiloeiroEstados[fonte]) return; // já carregado
+    const { data } = await supabase
+      .from('imoveis_leilao')
+      .select('estado')
+      .eq('fonte', fonte)
+      .not('estado', 'is', null);
+    if (!data) return;
+    const contagem = {};
+    data.forEach(({ estado }) => { contagem[estado] = (contagem[estado] || 0) + 1; });
+    setLeiloeiroEstados(s => ({ ...s, [fonte]: contagem }));
+  }
+
   async function triggerPuppeteer() {
     setPuppeteerStatus({ rodando: true });
     try {
@@ -4353,22 +4370,53 @@ function ScrapersTab() {
             )}
             {puppeteerStatus?.erro && <div style={{ fontSize: 12, color: '#ef4444', background: '#fef2f2', padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>⚠️ {puppeteerStatus.erro}</div>}
             {puppeteerStatus?.agendado && <div style={{ fontSize: 12, color: '#059669', background: '#f0fdf4', padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>✅ {puppeteerStatus.msg}</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
-                { nome: 'Mega Leilões',    volume: '~5–10k', cor: '#0D63DB', desc: 'Imóveis residenciais e comerciais' },
-                { nome: 'Sold Leilões',    volume: '~3–6k',  cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros bancos' },
-                { nome: 'Superbid',        volume: '~8–15k', cor: '#059669', desc: 'Maior marketplace de leilões do Brasil' },
-                { nome: 'Banco do Brasil', volume: '~2–4k',  cor: '#d97706', desc: 'Carteira imobiliária do BB' },
-              ].map(s => (
-                <div key={s.nome} style={{ background: `${s.cor}08`, borderRadius: 10, padding: '12px 14px', border: `1px solid ${s.cor}22` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>{s.nome}</div>
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: `${s.cor}22`, color: s.cor }}>Ativo</span>
+                { fonte: 'mega',    nome: 'Mega Leilões',    volume: '~5–10k', cor: '#0D63DB', desc: 'Imóveis residenciais e comerciais' },
+                { fonte: 'sold',    nome: 'Sold Leilões',    volume: '~3–6k',  cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros bancos' },
+                { fonte: 'superbid',nome: 'Superbid',        volume: '~8–15k', cor: '#059669', desc: 'Maior marketplace de leilões do Brasil' },
+                { fonte: 'bb',      nome: 'Banco do Brasil', volume: '~2–4k',  cor: '#d97706', desc: 'Carteira imobiliária do BB' },
+              ].map(s => {
+                const expandido = leiloeiroExpandido === s.fonte;
+                const estados = leiloeiroEstados[s.fonte];
+                const total = estados ? Object.values(estados).reduce((a, b) => a + b, 0) : null;
+                const ufsOrdenadas = estados ? Object.entries(estados).sort((a, b) => b[1] - a[1]) : [];
+                return (
+                  <div key={s.fonte} style={{ background: `${s.cor}06`, borderRadius: 10, border: `1px solid ${s.cor}22`, overflow: 'hidden' }}>
+                    <button onClick={() => expandirLeiloeiro(s.fonte)}
+                      style={{ width: '100%', padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>{s.nome}</div>
+                          <div style={{ fontSize: 11, color: '#64748b' }}>{s.desc}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {total != null && <span style={{ fontSize: 11, fontWeight: 700, color: s.cor }}>{total.toLocaleString('pt-BR')} imóveis</span>}
+                        {total == null && <span style={{ fontSize: 11, color: '#94a3b8' }}>{s.volume}/exec</span>}
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: `${s.cor}22`, color: s.cor }}>Ativo</span>
+                        <span style={{ fontSize: 11, color: s.cor, fontWeight: 700 }}>{expandido ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
+                    {expandido && (
+                      <div style={{ padding: '0 14px 14px' }}>
+                        {!estados && <div style={{ fontSize: 11, color: '#94a3b8' }}>Carregando...</div>}
+                        {estados && ufsOrdenadas.length === 0 && <div style={{ fontSize: 11, color: '#94a3b8' }}>Nenhum imóvel no banco desta fonte ainda.</div>}
+                        {estados && ufsOrdenadas.length > 0 && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
+                            {ufsOrdenadas.map(([uf, count]) => (
+                              <div key={uf} style={{ background: '#f8fafc', borderRadius: 6, padding: '5px 8px', border: `1px solid ${s.cor}18` }}>
+                                <div style={{ fontWeight: 800, fontSize: 12, color: '#334155' }}>{uf}</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: s.cor }}>{count.toLocaleString('pt-BR')}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>{s.desc}</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: s.cor, marginTop: 2 }}>{s.volume} imóveis/execução</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
