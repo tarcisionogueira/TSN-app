@@ -98,7 +98,7 @@ export default async function handler(req) {
       await fetch(`${SUPABASE}/rest/v1/imoveis_leiloeiro?leiloeiro_id=eq.${leiloeiro.id}&id_externo=eq.${encodeURIComponent(lote.id_externo)}`, {
         method: 'PATCH',
         headers: { apikey: SVC_KEY, Authorization: `Bearer ${SVC_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: lote.motivo || 'encerrado', atualizado_em: new Date().toISOString() }),
+        body: JSON.stringify({ status: ['encerrado','vendido','cancelado','suspenso'].includes(lote.motivo) ? lote.motivo : 'encerrado', atualizado_em: new Date().toISOString() }),
       });
       return json({ ok: true });
     }

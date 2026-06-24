@@ -135,6 +135,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
             .from('comissoes')
             .select('id')
             .eq('asaas_payment_id', gatewayPaymentId)
+            .eq('origem', 'assinatura')
             .maybeSingle();
 
           if (!existente) {

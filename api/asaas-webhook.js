@@ -2,6 +2,7 @@
  * Webhook Asaas → normaliza eventos e delega ao _webhook-core.js
  * Documentação Asaas: https://docs.asaas.com/reference/webhooks
  */
+import crypto from 'crypto';
 import {
   processarConfirmado,
   processarVencido,
@@ -20,7 +21,7 @@ export default async function handler(req, res) {
   const received = req.headers['asaas-access-token']
     || req.headers['authorization']?.replace('Bearer ', '');
   const tokOk = received && received.length === webhookToken.length &&
-    require('crypto').timingSafeEqual(Buffer.from(received), Buffer.from(webhookToken));
+    crypto.timingSafeEqual(Buffer.from(received), Buffer.from(webhookToken));
   if (!tokOk) {
     console.warn('[asaas] token inválido ou ausente');
     return res.status(401).json({ error: 'Não autorizado' });
@@ -33,9 +34,12 @@ export default async function handler(req, res) {
 
   const tipo      = event.event;
   const pag       = event.payment;
+  const valor = Number(pag?.value);
+  if (!valor || valor <= 0) return res.status(400).json({ error: 'Valor de pagamento inválido' });
+
   const contexto  = {
     gateway:           'asaas',
-    valor:             pag?.value,
+    valor,
     descricao:         pag?.description || '',
     email:             pag?.customer?.email || null,
     gatewayCustomerId: pag?.customer?.id   || null,

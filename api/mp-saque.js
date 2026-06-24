@@ -44,9 +44,8 @@ export default async function handler(req) {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
 
   let user;
-  try { user = await getAuthUser(req); } catch {
-    return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
-  }
+  try { user = await getAuthUser(req); } catch { /* falls through to null check */ }
+  if (!user) return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
 
   let body;
   try { body = await req.json(); } catch {
@@ -71,6 +70,12 @@ export default async function handler(req) {
       }
       if (!chave_pix && (!banco || !agencia || !conta)) {
         return new Response(JSON.stringify({ error: 'Informe chave PIX ou dados bancários (banco, agência, conta)' }), { status: 400 });
+      }
+
+      // Impede duplicatas de saque pendente
+      const { data: pendentes } = await sbFetch(`mp_saques?user_id=eq.${user.id}&status=eq.pendente&select=id`);
+      if (pendentes?.length > 0) {
+        return new Response(JSON.stringify({ error: 'Já existe um saque pendente em análise.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
       const row = {
@@ -100,7 +105,8 @@ export default async function handler(req) {
 
     // ── Listar saques ──────────────────────────────────────────────────────
     if (action === 'listar') {
-      const filtroStatus = body.status || 'pendente';
+      const STATUS_VALIDOS = ['pendente', 'pago', 'rejeitado', 'todos'];
+      const filtroStatus = STATUS_VALIDOS.includes(body.status) ? body.status : 'pendente';
       let query = `mp_saques?order=solicitado_em.desc`;
       if (!isAdmin) {
         query += `&user_id=eq.${user.id}`;

@@ -156,13 +156,15 @@ export default async function handler(req) {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  // Protege contra chamadas externas não autorizadas
+  // Protege contra chamadas externas não autorizadas — falha fechado se CRON_SECRET não configurado
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const url = new URL(req.url);
-    const sent = req.headers.get('x-cron-secret') || url.searchParams.get('secret') || '';
-    if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
+  if (!cronSecret) {
+    console.error('[geocodificar] CRON_SECRET não configurado — acesso bloqueado');
+    return new Response(JSON.stringify({ error: 'Endpoint não configurado' }), { status: 500 });
   }
+  const _url = new URL(req.url);
+  const sent = req.headers.get('x-cron-secret') || _url.searchParams.get('secret') || '';
+  if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     return new Response(JSON.stringify({ error: 'Supabase env vars not configured' }), { status: 500 });
@@ -176,13 +178,13 @@ export default async function handler(req) {
     'MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN',
     'RO','RR','RS','SC','SE','SP','TO',
   ];
-  const url = new URL(req.url, 'http://localhost');
-  const qEstados = url.searchParams.get('estados');
+  const reqUrl = new URL(req.url, 'http://localhost');
+  const qEstados = reqUrl.searchParams.get('estados');
   let estados = null;
   let modoManual = false;
 
   if (qEstados) {
-    estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
+    estados = qEstados.split(',').map(s => s.trim().toUpperCase()).filter(s => /^[A-Z]{2}$/.test(s) && ESTADOS_GEOCOD.includes(s));
   } else if (req.method === 'GET') {
     // Cron */10 0,1,2,3,4 * * * — cada invocação processa 1 estado pelo horário UTC
     // 00:00→AC, 00:10→AL, ..., 04:20→TO  (27 estados em 270 min)

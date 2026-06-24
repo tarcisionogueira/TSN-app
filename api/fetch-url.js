@@ -2,8 +2,13 @@
 // Sem armazenamento — conteúdo processado em memória e descartado
 export const config = { runtime: 'edge' };
 
+import { getAuthUser } from './_auth.js';
+
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const user = await getAuthUser(req);
+  if (!user) return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
 
   let url;
   try {
@@ -13,7 +18,7 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Body inválido' }), { status: 400 });
   }
 
-  if (!url || !/^https?:\/\//.test(url)) {
+  if (!url || !/^https:\/\//.test(url)) {
     return new Response(JSON.stringify({ error: 'URL inválida' }), { status: 400 });
   }
 
