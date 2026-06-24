@@ -3899,6 +3899,8 @@ function ScrapersTab() {
   const [puppeteerStatus, setPuppeteerStatus] = useState(null);
   const [abaAtiva, setAbaAtiva] = useState(() => sessionStorage.getItem('scraper_aba') || 'caixa');
   const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
+  const [estadosExpandidos, setEstadosExpandidos] = useState({ caixa: false, geocod: false });
+  const toggleExpandir = (aba) => setEstadosExpandidos(e => ({ ...e, [aba]: !e[aba] }));
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
   // Progresso "executar todos" do Caixa (estado a estado)
   const [caixaTodos, setCaixaTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '' });
@@ -4248,27 +4250,42 @@ function ScrapersTab() {
           )}
           {scraperRegiao['todos']?.erro && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 10 }}>⚠️ {scraperRegiao['todos'].erro}</div>}
 
-          {/* Grid de estados 4 colunas */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-            {AGENDA_SCRAPER.map(({ uf, hora }) => {
-              const r = scraperRegiao[uf] || {};
-              return (
-                <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#e2e8f0'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
-                    <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
-                      style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
-                      {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
-                  {r.agendado && <div style={{ fontSize: 9, color: '#059669', fontWeight: 700, marginTop: 2 }}>🚀 Agendado</div>}
-                  {r.erro && <div style={{ fontSize: 9, color: '#dc2626', marginTop: 2 }} title={r.erro}>❌ Erro</div>}
-                </div>
-              );
-            })}
+          {/* Resumo + toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              {Object.values(scraperRegiao).filter(r => r.agendado).length > 0
+                ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ {Object.values(scraperRegiao).filter(r => r.agendado).length} estados agendados</span>
+                : <span>Cron diário 22:00 UTC · clique ▶ para forçar por estado</span>}
+              {Object.values(scraperRegiao).filter(r => r.erro).length > 0 &&
+                <span style={{ color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>· ❌ {Object.values(scraperRegiao).filter(r => r.erro).length} erros</span>}
+            </div>
+            <button onClick={() => toggleExpandir('caixa')} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+              {estadosExpandidos.caixa ? '▲ Recolher estados' : '▼ Ver todos os estados (27)'}
+            </button>
           </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>Cron automático diário · ▶ força execução manual por estado</div>
+
+          {estadosExpandidos.caixa && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {AGENDA_SCRAPER.map(({ uf, hora }) => {
+                const r = scraperRegiao[uf] || {};
+                return (
+                  <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#e2e8f0'}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
+                      <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
+                        style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                        {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
+                    {r.rodando && <div style={{ fontSize: 9, color: '#c2410c', fontWeight: 700, marginTop: 2 }}>⏳ Agendando...</div>}
+                    {r.agendado && <div style={{ fontSize: 9, color: '#059669', fontWeight: 700, marginTop: 2 }}>🚀 Agendado</div>}
+                    {r.erro && <div style={{ fontSize: 9, color: '#dc2626', marginTop: 2 }} title={r.erro}>❌ {r.erro.slice(0, 30)}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -4276,15 +4293,33 @@ function ScrapersTab() {
       {abaAtiva === 'leiloeiros' && (
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Scraper de Leiloeiros (Puppeteer)</div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>GitHub Actions · diário às 07:00 BRT · extrai HTML de leiloeiros privados</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏛️</div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Scraper de Leiloeiros (Puppeteer)</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>GitHub Actions · diário às 07:00 BRT · extrai HTML de leiloeiros privados</div>
+              </div>
             </div>
-            <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
-              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: puppeteerStatus?.agendado ? '#f0fdf4' : '#0D63DB', color: puppeteerStatus?.agendado ? '#059669' : 'white', fontWeight: 700, fontSize: 13, cursor: puppeteerStatus?.rodando ? 'default' : 'pointer', border: puppeteerStatus?.agendado ? '1px solid #bbf7d0' : 'none' }}>
-              {puppeteerStatus?.rodando ? '⏳ Disparando...' : puppeteerStatus?.agendado ? '🚀 Agendado' : '▶ Executar agora'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={() => rodarSysDebug('banco')} disabled={sysDebugRodando['banco']}
+                style={{ padding: '5px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {sysDebugRodando['banco'] ? '⏳' : '🔍 Diagnóstico'}
+              </button>
+              <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
+                style={{ padding: '8px 16px', borderRadius: 8, background: puppeteerStatus?.agendado ? '#f0fdf4' : '#0D63DB', color: puppeteerStatus?.agendado ? '#059669' : 'white', fontWeight: 700, fontSize: 13, cursor: puppeteerStatus?.rodando ? 'default' : 'pointer', border: puppeteerStatus?.agendado ? '1px solid #bbf7d0' : 'none' }}>
+                {puppeteerStatus?.rodando ? '⏳ Disparando...' : puppeteerStatus?.agendado ? '🚀 Agendado' : '▶ Executar agora'}
+              </button>
+            </div>
           </div>
+          {sysDebug['banco'] && (
+            <div style={{ marginBottom: 12, background: sysDebug['banco'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${sysDebug['banco'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+              <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['banco'].status === 200 ? '#059669' : '#dc2626' }}>
+                {sysDebug['banco'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['banco'].status})`}
+                <button onClick={() => setSysDebug(s => ({ ...s, banco: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
+              </div>
+              <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 220, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['banco'].body, null, 2)} />
+            </div>
+          )}
           {puppeteerStatus?.erro && <div style={{ fontSize: 12, color: '#ef4444', background: '#fef2f2', padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>⚠️ {puppeteerStatus.erro}</div>}
           {puppeteerStatus?.agendado && <div style={{ fontSize: 12, color: '#059669', background: '#f0fdf4', padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>✅ {puppeteerStatus.msg}</div>}
 
@@ -4308,7 +4343,6 @@ function ScrapersTab() {
           <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 14, padding: '10px 12px', background: '#f8fafc', borderRadius: 8 }}>
             ℹ️ Puppeteer roda via GitHub Actions (IPs Microsoft não bloqueados pelos leiloeiros). Os imóveis são inseridos/atualizados na tabela <code>imoveis_leilao</code> com as coordenadas e dados completos para busca dos clientes.
           </div>
-          <BotaoDebug modulo="banco" label="Diagnóstico Banco de Dados" />
         </div>
       )}
 
@@ -4319,7 +4353,7 @@ function ScrapersTab() {
             <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação — Nominatim / OSM</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–09:59 UTC (21h–07h BRT) · cache ~70% · cascade 3 níveis</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–09:59 UTC (21h–07h BRT) · CEP+Correios → endereço → rua → bairro → cidade</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button onClick={() => rodarSysDebug('geocod')} disabled={sysDebugRodando['geocod']}
@@ -4328,7 +4362,7 @@ function ScrapersTab() {
               </button>
               <button onClick={geocodificarTodos} disabled={geocTodos.rodando}
                 style={{ padding: '7px 14px', borderRadius: 8, background: geocTodos.rodando ? '#f1f5f9' : '#0D63DB', color: geocTodos.rodando ? '#94a3b8' : 'white', border: 'none', cursor: geocTodos.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                {geocTodos.rodando ? `⏳ Processando UF [${geocTodos.atual}/27]...` : '▶ Geocodificar todos'}
+                {geocTodos.rodando ? `⏳ ${geocTodos.ufAtual} [${geocTodos.atual}/27] · ${geocTodos.processadosTotal} proc` : '▶ Geocodificar todos'}
               </button>
             </div>
           </div>
@@ -4365,44 +4399,66 @@ function ScrapersTab() {
             cor="#0D63DB"
           />
 
-          {/* Grid de estados */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-            {AGENDA_GEOCOD.map(({ uf, hora }) => {
-              const r = geocRegiao[uf] || {};
-              return (
-                <div key={uf} style={{ background: r.processados != null ? '#eff6ff' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${r.processados != null ? '#bfdbfe' : '#e2e8f0'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
-                    <button onClick={() => triggerGeoc(uf)} disabled={r.rodando}
-                      style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
-                      {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
-                  {r.rodando && (
-                    <div style={{ marginTop: 4 }}>
-                      <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: '60%', background: '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
-                      </div>
-                      <div style={{ fontSize: 9, color: '#0D63DB', fontWeight: 700, marginTop: 2 }}>⏳ Processando...</div>
-                    </div>
-                  )}
-                  {r.processados != null && !r.rodando && (
-                    <div style={{ marginTop: 4 }}>
-                      <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: r.concluido ? '100%' : `${Math.min(100, (r.processados / 50) * 100)}%`, background: r.concluido ? '#10b981' : '#0D63DB', borderRadius: 4 }} />
-                      </div>
-                      <div style={{ fontSize: 9, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 700, marginTop: 2 }}>
-                        {r.concluido ? '✅ 0 pendentes' : `📍 ${r.processados} proc · ${r.falhas || 0} falhas`}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          {/* Resumo + toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              {geocTodos.rodando
+                ? <span style={{ color: '#0D63DB', fontWeight: 700 }}>⏳ Processando {geocTodos.ufAtual}... · <b>{geocTodos.processadosTotal.toLocaleString('pt-BR')}</b> imóveis geocodificados</span>
+                : geocTodos.total > 0
+                  ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ Sessão concluída · {geocTodos.processadosTotal.toLocaleString('pt-BR')} imóveis geocodificados</span>
+                  : <span>Cron 00:00–09:59 UTC · clique ▶ para forçar por estado</span>}
+            </div>
+            <button onClick={() => toggleExpandir('geocod')} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+              {estadosExpandidos.geocod ? '▲ Recolher estados' : '▼ Ver todos os estados (27)'}
+            </button>
           </div>
+
+          {estadosExpandidos.geocod && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {AGENDA_GEOCOD.map(({ uf, hora }) => {
+                const r = geocRegiao[uf] || {};
+                const temErro = !!r.erro;
+                const temResultado = r.processados != null && !r.rodando;
+                return (
+                  <div key={uf} style={{ background: temErro ? '#fef2f2' : temResultado ? '#eff6ff' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${temErro ? '#fecaca' : temResultado ? '#bfdbfe' : '#e2e8f0'}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
+                      <button onClick={() => triggerGeoc(uf)} disabled={r.rodando}
+                        style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                        {r.rodando ? '…' : temResultado ? '↺' : '▶'}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
+                    {r.rodando && (
+                      <div style={{ marginTop: 4 }}>
+                        <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: '60%', background: '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          ⏳ {(r.processados || 0).toLocaleString('pt-BR')} processados...
+                        </div>
+                      </div>
+                    )}
+                    {temResultado && !temErro && (
+                      <div style={{ marginTop: 4 }}>
+                        <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: r.concluido ? '100%' : `${Math.min(100, (r.processados / 200) * 100)}%`, background: r.concluido ? '#10b981' : '#0D63DB', borderRadius: 4 }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          {r.concluido ? '✅ 0 pendentes' : `📍 ${r.processados.toLocaleString('pt-BR')} proc · ${r.falhas || 0} falhas`}
+                        </div>
+                      </div>
+                    )}
+                    {temErro && (
+                      <div style={{ fontSize: 9, color: '#dc2626', fontWeight: 700, marginTop: 3 }} title={r.erro}>❌ {r.erro.slice(0, 40)}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
-            Cascade: endereço → bairro → cidade · ▶ força 1 lote por estado manualmente
+            Cascata 5 níveis: CEP+Correios → endereço → rua s/nº → bairro → cidade · ▶ força 1 lote manualmente
           </div>
         </div>
       )}
