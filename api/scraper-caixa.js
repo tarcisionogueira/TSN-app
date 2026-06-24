@@ -305,6 +305,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Protege contra chamadas externas não autorizadas
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const sent = req.headers['x-cron-secret'] || new URL(req.url, 'http://localhost').searchParams.get('secret') || '';
+    if (sent !== cronSecret) return res.status(401).json({ error: 'Não autorizado' });
+  }
+
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
 

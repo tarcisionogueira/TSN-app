@@ -1,5 +1,5 @@
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
+import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -62,13 +62,19 @@ async function check(nome, fn) {
 }
 
 export default async function handler(req) {
-
-  const user = await getUser(req);
-  if (!user) return unauthorized();
-  const role = await getUserRole(user.id);
-  if (role !== 'admin') return forbidden();
-  // Permite chamada manual (POST) ou cron (GET)
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  // Cron Vercel usa CRON_SECRET; chamada manual exige autenticação admin
+  const cronSecret = process.env.CRON_SECRET;
+  const sentCron = req.headers.get('x-cron-secret') || (new URL(req.url)).searchParams.get('secret') || '';
+  const isCron = cronSecret && sentCron === cronSecret;
+
+  if (!isCron) {
+    const user = await getUser(req);
+    if (!user) return unauthorized();
+    const role = await getUserRoleById(user.id);
+    if (role !== 'admin') return forbidden();
+  }
 
   if (!SUPABASE_SERVICE_KEY) return new Response(JSON.stringify({ error: 'SUPABASE_SERVICE_KEY não configurada' }), { status: 500 });
 

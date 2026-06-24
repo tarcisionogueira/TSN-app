@@ -6,7 +6,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
-  Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle,
+  Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck,
 } from 'lucide-react';
 import { extrairDadosDocumento, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
@@ -18,6 +18,7 @@ import RiscoJuridico from '../components/RiscoJuridico';
 import Lancamentos from '../components/Lancamentos';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { apiCall } from '../utils/apiCall';
+import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
 
 const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
@@ -164,6 +165,34 @@ export default function Analise() {
   const [loadCnj, setLoadCnj] = useState(false);
   const [cnjErro, setCnjErro] = useState('');
 
+  // Certidões (CND + PGFN)
+  const [certDocumento, setCertDocumento] = useState('');
+  const [certResultados, setCertResultados] = useState(null);
+  const [loadCert, setLoadCert] = useState(false);
+  const [certErro, setCertErro] = useState('');
+
+  const buscarCertidoes = async () => {
+    if (!certDocumento.trim()) return;
+    setLoadCert(true); setCertErro(''); setCertResultados(null);
+    try {
+      const res = await apiCall('/api/certidoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documento: certDocumento.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro na consulta');
+      setCertResultados(data);
+      // Adiciona irregularidade como risco automaticamente
+      if (data.parecer?.nivel === 'vermelho') {
+        const txt = `[Certidão] ${data.parecer.texto}`;
+        const existentes = new Set((d.riscos || []).map(r => r.texto));
+        if (!existentes.has(txt)) up('riscos', [...(d.riscos || []), { id: Date.now(), texto: txt, tipo: 'alerta' }]);
+      }
+    } catch (err) { setCertErro(err.message); }
+    setLoadCert(false);
+  };
+
   const cenario_role_pro = ['top2', 'assessorado', 'clube', 'analista', 'advogado', 'admin'];
 
   const buscarCNJ = async () => {
@@ -210,7 +239,7 @@ export default function Analise() {
   const [solicitado, setSolicitado] = useState(false);
 
   // Controle de abertura por seção
-  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false });
+  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false, guia:true });
   const toggleSec = (k) => setOpenSec(p => ({ ...p, [k]: !p[k] }));
 
   const up = useCallback((name, val) => setD(p => ({ ...p, [name]: val })), []);
@@ -716,6 +745,84 @@ export default function Analise() {
                 ))}
               </div>
             )}
+
+            {/* ── Certidões: CND + PGFN ── */}
+            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Certidões Fiscais — CPF ou CNPJ do Executado
+            </div>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#475569' }}>
+              Consulta pública na <strong>Receita Federal</strong> (situação cadastral) e <strong>PGFN</strong> (Dívida Ativa da União). Não requer certificado digital.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={certDocumento}
+                onChange={e => setCertDocumento(e.target.value)}
+                placeholder="CPF (000.000.000-00) ou CNPJ (00.000.000/0000-00)"
+                style={{ flex: 1, padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13 }}
+              />
+              <button onClick={buscarCertidoes} disabled={loadCert || !certDocumento.trim()}
+                style={{ padding: '9px 16px', background: loadCert ? '#94a3b8' : '#0f172a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {loadCert ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Consultando...</> : <><Search size={13} /> Consultar</>}
+              </button>
+            </div>
+
+            {certErro && (
+              <div style={{ padding: '10px 14px', background: '#fee2e2', borderRadius: 8, fontSize: 12, color: '#dc2626', display: 'flex', gap: 8 }}>
+                <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} /> {certErro}
+              </div>
+            )}
+
+            {certResultados && (() => {
+              const cores = { vermelho: ['#fef2f2','#dc2626','#fee2e2'], amarelo: ['#fefce8','#d97706','#fef3c7'], verde: ['#f0fdf4','#16a34a','#dcfce7'] };
+              const [bg, cor, borda] = cores[certResultados.parecer?.nivel] || cores.verde;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ background: bg, border: `2px solid ${borda}`, borderRadius: 10, padding: '12px 16px' }}>
+                    <div style={{ fontWeight: 800, fontSize: 12, color: cor, marginBottom: 4 }}>
+                      {certResultados.parecer?.nivel === 'verde' ? '✅ SITUAÇÃO FISCAL REGULAR' : certResultados.parecer?.nivel === 'amarelo' ? '⚠️ VERIFICAÇÃO PARCIAL' : '🔴 IRREGULARIDADE FISCAL'}
+                    </div>
+                    <div style={{ fontSize: 12, color: cor }}>{certResultados.parecer?.texto}</div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+                    {/* Receita Federal */}
+                    {certResultados.receita_federal && (
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Receita Federal</div>
+                        {certResultados.receita_federal.ok ? (
+                          <>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{certResultados.receita_federal.nome || '—'}</div>
+                            <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: certResultados.receita_federal.regular ? '#16a34a' : '#dc2626' }} />
+                              <span style={{ color: certResultados.receita_federal.regular ? '#16a34a' : '#dc2626', fontWeight: 700 }}>{certResultados.receita_federal.situacao}</span>
+                            </div>
+                            {certResultados.receita_federal.municipio && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{certResultados.receita_federal.municipio}/{certResultados.receita_federal.uf}</div>}
+                          </>
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#94a3b8' }}>{certResultados.receita_federal.erro || 'Indisponível'}</div>
+                        )}
+                      </div>
+                    )}
+                    {/* PGFN */}
+                    {certResultados.divida_ativa && (
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Dívida Ativa — PGFN</div>
+                        {certResultados.divida_ativa.ok ? (
+                          <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: certResultados.divida_ativa.regular ? '#16a34a' : '#dc2626' }} />
+                            <span style={{ color: certResultados.divida_ativa.regular ? '#16a34a' : '#dc2626', fontWeight: 700 }}>{certResultados.divida_ativa.situacao}</span>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#94a3b8' }}>{certResultados.divida_ativa.erro || 'Indisponível'}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            </div>
+
           </div>
         )}
       </Section>}
@@ -1195,6 +1302,36 @@ export default function Analise() {
           )}
         </div>
       </Section>
+
+      {/* ── GUIA PÓS-ARREMATAÇÃO (aparece somente quando status = arrematado) ── */}
+      {d.status === 'arrematado' && (
+        <>
+          <Section step="7" title="Guia Pós-Arrematação" icon={ClipboardCheck} color="#059669"
+            open={openSec.guia} onToggle={() => toggleSec('guia')}
+            badge={`${d.origem === 'judicial' ? 'Judicial' : 'Extrajudicial'} — checklist completo`}>
+            <div style={{ paddingTop: 14 }}>
+              <GuiaPosArrematacao
+                modalidade={d.origem || 'extrajudicial'}
+                imovelId={d.id}
+                onNavCNJ={() => { toggleSec('cnj'); document.querySelector('[data-sec="cnj"]')?.scrollIntoView({ behavior: 'smooth' }); }}
+                onNavCertidoes={() => { toggleSec('cnj'); }}
+              />
+            </div>
+          </Section>
+
+          {/* Atalho rápido para ONR */}
+          <div style={{ margin: '8px 0', padding: '14px 18px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#1d4ed8' }}>Registrar imóvel — ONR Digital</div>
+              <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 2 }}>Protocole o registro de transferência de propriedade no cartório via SREI ou presencialmente.</div>
+            </div>
+            <button onClick={() => nav(`/registro-imovel/${d.id}`)}
+              style={{ padding: '9px 18px', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Iniciar registro →
+            </button>
+          </div>
+        </>
+      )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
     </div>

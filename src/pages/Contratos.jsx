@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, CheckCircle2, Clock, ShieldCheck, X, Users, MapPin, Download } from 'lucide-react';
+import { FileText, CheckCircle2, Clock, ShieldCheck, X, Users, MapPin, Download, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -40,7 +40,8 @@ const S = {
 export default function Contratos() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, effectiveUserId, loading: authLoading } = useAuth();
+  const { user, effectiveUserId, loading: authLoading, role } = useAuth();
+  const STAFF = ['admin', 'consultor', 'analista', 'advogado'];
   const [contratos, setContratos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState(null);
@@ -182,8 +183,26 @@ export default function Contratos() {
 
   return (
     <div style={{ maxWidth: 920, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px' }}>
-      <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111111', margin: '0 0 4px' }}>Meus Contratos</h1>
-      <p style={{ color: '#64748b', margin: '0 0 24px', fontSize: 14 }}>Contratos de assessoria, clube de negócios e demais produtos.</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111111', margin: '0 0 4px' }}>Meus Contratos</h1>
+          <p style={{ color: '#64748b', margin: 0, fontSize: 14 }}>Contratos de assessoria, clube de negócios e demais produtos.</p>
+        </div>
+        {STAFF.includes(role) && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            {role === 'admin' && (
+              <button onClick={() => nav('/contratos/templates')}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                <Users size={15} /> Templates equipe
+              </button>
+            )}
+            <button onClick={() => nav('/contratos/novo')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              <Plus size={15} /> Novo contrato
+            </button>
+          </div>
+        )}
+      </div>
 
       {contratos.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>

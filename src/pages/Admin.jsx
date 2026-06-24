@@ -1012,6 +1012,16 @@ function ConfigTab() {
   const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 4.5, analista_pct: 1 });
   const [honorariosSaved, setHonorariosSaved] = useState(false);
   const [honorariosErr, setHonorariosErr] = useState('');
+  // Fidelidade e cancelamento
+  const [fidConfig, setFidConfig] = useState({ assessorado: {}, clube: {} });
+  const [fidSaved, setFidSaved] = useState({});
+  const [fidErr, setFidErr] = useState('');
+  // Assessorados ativos
+  const [assessorados, setAssessorados] = useState([]);
+  const [loadingAssessorados, setLoadingAssessorados] = useState(false);
+  const [extendTarget, setExtendTarget] = useState(null); // { id, acesso_fim, user_email }
+  const [extendMeses, setExtendMeses] = useState(3);
+  const [extendSaving, setExtendSaving] = useState(false);
 
   useEffect(() => {
     supabase.from('planos_config').select('*').order('preco', { ascending: true })
@@ -1035,6 +1045,25 @@ function ConfigTab() {
       });
     supabase.from('config_honorarios').select('*').eq('id', 1).maybeSingle()
       .then(({ data }) => { if (data) setHonorarios(data); });
+    // Carrega config de fidelidade para assessorado e clube
+    supabase.from('planos_config')
+      .select('plano_key, fidelidade_meses, multa_cancelamento_pct, pagamento_tipo, acesso_meses, vinculado_arrematacao, honorarios_exito_pct')
+      .in('plano_key', ['assessorado', 'clube'])
+      .then(({ data }) => {
+        if (data) {
+          const m = {};
+          data.forEach(r => { m[r.plano_key] = r; });
+          setFidConfig(m);
+        }
+      });
+    // Carrega assinaturas assessorado ativas
+    setLoadingAssessorados(true);
+    supabase.from('plano_assinaturas')
+      .select('*, perfis:user_id(nome, email)')
+      .eq('plano_key', 'assessorado')
+      .eq('status', 'ativo')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { setAssessorados(data || []); setLoadingAssessorados(false); });
   }, []);
 
   function updateCfin(gateway, field, value) {
@@ -1076,6 +1105,62 @@ function ConfigTab() {
     });
     if (!error) { setHonorariosSaved(true); setTimeout(() => setHonorariosSaved(false), 2500); }
     else setHonorariosErr('Erro ao salvar: ' + error.message);
+  }
+
+  async function salvarFidelidade(planoKey) {
+    setFidErr('');
+    const cfg = fidConfig[planoKey] || {};
+    const { error } = await supabase.from('planos_config').update({
+      fidelidade_meses:       Number(cfg.fidelidade_meses) || null,
+      multa_cancelamento_pct: Number(cfg.multa_cancelamento_pct) || 0,
+      pagamento_tipo:         cfg.pagamento_tipo || 'recorrente',
+      acesso_meses:           Number(cfg.acesso_meses) || null,
+      vinculado_arrematacao:  !!cfg.vinculado_arrematacao,
+      honorarios_exito_pct:   Number(cfg.honorarios_exito_pct) || 0,
+      atualizado_em:          new Date().toISOString(),
+    }).eq('plano_key', planoKey);
+    if (!error) {
+      setFidSaved(p => ({ ...p, [planoKey]: true }));
+      setTimeout(() => setFidSaved(p => ({ ...p, [planoKey]: false })), 2000);
+    } else {
+      setFidErr('Erro ao salvar: ' + error.message);
+    }
+  }
+
+  function updateFid(planoKey, field, value) {
+    setFidConfig(p => ({ ...p, [planoKey]: { ...(p[planoKey] || {}), [field]: value } }));
+  }
+
+  async function cancelarSemMulta(assinaturaId) {
+    if (!window.confirm('Cancelar esta assinatura SEM aplicar multa? Esta ação não pode ser desfeita.')) return;
+    const adminId = (await supabase.auth.getUser()).data?.user?.id;
+    const { error } = await supabase.from('plano_assinaturas').update({
+      status:          'cancelado',
+      cancelado_em:    new Date().toISOString(),
+      cancelado_por:   adminId,
+      multa_calculada: 0,
+      multa_aplicada:  0,
+      notas_admin:     'Cancelado sem multa pelo admin',
+    }).eq('id', assinaturaId);
+    if (!error) setAssessorados(prev => prev.filter(a => a.id !== assinaturaId));
+  }
+
+  async function estenderAssessorado() {
+    if (!extendTarget) return;
+    setExtendSaving(true);
+    const atual = extendTarget.acesso_fim ? new Date(extendTarget.acesso_fim) : new Date();
+    if (atual < new Date()) atual.setTime(new Date().getTime());
+    atual.setMonth(atual.getMonth() + Number(extendMeses));
+    const { error } = await supabase.from('plano_assinaturas').update({
+      acesso_fim:   atual.toISOString(),
+      extended_by:  (await supabase.auth.getUser()).data?.user?.id,
+      extended_at:  new Date().toISOString(),
+    }).eq('id', extendTarget.id);
+    if (!error) {
+      setAssessorados(prev => prev.map(a => a.id === extendTarget.id ? { ...a, acesso_fim: atual.toISOString() } : a));
+      setExtendTarget(null);
+    }
+    setExtendSaving(false);
   }
 
   const isDirty = dirtyIds.size > 0;
@@ -1457,17 +1542,217 @@ function ConfigTab() {
         </div>
       </div>
 
+      {/* Fidelidade e Cancelamento */}
+      <div style={S.card}>
+        <p style={S.subTitle}>Planos Premium — Fidelidade, Cancelamento e Honorários</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Configure fidelidade, multa de cancelamento antecipado e honorários de êxito para Assessorado e Leilão Club.
+          A multa de cancelamento do Leilão Club incide sobre o saldo restante da fidelidade
+          (ex: 30% × meses restantes × valor mensal). Consulte seu advogado antes de alterar o percentual de multa.
+        </p>
+
+        {[
+          { key: 'assessorado', nome: 'Assessorado', cor: '#d97706', bg: '#fef3c7' },
+          { key: 'clube',       nome: 'Leilão Club', cor: '#059669', bg: '#d1fae5' },
+        ].map(({ key, nome, cor, bg }) => {
+          const cfg = fidConfig[key] || {};
+          return (
+            <div key={key} style={{ background: bg + '88', border: `1px solid ${cor}44`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: cor, marginBottom: 12 }}>{nome}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
+
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>FIDELIDADE (MESES)</div>
+                  <input type="number" min="1" max="60" value={cfg.fidelidade_meses ?? ''}
+                    onChange={e => updateFid(key, 'fidelidade_meses', e.target.value)}
+                    style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>padrão: 12</div>
+                </div>
+
+                {key === 'clube' && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>MULTA CANCELAMENTO %</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <input type="number" min="0" max="100" step="1" value={cfg.multa_cancelamento_pct ?? 30}
+                        onChange={e => updateFid(key, 'multa_cancelamento_pct', e.target.value)}
+                        style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 70 }} />
+                      <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>do saldo restante · padrão 30%</div>
+                  </div>
+                )}
+
+                {key === 'assessorado' && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>ACESSO (MESES)</div>
+                    <input type="number" min="1" max="60" value={cfg.acesso_meses ?? ''}
+                      onChange={e => updateFid(key, 'acesso_meses', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>prazo base (extensível)</div>
+                  </div>
+                )}
+
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>HONORÁRIOS ÊXITO %</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="number" min="0" max="100" step="0.5" value={cfg.honorarios_exito_pct ?? 10}
+                      onChange={e => updateFid(key, 'honorarios_exito_pct', e.target.value)}
+                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 70 }} />
+                    <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>sobre valor arrematado</div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TIPO PAGAMENTO</div>
+                  <select value={cfg.pagamento_tipo || 'recorrente'}
+                    onChange={e => updateFid(key, 'pagamento_tipo', e.target.value)}
+                    style={{ ...S.input, padding: '6px 8px', fontSize: 12 }}>
+                    <option value="recorrente">Recorrente (mensal)</option>
+                    <option value="parcelado_fixo">Parcelado fixo (12×)</option>
+                    <option value="unico">Pagamento único</option>
+                  </select>
+                </div>
+
+                {key === 'assessorado' && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>VINCULADO A 1 ARREMATAÇÃO</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                      <input type="checkbox" checked={!!cfg.vinculado_arrematacao}
+                        onChange={e => updateFid(key, 'vinculado_arrematacao', e.target.checked)}
+                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#d97706' }} />
+                      <span style={{ fontSize: 12, color: '#334155' }}>Sim</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={() => salvarFidelidade(key)}
+                  style={{ padding: '8px 20px', background: fidSaved[key] ? '#10b981' : cor, color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  {fidSaved[key] ? '✓ Salvo' : 'Salvar'}
+                </button>
+                {key === 'clube' && cfg.multa_cancelamento_pct > 0 && (
+                  <div style={{ fontSize: 11, color: '#64748b' }}>
+                    Ex: cancelar no 4° mês → {Number(cfg.fidelidade_meses || 12) - 4} meses restantes →
+                    multa ≈ {cfg.multa_cancelamento_pct}% × {Number(cfg.fidelidade_meses || 12) - 4} × (valor mensal)
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {fidErr && <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 600, marginTop: 8 }}>{fidErr}</div>}
+      </div>
+
+      {/* Gestão de Assessorados Ativos */}
+      <div style={S.card}>
+        <p style={S.subTitle}>Assessorados Ativos</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Clientes com plano Assessorado em andamento. Você pode estender o prazo de acesso quando necessário (ex: aguardando imissão de posse).
+        </p>
+        {loadingAssessorados ? (
+          <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
+        ) : assessorados.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Nenhum assessorado ativo no momento.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {assessorados.map(a => {
+              const nomeCliente = a.perfis?.nome || a.user_id;
+              const emailCliente = a.perfis?.email || '';
+              const fimAcesso = a.acesso_fim ? new Date(a.acesso_fim) : null;
+              const diasRestantes = fimAcesso ? Math.ceil((fimAcesso - new Date()) / (1000 * 60 * 60 * 24)) : null;
+              const vencendo = diasRestantes !== null && diasRestantes <= 30;
+              return (
+                <div key={a.id} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', border: vencendo ? '1px solid #fbbf24' : '1px solid #e2e8f0' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#111111' }}>{nomeCliente}</div>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>{emailCliente}</div>
+                    <div style={{ fontSize: 11, marginTop: 4 }}>
+                      Início: {a.inicio ? new Date(a.inicio).toLocaleDateString('pt-BR') : '—'} ·
+                      Acesso até: {fimAcesso ? fimAcesso.toLocaleDateString('pt-BR') : '—'}
+                      {diasRestantes !== null && (
+                        <span style={{ marginLeft: 6, fontWeight: 700, color: diasRestantes <= 0 ? '#dc2626' : vencendo ? '#d97706' : '#059669' }}>
+                          ({diasRestantes <= 0 ? 'Expirado' : `${diasRestantes} dias`})
+                        </span>
+                      )}
+                    </div>
+                    {a.imovel_id && <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Imóvel: {a.imovel_id}</div>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => { setExtendTarget(a); setExtendMeses(3); }}
+                      style={{ padding: '7px 14px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      + Estender prazo
+                    </button>
+                    <button onClick={() => cancelarSemMulta(a.id)}
+                      style={{ padding: '7px 14px', background: '#f1f5f9', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      Cancelar s/ multa
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Modal de extensão */}
+        {extendTarget && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 28, maxWidth: 380, width: '100%' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 8 }}>Estender prazo</div>
+              <div style={{ fontSize: 13, color: '#475569', marginBottom: 18 }}>
+                {extendTarget.perfis?.nome || extendTarget.user_id}<br/>
+                Acesso atual até: {extendTarget.acesso_fim ? new Date(extendTarget.acesso_fim).toLocaleDateString('pt-BR') : '—'}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>Adicionar (meses)</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[1, 3, 6, 12].map(m => (
+                    <button key={m} onClick={() => setExtendMeses(m)}
+                      style={{ flex: 1, padding: '8px 4px', border: `2px solid ${extendMeses === m ? '#d97706' : '#e2e8f0'}`, background: extendMeses === m ? '#fef3c7' : 'white', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', color: extendMeses === m ? '#92400e' : '#334155' }}>
+                      +{m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18 }}>
+                Nova data de acesso:{' '}
+                <strong>
+                  {(() => {
+                    const d = extendTarget.acesso_fim ? new Date(extendTarget.acesso_fim) : new Date();
+                    if (d < new Date()) d.setTime(new Date().getTime());
+                    d.setMonth(d.getMonth() + extendMeses);
+                    return d.toLocaleDateString('pt-BR');
+                  })()}
+                </strong>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setExtendTarget(null)}
+                  style={{ flex: 1, padding: '10px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button onClick={estenderAssessorado} disabled={extendSaving}
+                  style={{ flex: 2, padding: '10px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+                  {extendSaving ? 'Salvando…' : 'Confirmar extensão'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Taxas Financeiras por Gateway */}
       <div style={S.card}>
         <p style={S.subTitle}>Taxas Financeiras por Gateway</p>
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
           Configure as taxas cobradas por cada gateway. Usadas para exibir o breakdown financeiro no analítico de comissões.
-          <br/>As taxas reais do seu contrato devem ser verificadas diretamente nos painéis Asaas e Pagar.me.
+          <br/>As taxas reais do seu contrato devem ser verificadas diretamente nos painéis Asaas e Mercado Pago.
         </p>
-        {['asaas', 'pagarme'].map(gw => {
+        {['asaas', 'mercadopago'].map(gw => {
           const r = cfin[gw] || {};
-          const gwLabel = gw === 'pagarme' ? 'Pagar.me' : 'Asaas';
-          const prazoPadrao = gw === 'pagarme' ? 30 : 32;
+          const gwLabel = gw === 'mercadopago' ? 'Mercado Pago' : 'Asaas';
+          const prazoPadrao = gw === 'mercadopago' ? 0 : 32;
           return (
             <div key={gw} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 12 }}>{gwLabel}</div>
@@ -1500,7 +1785,7 @@ function ConfigTab() {
                       style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 60 }} />
                     <span style={{ fontSize: 12, color: '#64748b' }}>dias</span>
                   </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{gw === 'pagarme' ? 'padrão D+30' : 'padrão D+32'}</div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{gw === 'mercadopago' ? 'crédito D+0 a D+14' : 'padrão D+32'}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>ANTECIPAÇÃO HABILITADA</div>
@@ -1535,7 +1820,7 @@ function ConfigTab() {
         })}
         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
           Asaas: crédito D+32 · antecipação a partir de 1,25% ao mês · recebe em até 2 dias úteis · sem IOF<br/>
-          Pagar.me: crédito D+30 · taxa de antecipação negociada por contrato com Stone · cálculo proporcional por dias
+          Mercado Pago: crédito D+0 a D+14 conforme configuração da conta · rendimento CDI no saldo da conta
         </div>
       </div>
 

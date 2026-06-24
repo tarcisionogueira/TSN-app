@@ -1,11 +1,20 @@
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
+import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 export default async function handler(req) {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`resumir-ticket:${ip}`, 10, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const user = await getUser(req);
   if (!user) return unauthorized();
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  // Only staff can trigger AI summarisation
+  const role = await getUserRoleById(user.id);
+  if (!['admin', 'consultor', 'analista', 'advogado'].includes(role)) return forbidden('Acesso restrito');
 
   const apiKey = process.env.CLAUDE_KEY;
   const supabaseUrl = process.env.VITE_SUPABASE_URL;

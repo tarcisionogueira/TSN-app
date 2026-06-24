@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/apiCall';
+import { AlertTriangle, Info } from 'lucide-react';
 
 const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Limite Bacen para instituições de pagamento: R$ 500.000/mês
+// Acima deste volume, é necessário autorização do Banco Central (Resolução BCB 80/2021)
+const LIMITE_BACEN = 500_000;
+
 const CONTAS = [
+  { key: 'mercadopago', label: 'Mercado Pago', ativo: false },
   { key: 'asaas', label: 'Asaas', ativo: true },
-  { key: 'pagarme', label: 'Pagar.me', ativo: false },
 ];
 
 export default function AdminFinanceiro() {
@@ -97,6 +102,10 @@ export default function AdminFinanceiro() {
     { label: 'Taxas cobradas', value: financas?.statsMes?.fees, cor: '#f59e0b' },
   ];
 
+  const volumeMes = Number(financas?.statsMes?.revenue || 0);
+  const pctBacen = Math.min(100, (volumeMes / LIMITE_BACEN) * 100);
+  const corBacen = pctBacen >= 90 ? '#dc2626' : pctBacen >= 70 ? '#d97706' : '#059669';
+
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', padding: '0 0 60px' }}>
       {/* Header */}
@@ -109,6 +118,32 @@ export default function AdminFinanceiro() {
       </div>
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
+
+        {/* Marcador de volume Bacen */}
+        {volumeMes > 0 && (
+          <div style={{ background: 'white', borderRadius: 12, border: `1px solid ${corBacen}40`, padding: '14px 18px', marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              {pctBacen >= 70 ? <AlertTriangle size={15} color={corBacen} /> : <Info size={15} color={corBacen} />}
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#111111' }}>Volume mensal — Limite Bacen</span>
+              <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: corBacen }}>
+                R$ {fmt(volumeMes)} / R$ {fmt(LIMITE_BACEN)} ({pctBacen.toFixed(1)}%)
+              </span>
+            </div>
+            <div style={{ height: 7, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pctBacen}%`, background: corBacen, borderRadius: 99, transition: 'width 0.4s' }} />
+            </div>
+            {pctBacen >= 90 && (
+              <p style={{ margin: '8px 0 0', fontSize: 11.5, color: '#dc2626', fontWeight: 600 }}>
+                ⚠️ Volume próximo ao limite de R$ 500k/mês. Acima deste valor é necessário autorização do Banco Central como Instituição de Pagamento (Resolução BCB 80/2021). Consulte seu advogado.
+              </p>
+            )}
+            {pctBacen >= 70 && pctBacen < 90 && (
+              <p style={{ margin: '8px 0 0', fontSize: 11.5, color: '#92400e' }}>
+                Volume em atenção. Acompanhe o crescimento para antecipar o processo de autorização junto ao Bacen caso necessário.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Filtro de conta */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>

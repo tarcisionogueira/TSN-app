@@ -437,6 +437,23 @@ export default function ConviteEquipe() {
         });
       }
 
+      // Gerar e enviar contrato operacional automaticamente (exceto admin)
+      if (roleKey !== 'admin' && signUpData?.user?.id) {
+        try {
+          await apiCall('/api/contratos-operacional', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              roleDestino: roleKey,
+              emailDestinatario: form.email.trim(),
+              nomeDestinatario: form.nome.trim(),
+            }),
+          });
+        } catch (_) {
+          // Falha no envio do contrato não bloqueia o cadastro
+        }
+      }
+
       setConcluido(true);
     } catch (err) {
       setErroPasso(err.message || 'Erro ao criar conta. Tente novamente.');

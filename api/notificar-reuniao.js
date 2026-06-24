@@ -1,11 +1,12 @@
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
+import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 
 export default async function handler(req) {
-
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   const user = await getUser(req);
   if (!user) return unauthorized();
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+  const role = await getUserRoleById(user.id);
+  if (!['admin', 'consultor', 'analista', 'advogado'].includes(role)) return forbidden('Apenas consultores podem enviar notificações de reunião');
 
   const RESEND_KEY = process.env.RESEND_API_KEY;
   if (!RESEND_KEY) return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500 });

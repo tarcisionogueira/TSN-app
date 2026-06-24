@@ -1,13 +1,21 @@
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
+import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 const DAILY_API = 'https://api.daily.co/v1';
 
 export default async function handler(req) {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`estender-reuniao:${ip}`, 10, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const user = await getUser(req);
   if (!user) return unauthorized();
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const role = await getUserRoleById(user.id);
+  if (!['admin', 'consultor', 'analista', 'advogado'].includes(role)) return forbidden('Apenas consultores podem estender reuniões');
 
   const DAILY_KEY = process.env.DAILY_API_KEY;
   if (!DAILY_KEY) return new Response(JSON.stringify({ error: 'DAILY_API_KEY não configurada' }), { status: 500 });

@@ -29,7 +29,10 @@ function verificarAssinatura(req) {
     .update(body)
     .digest('hex');
 
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length) return false;
+  try { return crypto.timingSafeEqual(sigBuf, expBuf); } catch { return false; }
 }
 
 // Normaliza evento Pagar.me para o formato do _webhook-core
@@ -106,6 +109,6 @@ export default async function handler(req, res) {
     return res.status(200).json(result);
   } catch (e) {
     console.error('[pagarme-webhook]', e.message);
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: 'Erro interno no webhook' });
   }
 }

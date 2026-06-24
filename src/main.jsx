@@ -2,6 +2,12 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
+import { registrarServiceWorker } from './utils/push.js'
+
+// Registra o service worker em produção
+if (import.meta.env.PROD) {
+  registrarServiceWorker().catch(() => {});
+}
 
 class RootErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }

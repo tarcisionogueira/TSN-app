@@ -1,11 +1,16 @@
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
+import { getUser, unauthorized } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 export default async function handler(req) {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`cnj-chat:${ip}`, 20, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const user = await getUser(req);
   if (!user) return unauthorized();
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const { mensagem, contexto, historico = [] } = await req.json();
 
@@ -43,6 +48,7 @@ Seja direto e use linguagem acessível mas precisa. Não mencione IA ou sistemas
     if (!r.ok) throw new Error(data.error?.message || 'Erro na API');
     return new Response(JSON.stringify({ resposta: data.content[0].text }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    console.error('cnj-chat erro:', e.message);
+    return new Response(JSON.stringify({ error: 'Erro interno' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }

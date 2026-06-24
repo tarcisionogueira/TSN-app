@@ -1,8 +1,94 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
+
+const DOCS_LABELS = {
+  foto_doc: 'Foto do documento de identidade (RG ou CNH)',
+  selfie: 'Selfie (foto do rosto)',
+  selfie_doc: 'Selfie ao lado do documento de identidade',
+  comprovante_residencia: 'Comprovante de residência',
+  estado_civil: 'Certidão de estado civil',
+  procuracao: 'Procuração ou documento de representação legal',
+};
+
+// Componente de captura/upload de imagem
+function CapturaImagem({ id, label, onChange, valor }) {
+  const fileRef = useRef();
+  const videoRef = useRef();
+  const [modo, setModo] = useState('idle'); // idle | camera | uploaded
+  const [stream, setStream] = useState(null);
+
+  const abrirCamera = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      setStream(s);
+      setModo('camera');
+      setTimeout(() => { if (videoRef.current) videoRef.current.srcObject = s; }, 100);
+    } catch { setModo('idle'); fileRef.current?.click(); }
+  };
+
+  const capturar = () => {
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    onChange(id, dataUrl);
+    stream?.getTracks().forEach(t => t.stop());
+    setStream(null); setModo('uploaded');
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => { onChange(id, ev.target.result); setModo('uploaded'); };
+    reader.readAsDataURL(file);
+  };
+
+  const remover = () => { onChange(id, null); setModo('idle'); };
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>{label} *</div>
+      {modo === 'idle' && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" onClick={abrirCamera} style={{ flex: 1, padding: '12px', border: '1.5px dashed #cbd5e1', borderRadius: 9, background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
+            <Camera size={16} /> Câmera
+          </button>
+          <button type="button" onClick={() => fileRef.current?.click()} style={{ flex: 1, padding: '12px', border: '1.5px dashed #cbd5e1', borderRadius: 9, background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
+            <Upload size={16} /> Arquivo
+          </button>
+          <input ref={fileRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={handleFile} />
+        </div>
+      )}
+      {modo === 'camera' && (
+        <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#000' }}>
+          <video ref={videoRef} autoPlay playsInline style={{ width: '100%', display: 'block', maxHeight: 240, objectFit: 'cover' }} />
+          <button type="button" onClick={capturar} style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', padding: '10px 24px', background: 'white', border: 'none', borderRadius: 24, fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
+            Capturar
+          </button>
+        </div>
+      )}
+      {modo === 'uploaded' && valor && (
+        <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '2px solid #86efac' }}>
+          {valor.startsWith('data:image') || valor.startsWith('http') ? (
+            <img src={valor} alt={label} style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
+          ) : (
+            <div style={{ padding: '14px 16px', background: '#f0fdf4', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={16} color="#059669" /><span style={{ fontSize: 13, color: '#059669', fontWeight: 600 }}>Arquivo carregado ✓</span>
+            </div>
+          )}
+          <button type="button" onClick={remover} style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+            Trocar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const inp = { width:'100%', padding:'10px 13px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:14, background:'white', color:'#111111', boxSizing:'border-box' };
 const lbl = { fontSize:12, fontWeight:700, color:'#94a3b8', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
@@ -79,11 +165,16 @@ export default function ContratoLink() {
   const [enviando, setEnviando] = useState(false);
   const [aceite, setAceite] = useState(false);
   const [lgpdAceite, setLgpdAceite] = useState(false);
+  const [imagensIdentidade, setImagensIdentidade] = useState({}); // { foto_doc: dataUrl, selfie: dataUrl, ... }
   const conteudoRef = useRef(null);
+
+  const setImagem = useCallback((id, val) => {
+    setImagensIdentidade(p => val ? { ...p, [id]: val } : Object.fromEntries(Object.entries(p).filter(([k]) => k !== id)));
+  }, []);
 
   useEffect(() => {
     if (!token) return;
-    supabase.from('contratos_link').select('id, titulo, conteudo, tipo_contrato, status, expira_em, kyc_incluido, kyc_fotos')
+    supabase.from('contratos_link').select('id, titulo, conteudo, arquivo_url, arquivo_nome, tipo_contrato, status, expira_em, kyc_incluido, kyc_fotos, verificacao_identidade, docs_extras_exigidos, arquivos_referencia')
       .eq('token', token).single()
       .then(({ data, error }) => {
         if (error || !data) setErro('Contrato não encontrado ou link inválido.');
@@ -126,6 +217,20 @@ export default function ContratoLink() {
   const assinar = async () => {
     if (!assinatura) { alert('Por favor, assine no campo de assinatura.'); return; }
     if (!aceite) { alert('É necessário aceitar os termos para prosseguir.'); return; }
+
+    // Valida documentos de identidade obrigatórios
+    const verif = contrato?.verificacao_identidade;
+    if (verif && verif !== 'nenhuma') {
+      const tiposObrigatorios = verif === 'selfie_doc' ? ['selfie_doc'] : verif === 'selfie' ? ['selfie'] : verif === 'foto_doc' ? ['foto_doc'] : [];
+      for (const tipo of tiposObrigatorios) {
+        if (!imagensIdentidade[tipo]) { alert(`Envie a ${DOCS_LABELS[tipo]} para continuar.`); return; }
+      }
+    }
+    const extrasObrig = contrato?.docs_extras_exigidos || [];
+    for (const doc of extrasObrig) {
+      if (!imagensIdentidade[doc]) { alert(`Envie: ${DOCS_LABELS[doc]}`); return; }
+    }
+
     setEnviando(true);
     const enc = new TextEncoder();
     const hashBuffer = await crypto.subtle.digest('SHA-256', enc.encode(JSON.stringify(dados) + assinatura + token));
@@ -137,6 +242,7 @@ export default function ContratoLink() {
       assinatura,
       assinado_em: new Date().toISOString(),
       assinatura_hash: hash,
+      docs_identidade: imagensIdentidade,
     }).eq('token', token);
     if (error) { alert('Erro ao assinar: ' + error.message); setEnviando(false); return; }
     setEtapa('ok');
@@ -200,15 +306,37 @@ export default function ContratoLink() {
           maxHeight: isMobile ? '45vh' : 'none',
         }}>
           <div style={{ fontSize:11, color:'#475569', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:16 }}>
-            Conteúdo do contrato
+            {contrato.arquivo_url ? 'Documento para assinatura' : 'Conteúdo do contrato'}
           </div>
-          <div style={{
-            whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1',
-            background:'#111827', borderRadius:12, padding:'20px 22px',
-            border:'1px solid #111111', minHeight:200,
-          }}>
-            {contrato.conteudo}
-          </div>
+
+          {/* Documento em arquivo (PDF/Word/imagem) */}
+          {contrato.arquivo_url ? (
+            <div style={{ background:'#111827', borderRadius:12, padding:'20px 22px', border:'1px solid #111111' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+                <FileText size={20} color="#60a5fa" />
+                <span style={{ fontSize:14, color:'#e2e8f0', fontWeight:700 }}>{contrato.arquivo_nome || 'Documento'}</span>
+              </div>
+              {contrato.arquivo_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                <img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:8, maxHeight:400, objectFit:'contain' }} />
+              ) : (
+                <a href={contrato.arquivo_url} target="_blank" rel="noreferrer"
+                  style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 18px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:14, textDecoration:'none' }}>
+                  <ExternalLink size={16} /> Abrir documento para leitura
+                </a>
+              )}
+              <p style={{ margin:'12px 0 0', fontSize:12, color:'#64748b', lineHeight:1.6 }}>
+                Leia o documento antes de prosseguir para a assinatura.
+              </p>
+            </div>
+          ) : (
+            <div style={{
+              whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1',
+              background:'#111827', borderRadius:12, padding:'20px 22px',
+              border:'1px solid #111111', minHeight:200,
+            }}>
+              {contrato.conteudo}
+            </div>
+          )}
           {/* KYC section */}
           {contrato.kyc_incluido && contrato.kyc_fotos && (
             <div style={{ marginTop: 32 }}>
@@ -322,6 +450,33 @@ export default function ContratoLink() {
                 </button>
               </div>
 
+              {/* Verificação de identidade */}
+              {contrato?.verificacao_identidade && contrato.verificacao_identidade !== 'nenhuma' && (
+                <div style={{ marginBottom:20, padding:'14px 16px', background:'rgba(96,165,250,0.08)', border:'1px solid rgba(96,165,250,0.2)', borderRadius:10 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#60a5fa', marginBottom:12, textTransform:'uppercase', letterSpacing:0.5 }}>
+                    Verificação de Identidade Obrigatória
+                  </div>
+                  <CapturaImagem
+                    id={contrato.verificacao_identidade}
+                    label={DOCS_LABELS[contrato.verificacao_identidade]}
+                    onChange={setImagem}
+                    valor={imagensIdentidade[contrato.verificacao_identidade]}
+                  />
+                </div>
+              )}
+
+              {/* Documentos extras exigidos */}
+              {(contrato?.docs_extras_exigidos || []).length > 0 && (
+                <div style={{ marginBottom:20, padding:'14px 16px', background:'rgba(250,204,21,0.07)', border:'1px solid rgba(250,204,21,0.2)', borderRadius:10 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#fbbf24', marginBottom:12, textTransform:'uppercase', letterSpacing:0.5 }}>
+                    Documentos Adicionais Solicitados
+                  </div>
+                  {(contrato.docs_extras_exigidos || []).map(id => (
+                    <CapturaImagem key={id} id={id} label={DOCS_LABELS[id] || id} onChange={setImagem} valor={imagensIdentidade[id]} />
+                  ))}
+                </div>
+              )}
+
               <div style={{ marginBottom:18 }}>
                 <AssinaturaCanvas onChange={setAssinatura} />
               </div>
@@ -329,7 +484,7 @@ export default function ContratoLink() {
               <label style={{ display:'flex', gap:10, alignItems:'flex-start', cursor:'pointer', fontSize:12.5, color:'#94a3b8', lineHeight:1.6, marginBottom:20 }}>
                 <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
                 <span>
-                  Li o contrato e concordo com seus termos. Reconheço esta assinatura eletrônica como juridicamente válida nos termos da <strong style={{ color:'#cbd5e1' }}>Lei 14.063/2020</strong> e <strong style={{ color:'#cbd5e1' }}>MP 2.200-2/2001</strong>.
+                  Li o documento, concordo com seus termos e declaro que os documentos enviados são verídicos. Reconheço esta assinatura eletrônica como juridicamente válida nos termos da <strong style={{ color:'#cbd5e1' }}>Lei 14.063/2020</strong> e <strong style={{ color:'#cbd5e1' }}>MP 2.200-2/2001</strong>.
                 </span>
               </label>
 

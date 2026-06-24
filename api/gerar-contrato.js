@@ -1,5 +1,9 @@
 import { getUser, getUserRole } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
+import { auditLog } from './_audit.js';
+import { sanitizeText, sanitizeName } from './_sanitize.js';
+import { alertarErro } from './_error-alert.js';
 
 // Dados fixos da empresa contratante
 const EMPRESA = {
@@ -44,20 +48,53 @@ const PADROES = {
 };
 
 export default async function handler(req, res) {
+  const ip = getIP(req);
+  const rl = checkRateLimit(`gerar-contrato:${ip}`, 10, 60_000);
+  if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
 
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { descricao: descricaoRaw, tipo, titulo, arquivos = [], respostas } = req.body || {};
+  const {
+    descricao: descricaoRaw, tipo, titulo: tituloRaw, arquivos = [], respostas,
+    // Novo fluxo CriarContrato
+    conteudo: conteudoDireto, emailAssinante, verificacaoIdentidade, arquivosReferencia, geradoPorIA,
+  } = req.body || {};
+  // Fluxo direto: conteúdo já pronto (assinar documento existente ou contrato gerado pela IA no frontend)
+  if (conteudoDireto && emailAssinante) {
+    try {
+      const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+      const tituloFinal = sanitizeText(tituloRaw, 200) || 'Contrato';
+      const { arquivoUrl, arquivoNome, docsExtrasExigidos } = req.body || {};
+    const { data, error } = await supabase.from('contratos_link').insert({
+        titulo: tituloFinal,
+        conteudo: conteudoDireto ? sanitizeText(conteudoDireto, 20000) : null,
+        arquivo_url: arquivoUrl || null,
+        arquivo_nome: arquivoNome ? sanitizeText(arquivoNome, 200) : null,
+        tipo_contrato: tipo || 'servico',
+        status: 'aguardando_assinatura',
+        requer_assinatura: true,
+        criado_por: user.id,
+        assinante_email: sanitizeText(emailAssinante, 200),
+        verificacao_identidade: verificacaoIdentidade || 'nenhuma',
+        docs_extras_exigidos: docsExtrasExigidos || [],
+        arquivos_referencia: arquivosReferencia || [],
+        gerado_por_ia: !!geradoPorIA,
+      }).select('token').single();
+      if (error || !data) return res.status(500).json({ error: 'Erro ao salvar contrato' });
+      await auditLog({ acao: 'contrato_criado', user_id: user.id, ip, detalhes: { titulo: tituloFinal, email: emailAssinante, verificacao: verificacaoIdentidade }, sucesso: true });
+      return res.status(200).json({ ok: true, token: data.token });
+    } catch (e) {
+      console.error('[gerar-contrato direto]', e.message);
+      return res.status(500).json({ error: 'Erro interno' });
+    }
+  }
+
   if (!descricaoRaw) return res.status(400).json({ error: 'descricao obrigatória' });
 
-  // Sanitização de entrada: limita tamanho e remove marcadores de delimitação do sistema
-  // para evitar prompt injection via descricao do usuário
-  const descricao = String(descricaoRaw)
-    .slice(0, 5000)
-    .replace(/<<</g, '«')
-    .replace(/>>>/g, '»');
+  const descricao = sanitizeText(descricaoRaw, 5000);
+  const titulo = sanitizeText(tituloRaw, 200);
 
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Chave de API não configurada' });
@@ -187,6 +224,7 @@ FORMATO DE SAÍDA:
     return res.status(200).json({ conteudo, perguntas });
   } catch (e) {
     console.error('gerar-contrato error:', e.message);
+    alertarErro({ rota: '/api/gerar-contrato', erro: e.message });
     return res.status(500).json({ error: 'Erro interno' });
   }
 }

@@ -3,12 +3,10 @@
  * Sistema: ASP.NET WebForms + ASHX handlers via cookie de sessão.
  *
  * Fluxo:
- * 1. GET /Acesso.aspx → extrai __VIEWSTATE, __EVENTVALIDATION, __VIEWSTATEGENERATOR
- * 2. POST /Acesso.aspx com credenciais (senha em SHA-1) → 302 → cookie de sessão
+ * 1. GET /FAcesso.aspx → extrai __VIEWSTATE, __EVENTVALIDATION e nomes dos campos
+ * 2. POST /FAcesso.aspx com credenciais → obtém cookie de sessão
  * 3. Chamadas autenticadas: POST /ajax/{handler}.ashx?_method={method}&_session=yes
- *
- * Campos confirmados via DevTools (23/06/2026):
- *   txtEmail, txtSenha (SHA-1 do plaintext), btnProsseguir
+ *    com o cookie de sessão no header
  */
 
 const BASE = 'https://ridigital.org.br';
@@ -17,18 +15,33 @@ const AJAX = `${BASE}/ajax`;
 // Cache em memória (por instância da função serverless)
 let _sessionCache = { cookie: null, expiresAt: 0 };
 
-/** SHA-1 da senha — o site faz isso no cliente antes de enviar */
-async function sha1(text) {
-  const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/** Extrai o valor de um input hidden do HTML por nome */
+/** Extrai o valor de um input hidden do HTML por nome ou id */
 function extractInput(html, name) {
-  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const m = html.match(new RegExp(`name="${esc}"[^>]*value="([^"]*)"`, 'i'))
-         || html.match(new RegExp(`value="([^"]*)"[^>]*name="${esc}"`, 'i'));
-  return m ? m[1] : '';
+  const byName = html.match(new RegExp(`name="${escapeReg(name)}"[^>]*value="([^"]*)"`, 'i'));
+  if (byName) return byName[1];
+  const byId = html.match(new RegExp(`id="${escapeReg(name)}"[^>]*value="([^"]*)"`, 'i'));
+  if (byId) return byId[1];
+  const valueFirst = html.match(new RegExp(`value="([^"]*)"[^>]*(?:name|id)="${escapeReg(name)}"`, 'i'));
+  return valueFirst ? valueFirst[1] : '';
+}
+function escapeReg(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+/** Tenta encontrar o nome do campo de email/login no HTML */
+function findEmailField(html) {
+  // Busca input de tipo text/email com name contendo "login", "email" ou "usuario"
+  const m = html.match(/name="([^"]*(?:login|email|usuario)[^"]*)"/i);
+  return m ? m[1] : null;
+}
+function findSenhaField(html) {
+  const m = html.match(/type="password"[^>]*name="([^"]*)"/i)
+         || html.match(/name="([^"]*)"[^>]*type="password"/i);
+  return m ? m[1] : null;
+}
+function findBtnEntrar(html) {
+  // Botão de submit — pega o name
+  const m = html.match(/type="submit"[^>]*name="([^"]*)"/i)
+         || html.match(/name="([^"]*)"[^>]*type="submit"/i);
+  return m ? m[1] : null;
 }
 
 /**
@@ -45,7 +58,7 @@ export async function getSession() {
   if (!email || !senha) throw new Error('ONR_EMAIL e ONR_SENHA não configurados');
 
   // 1. GET da página de login para obter tokens ASP.NET
-  const getRes = await fetch(`${BASE}/Acesso.aspx`, {
+  const getRes = await fetch(`${BASE}/FAcesso.aspx`, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TSN-App/1.0)' },
   });
   const html = await getRes.text();
@@ -55,26 +68,27 @@ export async function getSession() {
   const eventValidation    = extractInput(html, '__EVENTVALIDATION');
   const viewstateGenerator = extractInput(html, '__VIEWSTATEGENERATOR');
 
-  // Senha enviada como SHA-1 (confirmado via DevTools)
-  const senhaSha1 = await sha1(senha);
+  const emailField = findEmailField(html) || 'ctl00$cphConteudo$txtLogin';
+  const senhaField = findSenhaField(html) || 'ctl00$cphConteudo$txtSenha';
+  const btnField   = findBtnEntrar(html)  || 'ctl00$cphConteudo$btnEntrar';
 
   const body = new URLSearchParams({
     __VIEWSTATE:          viewstate,
     __EVENTVALIDATION:    eventValidation,
     __VIEWSTATEGENERATOR: viewstateGenerator,
-    txtEmail:             email,
-    txtSenha:             senhaSha1,
-    btnProsseguir:        'Entrar',
+    [emailField]:         email,
+    [senhaField]:         senha,
+    [btnField]:           'Entrar',
   });
 
   // 2. POST de login
-  const postRes = await fetch(`${BASE}/Acesso.aspx`, {
+  const postRes = await fetch(`${BASE}/FAcesso.aspx`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Cookie':        serializeCookies(initCookie),
       'Origin':        BASE,
-      'Referer':       `${BASE}/Acesso.aspx`,
+      'Referer':       `${BASE}/FAcesso.aspx`,
       'User-Agent':    'Mozilla/5.0 (compatible; TSN-App/1.0)',
     },
     body: body.toString(),
@@ -84,19 +98,20 @@ export async function getSession() {
   const setCookie = postRes.headers.get('set-cookie') || '';
   const location  = postRes.headers.get('location') || '';
 
-  // Sucesso = redireciona para ServicosOnline (confirmado via DevTools)
+  // Sucesso = redirecionou para fora da página de login
   const loginOk = (postRes.status === 302 || postRes.status === 301)
-    && !location.toLowerCase().includes('acesso')
+    && !location.toLowerCase().includes('facesso')
     && !location.toLowerCase().includes('erro');
 
   if (!loginOk) {
+    // Tenta extrair mensagem de erro do HTML (resposta 200 = ainda na página de login)
     const errHtml = postRes.status === 200 ? await postRes.text() : '';
     const errMsg  = errHtml.match(/class="[^"]*(?:erro|alert|mensagem)[^"]*"[^>]*>([^<]+)</i)?.[1]?.trim()
-                 || `Status ${postRes.status} — credenciais inválidas ou formato alterado`;
+                 || 'Credenciais inválidas ou formato de login alterado';
     throw new Error(`ONR login falhou: ${errMsg}`);
   }
 
-  // 3. Consolida todos os cookies
+  // 3. Consolida todos os cookies (initCookie + Set-Cookie do POST)
   const loginCookies = { ...initCookie, ...parseCookies(setCookie) };
   const cookieStr    = serializeCookies(loginCookies);
 
@@ -105,46 +120,30 @@ export async function getSession() {
   return cookieStr;
 }
 
-/** Chama um método AJAX do RI Digital. Faz 1 retry automático se sessão expirada. */
+/** Chama um método AJAX do RI Digital (autenticado ou não). */
 export async function onrAjax(handler, method, payload = {}, requireSession = true) {
-  for (let tentativa = 0; tentativa < 2; tentativa++) {
-    const sessionCookie = requireSession ? await getSession() : '';
-    const url = `${AJAX}/${handler}.ashx?_method=${method}&_session=${requireSession ? 'yes' : 'no'}`;
+  const sessionCookie = requireSession ? await getSession() : '';
+  const url = `${AJAX}/${handler}.ashx?_method=${method}&_session=${requireSession ? 'yes' : 'no'}`;
 
-    const body = new URLSearchParams(
-      Object.entries(payload).map(([k, v]) => [k, String(v ?? '')])
-    );
+  const body = new URLSearchParams(
+    Object.entries(payload).map(([k, v]) => [k, String(v ?? '')])
+  );
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Origin': BASE,
-        'Referer': `${BASE}/eProtocolo/listagem_contratos.aspx`,
-        'User-Agent': 'Mozilla/5.0 (compatible; TSN-App/1.0)',
-        ...(sessionCookie ? { Cookie: sessionCookie } : {}),
-      },
-      body: body.toString(),
-    });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Origin': BASE,
+      'Referer': `${BASE}/eProtocolo/listagem_contratos.aspx`,
+      'User-Agent': 'Mozilla/5.0 (compatible; TSN-App/1.0)',
+      ...(sessionCookie ? { Cookie: sessionCookie } : {}),
+    },
+    body: body.toString(),
+  });
 
-    // Sessão rejeitada pelo servidor → invalida cache e tenta de novo
-    if (requireSession && (res.status === 401 || res.redirected || res.url?.includes('Acesso'))) {
-      invalidateSession();
-      if (tentativa === 0) continue;
-      throw new Error('ONR sessão inválida após retry');
-    }
-
-    const text = await res.text();
-
-    // Resposta HTML de login = sessão expirou silenciosamente
-    if (requireSession && text.includes('txtEmail') && tentativa === 0) {
-      invalidateSession();
-      continue;
-    }
-
-    try { return JSON.parse(text); } catch { return text; }
-  }
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return text; }
 }
 
 /** Invalida o cache de sessão (ex: ao detectar erro 401/redirect). */
@@ -156,6 +155,7 @@ export function invalidateSession() {
 function parseCookies(raw) {
   const map = {};
   if (!raw) return map;
+  // Set-Cookie pode ter múltiplos valores separados por vírgula seguidos de path/expires
   raw.split(/,(?=[^;]+=)/).forEach(part => {
     const kv = part.split(';')[0].trim();
     const [k, ...vs] = kv.split('=');

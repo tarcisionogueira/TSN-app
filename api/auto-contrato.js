@@ -1,5 +1,9 @@
 import { getUser, getUserRole } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
+import { auditLog } from './_audit.js';
+import { sanitizeName, sanitizeEmail } from './_sanitize.js';
+import { alertarErro } from './_error-alert.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -100,16 +104,28 @@ _______________________________________
 Assinatura`;
 
 export default async function handler(req, res) {
+  const ip = getIP(req);
+  const rl = checkRateLimit(`auto-contrato:${ip}`, 10, 60_000);
+  if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
 
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { userId, planoKey, nomeUsuario, emailUsuario } = req.body || {};
+  const { userId: userIdRaw, planoKey, nomeUsuario: nomeRaw, emailUsuario: emailRaw } = req.body || {};
+
+  // Garante que o usuário só pode gerar contrato para si mesmo (exceto admin/consultor)
+  const { getUserRoleById } = await import('./_auth.js');
+  const callerRole = await getUserRoleById(user.id);
+  const isStaff = ['admin', 'consultor', 'analista', 'advogado'].includes(callerRole);
+  const userId = isStaff ? (userIdRaw || user.id) : user.id;
+
   if (!planoKey || !['assessorado', 'clube'].includes(planoKey)) {
     return res.status(400).json({ error: 'planoKey deve ser assessorado ou clube' });
   }
-  if (emailUsuario && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailUsuario)) {
+  const nomeUsuario = sanitizeName(nomeRaw, 200);
+  const emailUsuario = sanitizeEmail(emailRaw);
+  if (emailRaw && !emailUsuario) {
     return res.status(400).json({ error: 'emailUsuario inválido' });
   }
 

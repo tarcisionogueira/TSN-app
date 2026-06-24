@@ -85,7 +85,7 @@ export default async function handler(req) {
   // ── Verifica curso ou ebook ──
   if (produto.tipo === 'curso' || produto.tipo === 'ebook') {
     const tabela = produto.tipo === 'curso' ? 'cursos_admin' : 'ebooks_admin';
-    const rp = await sb(`${tabela}?id=eq.${produto.id}&select=preco`);
+    const rp = await sb(`${tabela}?id=eq.${encodeURIComponent(produto.id)}&select=preco`);
     const [prod] = await rp.json();
     const preco = Number(prod?.preco || 0);
     const ehBeneficio = preco === 0;
@@ -94,7 +94,7 @@ export default async function handler(req) {
       const temAcesso = PLANOS_COM_CONTEUDO.includes(role);
       return new Response(JSON.stringify({ temConta: true, role, temAcesso, ehBeneficio: true }), { status: 200, headers });
     } else {
-      const rc = await sb(`compras_produtos?user_id=eq.${userId}&produto_tipo=eq.${produto.tipo}&produto_id=eq.${produto.id}&status=eq.ativo&select=id`);
+      const rc = await sb(`compras_produtos?user_id=eq.${encodeURIComponent(userId)}&produto_tipo=eq.${encodeURIComponent(produto.tipo)}&produto_id=eq.${encodeURIComponent(produto.id)}&status=eq.ativo&select=id`);
       const compras = await rc.json();
       const jaComprou = Array.isArray(compras) && compras.length > 0;
       return new Response(
