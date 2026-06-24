@@ -594,7 +594,7 @@ export default function Busca() {
         supabase.from('busca_historico').insert({
           user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos,
           resultados_count: totalResultados || 0, cidade: filtrosAtivos.cidades?.join(', ') || null,
-          estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipo || null,
+          estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipos?.join(',') || null,
           valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
           valor_max: filtrosAtivos.valorMax ? Number(filtrosAtivos.valorMax) : null,
           pagamento_tipos: filtrosAtivos.pagamento?.length > 0 ? filtrosAtivos.pagamento : null,
@@ -606,7 +606,7 @@ export default function Busca() {
         try {
           supabase.from('alertas_email').upsert({
             user_id: user.id, filtros: filtrosAtivos,
-            descricao: [filtrosAtivos.cidades?.join(', ') || filtrosAtivos.estado, filtrosAtivos.tipo].filter(Boolean).join(' · ') || 'Preferência geral',
+            descricao: [filtrosAtivos.cidades?.join(', ') || filtrosAtivos.estado, filtrosAtivos.tipos?.join(', ')].filter(Boolean).join(' · ') || 'Preferência geral',
             ativo: true,
           }, { onConflict: 'user_id' }).then(() => {}).catch(() => {});
         } catch (_) {}
@@ -734,20 +734,44 @@ export default function Busca() {
             <div style={{ padding:14, display:'flex', flexDirection:'column', gap:12 }}>
               <div>
                 <label style={lbl}>Tipo de Imóvel</label>
-                <select value={filtros.tipo} onChange={e=>up('tipo',e.target.value)} style={inp}>
-                  <option value="">Todos</option>
-                  {[['casa','Casa'],['apartamento','Apartamento'],['terreno','Terreno/Lote'],['comercial','Comercial']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
-                </select>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {[
+                    { val: 'apartamento', label: 'Apartamento' },
+                    { val: 'casa', label: 'Casa' },
+                    { val: 'terreno', label: 'Terreno' },
+                    { val: 'comercial', label: 'Comercial' },
+                  ].map(({ val, label }) => (
+                    <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                      <input type="checkbox" checked={filtros.tipos?.includes(val) || false}
+                        onChange={e => {
+                          const arr = filtros.tipos || [];
+                          setFiltrosPersist(p => ({ ...p, tipos: e.target.checked ? [...arr, val] : arr.filter(v => v !== val) }));
+                        }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
               </div>
               <div>
                 <label style={lbl}>Modalidade</label>
-                <select value={filtros.modalidade} onChange={e=>up('modalidade',e.target.value)} style={inp}>
-                  <option value="">Todas</option>
-                  <option value="primeiro_leilao">1ª Praça</option>
-                  <option value="segundo_leilao">2ª Praça</option>
-                  <option value="venda_direta">Venda Direta</option>
-                  <option value="licitacao_aberta">Licitação Aberta</option>
-                </select>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {[
+                    { val: 'extrajudicial', label: 'Extrajudicial' },
+                    { val: 'judicial', label: 'Judicial' },
+                    { val: 'venda_direta', label: 'Venda Direta' },
+                  ].map(({ val, label }) => (
+                    <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                      <input type="checkbox" checked={filtros.modalidades?.includes(val) || false}
+                        onChange={e => {
+                          const arr = filtros.modalidades || [];
+                          setFiltrosPersist(p => ({ ...p, modalidades: e.target.checked ? [...arr, val] : arr.filter(v => v !== val) }));
+                        }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
               </div>
               <div>
                 <label style={lbl}>Estado (UF) <span style={{ color:'#ef4444' }}>*</span></label>
