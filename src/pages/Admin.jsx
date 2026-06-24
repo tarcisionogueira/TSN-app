@@ -3901,8 +3901,7 @@ function ScrapersTab() {
   const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
   const [estadosExpandidos, setEstadosExpandidos] = useState({ caixa: false, geocod: false });
   const toggleExpandir = (aba) => setEstadosExpandidos(e => ({ ...e, [aba]: !e[aba] }));
-  const [leiloeiroExpandido, setLeiloeiroExpandido] = useState(null); // chave do leiloeiro expandido
-  const [leiloeiroEstados, setLeiloeiroEstados] = useState({}); // fonte → { UF: count }
+  const [leiloeiroContagem, setLeiloeiroContagem] = useState({}); // fonte → total imóveis no banco
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
   const [geocPendentes, setGeocPendentes] = useState({});
   // Progresso "executar todos" do Caixa (estado a estado)
@@ -3917,6 +3916,14 @@ function ScrapersTab() {
       carregarPendentes();
     }
   }, [abaAtiva]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // Contagem de imóveis por fonte (leiloeiros)
+    Promise.all(['mega','sold','superbid','bb'].map(async fonte => {
+      const { count } = await supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', fonte);
+      return [fonte, count || 0];
+    })).then(entries => setLeiloeiroContagem(Object.fromEntries(entries)));
+  }, []);
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
@@ -4162,21 +4169,6 @@ function ScrapersTab() {
     return { uf, hora: `${String(horaTotal).padStart(2,'0')}:${String(minuto).padStart(2,'0')}` };
   });
 
-  async function expandirLeiloeiro(fonte) {
-    if (leiloeiroExpandido === fonte) { setLeiloeiroExpandido(null); return; }
-    setLeiloeiroExpandido(fonte);
-    if (leiloeiroEstados[fonte]) return; // já carregado
-    const { data } = await supabase
-      .from('imoveis_leilao')
-      .select('estado')
-      .eq('fonte', fonte)
-      .not('estado', 'is', null);
-    if (!data) return;
-    const contagem = {};
-    data.forEach(({ estado }) => { contagem[estado] = (contagem[estado] || 0) + 1; });
-    setLeiloeiroEstados(s => ({ ...s, [fonte]: contagem }));
-  }
-
   async function triggerPuppeteer() {
     setPuppeteerStatus({ rodando: true });
     try {
@@ -4370,48 +4362,41 @@ function ScrapersTab() {
             )}
             {puppeteerStatus?.erro && <div style={{ fontSize: 12, color: '#ef4444', background: '#fef2f2', padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>⚠️ {puppeteerStatus.erro}</div>}
             {puppeteerStatus?.agendado && <div style={{ fontSize: 12, color: '#059669', background: '#f0fdf4', padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>✅ {puppeteerStatus.msg}</div>}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
               {[
-                { fonte: 'mega',    nome: 'Mega Leilões',    volume: '~5–10k', cor: '#0D63DB', desc: 'Imóveis residenciais e comerciais' },
-                { fonte: 'sold',    nome: 'Sold Leilões',    volume: '~3–6k',  cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros bancos' },
-                { fonte: 'superbid',nome: 'Superbid',        volume: '~8–15k', cor: '#059669', desc: 'Maior marketplace de leilões do Brasil' },
-                { fonte: 'bb',      nome: 'Banco do Brasil', volume: '~2–4k',  cor: '#d97706', desc: 'Carteira imobiliária do BB' },
+                { fonte: 'mega',     nome: 'Mega Leilões',    cor: '#0D63DB', desc: 'Imóveis residenciais e comerciais' },
+                { fonte: 'sold',     nome: 'Sold Leilões',    cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros bancos' },
+                { fonte: 'superbid', nome: 'Superbid',        cor: '#059669', desc: 'Maior marketplace de leilões do Brasil' },
+                { fonte: 'bb',       nome: 'Banco do Brasil', cor: '#d97706', desc: 'Carteira imobiliária do BB' },
               ].map(s => {
-                const expandido = leiloeiroExpandido === s.fonte;
-                const estados = leiloeiroEstados[s.fonte];
-                const total = estados ? Object.values(estados).reduce((a, b) => a + b, 0) : null;
-                const ufsOrdenadas = estados ? Object.entries(estados).sort((a, b) => b[1] - a[1]) : [];
+                const total = leiloeiroContagem[s.fonte];
+                const temDados = total != null && total > 0;
                 return (
-                  <div key={s.fonte} style={{ background: `${s.cor}06`, borderRadius: 10, border: `1px solid ${s.cor}22`, overflow: 'hidden' }}>
-                    <button onClick={() => expandirLeiloeiro(s.fonte)}
-                      style={{ width: '100%', padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>{s.nome}</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>{s.desc}</div>
-                        </div>
+                  <div key={s.fonte} style={{ background: `${s.cor}06`, borderRadius: 10, padding: '12px 14px', border: `1px solid ${s.cor}22` }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>{s.nome}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{s.desc}</div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {total != null && <span style={{ fontSize: 11, fontWeight: 700, color: s.cor }}>{total.toLocaleString('pt-BR')} imóveis</span>}
-                        {total == null && <span style={{ fontSize: 11, color: '#94a3b8' }}>{s.volume}/exec</span>}
-                        <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: `${s.cor}22`, color: s.cor }}>Ativo</span>
-                        <span style={{ fontSize: 11, color: s.cor, fontWeight: 700 }}>{expandido ? '▲' : '▼'}</span>
-                      </div>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: temDados ? `${s.cor}22` : '#f1f5f9', color: temDados ? s.cor : '#94a3b8', whiteSpace: 'nowrap' }}>
+                        {temDados ? '● Ativo' : total === 0 ? '○ Sem dados' : '…'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: s.cor, lineHeight: 1 }}>
+                      {total != null ? total.toLocaleString('pt-BR') : '—'}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>imóveis no banco</div>
+                    <button onClick={() => rodarSysDebug(`leiloeiro_${s.fonte}`)} disabled={sysDebugRodando[`leiloeiro_${s.fonte}`]}
+                      style={{ marginTop: 8, padding: '4px 10px', borderRadius: 6, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+                      {sysDebugRodando[`leiloeiro_${s.fonte}`] ? '⏳' : '🔍 Diagnóstico'}
                     </button>
-                    {expandido && (
-                      <div style={{ padding: '0 14px 14px' }}>
-                        {!estados && <div style={{ fontSize: 11, color: '#94a3b8' }}>Carregando...</div>}
-                        {estados && ufsOrdenadas.length === 0 && <div style={{ fontSize: 11, color: '#94a3b8' }}>Nenhum imóvel no banco desta fonte ainda.</div>}
-                        {estados && ufsOrdenadas.length > 0 && (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
-                            {ufsOrdenadas.map(([uf, count]) => (
-                              <div key={uf} style={{ background: '#f8fafc', borderRadius: 6, padding: '5px 8px', border: `1px solid ${s.cor}18` }}>
-                                <div style={{ fontWeight: 800, fontSize: 12, color: '#334155' }}>{uf}</div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: s.cor }}>{count.toLocaleString('pt-BR')}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                    {sysDebug[`leiloeiro_${s.fonte}`] && (
+                      <div style={{ marginTop: 8, background: sysDebug[`leiloeiro_${s.fonte}`].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '8px 10px', border: `1px solid ${sysDebug[`leiloeiro_${s.fonte}`].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+                        <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, color: sysDebug[`leiloeiro_${s.fonte}`].status === 200 ? '#059669' : '#dc2626', display: 'flex', justifyContent: 'space-between' }}>
+                          {sysDebug[`leiloeiro_${s.fonte}`].status === 200 ? '✅ OK' : `❌ Erro (${sysDebug[`leiloeiro_${s.fonte}`].status})`}
+                          <button onClick={() => setSysDebug(d => ({ ...d, [`leiloeiro_${s.fonte}`]: null }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 10 }}>✕</button>
+                        </div>
+                        <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 9, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 140, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug[`leiloeiro_${s.fonte}`].body, null, 2)} />
                       </div>
                     )}
                   </div>
