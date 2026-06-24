@@ -304,10 +304,10 @@ export default async function handler(req) {
       if (!adminOk) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
     }
   } else {
-    // GET: apenas cron ou secret na URL
-    if (cronSecret) {
-      const url = new URL(req.url);
-      const sent = req.headers.get('x-cron-secret') || url.searchParams.get('secret') || '';
+    // GET: aceita chamadas do cron Vercel (x-vercel-cron: 1) ou com CRON_SECRET
+    const isVercelCron = req.headers.get('x-vercel-cron') === '1';
+    if (!isVercelCron && cronSecret) {
+      const sent = req.headers.get('x-cron-secret') || new URL(req.url).searchParams.get('secret') || '';
       if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
     }
   }
