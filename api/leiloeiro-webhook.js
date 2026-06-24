@@ -63,24 +63,28 @@ export default async function handler(req) {
 
   const { action, lote } = body;
 
+  if (!action || typeof action !== 'string') return json({ error: 'action obrigatório' }, 400);
+  if (!['upsert_lote', 'fechar_lote'].includes(action)) return json({ error: `Action desconhecida: ${action}` }, 400);
+  if (!lote || typeof lote !== 'object' || Array.isArray(lote)) return json({ error: 'lote deve ser um objeto' }, 400);
+
   try {
     if (action === 'upsert_lote') {
       if (!lote?.id_externo) return json({ error: 'id_externo obrigatório' }, 400);
       const row = {
         leiloeiro_id:    leiloeiro.id,
-        id_externo:      String(lote.id_externo),
-        titulo:          lote.titulo || null,
-        tipo:            lote.tipo || null,
-        endereco:        lote.endereco || null,
-        cidade:          lote.cidade || null,
-        estado:          lote.estado || null,
+        id_externo:      String(lote.id_externo).slice(0, 200),
+        titulo:          lote.titulo ? String(lote.titulo).slice(0, 500) : null,
+        tipo:            lote.tipo ? String(lote.tipo).slice(0, 50) : null,
+        endereco:        lote.endereco ? String(lote.endereco).slice(0, 500) : null,
+        cidade:          lote.cidade ? String(lote.cidade).slice(0, 100) : null,
+        estado:          lote.estado ? String(lote.estado).slice(0, 2).toUpperCase() : null,
         valor_avaliacao: lote.valor_avaliacao ? Number(lote.valor_avaliacao) : null,
         valor_minimo:    lote.valor_minimo    ? Number(lote.valor_minimo)    : null,
         area_m2:         lote.area_m2         ? Number(lote.area_m2)         : null,
         data_leilao:     lote.data_leilao || null,
-        modalidade:      lote.modalidade || null,
-        url_lote:        lote.url_lote || null,
-        descricao:       lote.descricao || null,
+        modalidade:      lote.modalidade ? String(lote.modalidade).slice(0, 50) : null,
+        url_lote:        lote.url_lote ? String(lote.url_lote).slice(0, 1000) : null,
+        descricao:       lote.descricao ? String(lote.descricao).slice(0, 5000) : null,
         status:          'ativo',
         dados_raw:       lote,
         atualizado_em:   new Date().toISOString(),

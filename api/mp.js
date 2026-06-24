@@ -198,9 +198,8 @@ export default async function handler(req) {
   if (!TOKEN) return new Response(JSON.stringify({ error: 'MP_ACCESS_TOKEN não configurado' }), { status: 500 });
 
   let user;
-  try { user = await getAuthUser(req); } catch {
-    return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
-  }
+  try { user = await getAuthUser(req); } catch { /* getAuthUser retorna null em falha */ }
+  if (!user) return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
 
   let body;
   try { body = await req.json(); } catch {
