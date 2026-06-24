@@ -25,9 +25,17 @@ const UFS = (process.env.UFS ? process.env.UFS.split(',') : TODAS_UFS).map(s => 
 
 const CAIXA_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Accept-Encoding': 'gzip, deflate, br',
   'Referer': 'https://venda-imoveis.caixa.gov.br/sistema/busca-imovel.asp',
+  'Connection': 'keep-alive',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'same-origin',
+  'Upgrade-Insecure-Requests': '1',
 };
 
 // Parser CSV que respeita campos entre aspas (inclui campos com ";" internos)
@@ -91,19 +99,44 @@ function extrairFormaPagamento(descricao = '', modalidade = '') {
   return null;
 }
 
-async function baixarCsv(uf) {
+// Obtém cookies de sessão visitando a página principal antes de baixar o CSV
+async function obterCookiesSessao() {
+  try {
+    const res = await fetch('https://venda-imoveis.caixa.gov.br/sistema/busca-imovel.asp?sltEstado=SP&selTipoimovel=&selTipoModalidade=&selTipoGarantia=&selValorMin=&selValorMax=&chkMunicipio=&hdnOrigem=&botao=Pesquisar', {
+      headers: CAIXA_HEADERS,
+      signal: AbortSignal.timeout(15000),
+      redirect: 'follow',
+    });
+    const cookies = res.headers.get('set-cookie') || '';
+    return cookies;
+  } catch {
+    return '';
+  }
+}
+
+async function baixarCsv(uf, cookies = '') {
+  const headers = { ...CAIXA_HEADERS };
+  if (cookies) headers['Cookie'] = cookies;
+
   const urls = [
     `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf}.csv`,
     `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf.toLowerCase()}.csv`,
   ];
   for (const url of urls) {
-    const res = await fetch(url, { headers: CAIXA_HEADERS, signal: AbortSignal.timeout(30000) });
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(60000), redirect: 'follow' });
     if (!res.ok) continue;
     const buf  = await res.arrayBuffer();
     const bytes = new Uint8Array(buf);
     const hasBom = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
     const text = new TextDecoder(hasBom ? 'utf-8' : 'windows-1252').decode(buf);
-    if (text.length > 100) return text;
+    if (text.length > 100) {
+      // Rejeitar respostas HTML/JS (proteção anti-bot da Caixa)
+      const inicio = text.trimStart().slice(0, 80).toLowerCase();
+      if (inicio.startsWith('<!') || inicio.startsWith('<html') || inicio.startsWith('(function') || inicio.startsWith('function(') || inicio.includes('<script')) {
+        throw new Error(`Caixa retornou HTML/JS em vez de CSV (anti-bot). Início: ${text.slice(0,60)}`);
+      }
+      return text;
+    }
   }
   throw new Error('CSV não disponível (403/404)');
 }
@@ -213,14 +246,20 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   let totalGeral = 0;
   const todosIds = new Set();
 
+  // Obter cookies de sessão uma vez antes de baixar os CSVs
+  process.stdout.write('  Obtendo sessão na Caixa... ');
+  const cookies = await obterCookiesSessao();
+  console.log(cookies ? `✓ (${cookies.length} bytes de cookies)` : '⚠️  sem cookies (pode ser bloqueado)');
+  await sleep(2000);
+
   for (let i = 0; i < UFS.length; i++) {
     const uf = UFS[i];
-    if (i > 0) await sleep(3000); // delay entre estados para não sobrecarregar
+    if (i > 0) await sleep(3000); // delay entre estados
 
     process.stdout.write(`  [${uf}] baixando... `);
     let texto;
     try {
-      texto = await baixarCsv(uf);
+      texto = await baixarCsv(uf, cookies);
     } catch (e) {
       console.log(`❌ ${e.message}`);
       continue;
