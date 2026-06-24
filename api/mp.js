@@ -58,12 +58,14 @@ async function mpPut(path, body) {
 // ─── Configurações de plano ───────────────────────────────────────────────────
 
 const PLANOS_CONFIG = {
-  assessorado:       { nome: 'Assessorado Pós-Arrematação', valor: 5000.00, recorrente: false },
-  assessorado_vista: { nome: 'Assessorado (À Vista)',        valor: 5000.00, recorrente: false },
-  clube:             { nome: 'Leilão Club — Mensal',         valor: 5000.00, recorrente: true,  frequencia: 'months', frequencia_tipo: 'MONTHS' },
+  assessorado:       { nome: 'Assessoria Pós-Arrematação',  valor: 5000.00, recorrente: false },
+  assessorado_vista: { nome: 'Assessoria (À Vista)',         valor: 5000.00, recorrente: false },
+  clube:             { nome: 'Leilão Club — Mensal',         valor: 5000.00, recorrente: true  },
   clube_vista:       { nome: 'Leilão Club (12× Anual)',      valor: 5000.00, recorrente: false },
-  top1:              { nome: 'Investidor',                   valor: 49.90,  recorrente: true,  frequencia: 'months', frequencia_tipo: 'MONTHS' },
-  top2:              { nome: 'Investidor Pro',               valor: 99.90,  recorrente: true,  frequencia: 'months', frequencia_tipo: 'MONTHS' },
+  top1:              { nome: 'Investidor',                   valor: 49.90,  recorrente: true  },
+  top1_anual:        { nome: 'Investidor (Anual)',           valor: 449.90, recorrente: false },
+  top2:              { nome: 'Investidor Pro',               valor: 99.90,  recorrente: true  },
+  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 797.00, recorrente: false },
 };
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
