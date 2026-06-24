@@ -4024,15 +4024,20 @@ function ScrapersTab() {
     } catch (e) {
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message, processados: totalProc } }));
     } finally {
-      // Atualiza contador global sempre ao final
+      // Atualiza contadores globais e recarrega pendentes do estado
       Promise.all([
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
-      ]).then(([comGeo, semNull, semZero]) => {
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).is('latitude', null),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).eq('latitude', 0),
+      ]).then(([comGeo, semNull, semZero, ufNull, ufZero]) => {
         const com = comGeo.count || 0;
         const sem = (semNull.count || 0) + (semZero.count || 0);
         setGeoStats({ com, sem, total: com + sem });
+        // Atualiza pendentes reais do estado processado
+        const ufPendentes = (ufNull.count || 0) + (ufZero.count || 0);
+        setGeocPendentes(p => ({ ...p, [uf]: ufPendentes }));
       });
     }
   }
@@ -4508,22 +4513,24 @@ function ScrapersTab() {
                     {r.rodando && (
                       <div style={{ marginTop: 3 }}>
                         <div style={{ background: '#dbeafe', borderRadius: 4, height: 4, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: '55%', background: '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                          <div style={{ height: '100%', width: '55%', background: r.aviso ? '#f59e0b' : '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
                         </div>
                         <div style={{ fontSize: 9, color: r.aviso ? '#d97706' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
-                          {r.aviso ? r.aviso + ' · ' : '⏳ '}{(r.processados || 0).toLocaleString('pt-BR')} / {pendentes != null ? pendentes.toLocaleString('pt-BR') : '?'}
+                          {r.aviso
+                            ? `${r.aviso} · ${(r.processados || 0).toLocaleString('pt-BR')} proc`
+                            : `⏳ ${(r.processados || 0).toLocaleString('pt-BR')} proc`}
                         </div>
                       </div>
                     )}
                     {temResultado && !temErro && (
                       <div style={{ marginTop: 3 }}>
                         <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pctFeito}%`, background: r.concluido ? '#10b981' : '#0D63DB', borderRadius: 4 }} />
+                          <div style={{ height: '100%', width: r.concluido || pendentes === 0 ? '100%' : `${Math.min(100, pctFeito)}%`, background: (r.concluido || pendentes === 0) ? '#10b981' : '#0D63DB', borderRadius: 4 }} />
                         </div>
-                        <div style={{ fontSize: 9, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
-                          {r.concluido
-                            ? '✅ fila zerada'
-                            : `📍 ${r.processados.toLocaleString('pt-BR')} / ${pendentes != null ? pendentes.toLocaleString('pt-BR') : '?'}${r.falhas ? ` · ${r.falhas} falhas` : ''}`}
+                        <div style={{ fontSize: 9, color: (r.concluido || pendentes === 0) ? '#059669' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          {(r.concluido || pendentes === 0)
+                            ? `✅ fila zerada${r.falhas ? ` · ${r.falhas} falhas` : ''}`
+                            : `📍 ${r.processados.toLocaleString('pt-BR')} proc · ${pendentes != null ? pendentes.toLocaleString('pt-BR') : '?'} restantes${r.falhas ? ` · ${r.falhas} falhas` : ''}`}
                         </div>
                       </div>
                     )}
