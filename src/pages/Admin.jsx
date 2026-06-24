@@ -3967,20 +3967,33 @@ function ScrapersTab() {
 
   // Trigger manual de geocodificação por estado (1 lote, retorna imediatamente)
   async function triggerGeoc(uf) {
-    setGeocRegiao(g => ({ ...g, [uf]: { rodando: true } }));
+    setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: 0, falhas: 0 } }));
+    let totalProc = 0, totalFalhas = 0, loops = 0;
+    const MAX_LOOPS = 50; // 50 × 10 = 500 imóveis por estado por clique
     try {
-      const r = await apiCall('/api/geocodificar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estados: [uf] }),
-      });
-      const d = await r.json();
-      if (!r.ok || d.error) {
-        setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d.error || `HTTP ${r.status}` } }));
-        return;
+      while (loops < MAX_LOOPS) {
+        const r = await apiCall('/api/geocodificar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estados: [uf] }),
+        });
+        const d = await r.json();
+        if (!r.ok || d.error) {
+          setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d.error || `HTTP ${r.status}`, processados: totalProc, falhas: totalFalhas } }));
+          return;
+        }
+        totalProc += d.processados || 0;
+        totalFalhas += d.falhas || 0;
+        loops++;
+        setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: totalProc, falhas: totalFalhas } }));
+        if (!d.processados || d.processados < 10) break; // sem mais pendentes
+        await new Promise(res => setTimeout(res, 300)); // pausa entre chamadas
       }
-      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: d.processados === 0 } }));
-      // Sempre atualiza contador após qualquer run (mesmo 0 proc — para refletir estado real)
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: totalProc, falhas: totalFalhas, concluido: totalProc === 0 } }));
+    } catch (e) {
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message, processados: totalProc } }));
+    } finally {
+      // Atualiza contador global sempre ao final
       Promise.all([
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
@@ -3990,8 +4003,6 @@ function ScrapersTab() {
         const sem = (semNull.count || 0) + (semZero.count || 0);
         setGeoStats({ com, sem, total: com + sem });
       });
-    } catch (e) {
-      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
     }
   }
 
@@ -4051,19 +4062,29 @@ function ScrapersTab() {
     for (let i = 0; i < UFS_GEOCOD_ORDEM.length; i++) {
       const uf = UFS_GEOCOD_ORDEM[i];
       setGeocTodos(g => ({ ...g, atual: i + 1, ufAtual: uf }));
-      setGeocRegiao(g => ({ ...g, [uf]: { rodando: true } }));
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: 0, falhas: 0 } }));
+      let ufProc = 0, ufFalhas = 0, ufLoops = 0;
       try {
-        const r = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estados: [uf] }) });
-        const d = await r.json();
-        const proc = d.processados || 0;
-        processadosTotal += proc;
-        setGeocTodos(g => ({ ...g, processadosTotal }));
-        setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: proc, falhas: d.falhas || 0, concluido: proc === 0 } }));
-        if (proc === 0) { continue; }
+        while (ufLoops < 20) { // até 20 × 10 = 200 imóveis por estado no "todos"
+          const r = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estados: [uf] }) });
+          if (!r.ok) break;
+          const d = await r.json();
+          if (d.error) break;
+          ufProc += d.processados || 0;
+          ufFalhas += d.falhas || 0;
+          ufLoops++;
+          processadosTotal += d.processados || 0;
+          setGeocTodos(g => ({ ...g, processadosTotal }));
+          setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: ufProc, falhas: ufFalhas } }));
+          if (!d.processados || d.processados < 10) break;
+          await new Promise(res => setTimeout(res, 300));
+        }
       } catch (e) {
         setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
+        continue;
       }
-      await new Promise(res => setTimeout(res, 2400));
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: ufProc, falhas: ufFalhas, concluido: ufProc === 0 } }));
+      await new Promise(res => setTimeout(res, 500));
     }
     setGeocTodos(g => ({ ...g, rodando: false }));
     // Atualiza contador após processar

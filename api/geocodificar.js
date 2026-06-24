@@ -261,15 +261,16 @@ export default async function handler(req) {
 
   // Modo cron (GET): loop até acabar todos os pendentes ou restar <30s de margem
   // Modo manual (POST): processa 1 lote de 50 e retorna (para o admin monitorar em tempo real)
+  // Modo manual: lote pequeno (10) para caber no limite de 30s do Edge Hobby
+  // O frontend chama em loop até processados=0
   if (modoManual) {
-    const res = await processarLote(estadosFilter, 50);
+    const res = await processarLote(estadosFilter, 10);
     if (!res) return new Response(JSON.stringify({ error: 'Supabase error' }), { status: 500 });
-    if (!res.processados) return new Response(JSON.stringify({ processados: 0, msg: 'Nenhum imóvel pendente' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
-  // Modo cron: loop interno — processa tudo que couber em ~270s (margem de 30s antes do timeout)
-  const LIMITE_MS = 270_000;
+  // Modo cron: loop interno até ~25s (5s de margem antes do kill em 30s no Hobby)
+  const LIMITE_MS = 25_000;
   const inicio = Date.now();
   const total = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
 
