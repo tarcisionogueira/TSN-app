@@ -120,10 +120,10 @@ export default function CriarContrato() {
     setGerandoIA(true); setErro('');
     try {
       const sess = (await supabase.auth.getSession()).data.session;
-      const r = await fetch('/api/gerar-contrato-ia', {
+      const r = await fetch('/api/gerar-contrato', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess?.access_token}` },
-        body: JSON.stringify({ descricao: descricaoIA, tipoContrato, partesAdicionais: partesInfo }),
+        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partesAdicionais: partesInfo }),
       });
       const data = await r.json();
       if (!r.ok || !data.ok) throw new Error(data.error || 'Erro ao gerar');

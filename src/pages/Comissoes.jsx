@@ -38,11 +38,6 @@ export default function Comissoes() {
   const [msgSaque, setMsgSaque] = useState(null);
   const [showSaqueForm, setShowSaqueForm] = useState(false);
 
-  useEffect(() => {
-    if (!ROLES_ELEGÍVEIS.includes(role)) { nav('/'); return; }
-    carregar();
-  }, [role]);
-
   const [cfinConfig, setCfinConfig] = useState({});  // config financeira por gateway
 
   const carregar = useCallback(async () => {
@@ -65,6 +60,11 @@ export default function Comissoes() {
     }
     setLoading(false);
   }, [user.id]);
+
+  useEffect(() => {
+    if (!ROLES_ELEGÍVEIS.includes(role)) { nav('/'); return; }
+    carregar();
+  }, [role, carregar]);
 
   async function salvarPix() {
     setSalvandoPix(true);
@@ -107,7 +107,7 @@ export default function Comissoes() {
 
   // Agrupamento por gateway
   const porGateway = comissoes.reduce((acc, c) => {
-    const g = c.asaas_payment_id?.startsWith('pay_') ? 'pagar.me' : 'asaas';
+    const g = c.asaas_payment_id?.startsWith('pay_') ? 'pagarme' : 'asaas';
     if (!acc[g]) acc[g] = { total: 0, qtd: 0 };
     acc[g].total += Number(c.valor_comissao);
     acc[g].qtd++;

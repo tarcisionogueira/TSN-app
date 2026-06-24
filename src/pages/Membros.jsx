@@ -47,11 +47,11 @@ function EbookCover({ titulo }) {
 
 export default function Membros() {
   const nav = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [categoria, setCategoria] = useState('Todos');
   const [busca, setBusca] = useState('');
   const [progresso, setProgresso] = useState(getProgressoLocal());
-  const [plano, setPlano] = useState(getPlano());
+  const [plano, setPlano] = useState(role || getPlano());
   const [showPlanos, setShowPlanos] = useState(false);
   const [showCancelar, setShowCancelar] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -120,6 +120,8 @@ export default function Membros() {
   });
 
   const cursosEmProgresso = cursosComPct.filter(c => c.pct > 0 && c.pct < 100);
+
+  useEffect(() => { if (role) setPlano(role); }, [role]);
 
   const ativarPlano = (p) => {
     localStorage.setItem('tsn_plano_membro', p);

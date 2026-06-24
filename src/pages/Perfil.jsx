@@ -153,6 +153,8 @@ export default function Perfil() {
       const { error } = await supabase.auth.updateUser(updates);
       if (error) throw error;
 
+      await supabase.from('perfis').update({ nome_completo: nome }).eq('id', user.id);
+
       setNovaSenha('');
       setConfirmarSenha('');
       setMensagem({ tipo: 'sucesso', texto: 'Perfil atualizado com sucesso!' });

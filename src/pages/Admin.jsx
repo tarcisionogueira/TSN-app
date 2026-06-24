@@ -5000,17 +5000,21 @@ function FinanceiroTab() {
       if (mp) setGateway(mp.ativo ? 'mp' : 'asaas');
     });
     // Saldo MP
-    fetch('/api/mp-admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabase.auth.getSession()?.access_token}` }, body: JSON.stringify({ action: 'saldo' }) })
-      .then(r => r.json()).then(d => setMpSaldo(d)).catch(() => setMpSaldo(null)).finally(() => setMpLoading(false));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      fetch('/api/mp-admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` }, body: JSON.stringify({ action: 'saldo' }) })
+        .then(r => r.json()).then(d => setMpSaldo(d)).catch(() => setMpSaldo(null)).finally(() => setMpLoading(false));
+    });
   }, []);
 
   React.useEffect(() => {
     setSacLoading(true);
-    fetch('/api/mp-saque', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabase.auth.getSession()?.access_token}` },
-      body: JSON.stringify({ action: 'listar', status: sacTab }),
-    }).then(r => r.json()).then(d => setSaques(Array.isArray(d) ? d : [])).catch(() => setSaques([])).finally(() => setSacLoading(false));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      fetch('/api/mp-saque', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action: 'listar', status: sacTab }),
+      }).then(r => r.json()).then(d => setSaques(Array.isArray(d) ? d : [])).catch(() => setSaques([])).finally(() => setSacLoading(false));
+    });
   }, [sacTab]);
 
   const salvarGateway = async (gw) => {
@@ -5027,9 +5031,10 @@ function FinanceiroTab() {
     setErroSac('');
     setAprovando(p => ({ ...p, [saqueId]: true }));
     const comp = comprovante[saqueId] || '';
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/mp-saque', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabase.auth.getSession()?.access_token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
       body: JSON.stringify({ action: 'aprovar', saqueId, comprovante_url: comp }),
     });
     const d = await res.json();
@@ -5040,9 +5045,10 @@ function FinanceiroTab() {
   const rejeitarSaque = async (saqueId) => {
     const motivo = prompt('Motivo da rejeição (será notificado ao profissional):');
     if (!motivo) return;
+    const { data: { session } } = await supabase.auth.getSession();
     await fetch('/api/mp-saque', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabase.auth.getSession()?.access_token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
       body: JSON.stringify({ action: 'rejeitar', saqueId, motivo }),
     });
     setSaques(p => p.filter(s => s.id !== saqueId));

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -19,12 +19,13 @@ const PLANOS_ANALISE = ['top1','top2','assessorado','clube','analista','admin'];
 export default function ImovelDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
+  const { id: paramId } = useParams();
   const { user, role } = useAuth();
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
   const [loading, setLoading] = useState(!loc.state?.imovel);
   const [imgError, setImgError] = useState(false);
 
-  const id = loc.state?.imovel?.id || new URLSearchParams(loc.search).get('id');
+  const id = loc.state?.imovel?.id || paramId;
 
   useEffect(() => {
     if (imovel) return;

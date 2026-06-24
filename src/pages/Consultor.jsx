@@ -510,7 +510,7 @@ export default function Consultor() {
                       style={{ padding:'6px 12px', background:'#eff6ff', color:'#084BA6', border:'1px solid #bfdbfe', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                       ✉ Mensagem
                     </button>
-                    <button onClick={()=>{ setReuniaoModal({ nome, email }); setReuniaoForm({ data:'', hora:'10:00', duracao:30 }); setReuniaoLink(''); }}
+                    <button onClick={()=>{ setReuniaoModal({ nome, email }); setReuniaoForm({ data:'', hora:'10:00', duracao:30 }); setReuniaoInfo(null); }}
                       style={{ padding:'6px 12px', background:'#f0fdf4', color:'#15803d', border:'1px solid #bbf7d0', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                       📅 Reunião
                     </button>

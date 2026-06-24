@@ -161,7 +161,7 @@ ${ctxContratosAnteriores}`;
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-haiku-4-5',
         max_tokens: 2500,
         system: `Você é o advogado interno da NOGUEIRA EMPREENDIMENTOS LTDA (CNPJ 02.311.492/0001-61), sediada em Feira de Santana/BA.
 

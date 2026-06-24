@@ -301,7 +301,7 @@ export default function Contratos() {
                 </div>
 
               /* ── Aguardando assinatura ── */
-              ) : aberto.requer_assinatura && aberto.status === 'aguardando_assinatura' ? (
+              ) : aberto.requer_assinatura && ['aguardando','aguardando_assinatura'].includes(aberto.status) ? (
                 <div>
                   {/* CPF */}
                   <div style={S.secao}>
@@ -378,7 +378,7 @@ export default function Contratos() {
             </div>
 
             {/* Footer com botão de assinar */}
-            {aberto.status === 'aguardando_assinatura' && aberto.requer_assinatura && (
+            {['aguardando','aguardando_assinatura'].includes(aberto.status) && aberto.requer_assinatura && (
               <div style={{ padding: '14px 22px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0 }}>
                 <button onClick={() => setAberto(null)} style={{ padding: '10px 18px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 600, color: '#64748b', cursor: 'pointer' }}>Cancelar</button>
                 <button onClick={assinar} disabled={salvando}
