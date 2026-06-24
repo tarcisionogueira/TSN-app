@@ -40,7 +40,10 @@ async function nominatim(query) {
 }
 
 /**
- * Geocodificação em cascata com 4 níveis de precisão:
+ * Geocodificação em cascata com 5 níveis de precisão:
+ *
+ * 0. CEP via ViaCEP → logradouro atual dos Correios → Nominatim com dados corrigidos
+ *    Resolve ruas renomeadas e endereços desatualizados na matrícula.
  *
  * 1. Endereço completo (endereco + bairro + cidade + estado)  → 'endereco'
  *    Pin exato no imóvel, sem círculo.
@@ -57,6 +60,29 @@ async function nominatim(query) {
  * Se nenhum nível resolver → retorna null (grava lat=0,lng=0 sentinela).
  */
 
+// Consulta ViaCEP (Correios) para obter o logradouro oficial atualizado
+async function viaCep(cep) {
+  if (!cep) return null;
+  const cepLimpo = cep.replace(/\D/g, '');
+  if (cepLimpo.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    if (d.erro) return null; // CEP não encontrado
+    return {
+      logradouro: d.logradouro || null,
+      bairro: d.bairro || null,
+      cidade: d.localidade || null,
+      uf: d.uf || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Remove número do endereço para tentar geocodificar só pelo nome da rua
 // Ex: "Rua das Flores, 123 Apto 5" → "Rua das Flores"
 // Ex: "Av. Brasil nº 45" → "Av. Brasil"
@@ -66,22 +92,58 @@ function extrairRua(endereco) {
     .replace(/,?\s*s\/n.*/i, '')                          // s/n e variações
     .replace(/,?\s*(n[°º]?\.?\s*)?\d[\d\-\/]*.*/i, '')   // número e tudo após
     .trim();
-  // Só retorna se o resultado for diferente do original (havia número para remover)
-  // e tiver conteúdo útil (mais de 4 chars)
   return rua && rua.length > 4 && rua !== endereco.trim() ? rua : null;
 }
 
-async function geocodificarCascata(im) {
-  const { endereco, bairro, cidade, estado } = im;
+// Extrai número do endereço para reusar com logradouro corrigido pelo ViaCEP
+function extrairNumero(endereco) {
+  if (!endereco?.trim()) return null;
+  const m = endereco.match(/,?\s*(?:n[°º]?\.?\s*)?(\d[\d\-\/]*)/i);
+  return m ? m[1] : null;
+}
 
-  // Nível 1 — endereço completo (com número)
+async function geocodificarCascata(im) {
+  let { endereco, bairro, cidade, estado, cep } = im;
+
+  // Nível 0 — CEP via ViaCEP (Correios): corrige logradouro desatualizado
+  if (cep) {
+    const via = await viaCep(cep);
+    if (via?.logradouro) {
+      // Reconstrói o endereço com o logradouro oficial dos Correios
+      const numero = extrairNumero(endereco);
+      const enderecoCorrigido = numero
+        ? `${via.logradouro}, ${numero}`
+        : via.logradouro;
+      const bairroCorrigido = via.bairro || bairro;
+      const cidadeCorrigida = via.cidade || cidade;
+      const estadoCorrigido = via.uf || estado;
+
+      const query = [enderecoCorrigido, bairroCorrigido, cidadeCorrigida, estadoCorrigido, 'Brasil'].filter(Boolean).join(', ');
+      const coords = await nominatim(query);
+      if (coords) return { ...coords, nivel: 'endereco' };
+      await sleep(1320);
+
+      // Tenta só o logradouro sem número
+      const queryRua = [via.logradouro, bairroCorrigido, cidadeCorrigida, estadoCorrigido, 'Brasil'].filter(Boolean).join(', ');
+      const coordsRua = await nominatim(queryRua);
+      if (coordsRua) return { ...coordsRua, nivel: 'rua' };
+      await sleep(1320);
+
+      // Atualiza para o resto da cascata usar os dados corrigidos
+      bairro = bairroCorrigido;
+      cidade = cidadeCorrigida;
+      estado = estadoCorrigido;
+    }
+  }
+
+  // Nível 1 — endereço original completo (com número)
   if (endereco?.trim()) {
     const query = [endereco, bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
     const coords = await nominatim(query);
     if (coords) return { ...coords, nivel: 'endereco' };
     await sleep(1320);
 
-    // Nível 1.5 — rua sem número (mesmo endereço, remove o nº)
+    // Nível 1.5 — rua sem número
     const rua = extrairRua(endereco);
     if (rua) {
       const query2 = [rua, bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
@@ -152,7 +214,7 @@ async function processarLote(estadosFilter, lote = 50) {
   // Busca imóveis pendentes: latitude IS NULL (nunca geocodificados) OU latitude=0 (tentativa anterior falhou)
   // Usa duas queries separadas para evitar a sintaxe `or=()` do PostgREST que falha com parâmetros combinados
   // Sem filtro ativo — service key vê tudo; geocodifica independente do status
-  const base = `imoveis_leilao?select=id,cidade,estado,endereco,bairro${estadosFilter}&order=atualizado_em.desc&limit=${lote}`;
+  const base = `imoveis_leilao?select=id,cidade,estado,endereco,bairro,cep${estadosFilter}&order=atualizado_em.desc&limit=${lote}`;
   const [r1, r2] = await Promise.all([
     sb(`${base}&latitude=is.null`),
     sb(`${base}&latitude=eq.0`),

@@ -173,7 +173,12 @@ function csvToImoveis(csv, uf) {
     const estado = cols[1] || uf;
     const cidade = cols[2] || '';
     const bairro = cols[3] || '';
-    const endereco = cols[4] || '';
+    const enderecoRaw = cols[4] || '';
+    // CEP embutido no campo endereco: "..., PLANO DIRETOR SUL - CEP: 77016-366, PALMAS..."
+    const cepMatch = enderecoRaw.match(/CEP[:\s]+(\d{5}-?\d{3})/i);
+    const cep = cepMatch ? cepMatch[1].replace('-', '') : null;
+    // Remove o trecho "- CEP: XXXXX-XXX" do endereco para não poluir a geocodificação
+    const endereco = enderecoRaw.replace(/\s*[-–]\s*CEP[:\s]+\d{5}-?\d{3}/i, '').trim();
     const valorMinimo = parseNumeric(cols[5]);
     const valorAvaliacao = parseNumeric(cols[6]);
     const descontoPct = parseDesconto(cols[7]);
@@ -213,7 +218,8 @@ function csvToImoveis(csv, uf) {
       estado: estado.trim().toUpperCase(),
       cidade: cidade.trim(),
       bairro: bairro.trim(),
-      endereco: endereco.trim(),
+      endereco: endereco,
+      cep: cep || null,
       tipo: inferirTipo(descricao),
       valor_avaliacao: valorAvaliacao,
       valor_minimo: valorMinimo,
