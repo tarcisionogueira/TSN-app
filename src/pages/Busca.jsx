@@ -105,8 +105,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const aplicarFiltros = (base) => {
         let q = base.eq('ativo', true);
         if (filtros.estado) q = q.eq('estado', filtros.estado);
-        if (filtros.tipo) q = q.in('tipo', [filtros.tipo, 'imovel']);
-        if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
+        if (filtros.tipos?.length) q = q.in('tipo', [...filtros.tipos, 'imovel']);
+        if (filtros.modalidades?.length) q = q.in('modalidade', filtros.modalidades);
         if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
         if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
         if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
@@ -308,18 +308,18 @@ export default function Busca() {
     supabase.from('perfis').select('analises_bonus').eq('id', user.id).single()
       .then(({ data }) => { if (data) setAnalisesBonus(data.analises_bonus || 0); });
   }, [role, user?.id]);
-  const FILTROS_INICIAL = { tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] };
+  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[] };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
     if (!_urlParams.estado) return null;
     return {
-      tipo: _urlParams.tipo || '',
+      tipos: _urlParams.tipo ? [_urlParams.tipo] : [],
       estado: _urlParams.estado || '',
       cidades: _urlParams.cidades ? _urlParams.cidades.split(',').filter(Boolean) : [],
       raioKm: 0,
       valorMin: _urlParams.valorMin || '',
       valorMax: _urlParams.valorMax || '',
-      modalidade: _urlParams.modalidade || '',
+      modalidades: _urlParams.modalidade ? [_urlParams.modalidade] : [],
       pagamento: _urlParams.pagamento ? _urlParams.pagamento.split(',').filter(Boolean) : [],
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -492,8 +492,8 @@ export default function Busca() {
     const buildQuery = (base) => {
       let q = base.eq('ativo', true);
       if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
-      if (filtrosAtivos.tipo) q = q.in('tipo', [filtrosAtivos.tipo, 'imovel']);
-      if (filtrosAtivos.modalidade) q = q.eq('modalidade', filtrosAtivos.modalidade);
+      if (filtrosAtivos.tipos?.length) q = q.in('tipo', [...filtrosAtivos.tipos, 'imovel']);
+      if (filtrosAtivos.modalidades?.length) q = q.in('modalidade', filtrosAtivos.modalidades);
       if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')));
       if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')));
       // Cidades: OR interno entre cidades, mas ANDado com os demais filtros via filtro separado

@@ -3881,13 +3881,14 @@ function ScrapersTab() {
   const [puppeteerStatus, setPuppeteerStatus] = useState(null);
   const [abaAtiva, setAbaAtiva] = useState(() => sessionStorage.getItem('scraper_aba') || 'caixa');
   const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
+  const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
     // Contador de imóveis geocodificados (coluna: latitude)
     Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).or('latitude.is.null,latitude.eq.0'),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).or('latitude.is.null,latitude.eq.0'),
     ]).then(([comGeo, semGeo]) => {
       const com = comGeo.count || 0;
       const sem = semGeo.count || 0;
@@ -3927,6 +3928,27 @@ function ScrapersTab() {
     } catch (e) {
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
     }
+  }
+
+  const UFS_GEOCOD_ORDEM = ['SP','MG','PR','RS','RJ','SC','BA','GO','CE','PE','MT','MS','ES','PA','MA','RN','PB','AL','PI','SE','TO','RO','AM','DF','AC','AP','RR'];
+
+  async function geocodificarTodos() {
+    const total = UFS_GEOCOD_ORDEM.length;
+    setGeocTodos({ rodando: true, atual: 0, total, ufAtual: UFS_GEOCOD_ORDEM[0], processadosTotal: 0 });
+    let processadosTotal = 0;
+    for (let i = 0; i < UFS_GEOCOD_ORDEM.length; i++) {
+      const uf = UFS_GEOCOD_ORDEM[i];
+      setGeocTodos(g => ({ ...g, atual: i + 1, ufAtual: uf }));
+      try {
+        const r = await apiCall('/api/geocodificar', { method: 'POST', body: JSON.stringify({ estados: [uf] }) });
+        const d = await r.json();
+        processadosTotal += d.processados || 0;
+        setGeocTodos(g => ({ ...g, processadosTotal }));
+        if ((d.processados || 0) === 0) { continue; }
+      } catch (e) { /* avança para o próximo */ }
+      await new Promise(res => setTimeout(res, 2400));
+    }
+    setGeocTodos(g => ({ ...g, rodando: false }));
   }
 
   // Lista de estados com horários do cron (UTC)
@@ -4118,10 +4140,14 @@ function ScrapersTab() {
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação — Nominatim / OSM</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–04:20 UTC · cache ~70% · cascade 3 níveis</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–09:59 UTC (21h–07h BRT) · cache ~70% · cascade 3 níveis</div>
             </div>
+            <button onClick={geocodificarTodos} disabled={geocTodos.rodando}
+              style={{ padding: '7px 14px', borderRadius: 8, background: geocTodos.rodando ? '#f1f5f9' : '#0D63DB', color: geocTodos.rodando ? '#94a3b8' : 'white', border: 'none', cursor: geocTodos.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+              {geocTodos.rodando ? `⏳ Processando UF [${geocTodos.atual}/27]...` : '▶ Geocodificar todos'}
+            </button>
           </div>
 
           {/* Resumo por nível */}
@@ -4137,6 +4163,19 @@ function ScrapersTab() {
               </div>
             ))}
           </div>
+
+          {geocTodos.rodando && (
+            <div style={{ marginBottom: 14, background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#334155', fontWeight: 700, marginBottom: 8 }}>
+                <span>🗺️ Geocodificando {geocTodos.ufAtual}...</span>
+                <span>{geocTodos.atual}/{geocTodos.total} estados · {geocTodos.processadosTotal} imóveis</span>
+              </div>
+              <div style={{ background: '#e2e8f0', borderRadius: 6, height: 10, overflow: 'hidden' }}>
+                <div style={{ width: `${geocTodos.total > 0 ? (geocTodos.atual/geocTodos.total)*100 : 0}%`, height: '100%', background: '#0D63DB', borderRadius: 6, transition: 'width 0.5s' }} />
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>Respeitando limite de 1 req/s do Nominatim · não feche esta aba</div>
+            </div>
+          )}
 
           {/* Grid de estados */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
