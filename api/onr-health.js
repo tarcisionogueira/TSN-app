@@ -56,9 +56,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export default async function handler(req) {
   // Aceita cron (sem auth) ou admin autenticado com secret
-  const secret = req.headers.get('x-cron-secret') || new URL(req.url).searchParams.get('secret');
-  const isCron = secret === CRON_SECRET;
-  const isManual = req.headers.get('x-manual-health') === 'true';
+  const secret = req.headers.get('x-cron-secret') || '';
+  const isCron = CRON_SECRET && secret === CRON_SECRET;
+  const isManual = req.headers.get('x-manual-health') === 'true' && isCron;
 
   if (!isCron && !isManual) {
     // Acesso manual sem secret: retorna só o último estado salvo

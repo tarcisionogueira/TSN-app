@@ -1,8 +1,19 @@
 export const config = { runtime: 'edge' };
 
+const UFS_VALIDAS = new Set(['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']);
+
 export default async function handler(req) {
+  const CRON_SECRET = process.env.CRON_SECRET;
+  const sent = req.headers.get('x-cron-secret') || new URL(req.url).searchParams.get('secret') || '';
+  if (!CRON_SECRET || sent !== CRON_SECRET) {
+    return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
+
   const url = new URL(req.url);
   const uf = (url.searchParams.get('uf') || 'SP').toUpperCase();
+  if (!UFS_VALIDAS.has(uf)) {
+    return new Response(JSON.stringify({ error: 'UF inválida' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
 
   const csvUrl = `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf}.csv`;
   const headers = {

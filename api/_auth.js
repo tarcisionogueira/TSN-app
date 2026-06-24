@@ -70,7 +70,11 @@ export async function getUserRole(req) {
 export async function getUserRoleById(userId) {
   if (!userId) return null;
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-  const key = SERVICE_KEY || ANON_KEY;
+  if (!SERVICE_KEY) {
+    console.error('[_auth] SUPABASE_SERVICE_KEY não configurada — getUserRoleById abortado');
+    return null;
+  }
+  const key = SERVICE_KEY;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${userId}&select=role`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },

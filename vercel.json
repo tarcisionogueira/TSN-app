@@ -4,9 +4,9 @@
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "POST, GET, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type" }
+        { "key": "Access-Control-Allow-Origin", "value": "https://bidprobrasil.com.br" },
+        { "key": "Access-Control-Allow-Methods", "value": "POST, GET, PATCH, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type, X-Leiloeiro-Key, X-Cron-Secret" }
       ]
     },
     {
@@ -14,19 +14,19 @@
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https: http:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://api.daily.co wss://*.daily.co https://nominatim.openstreetmap.org https://servicodados.ibge.gov.br https://viacep.com.br https://api.resend.com https://api.asaas.com https://api.mercadopago.com https://www.google-analytics.com; frame-src https://*.daily.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'" }
       ]
     }
   ],
   "crons": [
-    { "path": "/api/health-check",        "schedule": "0 6 * * *"             },
-    { "path": "/api/enviar-alertas-cron", "schedule": "0 8 * * 1"             },
-    { "path": "/api/scraper-caixa",       "schedule": "*/2 22 * * *"          },
-    { "path": "/api/geocodificar",        "schedule": "*/10 * * * *"            },
-    { "path": "/api/onr-health",          "schedule": "0 7 * * 1"             },
-    { "path": "/api/mp-saque-cron",       "schedule": "0 9 * * 5"             }
+    { "path": "/api/health-check",        "schedule": "0 6 * * *"    },
+    { "path": "/api/enviar-alertas-cron", "schedule": "0 8 * * 1"    },
+    { "path": "/api/scraper-caixa",       "schedule": "*/2 22 * * *" },
+    { "path": "/api/geocodificar",        "schedule": "*/10 * * * *"  },
+    { "path": "/api/onr-health",          "schedule": "0 7 * * 1"    },
+    { "path": "/api/mp-saque-cron",       "schedule": "0 9 * * 5"    }
   ]
 }

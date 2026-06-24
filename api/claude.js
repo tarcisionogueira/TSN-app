@@ -32,7 +32,20 @@ export default async function handler(req) {
   }
 
   const body = await req.json();
-  const { useSearch, ...claudePayload } = body;
+  const { useSearch, messages, tools, system, model, max_tokens } = body;
+
+  // Campos críticos fixos no servidor — cliente não pode sobrescrever modelo, tokens ou system prompt
+  const MODELOS_PERMITIDOS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8'];
+  const modeloSolicitado = model && MODELOS_PERMITIDOS.includes(model) ? model : 'claude-haiku-4-5-20251001';
+  const maxTokensSafe = Math.min(Number(max_tokens) || 1024, 4096);
+
+  const payload = {
+    model: modeloSolicitado,
+    max_tokens: maxTokensSafe,
+    messages,
+    ...(system ? { system } : {}),
+    ...(tools ? { tools } : {}),
+  };
 
   const headers = {
     'x-api-key': apiKey,
@@ -40,7 +53,6 @@ export default async function handler(req) {
     'content-type': 'application/json',
   };
 
-  // Habilita web_search quando solicitado
   if (useSearch) {
     headers['anthropic-beta'] = 'web-search-2025-03-05';
   }
@@ -48,7 +60,7 @@ export default async function handler(req) {
   const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers,
-    body: JSON.stringify(claudePayload),
+    body: JSON.stringify(payload),
   });
 
   const data = await anthropicRes.json();

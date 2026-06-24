@@ -4,14 +4,11 @@ export const config = { runtime: 'edge' };
 // GET /api/setup-daily-webhook?secret=CRON_SECRET (somente admin)
 export default async function handler(req) {
   const CRON_SECRET = process.env.CRON_SECRET;
-  if (CRON_SECRET) {
-    const url = new URL(req.url);
-    const sentSecret = url.searchParams.get('secret') || req.headers.get('x-cron-secret') || '';
-    if (sentSecret !== CRON_SECRET) {
-      return new Response(JSON.stringify({ error: 'Acesso negado' }), {
-        status: 403, headers: { 'Content-Type': 'application/json' },
-      });
-    }
+  const sentSecret = req.headers.get('x-cron-secret') || '';
+  if (!CRON_SECRET || sentSecret !== CRON_SECRET) {
+    return new Response(JSON.stringify({ error: 'Acesso negado' }), {
+      status: 401, headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const DAILY_KEY = process.env.DAILY_API_KEY;

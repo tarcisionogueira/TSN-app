@@ -13,7 +13,7 @@ export default async function handler(req) {
 
   // Autenticação via CRON_SECRET (mesmo padrão dos outros endpoints)
   const sent = req.headers.get('x-cron-secret') || '';
-  if (CRON_SECRET && sent !== CRON_SECRET) {
+  if (!CRON_SECRET || sent !== CRON_SECRET) {
     return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
   }
 
