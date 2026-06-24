@@ -422,7 +422,7 @@ async function scraperSuperbid(browser, pageNum = 1) {
         const id = of.href.split('/').filter(Boolean).pop()?.split('?')[0] || `${pageNum}_${idx}`;
         const estadoMatch = of.local.match(/[-–]\s*([A-Z]{2})$/);
         return {
-          fonte: 'SOLD',
+          fonte: 'SUPERBID',
           fonte_id: `sbid_${id}`,
           titulo: of.titulo.slice(0, 120) || 'Imóvel Superbid',
           tipo: normalizarTipo(of.titulo),
@@ -455,7 +455,7 @@ async function scraperSuperbid(browser, pageNum = 1) {
       if (!valMin) return null;
 
       return {
-        fonte: 'SOLD',
+        fonte: 'SUPERBID',
         fonte_id: `sbid_${id}`,
         titulo: titulo.slice(0, 120) || `Imóvel Superbid`,
         tipo: normalizarTipo(p.subCategory?.description || of.category),
