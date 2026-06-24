@@ -3910,12 +3910,14 @@ function ScrapersTab() {
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
     // Contador de imóveis geocodificados (coluna: latitude)
+    // Sem coordenadas = latitude IS NULL (nunca processado) + latitude=0 (falhou)
     Promise.all([
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
-    ]).then(([comGeo, semGeo]) => {
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
+    ]).then(([comGeo, semNull, semZero]) => {
       const com = comGeo.count || 0;
-      const sem = semGeo.count || 0;
+      const sem = (semNull.count || 0) + (semZero.count || 0);
       setGeoStats({ com, sem, total: com + sem });
     });
   }, []);
@@ -3978,8 +3980,11 @@ function ScrapersTab() {
         Promise.all([
           supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
           supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
-        ]).then(([comGeo, semGeo]) => {
-          setGeoStats({ com: comGeo.count || 0, sem: semGeo.count || 0, total: (comGeo.count || 0) + (semGeo.count || 0) });
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
+        ]).then(([comGeo, semNull, semZero]) => {
+          const com = comGeo.count || 0;
+          const sem = (semNull.count || 0) + (semZero.count || 0);
+          setGeoStats({ com, sem, total: com + sem });
         });
       }
     } catch (e) {
@@ -4063,9 +4068,12 @@ function ScrapersTab() {
     // Atualiza contador após processar
     Promise.all([
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).or('latitude.is.null,latitude.eq.0'),
-    ]).then(([comGeo, semGeo]) => {
-      setGeoStats({ com: comGeo.count || 0, sem: semGeo.count || 0, total: (comGeo.count || 0) + (semGeo.count || 0) });
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
+    ]).then(([comGeo, semNull, semZero]) => {
+      const com = comGeo.count || 0;
+      const sem = (semNull.count || 0) + (semZero.count || 0);
+      setGeoStats({ com, sem, total: com + sem });
     });
   }
 
@@ -4223,7 +4231,6 @@ function ScrapersTab() {
             })}
           </div>
           <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>Cron automático diário · ▶ força execução manual por estado</div>
-          <BotaoDebug modulo="scraper" label="Diagnóstico Scraper" />
         </div>
       )}
 
@@ -4324,10 +4331,22 @@ function ScrapersTab() {
                     </button>
                   </div>
                   <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
-                  {r.rodando && <div style={{ fontSize: 9, color: '#0D63DB', fontWeight: 700, marginTop: 2 }}>⏳ Geocodificando...</div>}
+                  {r.rodando && (
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: '60%', background: '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                      </div>
+                      <div style={{ fontSize: 9, color: '#0D63DB', fontWeight: 700, marginTop: 2 }}>⏳ Processando...</div>
+                    </div>
+                  )}
                   {r.processados != null && !r.rodando && (
-                    <div style={{ fontSize: 9, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 700, marginTop: 2 }}>
-                      {r.concluido ? '✅ Completo' : `📍 ${r.processados} proc · ${r.falhas || 0} falhas`}
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: r.concluido ? '100%' : `${Math.min(100, (r.processados / 50) * 100)}%`, background: r.concluido ? '#10b981' : '#0D63DB', borderRadius: 4 }} />
+                      </div>
+                      <div style={{ fontSize: 9, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 700, marginTop: 2 }}>
+                        {r.concluido ? '✅ 0 pendentes' : `📍 ${r.processados} proc · ${r.falhas || 0} falhas`}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -4337,7 +4356,6 @@ function ScrapersTab() {
           <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
             Cascade: endereço → bairro → cidade · ▶ força 1 lote por estado manualmente
           </div>
-          <BotaoDebug modulo="geocod" label="Diagnóstico Geocodificação" />
         </div>
       )}
 

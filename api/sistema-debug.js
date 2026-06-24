@@ -97,9 +97,16 @@ export default async function handler(req) {
   }
 
   if (modulo === 'geral' || modulo === 'geocod') {
+    const [semNull, semZero, comCoords] = await Promise.all([
+      countHead('imoveis_leilao?ativo=eq.true&latitude=is.null'),
+      countHead('imoveis_leilao?ativo=eq.true&latitude=eq.0'),
+      countHead('imoveis_leilao?ativo=eq.true&latitude=gt.0'),
+    ]);
     resultado.geocodificacao = {
-      sem_coords: await countHead('imoveis_leilao?ativo=eq.true&or=(latitude.is.null,latitude.eq.0)'),
-      com_coords: await countHead('imoveis_leilao?ativo=eq.true&latitude=not.is.null&latitude=neq.0'),
+      sem_coords_null: semNull,
+      sem_coords_zero: semZero,
+      sem_coords_total: { ok: semNull.ok && semZero.ok, count: (semNull.count || 0) + (semZero.count || 0) },
+      com_coords: comCoords,
       por_nivel: {},
     };
     for (const nivel of ['endereco', 'bairro', 'cidade']) {

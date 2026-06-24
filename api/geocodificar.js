@@ -122,11 +122,22 @@ function cacheKey(im) {
 }
 
 async function processarLote(estadosFilter, lote = 50) {
-  const r = await sb(
-    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&latitude=is.null&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
-  );
-  if (!r.ok) return null;
-  const imoveis = await r.json();
+  // Busca imóveis pendentes: latitude IS NULL (nunca geocodificados) OU latitude=0 (tentativa anterior falhou)
+  // Usa duas queries separadas para evitar a sintaxe `or=()` do PostgREST que falha com parâmetros combinados
+  const base = `imoveis_leilao?select=id,cidade,estado,endereco,bairro&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`;
+  const [r1, r2] = await Promise.all([
+    sb(`${base}&latitude=is.null`),
+    sb(`${base}&latitude=eq.0`),
+  ]);
+  if (!r1.ok || !r2.ok) return null;
+  const [list1, list2] = await Promise.all([r1.json(), r2.json()]);
+  // Combina e deduplica mantendo o limite
+  const seen = new Set();
+  const imoveis = [];
+  for (const im of [...list1, ...list2]) {
+    if (!seen.has(im.id)) { seen.add(im.id); imoveis.push(im); }
+    if (imoveis.length >= lote) break;
+  }
   if (!imoveis.length) return { processados: 0 };
 
   const res = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0 };
