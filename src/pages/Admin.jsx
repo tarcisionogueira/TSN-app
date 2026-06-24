@@ -2751,6 +2751,7 @@ function DashboardTab() {
   const [asaasDados, setAsaasDados] = useState(null);
   const [loading, setLoading] = useState(true);
   const [asaasLoading, setAsaasLoading] = useState(true);
+  const [fotoStats, setFotoStats] = useState({ total: 0, noStorage: 0 });
   const [usuariosDetalhe, setUsuariosDetalhe] = useState(false);
   const [healthLogs, setHealthLogs] = useState([]);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -2860,6 +2861,13 @@ function DashboardTab() {
       }
       setAsaasLoading(false);
     }
+
+    // Fotos: count total e quantas já estão no Storage
+    supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true)
+      .then(({ count: total }) => {
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).like('link_foto', '%supabase%')
+          .then(({ count: noStorage }) => setFotoStats({ total: total || 0, noStorage: noStorage || 0 }));
+      });
 
     load();
     loadAsaas();
@@ -3372,6 +3380,55 @@ function DashboardTab() {
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#10b981' }}>~R$ 0,08/doc</div>
               </div>
             </div>
+
+            {/* Scrapers & Storage operacional */}
+            {(() => {
+              const fotosGB = (fotoStats.noStorage * 0.00015); // ~150 KB média por foto
+              const storageCustoBRL = fotosGB * 0.021 * 6.0; // $0.021/GB × câmbio ~6.0
+              const semFoto = fotoStats.total - fotoStats.noStorage;
+              const pctFotos = fotoStats.total > 0 ? Math.round((fotoStats.noStorage / fotoStats.total) * 100) : 0;
+              return (
+                <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Scrapers & Storage Fotos</div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>Supabase Storage · ~150 KB/foto · $0,021/GB/mês</div>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: storageCustoBRL < 1 ? '#10b981' : '#d97706' }}>
+                      {storageCustoBRL < 0.01 ? 'R$ 0' : `~R$ ${storageCustoBRL.toFixed(2)}`}/mês
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                    {[
+                      { label: 'Imóveis ativos', val: fmtN(fotoStats.total), cor: '#0D63DB' },
+                      { label: 'Fotos no Storage', val: `${fmtN(fotoStats.noStorage)} (${pctFotos}%)`, cor: pctFotos > 80 ? '#10b981' : pctFotos > 30 ? '#d97706' : '#dc2626' },
+                      { label: 'Sem foto', val: fmtN(semFoto), cor: semFoto > 1000 ? '#d97706' : '#64748b' },
+                    ].map(c => (
+                      <div key={c.label} style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: c.cor }}>{c.val}</div>
+                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{c.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {[
+                      { nome: 'GitHub Actions (scrapers)', custo: 'Grátis', desc: 'Repo público — ilimitado', cor: '#10b981' },
+                      { nome: 'Nominatim / OSM (geocod)', custo: 'Grátis', desc: '1 req/s · uso moderado', cor: '#10b981' },
+                      { nome: 'Scraper Caixa', custo: 'Grátis', desc: 'API pública Caixa via GH Actions', cor: '#10b981' },
+                      { nome: 'ScraperAPI (opcional)', custo: 'US$ 49/mês', desc: 'Leiloeiros privados — não ativado', cor: '#94a3b8' },
+                    ].map(s => (
+                      <div key={s.nome} style={{ background: '#f8fafc', borderRadius: 7, padding: '7px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#111' }}>{s.nome}</div>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>{s.desc}</div>
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: s.cor, whiteSpace: 'nowrap' }}>{s.custo}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Asaas */}
             <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>

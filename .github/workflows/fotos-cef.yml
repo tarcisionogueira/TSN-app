@@ -38,4 +38,11 @@ jobs:
 
       - name: Notify on failure
         if: failure()
-        run: echo "Scraper de fotos falhou em $(date). Verifique os logs."
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: |
+          curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Fotos CEF","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
