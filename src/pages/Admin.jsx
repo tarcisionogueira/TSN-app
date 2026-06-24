@@ -3827,10 +3827,10 @@ function ScrapersTab() {
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
-    // Contador de imóveis geocodificados
+    // Contador de imóveis geocodificados (coluna: latitude)
     Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('lat', 'is', null),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('lat', null),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).or('latitude.is.null,latitude.eq.0'),
     ]).then(([comGeo, semGeo]) => {
       const com = comGeo.count || 0;
       const sem = semGeo.count || 0;
