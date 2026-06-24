@@ -40,10 +40,13 @@ async function nominatim(query) {
 }
 
 /**
- * Geocodificação em cascata com 3 níveis de precisão:
+ * Geocodificação em cascata com 4 níveis de precisão:
  *
  * 1. Endereço completo (endereco + bairro + cidade + estado)  → 'endereco'
- *    Pin exato no mapa, sem círculo.
+ *    Pin exato no imóvel, sem círculo.
+ *
+ * 1.5 Rua sem número (nome da rua + bairro + cidade + estado) → 'rua'
+ *    Pin na rua + círculo de 100 m destacando o trecho.
  *
  * 2. Bairro (bairro + cidade + estado)                        → 'bairro'
  *    Pin no centro do bairro + círculo de 500 m no mapa.
@@ -53,19 +56,43 @@ async function nominatim(query) {
  *
  * Se nenhum nível resolver → retorna null (grava lat=0,lng=0 sentinela).
  */
+
+// Remove número do endereço para tentar geocodificar só pelo nome da rua
+// Ex: "Rua das Flores, 123 Apto 5" → "Rua das Flores"
+// Ex: "Av. Brasil nº 45" → "Av. Brasil"
+function extrairRua(endereco) {
+  if (!endereco?.trim()) return null;
+  const rua = endereco
+    .replace(/,?\s*s\/n.*/i, '')                          // s/n e variações
+    .replace(/,?\s*(n[°º]?\.?\s*)?\d[\d\-\/]*.*/i, '')   // número e tudo após
+    .trim();
+  // Só retorna se o resultado for diferente do original (havia número para remover)
+  // e tiver conteúdo útil (mais de 4 chars)
+  return rua && rua.length > 4 && rua !== endereco.trim() ? rua : null;
+}
+
 async function geocodificarCascata(im) {
   const { endereco, bairro, cidade, estado } = im;
 
-  // Nível 1 — endereço completo
-  if (endereco && endereco.trim()) {
+  // Nível 1 — endereço completo (com número)
+  if (endereco?.trim()) {
     const query = [endereco, bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
     const coords = await nominatim(query);
     if (coords) return { ...coords, nivel: 'endereco' };
     await sleep(1320);
+
+    // Nível 1.5 — rua sem número (mesmo endereço, remove o nº)
+    const rua = extrairRua(endereco);
+    if (rua) {
+      const query2 = [rua, bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
+      const coords2 = await nominatim(query2);
+      if (coords2) return { ...coords2, nivel: 'rua' };
+      await sleep(1320);
+    }
   }
 
   // Nível 2 — bairro
-  if (bairro && bairro.trim()) {
+  if (bairro?.trim()) {
     const query = [bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
     const coords = await nominatim(query);
     if (coords) return { ...coords, nivel: 'bairro' };
@@ -73,7 +100,7 @@ async function geocodificarCascata(im) {
   }
 
   // Nível 3 — cidade
-  if (cidade && cidade.trim()) {
+  if (cidade?.trim()) {
     const query = [cidade, estado, 'Brasil'].filter(Boolean).join(', ');
     const coords = await nominatim(query);
     if (coords) return { ...coords, nivel: 'cidade' };

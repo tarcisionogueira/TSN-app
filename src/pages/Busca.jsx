@@ -182,10 +182,10 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         const pgtoBg = pgto === 'financiado' ? '#dcfce7' : pgto === 'hipotecado' ? '#fef3c7' : '#f1f5f9';
 
         // Precisão da geocodificação
-        const nivel = im.geocod_nivel; // 'endereco' | 'bairro' | 'cidade' | null
+        const nivel = im.geocod_nivel; // 'endereco' | 'rua' | 'bairro' | 'cidade' | null
         const isAproximado = nivel && nivel !== 'endereco';
-        const nivelLabel = nivel === 'bairro' ? '📍 Bairro (±500m)' : nivel === 'cidade' ? '🏙️ Cidade (±2km)' : null;
-        const raioMetros = nivel === 'bairro' ? 500 : nivel === 'cidade' ? 2000 : 0;
+        const nivelLabel = nivel === 'rua' ? '📍 Rua (±100m)' : nivel === 'bairro' ? '📍 Bairro (±500m)' : nivel === 'cidade' ? '🏙️ Cidade (±2km)' : null;
+        const raioMetros = nivel === 'rua' ? 100 : nivel === 'bairro' ? 500 : nivel === 'cidade' ? 2000 : 0;
 
         const popupHTML = `
           <div style="font-family:Inter,sans-serif;min-width:190px;max-width:220px">
