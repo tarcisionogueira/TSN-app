@@ -149,8 +149,8 @@ export default function ChatSuporte() {
     setMensagens(novaLista);
     setTexto(''); setAnexos([]);
     resetTimers();
-    // Só aciona IA se não houver atendente humano assumindo o chamado
-    if (ticket.status !== 'em_atendimento') {
+    // Só aciona IA se não houver atendente humano ou solicitação pendente
+    if (!['em_atendimento', 'aguardando_atendente'].includes(ticket.status)) {
       await dispararIA(ticket, novaLista);
     }
     setEnviando(false);
@@ -188,12 +188,16 @@ export default function ChatSuporte() {
 
   async function solicitarAtendente() {
     if (!ticket) return;
+    await supabase.from('chamados').update({
+      status: 'aguardando_atendente',
+      atualizado_em: new Date().toISOString(),
+    }).eq('id', ticket.id);
     await supabase.from('chamados_mensagens').insert({
       chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'Sistema',
       conteudo: '— Cliente solicitou atendimento humano. Um membro da equipe assumirá em breve. —',
       anexos: [],
     });
-    await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', ticket.id);
+    setTicket(prev => ({ ...prev, status: 'aguardando_atendente' }));
     setPrecisaAtendente(false);
   }
 

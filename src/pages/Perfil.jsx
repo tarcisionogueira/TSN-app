@@ -58,6 +58,7 @@ export default function Perfil() {
   const nav = useNavigate();
 
   const [nome, setNome] = useState(user?.user_metadata?.nome || '');
+  const [chavePix, setChavePix] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -114,6 +115,13 @@ export default function Perfil() {
       .catch(() => setLoadRelatorios(false));
   }, [user?.id]);
 
+  // Carrega chave PIX salva
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('perfis').select('chave_pix').eq('id', user.id).single()
+      .then(({ data }) => { if (data?.chave_pix) setChavePix(data.chave_pix); });
+  }, [user?.id]);
+
   // Comissões (apenas para papéis elegíveis)
   const temComissao = ROLES_COM_COMISSAO.includes(role);
   const [resumoComissao, setResumoComissao] = useState(null);
@@ -153,7 +161,9 @@ export default function Perfil() {
       const { error } = await supabase.auth.updateUser(updates);
       if (error) throw error;
 
-      await supabase.from('perfis').update({ nome_completo: nome }).eq('id', user.id);
+      const perfilUpdate = { nome_completo: nome };
+      if (temComissao) perfilUpdate.chave_pix = chavePix || null;
+      await supabase.from('perfis').update(perfilUpdate).eq('id', user.id);
 
       setNovaSenha('');
       setConfirmarSenha('');
@@ -379,6 +389,21 @@ export default function Perfil() {
               />
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>O e-mail não pode ser alterado</div>
             </div>
+
+            {/* Chave PIX (apenas profissionais com comissão) */}
+            {temComissao && (
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Chave PIX para recebimento</label>
+                <input
+                  type="text"
+                  value={chavePix}
+                  onChange={e => setChavePix(e.target.value)}
+                  placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                  style={inputStyle}
+                />
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Usada para transferência de comissões e saques</div>
+              </div>
+            )}
 
             {/* Separador senha */}
             <div style={{ height: 1, background: '#f1f5f9', margin: '8px 0 20px' }} />
