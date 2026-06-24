@@ -330,15 +330,10 @@ export default async function handler(req) {
   if (qEstados) {
     estados = qEstados.split(',').map(s => s.trim()).filter(Boolean);
   } else if (req.method === 'GET') {
-    // Cron */10 0-9 * * * — cada invocação processa 1 estado pelo slot de 10min
-    // 27 estados × 10min = 270min = 1 ciclo. Em 10h (600min) → ~2 ciclos completos
-    // idx é módulo 27 para reiniciar o ciclo e processar grandes estados 2× por noite
-    const now = new Date();
-    const hora = now.getUTCHours(); // 0..9
-    const minuto = now.getUTCMinutes();
-    const slotGlobal = hora * 6 + Math.floor(minuto / 10); // 0..59
-    const idx = slotGlobal % ESTADOS_GEOCOD.length; // reinicia ciclo após 270min
-    estados = [ESTADOS_GEOCOD[idx]];
+    // Cron */10 * * * * — processa os próximos pendentes sem filtro de estado
+    // Sem filtro: busca os 50 próximos de qualquer estado, maximiza throughput
+    // Estados com mais pendentes naturalmente dominam (RJ 11k, SP 3.4k, etc.)
+    estados = null;
   } else if (req.method === 'POST') {
     try {
       const body = await req.json();

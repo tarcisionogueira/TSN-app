@@ -4065,6 +4065,7 @@ function ScrapersTab() {
   const [leiloeiroContagem, setLeiloeiroContagem] = useState({}); // fonte → total imóveis no banco
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
   const [geocPendentes, setGeocPendentes] = useState({});
+  const [geocUltimoRefresh, setGeocUltimoRefresh] = useState(null);
   const [parceiros, setParceiros] = useState([]);
   const [gerandoConviteLeiloeiro, setGerandoConviteLeiloeiro] = useState(false);
   const [linkLeiloeiro, setLinkLeiloeiro] = useState(null);
@@ -4076,10 +4077,19 @@ function ScrapersTab() {
   const [sysDebugRodando, setSysDebugRodando] = useState({});
 
   useEffect(() => {
-    if (abaAtiva === 'geocod' && Object.keys(geocPendentes).length === 0) {
+    if (abaAtiva === 'geocod') {
       carregarPendentes();
     }
   }, [abaAtiva]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh pendentes a cada 2 min quando na aba geocod e não processando manualmente
+  useEffect(() => {
+    if (abaAtiva !== 'geocod') return;
+    const interval = setInterval(() => {
+      if (!geocTodos.rodando) carregarPendentes();
+    }, 120_000);
+    return () => clearInterval(interval);
+  }, [abaAtiva, geocTodos.rodando]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Contagem de imóveis por fonte
@@ -4277,6 +4287,7 @@ function ScrapersTab() {
       })
     );
     setGeocPendentes(Object.fromEntries(results));
+    setGeocUltimoRefresh(new Date());
   }
 
   async function geocodificarTodos() {
@@ -4656,7 +4667,7 @@ function ScrapersTab() {
                 ? <span style={{ color: '#0D63DB', fontWeight: 700 }}>⏳ Processando {geocTodos.ufAtual}... · <b>{geocTodos.processadosTotal.toLocaleString('pt-BR')}</b> / {Object.values(geocPendentes).reduce((a, b) => a + b, 0).toLocaleString('pt-BR')} processados</span>
                 : geocTodos.total > 0
                   ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ Sessão concluída · {geocTodos.processadosTotal.toLocaleString('pt-BR')} imóveis geocodificados</span>
-                  : <span>Cron 24h · a cada 10min · clique ▶ para forçar um estado agora</span>}
+                  : <span>Cron 24h · a cada 10min · clique ▶ para forçar um estado agora{geocUltimoRefresh ? ` · atualizado ${geocUltimoRefresh.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>}
             </div>
             <button onClick={() => { toggleExpandir('geocod'); if (!estadosExpandidos.geocod && Object.keys(geocPendentes).length === 0) carregarPendentes(); }} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
               {estadosExpandidos.geocod ? '▲ Recolher estados' : '▼ Ver todos os estados (27)'}
