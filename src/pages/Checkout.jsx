@@ -418,10 +418,10 @@ export default function Checkout() {
                 style={{ padding: '10px 20px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <RefreshCw size={14} /> Tentar novamente
               </button>
-              <a href="https://wa.me/5571996502234" target="_blank" rel="noreferrer"
-                style={{ padding: '10px 20px', background: '#25d366', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+                style={{ padding: '10px 20px', background: '#0D63DB', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                 💬 Falar com suporte
-              </a>
+              </button>
             </div>
           </div>
         </div>

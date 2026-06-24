@@ -68,10 +68,10 @@ function ContaInativa() {
         <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
           Sua conta está temporariamente inativa. Entre em contato com o suporte para reativá-la.
         </p>
-        <a href="https://wa.me/5571996502234" target="_blank" rel="noreferrer"
-          style={{ display: 'inline-block', padding: '12px 28px', background: '#25d366', color: 'white', borderRadius: 10, fontWeight: 700, textDecoration: 'none', fontSize: 15 }}>
-          Falar com suporte no WhatsApp
-        </a>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+          style={{ display: 'inline-block', padding: '12px 28px', background: '#0D63DB', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 15, border: 'none', cursor: 'pointer' }}>
+          Falar com suporte
+        </button>
         <div style={{ marginTop: 20, fontSize: 13, color: '#94a3b8' }}>
           Logado como: {user?.email}
         </div>
@@ -135,7 +135,7 @@ function PopupInadimplente({ dias }) {
               ? 'Seu acesso foi reduzido ao plano gratuito. Regularize o pagamento para restaurar seu plano.'
               : 'Existe uma cobrança em aberto na sua conta. Regularize para manter acesso completo.'}
           </div>
-          <a href="https://wa.me/5571996502234" target="_blank" rel="noreferrer"
+          <a href="/#/planos"
             style={{ display: 'inline-block', marginTop: 10, padding: '7px 16px', background: 'white', color: critico ? '#7f1d1d' : '#78350f', borderRadius: 8, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
             Regularizar pagamento
           </a>
