@@ -205,7 +205,7 @@ export default async function handler(req) {
   }
 
   const estadosFilter = estados?.length
-    ? `&estado=in.(${estados.map(e => `"${e}"`).join(',')})`
+    ? `&estado=in.(${estados.join(',')})`
     : '';
 
   // Modo cron (GET): loop até acabar todos os pendentes ou restar <30s de margem
