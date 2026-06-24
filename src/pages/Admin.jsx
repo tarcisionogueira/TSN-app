@@ -3820,6 +3820,7 @@ function ScrapersTab() {
   // Estado de execução manual por região (scraper e geocodificação)
   const [scraperRegiao, setScraperRegiao] = useState({});
   const [geocRegiao, setGeocRegiao] = useState({});
+  const [ultimoDebug, setUltimoDebug] = useState(null);
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
@@ -3836,6 +3837,7 @@ function ScrapersTab() {
       });
       const d = await r.json();
       setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, processados: d.processados || 0, ok: d.estados_ok || [], erros: d.estados_erro || [], todosErros: d.erros || [], primeiroErro: d.erros?.[0]?.erro } }));
+      if (d.processados === 0 && d.erros?.length > 0) setUltimoDebug({ uf: regiao, ...d.erros[0] });
       apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {});
     } catch (e) {
       setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
@@ -3902,6 +3904,21 @@ function ScrapersTab() {
         <div style={{ background: '#f8fafc', borderRadius: 10, padding: '8px 16px', marginBottom: 16, fontSize: 12, color: '#475569', display: 'flex', gap: 16 }}>
           <span>📦 <b>{status.total?.toLocaleString('pt-BR') || 0}</b> imóveis no banco</span>
           {status.ultima_atualizacao && <span>🕐 Última importação: <b>{new Date(status.ultima_atualizacao).toLocaleString('pt-BR')}</b></span>}
+        </div>
+      )}
+
+      {ultimoDebug && (
+        <div style={{ background: '#1e293b', borderRadius: 10, padding: 14, marginBottom: 16, color: '#e2e8f0', fontSize: 11, fontFamily: 'monospace' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontWeight: 700, color: '#fbbf24' }}>🔍 DEBUG SCRAPER — {ultimoDebug.uf} — {ultimoDebug.csv_tamanho} bytes</span>
+            <button onClick={() => setUltimoDebug(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12 }}>✕</button>
+          </div>
+          {ultimoDebug.csv_primeiras_linhas?.map((l, i) => (
+            <div key={i} style={{ padding: '2px 0', borderBottom: '1px solid #334155', color: i === 0 ? '#86efac' : '#94a3b8', wordBreak: 'break-all' }}>
+              <span style={{ color: '#475569', marginRight: 8 }}>L{i+1}:</span>{l}
+            </div>
+          ))}
+          {!ultimoDebug.csv_primeiras_linhas && <div style={{ color: '#fca5a5' }}>{ultimoDebug.erro}</div>}
         </div>
       )}
 
