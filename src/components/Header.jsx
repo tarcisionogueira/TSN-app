@@ -256,6 +256,13 @@ export default function Header() {
             </button>
           ))}
 
+          {(role === 'leiloeiro' || role === 'admin') && (
+            <button onClick={() => nav('/leiloeiro')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/leiloeiro') ? '#b45309' : '#b4530922', color: '#fcd34d', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              🏛️ Portal Leiloeiro
+            </button>
+          )}
+
           {(role === 'consultor' || role === 'admin') && (
             <button onClick={() => nav('/consultor')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/consultor') ? '#059669' : '#05966922', color: '#6ee7b7', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -359,6 +366,12 @@ export default function Header() {
               <l.icon size={16} /> {l.label}
             </button>
           ))}
+          {(role === 'leiloeiro' || role === 'admin') && (
+            <button onClick={() => { nav('/leiloeiro'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#fcd34d', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              🏛️ Portal Leiloeiro
+            </button>
+          )}
           {(role === 'consultor' || role === 'admin') && (
             <button onClick={() => { nav('/consultor'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#6ee7b7', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>

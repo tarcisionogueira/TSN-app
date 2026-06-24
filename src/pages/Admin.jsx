@@ -3821,6 +3821,7 @@ function ScrapersTab() {
   const [scraperRegiao, setScraperRegiao] = useState({});
   const [geocRegiao, setGeocRegiao] = useState({});
   const [ultimoDebug, setUltimoDebug] = useState(null);
+  const [puppeteerStatus, setPuppeteerStatus] = useState(null);
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
@@ -3870,6 +3871,18 @@ function ScrapersTab() {
     const minuto = (i % 6) * 10;
     return { uf, hora: `${String(horaTotal).padStart(2,'0')}:${String(minuto).padStart(2,'0')}` };
   });
+
+  async function triggerPuppeteer() {
+    setPuppeteerStatus({ rodando: true });
+    try {
+      const r = await apiCall('/api/trigger-puppeteer', { method: 'POST' });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'Erro ao disparar workflow');
+      setPuppeteerStatus({ agendado: true, msg: d.msg });
+    } catch (e) {
+      setPuppeteerStatus({ erro: e.message });
+    }
+  }
 
   // Scrapers planejados
   const scrapersPlanjados = [
@@ -4000,6 +4013,36 @@ function ScrapersTab() {
             })}
           </div>
           <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>Cron automático · use ▶ para forçar um estado manualmente</div>
+        </div>
+      </div>
+
+      {/* ── Scraper Puppeteer (Leiloeiros) ── */}
+      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>🏛️ Leiloeiros — Scraper Puppeteer</div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>GitHub Actions · todo dia às 7h BRT (após Caixa)</div>
+          </div>
+          <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
+            style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: puppeteerStatus?.agendado ? '#6ee7b722' : '#0D63DB', color: puppeteerStatus?.agendado ? '#059669' : 'white', fontWeight: 700, fontSize: 12, cursor: puppeteerStatus?.rodando ? 'default' : 'pointer' }}>
+            {puppeteerStatus?.rodando ? '…' : puppeteerStatus?.agendado ? '🚀 Agendado' : '▶ Executar agora'}
+          </button>
+        </div>
+        {puppeteerStatus?.erro && <div style={{ fontSize: 11, color: '#ef4444', marginBottom: 8 }}>⚠️ {puppeteerStatus.erro}</div>}
+        {puppeteerStatus?.agendado && <div style={{ fontSize: 11, color: '#059669', marginBottom: 8 }}>✅ {puppeteerStatus.msg}</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          {[
+            { nome: 'Mega Leilões', volume: '~5-10k', cor: '#0D63DB' },
+            { nome: 'Sold Leilões', volume: '~3-6k', cor: '#7c3aed' },
+            { nome: 'Superbid', volume: '~8-15k', cor: '#059669' },
+            { nome: 'Banco do Brasil', volume: '~2-4k', cor: '#d97706' },
+          ].map(s => (
+            <div key={s.nome} style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 12px', border: `1px solid ${s.cor}33` }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#334155' }}>{s.nome}</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{s.volume} imóveis</div>
+              <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: `${s.cor}22`, color: s.cor }}>Ativo</div>
+            </div>
+          ))}
         </div>
       </div>
 
