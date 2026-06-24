@@ -394,6 +394,22 @@ export default async function handler(req, res) {
 
       const imoveis = csvToImoveis(resultado.csv, uf);
       for (let j = 0; j < imoveis.length; j += 100) await upsertBatch(imoveis.slice(j, j + 100), supabaseUrl, serviceKey);
+
+      // Remove imóveis que saíram da Caixa (vendidos/retirados): deleta registros do estado
+      // que NÃO estão no CSV atual. Usa NOT IN com os fonte_ids do CSV.
+      const idsAtivos = imoveis.map(im => im.fonte_id).filter(Boolean);
+      if (idsAtivos.length > 0) {
+        // PostgREST: DELETE com not.in — limita a 500 ids por segurança (Caixa tem ~30k total)
+        // Divide em chunks de 500 para não estourar URL
+        for (let k = 0; k < Math.ceil(idsAtivos.length / 500); k++) {
+          const chunk = idsAtivos.slice(k * 500, (k + 1) * 500);
+          await fetch(
+            `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&fonte_id=not.in.(${chunk.map(id => `"${id}"`).join(',')})`,
+            { method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' } }
+          ).catch(() => {});
+        }
+      }
+
       return res.status(200).json({ uf, status: 'ok', processados: imoveis.length });
 
     } else {
@@ -415,6 +431,16 @@ export default async function handler(req, res) {
         }).catch(() => {});
         const imoveis = csvToImoveis(resultado.csv, uf);
         for (let j = 0; j < imoveis.length; j += 100) await upsertBatch(imoveis.slice(j, j + 100), supabaseUrl, serviceKey);
+        const idsAtivos = imoveis.map(im => im.fonte_id).filter(Boolean);
+        if (idsAtivos.length > 0) {
+          for (let k = 0; k < Math.ceil(idsAtivos.length / 500); k++) {
+            const chunk = idsAtivos.slice(k * 500, (k + 1) * 500);
+            await fetch(
+              `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&fonte_id=not.in.(${chunk.map(id => `"${id}"`).join(',')})`,
+              { method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' } }
+            ).catch(() => {});
+          }
+        }
         return res.status(200).json({ uf, status: 'retry_ok', processados: imoveis.length, tentativas });
       } else {
         // Retry falhou: incrementa tentativas (admin verá no painel)

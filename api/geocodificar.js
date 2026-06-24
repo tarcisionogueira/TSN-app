@@ -210,23 +210,28 @@ function cacheKey(im) {
   return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
 }
 
-async function processarLote(estadosFilter, lote = 50, limiteMs = null) {
-  // Busca imóveis pendentes: latitude IS NULL (nunca geocodificados) OU latitude=0 (tentativa anterior falhou)
-  // Usa duas queries separadas para evitar a sintaxe `or=()` do PostgREST que falha com parâmetros combinados
-  // Sem filtro ativo — service key vê tudo; geocodifica independente do status
-  const base = `imoveis_leilao?select=id,cidade,estado,endereco,bairro,cep${estadosFilter}&order=atualizado_em.desc&limit=${lote}`;
-  const [r1, r2] = await Promise.all([
-    sb(`${base}&latitude=is.null`),
-    sb(`${base}&latitude=eq.0`),
-  ]);
-  if (!r1.ok || !r2.ok) return null;
-  const [list1, list2] = await Promise.all([r1.json(), r2.json()]);
-  // Combina e deduplica mantendo o limite
-  const seen = new Set();
-  const imoveis = [];
-  for (const im of [...list1, ...list2]) {
-    if (!seen.has(im.id)) { seen.add(im.id); imoveis.push(im); }
-    if (imoveis.length >= lote) break;
+async function processarLote(estadosFilter, lote = 50, limiteMs = null, somenteNovos = false) {
+  // somenteNovos=true (cron): só latitude IS NULL — nunca tentados. Não reprocessa falhas (lat=0).
+  // somenteNovos=false (manual): inclui lat=0 para retentar imóveis que falharam antes.
+  const base = `imoveis_leilao?select=id,cidade,estado,endereco,bairro,cep${estadosFilter}&order=atualizado_em.asc&limit=${lote}`;
+  let imoveis;
+  if (somenteNovos) {
+    const r = await sb(`${base}&latitude=is.null`);
+    if (!r.ok) return null;
+    imoveis = await r.json();
+  } else {
+    const [r1, r2] = await Promise.all([
+      sb(`${base}&latitude=is.null`),
+      sb(`${base}&latitude=eq.0`),
+    ]);
+    if (!r1.ok || !r2.ok) return null;
+    const [list1, list2] = await Promise.all([r1.json(), r2.json()]);
+    const seen = new Set();
+    imoveis = [];
+    for (const im of [...list1, ...list2]) {
+      if (!seen.has(im.id)) { seen.add(im.id); imoveis.push(im); }
+      if (imoveis.length >= lote) break;
+    }
   }
   if (!imoveis.length) return { processados: 0 };
 
@@ -363,7 +368,7 @@ export default async function handler(req) {
   const total = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
 
   while (Date.now() - inicio < LIMITE_MS) {
-    const res = await processarLote(estadosFilter, 50);
+    const res = await processarLote(estadosFilter, 50, null, true); // cron: só latitude IS NULL
     if (!res || res.processados === 0) break; // sem mais pendentes
     total.processados += res.processados;
     total.endereco    += res.endereco;
