@@ -60,7 +60,7 @@ async function geocodificarCascata(im) {
     const query = [endereco, bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
     const coords = await nominatim(query);
     if (coords) return { ...coords, nivel: 'endereco' };
-    await sleep(1100);
+    await sleep(1320);
   }
 
   // Nível 2 — bairro
@@ -68,7 +68,7 @@ async function geocodificarCascata(im) {
     const query = [bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
     const coords = await nominatim(query);
     if (coords) return { ...coords, nivel: 'bairro' };
-    await sleep(1100);
+    await sleep(1320);
   }
 
   // Nível 3 — cidade
@@ -76,7 +76,7 @@ async function geocodificarCascata(im) {
     const query = [cidade, estado, 'Brasil'].filter(Boolean).join(', ');
     const coords = await nominatim(query);
     if (coords) return { ...coords, nivel: 'cidade' };
-    await sleep(1100);
+    await sleep(1320);
   }
 
   return null;
@@ -145,7 +145,7 @@ async function processarLote(estadosFilter, lote = 50) {
     const salvo = await salvarCoords(im.id, coords);
     if (salvo && coords) { res[coords.nivel]++; if (fromCache) res.cache_hits++; }
     else res.falhas++;
-    if (!fromCache) await sleep(1100);
+    if (!fromCache) await sleep(1320);
   }
 
   return res;

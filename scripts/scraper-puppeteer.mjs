@@ -95,7 +95,7 @@ async function capturarRespostasJSON(page, urlAlvo, { waitSelector, timeout = 20
   }
 
   // Aguarda mais um pouco para requests tardios
-  await new Promise(r => setTimeout(r, 3000));
+  await new Promise(r => setTimeout(r, 3600));
 
   return respostas;
 }
@@ -657,7 +657,7 @@ async function main() {
       const imoveis = await scraperMegaLeiloes(browser, uf);
       await salvarImoveis(imoveis, `Mega ${uf}`);
       total += imoveis.length;
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 2400));
     }
 
     // 2. Sold Leilões — até 5 páginas
@@ -667,7 +667,7 @@ async function main() {
       await salvarImoveis(imoveis, `Sold p${page}`);
       total += imoveis.length;
       if (imoveis.length === 0) break;
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 2400));
     }
 
     // 3. Superbid via browser — até 6 páginas
@@ -677,7 +677,7 @@ async function main() {
       await salvarImoveis(imoveis, `Superbid p${page}`);
       total += imoveis.length;
       if (imoveis.length === 0) break;
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 2400));
     }
 
     // 4. Banco do Brasil — até 4 páginas
@@ -687,7 +687,7 @@ async function main() {
       await salvarImoveis(imoveis, `BB p${page}`);
       total += imoveis.length;
       if (imoveis.length === 0) break;
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 2400));
     }
 
   } finally {
