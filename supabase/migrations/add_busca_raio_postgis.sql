@@ -38,7 +38,7 @@ RETURNS TABLE (
   longitude float8,
   link_foto text,
   url_lote text,
-  data_leilao timestamptz,
+  data_leilao text,
   forma_pagamento text,
   fonte text,
   fonte_id text,
