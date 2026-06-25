@@ -6,7 +6,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
-  Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck,
+  Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck, CreditCard,
 } from 'lucide-react';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
@@ -19,6 +19,7 @@ import Lancamentos from '../components/Lancamentos';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { apiCall } from '../utils/apiCall';
 import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
+import FinanciamentoTracker from '../components/FinanciamentoTracker';
 
 const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
@@ -240,7 +241,7 @@ export default function Analise() {
   const [solicitado, setSolicitado] = useState(false);
 
   // Controle de abertura por seção
-  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false, guia:true });
+  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false, guia:true, financiamento:true });
   const toggleSec = (k) => setOpenSec(p => ({ ...p, [k]: !p[k] }));
 
   const up = useCallback((name, val) => setD(p => ({ ...p, [name]: val })), []);
@@ -1385,6 +1386,19 @@ export default function Analise() {
                 imovelId={d.id}
                 onNavCNJ={() => { toggleSec('cnj'); document.querySelector('[data-sec="cnj"]')?.scrollIntoView({ behavior: 'smooth' }); }}
                 onNavCertidoes={() => { toggleSec('cnj'); }}
+              />
+            </div>
+          </Section>
+
+          {/* ── FINANCIAMENTO TRACKER ── */}
+          <Section step="8" title="Financiamento da Arrematação" icon={CreditCard} color="#7c3aed"
+            open={openSec.financiamento} onToggle={() => toggleSec('financiamento')}
+            badge="Sinal · Parcelas · Alertas de vencimento">
+            <div style={{ paddingTop: 14 }}>
+              <FinanciamentoTracker
+                imovelId={d.id}
+                imovelNome={d.nome || d.endereco || 'Imóvel arrematado'}
+                onSalvo={() => {}}
               />
             </div>
           </Section>
