@@ -379,14 +379,18 @@ async function scraperSuperbid(pageNumber = 1) {
 
 // ─── SCRAPER ZUKERMAN (judicial SP) ──────────────────────────────────────────
 
-async function scraperZukerman() {
-  console.log(`  Zukerman Leilões...`);
+async function scraperZukerman(page = 1) {
+  console.log(`  Zukerman Leilões página ${page}...`);
   try {
-    const html = await fetchHtml('https://www.zukerman.com.br/imoveis');
+    const html = await fetchHtml(`https://www.zukerman.com.br/imoveis?page=${page}`);
+    if (html.length < 1000) {
+      console.log(`    Zukerman p${page}: HTML muito curto (${html.length} chars) — fim da paginação`);
+      return [];
+    }
     const imoveis = [];
     const cardRegex = /<article[^>]*>([\s\S]*?)<\/article>/gi;
     let match;
-    while ((match = cardRegex.exec(html)) !== null && imoveis.length < 20) {
+    while ((match = cardRegex.exec(html)) !== null) {
       const card = match[1];
       const titulo = card.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
       const valor = card.match(/R\$\s*([\d.,]+)/)?.[1]?.replace(/\./g,'')?.replace(',','.') || '0';
@@ -414,7 +418,7 @@ async function scraperZukerman() {
         });
       }
     }
-    console.log(`    Zukerman: ${imoveis.length} imóveis`);
+    console.log(`    Zukerman p${page}: ${imoveis.length} imóveis`);
     return imoveis;
   } catch (err) {
     console.log(`    Erro Zukerman: ${err.message.slice(0, 80)}`);
@@ -434,7 +438,7 @@ async function scraperBiassi(page = 1) {
     // Tenta extrair dados dos cards de lote
     const lotRegex = /<a[^>]*href="([^"]*\/lote\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     let m;
-    while ((m = lotRegex.exec(html)) !== null && imoveis.length < 30) {
+    while ((m = lotRegex.exec(html)) !== null && imoveis.length < 100) {
       const href = m[1];
       const inner = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const valorMatch = inner.match(/R\$\s*([\d.,]+)/);
@@ -482,7 +486,7 @@ async function scraperHastaPublica(page = 1) {
     const linkRegex = /href="(\/lote\/[^"?]+)[^"]*"[^>]*>([\s\S]{0,500}?)<\/a>/gi;
     let m;
     const seen = new Set();
-    while ((m = linkRegex.exec(html)) !== null && imoveis.length < 30) {
+    while ((m = linkRegex.exec(html)) !== null && imoveis.length < 100) {
       const href = m[1];
       if (seen.has(href)) continue;
       seen.add(href);
@@ -748,7 +752,7 @@ async function scraperFrazao(page = 1) {
       if (imoveis.length === 0) {
         const linkRegex = /href="(https?:\/\/(?:www\.)?frazaoleiloes\.com\.br\/[^"]+)"/gi;
         let lm;
-        while ((lm = linkRegex.exec(html)) !== null && imoveis.length < 30) {
+        while ((lm = linkRegex.exec(html)) !== null && imoveis.length < 100) {
           const href = lm[1];
           if (seen.has(href) || !href.match(/lote|imovel|produto|leilao/i)) continue;
           seen.add(href);
@@ -867,7 +871,7 @@ async function scraperSoldHtml(page = 1) {
     const seen = new Set();
     const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:lot|card|product|item)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
     let m;
-    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 30) {
+    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 100) {
       const card = m[1];
       const href = card.match(/href="([^"]*(?:lote|lot)[^"]*)"/i)?.[1] || '';
       if (!href || seen.has(href)) continue;
@@ -1061,7 +1065,7 @@ async function scraperELeiloes(page = 1) {
     // eLeilões usa cards com data-product ou article
     const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:card|product|lote)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
     let m;
-    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 30) {
+    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 100) {
       const card = m[1];
       const href = card.match(/href="([^"]*lote[^"]+)"/i)?.[1] || '';
       if (!href) continue;
@@ -1233,7 +1237,7 @@ async function main() {
 
   // 2. Superbid (API direta — 1450 imóveis paginados de 50 em 50)
   console.log('\n📋 Scraping Superbid...');
-  for (let page = 1; page <= 6; page++) {
+  for (let page = 1; page <= 15; page++) {
     const imoveis = await scraperSuperbid(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
@@ -1243,13 +1247,17 @@ async function main() {
 
   // 3. Zukerman (judicial SP)
   console.log('\n📋 Scraping leiloeiros judiciais...');
-  const zuk = await scraperZukerman();
-  await salvarImoveis(zuk);
-  total += zuk.length;
+  for (let page = 1; page <= 8; page++) {
+    const zuk = await scraperZukerman(page);
+    await salvarImoveis(zuk);
+    total += zuk.length;
+    if (zuk.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
 
   // 4. Biassi (extrajudicial/judicial SP e outros estados)
   console.log('\n📋 Scraping Biassi...');
-  for (let page = 1; page <= 3; page++) {
+  for (let page = 1; page <= 8; page++) {
     const imoveis = await scraperBiassi(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
@@ -1259,7 +1267,7 @@ async function main() {
 
   // 5. HastaPública (judicial)
   console.log('\n📋 Scraping HastaPública...');
-  for (let page = 1; page <= 3; page++) {
+  for (let page = 1; page <= 8; page++) {
     const imoveis = await scraperHastaPublica(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
@@ -1269,7 +1277,7 @@ async function main() {
 
   // 6. Superbid URL alternativa
   console.log('\n📋 Scraping Superbid Alt...');
-  for (let page = 1; page <= 4; page++) {
+  for (let page = 1; page <= 15; page++) {
     const imoveis = await scraperSuperbidAlt(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
@@ -1279,7 +1287,7 @@ async function main() {
 
   // 7. eLeilões
   console.log('\n📋 Scraping eLeilões...');
-  for (let page = 1; page <= 3; page++) {
+  for (let page = 1; page <= 8; page++) {
     const imoveis = await scraperELeiloes(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
@@ -1289,7 +1297,7 @@ async function main() {
 
   // 8. Mega Leilões (por UF principal)
   console.log('\n📋 Scraping Mega Leilões...');
-  const ufsMega = ['SP','RJ','MG','PR','RS','SC','GO','DF','BA','PE'];
+  const ufsMega = ['SP','RJ','MG','PR','RS','SC','GO','DF','BA','PE','CE','AM','PA','ES','PB','RN','AL','SE','PI','MT','MS','TO','RO','AC','AP','RR','MA'];
   for (const uf of ufsMega) {
     const imoveis = await scraperMegaLeiloes(uf);
     await salvarImoveis(imoveis);
@@ -1299,7 +1307,7 @@ async function main() {
 
   // 9. Sold Leilões
   console.log('\n📋 Scraping Sold Leilões...');
-  for (let page = 1; page <= 4; page++) {
+  for (let page = 1; page <= 10; page++) {
     const imoveis = await scraperSold(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
@@ -1319,7 +1327,7 @@ async function main() {
 
   // 11. Banco do Brasil
   console.log('\n📋 Scraping Banco do Brasil...');
-  for (let page = 0; page <= 4; page++) {
+  for (let page = 0; page <= 10; page++) {
     const imoveis = await scraperBancoBrasil(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
