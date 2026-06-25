@@ -56,12 +56,12 @@ LANGUAGE sql STABLE AS $$
     i.cidade,
     i.bairro,
     i.endereco,
-    i.valor_minimo,
-    i.valor_avaliacao,
-    i.desconto_percentual,
-    i.area_m2,
-    i.latitude,
-    i.longitude,
+    i.valor_minimo::float8,
+    i.valor_avaliacao::float8,
+    i.desconto_percentual::float8,
+    i.area_m2::float8,
+    i.latitude::float8,
+    i.longitude::float8,
     i.link_foto,
     COALESCE(i.url_lote, i.link_edital) AS url_lote,
     i.data_leilao,
@@ -72,7 +72,7 @@ LANGUAGE sql STABLE AS $$
     i.score_juridico,
     ROUND(CAST(
       earth_distance(
-        ll_to_earth(i.latitude, i.longitude),
+        ll_to_earth(i.latitude::float8, i.longitude::float8),
         ll_to_earth($1, $2)
       ) / 1000.0 AS numeric
     ), 1)::float8 AS distancia_km
@@ -81,8 +81,8 @@ LANGUAGE sql STABLE AS $$
     i.ativo = true
     AND i.latitude IS NOT NULL AND i.latitude != 0
     AND i.longitude IS NOT NULL AND i.longitude != 0
-    AND earth_box(ll_to_earth($1, $2), $3) @> ll_to_earth(i.latitude, i.longitude)
-    AND earth_distance(ll_to_earth(i.latitude, i.longitude), ll_to_earth($1, $2)) <= $3
+    AND earth_box(ll_to_earth($1, $2), $3) @> ll_to_earth(i.latitude::float8, i.longitude::float8)
+    AND earth_distance(ll_to_earth(i.latitude::float8, i.longitude::float8), ll_to_earth($1, $2)) <= $3
     AND ($6 = '' OR i.tipo = $6)
     AND ($7 = '' OR i.estado = $7)
     AND ($8 = '' OR i.modalidade = $8)
