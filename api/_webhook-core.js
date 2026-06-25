@@ -55,7 +55,9 @@ export function mapearPlano(valor, descricao = '') {
 export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
   // 1. Tenta por ID do gateway no campo correto do perfil
   if (gatewayCustomerId) {
-    const campo = gateway === 'pagarme' ? 'pagarme_id' : 'asaas_id';
+    const campo = gateway === 'pagarme' ? 'pagarme_id'
+                : gateway === 'mercadopago' ? 'mp_id'
+                : 'asaas_id';
     const { data } = await supabase
       .from('perfis')
       .select('id, indicado_por, role, role_anterior, inadimplente_desde')
@@ -91,9 +93,12 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
   const mapeado = mapearPlano(valor, descricao);
 
   // Atualiza perfil: limpa inadimplência, atualiza plano/role
+  const campoId = gateway === 'pagarme' ? 'pagarme_id'
+               : gateway === 'mercadopago' ? 'mp_id'
+               : 'asaas_id';
   const update = {
     inadimplente_desde: null,
-    [`${gateway}_id`]: gatewayCustomerId || undefined,
+    [campoId]: gatewayCustomerId || undefined,
   };
   if (mapeado) {
     update.plano = mapeado.plano;
@@ -134,7 +139,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
           const { data: existente } = await supabase
             .from('comissoes')
             .select('id')
-            .eq('asaas_payment_id', gatewayPaymentId)
+            .eq('gateway_payment_id', gatewayPaymentId)
             .eq('origem', 'assinatura')
             .maybeSingle();
 
@@ -150,7 +155,8 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
               valor_comissao:   valorComissao,
               competencia:      new Date().toISOString().slice(0, 10),
               status:           'pendente',
-              asaas_payment_id: gatewayPaymentId,
+              gateway_payment_id: gatewayPaymentId,
+              gateway,
             });
           }
         }
