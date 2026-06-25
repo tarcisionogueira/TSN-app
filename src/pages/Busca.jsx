@@ -551,16 +551,84 @@ export default function Busca() {
       : ['valor_minimo', false];
 
     try {
-      let dbData, dbError;
+      // ── Modo raio: PostGIS server-side (sem trazer 5000 registros pro browser) ──
+      if (raioAtivoBusca && centro) {
+        const body = {
+          lat: centro.lat, lng: centro.lng, raioKm: raioKmBusca,
+          pagina: paginaAlvo, porPagina: POR_PAGINA,
+          filtros: {
+            tipo: filtrosAtivos.tipos?.[0] || '',
+            estado: filtrosAtivos.estado || '',
+            modalidade: filtrosAtivos.modalidades?.[0] || '',
+            valorMin: filtrosAtivos.valorMin ? Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')) : 0,
+            valorMax: filtrosAtivos.valorMax ? Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')) : 9999999999,
+          },
+        };
+        const resp = await fetch('/api/busca-raio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          setErro(err.error || 'Erro na busca por raio. Tente novamente.');
+          setLoading(false);
+          return;
+        }
+        const apiData = await resp.json();
+        const dados = apiData.resultados || [];
+        const offset = (paginaAlvo - 1) * POR_PAGINA;
+        // Estima total: quando página cheia → há ao menos mais uma; quando parcial → sabemos o exato
+        const totalEst = apiData.total ?? (offset + dados.length + (dados.length === POR_PAGINA ? 1 : 0));
+        setTotalResultados(totalEst);
 
-      if (raioAtivoBusca && centro && cidadesRaio) {
-        // City-based radius: buildQuery already applies cidadesRaio as the city filter
-        const { data, error } = await buildQuery(supabase.from('imoveis_leilao').select('*'))
-          .order(coluna, { ascending: dir, nullsFirst: false })
-          .limit(5000);
-        dbData = data;
-        dbError = error;
-      } else {
+        const novasDistancias = {};
+        const mapeados = dados.map(im => {
+          if (im.distancia_km != null) novasDistancias[im.id] = Math.round(im.distancia_km);
+          return {
+            id: im.id,
+            titulo: im.titulo,
+            tipo: im.tipo,
+            modalidade: im.modalidade,
+            estado: im.estado,
+            cidade: im.cidade,
+            bairro: im.bairro,
+            endereco: im.endereco,
+            valorAvaliacao: im.valor_avaliacao,
+            valorMinimo: im.valor_minimo,
+            descontoPercentual: im.desconto_percentual,
+            areaM2: im.area_m2,
+            descricao: null,
+            urlLote: im.url_lote,
+            linkEdital: null,
+            linkMatricula: null,
+            foto: im.link_foto,
+            leiloeiro: null,
+            dataLeilao: im.data_leilao,
+            pagamento: im.forma_pagamento ? [im.forma_pagamento] : [],
+            viavel: null,
+            scoreViabilidade: null,
+            fracionado: null,
+            fonte: im.fonte,
+            fonteId: im.fonte_id,
+            numeroEdital: null,
+            numeroMatricula: null,
+            numeroProcesso: null,
+            latitude: im.latitude,
+            longitude: im.longitude,
+            scoreFinanceiro: im.score_financeiro ?? null,
+            scoreJuridico: im.score_juridico ?? null,
+          };
+        });
+        setDistancias(novasDistancias);
+        setResultados(mapeados);
+        setLoading(false);
+        return;
+      }
+
+      // ── Modo normal: paginação server-side via Supabase ──
+      let dbData, dbError;
+      {
         const offset = (paginaAlvo - 1) * POR_PAGINA;
         const [{ count }, { data, error }] = await Promise.all([
           buildQuery(supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true })),
@@ -608,23 +676,7 @@ export default function Busca() {
         scoreJuridico: im.score_juridico ?? null,
       })) : [];
 
-      // Radius: all results are already city-filtered; add distance badge for those with coords
-      if (raioAtivoBusca && centro && cidadesRaio) {
-        const novasDistancias = {};
-        mapeados.forEach(im => {
-          if (im.latitude != null && im.longitude != null && im.latitude !== 0 && im.longitude !== 0) {
-            const dist = haversine(centro.lat, centro.lng, Number(im.latitude), Number(im.longitude));
-            if (!isNaN(dist)) novasDistancias[im.id] = Math.round(dist);
-          }
-        });
-        setDistancias(novasDistancias);
-        setTotalResultados(mapeados.length);
-        const offset = (paginaAlvo - 1) * POR_PAGINA;
-        mapeados = mapeados.slice(offset, offset + POR_PAGINA);
-      } else {
-        setDistancias({});
-      }
-
+      setDistancias({});
       setResultados(mapeados);
 
       // Silent tracking — fire and forget
@@ -673,15 +725,7 @@ export default function Busca() {
     if (raioAtivo && filtros.cidades[0]) {
       setLoading(true);
       centro = await geocodificarCidade(filtros.cidades[0], filtros.estado);
-      if (centro) {
-        const todasCidades = await getCidadesEstadoComCoords(filtros.estado);
-        cidadesNaArea = todasCidades
-          .filter(c => haversine(centro.lat, centro.lng, c.lat, c.lng) <= raioKmAtivo)
-          .map(c => c.nome);
-        if (!cidadesNaArea.some(c => c.toLowerCase() === filtros.cidades[0].toLowerCase())) {
-          cidadesNaArea.push(filtros.cidades[0]);
-        }
-      }
+      // PostGIS handles radius filtering server-side — Overpass not needed
     } else if (!centroRaio && filtros.cidades[0]) {
       // Geocodifica para auto-zoom no mapa mesmo sem raio
       geocodificarCidade(filtros.cidades[0], filtros.estado).then(c => setCentroBusca(c));
