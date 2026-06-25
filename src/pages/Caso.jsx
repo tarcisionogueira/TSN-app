@@ -722,7 +722,7 @@ export default function Caso() {
             ))}
           </div>
 
-          {analisesConcluidas && !reuniao1 && (
+          {analisesConcluidas && !reuniao1 && (isAnalista || (COTAS_PLANO[role]?.reunioes || 0) > 0) && (
             <div style={{ marginTop:16, padding:'14px 16px', background:'#eff6ff', borderRadius:10, border:'1px solid #bfdbfe' }}>
               {showAgendar === 1 ? (
                 <AgendarReuniao
@@ -877,7 +877,7 @@ export default function Caso() {
               )}
 
               {/* 2ª reunião — analista ou cliente agenda após parecer */}
-              {juridica.entregue_em && !reuniao2 && (
+              {juridica.entregue_em && !reuniao2 && (isAnalista || (COTAS_PLANO[role]?.reunioes || 0) >= 2) && (
                 <div style={{ marginTop:16, padding:'14px', background:'#ecfdf5', borderRadius:10, border:'1px solid #bbf7d0' }}>
                   {showAgendar === 2 ? (
                     <AgendarReuniao

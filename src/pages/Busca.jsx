@@ -311,8 +311,8 @@ export default function Busca() {
 
   useEffect(() => {
     if (role !== 'explorador' || !user?.id) return;
-    supabase.from('perfis').select('analises_bonus').eq('id', user.id).single()
-      .then(({ data }) => { if (data) setAnalisesBonus(data.analises_bonus || 0); });
+    supabase.from('perfis').select('bonus_mercado').eq('id', user.id).single()
+      .then(({ data }) => { if (data) setAnalisesBonus(data.bonus_mercado || 0); });
   }, [role, user?.id]);
   const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[] };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
