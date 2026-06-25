@@ -7,6 +7,7 @@ import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
+import PagamentoServico from '../components/PagamentoServico';
 
 const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
 
@@ -90,6 +91,7 @@ export default function Checkout() {
   const [verificando, setVerificando] = useState(false);
   const [gatewayUsado, setGatewayUsado] = useState(null); // 'mp' | 'asaas'
   const [ofertandoFallback, setOfertandoFallback] = useState(false); // cliente recusado no MP, oferece Asaas
+  const [showPagamento, setShowPagamento] = useState(false); // PagamentoServico inline (assessorado)
   const pollingRef = React.useRef(null);
   const jaConfirmouRef = React.useRef(false);
 
@@ -663,9 +665,22 @@ export default function Checkout() {
                 Já tenho conta — Entrar
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-                Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser
+                Pague via PIX ou cartão de crédito · Cancele quando quiser
               </p>
             </>
+          ) : showPagamento && planoKey === 'assessorado' ? (
+            /* ── Assessoria: pagamento inline PIX + cartão ── */
+            <PagamentoServico
+              servico={{
+                id: planoApiKey,
+                nome: `${plano.nome}${modalidade === 'vista' ? ' (à vista)' : ' (parcelado)'}`,
+                valor: modalidade === 'vista' ? (plano.precoVista || plano.preco) : plano.preco,
+                descricao: plano.nome,
+              }}
+              assinatura={false}
+              onPago={() => confirmarPagamento()}
+              onCancelar={() => setShowPagamento(false)}
+            />
           ) : (
             <>
               {/* Aceite dos termos — prova de consentimento */}
@@ -674,22 +689,28 @@ export default function Checkout() {
                   <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
                   <span>
                     Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a>.{' '}
-                    {temToggleAnual && modalidade === 'anual'
-                      ? `Estou ciente de que esta é uma contratação anual de valor único (${plano?.precoAnualLabel || 'R$ 449,90'}), podendo ser paga em até 12× no cartão. Não há renovação automática — o acesso é válido por 12 meses a partir da confirmação do pagamento.`
-                      : 'Autorizo a cobrança recorrente mensal conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma sem multa.'}
+                    {planoKey === 'assessorado'
+                      ? `Estou ciente de que este é um serviço de assessoria ${modalidade === 'vista' ? 'pago à vista' : 'parcelado em até 12×'}. O acesso à assessoria é ativado após confirmação do pagamento.`
+                      : temToggleAnual && modalidade === 'anual'
+                        ? `Estou ciente de que esta é uma contratação anual de valor único (${plano?.precoAnualLabel || 'R$ 449,90'}), podendo ser paga em até 12× no cartão. Não há renovação automática — o acesso é válido por 12 meses a partir da confirmação do pagamento.`
+                        : 'Autorizo a cobrança recorrente mensal conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma sem multa.'}
                   </span>
                 </label>
               )}
-              <button onClick={ehMudanca ? mudarPlano : gerarLink} disabled={loading || !aceitouTermos}
+              <button
+                onClick={ehMudanca ? mudarPlano : planoKey === 'assessorado' ? () => setShowPagamento(true) : gerarLink}
+                disabled={loading || !aceitouTermos}
                 style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: (!aceitouTermos || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceitouTermos) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
-                {temToggleAnual && modalidade === 'anual'
-                  ? `Pagamento anual único (${plano?.precoAnualLabel || 'R$ 449,90'}) via PIX, boleto ou em até 12× no cartão · Contratação anual sem renovação automática mensal`
-                  : 'Pague via PIX, boleto ou cartão de crédito · Cancele quando quiser'}
+                {planoKey === 'assessorado'
+                  ? 'Pague via PIX (sem taxa) ou cartão de crédito em até 12×'
+                  : temToggleAnual && modalidade === 'anual'
+                    ? `Pagamento anual único (${plano?.precoAnualLabel || 'R$ 449,90'}) em até 12× no cartão · Contratação anual sem renovação automática mensal`
+                    : 'Somente cartão de crédito · Cancele quando quiser'}
               </p>
             </>
           )}

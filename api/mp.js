@@ -165,7 +165,10 @@ async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
     external_reference: `${userId}|${planoKey}`,
     status:            'pending',
     metadata:          { userId, planoKey, cpf },
-  };
+    // Assinaturas: somente cartão de crédito
+    payment_methods_allowed: [
+      { payment_type: 'credit_card' },
+    ],
 
   const sub = await mpPost('/preapproval', body);
   return {
