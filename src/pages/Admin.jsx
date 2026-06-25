@@ -4468,18 +4468,18 @@ function ScrapersTab() {
               const erros = Object.values(scraperRegiao).filter(r => r.erro).length;
               const agendados = Object.values(scraperRegiao).filter(r => r.agendado).length;
               return (
-                <div style={{ background: '#fff7ed', borderRadius: 12, border: '1px solid #fed7aa', padding: '14px 16px', gridColumn: '1 / -1' }}>
+                <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: '14px 16px', gridColumn: '1 / -1' }}>
                   {/* Cabeçalho */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 22 }}>🏦</span>
                       <div>
                         <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
-                        <div style={{ fontSize: 11, color: '#92400e', fontWeight: 600 }}>● CSV · 27 arquivos (1 por estado) · cron 22:00–22:52 UTC · retry ×3</div>
+                        <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>● CSV · 27 arquivos (1 por estado) · cron 22:00–22:52 UTC · retry ×3</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: temDados ? '#fed7aa' : '#f1f5f9', color: temDados ? '#c2410c' : '#94a3b8' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: erros > 0 ? '#fef2f2' : temDados ? '#f0fdf4' : '#f1f5f9', color: erros > 0 ? '#dc2626' : temDados ? '#16a34a' : '#94a3b8' }}>
                         {erros > 0 ? `❌ ${erros} erros` : agendados > 0 ? `● ${agendados} agendados` : temDados ? '● Ativo' : '○ Sem dados'}
                       </span>
                       <button onClick={() => rodarSysDebug('scraper')} disabled={sysDebugRodando['scraper']}
@@ -4495,10 +4495,10 @@ function ScrapersTab() {
 
                   {/* Contador + progresso */}
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 28, fontWeight: 900, color: '#c2410c', lineHeight: 1 }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: '#111', lineHeight: 1 }}>
                       {total != null ? total.toLocaleString('pt-BR') : '—'}
                     </span>
-                    <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>imóveis no banco</span>
+                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>imóveis no banco</span>
                   </div>
 
                   <BarraProgresso visivel={caixaTodos.rodando || (caixaTodos.total > 0 && !caixaTodos.rodando)} atual={caixaTodos.atual} total={caixaTodos.total}
@@ -4517,11 +4517,11 @@ function ScrapersTab() {
 
                   {/* 27 estados expansíveis */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                    <span style={{ fontSize: 11, color: '#92400e' }}>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>
                       {agendados > 0 ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ {agendados} estados agendados</span> : 'Cron diário automático · ▶ para forçar por estado'}
                       {erros > 0 && <span style={{ color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>· ❌ {erros} com erro</span>}
                     </span>
-                    <button onClick={() => toggleExpandir('caixa')} style={{ fontSize: 11, color: '#c2410c', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+                    <button onClick={() => toggleExpandir('caixa')} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
                       {estadosExpandidos.caixa ? '▲ Recolher' : `▼ Ver 27 estados${erros > 0 ? ` (${erros} ❌)` : ''}`}
                     </button>
                   </div>
@@ -4530,11 +4530,11 @@ function ScrapersTab() {
                       {AGENDA_SCRAPER.map(({ uf, hora }) => {
                         const r = scraperRegiao[uf] || {};
                         return (
-                          <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#fffbeb', borderRadius: 7, padding: '6px 8px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#fed7aa'}` }}>
+                          <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#f8fafc', borderRadius: 7, padding: '6px 8px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#e2e8f0'}` }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                               <span style={{ fontWeight: 800, fontSize: 12, color: '#334155' }}>{uf}</span>
                               <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
-                                style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 8 }}>
+                                style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 8 }}>
                                 {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
                               </button>
                             </div>
