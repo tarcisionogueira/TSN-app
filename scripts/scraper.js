@@ -662,6 +662,135 @@ async function scraperMegaLeiloes(uf) {
   }
 }
 
+// ─── SCRAPER FRAZÃO LEILÕES ──────────────────────────────────────────────────
+
+async function scraperFrazao(page = 1) {
+  console.log(`  Frazão Leilões página ${page}...`);
+  const urls = [
+    `https://www.frazaoleiloes.com.br/imoveis?page=${page}`,
+    `https://www.frazaoleiloes.com.br/leiloes/imoveis?pagina=${page}`,
+    `https://www.frazaoleiloes.com.br/leiloes?categoria=imoveis&page=${page}`,
+    `https://www.frazaoleiloes.com.br/?page=${page}&categoria=imoveis`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const html = await fetchHtml(url, {
+        headers: {
+          Referer: 'https://www.frazaoleiloes.com.br/',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      });
+
+      if (html.length < 1000) continue;
+
+      const imoveis = [];
+      const seen = new Set();
+
+      // Tenta cards com article/div de lote — padrão WordPress/WooCommerce
+      const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:lote|lot|card|product|item)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+      let m;
+      while ((m = cardRegex.exec(html)) !== null && imoveis.length < 50) {
+        const card = m[1];
+        const href = card.match(/href="([^"]+(?:lote|imovel|produto|leilao)[^"]*)"/i)?.[1]
+          || card.match(/href="(https?:\/\/[^"]+)"/i)?.[1]
+          || '';
+        if (!href || seen.has(href)) continue;
+        seen.add(href);
+
+        const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g, '').trim()
+          || card.match(/title="([^"]+)"/i)?.[1]
+          || '';
+        const valorMatch = card.match(/R\$\s*([\d.,]+)/);
+        const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
+        if (!valor) continue;
+
+        const avalMatch = card.match(/(?:avalia[çc][aã]o|avaliado)[^R]*R\$\s*([\d.,]+)/i);
+        const aval = avalMatch ? parseFloat(avalMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
+        const foto = card.match(/<img[^>]*(?:src|data-src)="([^"]+(?:jpg|jpeg|png|webp)[^"]*)"/i)?.[1]
+          || card.match(/<img[^>]*(?:src|data-src)="(https?:\/\/[^"]+)"/i)?.[1]
+          || null;
+        const areaMatch = card.match(/(\d+[\.,]?\d*)\s*m[²2]/i);
+        const area = areaMatch ? parseFloat(areaMatch[1].replace(',', '.')) : 0;
+
+        const estadoMatch = card.match(/\b([A-Z]{2})\b(?:\s*[-–]|\s*<)/);
+        const estado = estadoMatch?.[1] || 'SP';
+        const cidadeMatch = card.match(/(?:cidade|local)[^>]*>[^<]*?([A-ZÀ-Ú][a-zà-ú]+(?:\s[A-ZÀ-Ú][a-zà-ú]+)*)/);
+        const cidade = cidadeMatch?.[1] || '';
+
+        const id = href.replace(/[?#].*/, '').split('/').filter(Boolean).pop() || Math.random().toString(36).slice(2);
+        const linkAbsoluto = href.startsWith('http') ? href : `https://www.frazaoleiloes.com.br${href}`;
+        const fotoAbsoluta = foto ? (foto.startsWith('http') ? foto : `https://www.frazaoleiloes.com.br${foto}`) : null;
+
+        imoveis.push({
+          fonte: 'FRAZAO',
+          fonte_id: `frazao_${id}`,
+          titulo: titulo.slice(0, 120) || `Imóvel Frazão ${id}`,
+          tipo: normalizarTipo(titulo),
+          modalidade: titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+          estado,
+          cidade,
+          bairro: '',
+          endereco: '',
+          valor_avaliacao: aval,
+          valor_minimo: valor,
+          area_m2: area,
+          descricao: titulo.slice(0, 300),
+          link_edital: linkAbsoluto,
+          link_foto: fotoAbsoluta,
+          leiloeiro: 'Frazão Leilões',
+          data_leilao: null,
+          forma_pagamento: null,
+        });
+      }
+
+      // Fallback por links diretos se regex de card não pegou nada
+      if (imoveis.length === 0) {
+        const linkRegex = /href="(https?:\/\/(?:www\.)?frazaoleiloes\.com\.br\/[^"]+)"/gi;
+        let lm;
+        while ((lm = linkRegex.exec(html)) !== null && imoveis.length < 30) {
+          const href = lm[1];
+          if (seen.has(href) || !href.match(/lote|imovel|produto|leilao/i)) continue;
+          seen.add(href);
+          const ctx = html.slice(Math.max(0, html.indexOf(href) - 300), html.indexOf(href) + 300);
+          const valorMatch = ctx.match(/R\$\s*([\d.,]+)/);
+          const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
+          if (!valor) continue;
+          const titulo = ctx.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() || '';
+          const id = href.replace(/[?#].*/, '').split('/').filter(Boolean).pop();
+          imoveis.push({
+            fonte: 'FRAZAO',
+            fonte_id: `frazao_${id}`,
+            titulo: titulo.slice(0, 120) || `Imóvel Frazão ${id}`,
+            tipo: normalizarTipo(titulo),
+            modalidade: 'extrajudicial',
+            estado: 'SP',
+            cidade: '',
+            bairro: '',
+            endereco: '',
+            valor_avaliacao: 0,
+            valor_minimo: valor,
+            area_m2: 0,
+            descricao: '',
+            link_edital: href,
+            link_foto: null,
+            leiloeiro: 'Frazão Leilões',
+            data_leilao: null,
+            forma_pagamento: null,
+          });
+        }
+      }
+
+      console.log(`    Frazão p${page} [${url}]: ${imoveis.length} imóveis`);
+      return imoveis;
+    } catch (err) {
+      console.log(`    Frazão tentativa falhou [${url}]: ${err.message.slice(0, 80)}`);
+    }
+  }
+  console.log(`    Frazão p${page}: todas as URLs falharam`);
+  return [];
+}
+
 // ─── SCRAPER SOLD LEILÕES ─────────────────────────────────────────────────────
 
 async function scraperSold(page = 1) {
@@ -1178,7 +1307,17 @@ async function main() {
     await new Promise(r => setTimeout(r, 1500));
   }
 
-  // 10. Banco do Brasil
+  // 10. Frazão Leilões
+  console.log('\n📋 Scraping Frazão Leilões...');
+  for (let page = 1; page <= 4; page++) {
+    const imoveis = await scraperFrazao(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 11. Banco do Brasil
   console.log('\n📋 Scraping Banco do Brasil...');
   for (let page = 0; page <= 4; page++) {
     const imoveis = await scraperBancoBrasil(page);

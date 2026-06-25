@@ -25,6 +25,12 @@ export default async function handler(req) {
     'www.zukerman.com.br',
     'eleiloes.com.br',
     'www.eleiloes.com.br',
+    'frazaoleiloes.com.br',
+    'www.frazaoleiloes.com.br',
+    'biassi.com.br',
+    'www.biassi.com.br',
+    'hastapublica.com.br',
+    'www.hastapublica.com.br',
   ]);
   let targetUrl;
   try {
