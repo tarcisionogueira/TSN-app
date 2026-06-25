@@ -138,6 +138,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
   const [etapa, setEtapa] = useState('aguardando'); // aguardando | verificando | confirmado | erro
   const [copiado, setCop] = useState('');
   const [msgErro, setMsgErro] = useState('');
+  const [showQR, setShowQR] = useState(false);
   const [paymentId, setPaymentId] = useState(null);
   const pollingRef = useRef(null);
   const tentRef = useRef(0);
@@ -241,24 +242,47 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
         <div style={{ fontSize: 12, color: '#64748b' }}>{servico.nome}</div>
       </div>
 
-      {/* QR Code */}
-      {brCode ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      {/* Botões de ação: QR ou Copiar */}
+      {brCode && !showQR && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <button onClick={() => setShowQR(true)} style={{
+            padding: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0',
+            borderRadius: 10, cursor: 'pointer', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, color: '#059669',
+          }}>
+            <QrCode size={22} color="#059669" />
+            Gerar QR Code
+          </button>
+          <button onClick={() => copiar(PIX_KEY, 'chave')} style={{
+            padding: '12px', background: copiado === 'chave' ? '#f0fdf4' : '#f8fafc',
+            border: `1px solid ${copiado === 'chave' ? '#bbf7d0' : '#e2e8f0'}`,
+            borderRadius: 10, cursor: 'pointer', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13,
+            color: copiado === 'chave' ? '#059669' : '#374151',
+          }}>
+            <Copy size={22} color={copiado === 'chave' ? '#059669' : '#374151'} />
+            {copiado === 'chave' ? 'Copiado!' : 'Copiar chave'}
+          </button>
+        </div>
+      )}
+
+      {/* QR Code — só aparece após clique */}
+      {showQR && brCode && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           <QRCodeImg value={brCode} size={200} />
           <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center' }}>
             Aponte a câmera do seu banco para o QR code
           </div>
-        </div>
-      ) : (
-        <div style={{ background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#92400e', textAlign: 'center' }}>
-          Configure VITE_MP_PIX_KEY no Vercel para gerar o QR code
+          <button onClick={() => setShowQR(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
+            Ocultar QR code
+          </button>
         </div>
       )}
 
       {/* Separador */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>OU COPIE A CHAVE PIX</span>
+        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>CHAVE PIX</span>
         <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
       </div>
 
