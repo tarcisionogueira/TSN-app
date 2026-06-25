@@ -54,8 +54,8 @@ SELECT
     WHEN c.prazo_juridico < now() + INTERVAL '4 hours' THEN 'critico'
     ELSE 'no_prazo'
   END AS juridico_sla,
-  p_analista.email AS analista_email,
-  p_cliente.email  AS cliente_email
+  p_analista.id  AS analista_id,
+  p_cliente.id   AS cliente_id
 FROM public.casos c
 LEFT JOIN public.perfis p_analista ON p_analista.id = c.analista_id
 LEFT JOIN public.perfis p_cliente  ON p_cliente.id  = c.cliente_id

@@ -56,42 +56,58 @@ export default async function handler(req) {
       }
       if (candidatos.length === 0) candidatos = imoveis; // fallback: usa todos do estado
 
-      // ── Algoritmo de pontuação ───────────────────────────────────────────
-      // Pontuação composta para selecionar as 6 melhores oportunidades
-      const pontuados = candidatos.map(im => {
+      // ── Algoritmo de pontuação — ROI líquido estimado ───────────────────
+      // Calcula margem bruta estimada para cada imóvel e filtra por threshold
+      const MARGEM_THRESHOLD = 25; // % mínima de margem para alertas ideais
+
+      const comMargem = candidatos.map(im => {
+        const valorMinimo = Number(im.valor_minimo) || 0;
+        const valorAvaliacao = Number(im.valor_avaliacao) || 0;
+        let margemBruta = null;
+
+        if (valorMinimo > 0 && valorAvaliacao > 0) {
+          const custoAquisicao = valorMinimo * 1.05; // +5% ITBI, taxas, registro
+          margemBruta = (valorAvaliacao - custoAquisicao) / custoAquisicao * 100;
+        }
+
         let score = 0;
 
-        // 1. Desconto sobre avaliação (peso 40%)
-        const desc = Number(im.desconto_percentual) || 0;
-        score += desc * 0.4; // até +40
+        if (margemBruta !== null) {
+          // Base: margem bruta (até 50 pts para 100% de margem)
+          score += margemBruta * 0.5;
 
-        // 2. Leilão próximo: prioriza datas nos próximos 30 dias (peso 25%)
+          // Bônus: margem excepcional >= 50%
+          if (margemBruta >= 50) score += 15;
+        }
+
+        // Leilão nos próximos 30 dias (até +20 pts com decaimento)
         if (im.data_leilao) {
           const dLeilao = new Date(im.data_leilao);
           const diasParaLeilao = (dLeilao - agora) / (1000 * 60 * 60 * 24);
           if (diasParaLeilao >= 0 && diasParaLeilao <= 30) {
-            score += 25 * (1 - diasParaLeilao / 30); // +25 se hoje, +0 se em 30 dias
+            score += 20 * (1 - diasParaLeilao / 30);
           }
         }
 
-        // 3. Tipo preferido pelo usuário (peso 15%)
+        // Tipo preferido pelo usuário (+15 pts)
         if (filtros.tipos?.length > 0 && filtros.tipos.includes(im.tipo)) score += 15;
 
-        // 4. Desconto absoluto (quanto abaixo do mínimo — indica liquidez, peso 10%)
-        if (im.valor_avaliacao && im.valor_minimo) {
-          const descAbsoluto = Number(im.valor_avaliacao) - Number(im.valor_minimo);
-          if (descAbsoluto > 200000) score += 10;
-          else if (descAbsoluto > 50000) score += 5;
-        }
-
-        // 5. Modalidade preferida (peso 10%)
-        if (filtros.modalidades?.length > 0 && filtros.modalidades.includes(im.modalidade)) score += 10;
-
-        return { ...im, _score: score };
+        return { ...im, _margemBruta: margemBruta, _score: score };
       });
 
-      // Ordena por score e pega top 6
-      const top6 = pontuados.sort((a, b) => b._score - a._score).slice(0, 6);
+      // Candidatos ideais: margem >= threshold
+      let candidatosIdeais = comMargem.filter(im => im._margemBruta !== null && im._margemBruta >= MARGEM_THRESHOLD);
+      const usouFallback = candidatosIdeais.length < 3;
+
+      // Fallback: se menos de 3 atendem o critério, usa os melhores por desconto
+      let top6;
+      if (usouFallback) {
+        top6 = comMargem
+          .sort((a, b) => (Number(b.desconto_percentual) || 0) - (Number(a.desconto_percentual) || 0))
+          .slice(0, 6);
+      } else {
+        top6 = candidatosIdeais.sort((a, b) => b._score - a._score).slice(0, 6);
+      }
 
       // ── Email ────────────────────────────────────────────────────────────
       // Deep-link para abrir busca com filtros pré-preenchidos
@@ -110,15 +126,25 @@ export default async function handler(req) {
       const cardsHtml = top6.map((im, i) => {
         const foto = im.link_foto ? `<img src="${im.link_foto}" alt="foto" style="width:100%;height:120px;object-fit:cover;display:block;border-radius:8px 8px 0 0;">` : '';
         const dataLabel = fmtData(im.data_leilao);
-        const desc = im.desconto_percentual ? `<span style="display:inline-block;background:#f0fdf4;color:#059669;border:1px solid #bbf7d0;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">▼ ${Math.round(im.desconto_percentual)}% desconto</span>` : '';
+        // Margem arredondada ao múltiplo de 5 mais próximo
+        const margemRounded = im._margemBruta !== null ? Math.round(im._margemBruta / 5) * 5 : null;
+        const margemTag = margemRounded !== null
+          ? `<span style="display:inline-block;background:#f0fdf4;color:#059669;border:1px solid #bbf7d0;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">~Margem ${margemRounded}%</span>`
+          : '';
         const dataTag = dataLabel ? `<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;margin-left:4px;">📅 ${dataLabel}</span>` : '';
+        const margemDestaque = im._margemBruta !== null
+          ? `<div style="margin-bottom:10px;padding:8px 12px;background:#f0fdf4;border-radius:8px;border-left:3px solid #059669;">
+               <span style="font-size:12px;color:#064e3b;font-weight:600;">Margem estimada: <strong style="font-size:14px;">~${Math.round(im._margemBruta)}%</strong></span>
+             </div>`
+          : '';
         return `
         <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:12px;background:#fff;">
           ${foto}
           <div style="padding:14px 16px;">
             <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px;">${im.titulo || im.endereco || 'Imóvel em leilão'}</div>
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${im.cidade || ''}${im.estado ? ' — ' + im.estado : ''}</div>
-            <div style="margin-bottom:8px;">${desc}${dataTag}</div>
+            <div style="margin-bottom:8px;">${margemTag}${dataTag}</div>
+            ${margemDestaque}
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div>
                 <div style="font-size:11px;color:#94a3b8;">Lance mínimo</div>
@@ -144,7 +170,7 @@ export default async function handler(req) {
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a;">Olá${userName ? ', ' + userName : ''}!</h2>
     <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">
-      Selecionamos as <strong>${top6.length} melhores oportunidades</strong> em <strong>${localFiltro}</strong> para você esta semana:
+      Selecionamos as <strong>${top6.length} melhores oportunidades</strong> em <strong>${localFiltro}</strong> para você esta semana:${usouFallback ? '<br><span style="font-size:12px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;padding:4px 10px;border-radius:6px;display:inline-block;margin-top:8px;">⚠️ Melhores disponíveis na região, fora do critério ideal de margem</span>' : ''}
     </p>
     ${cardsHtml}
     <div style="text-align:center;margin-top:20px;">

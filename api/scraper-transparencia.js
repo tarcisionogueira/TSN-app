@@ -224,6 +224,48 @@ export default async function handler(req, res) {
   let totalErros = 0;
   const detalhes = [];
 
+  // ── PGFN: consulta devedores da dívida ativa federal ──────────────────────
+  // A PGFN disponibiliza download em lotes via API CKAN do Portal Aberto.
+  // Verificamos o endpoint de devedores ativos (limite diário de 10k itens).
+  let pgfnProcessados = 0;
+  try {
+    const pgfnRes = await fetch(
+      'https://dadosabertos.pgfn.gov.br/api/3/action/datastore_search?resource_id=b0f82e1a-e636-4954-b74c-5c36c2e1b90b&limit=1000',
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15000) }
+    );
+    if (pgfnRes.ok) {
+      const pgfnJson = await pgfnRes.json();
+      const records = pgfnJson?.result?.records || [];
+      const rowsPgfn = records.map(r => ({
+        fonte: 'pgfn',
+        fonte_id: `pgfn_${r._id ?? r.CPF_CNPJ ?? r.NO_DEVEDOR}`,
+        cpf_cnpj: (r.CPF_CNPJ || '').replace(/\D/g, '') || null,
+        nome_sancionado: r.NO_DEVEDOR || null,
+        tipo_sancao: 'Dívida Ativa Federal',
+        orgao_sancionador: 'PGFN',
+        data_inicio_sancao: null,
+        data_fim_sancao: null,
+        fundamentacao_legal: null,
+        processo: r.NO_PROCESSO || null,
+        ativo: true,
+        atualizado_em: new Date().toISOString(),
+      })).filter(r => r.fonte_id && r.cpf_cnpj);
+      for (let i = 0; i < rowsPgfn.length; i += 200) {
+        await upsertSancoes(rowsPgfn.slice(i, i + 200), supabaseUrl, serviceKey).catch(e =>
+          console.error('[scraper-transparencia] PGFN upsert:', e.message)
+        );
+      }
+      pgfnProcessados = rowsPgfn.length;
+      totalProcessados += pgfnProcessados;
+      detalhes.push({ fonte: 'PGFN', status: 'ok', processados: pgfnProcessados });
+    } else {
+      detalhes.push({ fonte: 'PGFN', status: 'indisponivel', erro: `HTTP ${pgfnRes.status}` });
+    }
+  } catch (e) {
+    console.warn('[scraper-transparencia] PGFN indisponível:', e.message);
+    detalhes.push({ fonte: 'PGFN', status: 'indisponivel', erro: e.message });
+  }
+
   // Definição das fontes a buscar
   const FONTES = [
     {
