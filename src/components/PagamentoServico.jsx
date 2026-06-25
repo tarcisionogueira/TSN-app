@@ -504,8 +504,10 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar }) {
 }
 
 /* ── Componente principal ── */
-export default function PagamentoServico({ servico, onPago, onCancelar }) {
-  const [metodo, setMetodo] = useState(null);
+// assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
+// assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false }) {
+  const [metodo, setMetodo] = useState(assinatura ? 'cartao' : null);
 
   return (
     <div style={{
@@ -514,6 +516,11 @@ export default function PagamentoServico({ servico, onPago, onCancelar }) {
     }}>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a' }}>Finalizar pagamento</div>
+        {assinatura && (
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+            Assinatura recorrente · Somente cartão de crédito
+          </div>
+        )}
       </div>
 
       {!metodo && (
@@ -531,7 +538,11 @@ export default function PagamentoServico({ servico, onPago, onCancelar }) {
         <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={() => setMetodo(null)} />
       )}
       {metodo === 'cartao' && (
-        <PagamentoCartao servico={servico} onConfirmado={onPago} onVoltar={() => setMetodo(null)} />
+        <PagamentoCartao
+          servico={servico}
+          onConfirmado={onPago}
+          onVoltar={assinatura ? onCancelar : () => setMetodo(null)}
+        />
       )}
     </div>
   );
