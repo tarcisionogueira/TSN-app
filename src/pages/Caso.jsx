@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
+import AgendarReuniao from '../components/AgendarReuniao';
 
 // ─── Estilos base ────────────────────────────────────────────────────────────
 const card = { background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding:'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' };
@@ -188,6 +189,7 @@ export default function Caso() {
   // ─── Estados gerais ──────────────────────────────────────────────────────
   const [caso, setCaso] = useState(null);
   const [imovelExtra, setImovelExtra] = useState(null); // data_leilao, titulo, link_leilao
+  const [showAgendar, setShowAgendar] = useState(null); // null | 1 | 2
   const [jobs, setJobs] = useState([]);
   const [relatorios, setRelatorios] = useState([]);
   const [reunioes, setReunioes] = useState([]);
@@ -720,12 +722,27 @@ export default function Caso() {
             ))}
           </div>
 
-          {analisesConcluidas && isAnalista && !reuniao1 && (
+          {analisesConcluidas && !reuniao1 && (
             <div style={{ marginTop:16, padding:'14px 16px', background:'#eff6ff', borderRadius:10, border:'1px solid #bfdbfe' }}>
-              <div style={{ fontWeight:700, fontSize:14, color:'#084BA6', marginBottom:8 }}>Relatórios prontos — agendar reunião com cliente</div>
-              <button onClick={() => { nav('/atendimento'); }} style={{ ...btn('#0D63DB'), fontSize:12 }}>
-                <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Agendar reunião
-              </button>
+              {showAgendar === 1 ? (
+                <AgendarReuniao
+                  casoId={caso.id}
+                  analistaId={caso.analista_id}
+                  reuniaoNum={1}
+                  titulo="Agendar 1ª Reunião com Analista"
+                  onAgendado={() => { setShowAgendar(null); carregarCaso(); }}
+                  onCancelar={() => setShowAgendar(null)}
+                />
+              ) : (
+                <>
+                  <div style={{ fontWeight:700, fontSize:14, color:'#084BA6', marginBottom:8 }}>
+                    {isAnalista ? 'Relatórios prontos — agendar reunião com cliente' : 'Relatórios prontos — agende sua reunião com o analista'}
+                  </div>
+                  <button onClick={() => setShowAgendar(1)} style={{ ...btn('#0D63DB'), fontSize:12 }}>
+                    <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Escolher horário
+                  </button>
+                </>
+              )}
             </div>
           )}
         </Secao>
@@ -776,8 +793,8 @@ export default function Caso() {
           ) : (
             <div style={{ paddingTop:14, color:'#64748b', fontSize:13 }}>
               {analisesConcluidas
-                ? 'Os relatórios estão prontos. O analista irá agendar a reunião em breve.'
-                : 'A reunião será disponível após a conclusão dos relatórios.'}
+                ? 'Clique em "Escolher horário" acima para agendar sua reunião com o analista.'
+                : 'A reunião será liberada após a conclusão dos relatórios de análise.'}
             </div>
           )}
         </Secao>
@@ -859,13 +876,28 @@ export default function Caso() {
                 <ChecklistJuridico juridica={juridica} casoId={caso.id} onSalvo={carregarCaso}/>
               )}
 
-              {/* 2ª reunião — analista agenda após parecer */}
-              {isAnalista && juridica.entregue_em && !reuniao2 && (
+              {/* 2ª reunião — analista ou cliente agenda após parecer */}
+              {juridica.entregue_em && !reuniao2 && (
                 <div style={{ marginTop:16, padding:'14px', background:'#ecfdf5', borderRadius:10, border:'1px solid #bbf7d0' }}>
-                  <div style={{ fontWeight:700, fontSize:13, color:'#166534', marginBottom:8 }}>Agendar 2ª reunião com cliente para aprovação</div>
-                  <button onClick={() => nav('/atendimento')} style={{ ...btn('#10b981'), fontSize:12 }}>
-                    <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Agendar 2ª reunião
-                  </button>
+                  {showAgendar === 2 ? (
+                    <AgendarReuniao
+                      casoId={caso.id}
+                      analistaId={caso.analista_id}
+                      reuniaoNum={2}
+                      titulo="Agendar 2ª Reunião — Aprovação"
+                      onAgendado={() => { setShowAgendar(null); carregarCaso(); }}
+                      onCancelar={() => setShowAgendar(null)}
+                    />
+                  ) : (
+                    <>
+                      <div style={{ fontWeight:700, fontSize:13, color:'#166534', marginBottom:8 }}>
+                        {isAnalista ? 'Agendar 2ª reunião com cliente para aprovação' : 'Agende a 2ª reunião para aprovação do parecer'}
+                      </div>
+                      <button onClick={() => setShowAgendar(2)} style={{ ...btn('#10b981'), fontSize:12 }}>
+                        <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Escolher horário
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
