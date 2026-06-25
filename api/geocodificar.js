@@ -162,11 +162,11 @@ export default async function handler(req) {
     console.error('[geocodificar] CRON_SECRET não configurado — acesso bloqueado');
     return new Response(JSON.stringify({ error: 'Endpoint não configurado' }), { status: 500 });
   }
-  const _url = new URL(req.url);
+  const _url = new URL(req.url, 'http://localhost');
   // Vercel cron envia: Authorization: Bearer <CRON_SECRET>
   // Chamadas manuais podem enviar: x-cron-secret header ou ?secret= query param
-  const authHeader = req.headers.get('authorization') || '';
-  const sent = req.headers.get('x-cron-secret')
+  const authHeader = (req.headers.get ? req.headers.get('authorization') : req.headers['authorization']) || '';
+  const sent = (req.headers.get ? req.headers.get('x-cron-secret') : req.headers['x-cron-secret'])
     || _url.searchParams.get('secret')
     || authHeader.replace(/^Bearer\s+/i, '');
   if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
