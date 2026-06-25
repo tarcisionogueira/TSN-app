@@ -314,7 +314,8 @@ async function scraperCEF(estado) {
 async function scraperSuperbid(pageNumber = 1) {
   console.log(`  Superbid página ${pageNumber}...`);
   try {
-    const url = `https://offer-query.superbid.net/seo/offers/?locale=pt_BR&portalId=[2,15]&requestOrigin=marketplace&timeZoneId=America%2FSao_Paulo&orderBy=score:desc&pageNumber=${pageNumber}&pageSize=50&searchType=opened&categoryId=imoveis`;
+    // portalId=[2,15] deve ser percent-encoded para evitar rejeição por alguns servidores/proxies
+    const url = `https://offer-query.superbid.net/seo/offers/?locale=pt_BR&portalId=%5B2%2C15%5D&requestOrigin=marketplace&timeZoneId=America%2FSao_Paulo&orderBy=score%3Adesc&pageNumber=${pageNumber}&pageSize=50&searchType=opened&categoryId=imoveis`;
     const data = await fetchJson(url, {
       headers: {
         'Origin': 'https://www.superbid.net',
@@ -348,7 +349,7 @@ async function scraperSuperbid(pageNumber = 1) {
       const cidadeNome = cidadeCompleta.replace(/\s*[-–]\s*[A-Z]{2}$/, '').trim();
 
       return {
-        fonte: 'SOLD',
+        fonte: 'SUPERBID',
         fonte_id: `sbid_${of.id}`,
         titulo: p.shortDesc || `Imóvel ${cidadeCompleta}`,
         tipo: normalizarTipo(p.subCategory?.description),
@@ -394,7 +395,11 @@ async function scraperZukerman(page = 1) {
       const card = match[1];
       const titulo = card.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
       const valor = card.match(/R\$\s*([\d.,]+)/)?.[1]?.replace(/\./g,'')?.replace(',','.') || '0';
-      const link = card.match(/href="([^"]+)"/)?.[1] || '';
+      // Prefere link que aponte para lote/imovel — evita pegar links de imagem ou breadcrumb
+      const link = card.match(/href="([^"]*(?:lote|imovel|produto|processo)[^"]*)"/i)?.[1]
+        || card.match(/href="(\/[^"]+\d{4,}[^"]*)"/)?.[1]
+        || card.match(/href="([^"#][^"]+)"/)?.[1]
+        || '';
       if (titulo && parseFloat(valor) > 0) {
         imoveis.push({
           fonte: 'JUDICIAL',
@@ -434,16 +439,17 @@ async function scraperBiassi(page = 1) {
     const url = `https://www.biassi.com.br/leilao/imoveis?page=${page}`;
     const html = await fetchHtml(url);
     const imoveis = [];
-    const cardRegex = /<div[^>]*class="[^"]*card[^"]*lote[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
-    // Tenta extrair dados dos cards de lote
-    const lotRegex = /<a[^>]*href="([^"]*\/lote\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+    // Biassi usa links com /lote/, /produto/ ou /item/ — captura qualquer um
+    const lotRegex = /<a[^>]*href="([^"]*\/(?:lote|produto|item|imovel)\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     let m;
-    while ((m = lotRegex.exec(html)) !== null && imoveis.length < 100) {
-      const href = m[1];
-      const inner = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const seen = new Set();
+
+    const extrairImovelBiassi = (href, inner) => {
+      if (seen.has(href)) return;
+      seen.add(href);
       const valorMatch = inner.match(/R\$\s*([\d.,]+)/);
       const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
-      if (!valor) continue;
+      if (!valor) return;
       const id = href.split('/').pop().split('?')[0];
       imoveis.push({
         fonte: 'BIASSI',
@@ -465,7 +471,26 @@ async function scraperBiassi(page = 1) {
         data_leilao: null,
         forma_pagamento: 'a_vista',
       });
+    };
+
+    while ((m = lotRegex.exec(html)) !== null && imoveis.length < 100) {
+      const href = m[1];
+      const inner = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      extrairImovelBiassi(href, inner);
     }
+
+    // Fallback: extrai por contexto ao redor de qualquer link com ID numérico longo
+    if (imoveis.length === 0) {
+      const fallbackRegex = /href="(\/[^"]*\d{5,}[^"?#]*)"/gi;
+      while ((m = fallbackRegex.exec(html)) !== null && imoveis.length < 100) {
+        const href = m[1];
+        if (seen.has(href)) continue;
+        const pos = html.indexOf(m[0]);
+        const ctx = html.slice(Math.max(0, pos - 300), pos + 600).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        extrairImovelBiassi(href, ctx);
+      }
+    }
+
     console.log(`    Biassi p${page}: ${imoveis.length} imóveis`);
     return imoveis;
   } catch (err) {
@@ -482,24 +507,29 @@ async function scraperHastaPublica(page = 1) {
     const url = `https://www.hastapublica.com.br/busca?categoria=imoveis&pagina=${page}`;
     const html = await fetchHtml(url);
     const imoveis = [];
-    // Extrai links de lotes de imóveis
-    const linkRegex = /href="(\/lote\/[^"?]+)[^"]*"[^>]*>([\s\S]{0,500}?)<\/a>/gi;
+    // Extrai links de lotes — procura /lote/ ou /processo/ no href
+    const linkRegex = /href="(\/(?:lote|processo|imovel)\/[^"?#]+)"/gi;
     let m;
     const seen = new Set();
     while ((m = linkRegex.exec(html)) !== null && imoveis.length < 100) {
       const href = m[1];
       if (seen.has(href)) continue;
       seen.add(href);
-      const inner = m[2].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-      const valorMatch = inner.match(/R\$\s*([\d.,]+)/);
+      // Usa contexto ao redor do link para extrair título e valor (valor pode estar fora do <a>)
+      const pos = html.indexOf(m[0]);
+      const ctx = html.slice(Math.max(0, pos - 300), pos + 800);
+      const inner = ctx.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+      const valorMatch = inner.match(/R\$\s*([\d.]+,\d{2})/);
       const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
       if (!valor) continue;
+      const titulo = ctx.match(/<h[2-5][^>]*>([\s\S]*?)<\/h[2-5]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim()
+        || inner.slice(0, 100);
       const id = href.split('/').filter(Boolean).pop();
       imoveis.push({
         fonte: 'HASTA',
         fonte_id: `hasta_${id}`,
-        titulo: inner.slice(0, 100) || `Imóvel HastaPública ${id}`,
-        tipo: normalizarTipo(inner),
+        titulo: titulo.slice(0, 100) || `Imóvel HastaPública ${id}`,
+        tipo: normalizarTipo(titulo),
         modalidade: 'judicial',
         estado: '',
         cidade: '',
@@ -508,7 +538,7 @@ async function scraperHastaPublica(page = 1) {
         valor_avaliacao: 0,
         valor_minimo: valor,
         area_m2: 0,
-        descricao: inner.slice(0, 300),
+        descricao: titulo.slice(0, 300),
         link_edital: `https://www.hastapublica.com.br${href}`,
         link_foto: null,
         leiloeiro: 'HastaPública',
@@ -543,7 +573,7 @@ async function scraperSuperbidAlt(pageNumber = 1) {
       const p = of.product || of;
       const loc = p.location || of.location || {};
       return {
-        fonte: 'SOLD',
+        fonte: 'SUPERBID',
         fonte_id: `sbid_${of.id || of.offerId}`,
         titulo: p.shortDesc || p.description || `Imóvel Superbid`,
         tipo: normalizarTipo(p.subCategory?.description || of.categoryDesc),
@@ -574,7 +604,8 @@ async function scraperSuperbidAlt(pageNumber = 1) {
 async function scraperMegaLeiloes(uf) {
   console.log(`  Mega Leilões ${uf}...`);
   try {
-    const url = `https://www.megaleiloes.com.br/imoveis/${uf}`;
+    // Mega Leilões usa query param ?estado= e não path segment
+    const url = `https://www.megaleiloes.com.br/imoveis?estado=${uf}`;
     const html = await fetchHtml(url);
     const imoveis = [];
     const seen = new Set();
@@ -625,16 +656,22 @@ async function scraperMegaLeiloes(uf) {
       });
     }
 
-    // Fallback: extrai por link com regex mais simples
+    // Fallback: extrai por link com contexto — não usa zip posicional que mistura links com valores errados
     if (imoveis.length === 0) {
-      const linkRegex = /href="(\/(?:lote|imovel)\/[^"?]+)"/gi;
-      const valorInline = /R\$\s*([\d.]+,\d{2})/g;
-      const links = [...html.matchAll(linkRegex)].map(x => x[1]);
-      const valores = [...html.matchAll(valorInline)].map(x => parseFloat(x[1].replace(/\./g,'').replace(',','.')));
-      for (let i = 0; i < Math.min(links.length, valores.length, 30); i++) {
-        if (!links[i] || !valores[i] || seen.has(links[i])) continue;
-        seen.add(links[i]);
-        const id = links[i].split('/').filter(Boolean).pop();
+      const linkRegex = /href="(\/(?:lote|imovel)[^"?#]+)"/gi;
+      let lm;
+      while ((lm = linkRegex.exec(html)) !== null && imoveis.length < 30) {
+        const href = lm[1];
+        if (seen.has(href)) continue;
+        seen.add(href);
+        // Pega contexto ao redor para extrair valor corretamente (não posicional)
+        const pos = html.indexOf(lm[0]);
+        const ctx = html.slice(Math.max(0, pos - 200), pos + 500);
+        const valorMatch = ctx.match(/R\$\s*([\d.]+,\d{2})/);
+        if (!valorMatch) continue;
+        const valor = parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.'));
+        if (!valor) continue;
+        const id = href.split('/').filter(Boolean).pop();
         imoveis.push({
           fonte: 'MEGA',
           fonte_id: `mega_${id}`,
@@ -646,10 +683,10 @@ async function scraperMegaLeiloes(uf) {
           bairro: '',
           endereco: '',
           valor_avaliacao: 0,
-          valor_minimo: valores[i],
+          valor_minimo: valor,
           area_m2: 0,
           descricao: '',
-          link_edital: `https://www.megaleiloes.com.br${links[i]}`,
+          link_edital: `https://www.megaleiloes.com.br${href}`,
           link_foto: null,
           leiloeiro: 'Mega Leilões',
           data_leilao: null,
@@ -869,19 +906,21 @@ async function scraperSoldHtml(page = 1) {
 
     const imoveis = [];
     const seen = new Set();
-    const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:lot|card|product|item)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+    // Extrai por link (mais robusto que regex de card com nesting)
+    const linkRegex = /href="([^"]*\/(?:lote|lot)\/[^"?#]+)"/gi;
     let m;
-    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 100) {
-      const card = m[1];
-      const href = card.match(/href="([^"]*(?:lote|lot)[^"]*)"/i)?.[1] || '';
-      if (!href || seen.has(href)) continue;
+    while ((m = linkRegex.exec(html)) !== null && imoveis.length < 100) {
+      const href = m[1].split('?')[0];
+      if (seen.has(href)) continue;
       seen.add(href);
-      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
-      const valorMatch = card.match(/R\$\s*([\d.,]+)/);
+      const pos = html.indexOf(m[0]);
+      const ctx = html.slice(Math.max(0, pos - 400), pos + 700);
+      const titulo = ctx.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const valorMatch = ctx.match(/R\$\s*([\d.]+,\d{2})/);
       const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
       if (!valor) continue;
-      const foto = card.match(/<img[^>]*(?:src|data-src)="([^"]+)"/i)?.[1] || null;
-      const id = href.split('/').filter(Boolean).pop().split('?')[0];
+      const foto = ctx.match(/<img[^>]*(?:src|data-src)="([^"]+(?:jpg|jpeg|png|webp)[^"]*)"/i)?.[1] || null;
+      const id = href.split('/').filter(Boolean).pop();
       imoveis.push({
         fonte: 'SOLD',
         fonte_id: `sold_${id}`,
@@ -897,7 +936,7 @@ async function scraperSoldHtml(page = 1) {
         area_m2: 0,
         descricao: titulo.slice(0, 300),
         link_edital: href.startsWith('http') ? href : `https://www.sold.com.br${href}`,
-        link_foto: foto?.startsWith('http') ? foto : null,
+        link_foto: foto ? (foto.startsWith('http') ? foto : `https://www.sold.com.br${foto}`) : null,
         leiloeiro: 'Sold Leilões',
         data_leilao: null,
         forma_pagamento: 'a_vista',
@@ -916,7 +955,8 @@ async function scraperSoldHtml(page = 1) {
 async function scraperBancoBrasil(page = 0) {
   console.log(`  Banco do Brasil página ${page + 1}...`);
   try {
-    // API pública do Seu Imóvel BB (sem autenticação OAuth necessária para busca)
+    // API pública do Seu Imóvel BB — tenta www42 (domínio histórico) e www47 (alternativo)
+    // Ambos apontam para o portal de imóveis do BB
     const url = `https://www42.bb.com.br/portalbb/imoveisRecurso/imoveis/listar,802,0,0.bbx?page=${page}&size=50&tipoOferta=1,2,3`;
     const data = await fetchJson(url, {
       headers: {
@@ -951,7 +991,7 @@ async function scraperBancoBrasil(page = 0) {
         valor_minimo: preco,
         area_m2: parseFloat(im.areaTotal || im.area || 0),
         descricao: im.descricao || im.complemento || '',
-        link_edital: im.linkAcesso || im.urlImovel || `https://www42.bb.com.br/portalbb/imoveis/imovel/${im.codImovel}`,
+        link_edital: im.linkAcesso || im.urlImovel || (im.codImovel ? `https://www42.bb.com.br/portalbb/imoveis/imovel/${im.codImovel}` : null),
         link_foto: im.foto || im.urlFoto || im.imagemPrincipal || null,
         leiloeiro: 'Banco do Brasil',
         data_leilao: im.dataLeilao || im.dtLeilao || null,
@@ -968,7 +1008,7 @@ async function scraperBancoBrasil(page = 0) {
 
 async function scraperBancoBrasilAlt(page = 0) {
   try {
-    // Endpoint alternativo - portal público BB imóveis
+    // Endpoint alternativo com offset/limit (diferente de page/size)
     const offset = page * 50;
     const url = `https://www42.bb.com.br/portalbb/imoveisRecurso/imoveis/listar,802,0,0.bbx?offset=${offset}&limit=50`;
     const data = await fetchJson(url, {
@@ -993,12 +1033,12 @@ async function scraperBancoBrasilAlt(page = 0) {
       valor_minimo: parseFloat(im.precoVenda || im.valorVenda || 0),
       area_m2: parseFloat(im.areaTotal || 0),
       descricao: im.descricao || '',
-      link_edital: `https://www42.bb.com.br/portalbb/imoveis/imovel/${im.codImovel}`,
+      link_edital: im.codImovel ? `https://www42.bb.com.br/portalbb/imoveis/imovel/${im.codImovel}` : null,
       link_foto: im.foto || null,
       leiloeiro: 'Banco do Brasil',
       data_leilao: null,
       forma_pagamento: 'a_vista',
-    })).filter(im => im.valor_minimo > 0);
+    })).filter(im => im.valor_minimo > 0 && im.link_edital);
   } catch {
     return await scraperSeuImovelBB(page);
   }
@@ -1059,22 +1099,36 @@ async function scraperSeuImovelBB(page = 0) {
 async function scraperELeiloes(page = 1) {
   console.log(`  eLeilões página ${page}...`);
   try {
-    const url = `https://www.eleiloes.com.br/busca?categoria=imoveis&pagina=${page}`;
-    const html = await fetchHtml(url);
+    // Tenta URL de busca; se retornar vazio tenta URL de categoria direta
+    const urls = [
+      `https://www.eleiloes.com.br/busca?categoria=imoveis&pagina=${page}`,
+      `https://www.eleiloes.com.br/imoveis?pagina=${page}`,
+    ];
+    let html = '';
+    for (const u of urls) {
+      html = await fetchHtml(u);
+      if (html.length > 2000) break;
+    }
     const imoveis = [];
-    // eLeilões usa cards com data-product ou article
-    const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:card|product|lote)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+    const seenHref = new Set();
+    // Extrai links de lotes diretamente — mais robusto que regex de card aninhado
+    const linkRegex = /href="([^"]*(?:lote|leilao|produto)\/[^"?#]+)"/gi;
     let m;
-    while ((m = cardRegex.exec(html)) !== null && imoveis.length < 100) {
-      const card = m[1];
-      const href = card.match(/href="([^"]*lote[^"]+)"/i)?.[1] || '';
-      if (!href) continue;
-      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
-      const valorMatch = card.match(/R\$\s*([\d.,]+)/);
+    while ((m = linkRegex.exec(html)) !== null && imoveis.length < 100) {
+      const href = m[1].split('?')[0];
+      if (seenHref.has(href)) continue;
+      seenHref.add(href);
+      // Pega contexto ao redor do link para extrair título e valor
+      const pos = html.indexOf(m[0]);
+      const ctx = html.slice(Math.max(0, pos - 400), pos + 600);
+      const titulo = ctx.match(/<h[2-5][^>]*>([\s\S]*?)<\/h[2-5]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim()
+        || ctx.match(/title="([^"]{5,})"/i)?.[1]
+        || '';
+      const valorMatch = ctx.match(/R\$\s*([\d.]+,\d{2})/);
       const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
       if (!valor) continue;
-      const id = href.split('/').filter(Boolean).pop().split('?')[0];
-      const foto = card.match(/<img[^>]*src="([^"]+)"/i)?.[1] || null;
+      const id = href.split('/').filter(Boolean).pop();
+      const foto = ctx.match(/<img[^>]*(?:src|data-src)="([^"]+(?:jpg|jpeg|png|webp)[^"]*)"/i)?.[1] || null;
       imoveis.push({
         fonte: 'ELEILOES',
         fonte_id: `eleil_${id}`,
@@ -1090,7 +1144,7 @@ async function scraperELeiloes(page = 1) {
         area_m2: 0,
         descricao: titulo.slice(0, 300),
         link_edital: href.startsWith('http') ? href : `https://www.eleiloes.com.br${href}`,
-        link_foto: foto,
+        link_foto: foto ? (foto.startsWith('http') ? foto : `https://www.eleiloes.com.br${foto}`) : null,
         leiloeiro: 'eLeilões',
         data_leilao: null,
         forma_pagamento: 'a_vista',
