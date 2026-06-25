@@ -5066,7 +5066,8 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
   );
   const [reuniaoDuracao, setReuniaoDuracao] = useState(sol.reuniao_duracao_min || 30);
   const [concedendo, setConcedendo] = useState(false);
-  const [analisesExtras, setAnalisesExtras] = useState(1);
+  const [extrasMercado, setExtrasMercado] = useState(1);
+  const [extrasDocumental, setExtrasDocumental] = useState(1);
   const [msgConcessao, setMsgConcessao] = useState('');
 
   useEffect(() => {
@@ -5179,12 +5180,24 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
 
   async function concederAnalises() {
     if (!sol.user_id) return;
-    if (analisesExtras < 1 || analisesExtras > 2) { setMsgConcessao('Máximo de 2 análises por reunião.'); return; }
+    if (extrasMercado < 0 || extrasDocumental < 0) { setMsgConcessao('Valores inválidos.'); return; }
+    if (extrasMercado === 0 && extrasDocumental === 0) { setMsgConcessao('Selecione ao menos 1 análise para conceder.'); return; }
     setConcedendo(true); setMsgConcessao('');
-    const { data: perfil } = await supabase.from('perfis').select('analises_bonus').eq('id', sol.user_id).single();
-    const atual = perfil?.analises_bonus || 0;
-    const { error } = await supabase.from('perfis').update({ analises_bonus: atual + analisesExtras }).eq('id', sol.user_id);
-    if (error) { setMsgConcessao('Erro ao conceder análises.'); } else { setMsgConcessao(`✅ ${analisesExtras} análise${analisesExtras > 1 ? 's' : ''} concedida${analisesExtras > 1 ? 's' : ''} ao cliente.`); }
+    const { data: perfil } = await supabase.from('perfis').select('bonus_mercado, bonus_documental').eq('id', sol.user_id).single();
+    const atualMercado = perfil?.bonus_mercado || 0;
+    const atualDocumental = perfil?.bonus_documental || 0;
+    const { error } = await supabase.from('perfis').update({
+      bonus_mercado: atualMercado + extrasMercado,
+      bonus_documental: atualDocumental + extrasDocumental,
+    }).eq('id', sol.user_id);
+    if (error) {
+      setMsgConcessao('Erro ao conceder análises.');
+    } else {
+      const partes = [];
+      if (extrasMercado > 0) partes.push(`${extrasMercado} mercadológica${extrasMercado > 1 ? 's' : ''}`);
+      if (extrasDocumental > 0) partes.push(`${extrasDocumental} documental${extrasDocumental > 1 ? 'is' : ''}`);
+      setMsgConcessao(`✅ Concedido: ${partes.join(' + ')}.`);
+    }
     setConcedendo(false);
   }
 
@@ -5274,15 +5287,24 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
             )}
 
             <div style={{ marginTop: 16, padding: '14px 16px', background: '#fffbeb', borderRadius: 10, border: '1.5px solid #fde68a' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>🎁 Conceder análises adicionais ao cliente</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select value={analisesExtras} onChange={e => setAnalisesExtras(Number(e.target.value))}
-                  style={{ padding: '7px 10px', border: '1.5px solid #fde68a', borderRadius: 7, fontSize: 14, background: 'white' }}>
-                  <option value={1}>1 análise</option>
-                  <option value={2}>2 análises</option>
-                </select>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 10 }}>🎁 Conceder análises adicionais ao cliente</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#78350f', width: 110 }}>Mercadológicas</span>
+                  <select value={extrasMercado} onChange={e => setExtrasMercado(Number(e.target.value))}
+                    style={{ padding: '6px 10px', border: '1.5px solid #fde68a', borderRadius: 7, fontSize: 13, background: 'white', flex: 1 }}>
+                    {[0,1,2,3,5].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#78350f', width: 110 }}>Documentais/Jur.</span>
+                  <select value={extrasDocumental} onChange={e => setExtrasDocumental(Number(e.target.value))}
+                    style={{ padding: '6px 10px', border: '1.5px solid #fde68a', borderRadius: 7, fontSize: 13, background: 'white', flex: 1 }}>
+                    {[0,1,2,3,5].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
                 <button onClick={concederAnalises} disabled={concedendo || !sol.user_id}
-                  style={{ flex: 1, padding: '8px 14px', background: '#d97706', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: concedendo ? 0.7 : 1 }}>
+                  style={{ padding: '8px 14px', background: '#d97706', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: concedendo ? 0.7 : 1, marginTop: 4 }}>
                   {concedendo ? 'Concedendo…' : 'Conceder'}
                 </button>
               </div>
