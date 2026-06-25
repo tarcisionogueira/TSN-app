@@ -3,88 +3,189 @@ export const config = { runtime: 'edge' };
 export default async function handler(req) {
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('ok', { status: 200 });
 
+  const CRON_SECRET = process.env.CRON_SECRET;
   const secret = req.headers.get('x-cron-secret') || new URL(req.url).searchParams.get('secret');
-  if (secret !== process.env.CRON_SECRET) return new Response('unauthorized', { status: 401 });
+  if (!CRON_SECRET || secret !== CRON_SECRET) return new Response('unauthorized', { status: 401 });
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supabaseUrl || !serviceKey) return new Response(JSON.stringify({ error: 'env not configured' }), { status: 500 });
 
-  const alertasRes = await fetch(`${supabaseUrl}/rest/v1/alertas_email?select=*,perfis(email,nome)&ativo=eq.true&or=(ultimo_envio.is.null,ultimo_envio.lt.${new Date(Date.now() - 7*24*60*60*1000).toISOString()})`, {
-    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
-  });
+  const hdr = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+  const limiteEnvio = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
+  // Busca alertas ativos não enviados na última semana
+  const alertasRes = await fetch(
+    `${supabaseUrl}/rest/v1/alertas_email?select=*,perfis(email,nome)&ativo=eq.true&or=(ultimo_envio.is.null,ultimo_envio.lt.${limiteEnvio})`,
+    { headers: hdr }
+  );
   const alertas = await alertasRes.json();
   let enviados = 0;
 
+  const RESEND_KEY = process.env.RESEND_API_KEY;
+  const FROM = process.env.APP_FROM_EMAIL || 'TSN Ativos <alertas@tsnativos.com.br>';
+  const BASE_URL = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
+
   for (const alerta of alertas || []) {
     try {
+      const userEmail = alerta.perfis?.email;
+      const userName = alerta.perfis?.nome || '';
+      if (!userEmail || !RESEND_KEY) continue;
+
       const filtros = alerta.filtros || {};
-      let url = `${supabaseUrl}/rest/v1/imoveis_leilao?select=*&ativo=eq.true&order=desconto_percentual.desc&limit=5`;
-      if (filtros.estado) url += `&estado=eq.${filtros.estado}`;
-      if (filtros.tipo) url += `&tipo=ilike.*${filtros.tipo}*`;
+      const agora = new Date();
+      const em30Dias = new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-      const imoveisRes = await fetch(url, {
-        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
-      });
+      // Constrói query com todos os filtros do usuário
+      let query = `${supabaseUrl}/rest/v1/imoveis_leilao?select=id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto,link_externo&ativo=eq.true&order=desconto_percentual.desc&limit=50`;
+      if (filtros.estado) query += `&estado=eq.${filtros.estado}`;
+      if (filtros.tipos?.length === 1) query += `&tipo=eq.${filtros.tipos[0]}`;
+      if (filtros.valorMin) query += `&valor_minimo=gte.${filtros.valorMin}`;
+      if (filtros.valorMax) query += `&valor_minimo=lte.${filtros.valorMax}`;
+      if (filtros.modalidades?.length === 1) query += `&modalidade=eq.${filtros.modalidades[0]}`;
+
+      const imoveisRes = await fetch(query, { headers: hdr });
       const imoveis = await imoveisRes.json();
+      if (!Array.isArray(imoveis) || imoveis.length === 0) continue;
 
-      if (imoveis?.length > 0) {
-        const userEmail = alerta.perfis?.email;
-        const userName = alerta.perfis?.nome;
-        if (!userEmail) continue;
+      // Filtra cidades se especificadas (OR ilike)
+      let candidatos = imoveis;
+      if (filtros.cidades?.length > 0) {
+        const cidadesLower = filtros.cidades.map(c => c.toLowerCase());
+        candidatos = imoveis.filter(im => im.cidade && cidadesLower.some(c => im.cidade.toLowerCase().includes(c)));
+      }
+      if (candidatos.length === 0) candidatos = imoveis; // fallback: usa todos do estado
 
-        // Check if user has enough search activity
-        const activityRes = await fetch(
-          `${supabaseUrl}/rest/v1/busca_historico?user_id=eq.${alerta.user_id}&criado_em=gte.${new Date(Date.now()-30*24*60*60*1000).toISOString()}&select=id`,
-          { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
-        );
-        const activity = await activityRes.json();
-        // Only send if user has searched at least 3 times in last 30 days, or it's the first email
-        if ((activity?.length || 0) < 3 && (alerta.total_enviados || 0) > 0) continue;
+      // ── Algoritmo de pontuação ───────────────────────────────────────────
+      // Pontuação composta para selecionar as 6 melhores oportunidades
+      const pontuados = candidatos.map(im => {
+        let score = 0;
 
-        // Envia diretamente via Resend (cron não tem token de usuário para autenticar /api/email-alerta)
-        const RESEND_KEY = process.env.RESEND_API_KEY;
-        if (!RESEND_KEY) continue;
-        const FROM = process.env.APP_FROM_EMAIL || 'TSN Ativos <alertas@tsnativos.com.br>';
-        const BASE_URL = process.env.APP_BASE_URL || new URL(req.url).origin;
-        const unsubToken = btoa(`${alerta.user_id}:unsubscribe`);
-        const unsubUrl = `${BASE_URL}/cancelar-alertas?token=${unsubToken}`;
-        const imoveisHtml = imoveis.slice(0, 5).map(im =>
-          `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;">
-            <strong>${im.endereco || im.titulo || 'Imóvel'}</strong><br>
-            <span style="color:#64748b;font-size:13px;">${im.cidade || ''}${im.estado ? ' — ' + im.estado : ''}</span><br>
-            ${im.desconto_percentual ? `<span style="color:#059669;font-weight:700;">${im.desconto_percentual}% abaixo do valor de avaliação</span>` : ''}
-          </div>`
-        ).join('');
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: FROM,
-            to: userEmail,
-            subject: `${imoveis.length} imóveis novos para você — TSN Ativos`,
-            html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:24px 16px;">
-              <h2 style="color:#0f172a;">Olá${userName ? ', ' + userName : ''}!</h2>
-              <p style="color:#475569;">Encontramos imóveis que correspondem ao seu alerta <strong>${alerta.descricao || ''}</strong>:</p>
-              ${imoveisHtml}
-              <p style="margin-top:20px;"><a href="${BASE_URL}" style="background:#0D63DB;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;">Ver todos os imóveis</a></p>
-              <p style="font-size:12px;color:#94a3b8;margin-top:24px;"><a href="${unsubUrl}" style="color:#94a3b8;">Cancelar alertas</a></p>
-            </div>`,
-          }),
-        });
+        // 1. Desconto sobre avaliação (peso 40%)
+        const desc = Number(im.desconto_percentual) || 0;
+        score += desc * 0.4; // até +40
 
+        // 2. Leilão próximo: prioriza datas nos próximos 30 dias (peso 25%)
+        if (im.data_leilao) {
+          const dLeilao = new Date(im.data_leilao);
+          const diasParaLeilao = (dLeilao - agora) / (1000 * 60 * 60 * 24);
+          if (diasParaLeilao >= 0 && diasParaLeilao <= 30) {
+            score += 25 * (1 - diasParaLeilao / 30); // +25 se hoje, +0 se em 30 dias
+          }
+        }
+
+        // 3. Tipo preferido pelo usuário (peso 15%)
+        if (filtros.tipos?.length > 0 && filtros.tipos.includes(im.tipo)) score += 15;
+
+        // 4. Desconto absoluto (quanto abaixo do mínimo — indica liquidez, peso 10%)
+        if (im.valor_avaliacao && im.valor_minimo) {
+          const descAbsoluto = Number(im.valor_avaliacao) - Number(im.valor_minimo);
+          if (descAbsoluto > 200000) score += 10;
+          else if (descAbsoluto > 50000) score += 5;
+        }
+
+        // 5. Modalidade preferida (peso 10%)
+        if (filtros.modalidades?.length > 0 && filtros.modalidades.includes(im.modalidade)) score += 10;
+
+        return { ...im, _score: score };
+      });
+
+      // Ordena por score e pega top 6
+      const top6 = pontuados.sort((a, b) => b._score - a._score).slice(0, 6);
+
+      // ── Email ────────────────────────────────────────────────────────────
+      // Deep-link para abrir busca com filtros pré-preenchidos
+      const qs = new URLSearchParams({
+        ...(filtros.estado ? { estado: filtros.estado } : {}),
+        ...(filtros.cidades?.length ? { cidades: filtros.cidades.join(',') } : {}),
+        ...(filtros.tipos?.length ? { tipo: filtros.tipos[0] } : {}),
+      });
+      const deepLink = `${BASE_URL}/#/buscar${qs.toString() ? '?' + qs.toString() : ''}`;
+      const unsubToken = btoa(`${alerta.user_id}:unsubscribe`);
+      const unsubUrl = `${BASE_URL}/#/cancelar-alertas?token=${unsubToken}`;
+
+      const fmtBRL = v => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0 }) : '—';
+      const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : null;
+
+      const cardsHtml = top6.map((im, i) => {
+        const foto = im.link_foto ? `<img src="${im.link_foto}" alt="foto" style="width:100%;height:120px;object-fit:cover;display:block;border-radius:8px 8px 0 0;">` : '';
+        const dataLabel = fmtData(im.data_leilao);
+        const desc = im.desconto_percentual ? `<span style="display:inline-block;background:#f0fdf4;color:#059669;border:1px solid #bbf7d0;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">▼ ${Math.round(im.desconto_percentual)}% desconto</span>` : '';
+        const dataTag = dataLabel ? `<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;margin-left:4px;">📅 ${dataLabel}</span>` : '';
+        return `
+        <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:12px;background:#fff;">
+          ${foto}
+          <div style="padding:14px 16px;">
+            <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px;">${im.titulo || im.endereco || 'Imóvel em leilão'}</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${im.cidade || ''}${im.estado ? ' — ' + im.estado : ''}</div>
+            <div style="margin-bottom:8px;">${desc}${dataTag}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div style="font-size:11px;color:#94a3b8;">Lance mínimo</div>
+                <div style="font-size:16px;font-weight:800;color:#0f172a;">${fmtBRL(im.valor_minimo)}</div>
+              </div>
+              ${im.link_externo ? `<a href="${im.link_externo}" style="background:#0D63DB;color:#fff;text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;">Ver edital →</a>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+
+      const localFiltro = [filtros.cidades?.[0], filtros.estado].filter(Boolean).join(' — ') || 'Brasil';
+
+      const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+  <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:24px 28px;text-align:center;">
+    <div style="font-size:22px;font-weight:800;color:#fff;">TSN Ativos</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Assessoria em Imóveis de Leilão</div>
+  </div>
+  <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a;">Olá${userName ? ', ' + userName : ''}!</h2>
+    <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">
+      Selecionamos as <strong>${top6.length} melhores oportunidades</strong> em <strong>${localFiltro}</strong> para você esta semana:
+    </p>
+    ${cardsHtml}
+    <div style="text-align:center;margin-top:20px;">
+      <a href="${deepLink}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">
+        Ver todos os imóveis →
+      </a>
+    </div>
+    <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:20px;">
+      TSN Ativos · Você recebe estes alertas semanalmente ·
+      <a href="${unsubUrl}" style="color:#94a3b8;">Cancelar alertas</a>
+    </p>
+  </div>
+</div>
+</body>
+</html>`;
+
+      const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: FROM,
+          to: userEmail,
+          subject: `🏠 ${top6.length} oportunidades em ${localFiltro} esta semana`,
+          html,
+        }),
+      });
+
+      if (emailRes.ok) {
         await fetch(`${supabaseUrl}/rest/v1/alertas_email?id=eq.${alerta.id}`, {
           method: 'PATCH',
-          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({ ultimo_envio: new Date().toISOString(), total_enviados: (alerta.total_enviados || 0) + 1 }),
         });
         enviados++;
       }
-    } catch (_) {}
+    } catch (e) {
+      console.error('[enviar-alertas-cron] erro:', e?.message);
+    }
   }
 
   return new Response(JSON.stringify({ ok: true, enviados, total: alertas?.length || 0 }), {
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
   });
 }

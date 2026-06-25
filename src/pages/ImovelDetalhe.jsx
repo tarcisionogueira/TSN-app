@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import ScoreRisco from '../components/ScoreRisco';
 
 const TIPO_ANEXO_LABEL = {
   edital: 'Edital', auto_arrematacao: 'Auto de Arrematação', carta_arrematacao: 'Carta de Arrematação',
@@ -319,6 +320,8 @@ export default function ImovelDetalhe() {
           pagamento: [data.forma_pagamento], fonte: data.fonte,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
           numeroProcesso: data.numero_processo,
+          scoreFinanceiro: data.score_financeiro ?? null,
+          scoreJuridico: data.score_juridico ?? null,
         });
       })
       .finally(() => setLoading(false));
@@ -407,6 +410,11 @@ export default function ImovelDetalhe() {
                   </span>
                 )}
               </div>
+              {(imovel.scoreFinanceiro !== null || imovel.scoreJuridico !== null) && (
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+                  <ScoreRisco scoreFinanceiro={imovel.scoreFinanceiro} scoreJuridico={imovel.scoreJuridico} size="md" />
+                </div>
+              )}
             </div>
 
             {/* Valores */}

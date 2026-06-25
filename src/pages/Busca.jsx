@@ -11,6 +11,7 @@ import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoBadge } from '../data/pa
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
+import ScoreRisco from '../components/ScoreRisco';
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -396,6 +397,23 @@ export default function Busca() {
       .then(({ data }) => setFiltrosSalvos(data || []));
   }, [user?.id]);
 
+  // Pré-filtro de cidade: se sessão sem filtros, usa preferências do último alerta do usuário
+  useEffect(() => {
+    if (!user?.id) return;
+    if (filtrosFromUrl) return; // deep-link tem prioridade
+    let ss = null;
+    try { ss = sessionStorage.getItem('busca_filtros'); } catch {}
+    if (ss) return; // sessionStorage tem prioridade
+    supabase.from('alertas_email').select('filtros').eq('user_id', user.id).single()
+      .then(({ data }) => {
+        if (!data?.filtros?.estado) return;
+        setFiltrosPersist(prev => {
+          if (prev.estado) return prev; // já preenchido por outro efeito
+          return { ...FILTROS_INICIAL, ...data.filtros };
+        });
+      });
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Deep-link do email: ao carregar com filtros na URL, dispara busca automática
   const deepLinkDisparado = useRef(false);
   useEffect(() => {
@@ -586,6 +604,8 @@ export default function Busca() {
         numeroProcesso: im.numero_processo,
         latitude: im.latitude,
         longitude: im.longitude,
+        scoreFinanceiro: im.score_financeiro ?? null,
+        scoreJuridico: im.score_juridico ?? null,
       })) : [];
 
       // Radius: all results are already city-filtered; add distance badge for those with coords
@@ -1185,6 +1205,10 @@ export default function Busca() {
                       {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{im.areaM2}m²</span>}
                       <span style={{ fontSize:9, color:'#94a3b8' }}>{fmtData(im.dataLeilao, im.modalidade)}</span>
                     </div>
+
+                    {(im.scoreFinanceiro !== null || im.scoreJuridico !== null) && (
+                      <ScoreRisco scoreFinanceiro={im.scoreFinanceiro} scoreJuridico={im.scoreJuridico} size="sm" />
+                    )}
                   </div>
 
                   {/* Botões */}
