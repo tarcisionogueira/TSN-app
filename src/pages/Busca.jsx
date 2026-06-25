@@ -92,7 +92,7 @@ function svgPin(cor) {
   )}`;
 }
 
-function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista }) {
+function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista, visivel }) {
   const mapContainerRef = useRef(null);
   const leafletRef = useRef(null);
   const markersRef = useRef(null);
@@ -266,6 +266,13 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
     leafletRef.current.flyTo([centroRaio.lat, centroRaio.lng], zoom, { duration: 1 });
   }, [centroRaio, raioAtivo, raioKm, mapReady]);
 
+  // Quando o container fica visível novamente, corrige tamanho do mapa
+  useEffect(() => {
+    if (visivel && leafletRef.current) {
+      setTimeout(() => leafletRef.current?.invalidateSize(), 50);
+    }
+  }, [visivel]);
+
   return (
     <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: 'calc(100vh - 220px)', minHeight: 400, position: 'relative', isolation: 'isolate', zIndex: 0 }}>
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -429,6 +436,17 @@ export default function Busca() {
     }, 300);
     return () => clearTimeout(timer);
   }, [filtrosFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Busca reativa com debounce de 600ms quando filtros mudam e estado está preenchido
+  const buscarDebounceRef = useRef(null);
+  useEffect(() => {
+    if (!filtros.estado) return;
+    clearTimeout(buscarDebounceRef.current);
+    buscarDebounceRef.current = setTimeout(() => {
+      buscar();
+    }, 600);
+    return () => clearTimeout(buscarDebounceRef.current);
+  }, [filtros]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const up = (name, val) => setFiltrosPersist(p => ({ ...p, [name]: val }));
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x=>x!==v) : [...filtros.pagamento, v]);
@@ -996,15 +1014,35 @@ export default function Busca() {
               </div>
               <div>
                 <label style={lbl}>Valor de Lance (R$)</label>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-                  <input type="text" inputMode="numeric"
-                    value={filtros.valorMin ? 'R$ ' + Number(String(filtros.valorMin).replace(/\D/g,'')).toLocaleString('pt-BR') : ''}
-                    onChange={e=>{ const n=e.target.value.replace(/\D/g,''); up('valorMin', n); }}
-                    placeholder="R$ Mínimo" style={inp}/>
-                  <input type="text" inputMode="numeric"
-                    value={filtros.valorMax ? 'R$ ' + Number(String(filtros.valorMax).replace(/\D/g,'')).toLocaleString('pt-BR') : ''}
-                    onChange={e=>{ const n=e.target.value.replace(/\D/g,''); up('valorMax', n); }}
-                    placeholder="R$ Máximo" style={inp}/>
+                <div style={{ fontSize:11, color:'#475569', fontWeight:600, marginBottom:8, display:'flex', justifyContent:'space-between' }}>
+                  <span>{filtros.valorMin ? 'R$ ' + Number(filtros.valorMin).toLocaleString('pt-BR') : 'R$ 0'}</span>
+                  <span>{filtros.valorMax ? 'R$ ' + Number(filtros.valorMax).toLocaleString('pt-BR') : 'Sem limite'}</span>
+                </div>
+                <div style={{ position:'relative', height:20, marginBottom:4 }}>
+                  <input type="range" min={0} max={5000000} step={50000}
+                    value={Number(filtros.valorMin) || 0}
+                    onChange={e => { const v = Number(e.target.value); if (v <= (Number(filtros.valorMax) || 5000000)) up('valorMin', v || ''); }}
+                    style={{ position:'absolute', width:'100%', height:4, appearance:'none', background:'transparent', pointerEvents:'auto', accentColor:'#0D63DB', zIndex:2 }}
+                  />
+                  <input type="range" min={0} max={5000000} step={50000}
+                    value={Number(filtros.valorMax) || 5000000}
+                    onChange={e => { const v = Number(e.target.value); if (v >= (Number(filtros.valorMin) || 0)) up('valorMax', v >= 5000000 ? '' : v); }}
+                    style={{ position:'absolute', width:'100%', height:4, appearance:'none', background:'transparent', pointerEvents:'auto', accentColor:'#0D63DB', zIndex:2 }}
+                  />
+                  {/* Trilha visual */}
+                  {(() => {
+                    const min = Number(filtros.valorMin) || 0;
+                    const max = Number(filtros.valorMax) || 5000000;
+                    const pct = (v) => (v / 5000000) * 100;
+                    return (
+                      <div style={{ position:'absolute', top:'50%', transform:'translateY(-50%)', width:'100%', height:4, background:'#e2e8f0', borderRadius:4 }}>
+                        <div style={{ position:'absolute', left:`${pct(min)}%`, right:`${100-pct(max)}%`, height:'100%', background:'#0D63DB', borderRadius:4 }}/>
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:'#94a3b8' }}>
+                  <span>R$ 0</span><span>R$ 1M</span><span>R$ 2,5M</span><span>R$ 5M+</span>
                 </div>
               </div>
               <div>
@@ -1027,10 +1065,11 @@ export default function Busca() {
                   Selecione um estado para habilitar a busca
                 </div>
               )}
-              <button onClick={buscar} disabled={loading || !filtros.estado}
-                style={{ width:'100%', padding:'11px', background: filtros.estado ? '#0D63DB' : '#94a3b8', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor: filtros.estado ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-                {loading ? <><Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...</> : <><Search size={14}/> Buscar Leilões</>}
-              </button>
+              {loading && (
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px', color:'#0D63DB', fontSize:12, fontWeight:700 }}>
+                  <Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...
+                </div>
+              )}
               <button onClick={limparFiltros}
                 style={{ width:'100%', padding:'9px', background:'none', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
                 ✕ Limpar filtros
@@ -1161,13 +1200,15 @@ export default function Busca() {
         )}
 
         {/* Vista Mapa embutido — usa snapshot dos filtros no momento da busca */}
-        {vista === 'mapa' && buscaFeita && filtrosBusca && (
-          <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} totalLista={totalResultados} />
+        {buscaFeita && filtrosBusca && (
+          <div style={{ display: vista === 'mapa' ? 'block' : 'none' }}>
+            <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} totalLista={totalResultados} visivel={vista === 'mapa'} />
+          </div>
         )}
         {vista === 'mapa' && !buscaFeita && (
           <div style={{ borderRadius:14, border:'1px solid #e2e8f0', height:'calc(100vh - 220px)', minHeight:400, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, background:'#f8fafc', color:'#94a3b8' }}>
             <span style={{ fontSize:32 }}>🗺️</span>
-            <span style={{ fontSize:14, fontWeight:600 }}>Configure os filtros e clique em Buscar para ver os imóveis no mapa</span>
+            <span style={{ fontSize:14, fontWeight:600 }}>Configure os filtros e selecione um estado para ver os imóveis no mapa</span>
           </div>
         )}
 
