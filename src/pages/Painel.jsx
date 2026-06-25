@@ -18,7 +18,7 @@ import { supabase } from '../utils/supabase';
 const AVALIACOES = [
   { key:'mercadologica', label:'Avaliação Mercadológica + Viabilidade', desc:'Relatório de mercado em 2 níveis com viabilidade financeira e fluxo de caixa.', icon:BarChart3, cor:'#10b981', bg:'#f0fdf4', via:'analise' },
   { key:'edital',        label:'Avaliação de Edital e Matrícula',         desc:'Leitura do edital, matrícula e certidões com extração de riscos via IA.',       icon:FileText,  cor:'#0D63DB', bg:'#eff6ff', via:'analise' },
-  { key:'processual',    label:'Avaliação Processual',                    desc:'Consulta processual integrada (Jusbrasil/CNJ). Liberação em até 24h.',          icon:Scale,     cor:'#8b5cf6', bg:'#ede9fe', via:'integracao' },
+  { key:'processual',    label:'Avaliação Processual',                    desc:'Análise processual do imóvel com extração de riscos e pendências. Liberação em até 24h.',          icon:Scale,     cor:'#8b5cf6', bg:'#ede9fe', via:'integracao' },
 ];
 
 const ROLES_ANALISTA = ['analista','advogado','admin'];

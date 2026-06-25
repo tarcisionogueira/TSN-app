@@ -333,7 +333,7 @@ export const PLANOS = {
       '✅ Relatório mercadológico com valor real de mercado',
       '✅ Viabilidade financeira com projeções e fluxo de caixa',
       '✅ Análise de edital, matrícula e anexos do processo',
-      '✅ Consulta processual integrada (Jusbrasil/CNJ)',
+      '✅ Análise processual do imóvel',
       '✅ Alertas de risco (usufruto, penhora, ônus reais)',
       '✅ Análises ilimitadas por mês',
       '✅ Acesso à Calculadora de Arrematação',

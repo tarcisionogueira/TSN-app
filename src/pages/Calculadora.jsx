@@ -442,7 +442,7 @@ export default function Calculadora() {
                       : 'Invista com mais segurança e inteligência'}
                 </h3>
                 <p style={{ color: '#93c5fd', fontSize: 13, lineHeight: 1.7, margin: '0 0 18px' }}>
-                  Relatório de viabilidade, análise jurídica do edital e matrícula, consulta processual integrada e análises ilimitadas — tudo em uma plataforma.
+                  Relatório de viabilidade, análise jurídica do edital e matrícula, análise processual do imóvel e análises ilimitadas — tudo em uma plataforma.
                 </p>
                 <button onClick={irAssinar}
                   style={{ padding: '12px 24px', background: 'white', color: '#084BA6', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
@@ -455,7 +455,7 @@ export default function Calculadora() {
                 {[
                   'Relatório de viabilidade completo',
                   'Análise jurídica de edital e matrícula',
-                  'Consulta processual (Jusbrasil/CNJ)',
+                  'Análise processual do imóvel',
                   'Alertas de risco automáticos',
                   'Análises ilimitadas por mês',
                 ].map(f => (

@@ -141,7 +141,7 @@ export default function Planos() {
                 'Comparativos de mercado (condomínio/rua)',
                 'Projeções financeiras SAC e Price',
                 'Yield de locação mensal e anual',
-                'Consulta processual (Jusbrasil/CNJ)',
+                'Análise processual do imóvel',
                 'Alertas de risco (penhora, ônus reais)',
                 'Análises ilimitadas por mês',
               ].map(t => <CheckItem key={t} txt={t} light />)}
