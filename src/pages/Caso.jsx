@@ -28,9 +28,9 @@ const mesRef = () => { const d = new Date(); return new Date(d.getFullYear(), d.
 const COTAS_PLANO = {
   explorador: { mercado:5,   documental:0,  reunioes:0 },
   top1:       { mercado:5,   documental:0,  reunioes:0 },
-  top2:       { mercado:15,  documental:15, reunioes:1 },
-  assessorado:{ mercado:999, documental:999, reunioes:2 },
-  clube:      { mercado:999, documental:999, reunioes:4 },
+  top2:       { mercado:15,  documental:15, reunioes:2 },
+  assessorado:{ mercado:20,  documental:20, reunioes:2 },
+  clube:      { mercado:20,  documental:20, reunioes:4 },
   analista:   { mercado:999, documental:999, reunioes:999 },
   advogado:   { mercado:999, documental:999, reunioes:999 },
   admin:      { mercado:999, documental:999, reunioes:999 },
