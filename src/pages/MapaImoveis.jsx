@@ -111,14 +111,14 @@ export default function MapaImoveis() {
     import('leaflet').then(L => {
       markersLayer.current.clearLayers();
       imoveis.forEach(im => {
-        if (!im.latitude || !im.longitude) return;
+        if (im.latitude == null || im.longitude == null || im.latitude === 0 || im.longitude === 0) return;
         const cor = COR_TIPO[im.tipo] || '#111111';
         const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [24, 36], iconAnchor: [12, 36], popupAnchor: [0, -36] });
         const marker = L.marker([im.latitude, im.longitude], { icon });
         const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
         marker.bindPopup(`
           <div style="font-family:Inter,sans-serif;min-width:200px">
-            ${im.link_foto ? `<img src="${im.link_foto}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px"/>` : ''}
+            ${typeof im.link_foto === 'string' && im.link_foto ? `<img src="${im.link_foto}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px" onerror="this.style.display='none'"/>` : ''}
             <div style="font-weight:700;font-size:13px;color:#111;margin-bottom:4px">${im.titulo || 'Imóvel'}</div>
             <div style="font-size:12px;color:#64748b;margin-bottom:6px">${im.cidade} — ${im.estado}</div>
             <div style="font-size:14px;font-weight:800;color:#0D63DB;margin-bottom:8px">${fmt(im.valor_minimo)}</div>

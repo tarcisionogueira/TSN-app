@@ -29,7 +29,10 @@ async function nominatim(query) {
       headers: { 'User-Agent': NOMINATIM_UA },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (res.status === 429) console.warn('[nominatim] rate-limit atingido — aguardar');
+      return null;
+    }
     const data = await res.json();
     if (!data?.length) return null;
     return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
@@ -134,12 +137,14 @@ async function processarLote(estadosFilter, lote = 50) {
     const key = cacheKey(im);
     let coords, fromCache = false;
 
+    // Usa cache apenas para imóveis sem endereço completo (bairro/cidade) — endereço completo sempre geocodifica
     if (!im.endereco?.trim() && coordCache[key]) {
       coords = coordCache[key];
       fromCache = true;
     } else {
       coords = await geocodificarCascata(im);
-      if (coords && coords.nivel !== 'endereco') coordCache[key] = coords;
+      // Salva no cache só nível bairro/cidade (sem endereço), para reutilizar em imóveis do mesmo bairro
+      if (coords && coords.nivel !== 'endereco' && !im.endereco?.trim()) coordCache[key] = coords;
     }
 
     const salvo = await salvarCoords(im.id, coords);
@@ -160,7 +165,7 @@ export default async function handler(req) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     console.error('[geocodificar] CRON_SECRET não configurado — acesso bloqueado');
-    return new Response(JSON.stringify({ error: 'Endpoint não configurado' }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 403 });
   }
   const _url = new URL(req.url, 'http://localhost');
   // Vercel cron envia: Authorization: Bearer <CRON_SECRET>

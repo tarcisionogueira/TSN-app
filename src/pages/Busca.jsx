@@ -133,8 +133,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           .limit(2000)
       );
       const comCoords = (data || []).filter(im => {
-        if (!raioAtivo || !centroRaio || !im.latitude || !im.longitude) return true;
-        return haversine(centroRaio.lat, centroRaio.lng, im.latitude, im.longitude) <= raioKm;
+        if (!raioAtivo || !centroRaio || im.latitude == null || im.longitude == null || im.latitude === 0 || im.longitude === 0) return true;
+        return haversine(centroRaio.lat, centroRaio.lng, Number(im.latitude), Number(im.longitude)) <= raioKm;
       });
 
       // Detecta caso onde há resultados na lista mas nenhum tem coordenadas
@@ -593,7 +593,7 @@ export default function Busca() {
         foto: im.link_foto,
         leiloeiro: im.leiloeiro,
         dataLeilao: im.data_leilao,
-        pagamento: [im.forma_pagamento],
+        pagamento: im.forma_pagamento ? [im.forma_pagamento] : [],
         viavel: im.viavel,
         scoreViabilidade: im.score_viabilidade,
         fracionado: im.fracionado,
@@ -612,8 +612,9 @@ export default function Busca() {
       if (raioAtivoBusca && centro && cidadesRaio) {
         const novasDistancias = {};
         mapeados.forEach(im => {
-          if (im.latitude != null && im.longitude != null) {
-            novasDistancias[im.id] = Math.round(haversine(centro.lat, centro.lng, Number(im.latitude), Number(im.longitude)));
+          if (im.latitude != null && im.longitude != null && im.latitude !== 0 && im.longitude !== 0) {
+            const dist = haversine(centro.lat, centro.lng, Number(im.latitude), Number(im.longitude));
+            if (!isNaN(dist)) novasDistancias[im.id] = Math.round(dist);
           }
         });
         setDistancias(novasDistancias);
