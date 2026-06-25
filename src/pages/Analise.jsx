@@ -96,7 +96,8 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
   );
 }
 
-const LIMITE_POR_ROLE = { explorador: 0, top1: 20, top2: 20 }; // 0 = usa bônus
+// Limite de relatórios mercadológicos+viabilidade por plano/mês (0 = usa bônus para explorador)
+const LIMITE_POR_ROLE = { explorador: 0, top1: 5, top2: 15 };
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 const ROLES_SEM_LIMITE = ['assessorado','clube','analista','advogado','admin'];
 const ROLES_COM_CNJ   = ['top1','top2','assessorado','clube','analista','advogado','admin'];

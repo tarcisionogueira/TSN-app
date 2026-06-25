@@ -22,16 +22,19 @@ const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day:'2-digi
 const mesRef = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10); };
 
 // ─── Cotas por plano ─────────────────────────────────────────────────────────
+// mercado = relatórios mercadológico + viabilidade financeira
+// documental = relatórios análise documental e jurídica
+// O analista pode conceder +2 de cada tipo manualmente (extras_mercado / extras_documental)
 const COTAS_PLANO = {
-  explorador: { analises:3, reunioes:0 },
-  top1:       { analises:3, reunioes:0 },
-  top2:       { analises:10, reunioes:1 },
-  assessorado:{ analises:15, reunioes:2 },
-  clube:      { analises:20, reunioes:4 },
-  analista:   { analises:999, reunioes:999 },
-  advogado:   { analises:999, reunioes:999 },
-  admin:      { analises:999, reunioes:999 },
-  consultor:  { analises:999, reunioes:999 },
+  explorador: { mercado:5,   documental:0,  reunioes:0 },
+  top1:       { mercado:5,   documental:0,  reunioes:0 },
+  top2:       { mercado:15,  documental:15, reunioes:1 },
+  assessorado:{ mercado:999, documental:999, reunioes:2 },
+  clube:      { mercado:999, documental:999, reunioes:4 },
+  analista:   { mercado:999, documental:999, reunioes:999 },
+  advogado:   { mercado:999, documental:999, reunioes:999 },
+  admin:      { mercado:999, documental:999, reunioes:999 },
+  consultor:  { mercado:999, documental:999, reunioes:999 },
 };
 
 const PLANOS_JURIDICO = ['assessorado','clube','analista','advogado','admin'];
