@@ -5698,7 +5698,6 @@ function EquipeTab() {
 // FINANCEIRO TAB — Gateway (MP/Asaas), saldo MP, saques da equipe
 // ═══════════════════════════════════════════════════════════════════════════════
 function FinanceiroTab() {
-  const { apiCall } = useApiCall?.() || {};
   const [gateway, setGateway] = React.useState('mp'); // 'mp' | 'asaas'
   const [gwSaving, setGwSaving] = React.useState(false);
   const [gwSaved,  setGwSaved]  = React.useState(false);
