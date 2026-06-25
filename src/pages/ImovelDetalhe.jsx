@@ -319,7 +319,7 @@ export default function ImovelDetalhe() {
           descontoPercentual: data.desconto_percentual, areaM2: data.area_m2, descricao: data.descricao,
           urlLote: data.url_lote || data.link_edital || data.link_regras_venda, linkEdital: data.link_edital, linkMatricula: data.link_matricula, linkRegrasVenda: data.link_regras_venda,
           foto: data.link_foto, leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
-          pagamento: [data.forma_pagamento], fonte: data.fonte,
+          pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
           numeroProcesso: data.numero_processo,
           scoreFinanceiro: data.score_financeiro ?? null,
@@ -343,6 +343,23 @@ export default function ImovelDetalhe() {
   const desc = imovel.descontoPercentual || 0;
   const descColor = desc >= 40 ? '#15803d' : desc >= 20 ? '#92400e' : '#dc2626';
   const descBg    = desc >= 40 ? '#dcfce7' : desc >= 20 ? '#fef9c3' : '#fee2e2';
+
+  const getImgSrc = () => {
+    const foto = imovel.foto;
+    const isCef = imovel.fonte === 'CEF' || imovel.fonte === 'caixa';
+    if (!foto) {
+      if (!isCef) return null;
+      const id = (imovel.fonteId || '').replace(/^(caixa_|cef_)/, '');
+      return id ? `/api/img-caixa?id=${encodeURIComponent(id)}` : null;
+    }
+    if (foto.includes('supabase.co') || foto.startsWith('/')) return foto;
+    if (isCef) {
+      const id = (imovel.fonteId || '').replace(/^(caixa_|cef_)/, '');
+      return id ? `/api/img-caixa?id=${encodeURIComponent(id)}` : `/api/img-proxy?url=${encodeURIComponent(foto)}`;
+    }
+    return `/api/img-proxy?url=${encodeURIComponent(foto)}`;
+  };
+  const imgDetalheSrc = getImgSrc();
   const PLANOS_ANALISE = ['admin', 'analista', 'assessorado'];
   const podeFazerAnalise = PLANOS_ANALISE.includes(role);
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
@@ -369,8 +386,8 @@ export default function ImovelDetalhe() {
 
             {/* Foto + badges */}
             <div style={{ borderRadius: 16, overflow: 'hidden', position: 'relative', background: '#111111', minHeight: 260 }}>
-              {imovel.foto && !imgError ? (
-                <img src={imovel.foto} alt={imovel.titulo} onError={() => setImgError(true)}
+              {imgDetalheSrc && !imgError ? (
+                <img src={imgDetalheSrc} alt={imovel.titulo} onError={() => setImgError(true)}
                   style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }} />
               ) : (
                 <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#475569' }}>

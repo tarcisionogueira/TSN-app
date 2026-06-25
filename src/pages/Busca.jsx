@@ -193,7 +193,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 
         const popupHTML = `
           <div style="font-family:Inter,sans-serif;min-width:190px;max-width:220px">
-            ${im.link_foto ? `<img src="${im.link_foto}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>` : ''}
+            ${im.link_foto ? `<img src="${im.fonte === 'CEF' || im.fonte === 'caixa' ? '/api/img-caixa?id=' + encodeURIComponent((im.fonte_id||'').replace(/^(caixa_|cef_)/,'')) : '/api/img-proxy?url=' + encodeURIComponent(im.link_foto)}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>` : ''}
             <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${im.titulo || 'Imóvel'}</div>
             <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${im.cidade} — ${im.estado}</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
@@ -1218,7 +1218,15 @@ export default function Busca() {
             {resultadosPagina.map((im)=>{
               const desc = desconto(im);
               const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#084BA6' };
-              const imgSrc = im.foto || imgUrlCaixa({ ...im, fonte_id: im.fonteId });
+              const getImgSrc = (im) => {
+                const foto = im.foto;
+                const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
+                if (!foto) return isCef ? imgUrlCaixa({ ...im, fonte_id: im.fonteId }) : null;
+                if (foto.includes('supabase.co') || foto.startsWith('/')) return foto;
+                if (isCef) return imgUrlCaixa({ ...im, fonte_id: im.fonteId }) || `/api/img-proxy?url=${encodeURIComponent(foto)}`;
+                return `/api/img-proxy?url=${encodeURIComponent(foto)}`;
+              };
+              const imgSrc = getImgSrc(im);
 
               return (
                 <div key={im.id}
