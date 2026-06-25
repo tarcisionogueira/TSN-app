@@ -1009,7 +1009,7 @@ function ConfigTab() {
   const [comissoesExpanded, setComissoesExpanded] = useState({});
   const [cfin, setCfin] = useState({});   // config_financeira por gateway
   const [cfinSaved, setCfinSaved] = useState({});
-  const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 4.5, analista_pct: 1 });
+  const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 5.0, analista_pct: 0.5, consultor_pct: 0 });
   const [honorariosSaved, setHonorariosSaved] = useState(false);
   const [honorariosErr, setHonorariosErr] = useState('');
   // Fidelidade e cancelamento
@@ -1090,7 +1090,7 @@ function ConfigTab() {
   async function salvarHonorarios() {
     setHonorariosErr('');
     const total = Number(honorarios.total_pct) || 0;
-    const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
+    const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0) + (Number(honorarios.consultor_pct) || 0);
     if (Math.abs(soma - total) > 0.01) {
       setHonorariosErr(`A soma dos percentuais (${soma.toFixed(2)}%) deve ser igual ao total (${total.toFixed(2)}%).`);
       return;
@@ -1098,9 +1098,10 @@ function ConfigTab() {
     const { error } = await supabase.from('config_honorarios').upsert({
       id: 1,
       total_pct:    total,
-      admin_pct:    Number(honorarios.admin_pct) || 0,
-      advogado_pct: Number(honorarios.advogado_pct) || 0,
-      analista_pct: Number(honorarios.analista_pct) || 0,
+      admin_pct:     Number(honorarios.admin_pct) || 0,
+      advogado_pct:  Number(honorarios.advogado_pct) || 0,
+      analista_pct:  Number(honorarios.analista_pct) || 0,
+      consultor_pct: 0, // consultor nunca participa de honorários de êxito
       atualizado_em: new Date().toISOString(),
     });
     if (!error) { setHonorariosSaved(true); setTimeout(() => setHonorariosSaved(false), 2500); }
@@ -1492,9 +1493,9 @@ function ConfigTab() {
 
           {/* Distribuição por papel */}
           {[
-            { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação' },
-            { key: 'advogado_pct', label: 'Advogado', cor: '#0D63DB', desc: 'análise jurídica' },
-            { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica' },
+            { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação (4,5%)' },
+            { key: 'advogado_pct', label: 'Advogado', cor: '#0D63DB', desc: 'análise jurídica (5%)' },
+            { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica (0,5%)' },
           ].map(({ key, label, cor, desc }) => (
             <div key={key} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 18px', minWidth: 140, border: `1px solid ${cor}22` }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: cor, marginBottom: 6, textTransform: 'uppercase' }}>{label}</div>
@@ -1514,6 +1515,7 @@ function ConfigTab() {
             {(() => {
               const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
               const total = Number(honorarios.total_pct) || 0;
+              // consultor_pct é sempre 0 — não entra na soma
               const ok = Math.abs(soma - total) <= 0.01;
               return (
                 <div style={{ padding: '6px 14px', borderRadius: 20, background: ok ? '#f0fdf4' : '#fef2f2', color: ok ? '#16a34a' : '#ef4444', fontWeight: 700, fontSize: 13 }}>
