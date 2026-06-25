@@ -1,5 +1,7 @@
 export const config = { runtime: 'edge' };
 
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 
@@ -25,6 +27,10 @@ export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
 
+  const ip = getIP(req);
+  const rlIp = checkRateLimit(`leiloeiro-feed:ip:${ip}`, 30, 60_000);
+  if (!rlIp.ok) return rateLimitedResponse(rlIp.resetAt);
+
   // Valida token Bearer
   const auth = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
   if (!auth) return json({ error: 'Token de autenticação obrigatório no header Authorization: Bearer TOKEN' }, 401);
@@ -35,6 +41,10 @@ export default async function handler(req) {
   if (!lista.length) return json({ error: 'Token inválido ou parceiro inativo' }, 401);
 
   const parceiro = lista[0];
+
+  const rlToken = checkRateLimit(`leiloeiro-feed:token:${parceiro.id}`, 60, 60_000);
+  if (!rlToken.ok) return rateLimitedResponse(rlToken.resetAt);
+
   const fonte = `parceiro_${parceiro.id}`;
 
   let lotes;

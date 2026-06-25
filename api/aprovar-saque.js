@@ -44,16 +44,18 @@ export default async function handler(req, res) {
     // Devolve o valor ao saldo disponível
     const saldoRes = await fetch(`${SUPABASE_URL}/rest/v1/saldos_profissionais?user_id=eq.${saque.user_id}&select=saldo_disponivel,saldo_retido`, { headers: hdr });
     const [saldo] = await saldoRes.json();
-    await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/saques?id=eq.${saqueId}`, {
-        method: 'PATCH', headers: { ...hdr, Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: 'rejeitado', aprovado_por: user.id, processado_em: new Date().toISOString() }),
-      }),
-      fetch(`${SUPABASE_URL}/rest/v1/saldos_profissionais?user_id=eq.${saque.user_id}`, {
-        method: 'PATCH', headers: { ...hdr, Prefer: 'return=minimal' },
-        body: JSON.stringify({ saldo_disponivel: Number(saldo?.saldo_disponivel || 0) + Number(saque.valor), saldo_retido: Math.max(0, Number(saldo?.saldo_retido || 0) - Number(saque.valor)) }),
-      }),
-    ]);
+    const rejRes = await fetch(`${SUPABASE_URL}/rest/v1/saques?id=eq.${saqueId}`, {
+      method: 'PATCH', headers: { ...hdr, Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'rejeitado', aprovado_por: user.id, processado_em: new Date().toISOString() }),
+    });
+    if (!rejRes.ok) {
+      console.error('[aprovar-saque] erro ao rejeitar saque:', await rejRes.text());
+      return res.status(500).json({ error: 'Erro ao atualizar status do saque' });
+    }
+    await fetch(`${SUPABASE_URL}/rest/v1/saldos_profissionais?user_id=eq.${saque.user_id}`, {
+      method: 'PATCH', headers: { ...hdr, Prefer: 'return=minimal' },
+      body: JSON.stringify({ saldo_disponivel: Number(saldo?.saldo_disponivel || 0) + Number(saque.valor), saldo_retido: Math.max(0, Number(saldo?.saldo_retido || 0) - Number(saque.valor)) }),
+    });
     await auditLog({ acao: 'saque_rejeitado', user_id: user.id, ip, detalhes: { saque_id: saqueId, beneficiario: saque.user_id }, sucesso: true });
     return res.status(200).json({ ok: true, mensagem: 'Saque rejeitado e valor devolvido ao saldo.' });
   }
