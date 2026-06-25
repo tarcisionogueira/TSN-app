@@ -58,7 +58,7 @@ export default async function handler(req, res) {
       acao: 'contrato_operacional_criado',
       user_id: user.id,
       ip,
-      detalhes: { roleDestino, emailDestinatario, titulo, token: data.token },
+      detalhes: { roleDestino, emailDestinatario, titulo, contrato_id: data?.id },
       sucesso: true,
     });
 

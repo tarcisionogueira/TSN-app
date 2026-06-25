@@ -116,6 +116,57 @@ export const calcularTetoLance = (inputs, isAVista, metaRetorno, vMercado) => {
   return teto;
 };
 
+/**
+ * Calcula cronograma de depósito judicial para arrematação.
+ * Tipos: 'execucao_civil' | 'execucao_fiscal' | 'falencia' | 'extrajudicial'
+ * Retorna { sinal, saldo, parcelas[], totalDesembolso, custoCaptacao }
+ */
+export const calcularDepositoJudicial = ({
+  valorArrematacao = 0,
+  tipo = 'execucao_civil',
+  sinalPercentual = 30,       // % a pagar na assinatura
+  prazoMeses = 0,             // meses para quitação (0 = à vista)
+  indiceAnual = 10.5,         // SELIC anual % ou índice acordado
+  depositoJaRealizado = 0,    // eventual depósito prévio do devedor
+}) => {
+  const v = Number(valorArrematacao) || 0;
+  const dep = Math.min(Number(depositoJaRealizado) || 0, v);
+  const base = v - dep; // valor líquido a pagar
+
+  // Tipos com quitação integral (sem parcelamento)
+  const avista = tipo === 'falencia' || tipo === 'execucao_civil' || prazoMeses <= 1;
+  const pct = Math.min(Math.max(Number(sinalPercentual) || 30, 0), 100) / 100;
+  const sinal = avista ? base : base * pct;
+  const saldo = avista ? 0 : base - sinal;
+
+  let parcelas = [];
+  let custoCaptacao = 0;
+
+  if (!avista && saldo > 0 && prazoMeses > 0) {
+    const taxaMensal = Math.pow(1 + (Number(indiceAnual) || 0) / 100, 1 / 12) - 1;
+    if (taxaMensal === 0) {
+      const parc = saldo / prazoMeses;
+      parcelas = Array.from({ length: prazoMeses }, (_, i) => ({
+        mes: i + 1, parcela: parc, saldo: Math.max(0, saldo - parc * (i + 1)),
+      }));
+    } else {
+      const parc = (saldo * taxaMensal * Math.pow(1 + taxaMensal, prazoMeses)) /
+        (Math.pow(1 + taxaMensal, prazoMeses) - 1);
+      let sal = saldo;
+      parcelas = Array.from({ length: prazoMeses }, (_, i) => {
+        const juros = sal * taxaMensal;
+        const amort = parc - juros;
+        sal = Math.max(0, sal - amort);
+        return { mes: i + 1, parcela: parc, juros, amortizacao: amort, saldo: sal };
+      });
+    }
+    custoCaptacao = parcelas.reduce((s, p) => s + p.parcela, 0) - saldo;
+  }
+
+  const totalDesembolso = sinal + parcelas.reduce((s, p) => s + p.parcela, 0) + dep;
+  return { sinal, saldo, parcelas, totalDesembolso, custoCaptacao, depositoJaRealizado: dep };
+};
+
 export const fmt = (v, dec = 2) =>
   Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 

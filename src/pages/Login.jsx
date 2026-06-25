@@ -65,7 +65,7 @@ export default function Login() {
   }
 
   const produtoParam = params.get('produto') || ''; // tipo:id ex: curso:abc123
-  const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso'
+  const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [showSenha, setShowSenha] = useState(false);
@@ -112,6 +112,23 @@ export default function Login() {
     } catch (_) { setCpfCheck(null); }
     setCpfChecking(false);
   }
+
+  const [emailRecuperar, setEmailRecuperar] = useState('');
+
+  const handleRecuperarSenha = async (e) => {
+    e.preventDefault();
+    setErro(''); setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(emailRecuperar, {
+        redirectTo: `${window.location.origin}/#/redefinir-senha`,
+      });
+      if (error) throw error;
+      setModo('recuperar_sucesso');
+    } catch (err) {
+      setErro(err.message || 'Erro ao enviar email de recuperação.');
+    }
+    setLoading(false);
+  };
 
   const up = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -212,16 +229,17 @@ export default function Login() {
           </div>
         )}
 
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
+        {/* Logo clicável */}
+        <button onClick={() => nav(-1)}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
           <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
             <Briefcase size={20} color="white" />
           </div>
-          <div>
+          <div style={{ textAlign: 'left' }}>
             <div style={{ fontWeight: 900, fontSize: 16, color: '#111111', letterSpacing: '-0.5px' }}>BidPro Brasil</div>
             <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
           </div>
-        </div>
+        </button>
 
         {/* Sucesso cadastro */}
         {modo === 'sucesso' && (
@@ -260,6 +278,12 @@ export default function Login() {
                     {showSenha ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+              </div>
+              <div style={{ textAlign: 'right', marginTop: -8 }}>
+                <button type="button" onClick={() => { setModo('recuperar'); setErro(''); }}
+                  style={{ background: 'none', border: 'none', color: '#0D63DB', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+                  Esqueci minha senha
+                </button>
               </div>
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
               <button type="submit" disabled={loading}
@@ -446,6 +470,59 @@ export default function Login() {
             </div>
           </>
         )}
+        {/* Recuperar senha */}
+        {modo === 'recuperar' && (
+          <>
+            <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>Recuperar senha</h2>
+            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14, lineHeight: 1.6 }}>
+              Informe seu email e enviaremos um link para você criar uma nova senha.
+            </p>
+            <form onSubmit={handleRecuperarSenha} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={lbl}>Email cadastrado</label>
+                <input
+                  type="email"
+                  value={emailRecuperar}
+                  onChange={e => setEmailRecuperar(e.target.value)}
+                  placeholder="seu@email.com"
+                  required
+                  style={inp}
+                  autoFocus
+                />
+              </div>
+              {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
+              <button type="submit" disabled={loading}
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
+                {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando...</> : 'Enviar link de recuperação'}
+              </button>
+            </form>
+            <div style={{ marginTop: 16, textAlign: 'center' }}>
+              <button onClick={() => { setModo('login'); setErro(''); }}
+                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer' }}>
+                ← Voltar para o login
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Recuperar senha — sucesso */}
+        {modo === 'recuperar_sucesso' && (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 16px' }} />
+            <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#111111' }}>Email enviado!</h2>
+            <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 8 }}>
+              Se o email <strong>{emailRecuperar}</strong> estiver cadastrado, você receberá um link para redefinir sua senha em instantes.
+            </p>
+            <p style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.6, marginBottom: 24 }}>
+              Verifique também a caixa de spam. O link expira em 1 hora.
+            </p>
+            <button onClick={() => { setModo('login'); setErro(''); setEmailRecuperar(''); }}
+              style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              Voltar para o login
+            </button>
+          </div>
+        )}
+
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>

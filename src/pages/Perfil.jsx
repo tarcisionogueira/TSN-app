@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
-import { BarChart2, FileText, Clock, CheckCircle, AlertTriangle, XCircle, Bell, BellOff } from 'lucide-react';
+import { BarChart2, FileText, Clock, CheckCircle, AlertTriangle, XCircle, Bell, BellOff, Camera, ShieldCheck } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscriptionAtiva } from '../utils/push';
 
@@ -65,6 +65,56 @@ export default function Perfil() {
   const [mensagem, setMensagem] = useState(null);
   const [relatorios, setRelatorios] = useState([]);
   const [loadRelatorios, setLoadRelatorios] = useState(false);
+
+  // Validação de identidade (assessorado e clube)
+  const ROLES_SELFIE = ['assessorado', 'clube'];
+  const [identValidada, setIdentValidada] = useState(null); // null=carregando, true, false
+  const [identPendente, setIdentPendente] = useState(false);
+  const [selfieLoading, setSelfieLoading] = useState(false);
+  const [selfieMsg, setSelfieMsg] = useState(null);
+  const selfieRef = useRef();
+
+  useEffect(() => {
+    if (!user?.id || !ROLES_SELFIE.includes(role)) return;
+    supabase.from('perfis').select('identidade_validada, identidade_pendente').eq('id', user.id).single()
+      .then(({ data }) => {
+        setIdentValidada(data?.identidade_validada || false);
+        setIdentPendente(data?.identidade_pendente || false);
+      });
+  }, [user?.id, role]); // eslint-disable-line
+
+  const enviarSelfie = async (file) => {
+    if (!file) return;
+    setSelfieLoading(true); setSelfieMsg(null);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const imagem = e.target.result;
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/validar-selfie', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ imagem }),
+        });
+        const json = await res.json();
+        if (json.ok) {
+          await supabase.from('perfis').update({ identidade_validada: true, identidade_validada_em: new Date().toISOString(), identidade_pendente: false }).eq('id', user.id);
+          setIdentValidada(true); setIdentPendente(false);
+          setSelfieMsg({ ok: true, texto: 'Identidade verificada com sucesso!' });
+        } else {
+          // Claude não aprovou automaticamente — marca como pendente para revisão manual
+          await supabase.from('perfis').update({ identidade_pendente: true }).eq('id', user.id);
+          setIdentPendente(true);
+          setSelfieMsg({ ok: false, texto: json.mensagem || 'Foto não aprovada. Nossa equipe irá revisar.' });
+        }
+        setSelfieLoading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setSelfieMsg({ ok: false, texto: 'Erro ao enviar a foto. Tente novamente.' });
+      setSelfieLoading(false);
+    }
+  };
 
   // Push notifications
   const [pushAtivo, setPushAtivo] = useState(false);
@@ -264,6 +314,39 @@ export default function Perfil() {
             Fazer upgrade
           </button>
         </div>
+
+        {/* Validação de Identidade — assessorado e clube */}
+        {ROLES_SELFIE.includes(role) && (
+          <div style={{ background: identValidada ? '#f0fdf4' : '#fffbeb', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: `1px solid ${identValidada ? '#bbf7d0' : '#fde68a'}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <ShieldCheck size={18} color={identValidada ? '#16a34a' : '#d97706'} />
+              <span style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Verificação de Identidade</span>
+              {identValidada && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#dcfce7', color: '#166534', borderRadius: 999 }}>✓ Verificado</span>}
+              {identPendente && !identValidada && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fef9c3', color: '#92400e', borderRadius: 999 }}>Em revisão</span>}
+            </div>
+            {identValidada ? (
+              <p style={{ fontSize: 13, color: '#166534', margin: 0 }}>Sua identidade foi verificada. Você está habilitado para participar de arrematações.</p>
+            ) : identPendente ? (
+              <p style={{ fontSize: 13, color: '#92400e', margin: 0 }}>Sua foto foi enviada e está em revisão pela nossa equipe. Em breve você receberá a confirmação.</p>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, color: '#78350f', margin: '0 0 12px' }}>Para garantir a segurança das transações, precisamos verificar sua identidade. Tire uma selfie segurando seu documento (RG ou CNH).</p>
+                <input ref={selfieRef} type="file" accept="image/*" capture="user" style={{ display: 'none' }} onChange={e => enviarSelfie(e.target.files[0])} />
+                <button
+                  onClick={() => selfieRef.current?.click()}
+                  disabled={selfieLoading}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#d97706', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: selfieLoading ? 'not-allowed' : 'pointer', opacity: selfieLoading ? 0.7 : 1 }}>
+                  <Camera size={15} /> {selfieLoading ? 'Verificando...' : 'Enviar selfie com documento'}
+                </button>
+              </>
+            )}
+            {selfieMsg && (
+              <div style={{ marginTop: 10, fontSize: 13, color: selfieMsg.ok ? '#166534' : '#991b1b', fontWeight: 600 }}>
+                {selfieMsg.ok ? '✓ ' : '✕ '}{selfieMsg.texto}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Minhas Análises */}
         {['top1','top2','assessorado','clube','analista','advogado','admin'].includes(role) && (

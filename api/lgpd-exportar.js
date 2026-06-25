@@ -1,5 +1,6 @@
 export const config = { runtime: 'edge' };
 import { getUser } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -12,6 +13,10 @@ function sb(path) {
 
 export default async function handler(req) {
   if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 });
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`lgpd-exportar:${ip}`, 5, 60 * 60 * 1000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const user = await getUser(req);
   if (!user) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });

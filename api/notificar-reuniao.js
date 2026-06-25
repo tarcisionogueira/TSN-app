@@ -1,8 +1,14 @@
 export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`notificar-reuniao:${ip}`, 10, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
+
   const user = await getUser(req);
   if (!user) return unauthorized();
   const role = await getUserRoleById(user.id);
@@ -11,7 +17,14 @@ export default async function handler(req) {
   const RESEND_KEY = process.env.RESEND_API_KEY;
   if (!RESEND_KEY) return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500 });
 
-  const { clienteEmail, clienteNome, imovelNome, imovelCidade, reuniaoEm, reuniaoDuracao, meetLink, calendarUrl } = await req.json();
+  const { clienteEmail, clienteNome, imovelNome, imovelCidade, reuniaoEm, reuniaoDuracao, meetLink: meetLinkRaw, calendarUrl: calendarUrlRaw } = await req.json();
+
+  // Sanitiza URLs para evitar injeção de javascript: ou data: em emails enviados a clientes
+  function sanitizarUrl(u) {
+    try { const p = new URL(u); return ['https:','http:'].includes(p.protocol) ? u : '#'; } catch { return '#'; }
+  }
+  const meetLink = sanitizarUrl(meetLinkRaw || '');
+  const calendarUrl = sanitizarUrl(calendarUrlRaw || '');
 
   if (!clienteEmail || !reuniaoEm || !meetLink) {
     return new Response(JSON.stringify({ error: 'dados insuficientes' }), { status: 400 });

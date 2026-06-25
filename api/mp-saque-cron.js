@@ -16,6 +16,10 @@ const CRON_SECRET = process.env.CRON_SECRET;
 const BASE_URL    = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
 export default async function handler(req) {
+  if (!CRON_SECRET) {
+    console.error('[mp-saque-cron] CRON_SECRET não configurado');
+    return new Response(JSON.stringify({ error: 'Endpoint não configurado' }), { status: 500 });
+  }
   const secret = req.headers.get('x-cron-secret') || new URL(req.url).searchParams.get('secret');
   if (secret !== CRON_SECRET) return new Response('unauthorized', { status: 401 });
 

@@ -6,11 +6,12 @@ import {
   ArrowRight, X,
 } from 'lucide-react';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
-import { CIDADES_POR_ESTADO, RAIOS_KM } from '../data/cidades';
+import { buscarCidadesEstado, RAIOS_KM } from '../data/cidades';
 import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoBadge } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
+import ScoreRisco from '../components/ScoreRisco';
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -44,6 +45,7 @@ const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFra
 function LazyImage({ src, alt, style }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
+  const [erro, setErro] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -54,13 +56,17 @@ function LazyImage({ src, alt, style }) {
     return () => obs.disconnect();
   }, []);
   return (
-    <div ref={ref} style={{ ...style, background:'#f1f5f9', overflow:'hidden', flexShrink:0 }}>
-      {visible && src && (
-        <img src={src} alt={alt} loading="lazy"
-          style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
-          onError={e => { e.currentTarget.style.display = 'none'; }}
-        />
-      )}
+    <div ref={ref} style={{ ...style, background:'#f1f5f9', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      {visible && src && !erro
+        ? <img src={src} alt={alt} loading="lazy"
+            style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+            onError={() => setErro(true)}
+          />
+        : <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, color:'#cbd5e1', width:'100%', height:'100%' }}>
+            <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6"/></svg>
+            <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600 }}>Sem foto</span>
+          </div>
+      }
     </div>
   );
 }
@@ -105,8 +111,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const aplicarFiltros = (base) => {
         let q = base.eq('ativo', true);
         if (filtros.estado) q = q.eq('estado', filtros.estado);
-        if (filtros.tipo) q = q.in('tipo', [filtros.tipo, 'imovel']);
-        if (filtros.modalidade) q = q.eq('modalidade', filtros.modalidade);
+        if (filtros.tipos?.length) q = q.in('tipo', [...filtros.tipos, 'imovel']);
+        if (filtros.modalidades?.length) q = q.in('modalidade', filtros.modalidades);
         if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
         if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
         if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
@@ -177,10 +183,10 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         const pgtoBg = pgto === 'financiado' ? '#dcfce7' : pgto === 'hipotecado' ? '#fef3c7' : '#f1f5f9';
 
         // Precisão da geocodificação
-        const nivel = im.geocod_nivel; // 'endereco' | 'bairro' | 'cidade' | null
+        const nivel = im.geocod_nivel; // 'endereco' | 'rua' | 'bairro' | 'cidade' | null
         const isAproximado = nivel && nivel !== 'endereco';
-        const nivelLabel = nivel === 'bairro' ? '📍 Bairro (±500m)' : nivel === 'cidade' ? '🏙️ Cidade (±2km)' : null;
-        const raioMetros = nivel === 'bairro' ? 500 : nivel === 'cidade' ? 2000 : 0;
+        const nivelLabel = nivel === 'rua' ? '📍 Rua (±100m)' : nivel === 'bairro' ? '📍 Bairro (±500m)' : nivel === 'cidade' ? '🏙️ Cidade (±2km)' : null;
+        const raioMetros = nivel === 'rua' ? 100 : nivel === 'bairro' ? 500 : nivel === 'cidade' ? 2000 : 0;
 
         const popupHTML = `
           <div style="font-family:Inter,sans-serif;min-width:190px;max-width:220px">
@@ -258,7 +264,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   }, [centroRaio, raioAtivo, raioKm, mapReady]);
 
   return (
-    <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: 'calc(100vh - 220px)', minHeight: 400, position: 'relative' }}>
+    <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: 'calc(100vh - 220px)', minHeight: 400, position: 'relative', isolation: 'isolate', zIndex: 0 }}>
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
       {carregando && (
         <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '6px 16px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#64748b' }}>
@@ -273,7 +279,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       {!carregando && imoveisMapa.length === 0 && semCoordenadas && (
         <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '10px 18px', borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', fontSize: 12, color: '#64748b', textAlign: 'center', maxWidth: 320 }}>
           <div style={{ fontWeight: 700, color: '#334155', marginBottom: 3 }}>📍 {totalLista} imóvel(is) encontrado(s) sem localização</div>
-          <div>As coordenadas ainda não foram cadastradas. A geocodificação automática ocorre às 3h.</div>
+          <div>Coordenadas ainda não cadastradas. A geocodificação automática ocorre entre 21h e 7h (BRT) — os pins aparecem após o processamento noturno.</div>
         </div>
       )}
       {!carregando && imoveisMapa.length === 0 && !semCoordenadas && (
@@ -308,18 +314,18 @@ export default function Busca() {
     supabase.from('perfis').select('analises_bonus').eq('id', user.id).single()
       .then(({ data }) => { if (data) setAnalisesBonus(data.analises_bonus || 0); });
   }, [role, user?.id]);
-  const FILTROS_INICIAL = { tipo:'', estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidade:'', pagamento:[] };
+  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[] };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
     if (!_urlParams.estado) return null;
     return {
-      tipo: _urlParams.tipo || '',
+      tipos: _urlParams.tipo ? [_urlParams.tipo] : [],
       estado: _urlParams.estado || '',
       cidades: _urlParams.cidades ? _urlParams.cidades.split(',').filter(Boolean) : [],
       raioKm: 0,
       valorMin: _urlParams.valorMin || '',
       valorMax: _urlParams.valorMax || '',
-      modalidade: _urlParams.modalidade || '',
+      modalidades: _urlParams.modalidade ? [_urlParams.modalidade] : [],
       pagamento: _urlParams.pagamento ? _urlParams.pagamento.split(',').filter(Boolean) : [],
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -339,6 +345,8 @@ export default function Busca() {
   const [showSalvarModal, setShowSalvarModal] = useState(false);
   const [buscaCidade, setBuscaCidade] = useState('');
   const [dropdownIndex, setDropdownIndex] = useState(-1);
+  const [cidadesEstado, setCidadesEstado] = useState([]);
+  const [cidadesCarregando, setCidadesCarregando] = useState(false);
   const [resultados, setResultados] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
@@ -364,6 +372,17 @@ export default function Busca() {
   const [raioAtivoBusca, setRaioAtivoBusca] = useState(false);
   const [raioKmBusca, setRaioKmBusca] = useState(50);
 
+  // Busca cidades do estado selecionado via IBGE
+  useEffect(() => {
+    if (!filtros.estado) { setCidadesEstado([]); return; }
+    let cancelled = false;
+    setCidadesCarregando(true);
+    buscarCidadesEstado(filtros.estado).then(lista => {
+      if (!cancelled) { setCidadesEstado(lista); setCidadesCarregando(false); }
+    });
+    return () => { cancelled = true; };
+  }, [filtros.estado]);
+
   // Ao trocar para mapa com cidade selecionada, geocodifica para auto-zoom
   useEffect(() => {
     if (vista === 'mapa' && filtrosBusca?.cidades?.[0] && !centroBusca) {
@@ -377,6 +396,23 @@ export default function Busca() {
     supabase.from('filtros_salvos').select('*').eq('user_id', user.id).order('criado_em', { ascending: false })
       .then(({ data }) => setFiltrosSalvos(data || []));
   }, [user?.id]);
+
+  // Pré-filtro de cidade: se sessão sem filtros, usa preferências do último alerta do usuário
+  useEffect(() => {
+    if (!user?.id) return;
+    if (filtrosFromUrl) return; // deep-link tem prioridade
+    let ss = null;
+    try { ss = sessionStorage.getItem('busca_filtros'); } catch {}
+    if (ss) return; // sessionStorage tem prioridade
+    supabase.from('alertas_email').select('filtros').eq('user_id', user.id).single()
+      .then(({ data }) => {
+        if (!data?.filtros?.estado) return;
+        setFiltrosPersist(prev => {
+          if (prev.estado) return prev; // já preenchido por outro efeito
+          return { ...FILTROS_INICIAL, ...data.filtros };
+        });
+      });
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deep-link do email: ao carregar com filtros na URL, dispara busca automática
   const deepLinkDisparado = useRef(false);
@@ -492,8 +528,8 @@ export default function Busca() {
     const buildQuery = (base) => {
       let q = base.eq('ativo', true);
       if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
-      if (filtrosAtivos.tipo) q = q.in('tipo', [filtrosAtivos.tipo, 'imovel']);
-      if (filtrosAtivos.modalidade) q = q.eq('modalidade', filtrosAtivos.modalidade);
+      if (filtrosAtivos.tipos?.length) q = q.in('tipo', [...filtrosAtivos.tipos, 'imovel']);
+      if (filtrosAtivos.modalidades?.length) q = q.in('modalidade', filtrosAtivos.modalidades);
       if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')));
       if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')));
       // Cidades: OR interno entre cidades, mas ANDado com os demais filtros via filtro separado
@@ -568,6 +604,8 @@ export default function Busca() {
         numeroProcesso: im.numero_processo,
         latitude: im.latitude,
         longitude: im.longitude,
+        scoreFinanceiro: im.score_financeiro ?? null,
+        scoreJuridico: im.score_juridico ?? null,
       })) : [];
 
       // Radius: all results are already city-filtered; add distance badge for those with coords
@@ -594,7 +632,7 @@ export default function Busca() {
         supabase.from('busca_historico').insert({
           user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos,
           resultados_count: totalResultados || 0, cidade: filtrosAtivos.cidades?.join(', ') || null,
-          estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipo || null,
+          estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipos?.join(',') || null,
           valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
           valor_max: filtrosAtivos.valorMax ? Number(filtrosAtivos.valorMax) : null,
           pagamento_tipos: filtrosAtivos.pagamento?.length > 0 ? filtrosAtivos.pagamento : null,
@@ -606,7 +644,7 @@ export default function Busca() {
         try {
           supabase.from('alertas_email').upsert({
             user_id: user.id, filtros: filtrosAtivos,
-            descricao: [filtrosAtivos.cidades?.join(', ') || filtrosAtivos.estado, filtrosAtivos.tipo].filter(Boolean).join(' · ') || 'Preferência geral',
+            descricao: [filtrosAtivos.cidades?.join(', ') || filtrosAtivos.estado, filtrosAtivos.tipos?.join(', ')].filter(Boolean).join(' · ') || 'Preferência geral',
             ativo: true,
           }, { onConflict: 'user_id' }).then(() => {}).catch(() => {});
         } catch (_) {}
@@ -734,20 +772,46 @@ export default function Busca() {
             <div style={{ padding:14, display:'flex', flexDirection:'column', gap:12 }}>
               <div>
                 <label style={lbl}>Tipo de Imóvel</label>
-                <select value={filtros.tipo} onChange={e=>up('tipo',e.target.value)} style={inp}>
-                  <option value="">Todos</option>
-                  {[['casa','Casa'],['apartamento','Apartamento'],['terreno','Terreno/Lote'],['comercial','Comercial']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
-                </select>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[
+                    { val: 'apartamento', label: 'Apartamento' },
+                    { val: 'casa', label: 'Casa' },
+                    { val: 'terreno', label: 'Terreno' },
+                    { val: 'comercial', label: 'Comercial' },
+                  ].map(({ val, label }) => {
+                    const ativo = filtros.tipos?.includes(val);
+                    return (
+                      <button key={val} onClick={() => {
+                        const arr = filtros.tipos || [];
+                        setFiltrosPersist(p => ({ ...p, tipos: ativo ? arr.filter(v => v !== val) : [...arr, val] }));
+                      }}
+                        style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div>
                 <label style={lbl}>Modalidade</label>
-                <select value={filtros.modalidade} onChange={e=>up('modalidade',e.target.value)} style={inp}>
-                  <option value="">Todas</option>
-                  <option value="primeiro_leilao">1ª Praça</option>
-                  <option value="segundo_leilao">2ª Praça</option>
-                  <option value="venda_direta">Venda Direta</option>
-                  <option value="licitacao_aberta">Licitação Aberta</option>
-                </select>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[
+                    { val: 'extrajudicial', label: 'Extrajudicial' },
+                    { val: 'judicial', label: 'Judicial' },
+                    { val: 'venda_direta', label: 'Venda Direta' },
+                  ].map(({ val, label }) => {
+                    const ativo = filtros.modalidades?.includes(val);
+                    return (
+                      <button key={val} onClick={() => {
+                        const arr = filtros.modalidades || [];
+                        setFiltrosPersist(p => ({ ...p, modalidades: ativo ? arr.filter(v => v !== val) : [...arr, val] }));
+                      }}
+                        style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div>
                 <label style={lbl}>Estado (UF) <span style={{ color:'#ef4444' }}>*</span></label>
@@ -775,7 +839,7 @@ export default function Busca() {
                 )}
                 {(() => {
                   const cidadesFiltradas = filtros.estado
-                    ? (CIDADES_POR_ESTADO[filtros.estado] || []).filter(c => c.toLowerCase().includes(buscaCidade.toLowerCase()) && !filtros.cidades.includes(c))
+                    ? cidadesEstado.filter(c => c.toLowerCase().includes(buscaCidade.toLowerCase()) && !filtros.cidades.includes(c))
                     : [];
                   const handleKeyDown = (e) => {
                     if (!cidadesFiltradas.length) return;
@@ -803,8 +867,8 @@ export default function Busca() {
                         value={buscaCidade}
                         onChange={e=>{ setBuscaCidade(e.target.value); setDropdownIndex(-1); }}
                         onKeyDown={handleKeyDown}
-                        placeholder={filtros.estado ? 'Buscar cidade (opcional)...' : 'Selecione um estado primeiro'}
-                        disabled={!filtros.estado}
+                        placeholder={!filtros.estado ? 'Selecione um estado primeiro' : cidadesCarregando ? 'Carregando cidades...' : 'Buscar cidade (opcional)...'}
+                        disabled={!filtros.estado || cidadesCarregando}
                         style={{ ...inp, marginBottom:4 }}
                         autoComplete="off"
                       />
@@ -820,7 +884,7 @@ export default function Busca() {
                             </button>
                           ))}
                           {cidadesFiltradas.length === 0 && (
-                            <div style={{ padding:'8px 12px', fontSize:11, color:'#94a3b8' }}>Nenhuma cidade encontrada</div>
+                            <div style={{ padding:'8px 12px', fontSize:11, color:'#94a3b8' }}>{cidadesCarregando ? 'Carregando...' : 'Nenhuma cidade encontrada'}</div>
                           )}
                         </div>
                       )}
@@ -1141,6 +1205,10 @@ export default function Busca() {
                       {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{im.areaM2}m²</span>}
                       <span style={{ fontSize:9, color:'#94a3b8' }}>{fmtData(im.dataLeilao, im.modalidade)}</span>
                     </div>
+
+                    {(im.scoreFinanceiro !== null || im.scoreJuridico !== null) && (
+                      <ScoreRisco scoreFinanceiro={im.scoreFinanceiro} scoreJuridico={im.scoreJuridico} size="sm" />
+                    )}
                   </div>
 
                   {/* Botões */}

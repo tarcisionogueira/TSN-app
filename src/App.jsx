@@ -42,6 +42,7 @@ import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
 import Login from './pages/Login';
+import RedefinirSenha from './pages/RedefinirSenha';
 import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
 import AdminFinanceiro from './pages/AdminFinanceiro';
@@ -49,6 +50,7 @@ import MapaImoveis from './pages/MapaImoveis';
 import Promo from './pages/Promo';
 import Convite from './pages/Convite';
 import ConviteEquipe from './pages/ConviteEquipe';
+import ConviteLeiloeiro from './pages/ConviteLeiloeiro';
 import LeiloeiroPortal from './pages/LeiloeiroPortal';
 import EbookPage from './pages/EbookPage';
 import ContratoLink from './pages/ContratoLink';
@@ -237,12 +239,15 @@ export default function App() {
         <PlanosProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/redefinir-senha" element={<RedefinirSenha />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/admin" element={<PrivateRoute roles={['admin']}><Admin /></PrivateRoute>} />
           <Route path="/admin/financeiro" element={<PrivateRoute roles={['admin']}><AdminFinanceiro /></PrivateRoute>} />
           <Route path="/promo/:codigo" element={<Promo />} />
           <Route path="/convite/:codigo" element={<Convite />} />
           <Route path="/convite-equipe/:token" element={<ConviteEquipe />} />
+          <Route path="/cadastro-parceiro/:token" element={<ConviteLeiloeiro />} />
+          <Route path="/leiloeiro/:token" element={<ConviteLeiloeiro />} />
           <Route path="/leiloeiro" element={<PrivateRoute roles={['leiloeiro','admin']}><LeiloeiroPortal /></PrivateRoute>} />
           <Route path="/c/:token" element={<ContratoLink />} />
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />

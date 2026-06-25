@@ -122,8 +122,19 @@ export default async function handler(req) {
     if (action === 'aprovar') {
       if (!isAdmin) return new Response(JSON.stringify({ error: 'Acesso negado' }), { status: 403 });
 
-      const { saqueId, comprovante_url, observacao_admin } = body;
+      const { saqueId, comprovante_url, observacao_admin, antecipado } = body;
       if (!saqueId) return new Response(JSON.stringify({ error: 'saqueId obrigatório' }), { status: 400 });
+
+      // Pagamentos somente na sexta-feira, exceto quando admin marca antecipado=true
+      const hoje = new Date();
+      const diaSemana = hoje.getUTCDay(); // 5 = sexta
+      if (diaSemana !== 5 && !antecipado) {
+        const diasParaSexta = (5 - diaSemana + 7) % 7 || 7;
+        return new Response(JSON.stringify({
+          error: `Pagamentos são processados toda sexta-feira. Próxima sexta em ${diasParaSexta} dia(s). Use antecipado=true para liberar agora.`,
+          diasParaSexta,
+        }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+      }
 
       const { ok } = await sbFetch(`mp_saques?id=eq.${saqueId}`, {
         method: 'PATCH',
@@ -134,11 +145,12 @@ export default async function handler(req) {
           aprovado_em:       new Date().toISOString(),
           comprovante_url:   comprovante_url || null,
           observacao_admin:  observacao_admin || null,
+          antecipado:        antecipado ? true : false,
         }),
       });
 
       if (!ok) throw new Error('Erro ao atualizar saque');
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: true, antecipado: !!antecipado }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── Rejeitar saque (admin) ─────────────────────────────────────────────

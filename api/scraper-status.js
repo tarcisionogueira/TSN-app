@@ -1,4 +1,4 @@
-import { getUser } from './_auth.js';
+import { getUser, getUserRoleById } from './_auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -7,6 +7,9 @@ export default async function handler(req, res) {
 
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autorizado' });
+
+  const role = await getUserRoleById(user.id);
+  if (!['admin', 'analista'].includes(role)) return res.status(403).json({ error: 'Acesso negado' });
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;

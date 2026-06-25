@@ -311,7 +311,12 @@ export default async function handler(req, res) {
     if (['financas', 'extrato', 'transferir_pix'].includes(action)) {
       const adminUser = await getAuthUserNode(req);
       if (!adminUser?.id) return res.status(401).json({ error: 'Não autorizado' });
-      const { data: perfil } = await supabase.from('perfis').select('role').eq('id', adminUser.id).single();
+      const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+      const SVC_KEY = process.env.SUPABASE_SERVICE_KEY;
+      const perfilRes = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${adminUser.id}&select=role&limit=1`, {
+        headers: { apikey: SVC_KEY, Authorization: `Bearer ${SVC_KEY}` },
+      });
+      const [perfil] = perfilRes.ok ? await perfilRes.json() : [];
       if (perfil?.role !== 'admin') return res.status(403).json({ error: 'Acesso restrito a administradores' });
     }
 

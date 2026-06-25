@@ -23,7 +23,7 @@ function sb(path, opts = {}) {
 }
 
 export default async function handler(req) {
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' } });
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' } });
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const ip = getIP(req);
@@ -33,7 +33,7 @@ export default async function handler(req) {
   const user = await getUser(req);
   if (!user) return unauthorized();
 
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
 
   let body;
   try { body = await req.json(); } catch {

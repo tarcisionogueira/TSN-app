@@ -217,7 +217,7 @@ export default function Header() {
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
 
   return (
-    <header style={{ position: 'sticky', top: 0, zIndex: 100 }}>
+    <header style={{ position: 'sticky', top: 0, zIndex: 1100 }}>
       {/* Banner do modo suporte */}
       {impersonate && (
         <div style={{ background: '#d97706', color: 'white', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>

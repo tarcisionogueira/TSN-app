@@ -1009,7 +1009,7 @@ function ConfigTab() {
   const [comissoesExpanded, setComissoesExpanded] = useState({});
   const [cfin, setCfin] = useState({});   // config_financeira por gateway
   const [cfinSaved, setCfinSaved] = useState({});
-  const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 4.5, analista_pct: 1 });
+  const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 5.0, analista_pct: 0.5, consultor_pct: 0 });
   const [honorariosSaved, setHonorariosSaved] = useState(false);
   const [honorariosErr, setHonorariosErr] = useState('');
   // Fidelidade e cancelamento
@@ -1090,7 +1090,7 @@ function ConfigTab() {
   async function salvarHonorarios() {
     setHonorariosErr('');
     const total = Number(honorarios.total_pct) || 0;
-    const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
+    const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0) + (Number(honorarios.consultor_pct) || 0);
     if (Math.abs(soma - total) > 0.01) {
       setHonorariosErr(`A soma dos percentuais (${soma.toFixed(2)}%) deve ser igual ao total (${total.toFixed(2)}%).`);
       return;
@@ -1098,9 +1098,10 @@ function ConfigTab() {
     const { error } = await supabase.from('config_honorarios').upsert({
       id: 1,
       total_pct:    total,
-      admin_pct:    Number(honorarios.admin_pct) || 0,
-      advogado_pct: Number(honorarios.advogado_pct) || 0,
-      analista_pct: Number(honorarios.analista_pct) || 0,
+      admin_pct:     Number(honorarios.admin_pct) || 0,
+      advogado_pct:  Number(honorarios.advogado_pct) || 0,
+      analista_pct:  Number(honorarios.analista_pct) || 0,
+      consultor_pct: 0, // consultor nunca participa de honorários de êxito
       atualizado_em: new Date().toISOString(),
     });
     if (!error) { setHonorariosSaved(true); setTimeout(() => setHonorariosSaved(false), 2500); }
@@ -1492,9 +1493,9 @@ function ConfigTab() {
 
           {/* Distribuição por papel */}
           {[
-            { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação' },
-            { key: 'advogado_pct', label: 'Advogado', cor: '#0D63DB', desc: 'análise jurídica' },
-            { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica' },
+            { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação (4,5%)' },
+            { key: 'advogado_pct', label: 'Advogado', cor: '#0D63DB', desc: 'análise jurídica (5%)' },
+            { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica (0,5%)' },
           ].map(({ key, label, cor, desc }) => (
             <div key={key} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 18px', minWidth: 140, border: `1px solid ${cor}22` }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: cor, marginBottom: 6, textTransform: 'uppercase' }}>{label}</div>
@@ -1514,6 +1515,7 @@ function ConfigTab() {
             {(() => {
               const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
               const total = Number(honorarios.total_pct) || 0;
+              // consultor_pct é sempre 0 — não entra na soma
               const ok = Math.abs(soma - total) <= 0.01;
               return (
                 <div style={{ padding: '6px 14px', borderRadius: 20, background: ok ? '#f0fdf4' : '#fef2f2', color: ok ? '#16a34a' : '#ef4444', fontWeight: 700, fontSize: 13 }}>
@@ -2751,6 +2753,7 @@ function DashboardTab() {
   const [asaasDados, setAsaasDados] = useState(null);
   const [loading, setLoading] = useState(true);
   const [asaasLoading, setAsaasLoading] = useState(true);
+  const [fotoStats, setFotoStats] = useState({ total: 0, noStorage: 0 });
   const [usuariosDetalhe, setUsuariosDetalhe] = useState(false);
   const [healthLogs, setHealthLogs] = useState([]);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -2860,6 +2863,13 @@ function DashboardTab() {
       }
       setAsaasLoading(false);
     }
+
+    // Fotos: count total e quantas já estão no Storage
+    supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true)
+      .then(({ count: total }) => {
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).like('link_foto', '%supabase%')
+          .then(({ count: noStorage }) => setFotoStats({ total: total || 0, noStorage: noStorage || 0 }));
+      });
 
     load();
     loadAsaas();
@@ -3373,6 +3383,55 @@ function DashboardTab() {
               </div>
             </div>
 
+            {/* Scrapers & Storage operacional */}
+            {(() => {
+              const fotosGB = (fotoStats.noStorage * 0.00015); // ~150 KB média por foto
+              const storageCustoBRL = fotosGB * 0.021 * 6.0; // $0.021/GB × câmbio ~6.0
+              const semFoto = fotoStats.total - fotoStats.noStorage;
+              const pctFotos = fotoStats.total > 0 ? Math.round((fotoStats.noStorage / fotoStats.total) * 100) : 0;
+              return (
+                <div style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Scrapers & Storage Fotos</div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>Supabase Storage · ~150 KB/foto · $0,021/GB/mês</div>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: storageCustoBRL < 1 ? '#10b981' : '#d97706' }}>
+                      {storageCustoBRL < 0.01 ? 'R$ 0' : `~R$ ${storageCustoBRL.toFixed(2)}`}/mês
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                    {[
+                      { label: 'Imóveis ativos', val: fmtN(fotoStats.total), cor: '#0D63DB' },
+                      { label: 'Fotos no Storage', val: `${fmtN(fotoStats.noStorage)} (${pctFotos}%)`, cor: pctFotos > 80 ? '#10b981' : pctFotos > 30 ? '#d97706' : '#dc2626' },
+                      { label: 'Sem foto', val: fmtN(semFoto), cor: semFoto > 1000 ? '#d97706' : '#64748b' },
+                    ].map(c => (
+                      <div key={c.label} style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: c.cor }}>{c.val}</div>
+                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{c.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {[
+                      { nome: 'GitHub Actions (scrapers)', custo: 'Grátis', desc: 'Repo público — ilimitado', cor: '#10b981' },
+                      { nome: 'Nominatim / OSM (geocod)', custo: 'Grátis', desc: '1 req/s · uso moderado', cor: '#10b981' },
+                      { nome: 'Scraper Caixa', custo: 'Grátis', desc: 'API pública Caixa via GH Actions', cor: '#10b981' },
+                      { nome: 'ScraperAPI (opcional)', custo: 'US$ 49/mês', desc: 'Leiloeiros privados — não ativado', cor: '#94a3b8' },
+                    ].map(s => (
+                      <div key={s.nome} style={{ background: '#f8fafc', borderRadius: 7, padding: '7px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#111' }}>{s.nome}</div>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>{s.desc}</div>
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: s.cor, whiteSpace: 'nowrap' }}>{s.custo}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Asaas */}
             <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3815,6 +3874,185 @@ const REGIOES_ESTADOS = {
   'Sul':          ['PR','RS','SC'],
 };
 
+// ── Barra de progresso reutilizável ──────────────────────────────────────
+function BarraProgresso({ atual, total, label, sublabel, cor = '#0D63DB', visivel = true }) {
+  if (!visivel) return null;
+  const pct = total > 0 ? Math.round((atual / total) * 100) : 0;
+  return (
+    <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14, border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+        <span>{label}</span>
+        <span style={{ color: cor }}>{pct}% · {atual}/{total}</span>
+      </div>
+      <div style={{ background: '#e2e8f0', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 6, transition: 'width 0.4s ease' }} />
+      </div>
+      {sublabel && <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>{sublabel}</div>}
+    </div>
+  );
+}
+
+function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
+  const [loading, setLoading] = useState(false);
+  const [modalNovo, setModalNovo] = useState(false);
+  const [novoNome, setNovoNome] = useState('');
+  const [novoEmail, setNovoEmail] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [copiado, setCopiado] = useState('');
+  const [contagens, setContagens] = useState({});
+
+  const carregar = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('leiloeiros_parceiros').select('*').order('criado_em', { ascending: false });
+    setParceiros(data || []);
+    // Contar imóveis por parceiro
+    if (data?.length) {
+      const res = await Promise.all(
+        data.map(p =>
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', `parceiro_${p.id}`)
+        )
+      );
+      const mapa = {};
+      data.forEach((p, i) => { mapa[p.id] = res[i].count || 0; });
+      setContagens(mapa);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { carregar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const criarParceiro = async () => {
+    if (!novoNome.trim() || !novoEmail.trim()) return;
+    setSalvando(true);
+    await supabase.from('leiloeiros_parceiros').insert({ nome: novoNome.trim(), email: novoEmail.trim() });
+    setSalvando(false);
+    setModalNovo(false);
+    setNovoNome('');
+    setNovoEmail('');
+    carregar();
+  };
+
+  const alterarStatus = async (id, status) => {
+    await supabase.from('leiloeiros_parceiros').update({ status }).eq('id', id);
+    carregar();
+  };
+
+  const copiarLink = (token, key) => {
+    const url = `${window.location.origin}/#/leiloeiro/${token}`;
+    navigator.clipboard.writeText(url);
+    setCopiado(key);
+    setTimeout(() => setCopiado(''), 1800);
+  };
+
+  const copiarToken = (token, key) => {
+    navigator.clipboard.writeText(token);
+    setCopiado(key + '_token');
+    setTimeout(() => setCopiado(''), 1800);
+  };
+
+  const STATUS_COR = { ativo: '#10b981', pendente: '#f59e0b', inativo: '#94a3b8', suspenso: '#dc2626' };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#111111' }}>Leiloeiros Parceiros</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Cada parceiro recebe um token único para enviar lotes via API</div>
+        </div>
+        <button onClick={() => setModalNovo(true)}
+          style={{ padding: '8px 16px', background: '#ea580c', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          + Novo Parceiro
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Carregando…</div>
+      ) : parceiros.length === 0 ? (
+        <div style={{ background: 'white', borderRadius: 14, border: '1px dashed #e2e8f0', padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🔨</div>
+          <div style={{ fontWeight: 700, color: '#475569', marginBottom: 6 }}>Nenhum parceiro cadastrado</div>
+          <div style={{ fontSize: 13 }}>Crie um parceiro e envie o link de cadastro para o leiloeiro.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {parceiros.map(p => (
+            <div key={p.id} style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 800, fontSize: 14, color: '#111111' }}>{p.nome}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: STATUS_COR[p.status] + '22', color: STATUS_COR[p.status] }}>
+                      {p.status}
+                    </span>
+                    {contagens[p.id] > 0 && (
+                      <span style={{ fontSize: 10, color: '#64748b' }}>{contagens[p.id].toLocaleString('pt-BR')} imóveis</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>{p.email} {p.cnpj && `· CNPJ ${p.cnpj}`} {p.municipio && `· ${p.municipio}/${p.uf}`}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                    Criado em {new Date(p.criado_em).toLocaleDateString('pt-BR')}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button onClick={() => copiarLink(p.token, p.id)}
+                    style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: '1px solid #e2e8f0', borderRadius: 8, background: copiado === p.id ? '#f0fdf4' : '#f8fafc', color: copiado === p.id ? '#16a34a' : '#475569', cursor: 'pointer' }}>
+                    {copiado === p.id ? '✓ Link copiado' : '🔗 Link cadastro'}
+                  </button>
+                  <button onClick={() => copiarToken(p.token, p.id)}
+                    style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: '1px solid #e2e8f0', borderRadius: 8, background: copiado === p.id + '_token' ? '#f0fdf4' : '#f8fafc', color: copiado === p.id + '_token' ? '#16a34a' : '#475569', cursor: 'pointer' }}>
+                    {copiado === p.id + '_token' ? '✓ Token copiado' : '🔑 Token API'}
+                  </button>
+                  {p.status === 'ativo' ? (
+                    <button onClick={() => alterarStatus(p.id, 'suspenso')}
+                      style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: '1px solid #fecaca', borderRadius: 8, background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}>
+                      Suspender
+                    </button>
+                  ) : (
+                    <button onClick={() => alterarStatus(p.id, 'ativo')}
+                      style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: '1px solid #bbf7d0', borderRadius: 8, background: '#f0fdf4', color: '#16a34a', cursor: 'pointer' }}>
+                      Ativar
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modalNovo && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setModalNovo(false)}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 28, width: '100%', maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Novo Parceiro Leiloeiro</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>Um link de cadastro será gerado para o leiloeiro completar os dados.</div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Nome *</label>
+              <input value={novoNome} onChange={e => setNovoNome(e.target.value)} placeholder="Nome da empresa ou pessoa"
+                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 4 }}>E-mail *</label>
+              <input type="email" value={novoEmail} onChange={e => setNovoEmail(e.target.value)} placeholder="contato@leiloeiro.com.br"
+                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setModalNovo(false)}
+                style={{ flex: 1, padding: 10, background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, color: '#475569' }}>
+                Cancelar
+              </button>
+              <button onClick={criarParceiro} disabled={salvando || !novoNome.trim() || !novoEmail.trim()}
+                style={{ flex: 2, padding: 10, background: salvando ? '#94a3b8' : '#ea580c', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
+                {salvando ? 'Criando…' : 'Criar parceiro'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScrapersTab() {
   const [status, setStatus] = useState(null);
   const [geoStats, setGeoStats] = useState({ com: 0, sem: 0, total: 0 });
@@ -3822,54 +4060,297 @@ function ScrapersTab() {
   const [geocRegiao, setGeocRegiao] = useState({});
   const [ultimoDebug, setUltimoDebug] = useState(null);
   const [puppeteerStatus, setPuppeteerStatus] = useState(null);
-  const [abaAtiva, setAbaAtiva] = useState(() => sessionStorage.getItem('scraper_aba') || 'caixa');
+  const [abaAtiva, setAbaAtiva] = useState(() => { const a = sessionStorage.getItem('scraper_aba'); return (a === 'caixa' || a === 'leiloeiros') ? 'fontes' : (a || 'fontes'); });
   const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
+  const [estadosExpandidos, setEstadosExpandidos] = useState({ caixa: false, geocod: false });
+  const toggleExpandir = (aba) => setEstadosExpandidos(e => ({ ...e, [aba]: !e[aba] }));
+  const [leiloeiroContagem, setLeiloeiroContagem] = useState({}); // fonte → total imóveis no banco
+  const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
+  const [geocPendentes, setGeocPendentes] = useState({});
+  const [geocUltimoRefresh, setGeocUltimoRefresh] = useState(null);
+  const [parceiros, setParceiros] = useState([]);
+  const [gerandoConviteLeiloeiro, setGerandoConviteLeiloeiro] = useState(false);
+  const [linkLeiloeiro, setLinkLeiloeiro] = useState(null);
+  // Progresso "executar todos" do Caixa (estado a estado)
+  const [caixaTodos, setCaixaTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '' });
+  const [geocDebug, setGeocDebug] = useState(null);
+  const [geocDebugRodando, setGeocDebugRodando] = useState(false);
+  const [sysDebug, setSysDebug] = useState({});
+  const [sysDebugRodando, setSysDebugRodando] = useState({});
+
+  useEffect(() => {
+    if (abaAtiva === 'geocod') {
+      carregarPendentes();
+    }
+  }, [abaAtiva]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh pendentes a cada 2 min quando na aba geocod e não processando manualmente
+  useEffect(() => {
+    if (abaAtiva !== 'geocod') return;
+    const interval = setInterval(() => {
+      if (!geocTodos.rodando) carregarPendentes();
+    }, 120_000);
+    return () => clearInterval(interval);
+  }, [abaAtiva, geocTodos.rodando]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // Contagem de imóveis por fonte
+    // Caixa: registros novos têm fonte='caixa', antigos têm fonte=NULL — duas queries separadas pois
+    // o Supabase JS não suporta is.null dentro do .or()
+    Promise.all([
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', 'caixa'),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('fonte', null),
+      ...['mega','sold','superbid','bb'].map(f =>
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', f)
+      ),
+    ]).then(([caixaNova, caixaAntiga, mega, sold, superbid, bb]) => {
+      setLeiloeiroContagem({
+        caixa:    (caixaNova.count || 0) + (caixaAntiga.count || 0),
+        mega:     mega.count     || 0,
+        sold:     sold.count     || 0,
+        superbid: superbid.count || 0,
+        bb:       bb.count       || 0,
+      });
+    });
+  }, []);
 
   useEffect(() => {
     apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
     // Contador de imóveis geocodificados (coluna: latitude)
+    // Sem coordenadas = latitude IS NULL (nunca processado) + latitude=0 (falhou)
     Promise.all([
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).or('latitude.is.null,latitude.eq.0'),
-    ]).then(([comGeo, semGeo]) => {
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
+    ]).then(([comGeo, semNull, semZero]) => {
       const com = comGeo.count || 0;
-      const sem = semGeo.count || 0;
+      const sem = (semNull.count || 0) + (semZero.count || 0);
       setGeoStats({ com, sem, total: com + sem });
     });
   }, []);
 
-  // Trigger manual via GitHub Actions (IPs não bloqueados pela Caixa)
+  // Trigger manual via GitHub Actions — estado por estado com barra de progresso
   async function triggerScraper(regiao, estados) {
-    setScraperRegiao(g => ({ ...g, [regiao]: { rodando: true } }));
-    try {
-      const r = await apiCall('/api/trigger-scraper', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estados }),
-      });
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error || 'Erro ao disparar workflow');
-      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, msg: d.msg, agendado: true } }));
+    if (regiao === 'todos' && estados.length > 1) {
+      // Modo "todos": dispara estado a estado mostrando progresso
+      const total = estados.length;
+      setCaixaTodos({ rodando: true, atual: 0, total, ufAtual: estados[0] });
+      for (let i = 0; i < estados.length; i++) {
+        const uf = estados[i];
+        setCaixaTodos(p => ({ ...p, atual: i + 1, ufAtual: uf }));
+        setScraperRegiao(g => ({ ...g, [uf]: { rodando: true } }));
+        try {
+          const r = await apiCall('/api/trigger-scraper', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estados: [uf] }),
+          });
+          const d = await r.json();
+          if (!d.ok) throw new Error(d.error || 'Erro');
+          setScraperRegiao(g => ({ ...g, [uf]: { rodando: false, agendado: true, msg: d.msg } }));
+        } catch (e) {
+          setScraperRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
+        }
+        if (i < estados.length - 1) await new Promise(res => setTimeout(res, 800));
+      }
+      setCaixaTodos(p => ({ ...p, rodando: false }));
       setTimeout(() => apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}), 5000);
-    } catch (e) {
-      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
+    } else {
+      // Modo estado único
+      setScraperRegiao(g => ({ ...g, [regiao]: { rodando: true } }));
+      try {
+        const r = await apiCall('/api/trigger-scraper', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estados }),
+        });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'Erro ao disparar workflow');
+        setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, msg: d.msg, agendado: true } }));
+        setTimeout(() => apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}), 5000);
+      } catch (e) {
+        setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
+      }
     }
   }
 
   // Trigger manual de geocodificação por estado (1 lote, retorna imediatamente)
   async function triggerGeoc(uf) {
-    setGeocRegiao(g => ({ ...g, [uf]: { rodando: true } }));
+    setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: 0, falhas: 0 } }));
+    let totalProc = 0, totalFalhas = 0, loops = 0, timeoutsConsecutivos = 0;
+    const MAX_LOOPS = 2000; // sem limite prático — para só quando não há mais pendentes
+    const MAX_TIMEOUTS = 5; // aborta após 5 timeouts seguidos sem progresso
     try {
-      const r = await apiCall('/api/geocodificar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estados: [uf] }),
-      });
-      const d = await r.json();
-      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: d.processados || 0, falhas: d.falhas || 0, cache_hits: d.cache_hits || 0, concluido: !d.processados } }));
+      while (loops < MAX_LOOPS) {
+        const r = await apiCall('/api/geocodificar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estados: [uf] }),
+        });
+        let d;
+        try { d = await r.json(); } catch {
+          // Timeout da Vercel (30s) — os imóveis não foram gravados, ainda estão na fila
+          timeoutsConsecutivos++;
+          setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: totalProc, falhas: totalFalhas, aviso: `⚡ ${timeoutsConsecutivos} timeout(s) — retentando...` } }));
+          if (timeoutsConsecutivos >= MAX_TIMEOUTS) {
+            setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `${MAX_TIMEOUTS} timeouts consecutivos`, processados: totalProc, falhas: totalFalhas } }));
+            break;
+          }
+          await new Promise(res => setTimeout(res, 2000)); // pausa antes de retentar
+          continue;
+        }
+        timeoutsConsecutivos = 0; // reset ao receber resposta válida
+        if (!r.ok || d.error) {
+          setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d.error || `HTTP ${r.status}`, processados: totalProc, falhas: totalFalhas } }));
+          return;
+        }
+        totalProc += d.processados || 0;
+        totalFalhas += d.falhas || 0;
+        loops++;
+        setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: totalProc, falhas: totalFalhas } }));
+        if (!d.processados || d.processados < 5) break; // sem mais pendentes
+        await new Promise(res => setTimeout(res, 300)); // pausa entre chamadas
+      }
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: totalProc, falhas: totalFalhas, concluido: totalProc === 0 } }));
     } catch (e) {
-      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message, processados: totalProc } }));
+    } finally {
+      // Atualiza contadores globais e recarrega pendentes do estado
+      Promise.all([
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).is('latitude', null),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).eq('latitude', 0),
+      ]).then(([comGeo, semNull, semZero, ufNull, ufZero]) => {
+        const com = comGeo.count || 0;
+        const sem = (semNull.count || 0) + (semZero.count || 0);
+        setGeoStats({ com, sem, total: com + sem });
+        // Atualiza pendentes reais do estado processado
+        const ufPendentes = (ufNull.count || 0) + (ufZero.count || 0);
+        setGeocPendentes(p => ({ ...p, [uf]: ufPendentes }));
+      });
     }
+  }
+
+  async function rodarGeocDebug() {
+    setGeocDebugRodando(true);
+    setGeocDebug(null);
+    try {
+      const r = await apiCall('/api/geocod-debug', { method: 'GET' });
+      const d = await r.json();
+      setGeocDebug({ status: r.status, body: d });
+    } catch (e) {
+      setGeocDebug({ status: 'erro', body: { erro: e.message } });
+    }
+    setGeocDebugRodando(false);
+  }
+
+  async function rodarSysDebug(modulo) {
+    setSysDebugRodando(s => ({ ...s, [modulo]: true }));
+    setSysDebug(s => ({ ...s, [modulo]: null }));
+    try {
+      const r = await apiCall(`/api/sistema-debug?modulo=${modulo}`, { method: 'GET' });
+      const d = await r.json();
+      setSysDebug(s => ({ ...s, [modulo]: { status: r.status, body: d } }));
+    } catch (e) {
+      setSysDebug(s => ({ ...s, [modulo]: { status: 'erro', body: { erro: e.message } } }));
+    }
+    setSysDebugRodando(s => ({ ...s, [modulo]: false }));
+  }
+
+  function BotaoDebug({ modulo, label }) {
+    const rodando = sysDebugRodando[modulo];
+    const resultado = sysDebug[modulo];
+    return (
+      <div style={{ marginTop: 10 }}>
+        <button onClick={() => rodarSysDebug(modulo)} disabled={rodando}
+          style={{ padding: '5px 12px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+          {rodando ? '⏳ Verificando...' : `🔍 ${label || 'Diagnóstico'}`}
+        </button>
+        {resultado && (
+          <div style={{ marginTop: 8, background: resultado.status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${resultado.status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+            <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: resultado.status === 200 ? '#059669' : '#dc2626' }}>
+              {resultado.status === 200 ? '✅ OK' : `❌ Erro (${resultado.status})`}
+            </div>
+            <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 220, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(resultado.body, null, 2)} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const UFS_GEOCOD_ORDEM = ['SP','MG','PR','RS','RJ','SC','BA','GO','CE','PE','MT','MS','ES','PA','MA','RN','PB','AL','PI','SE','TO','RO','AM','DF','AC','AP','RR'];
+
+  async function carregarPendentes() {
+    const results = await Promise.all(
+      UFS_GEOCOD_ORDEM.map(async uf => {
+        const [r1, r2] = await Promise.all([
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).is('latitude', null),
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).eq('latitude', 0),
+        ]);
+        return [uf, (r1.count || 0) + (r2.count || 0)];
+      })
+    );
+    setGeocPendentes(Object.fromEntries(results));
+    setGeocUltimoRefresh(new Date());
+  }
+
+  async function geocodificarTodos() {
+    const total = UFS_GEOCOD_ORDEM.length;
+    setGeocTodos({ rodando: true, atual: 0, total, ufAtual: UFS_GEOCOD_ORDEM[0], processadosTotal: 0 });
+    let processadosTotal = 0;
+    for (let i = 0; i < UFS_GEOCOD_ORDEM.length; i++) {
+      const uf = UFS_GEOCOD_ORDEM[i];
+      setGeocTodos(g => ({ ...g, atual: i + 1, ufAtual: uf }));
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: 0, falhas: 0 } }));
+      let ufProc = 0, ufFalhas = 0, ufLoops = 0, ufTimeouts = 0;
+      const MAX_UF_TIMEOUTS = 5;
+      try {
+        while (true) { // para quando não há mais pendentes ou muitos timeouts
+          const r = await apiCall('/api/geocodificar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estados: [uf] }) });
+          let d;
+          try { d = await r.json(); } catch {
+            // Timeout — imóveis não foram gravados, ainda estão na fila; retentar
+            ufTimeouts++;
+            setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: ufProc, falhas: ufFalhas, aviso: `⚡ ${ufTimeouts} timeout(s)` } }));
+            if (ufTimeouts >= MAX_UF_TIMEOUTS) {
+              setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: `${MAX_UF_TIMEOUTS} timeouts`, processados: ufProc, falhas: ufFalhas } }));
+              break;
+            }
+            await new Promise(res => setTimeout(res, 2000));
+            continue;
+          }
+          ufTimeouts = 0;
+          if (!r.ok || d.error) {
+            setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: d?.error || `Erro ${r.status}`, processados: ufProc, falhas: ufFalhas } }));
+            break;
+          }
+          ufProc += d.processados || 0;
+          ufFalhas += d.falhas || 0;
+          ufLoops++;
+          processadosTotal += d.processados || 0;
+          setGeocTodos(g => ({ ...g, processadosTotal }));
+          setGeocRegiao(g => ({ ...g, [uf]: { rodando: true, processados: ufProc, falhas: ufFalhas } }));
+          if (!d.processados || d.processados < 5) break;
+          await new Promise(res => setTimeout(res, 300));
+        }
+      } catch (e) {
+        setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message } }));
+        continue;
+      }
+      setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, processados: ufProc, falhas: ufFalhas, concluido: ufProc === 0 } }));
+      await new Promise(res => setTimeout(res, 500));
+    }
+    setGeocTodos(g => ({ ...g, rodando: false }));
+    // Atualiza contador após processar
+    Promise.all([
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
+    ]).then(([comGeo, semNull, semZero]) => {
+      const com = comGeo.count || 0;
+      const sem = (semNull.count || 0) + (semZero.count || 0);
+      setGeoStats({ com, sem, total: com + sem });
+    });
   }
 
   // Lista de estados com horários do cron (UTC)
@@ -3909,10 +4390,10 @@ function ScrapersTab() {
   const geoPct = geoStats.total > 0 ? Math.round((geoStats.com / geoStats.total) * 100) : 0;
 
   const ABAS = [
-    { key: 'caixa',      label: '🏦 Caixa Econômica', desc: '27 estados · 22h UTC' },
-    { key: 'leiloeiros', label: '🏛️ Leiloeiros',       desc: 'Mega · Sold · Superbid · BB' },
-    { key: 'geocod',     label: '📍 Geocodificação',    desc: `${geoStats.com.toLocaleString('pt-BR')} / ${geoStats.total.toLocaleString('pt-BR')} imóveis` },
-    { key: 'roadmap',    label: '🚀 Roadmap',           desc: '7 fontes planejadas' },
+    { key: 'fontes',    label: '🏛️ Fontes',         desc: 'Caixa · Mega · Sold · Superbid · BB' },
+    { key: 'geocod',    label: '📍 Geocodificação',  desc: `${geoStats.com.toLocaleString('pt-BR')} / ${geoStats.total.toLocaleString('pt-BR')} imóveis` },
+    { key: 'parceiros', label: '🤝 Parceiros',       desc: `${parceiros.length} leiloeiros` },
+    { key: 'roadmap',   label: '🚀 Roadmap',         desc: '7 fontes planejadas' },
   ];
 
   return (
@@ -3973,86 +4454,176 @@ function ScrapersTab() {
         </div>
       )}
 
-      {/* ═══ ABA CAIXA ═══ */}
-      {abaAtiva === 'caixa' && (
-        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏦</div>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
-                <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático via GitHub Actions · 22:00–22:52 UTC · retry ×3</div>
-              </div>
-            </div>
-            <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)}
-              disabled={scraperRegiao['todos']?.rodando}
-              style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#fff7ed', color: '#c2410c', fontWeight: 700, fontSize: 12, cursor: 'pointer', border: '1px solid #fed7aa' }}>
-              ▶ Executar todos agora
-            </button>
-          </div>
-          {scraperRegiao['todos']?.agendado && <div style={{ fontSize: 11, color: '#7c3aed', marginBottom: 10 }}>🚀 Workflow agendado via GitHub Actions</div>}
-          {scraperRegiao['todos']?.erro && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 10 }}>⚠️ {scraperRegiao['todos'].erro}</div>}
+      {/* ═══ ABA FONTES ═══ */}
+      {abaAtiva === 'fontes' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* Grid de estados 4 colunas */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-            {AGENDA_SCRAPER.map(({ uf, hora }) => {
-              const r = scraperRegiao[uf] || {};
+          {/* Grade unificada de todas as fontes */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+
+            {/* ── Caixa Econômica Federal ── */}
+            {(() => {
+              const total = status?.total ?? null;
+              const temDados = total > 0;
+              const erros = Object.values(scraperRegiao).filter(r => r.erro).length;
+              const agendados = Object.values(scraperRegiao).filter(r => r.agendado).length;
               return (
-                <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#e2e8f0'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
-                    <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
-                      style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
-                      {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
+                <div style={{ background: '#fff7ed', borderRadius: 12, border: '1px solid #fed7aa', padding: '14px 16px', gridColumn: '1 / -1' }}>
+                  {/* Cabeçalho */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 22 }}>🏦</span>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Caixa Econômica Federal</div>
+                        <div style={{ fontSize: 11, color: '#92400e', fontWeight: 600 }}>● CSV · 27 arquivos (1 por estado) · cron 22:00–22:52 UTC · retry ×3</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: temDados ? '#fed7aa' : '#f1f5f9', color: temDados ? '#c2410c' : '#94a3b8' }}>
+                        {erros > 0 ? `❌ ${erros} erros` : agendados > 0 ? `● ${agendados} agendados` : temDados ? '● Ativo' : '○ Sem dados'}
+                      </span>
+                      <button onClick={() => rodarSysDebug('scraper')} disabled={sysDebugRodando['scraper']}
+                        style={{ padding: '4px 10px', borderRadius: 7, background: '#fff', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+                        {sysDebugRodando['scraper'] ? '⏳' : '🔍 Diagnóstico'}
+                      </button>
+                      <button onClick={() => triggerScraper('todos', TODOS_ESTADOS_SCRAPER)} disabled={caixaTodos.rodando}
+                        style={{ padding: '5px 12px', borderRadius: 7, background: caixaTodos.rodando ? '#f1f5f9' : '#c2410c', color: caixaTodos.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: caixaTodos.rodando ? 'default' : 'pointer', border: 'none' }}>
+                        {caixaTodos.rodando ? `⏳ ${caixaTodos.ufAtual} [${caixaTodos.atual}/${caixaTodos.total}]` : '▶ Executar todos'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Contador + progresso */}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: '#c2410c', lineHeight: 1 }}>
+                      {total != null ? total.toLocaleString('pt-BR') : '—'}
+                    </span>
+                    <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>imóveis no banco</span>
+                  </div>
+
+                  <BarraProgresso visivel={caixaTodos.rodando || (caixaTodos.total > 0 && !caixaTodos.rodando)} atual={caixaTodos.atual} total={caixaTodos.total}
+                    label={caixaTodos.rodando ? `Agendando ${caixaTodos.ufAtual}...` : `✅ ${caixaTodos.atual} estados agendados`}
+                    sublabel={caixaTodos.rodando ? 'Disparando workflows — não feche esta aba' : 'Scraper rodando em background · resultado em ~10 min'} cor="#c2410c" />
+
+                  {sysDebug['scraper'] && (
+                    <div style={{ marginBottom: 8, background: sysDebug['scraper'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '8px 12px', border: `1px solid ${sysDebug['scraper'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+                      <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['scraper'].status === 200 ? '#059669' : '#dc2626' }}>
+                        {sysDebug['scraper'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['scraper'].status})`}
+                        <button onClick={() => setSysDebug(s => ({ ...s, scraper: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
+                      </div>
+                      <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 160, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['scraper'].body, null, 2)} />
+                    </div>
+                  )}
+
+                  {/* 27 estados expansíveis */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                    <span style={{ fontSize: 11, color: '#92400e' }}>
+                      {agendados > 0 ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ {agendados} estados agendados</span> : 'Cron diário automático · ▶ para forçar por estado'}
+                      {erros > 0 && <span style={{ color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>· ❌ {erros} com erro</span>}
+                    </span>
+                    <button onClick={() => toggleExpandir('caixa')} style={{ fontSize: 11, color: '#c2410c', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+                      {estadosExpandidos.caixa ? '▲ Recolher' : `▼ Ver 27 estados${erros > 0 ? ` (${erros} ❌)` : ''}`}
                     </button>
                   </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
-                  {r.agendado && <div style={{ fontSize: 9, color: '#059669', fontWeight: 700, marginTop: 2 }}>🚀 Agendado</div>}
-                  {r.erro && <div style={{ fontSize: 9, color: '#dc2626', marginTop: 2 }} title={r.erro}>❌ Erro</div>}
+                  {estadosExpandidos.caixa && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5, marginTop: 10 }}>
+                      {AGENDA_SCRAPER.map(({ uf, hora }) => {
+                        const r = scraperRegiao[uf] || {};
+                        return (
+                          <div key={uf} style={{ background: r.agendado ? '#f0fdf4' : r.erro ? '#fef2f2' : '#fffbeb', borderRadius: 7, padding: '6px 8px', border: `1px solid ${r.agendado ? '#bbf7d0' : r.erro ? '#fecaca' : '#fed7aa'}` }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontWeight: 800, fontSize: 12, color: '#334155' }}>{uf}</span>
+                              <button onClick={() => triggerScraper(uf, [uf])} disabled={r.rodando}
+                                style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#fff7ed', color: r.rodando ? '#94a3b8' : '#c2410c', border: `1px solid ${r.rodando ? '#e2e8f0' : '#fed7aa'}`, borderRadius: 4, cursor: r.rodando ? 'default' : 'pointer', fontSize: 8 }}>
+                                {r.rodando ? '…' : r.agendado ? '↺' : '▶'}
+                              </button>
+                            </div>
+                            <div style={{ fontSize: 8, color: '#94a3b8' }}>{hora} UTC</div>
+                            {r.agendado && <div style={{ fontSize: 8, color: '#059669', fontWeight: 700 }}>🚀 Agendado</div>}
+                            {r.erro && <div style={{ fontSize: 8, color: '#dc2626', fontWeight: 700 }} title={r.erro}>❌ {r.erro.slice(0, 20)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── Leiloeiros (Puppeteer + Parceiros API) ── */}
+            {[
+              { fonte: 'mega',     nome: 'Mega Leilões',    cor: '#0D63DB', desc: 'Residenciais e comerciais',   tipo: 'scraper' },
+              { fonte: 'sold',     nome: 'Sold Leilões',    cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros', tipo: 'scraper' },
+              { fonte: 'superbid', nome: 'Superbid',        cor: '#059669', desc: 'Maior marketplace do Brasil', tipo: 'scraper' },
+              { fonte: 'bb',       nome: 'Banco do Brasil', cor: '#d97706', desc: 'Carteira imobiliária do BB',  tipo: 'scraper' },
+              // Parceiros via API aparecem aqui conforme se conectam
+              ...parceiros.filter(p => p.status === 'ativo').map(p => ({
+                fonte: `parceiro_${p.id}`,
+                nome: p.nome_fantasia || p.nome,
+                cor: '#ea580c',
+                desc: `API · token ativo`,
+                tipo: 'parceiro',
+                parceiro: p,
+              })),
+            ].map(s => {
+              const total = leiloeiroContagem[s.fonte] ?? 0;
+              const temDados = total > 0;
+              const debugKey = `leiloeiro_${s.fonte}`;
+              return (
+                <div key={s.fonte} style={{ background: `${s.cor}08`, borderRadius: 12, border: `1px solid ${s.cor}22`, padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>{s.nome}</div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{s.desc}</div>
+                    </div>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: temDados ? `${s.cor}22` : '#f1f5f9', color: temDados ? s.cor : '#94a3b8', whiteSpace: 'nowrap' }}>
+                      {temDados ? '● Ativo' : s.tipo === 'parceiro' ? '● Conectado' : '○ Sem dados'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: temDados ? s.cor : '#94a3b8', lineHeight: 1 }}>
+                    {total.toLocaleString('pt-BR')}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, marginBottom: 10 }}>imóveis no banco</div>
+                  <button onClick={() => rodarSysDebug(debugKey)} disabled={sysDebugRodando[debugKey]}
+                    style={{ padding: '4px 10px', borderRadius: 6, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+                    {sysDebugRodando[debugKey] ? '⏳' : '🔍 Diagnóstico'}
+                  </button>
+                  {sysDebug[debugKey] && (
+                    <div style={{ marginTop: 8, background: sysDebug[debugKey].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '8px 10px', border: `1px solid ${sysDebug[debugKey].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+                      <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, color: sysDebug[debugKey].status === 200 ? '#059669' : '#dc2626', display: 'flex', justifyContent: 'space-between' }}>
+                        {sysDebug[debugKey].status === 200 ? '✅ OK' : `❌ Erro (${sysDebug[debugKey].status})`}
+                        <button onClick={() => setSysDebug(d => ({ ...d, [debugKey]: null }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 10 }}>✕</button>
+                      </div>
+                      <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 9, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 120, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug[debugKey].body, null, 2)} />
+                    </div>
+                  )}
                 </div>
               );
             })}
-          </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>Cron automático diário · ▶ força execução manual por estado</div>
-        </div>
-      )}
 
-      {/* ═══ ABA LEILOEIROS ═══ */}
-      {abaAtiva === 'leiloeiros' && (
-        <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Scraper de Leiloeiros (Puppeteer)</div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>GitHub Actions · diário às 07:00 BRT · extrai HTML de leiloeiros privados</div>
-            </div>
-            <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
-              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: puppeteerStatus?.agendado ? '#f0fdf4' : '#0D63DB', color: puppeteerStatus?.agendado ? '#059669' : 'white', fontWeight: 700, fontSize: 13, cursor: puppeteerStatus?.rodando ? 'default' : 'pointer', border: puppeteerStatus?.agendado ? '1px solid #bbf7d0' : 'none' }}>
-              {puppeteerStatus?.rodando ? '⏳ Disparando...' : puppeteerStatus?.agendado ? '🚀 Agendado' : '▶ Executar agora'}
-            </button>
           </div>
-          {puppeteerStatus?.erro && <div style={{ fontSize: 12, color: '#ef4444', background: '#fef2f2', padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>⚠️ {puppeteerStatus.erro}</div>}
-          {puppeteerStatus?.agendado && <div style={{ fontSize: 12, color: '#059669', background: '#f0fdf4', padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>✅ {puppeteerStatus.msg}</div>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-            {[
-              { nome: 'Mega Leilões',    volume: '~5–10k', cor: '#0D63DB', desc: 'Imóveis residenciais e comerciais' },
-              { nome: 'Sold Leilões',    volume: '~3–6k',  cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros bancos' },
-              { nome: 'Superbid',        volume: '~8–15k', cor: '#059669', desc: 'Maior marketplace de leilões do Brasil' },
-              { nome: 'Banco do Brasil', volume: '~2–4k',  cor: '#d97706', desc: 'Carteira imobiliária do BB' },
-            ].map(s => (
-              <div key={s.nome} style={{ background: `${s.cor}08`, borderRadius: 12, padding: '14px 16px', border: `1px solid ${s.cor}33` }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>{s.nome}</div>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: `${s.cor}22`, color: s.cor }}>Ativo</span>
+          {/* Scraper Puppeteer status */}
+          {(puppeteerStatus?.erro || puppeteerStatus?.agendado || sysDebug['banco']) && (
+            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '12px 16px', fontSize: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#475569', marginBottom: 6 }}>Puppeteer · cron 07:00 BRT</div>
+              {puppeteerStatus?.erro && <div style={{ color: '#ef4444', marginBottom: 6 }}>⚠️ {puppeteerStatus.erro}</div>}
+              {puppeteerStatus?.agendado && <div style={{ color: '#059669', marginBottom: 6 }}>✅ {puppeteerStatus.msg}</div>}
+              {sysDebug['banco'] && (
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 11, color: sysDebug['banco'].status === 200 ? '#059669' : '#dc2626' }}>
+                    {sysDebug['banco'].status === 200 ? '✅ OK' : `❌ Erro (${sysDebug['banco'].status})`}
+                    <button onClick={() => setSysDebug(s => ({ ...s, banco: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+                  </div>
+                  <textarea readOnly style={{ fontSize: 10, width: '100%', maxHeight: 140, background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace' }} value={JSON.stringify(sysDebug['banco'].body, null, 2)} />
                 </div>
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{s.desc}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: s.cor }}>{s.volume} imóveis/execução</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 14, padding: '10px 12px', background: '#f8fafc', borderRadius: 8 }}>
-            ℹ️ Puppeteer roda via GitHub Actions (IPs Microsoft não bloqueados pelos leiloeiros). Os imóveis são inseridos/atualizados na tabela <code>imoveis_leilao</code> com as coordenadas e dados completos para busca dos clientes.
-          </div>
+              )}
+              <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
+                style={{ marginTop: 8, padding: '5px 12px', borderRadius: 7, background: '#0D63DB', color: 'white', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer' }}>
+                {puppeteerStatus?.rodando ? '⏳' : '▶ Executar Puppeteer agora'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -4061,11 +4632,33 @@ function ScrapersTab() {
         <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🗺️</div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#111' }}>Geocodificação — Nominatim / OSM</div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 00:00–04:20 UTC · cache ~70% · cascade 3 níveis</div>
+              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>● Automático · 24h contínuo · a cada 10min · CEP+Correios → endereço → rua → bairro → cidade</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={() => rodarSysDebug('geocod')} disabled={sysDebugRodando['geocod']}
+                style={{ padding: '5px 10px', borderRadius: 8, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {sysDebugRodando['geocod'] ? '⏳' : '🔍 Diagnóstico'}
+              </button>
+              <button onClick={geocodificarTodos} disabled={geocTodos.rodando}
+                style={{ padding: '7px 14px', borderRadius: 8, background: geocTodos.rodando ? '#f1f5f9' : '#0D63DB', color: geocTodos.rodando ? '#94a3b8' : 'white', border: 'none', cursor: geocTodos.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                {geocTodos.rodando
+                  ? `⏳ ${geocTodos.ufAtual} [${geocTodos.atual}/27] · ${geocTodos.processadosTotal.toLocaleString('pt-BR')} / ${Object.values(geocPendentes).reduce((a, b) => a + b, 0).toLocaleString('pt-BR')} proc`
+                  : '▶ Geocodificar todos'}
+              </button>
             </div>
           </div>
+
+          {sysDebug['geocod'] && (
+            <div style={{ marginBottom: 12, background: sysDebug['geocod'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${sysDebug['geocod'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
+              <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 4, color: sysDebug['geocod'].status === 200 ? '#059669' : '#dc2626' }}>
+                {sysDebug['geocod'].status === 200 ? '✅ Diagnóstico OK' : `❌ Erro (${sysDebug['geocod'].status})`}
+                <button onClick={() => setSysDebug(s => ({ ...s, geocod: null }))} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>
+              </div>
+              <textarea readOnly onClick={e => e.target.select()} style={{ fontSize: 10, color: '#334155', margin: 0, whiteSpace: 'pre', maxHeight: 220, overflow: 'auto', width: '100%', background: 'transparent', border: 'none', resize: 'none', outline: 'none', fontFamily: 'monospace', cursor: 'text' }} value={JSON.stringify(sysDebug['geocod'].body, null, 2)} />
+            </div>
+          )}
 
           {/* Resumo por nível */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
@@ -4081,34 +4674,92 @@ function ScrapersTab() {
             ))}
           </div>
 
-          {/* Grid de estados */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-            {AGENDA_GEOCOD.map(({ uf, hora }) => {
-              const r = geocRegiao[uf] || {};
-              return (
-                <div key={uf} style={{ background: r.processados != null ? '#eff6ff' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${r.processados != null ? '#bfdbfe' : '#e2e8f0'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
-                    <button onClick={() => triggerGeoc(uf)} disabled={r.rodando}
-                      style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
-                      {r.rodando ? '…' : r.processados != null ? '↺' : '▶'}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>{hora} UTC</div>
-                  {r.rodando && <div style={{ fontSize: 9, color: '#0D63DB', fontWeight: 700, marginTop: 2 }}>⏳ Geocodificando...</div>}
-                  {r.processados != null && !r.rodando && (
-                    <div style={{ fontSize: 9, color: r.concluido ? '#059669' : '#0D63DB', fontWeight: 700, marginTop: 2 }}>
-                      {r.concluido ? '✅ Completo' : `📍 ${r.processados} proc · ${r.falhas || 0} falhas`}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <BarraProgresso
+            visivel={geocTodos.rodando || (geocTodos.total > 0 && !geocTodos.rodando)}
+            atual={geocTodos.atual} total={geocTodos.total}
+            label={geocTodos.rodando ? `Geocodificando ${geocTodos.ufAtual}...` : `✅ Concluído — ${geocTodos.processadosTotal} imóveis geocodificados`}
+            sublabel={geocTodos.rodando ? `${geocTodos.processadosTotal.toLocaleString('pt-BR')} / ${Object.values(geocPendentes).reduce((a, b) => a + b, 0).toLocaleString('pt-BR')} processados · 1 req/s Nominatim · não feche esta aba` : 'Atualização do mapa disponível'}
+            cor="#0D63DB"
+          />
+
+          {/* Resumo + toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              {geocTodos.rodando
+                ? <span style={{ color: '#0D63DB', fontWeight: 700 }}>⏳ Processando {geocTodos.ufAtual}... · <b>{geocTodos.processadosTotal.toLocaleString('pt-BR')}</b> / {Object.values(geocPendentes).reduce((a, b) => a + b, 0).toLocaleString('pt-BR')} processados</span>
+                : geocTodos.total > 0
+                  ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ Sessão concluída · {geocTodos.processadosTotal.toLocaleString('pt-BR')} imóveis geocodificados</span>
+                  : <span>Cron 24h · a cada 10min · clique ▶ para forçar um estado agora{geocUltimoRefresh ? ` · atualizado ${geocUltimoRefresh.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>}
+            </div>
+            <button onClick={() => { toggleExpandir('geocod'); if (!estadosExpandidos.geocod && Object.keys(geocPendentes).length === 0) carregarPendentes(); }} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+              {estadosExpandidos.geocod ? '▲ Recolher estados' : '▼ Ver todos os estados (27)'}
+            </button>
           </div>
+
+          {estadosExpandidos.geocod && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {UFS_GEOCOD_ORDEM.map(uf => {
+                const r = geocRegiao[uf] || {};
+                const pendentes = geocPendentes[uf];
+                const temErro = !!r.erro;
+                const temResultado = r.processados != null && !r.rodando;
+                const pctFeito = pendentes > 0 ? Math.min(100, Math.round((r.processados / pendentes) * 100)) : (r.concluido ? 100 : 0);
+                return (
+                  <div key={uf} style={{ background: temErro ? '#fef2f2' : temResultado ? '#eff6ff' : '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${temErro ? '#fecaca' : temResultado ? '#bfdbfe' : '#e2e8f0'}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: '#334155' }}>{uf}</span>
+                      <button onClick={() => triggerGeoc(uf)} disabled={r.rodando}
+                        style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: r.rodando ? '#f1f5f9' : '#eff6ff', color: r.rodando ? '#94a3b8' : '#0D63DB', border: `1px solid ${r.rodando ? '#e2e8f0' : '#bfdbfe'}`, borderRadius: 5, cursor: r.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                        {r.rodando ? '…' : temResultado ? '↺' : '▶'}
+                      </button>
+                    </div>
+                    {/* Pendentes antes de processar */}
+                    {!r.rodando && !temResultado && !temErro && (
+                      <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                        {pendentes != null ? `${pendentes.toLocaleString('pt-BR')} pendentes` : '…'}
+                      </div>
+                    )}
+                    {r.rodando && (
+                      <div style={{ marginTop: 3 }}>
+                        <div style={{ background: '#dbeafe', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: '55%', background: r.aviso ? '#f59e0b' : '#0D63DB', borderRadius: 4, animation: 'pulse 1.2s ease-in-out infinite' }} />
+                        </div>
+                        <div style={{ fontSize: 9, color: r.aviso ? '#d97706' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          {r.aviso
+                            ? `${r.aviso} · ${(r.processados || 0).toLocaleString('pt-BR')} proc`
+                            : `⏳ ${(r.processados || 0).toLocaleString('pt-BR')} proc`}
+                        </div>
+                      </div>
+                    )}
+                    {temResultado && !temErro && (
+                      <div style={{ marginTop: 3 }}>
+                        <div style={{ background: '#e2e8f0', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: r.concluido || pendentes === 0 ? '100%' : `${Math.min(100, pctFeito)}%`, background: (r.concluido || pendentes === 0) ? '#10b981' : '#0D63DB', borderRadius: 4 }} />
+                        </div>
+                        <div style={{ fontSize: 9, color: (r.concluido || pendentes === 0) ? '#059669' : '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          {(r.concluido || pendentes === 0)
+                            ? `✅ fila zerada${r.falhas ? ` · ${r.falhas} falhas` : ''}`
+                            : `📍 ${r.processados.toLocaleString('pt-BR')} proc · ${pendentes != null ? pendentes.toLocaleString('pt-BR') : '?'} restantes${r.falhas ? ` · ${r.falhas} falhas` : ''}`}
+                        </div>
+                      </div>
+                    )}
+                    {temErro && (
+                      <div style={{ fontSize: 9, color: '#dc2626', fontWeight: 700, marginTop: 3 }} title={r.erro}>❌ {r.erro.slice(0, 40)}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
-            Cascade: endereço → bairro → cidade · ▶ força 1 lote por estado manualmente
+            Cascata 5 níveis: CEP+Correios → endereço → rua s/nº → bairro → cidade · cron 24h automático · ▶ processa até zerar
           </div>
         </div>
+      )}
+
+      {/* ═══ ABA PARCEIROS ═══ */}
+      {abaAtiva === 'parceiros' && (
+        <ParceirosLeiloeiroTab parceiros={parceiros} setParceiros={setParceiros} />
       )}
 
       {/* ═══ ABA ROADMAP ═══ */}

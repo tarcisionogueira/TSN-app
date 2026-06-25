@@ -12,7 +12,7 @@
  *   email:       string | null
  *   gatewayCustomerId: string | null   // id do cliente no gateway
  *   gatewayPaymentId:  string          // id único do pagamento no gateway
- *   gateway:     'asaas' | 'pagarme'
+ *   gateway:     'mercadopago' | 'asaas'
  * }
  */
 
@@ -35,8 +35,7 @@ export function mapearPlano(valor, descricao = '') {
   const desc = descricao.toLowerCase();
 
   // Investidor Pro — mensal ou anual parcelado
-  if (dentroFaixa(v, 49.9))  return { plano: 'top2', role: 'top2' };
-  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // anual à vista
+  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // Investidor Pro anual
 
   // Leilão Club — verificar ANTES de assessorado pois ambos têm opção de R$5.000
   if (dentroFaixa(v, 5000) && desc.includes('clube')) return { plano: 'clube', role: 'clube' };
@@ -55,7 +54,7 @@ export function mapearPlano(valor, descricao = '') {
 export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
   // 1. Tenta por ID do gateway no campo correto do perfil
   if (gatewayCustomerId) {
-    const campo = gateway === 'pagarme' ? 'pagarme_id' : 'asaas_id';
+    const campo = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';
     const { data } = await supabase
       .from('perfis')
       .select('id, indicado_por, role, role_anterior, inadimplente_desde')
@@ -91,9 +90,10 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
   const mapeado = mapearPlano(valor, descricao);
 
   // Atualiza perfil: limpa inadimplência, atualiza plano/role
+  const campoId = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';
   const update = {
     inadimplente_desde: null,
-    [`${gateway}_id`]: gatewayCustomerId || undefined,
+    [campoId]: gatewayCustomerId || undefined,
   };
   if (mapeado) {
     update.plano = mapeado.plano;
@@ -134,7 +134,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
           const { data: existente } = await supabase
             .from('comissoes')
             .select('id')
-            .eq('asaas_payment_id', gatewayPaymentId)
+            .eq('gateway_payment_id', gatewayPaymentId)
             .eq('origem', 'assinatura')
             .maybeSingle();
 
@@ -150,7 +150,8 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
               valor_comissao:   valorComissao,
               competencia:      new Date().toISOString().slice(0, 10),
               status:           'pendente',
-              asaas_payment_id: gatewayPaymentId,
+              gateway_payment_id: gatewayPaymentId,
+              gateway,
             });
           }
         }
@@ -168,22 +169,33 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
 export async function processarVencido({ gatewayCustomerId, email, gateway }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente && !cliente.inadimplente_desde) {
-    const ROLES_PAGANTES = ['top1', 'top2', 'assessorado', 'clube', 'top1_anual', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+    const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
     const update = { inadimplente_desde: new Date().toISOString().slice(0, 10) };
     if (ROLES_PAGANTES.includes(cliente.role)) {
       update.role_anterior = cliente.role;
       update.role = 'explorador';
     }
     await supabase.from('perfis').update(update).eq('id', cliente.id);
+    // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
+    await setExpiracaoDocumentos(cliente.id);
   }
   return { ok: true };
+}
+
+async function setExpiracaoDocumentos(userId) {
+  const expira = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  // Só seta em docs que ainda não têm expira_em (não sobrescreve prazo já existente)
+  await supabase.from('usuario_docs')
+    .update({ expira_em: expira })
+    .eq('user_id', userId)
+    .is('expira_em', null);
 }
 
 // ── PAGAMENTO RECUSADO ────────────────────────────────────────────────────────
 export async function processarRecusado({ gatewayCustomerId, email, motivo, gateway }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente) {
-    const ROLES_PAGANTES = ['top1', 'top2', 'assessorado', 'clube', 'top1_anual', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+    const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
     const update = {
       pagamento_erro:      motivo || 'RECUSADO',
       pagamento_erro_data: new Date().toISOString(),
@@ -193,8 +205,12 @@ export async function processarRecusado({ gatewayCustomerId, email, motivo, gate
       update.inadimplente_desde = new Date().toISOString().slice(0, 10);
       update.role_anterior = cliente.role;
       update.role = 'explorador';
+      await supabase.from('perfis').update(update).eq('id', cliente.id);
+      // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
+      await setExpiracaoDocumentos(cliente.id);
+    } else {
+      await supabase.from('perfis').update(update).eq('id', cliente.id);
     }
-    await supabase.from('perfis').update(update).eq('id', cliente.id);
   }
   return { ok: true };
 }

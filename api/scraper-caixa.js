@@ -173,7 +173,12 @@ function csvToImoveis(csv, uf) {
     const estado = cols[1] || uf;
     const cidade = cols[2] || '';
     const bairro = cols[3] || '';
-    const endereco = cols[4] || '';
+    const enderecoRaw = cols[4] || '';
+    // CEP embutido no campo endereco: "..., PLANO DIRETOR SUL - CEP: 77016-366, PALMAS..."
+    const cepMatch = enderecoRaw.match(/CEP[:\s]+(\d{5}-?\d{3})/i);
+    const cep = cepMatch ? cepMatch[1].replace('-', '') : null;
+    // Remove o trecho "- CEP: XXXXX-XXX" do endereco para não poluir a geocodificação
+    const endereco = enderecoRaw.replace(/\s*[-–]\s*CEP[:\s]+\d{5}-?\d{3}/i, '').trim();
     const valorMinimo = parseNumeric(cols[5]);
     const valorAvaliacao = parseNumeric(cols[6]);
     const descontoPct = parseDesconto(cols[7]);
@@ -213,7 +218,8 @@ function csvToImoveis(csv, uf) {
       estado: estado.trim().toUpperCase(),
       cidade: cidade.trim(),
       bairro: bairro.trim(),
-      endereco: endereco.trim(),
+      endereco: endereco,
+      cep: cep || null,
       tipo: inferirTipo(descricao),
       valor_avaliacao: valorAvaliacao,
       valor_minimo: valorMinimo,
@@ -308,8 +314,12 @@ export default async function handler(req, res) {
   // Protege contra chamadas externas não autorizadas.
   // Aceita: (1) CRON_SECRET no header/query, (2) JWT de admin via Authorization.
   const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error('[scraper-caixa] CRON_SECRET não configurado — acesso bloqueado');
+    return res.status(500).json({ error: 'Endpoint não configurado' });
+  }
   if (cronSecret) {
-    const sent = req.headers['x-cron-secret'] || new URL(req.url, 'http://localhost').searchParams.get('secret') || '';
+    const sent = req.headers['x-cron-secret'] || '';
     if (sent !== cronSecret) {
       // Fallback: aceitar JWT de usuário admin (chamada manual pelo painel)
       const authHeader = req.headers['authorization'] || '';
@@ -388,6 +398,22 @@ export default async function handler(req, res) {
 
       const imoveis = csvToImoveis(resultado.csv, uf);
       for (let j = 0; j < imoveis.length; j += 100) await upsertBatch(imoveis.slice(j, j + 100), supabaseUrl, serviceKey);
+
+      // Remove imóveis que saíram da Caixa (vendidos/retirados): deleta registros do estado
+      // que NÃO estão no CSV atual. Usa NOT IN com os fonte_ids do CSV.
+      const idsAtivos = imoveis.map(im => im.fonte_id).filter(Boolean);
+      if (idsAtivos.length > 0) {
+        // PostgREST: DELETE com not.in — limita a 500 ids por segurança (Caixa tem ~30k total)
+        // Divide em chunks de 500 para não estourar URL
+        for (let k = 0; k < Math.ceil(idsAtivos.length / 500); k++) {
+          const chunk = idsAtivos.slice(k * 500, (k + 1) * 500);
+          await fetch(
+            `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&ativo=eq.true&fonte_id=not.in.(${chunk.map(id => `"${id}"`).join(',')})`,
+            { method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' } }
+          ).catch(() => {});
+        }
+      }
+
       return res.status(200).json({ uf, status: 'ok', processados: imoveis.length });
 
     } else {
@@ -409,6 +435,16 @@ export default async function handler(req, res) {
         }).catch(() => {});
         const imoveis = csvToImoveis(resultado.csv, uf);
         for (let j = 0; j < imoveis.length; j += 100) await upsertBatch(imoveis.slice(j, j + 100), supabaseUrl, serviceKey);
+        const idsAtivos = imoveis.map(im => im.fonte_id).filter(Boolean);
+        if (idsAtivos.length > 0) {
+          for (let k = 0; k < Math.ceil(idsAtivos.length / 500); k++) {
+            const chunk = idsAtivos.slice(k * 500, (k + 1) * 500);
+            await fetch(
+              `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&ativo=eq.true&fonte_id=not.in.(${chunk.map(id => `"${id}"`).join(',')})`,
+              { method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Prefer: 'return=minimal' } }
+            ).catch(() => {});
+          }
+        }
         return res.status(200).json({ uf, status: 'retry_ok', processados: imoveis.length, tentativas });
       } else {
         // Retry falhou: incrementa tentativas (admin verá no painel)

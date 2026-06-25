@@ -118,7 +118,7 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'VAPID keys não configuradas' }), { status: 500 });
   }
 
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
 
   let body;
   try { body = await req.json(); } catch {
