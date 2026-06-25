@@ -22,11 +22,16 @@
  */
 
 import { getUser, getUserRoleById } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido — use POST' });
   }
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`calcular-score:${ip}`, 20, 60_000);
+  if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
 
   // ── 1. Autenticação ────────────────────────────────────────────────────────
   const user = await getUser(req);

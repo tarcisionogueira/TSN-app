@@ -181,7 +181,7 @@ export default async function handler(req) {
   const user = await getUser(req);
   if (!user) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
 
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
 
   let body;
   try { body = await req.json(); } catch {

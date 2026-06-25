@@ -7,7 +7,7 @@ export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       },
@@ -69,7 +69,7 @@ export default async function handler(req) {
     status: anthropicRes.status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br',
     },
   });
 }

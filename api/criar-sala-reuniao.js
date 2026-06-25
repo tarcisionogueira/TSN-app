@@ -1,5 +1,6 @@
 export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 const DAILY_API = 'https://api.daily.co/v1';
 const DOMAIN = 'tsn-reunioes';
@@ -7,6 +8,11 @@ const DOMAIN = 'tsn-reunioes';
 export default async function handler(req) {
 
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`criar-sala:${ip}`, 5, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
+
   const user = await getUser(req);
   if (!user) return unauthorized();
   const role = await getUserRoleById(user.id);

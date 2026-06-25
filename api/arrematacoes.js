@@ -6,7 +6,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 const CORS = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br',
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };

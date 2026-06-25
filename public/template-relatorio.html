@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BidPro Brasil — BP-2026-0624-006</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=League+Spartan:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --navy:     #0D3B66;
+  --navy-mid: #0B48A6;
+  --blue:     #1565C0;
+  --blue-lt:  #1976D2;
+  --gold:     #B8962E;
+  --gold-lt:  #D4AF55;
+  --danger:   #C62828;
+  --danger-lt:#FFEBEE;
+  --success:  #2E7D32;
+  --success-lt:#E8F5E9;
+  --warning:  #E65100;
+  --warning-lt:#FFF3E0;
+  --bg:       #F7F9FC;
+  --bg-alt:   #EEF2F7;
+  --border:   #DDE3EE;
+  --text:     #1A1A2E;
+  --text-mid: #4A5568;
+  --text-lt:  #718096;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 8px 40px rgba(13,59,102,.13), 0 2px 8px rgba(0,0,0,.06);
+}
+
+/* ═══════════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════════ */
+.hdr-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 28px 44px 22px;
+  background: #fff;
+  position: relative;
+  /* subtle dot pattern */
+  background-image: radial-gradient(circle, #DDE3EE 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 0 0;
+}
+
+.hdr-top::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,.97) 0%, rgba(247,249,252,.93) 100%);
+  pointer-events: none;
+}
+
+.hdr-top > * { position: relative; z-index: 1; }
+
+.logo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-icon {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(145deg, var(--navy-mid), var(--navy));
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(13,59,102,.35);
+}
+
+.logo-text { font-family: 'League Spartan', sans-serif; line-height: 1; }
+.logo-text .bid { font-size: 28px; font-weight: 900; color: var(--navy-mid); }
+.logo-text .pro { font-size: 28px; font-weight: 900; color: var(--text); }
+.logo-text .brasil {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 3.5px;
+  color: var(--gold);
+  text-transform: uppercase;
+  display: block;
+  border-top: 1px solid var(--gold);
+  padding-top: 3px;
+  margin-top: 3px;
+}
+
+.doc-meta { text-align: right; }
+.doc-num {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: .3px;
+}
+.doc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid var(--gold);
+  color: var(--gold);
+  font-family: 'League Spartan', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  padding: 4px 12px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: rgba(184,150,46,.07);
+}
+.doc-badge::before { content: ''; display: inline-block; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
+.doc-info { font-size: 11px; color: var(--text-lt); margin-top: 5px; }
+
+/* Gold accent line */
+.hdr-accent-line {
+  height: 3px;
+  background: linear-gradient(90deg, var(--navy) 0%, var(--gold) 40%, var(--gold-lt) 60%, transparent 100%);
+}
+
+.hdr-title-bar {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 55%, var(--blue) 100%);
+  padding: 20px 44px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.hdr-title-bar::before {
+  content: '';
+  position: absolute;
+  right: -40px; top: -40px;
+  width: 200px; height: 200px;
+  background: rgba(255,255,255,.04);
+  border-radius: 50%;
+}
+.hdr-title-bar::after {
+  content: '';
+  position: absolute;
+  left: -20px; bottom: -60px;
+  width: 160px; height: 160px;
+  background: rgba(255,255,255,.03);
+  border-radius: 50%;
+}
+.hdr-title-bar h1 {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 19px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 1;
+}
+.hdr-title-bar p {
+  font-size: 12px;
+  color: rgba(255,255,255,.72);
+  margin-top: 4px;
+  position: relative;
+  z-index: 1;
+  letter-spacing: .3px;
+}
+
+.hdr-meta {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-bottom: 3px solid var(--navy);
+}
+.hdr-meta-cell {
+  padding: 16px 18px;
+  border-right: 1px solid var(--border);
+  text-align: center;
+  background: #fff;
+  transition: background .15s;
+}
+.hdr-meta-cell:last-child { border-right: none; }
+.hdr-meta-label {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  display: block;
+  margin-bottom: 6px;
+}
+.hdr-meta-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+.hdr-meta-value small { font-size: 11px; color: var(--text-lt); font-weight: 400; }
+
+/* ═══════════════════════════════════════════════
+   VERDICT BANNER
+═══════════════════════════════════════════════ */
+.hdr-verdict {
+  padding: 14px 44px;
+  background: linear-gradient(90deg, var(--navy), var(--navy-mid) 60%, var(--blue));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.hdr-verdict .badge {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 14.5px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: .3px;
+}
+.hdr-verdict .note {
+  font-size: 11px;
+  color: rgba(255,255,255,.65);
+  margin-left: auto;
+  font-weight: 500;
+  letter-spacing: .5px;
+}
+
+/* ═══════════════════════════════════════════════
+   EXECUTIVE SUMMARY — 3 COLUMNS
+═══════════════════════════════════════════════ */
+.exec-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+.exec-col {
+  padding: 22px 28px;
+  border-right: 1px solid var(--border);
+  text-align: center;
+}
+.exec-col:last-child { border-right: none; }
+.exec-col.aprovado { background: linear-gradient(145deg, #E8F5E9, #F1FAF1); }
+.exec-col.roe { background: linear-gradient(145deg, #E3F2FD, #EBF5FE); }
+.exec-col.risco { background: linear-gradient(145deg, #FFF3E0, #FFF8F1); }
+.exec-label {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: block;
+}
+.exec-col.aprovado .exec-label { color: var(--success); }
+.exec-col.roe .exec-label { color: var(--navy-mid); }
+.exec-col.risco .exec-label { color: var(--warning); }
+.exec-value {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 30px;
+  font-weight: 900;
+  display: block;
+  line-height: 1.1;
+}
+.exec-col.aprovado .exec-value { color: var(--success); }
+.exec-col.roe .exec-value { color: var(--navy); }
+.exec-col.risco .exec-value { color: var(--warning); }
+.exec-sub {
+  font-size: 11.5px;
+  color: var(--text-mid);
+  margin-top: 5px;
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════
+   ALERT BARS
+═══════════════════════════════════════════════ */
+.warn-bar {
+  background: var(--warning-lt);
+  border-left: 4px solid var(--warning);
+  padding: 11px 44px;
+  font-size: 12px;
+  color: #7B3300;
+}
+.warn-bar-red {
+  background: var(--danger-lt);
+  border-left: 4px solid var(--danger);
+  padding: 12px 44px;
+  font-size: 12px;
+  color: #7B0000;
+  line-height: 1.7;
+}
+.warn-bar strong, .warn-bar-red strong { font-weight: 700; }
+
+/* ═══════════════════════════════════════════════
+   SECTIONS
+═══════════════════════════════════════════════ */
+.section {
+  padding: 32px 44px;
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+}
+.section:nth-child(odd) { background: #fff; }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.section-num {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--navy-mid), var(--navy));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'League Spartan', sans-serif;
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 3px 8px rgba(13,59,102,.30);
+}
+
+.section-title {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--navy);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  border-left: 3px solid var(--gold);
+  padding-left: 12px;
+}
+
+/* ═══════════════════════════════════════════════
+   INFO GRID
+═══════════════════════════════════════════════ */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.info-item {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--blue);
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+.info-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+.info-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+/* ═══════════════════════════════════════════════
+   TABLES
+═══════════════════════════════════════════════ */
+.cost-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cost-table th {
+  background: linear-gradient(135deg, var(--navy), var(--navy-mid));
+  color: #fff;
+  font-family: 'League Spartan', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 11px 16px;
+  text-align: left;
+  letter-spacing: .5px;
+}
+.cost-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.cost-table tr:nth-child(even) td { background: var(--bg); }
+.cost-table tr:last-child td { border-bottom: none; }
+.cost-table .total-row td {
+  background: linear-gradient(90deg, var(--navy), var(--navy-mid));
+  color: #fff;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+.cost-table .highlight-row td {
+  background: #E8F0FE;
+  font-weight: 600;
+  color: var(--navy-mid);
+}
+.ta-right { text-align: right !important; }
+.ta-center { text-align: center !important; }
+
+/* ═══════════════════════════════════════════════
+   MARKET COMPARISON — VISUAL CARDS
+═══════════════════════════════════════════════ */
+.market-cards-wrap { margin-bottom: 20px; }
+
+.market-card-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.mkt-card {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  position: relative;
+  overflow: hidden;
+}
+.mkt-card.benchmark {
+  border-color: var(--navy-mid);
+  background: linear-gradient(135deg, #EEF4FF, #E8F0FE);
+}
+.mkt-card-label { font-size: 11px; font-weight: 600; color: var(--text-mid); margin-bottom: 6px; }
+.mkt-card-value {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--navy);
+}
+.mkt-card.benchmark .mkt-card-value { color: var(--blue); }
+.mkt-card-sqm { font-size: 12px; color: var(--text-mid); font-weight: 600; margin-top: 2px; }
+
+/* Horizontal bar */
+.mkt-bar-wrap { margin-top: 10px; }
+.mkt-bar-label { font-size: 10px; color: var(--text-lt); margin-bottom: 3px; font-weight: 500; }
+.mkt-bar-track {
+  height: 6px;
+  background: var(--bg-alt);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.mkt-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--blue-lt), var(--navy-mid));
+  transition: width .3s ease;
+}
+.mkt-card.benchmark .mkt-bar-fill {
+  background: linear-gradient(90deg, var(--gold-lt), var(--gold));
+}
+
+/* ═══════════════════════════════════════════════
+   SCENARIO CARDS
+═══════════════════════════════════════════════ */
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.scenario-card {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0,0,0,.07);
+}
+.scenario-card.priority { border-color: var(--blue); box-shadow: 0 4px 16px rgba(21,101,192,.18); }
+.scenario-card.reprovado { border-color: var(--danger); }
+
+.sc-header { padding: 16px 18px; background: var(--bg); }
+.scenario-card.priority .sc-header { background: linear-gradient(135deg, #E3F2FD, #BBDEFB); }
+.scenario-card.reprovado .sc-header { background: var(--danger-lt); }
+
+.sc-badge {
+  display: inline-block;
+  font-family: 'League Spartan', sans-serif;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: .8px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.badge-priority { background: var(--blue); color: #fff; }
+.badge-ref { background: #718096; color: #fff; }
+.badge-rep { background: var(--danger); color: #fff; }
+
+.sc-name {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--navy);
+}
+.sc-sub { font-size: 11.5px; color: var(--text-mid); margin-top: 3px; }
+.sc-body { padding: 16px 18px; }
+.sc-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--bg-alt);
+  font-size: 12.5px;
+}
+.sc-row:last-child { border-bottom: none; }
+.sc-row .lbl { color: var(--text-mid); }
+.sc-row .val { font-weight: 600; color: var(--text); }
+
+.roe-bar {
+  background: linear-gradient(90deg, var(--navy), var(--navy-mid));
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.roe-bar.red { background: linear-gradient(90deg, var(--danger), #8B0000); }
+.roe-bar.neutral { background: linear-gradient(90deg, #4A5568, #2D3748); }
+.roe-label { font-family: 'League Spartan', sans-serif; font-size: 10px; color: rgba(255,255,255,.75); font-weight: 600; letter-spacing: .5px; }
+.roe-value { font-family: 'League Spartan', sans-serif; font-size: 20px; font-weight: 900; color: #fff; margin-top: 2px; }
+
+/* ═══════════════════════════════════════════════
+   COMPARE TABLE
+═══════════════════════════════════════════════ */
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.compare-table th {
+  background: linear-gradient(135deg, var(--navy), var(--navy-mid));
+  color: #fff;
+  font-family: 'League Spartan', sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  text-align: center;
+  letter-spacing: .5px;
+}
+.compare-table td {
+  padding: 11px 16px;
+  border: 1px solid var(--border);
+  text-align: center;
+  font-size: 12.5px;
+}
+.compare-table .winner { background: var(--success-lt); font-weight: 600; color: #1B5E20; }
+.compare-table .loser { background: var(--danger-lt); color: #B71C1C; }
+
+/* ═══════════════════════════════════════════════
+   RISK MATRIX 2×2
+═══════════════════════════════════════════════ */
+.risk-matrix-wrap { display: grid; grid-template-columns: 24px 1fr 1fr; gap: 4px; margin-top: 6px; }
+.risk-axis-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-lt);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+}
+.risk-axis-y {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+}
+.risk-matrix-header { font-family: 'League Spartan', sans-serif; font-size: 11px; font-weight: 700; color: var(--text-mid); text-align: center; padding: 6px; text-transform: uppercase; letter-spacing: .5px; }
+
+.risk-cell {
+  border-radius: 8px;
+  padding: 14px;
+  min-height: 130px;
+}
+.risk-cell.low-low { background: var(--success-lt); border: 1px solid #A5D6A7; }
+.risk-cell.low-high { background: var(--warning-lt); border: 1px solid #FFCC80; }
+.risk-cell.high-low { background: var(--warning-lt); border: 1px solid #FFCC80; }
+.risk-cell.high-high { background: var(--danger-lt); border: 1px solid #EF9A9A; }
+
+.risk-cell-title {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.low-low .risk-cell-title { color: var(--success); }
+.low-high .risk-cell-title, .high-low .risk-cell-title { color: var(--warning); }
+.high-high .risk-cell-title { color: var(--danger); }
+
+.risk-item {
+  font-size: 11.5px;
+  color: var(--text);
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0,0,0,.07);
+  line-height: 1.4;
+}
+.risk-item:last-child { border-bottom: none; }
+.risk-item strong { font-weight: 600; }
+
+.risk-matrix-legend {
+  grid-column: 2 / 4;
+  display: flex;
+  gap: 20px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-mid);
+}
+.risk-legend-item { display: flex; align-items: center; gap: 6px; }
+.risk-legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* Matrix axis labels row */
+.risk-matrix-header-row { display: contents; }
+
+/* ═══════════════════════════════════════════════
+   RISK LIST (legacy, also used)
+═══════════════════════════════════════════════ */
+.risk-list { list-style: none; padding: 0; }
+.risk-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.risk-list li:last-child { border-bottom: none; }
+.risk-icon {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; flex-shrink: 0; margin-top: 1px;
+}
+.risk-verde { background: var(--success-lt); color: var(--success); }
+.risk-amarelo { background: var(--warning-lt); color: var(--warning); }
+.risk-vermelho { background: var(--danger-lt); color: var(--danger); }
+
+/* ═══════════════════════════════════════════════
+   SIGNATURE BLOCK
+═══════════════════════════════════════════════ */
+.signature-block {
+  margin: 0 44px 32px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.sig-header {
+  background: linear-gradient(135deg, var(--navy), var(--navy-mid));
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sig-header-title {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.sig-header-badge {
+  margin-left: auto;
+  background: var(--gold);
+  color: #fff;
+  font-family: 'League Spartan', sans-serif;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.sig-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  background: #fff;
+}
+.sig-col {
+  padding: 18px 22px;
+  border-right: 1px solid var(--border);
+}
+.sig-col:last-child { border-right: none; }
+.sig-role {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.sig-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 4px;
+  font-family: 'League Spartan', sans-serif;
+}
+.sig-detail { font-size: 11.5px; color: var(--text-mid); line-height: 1.5; }
+.sig-digital-line {
+  grid-column: 1 / 4;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  padding: 10px 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sig-digital-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-lt);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+.sig-digital-hash {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 1.5px;
+  background: rgba(184,150,46,.08);
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(184,150,46,.2);
+}
+.sig-confidential {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-mid);
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════
+   CASH FLOW TABLE
+═══════════════════════════════════════════════ */
+.cashflow-table {
+  width: 100%;
+  border-collapse: collapse;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cashflow-table th {
+  background: linear-gradient(135deg, var(--navy), var(--navy-mid));
+  color: #fff;
+  font-family: 'League Spartan', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 11px 14px;
+  text-align: center;
+  letter-spacing: .5px;
+}
+.cashflow-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  text-align: center;
+}
+.cashflow-table tr:nth-child(even) td { background: var(--bg); }
+.cashflow-table tr:last-child td { border-bottom: none; }
+.cashflow-table .total-row td {
+  background: linear-gradient(90deg, var(--navy), var(--navy-mid));
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+}
+.positive { color: var(--success); font-weight: 600; }
+.negative { color: var(--danger); font-weight: 600; }
+.neutral { color: var(--text-mid); font-weight: 500; }
+
+/* ═══════════════════════════════════════════════
+   LEGAL OPINION
+═══════════════════════════════════════════════ */
+.legal-opinion-box {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.legal-opinion-box p {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+.legal-opinion-box p:last-child { margin-bottom: 0; }
+.legal-opinion-box ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.legal-opinion-box ul li {
+  display: flex;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.legal-opinion-box ul li:last-child { border-bottom: none; }
+.legal-bullet {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; flex-shrink: 0; margin-top: 1px;
+  font-weight: 700;
+}
+.legal-bullet.ok { background: var(--success-lt); color: var(--success); }
+.legal-bullet.warn { background: var(--warning-lt); color: var(--warning); }
+.legal-bullet.bad { background: var(--danger-lt); color: var(--danger); }
+.legal-bullet.info { background: #E3F2FD; color: var(--blue); }
+
+/* ═══════════════════════════════════════════════
+   DOCUMENT CHECKLIST
+═══════════════════════════════════════════════ */
+.doc-checklist {
+  width: 100%;
+  border-collapse: collapse;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.doc-checklist th {
+  background: linear-gradient(135deg, var(--navy), var(--navy-mid));
+  color: #fff;
+  font-family: 'League Spartan', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 11px 16px;
+  text-align: left;
+  letter-spacing: .5px;
+}
+.doc-checklist td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.doc-checklist tr:nth-child(even) td { background: var(--bg); }
+.doc-checklist tr:last-child td { border-bottom: none; }
+.status-ok { color: var(--success); font-weight: 700; }
+.status-warn { color: var(--warning); font-weight: 700; }
+.status-bad { color: var(--danger); font-weight: 700; }
+
+/* ═══════════════════════════════════════════════
+   FOOTER
+═══════════════════════════════════════════════ */
+.footer {
+  background: linear-gradient(135deg, var(--navy), var(--navy-mid));
+  padding: 18px 44px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.footer-left {
+  font-family: 'League Spartan', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: .3px;
+}
+.footer-left span { color: var(--gold-lt); }
+.footer-right { font-size: 11.5px; color: rgba(255,255,255,.7); text-align: right; line-height: 1.6; }
+.footer-disclaimer {
+  font-size: 10.5px;
+  color: rgba(255,255,255,.55);
+  text-align: center;
+  padding: 10px 44px;
+  background: #0D1F3C;
+  line-height: 1.55;
+}
+
+/* ═══════════════════════════════════════════════
+   TYPE VISIBILITY SYSTEM
+═══════════════════════════════════════════════ */
+
+/* Default: show all sections */
+.section-mercadologico,
+.section-financeiro,
+.section-fluxo,
+.section-documental,
+.section-juridico { display: block; }
+
+/* tipo-mercadologico: sections 1, 3, market deep-dive, rec */
+body.tipo-mercadologico .section-financeiro { display: none; }
+body.tipo-mercadologico .section-fluxo { display: none; }
+body.tipo-mercadologico .section-juridico { display: none; }
+body.tipo-mercadologico .section-documental { display: none; }
+
+/* tipo-financeiro: sections 1, 2, 4, 5 */
+body.tipo-financeiro .section-mercadologico { display: none; }
+body.tipo-financeiro .section-fluxo { display: none; }
+body.tipo-financeiro .section-juridico { display: none; }
+body.tipo-financeiro .section-documental { display: none; }
+
+/* tipo-fluxo: sections 1, 2, monthly cash flow */
+body.tipo-fluxo .section-mercadologico { display: none; }
+body.tipo-fluxo .section-financeiro { display: none; }
+body.tipo-fluxo .section-juridico { display: none; }
+body.tipo-fluxo .section-documental { display: none; }
+
+/* tipo-documental: sections 1, 6, extended doc checklist */
+body.tipo-documental .section-mercadologico { display: none; }
+body.tipo-documental .section-financeiro { display: none; }
+body.tipo-documental .section-fluxo { display: none; }
+body.tipo-documental .section-juridico { display: none; }
+
+/* tipo-juridico: sections 1, 6, legal opinion, case timeline */
+body.tipo-juridico .section-mercadologico { display: none; }
+body.tipo-juridico .section-financeiro { display: none; }
+body.tipo-juridico .section-fluxo { display: none; }
+body.tipo-juridico .section-documental { display: none; }
+
+/* ═══════════════════════════════════════════════
+   PRINT OPTIMIZATION
+═══════════════════════════════════════════════ */
+@page {
+  size: A4 portrait;
+  margin: 12mm 10mm;
+  @bottom-right {
+    content: "Página " counter(page) " de " counter(pages);
+    font-size: 9pt;
+    color: #666;
+  }
+}
+
+@media print {
+  body { background: #fff; font-size: 11px; }
+  .page { box-shadow: none; max-width: 100%; }
+  .section { page-break-inside: avoid; }
+  .scenario-grid { page-break-inside: avoid; }
+  .exec-summary { page-break-inside: avoid; }
+  .signature-block { page-break-inside: avoid; }
+  .hdr-top { page-break-after: avoid; }
+  .hdr-title-bar { page-break-after: avoid; }
+  .hdr-meta { page-break-after: avoid; }
+  .hdr-verdict { page-break-after: avoid; }
+  .warn-bar-red { page-break-after: avoid; }
+
+  /* Page counter */
+  body { counter-reset: page; }
+  .footer::after {
+    counter-increment: page;
+    content: "Pág. " counter(page);
+    color: rgba(255,255,255,.6);
+    font-size: 10px;
+  }
+
+  /* Print-safe colors */
+  .hdr-title-bar,
+  .hdr-verdict,
+  .cost-table th,
+  .compare-table th,
+  .cashflow-table th,
+  .doc-checklist th,
+  .footer { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+@media screen and (max-width: 900px) {
+  .hdr-meta { grid-template-columns: repeat(2, 1fr); }
+  .info-grid { grid-template-columns: repeat(2, 1fr); }
+  .scenario-grid { grid-template-columns: 1fr; }
+  .exec-summary { grid-template-columns: 1fr; }
+  .market-card-row { grid-template-columns: 1fr; }
+  .sig-body { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body class="tipo-completo">
+<div class="page">
+
+<!-- ═══════ HEADER ═══════ -->
+<div class="hdr-top">
+  <div class="logo-wrap">
+    <div class="logo-icon">
+      <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
+        <rect x="4" y="4" width="13" height="21" rx="2.5" fill="white"/>
+        <rect x="21" y="13" width="13" height="21" rx="2.5" fill="white"/>
+        <rect x="4" y="27" width="30" height="4" rx="2" fill="rgba(255,255,255,0.45)"/>
+      </svg>
+    </div>
+    <div class="logo-text">
+      <span><span class="bid">Bid</span><span class="pro">Pro</span></span>
+      <span class="brasil">Brasil</span>
+    </div>
+  </div>
+  <div class="doc-meta">
+    <div class="doc-num">Documento Nº BP-2026-0624-006</div>
+    <div class="doc-badge">CONFIDENCIAL</div>
+    <div class="doc-info">Emitido em 24/06/2026 &nbsp;·&nbsp; Autor: Nogueira Empreendimentos</div>
+  </div>
+</div>
+
+<div class="hdr-accent-line"></div>
+
+<div class="hdr-title-bar">
+  <h1>Relatório de Análise de Viabilidade de Arrematação</h1>
+  <p>Inteligência de Leilões &nbsp;·&nbsp; Nogueira Empreendimentos &nbsp;·&nbsp; Uso Interno e Estratégico</p>
+</div>
+
+<div class="hdr-meta">
+  <div class="hdr-meta-cell">
+    <span class="hdr-meta-label">Bem Objeto</span>
+    <span class="hdr-meta-value">Apto. 602 — 234,23m² AP<br>Edif. Prof. Telmo Ribeiro</span>
+  </div>
+  <div class="hdr-meta-cell">
+    <span class="hdr-meta-label">Endereço</span>
+    <span class="hdr-meta-value">R. Heitor Luz, 165 — Centro<br>Florianópolis/SC</span>
+  </div>
+  <div class="hdr-meta-cell">
+    <span class="hdr-meta-label">Valor Avaliação</span>
+    <span class="hdr-meta-value">R$ 3.255.000</span>
+  </div>
+  <div class="hdr-meta-cell">
+    <span class="hdr-meta-label">2º Leilão (60%)</span>
+    <span class="hdr-meta-value">R$ 1.953.000<br><small>Mazzolli Leilões</small></span>
+  </div>
+  <div class="hdr-meta-cell">
+    <span class="hdr-meta-label">1º Leilão em</span>
+    <span class="hdr-meta-value">29/07/2026<br><small>15:30h</small></span>
+  </div>
+</div>
+
+<div class="hdr-verdict">
+  <div class="badge">✅ OPERAÇÃO APROVADA — PARCELADO JUDICIAL: ROE 75,9% CONSERVADOR — ⚠️ VERIFICAR ÔNUS</div>
+  <div class="note">CONFIDENCIAL · Nogueira Empreendimentos</div>
+</div>
+
+<!-- ═══════ EXECUTIVE SUMMARY ═══════ -->
+<div class="exec-summary">
+  <div class="exec-col aprovado">
+    <span class="exec-label">Veredicto Final</span>
+    <span class="exec-value">APROVADO</span>
+    <div class="exec-sub">Via Parcelado Judicial (Art. 895 CPC)</div>
+  </div>
+  <div class="exec-col roe">
+    <span class="exec-label">ROE Recomendado</span>
+    <span class="exec-value">75,9%</span>
+    <div class="exec-sub">Conservador · 141,1% Otimista</div>
+  </div>
+  <div class="exec-col risco">
+    <span class="exec-label">Risco Global</span>
+    <span class="exec-value">MÉDIO-ALTO</span>
+    <div class="exec-sub">Múltiplos ônus — due diligence obrigatória</div>
+  </div>
+</div>
+
+<!-- ALERT BARS -->
+<div class="warn-bar-red">
+  🚨 <strong>ATENÇÃO — MÚLTIPLOS ÔNUS NA MATRÍCULA:</strong> (R-2) Hipoteca em favor da Caixa Econômica Federal; (AV-7) Ação trabalhista — Vara do Trabalho Florianópolis; (AV-9) Indisponibilidade de bens; (AV-10) Penhora trabalhista — Vara do Trabalho Palhoça; (AV-12) Penhora trabalhista — Vara do Trabalho Palhoça; (AV-16) Indisponibilidade — 2ª Vara do Trabalho São José; (AV-17) Penhora neste processo. Débito de condomínio: <strong>R$133.515,63 (15/06/2026)</strong>. Imóvel ocupado. Recomenda-se análise jurídica completa antes de participar.
+</div>
+
+<!-- ═══════ SEÇÃO 1 — IDENTIFICAÇÃO ═══════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">1</div>
+    <div class="section-title">Identificação do Bem e do Processo</div>
+  </div>
+  <div class="info-grid">
+    <div class="info-item"><div class="info-label">Processo</div><div class="info-value">5035031-78.2023.8.24.0023</div></div>
+    <div class="info-item"><div class="info-label">Vara</div><div class="info-value">1º Juízo — Vara de Cumprimentos de Sentença e Execuções Extrajudiciais — Florianópolis/SC</div></div>
+    <div class="info-item"><div class="info-label">Tipo</div><div class="info-value">Execução de Título Extrajudicial</div></div>
+    <div class="info-item"><div class="info-label">Exequente</div><div class="info-value">Condomínio do Edifício Professor Telmo Ribeiro</div></div>
+    <div class="info-item"><div class="info-label">Executados</div><div class="info-value">Célio de Souza e Sônia Maria Pereira de Souza</div></div>
+    <div class="info-item"><div class="info-label">Magistrada</div><div class="info-value">Nadia Inês Schmidt</div></div>
+    <div class="info-item"><div class="info-label">Área Privativa</div><div class="info-value">234,230 m² (Apto 602 — 6º pavimento)</div></div>
+    <div class="info-item"><div class="info-label">Área Comum</div><div class="info-value">35,617 m² (inclui 2 vagas garagem)</div></div>
+    <div class="info-item"><div class="info-label">Matrícula</div><div class="info-value">31.500 — 1º Ofício de RI de Florianópolis/SC</div></div>
+    <div class="info-item"><div class="info-label">Avaliação Judicial</div><div class="info-value">R$ 3.255.000</div></div>
+    <div class="info-item"><div class="info-label">2º Leilão (60%)</div><div class="info-value">R$ 1.953.000</div></div>
+    <div class="info-item"><div class="info-label">Débito Cond. (jun/2026)</div><div class="info-value">R$ 133.515,63 (sub-rogado no preço)</div></div>
+  </div>
+</div>
+
+<!-- ═══════ SEÇÃO 2 — CUSTOS ═══════ -->
+<div class="section section-financeiro section-fluxo">
+  <div class="section-header">
+    <div class="section-num">2</div>
+    <div class="section-title">Estrutura de Custos de Aquisição</div>
+  </div>
+  <table class="cost-table">
+    <thead><tr><th>Item</th><th>Base</th><th>%</th><th class="ta-right">Valor</th></tr></thead>
+    <tbody>
+      <tr><td>Valor de Arrematação (2º Leilão — 60%)</td><td>—</td><td>—</td><td class="ta-right">R$ 1.953.000</td></tr>
+      <tr class="highlight-row"><td>Honorários Jurídicos — Nogueira Empreendimentos</td><td>Arrematação</td><td>10,0%</td><td class="ta-right">R$ 195.300</td></tr>
+      <tr><td>Comissão do Leiloeiro</td><td>Arrematação</td><td>5,0%</td><td class="ta-right">R$ 97.650</td></tr>
+      <tr><td>Taxas de Registro / Cartório (ITBI + Registro)</td><td>Arrematação</td><td>6,0%</td><td class="ta-right">R$ 117.180</td></tr>
+      <tr class="total-row"><td colspan="3"><strong>CUSTO TOTAL DE AQUISIÇÃO</strong></td><td class="ta-right"><strong>R$ 2.363.130</strong></td></tr>
+      <tr class="highlight-row"><td>Sinal (Art. 895 CPC — 25%)</td><td>Arrematação</td><td>25,0%</td><td class="ta-right">R$ 488.250</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════ SEÇÃO 3 — MERCADO ═══════ -->
+<div class="section section-mercadologico">
+  <div class="section-header">
+    <div class="section-num">3</div>
+    <div class="section-title">Pesquisa de Mercado — Referências por m²</div>
+  </div>
+  <p style="font-size:12px;color:var(--text-mid);margin-bottom:14px">Fonte: OLX — Apartamentos à venda na Rua Heitor Luz e Centro de Florianópolis/SC — Jun/2026. Benchmark interno fixado em R$13.000/m² (conservador).</p>
+
+  <div class="market-cards-wrap">
+    <div class="market-card-row">
+      <div class="mkt-card">
+        <div class="mkt-card-label">Apto. R. Heitor Luz — 167m² · 3 dorms</div>
+        <div class="mkt-card-value">R$ 2.780.000</div>
+        <div class="mkt-card-sqm">R$ 16.647/m² &nbsp;·&nbsp; OLX Jun/2026</div>
+        <div class="mkt-bar-wrap">
+          <div class="mkt-bar-label">Relação ao benchmark (R$13.000/m²)</div>
+          <div class="mkt-bar-track"><div class="mkt-bar-fill" style="width:75%"></div></div>
+        </div>
+      </div>
+      <div class="mkt-card">
+        <div class="mkt-card-label">Apto. Centro FLN — 170m² · 5 dorms</div>
+        <div class="mkt-card-value">R$ 2.770.000</div>
+        <div class="mkt-card-sqm">R$ 16.294/m² &nbsp;·&nbsp; OLX Jun/2026</div>
+        <div class="mkt-bar-wrap">
+          <div class="mkt-bar-label">Relação ao benchmark</div>
+          <div class="mkt-bar-track"><div class="mkt-bar-fill" style="width:73%"></div></div>
+        </div>
+      </div>
+      <div class="mkt-card">
+        <div class="mkt-card-label">Apto. Centro — Parque da Luz — 160m²</div>
+        <div class="mkt-card-value">R$ 4.450.000</div>
+        <div class="mkt-card-sqm">R$ 27.813/m² &nbsp;·&nbsp; Premium</div>
+        <div class="mkt-bar-wrap">
+          <div class="mkt-bar-label">Relação ao benchmark</div>
+          <div class="mkt-bar-track"><div class="mkt-bar-fill" style="width:100%"></div></div>
+        </div>
+      </div>
+      <div class="mkt-card benchmark">
+        <div class="mkt-card-label">VM Conservador Adotado — 234m²</div>
+        <div class="mkt-card-value">R$ 3.044.990</div>
+        <div class="mkt-card-sqm">R$ 13.000/m² · Área Privativa · Base de cálculo</div>
+        <div class="mkt-bar-wrap">
+          <div class="mkt-bar-label">Benchmark interno (100%)</div>
+          <div class="mkt-bar-track"><div class="mkt-bar-fill" style="width:58%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <table class="cost-table" style="margin-top:4px">
+    <thead><tr><th>Referência</th><th class="ta-center">Área</th><th class="ta-center">Valor</th><th class="ta-center">R$/m²</th></tr></thead>
+    <tbody>
+      <tr><td>Apto. Rua Heitor Luz — Centro FLN</td><td class="ta-center">167m²</td><td class="ta-center">R$ 2.780.000</td><td class="ta-center">R$ 16.647</td></tr>
+      <tr><td>Cobertura Rua Heitor Luz — Centro FLN</td><td class="ta-center">384m²</td><td class="ta-center">R$ 3.350.000</td><td class="ta-center">R$ 8.724</td></tr>
+      <tr><td>Apto. Centro 5 dorms — 170m²</td><td class="ta-center">170m²</td><td class="ta-center">R$ 2.770.000</td><td class="ta-center">R$ 16.294</td></tr>
+      <tr><td>Apto. Centro — Parque da Luz — 160m²</td><td class="ta-center">160m²</td><td class="ta-center">R$ 4.450.000</td><td class="ta-center">R$ 27.813</td></tr>
+      <tr><td>Apto. Centro — 3 dorms — 143m²</td><td class="ta-center">143m²</td><td class="ta-center">R$ 2.500.000</td><td class="ta-center">R$ 17.483</td></tr>
+      <tr class="highlight-row"><td><strong>VM Conservador Adotado (objeto)</strong></td><td class="ta-center"><strong>234m²</strong></td><td class="ta-center"><strong>R$ 3.044.990</strong></td><td class="ta-center"><strong>R$ 13.000</strong></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════ SEÇÃO 4 — CENÁRIOS ═══════ -->
+<div class="section section-financeiro">
+  <div class="section-header">
+    <div class="section-num">4</div>
+    <div class="section-title">Análise por Cenário de Aquisição</div>
+  </div>
+  <div class="scenario-grid">
+    <!-- Prioridade -->
+    <div class="scenario-card priority">
+      <div class="sc-header">
+        <span class="sc-badge badge-priority">⭐ PRIORIDADE</span>
+        <div class="sc-name">Parcelado Judicial</div>
+        <div class="sc-sub">Art. 895 CPC &nbsp;·&nbsp; 30 parcelas</div>
+      </div>
+      <div class="sc-body">
+        <div class="sc-row"><span class="lbl">Sinal (25%)</span><span class="val">R$ 488.250</span></div>
+        <div class="sc-row"><span class="lbl">Saldo (75% em 30x)</span><span class="val">R$ 1.464.750</span></div>
+        <div class="sc-row"><span class="lbl">Parcela Mensal est.</span><span class="val">R$ 48.825</span></div>
+        <div class="sc-row"><span class="lbl">Capital Próprio</span><span class="val" style="color:var(--blue);font-weight:700">R$ 898.380</span></div>
+        <div class="sc-row"><span class="lbl">Lucro Conservador</span><span class="val" style="color:var(--success)">R$ 681.860</span></div>
+        <div class="sc-row"><span class="lbl">Lucro Otimista</span><span class="val" style="color:var(--success)">R$ 1.267.435</span></div>
+        <div class="roe-bar">
+          <div><div class="roe-label">ROE Conservador</div><div class="roe-value">75,9%</div></div>
+          <div style="text-align:right"><div class="roe-label">ROE Otimista</div><div class="roe-value">141,1%</div></div>
+        </div>
+      </div>
+    </div>
+    <!-- Reprovado -->
+    <div class="scenario-card reprovado">
+      <div class="sc-header">
+        <span class="sc-badge badge-rep">❌ REPROVADO</span>
+        <div class="sc-name">Financiamento Bancário</div>
+        <div class="sc-sub">15 anos &nbsp;·&nbsp; 12% a.a.</div>
+      </div>
+      <div class="sc-body">
+        <div class="sc-row"><span class="lbl">PMT Mensal (180x)</span><span class="val">R$ 17.579</span></div>
+        <div class="sc-row"><span class="lbl">Total Financiamento</span><span class="val">R$ 3.164.303</span></div>
+        <div class="sc-row"><span class="lbl">Capital Próprio</span><span class="val">R$ 898.380</span></div>
+        <div class="sc-row"><span class="lbl">Lucro Conservador</span><span class="val" style="color:var(--danger)">-R$ 1.017.693</span></div>
+        <div class="sc-row"><span class="lbl">Lucro Otimista</span><span class="val" style="color:var(--danger)">-R$ 432.118</span></div>
+        <div class="roe-bar red">
+          <div><div class="roe-label">ROE Conservador</div><div class="roe-value">-113,3%</div></div>
+          <div style="text-align:right"><div class="roe-label">ROE Otimista</div><div class="roe-value">-48,1%</div></div>
+        </div>
+      </div>
+    </div>
+    <!-- Não prioritário -->
+    <div class="scenario-card">
+      <div class="sc-header">
+        <span class="sc-badge badge-ref">NÃO PRIORITÁRIO</span>
+        <div class="sc-name">À Vista</div>
+        <div class="sc-sub">Referência apenas</div>
+      </div>
+      <div class="sc-body">
+        <div class="sc-row"><span class="lbl">Total a Pagar</span><span class="val">R$ 2.363.130</span></div>
+        <div class="sc-row"><span class="lbl">Capital Próprio</span><span class="val">R$ 2.363.130</span></div>
+        <div class="sc-row"><span class="lbl">Lucro Conservador</span><span class="val" style="color:var(--success)">R$ 681.860</span></div>
+        <div class="sc-row"><span class="lbl">Lucro Otimista</span><span class="val" style="color:var(--success)">R$ 1.267.435</span></div>
+        <div class="sc-row"><span class="lbl">Alavancagem</span><span class="val neutral">Nenhuma</span></div>
+        <div class="roe-bar neutral">
+          <div><div class="roe-label">ROE Conservador</div><div class="roe-value">28,9%</div></div>
+          <div style="text-align:right"><div class="roe-label">ROE Otimista</div><div class="roe-value">53,6%</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ SEÇÃO 5 — COMPARATIVO ═══════ -->
+<div class="section section-financeiro">
+  <div class="section-header">
+    <div class="section-num">5</div>
+    <div class="section-title">Quadro Comparativo — Síntese</div>
+  </div>
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>Cenário</th>
+        <th>Capital Próprio</th>
+        <th>VM Conservador</th>
+        <th>Lucro Cons.</th>
+        <th>ROE Conserv.</th>
+        <th>ROE Otimista</th>
+        <th>Resultado</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="winner">
+        <td><strong>⭐ Parcelado Judicial 30x</strong></td>
+        <td>R$ 898.380</td>
+        <td>R$ 3.044.990</td>
+        <td>R$ 681.860</td>
+        <td>75,9%</td>
+        <td>141,1%</td>
+        <td><strong>✅ APROVADO</strong></td>
+      </tr>
+      <tr class="loser">
+        <td>Financiamento Bancário 15a</td>
+        <td>R$ 898.380</td>
+        <td>R$ 3.044.990</td>
+        <td>-R$ 1.017.693</td>
+        <td>-113,3%</td>
+        <td>-48,1%</td>
+        <td>❌ REPROVADO</td>
+      </tr>
+      <tr>
+        <td>À Vista (não prioritário)</td>
+        <td>R$ 2.363.130</td>
+        <td>R$ 3.044.990</td>
+        <td>R$ 681.860</td>
+        <td>28,9%</td>
+        <td>53,6%</td>
+        <td>⚠️ LIMÍTROFE</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════ SEÇÃO 6 — RISCOS & DOCUMENTOS ═══════ -->
+<div class="section section-documental section-juridico">
+  <div class="section-header">
+    <div class="section-num">6</div>
+    <div class="section-title">Aspectos Documentais e Riscos Relevantes</div>
+  </div>
+
+  <!-- RISK MATRIX 2×2 -->
+  <p style="font-size:12px;color:var(--text-mid);margin-bottom:14px;font-weight:500">Matriz de Riscos — Impacto × Probabilidade</p>
+
+  <div style="display:grid;grid-template-columns:36px 1fr 1fr;gap:6px;margin-bottom:20px">
+    <!-- Axis Y label -->
+    <div style="grid-column:1;grid-row:1/4;display:flex;align-items:center;justify-content:center;">
+      <span style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:var(--text-lt);text-transform:uppercase;letter-spacing:1px">IMPACTO</span>
+    </div>
+    <!-- Column headers -->
+    <div style="background:var(--bg);border-radius:6px;padding:8px;text-align:center;font-family:'League Spartan',sans-serif;font-size:11px;font-weight:700;color:var(--text-mid);text-transform:uppercase;letter-spacing:.5px">Baixa Probabilidade</div>
+    <div style="background:var(--bg);border-radius:6px;padding:8px;text-align:center;font-family:'League Spartan',sans-serif;font-size:11px;font-weight:700;color:var(--text-mid);text-transform:uppercase;letter-spacing:.5px">Alta Probabilidade</div>
+    <!-- HIGH IMPACT row -->
+    <div class="risk-cell high-low">
+      <div class="risk-cell-title">⚠️ Alto Impacto · Baixa Prob.</div>
+      <div class="risk-item"><strong>Hipoteca CEF (R-2):</strong> Pode sobreviver à arrematação se não paga pelo produto do leilão.</div>
+      <div class="risk-item"><strong>Indisponibilidades:</strong> AV-9 e AV-16 podem suspender a lavratura da carta.</div>
+    </div>
+    <div class="risk-cell high-high">
+      <div class="risk-cell-title">🚨 Alto Impacto · Alta Prob.</div>
+      <div class="risk-item"><strong>Penhoras trabalhistas:</strong> AV-7, AV-10, AV-12, AV-16 — natureza alimentar, não sub-rogáveis.</div>
+      <div class="risk-item"><strong>Débito condominial R$133k:</strong> Alta chance de permanecer; prever no fluxo de caixa.</div>
+    </div>
+    <!-- LOW IMPACT row -->
+    <div class="risk-cell low-low">
+      <div class="risk-cell-title">✅ Baixo Impacto · Baixa Prob.</div>
+      <div class="risk-item"><strong>Cancelamento do leilão:</strong> Possível, porém histórico indica progresso processual.</div>
+      <div class="risk-item"><strong>Desvalorização de mercado:</strong> Centro FLN tem demanda consistente.</div>
+    </div>
+    <div class="risk-cell low-high">
+      <div class="risk-cell-title">⚠️ Baixo Impacto · Alta Prob.</div>
+      <div class="risk-item"><strong>Imóvel ocupado:</strong> Ação de imissão na posse necessária; prazo 3–9 meses.</div>
+      <div class="risk-item"><strong>Parcelamento desconsiderado:</strong> Se aparecer lance à vista no pregão.</div>
+    </div>
+  </div>
+
+  <!-- RISK LIST DETAILS -->
+  <ul class="risk-list">
+    <li><div class="risk-icon risk-vermelho">🚨</div><div><strong>HIPOTECA CEF (R-2):</strong> Hipoteca registrada em favor da Caixa Econômica Federal. Necessário verificar se será quitada com o produto da arrematação ou se permanece como ônus. Contato com a CEF deve ser feito antes do leilão.</div></li>
+    <li><div class="risk-icon risk-vermelho">🚨</div><div><strong>MÚLTIPLAS PENHORAS TRABALHISTAS:</strong> AV-10 (7ª Vara do Trabalho FLN), AV-12 (Vara do Trabalho Palhoça), AV-16 (2ª Vara do Trabalho São José). Débitos trabalhistas têm natureza alimentar — podem não ser sub-rogados no preço e permanecer como responsabilidade do arrematante.</div></li>
+    <li><div class="risk-icon risk-vermelho">⚠</div><div><strong>INDISPONIBILIDADE (AV-9 e AV-16):</strong> Duas determinações de indisponibilidade de bens. Verificar se já foram levantadas antes de arrematar.</div></li>
+    <li><div class="risk-icon risk-vermelho">⚠</div><div><strong>DÉBITO CONDOMINIAL:</strong> R$133.515,63 (15/06/2026). Pela natureza propter rem, este débito pode ser sub-rogado no preço da arrematação — verificar disposição do edital.</div></li>
+    <li><div class="risk-icon risk-amarelo">⚠</div><div><strong>IMÓVEL OCUPADO:</strong> Edital indica imóvel ocupado. Prever ação de imissão na posse e eventuais custos e prazos adicionais para desocupação.</div></li>
+    <li><div class="risk-icon risk-amarelo">⚠</div><div><strong>PARCELAMENTO JUDICIAL (Art. 895 CPC):</strong> Proposta parcelada deve ser enviada ao leiloeiro antes das 15h29 do dia do pregão. Se houver lance à vista, a proposta parcelada é desconsiderada.</div></li>
+    <li><div class="risk-icon risk-verde">✓</div><div><strong>LOCALIZAÇÃO CENTRAL VALORIZADA:</strong> Rua Heitor Luz / Centro de Florianópolis é endereço consolidado com boa liquidez. Imóvel de 234m² com 2 vagas no 6º andar possui alto potencial de valorização após regularização da situação jurídica.</div></li>
+    <li><div class="risk-icon risk-amarelo">⚠</div><div><strong>RECOMENDAÇÃO:</strong> Imóvel aprovado financeiramente apenas via Parcelado Judicial. Dado o volume de ônus, recomenda-se análise jurídica especializada (due diligence completa das matrículas e processos) antes de formular proposta.</div></li>
+  </ul>
+</div>
+
+<!-- ═══════ SEÇÃO 7 — FLUXO DE CAIXA ═══════ -->
+<div class="section section-fluxo">
+  <div class="section-header">
+    <div class="section-num">7</div>
+    <div class="section-title">Fluxo de Caixa Projetado — 12 Meses</div>
+  </div>
+  <p style="font-size:12px;color:var(--text-mid);margin-bottom:14px">Cenário: Parcelado Judicial (Art. 895 CPC). Sinal pago no mês 0. Regularização jurídica concluída no mês 4. Imissão na posse no mês 6. Revenda estimada no mês 12.</p>
+  <table class="cashflow-table">
+    <thead>
+      <tr>
+        <th>Mês</th>
+        <th>Evento</th>
+        <th class="ta-right">Entradas</th>
+        <th class="ta-right">Saídas</th>
+        <th class="ta-right">Saldo Mensal</th>
+        <th class="ta-right">Saldo Acumulado</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="ta-center"><strong>M0</strong></td>
+        <td>Arrematação — Sinal 25%</td>
+        <td class="ta-right positive">—</td>
+        <td class="ta-right negative">-R$ 898.380</td>
+        <td class="ta-right negative">-R$ 898.380</td>
+        <td class="ta-right negative">-R$ 898.380</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M1</strong></td>
+        <td>Parcela judicial + Custo jurídico</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 58.825</td>
+        <td class="ta-right negative">-R$ 58.825</td>
+        <td class="ta-right negative">-R$ 957.205</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M2</strong></td>
+        <td>Parcela judicial + Due diligence</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 53.825</td>
+        <td class="ta-right negative">-R$ 53.825</td>
+        <td class="ta-right negative">-R$ 1.011.030</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M3</strong></td>
+        <td>Parcela judicial</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 1.059.855</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M4</strong></td>
+        <td>Parcela judicial — Carta de Arrematação emitida</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 1.108.680</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M5</strong></td>
+        <td>Parcela judicial + Registro cartório</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 66.005</td>
+        <td class="ta-right negative">-R$ 66.005</td>
+        <td class="ta-right negative">-R$ 1.174.685</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M6</strong></td>
+        <td>Parcela judicial — Imissão na posse concluída</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 58.825</td>
+        <td class="ta-right negative">-R$ 58.825</td>
+        <td class="ta-right negative">-R$ 1.233.510</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M7</strong></td>
+        <td>Parcela judicial + Início reformas/homologação</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 1.282.335</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M8</strong></td>
+        <td>Parcela judicial + Marketing imobiliário</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 51.825</td>
+        <td class="ta-right negative">-R$ 51.825</td>
+        <td class="ta-right negative">-R$ 1.334.160</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M9</strong></td>
+        <td>Parcela judicial — Negociação em andamento</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 1.382.985</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M10</strong></td>
+        <td>Parcela judicial — Proposta aceita</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 1.431.810</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M11</strong></td>
+        <td>Parcela judicial — Escritura em processo</td>
+        <td class="ta-right">—</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 48.825</td>
+        <td class="ta-right negative">-R$ 1.480.635</td>
+      </tr>
+      <tr>
+        <td class="ta-center"><strong>M12</strong></td>
+        <td>Recebimento da venda (VM Conservador)</td>
+        <td class="ta-right positive">+R$ 3.044.990</td>
+        <td class="ta-right negative">-R$ 91.350</td>
+        <td class="ta-right positive">+R$ 2.953.640</td>
+        <td class="ta-right positive">+R$ 1.473.005</td>
+      </tr>
+      <tr class="total-row">
+        <td colspan="2" class="ta-right"><strong>RESULTADO FINAL (12 MESES)</strong></td>
+        <td class="ta-right"><strong>R$ 3.044.990</strong></td>
+        <td class="ta-right"><strong>-R$ 1.571.985</strong></td>
+        <td colspan="2" class="ta-right"><strong>LUCRO LÍQUIDO: R$ 1.473.005</strong></td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="font-size:11px;color:var(--text-lt);margin-top:10px;font-style:italic">* Saldo acumulado M12 representa retorno bruto antes do IR sobre ganho de capital. Despesas estimadas incluem parcelas judiciais, taxas, honorários e custo de imissão na posse. Cenário otimista (R$16.500/m²) eleva lucro para ~R$1.900.000.</p>
+</div>
+
+<!-- ═══════ SEÇÃO 8 — PARECER JURÍDICO ═══════ -->
+<div class="section section-juridico">
+  <div class="section-header">
+    <div class="section-num">8</div>
+    <div class="section-title">Parecer Jurídico Preliminar</div>
+  </div>
+  <div class="legal-opinion-box">
+    <p>Com base na análise da matrícula nº 31.500 do 1º Ofício de RI de Florianópolis/SC e dos autos do processo nº 5035031-78.2023.8.24.0023, o parecer jurídico preliminar é o seguinte:</p>
+    <ul>
+      <li><div class="legal-bullet warn">⚠</div><div><strong>Hipoteca CEF (R-2):</strong> A hipoteca em favor da Caixa Econômica Federal é ônus de alta relevância. Recomenda-se contato direto com a CEF para verificar saldo devedor e se o produto da arrematação será suficiente para quitação. Em caso negativo, o arrematante assume o ônus hipotecário.</div></li>
+      <li><div class="legal-bullet bad">✕</div><div><strong>Créditos trabalhistas (AV-7, AV-10, AV-12, AV-16):</strong> Créditos trabalhistas são de natureza alimentar e possuem precedência legal sobre créditos com garantia real (Súmula 478 do STJ). Existe risco real de que os valores não sejam sub-rogados no preço e permaneçam como responsabilidade pessoal do arrematante. Consulta a advogado trabalhista é imprescindível.</div></li>
+      <li><div class="legal-bullet bad">✕</div><div><strong>Indisponibilidades (AV-9 e AV-16):</strong> As ordens de indisponibilidade devem ser formalmente levantadas antes da arrematação. O juízo do leilão deve comunicar os juízos que decretaram as indisponibilidades para que haja concordância ou sub-rogação no preço. Verificar nos autos se já houve despacho nesse sentido.</div></li>
+      <li><div class="legal-bullet warn">⚠</div><div><strong>Débito condominial (propter rem):</strong> O débito de R$133.515,63 tem natureza propter rem. O edital deve esclarecer se é sub-rogado no preço ou transferido ao arrematante. Na ausência de disposição expressa, o arrematante pode ser responsabilizado solidariamente.</div></li>
+      <li><div class="legal-bullet ok">✓</div><div><strong>Competência do juízo:</strong> O processo tramita na Vara de Cumprimentos de Sentença e Execuções Extrajudiciais de Florianópolis/SC, sob responsabilidade da Magistrada Nadia Inês Schmidt. O processo é executório regular e o edital de leilão foi devidamente publicado.</div></li>
+      <li><div class="legal-bullet ok">✓</div><div><strong>Parcelamento judicial (Art. 895 CPC):</strong> O CPC autoriza o arrematante a depositar 25% do valor no ato e o restante em até 30 parcelas mensais. A proposta deve ser apresentada formalmente ao leiloeiro antes do pregão. Mecanismo válido e regular.</div></li>
+      <li><div class="legal-bullet info">ℹ</div><div><strong>Conclusão:</strong> Operação juridicamente viável, porém com riscos relevantes. Recomenda-se due diligence completa com advogado especialista em execuções imobiliárias e direito trabalhista antes de qualquer proposta. Budget estimado para honorários jurídicos de due diligence: R$5.000–R$15.000.</div></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════ SEÇÃO 9 — CHECKLIST DOCUMENTAL ═══════ -->
+<div class="section section-documental">
+  <div class="section-header">
+    <div class="section-num">9</div>
+    <div class="section-title">Checklist Documental</div>
+  </div>
+  <table class="doc-checklist">
+    <thead>
+      <tr>
+        <th style="width:35%">Documento</th>
+        <th style="width:10%;text-align:center">Status</th>
+        <th>Observação</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Edital de Leilão</td>
+        <td class="ta-center status-ok">✅ OK</td>
+        <td>Publicado — Mazzolli Leilões · 29/07/2026</td>
+      </tr>
+      <tr>
+        <td>Matrícula Atualizada (≤30 dias)</td>
+        <td class="ta-center status-ok">✅ OK</td>
+        <td>Matrícula 31.500 — 1º Ofício RI Florianópolis — Jun/2026</td>
+      </tr>
+      <tr>
+        <td>Auto de Avaliação Judicial</td>
+        <td class="ta-center status-ok">✅ OK</td>
+        <td>Avaliação: R$3.255.000 — Perito judicial nomeado pelo juízo</td>
+      </tr>
+      <tr>
+        <td>Certidão de Ônus Reais</td>
+        <td class="ta-center status-warn">⚠️ ATENÇÃO</td>
+        <td>Múltiplos ônus identificados — R-2, AV-7, AV-9, AV-10, AV-12, AV-16, AV-17</td>
+      </tr>
+      <tr>
+        <td>Posição da Hipoteca CEF</td>
+        <td class="ta-center status-bad">❌ PENDENTE</td>
+        <td>Necessário contato com a CEF para obter saldo devedor atualizado</td>
+      </tr>
+      <tr>
+        <td>Certidão de Débitos Trabalhistas (CNDT)</td>
+        <td class="ta-center status-bad">❌ PENDENTE</td>
+        <td>AV-7, AV-10, AV-12, AV-16 — consulta às varas trabalhistas necessária</td>
+      </tr>
+      <tr>
+        <td>Declaração de Débito Condominial</td>
+        <td class="ta-center status-warn">⚠️ ATENÇÃO</td>
+        <td>R$133.515,63 em 15/06/2026 — verificar se sub-rogado no preço</td>
+      </tr>
+      <tr>
+        <td>Certidão de Feitos Estaduais e Federais</td>
+        <td class="ta-center status-bad">❌ PENDENTE</td>
+        <td>Verificar existência de outras ações não averbadas na matrícula</td>
+      </tr>
+      <tr>
+        <td>Situação Fiscal do Imóvel (IPTU)</td>
+        <td class="ta-center status-bad">❌ PENDENTE</td>
+        <td>Solicitar certidão de débitos junto à Prefeitura de Florianópolis</td>
+      </tr>
+      <tr>
+        <td>Laudo de Vistoria do Imóvel</td>
+        <td class="ta-center status-bad">❌ PENDENTE</td>
+        <td>Imóvel ocupado — vistoria presencial não realizada. Recomendar acesso via leiloeiro</td>
+      </tr>
+      <tr>
+        <td>Planta Baixa / Habite-se</td>
+        <td class="ta-center status-warn">⚠️ VERIFICAR</td>
+        <td>Localizar junto ao cartório ou processo judicial</td>
+      </tr>
+      <tr>
+        <td>Consulta ao ENAT (Indisponibilidades)</td>
+        <td class="ta-center status-bad">❌ PENDENTE</td>
+        <td>AV-9 e AV-16 — verificar se ordens já foram formalmente levantadas</td>
+      </tr>
+      <tr>
+        <td>Cópia do Auto de Penhora e Carta de Ordem</td>
+        <td class="ta-center status-ok">✅ OK</td>
+        <td>AV-17 — penhora neste processo, base para o leilão. Obtida nos autos</td>
+      </tr>
+    </tbody>
+  </table>
+  <div style="display:flex;gap:20px;margin-top:14px;font-size:11.5px">
+    <span><span class="status-ok">✅</span> Documento disponível e verificado</span>
+    <span><span class="status-warn">⚠️</span> Atenção — verificar antes de arrematar</span>
+    <span><span class="status-bad">❌</span> Pendente — obtenção obrigatória</span>
+  </div>
+</div>
+
+<!-- ═══════ SIGNATURE BLOCK ═══════ -->
+<div class="signature-block">
+  <div class="sig-header">
+    <div class="sig-header-title">Responsabilidade pelo Relatório</div>
+    <div class="sig-header-badge">Documento Confidencial</div>
+  </div>
+  <div class="sig-body">
+    <div class="sig-col">
+      <div class="sig-role">Preparado por</div>
+      <div class="sig-name">Analista BidPro</div>
+      <div class="sig-detail">
+        Nogueira Empreendimentos<br>
+        Análise de Inteligência em Leilões<br>
+        24/06/2026
+      </div>
+    </div>
+    <div class="sig-col">
+      <div class="sig-role">Revisado por</div>
+      <div class="sig-name">Supervisor Sênior</div>
+      <div class="sig-detail">
+        Nogueira Empreendimentos<br>
+        Departamento Jurídico-Financeiro<br>
+        24/06/2026
+      </div>
+    </div>
+    <div class="sig-col">
+      <div class="sig-role">Status do Documento</div>
+      <div class="sig-name" style="color:var(--success);font-size:13px">APROVADO PARA USO</div>
+      <div class="sig-detail">
+        Versão 1.0 — Uso Interno<br>
+        Distribuição restrita a membros<br>
+        autorizados da equipe
+      </div>
+    </div>
+    <div class="sig-digital-line">
+      <span class="sig-digital-label">Hash de Integridade</span>
+      <span class="sig-digital-hash">BP-2026-0624-006 · SHA256: 4f8a2c91e3b7d05f1a6e9c23</span>
+      <span class="sig-confidential">Este relatório não constitui assessoria jurídica ou financeira formal. Uso exclusivo interno.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ FOOTER ═══════ -->
+<div class="footer">
+  <div class="footer-left">BidPro <span>Brasil</span> &nbsp;·&nbsp; Análise de Inteligência em Leilões</div>
+  <div class="footer-right">
+    Documento BP-2026-0624-006 &nbsp;·&nbsp; Nogueira Empreendimentos<br>
+    Gerado em 24/06/2026 &nbsp;·&nbsp; Versão 1.0
+  </div>
+</div>
+<div class="footer-disclaimer">
+  Este documento é de uso exclusivo e confidencial da Nogueira Empreendimentos. Sua reprodução, distribuição ou divulgação sem autorização expressa é proibida. Os valores de mercado são estimativas baseadas em dados públicos disponíveis na data de emissão. Este relatório não substitui assessoria jurídica, contábil ou financeira especializada. Consulte um advogado antes de participar deste leilão.
+</div>
+
+</div><!-- .page -->
+</body>
+</html>

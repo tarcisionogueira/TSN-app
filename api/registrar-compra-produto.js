@@ -16,7 +16,7 @@ export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   if (!SVC) return new Response(JSON.stringify({ error: 'Configuração ausente' }), { status: 500 });
 
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
 
   // Valida autenticação — rejeita requisições sem token válido
   const authUser = await getAuthUser(req);

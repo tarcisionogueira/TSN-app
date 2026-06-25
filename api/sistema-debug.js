@@ -126,6 +126,6 @@ export default async function handler(req) {
 function json(body, status) {
   return new Response(JSON.stringify(body, null, 2), {
     status,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' },
   });
 }

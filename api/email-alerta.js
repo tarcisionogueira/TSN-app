@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser, unauthorized } from './_auth.js';
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
 function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl) {
   const unsubToken = btoa(`${userId}:unsubscribe`);
@@ -233,6 +234,10 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl)
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const ip = getIP(req);
+  const rl = checkRateLimit(`email-alerta:${ip}`, 10, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const authUser = await getAuthUser(req);
   if (!authUser?.id) return unauthorized('Faça login para receber alertas.');

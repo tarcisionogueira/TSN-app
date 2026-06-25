@@ -8,7 +8,7 @@ export default async function handler(req) {
   if (!user) return unauthorized();
   const role = await getUserRoleById(user.id);
   if (role !== 'admin') return forbidden();
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*' } });
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' } });
 
   const status = {
     email:    { ok: !!process.env.RESEND_API_KEY,          label: 'Resend API Key',        grupo: 'email' },
@@ -22,6 +22,6 @@ export default async function handler(req) {
 
   return new Response(JSON.stringify(status), {
     status: 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' },
   });
 }
