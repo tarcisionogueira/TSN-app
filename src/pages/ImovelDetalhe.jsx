@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import ScoreRisco from '../components/ScoreRisco';
 
+const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
+
 const TIPO_ANEXO_LABEL = {
   edital: 'Edital', auto_arrematacao: 'Auto de Arrematação', carta_arrematacao: 'Carta de Arrematação',
   matricula: 'Matrícula', contrato: 'Contrato', procuracao: 'Procuração', outro: 'Outro',
