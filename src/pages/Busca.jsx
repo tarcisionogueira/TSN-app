@@ -697,8 +697,8 @@ export default function Busca() {
   };
 
   const imgUrlCaixa = (im) => {
-    if (im.fonte !== 'CEF') return null;
-    const id = (im.fonte_id || '').replace(/^cef_/, '');
+    if (im.fonte !== 'caixa' && im.fonte !== 'CEF') return null;
+    const id = (im.fonte_id || '').replace(/^(caixa_|cef_)/, '');
     return id ? `/api/img-caixa?id=${encodeURIComponent(id)}` : null;
   };
 
