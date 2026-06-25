@@ -131,7 +131,7 @@ export default function Planos() {
               Cancele quando quiser
             </div>
             <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 20, lineHeight: 1.7 }}>
-              Relatório completo de viabilidade por IA + análise jurídica documental e comparativos de mercado. Análises ilimitadas.
+              Relatório completo de viabilidade por IA + análise documental e jurídica com base nos anexos do leilão. Até 15 relatórios de cada tipo por mês.
             </p>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
               {[
@@ -141,9 +141,10 @@ export default function Planos() {
                 'Comparativos de mercado (condomínio/rua)',
                 'Projeções financeiras SAC e Price',
                 'Yield de locação mensal e anual',
-                'Consulta processual (Jusbrasil/CNJ)',
+                'Análise processual do imóvel',
                 'Alertas de risco (penhora, ônus reais)',
-                'Análises ilimitadas por mês',
+                '15 relatórios mercadológicos/mês',
+                '15 relatórios documentais e jurídicos/mês',
               ].map(t => <CheckItem key={t} txt={t} light />)}
             </div>
             <button onClick={() => periodo === 'anual' ? irAnual('top2') : ir('top2')} disabled={atual('top2')}

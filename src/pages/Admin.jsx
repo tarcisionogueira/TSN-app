@@ -5066,7 +5066,8 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
   );
   const [reuniaoDuracao, setReuniaoDuracao] = useState(sol.reuniao_duracao_min || 30);
   const [concedendo, setConcedendo] = useState(false);
-  const [analisesExtras, setAnalisesExtras] = useState(1);
+  const [extrasMercado, setExtrasMercado] = useState(1);
+  const [extrasDocumental, setExtrasDocumental] = useState(1);
   const [msgConcessao, setMsgConcessao] = useState('');
 
   useEffect(() => {
@@ -5179,12 +5180,24 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
 
   async function concederAnalises() {
     if (!sol.user_id) return;
-    if (analisesExtras < 1 || analisesExtras > 2) { setMsgConcessao('Máximo de 2 análises por reunião.'); return; }
+    if (extrasMercado < 0 || extrasDocumental < 0) { setMsgConcessao('Valores inválidos.'); return; }
+    if (extrasMercado === 0 && extrasDocumental === 0) { setMsgConcessao('Selecione ao menos 1 análise para conceder.'); return; }
     setConcedendo(true); setMsgConcessao('');
-    const { data: perfil } = await supabase.from('perfis').select('analises_bonus').eq('id', sol.user_id).single();
-    const atual = perfil?.analises_bonus || 0;
-    const { error } = await supabase.from('perfis').update({ analises_bonus: atual + analisesExtras }).eq('id', sol.user_id);
-    if (error) { setMsgConcessao('Erro ao conceder análises.'); } else { setMsgConcessao(`✅ ${analisesExtras} análise${analisesExtras > 1 ? 's' : ''} concedida${analisesExtras > 1 ? 's' : ''} ao cliente.`); }
+    const { data: perfil } = await supabase.from('perfis').select('bonus_mercado, bonus_documental').eq('id', sol.user_id).single();
+    const atualMercado = perfil?.bonus_mercado || 0;
+    const atualDocumental = perfil?.bonus_documental || 0;
+    const { error } = await supabase.from('perfis').update({
+      bonus_mercado: atualMercado + extrasMercado,
+      bonus_documental: atualDocumental + extrasDocumental,
+    }).eq('id', sol.user_id);
+    if (error) {
+      setMsgConcessao('Erro ao conceder análises.');
+    } else {
+      const partes = [];
+      if (extrasMercado > 0) partes.push(`${extrasMercado} mercadológica${extrasMercado > 1 ? 's' : ''}`);
+      if (extrasDocumental > 0) partes.push(`${extrasDocumental} documental${extrasDocumental > 1 ? 'is' : ''}`);
+      setMsgConcessao(`✅ Concedido: ${partes.join(' + ')}.`);
+    }
     setConcedendo(false);
   }
 
@@ -5274,15 +5287,24 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
             )}
 
             <div style={{ marginTop: 16, padding: '14px 16px', background: '#fffbeb', borderRadius: 10, border: '1.5px solid #fde68a' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>🎁 Conceder análises adicionais ao cliente</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select value={analisesExtras} onChange={e => setAnalisesExtras(Number(e.target.value))}
-                  style={{ padding: '7px 10px', border: '1.5px solid #fde68a', borderRadius: 7, fontSize: 14, background: 'white' }}>
-                  <option value={1}>1 análise</option>
-                  <option value={2}>2 análises</option>
-                </select>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 10 }}>🎁 Conceder análises adicionais ao cliente</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#78350f', width: 110 }}>Mercadológicas</span>
+                  <select value={extrasMercado} onChange={e => setExtrasMercado(Number(e.target.value))}
+                    style={{ padding: '6px 10px', border: '1.5px solid #fde68a', borderRadius: 7, fontSize: 13, background: 'white', flex: 1 }}>
+                    {[0,1,2,3,5].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#78350f', width: 110 }}>Documentais/Jur.</span>
+                  <select value={extrasDocumental} onChange={e => setExtrasDocumental(Number(e.target.value))}
+                    style={{ padding: '6px 10px', border: '1.5px solid #fde68a', borderRadius: 7, fontSize: 13, background: 'white', flex: 1 }}>
+                    {[0,1,2,3,5].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
                 <button onClick={concederAnalises} disabled={concedendo || !sol.user_id}
-                  style={{ flex: 1, padding: '8px 14px', background: '#d97706', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: concedendo ? 0.7 : 1 }}>
+                  style={{ padding: '8px 14px', background: '#d97706', color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: concedendo ? 0.7 : 1, marginTop: 4 }}>
                   {concedendo ? 'Concedendo…' : 'Conceder'}
                 </button>
               </div>
@@ -6439,7 +6461,156 @@ function MarketingTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Configurações'];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AGENDA TAB — Disponibilidade dos analistas e geração de slots
+// ═══════════════════════════════════════════════════════════════════════════════
+const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+function AgendaTab() {
+  const { user } = useAuth();
+  const [analistas, setAnalistas] = React.useState([]);
+  const [analistaSel, setAnalistaSel] = React.useState('');
+  const [disps, setDisps] = React.useState([]);
+  const [slots, setSlots] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [salvando, setSalvando] = React.useState(false);
+  const [gerando, setGerando] = React.useState(false);
+  const [msg, setMsg] = React.useState('');
+  const [novaDisp, setNovaDisp] = React.useState({ dia_semana: 1, hora_inicio: '09:00', hora_fim: '12:00' });
+
+  React.useEffect(() => {
+    supabase.from('perfis').select('id,nome').in('role', ['analista','admin']).order('nome')
+      .then(({ data }) => { setAnalistas(data || []); if (data?.length) setAnalistaSel(data[0].id); });
+  }, []);
+
+  React.useEffect(() => {
+    if (!analistaSel) return;
+    setLoading(true);
+    Promise.all([
+      supabase.from('disponibilidade_analista').select('*').eq('analista_id', analistaSel).order('dia_semana').order('hora_inicio'),
+      supabase.from('slots_reuniao').select('id,data_hora,disponivel,reservado_por').eq('analista_id', analistaSel)
+        .gte('data_hora', new Date().toISOString()).order('data_hora').limit(50),
+    ]).then(([d, s]) => { setDisps(d.data || []); setSlots(s.data || []); setLoading(false); });
+  }, [analistaSel]);
+
+  async function adicionarDisp() {
+    setSalvando(true); setMsg('');
+    const { error } = await supabase.from('disponibilidade_analista').insert({ analista_id: analistaSel, ...novaDisp });
+    if (error) setMsg('Erro: ' + error.message);
+    else {
+      setMsg('✅ Disponibilidade adicionada');
+      const { data } = await supabase.from('disponibilidade_analista').select('*').eq('analista_id', analistaSel).order('dia_semana').order('hora_inicio');
+      setDisps(data || []);
+    }
+    setSalvando(false);
+  }
+
+  async function removerDisp(id) {
+    await supabase.from('disponibilidade_analista').delete().eq('id', id);
+    setDisps(p => p.filter(d => d.id !== id));
+  }
+
+  async function gerarSlots() {
+    setGerando(true); setMsg('');
+    try {
+      const res = await apiCall('/api/gerar-slots', { method: 'POST' });
+      const data = await res.json();
+      setMsg(`✅ ${data.gerados} slots gerados`);
+      const { data: s } = await supabase.from('slots_reuniao').select('id,data_hora,disponivel,reservado_por')
+        .eq('analista_id', analistaSel).gte('data_hora', new Date().toISOString()).order('data_hora').limit(50);
+      setSlots(s || []);
+    } catch { setMsg('Erro ao gerar slots'); }
+    setGerando(false);
+  }
+
+  const fmtSlot = (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div style={{ padding: '0 4px' }}>
+      <h2 style={{ fontWeight: 800, fontSize: 18, marginBottom: 20 }}>Agenda de Reuniões</h2>
+
+      {/* Seletor de analista */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>Analista</label>
+        <select value={analistaSel} onChange={e => setAnalistaSel(e.target.value)}
+          style={{ padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, width: 280 }}>
+          {analistas.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+        </select>
+      </div>
+
+      {loading ? <div style={{ color: '#94a3b8' }}>Carregando...</div> : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          {/* Disponibilidade semanal */}
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Disponibilidade semanal</div>
+            {disps.length === 0 && <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>Nenhuma disponibilidade cadastrada.</div>}
+            {disps.map(d => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: d.ativo ? '#f0fdf4' : '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 6, fontSize: 13 }}>
+                <span style={{ fontWeight: 700, minWidth: 60 }}>{DIAS_SEMANA[d.dia_semana]}</span>
+                <span style={{ color: '#475569' }}>{d.hora_inicio.slice(0,5)} – {d.hora_fim.slice(0,5)}</span>
+                <button onClick={() => removerDisp(d.id)}
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Remover</button>
+              </div>
+            ))}
+
+            {/* Adicionar nova disponibilidade */}
+            <div style={{ marginTop: 16, padding: '14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Adicionar horário</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>Dia</label>
+                  <select value={novaDisp.dia_semana} onChange={e => setNovaDisp(p => ({ ...p, dia_semana: Number(e.target.value) }))}
+                    style={{ padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 13 }}>
+                    {DIAS_SEMANA.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>Início</label>
+                  <input type="time" value={novaDisp.hora_inicio} onChange={e => setNovaDisp(p => ({ ...p, hora_inicio: e.target.value }))}
+                    style={{ padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 13 }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>Fim</label>
+                  <input type="time" value={novaDisp.hora_fim} onChange={e => setNovaDisp(p => ({ ...p, hora_fim: e.target.value }))}
+                    style={{ padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 13 }} />
+                </div>
+                <button onClick={adicionarDisp} disabled={salvando}
+                  style={{ padding: '7px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  {salvando ? '...' : '+ Adicionar'}
+                </button>
+              </div>
+            </div>
+
+            <button onClick={gerarSlots} disabled={gerando}
+              style={{ marginTop: 14, width: '100%', padding: '10px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              {gerando ? 'Gerando...' : '⚡ Gerar slots para próximas 3 semanas'}
+            </button>
+
+            {msg && <div style={{ marginTop: 10, fontSize: 13, color: msg.startsWith('✅') ? '#059669' : '#dc2626' }}>{msg}</div>}
+          </div>
+
+          {/* Slots gerados */}
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Próximos slots ({slots.length})</div>
+            <div style={{ maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {slots.length === 0 && <div style={{ fontSize: 13, color: '#94a3b8' }}>Nenhum slot gerado ainda.</div>}
+              {slots.map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', background: s.disponivel ? '#f0fdf4' : '#fef2f2', border: `1px solid ${s.disponivel ? '#bbf7d0' : '#fecaca'}`, borderRadius: 8, fontSize: 12 }}>
+                  <span style={{ fontWeight: 600 }}>{fmtSlot(s.data_hora)}</span>
+                  <span style={{ marginLeft: 'auto', fontWeight: 700, color: s.disponivel ? '#059669' : '#dc2626' }}>
+                    {s.disponivel ? 'Livre' : 'Reservado'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function RegistrosTab() {
   const [transcricoes, setTranscricoes] = useState([]);
@@ -6859,6 +7030,7 @@ export default function Admin() {
         {tab === 'Tour'           && <TourTab />}
         {tab === 'SDR / Leads'    && <SdrTab />}
         {tab === 'Equipe'         && <EquipeTab />}
+        {tab === 'Agenda'         && <AgendaTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Registros'      && <RegistrosTab />}
         {tab === 'CNJ'            && <CnjTab />}

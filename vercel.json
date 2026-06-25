@@ -29,6 +29,8 @@
     { "path": "/api/onr-health",          "schedule": "0 7 * * 1"    },
     { "path": "/api/mp-saque-cron",       "schedule": "0 9 * * 5"    },
     { "path": "/api/scraper-transparencia",    "schedule": "0 3 * * *"    },
-    { "path": "/api/financiamento-alertas-cron","schedule": "0 7 * * *"    }
+    { "path": "/api/financiamento-alertas-cron","schedule": "0 7 * * *"    },
+    { "path": "/api/limpar-documentos-cron",  "schedule": "0 2 * * *"    },
+    { "path": "/api/gerar-slots",             "schedule": "0 1 * * *"    }
   ]
 }

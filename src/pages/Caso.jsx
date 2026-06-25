@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
+import AgendarReuniao from '../components/AgendarReuniao';
 
 // ─── Estilos base ────────────────────────────────────────────────────────────
 const card = { background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding:'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' };
@@ -22,16 +23,19 @@ const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day:'2-digi
 const mesRef = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10); };
 
 // ─── Cotas por plano ─────────────────────────────────────────────────────────
+// mercado = relatórios mercadológico + viabilidade financeira
+// documental = relatórios análise documental e jurídica
+// O analista pode conceder +2 de cada tipo manualmente (extras_mercado / extras_documental)
 const COTAS_PLANO = {
-  explorador: { analises:3, reunioes:0 },
-  top1:       { analises:3, reunioes:0 },
-  top2:       { analises:10, reunioes:1 },
-  assessorado:{ analises:15, reunioes:2 },
-  clube:      { analises:20, reunioes:4 },
-  analista:   { analises:999, reunioes:999 },
-  advogado:   { analises:999, reunioes:999 },
-  admin:      { analises:999, reunioes:999 },
-  consultor:  { analises:999, reunioes:999 },
+  explorador: { mercado:5,   documental:0,  reunioes:0 },
+  top1:       { mercado:5,   documental:0,  reunioes:0 },
+  top2:       { mercado:15,  documental:15, reunioes:2 },
+  assessorado:{ mercado:20,  documental:20, reunioes:2 },
+  clube:      { mercado:20,  documental:20, reunioes:4 },
+  analista:   { mercado:999, documental:999, reunioes:999 },
+  advogado:   { mercado:999, documental:999, reunioes:999 },
+  admin:      { mercado:999, documental:999, reunioes:999 },
+  consultor:  { mercado:999, documental:999, reunioes:999 },
 };
 
 const PLANOS_JURIDICO = ['assessorado','clube','analista','advogado','admin'];
@@ -184,6 +188,8 @@ export default function Caso() {
 
   // ─── Estados gerais ──────────────────────────────────────────────────────
   const [caso, setCaso] = useState(null);
+  const [imovelExtra, setImovelExtra] = useState(null); // data_leilao, titulo, link_leilao
+  const [showAgendar, setShowAgendar] = useState(null); // null | 1 | 2
   const [jobs, setJobs] = useState([]);
   const [relatorios, setRelatorios] = useState([]);
   const [reunioes, setReunioes] = useState([]);
@@ -268,7 +274,7 @@ export default function Caso() {
       setCaso(casoData);
 
       // Carrega dados paralelos
-      const [jobsR, relR, reunR, jurR, arrR, procR, cotaR, configHon] = await Promise.all([
+      const [jobsR, relR, reunR, jurR, arrR, procR, cotaR, configHon, imovelR] = await Promise.all([
         supabase.from('analise_jobs').select('*').eq('caso_id', casoData.id),
         supabase.from('analise_relatorios').select('*').eq('caso_id', casoData.id),
         supabase.from('reunioes').select('*').eq('caso_id', casoData.id).order('numero'),
@@ -277,6 +283,9 @@ export default function Caso() {
         supabase.from('procuracoes').select('*').eq('caso_id', casoData.id).order('versao', {ascending:false}).limit(1).maybeSingle(),
         supabase.from('cotas_analise').select('*').eq('usuario_id', user.id).eq('mes_ref', mesRef()).maybeSingle(),
         supabase.from('config_honorarios').select('*').eq('id', 1).maybeSingle(),
+        casoData.imovel_id
+          ? supabase.from('imoveis').select('data_leilao,titulo,link_leilao').eq('id', casoData.imovel_id).maybeSingle()
+          : Promise.resolve({ data: null }),
       ]);
 
       setJobs(jobsR.data || []);
@@ -286,6 +295,7 @@ export default function Caso() {
       setArrematacao(arrR.data || null);
       setProcuracao(procR.data || null);
       if (configHon.data) setHonorariosConfig(configHon.data);
+      if (imovelR.data) setImovelExtra(imovelR.data);
 
       // Cota: se não existe, usa defaults do plano
       const planoRole = role || 'explorador';
@@ -575,6 +585,38 @@ export default function Caso() {
 
   const podeSolicitarAnalise = isStaff || cotaInfo.usadas < cotaInfo.limite;
 
+  // ─── Google Agenda ────────────────────────────────────────────────────────
+  const linkGoogleAgenda = () => {
+    const titulo = imovelExtra?.titulo || caso?.imovel_endereco || 'Leilão de Imóvel';
+    const dataLeilao = imovelExtra?.data_leilao;
+    const linkLeilao = imovelExtra?.link_leilao || '';
+    const endereco   = caso?.imovel_endereco || '';
+
+    // Formata data para o formato do Google Calendar: YYYYMMDD
+    // Se não há horário definido, define como dia inteiro
+    let dates = '';
+    if (dataLeilao) {
+      const d = dataLeilao.replace(/-/g, '');
+      dates = `${d}/${d}`;
+    }
+
+    const detalhes = [
+      `📋 Imóvel: ${endereco}`,
+      linkLeilao ? `🔗 Link do leilão: ${linkLeilao}` : '',
+      `📁 Caso BidPro: ${window.location.origin}/#/caso/${caso?.id}`,
+    ].filter(Boolean).join('\n');
+
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: `🏠 Leilão — ${titulo}`,
+      ...(dates ? { dates } : {}),
+      details: detalhes,
+      ...(endereco ? { location: endereco } : {}),
+    });
+
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  };
+
   if (loading) return (
     <div style={{ display:'flex', justifyContent:'center', alignItems:'center', minHeight:'60vh' }}>
       <Loader2 size={32} color="#0D63DB" style={{animation:'spin 1s linear infinite'}}/>
@@ -680,12 +722,27 @@ export default function Caso() {
             ))}
           </div>
 
-          {analisesConcluidas && isAnalista && !reuniao1 && (
+          {analisesConcluidas && !reuniao1 && (isAnalista || (COTAS_PLANO[role]?.reunioes || 0) > 0) && (
             <div style={{ marginTop:16, padding:'14px 16px', background:'#eff6ff', borderRadius:10, border:'1px solid #bfdbfe' }}>
-              <div style={{ fontWeight:700, fontSize:14, color:'#084BA6', marginBottom:8 }}>Relatórios prontos — agendar reunião com cliente</div>
-              <button onClick={() => { nav('/atendimento'); }} style={{ ...btn('#0D63DB'), fontSize:12 }}>
-                <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Agendar reunião
-              </button>
+              {showAgendar === 1 ? (
+                <AgendarReuniao
+                  casoId={caso.id}
+                  analistaId={caso.analista_id}
+                  reuniaoNum={1}
+                  titulo="Agendar 1ª Reunião com Analista"
+                  onAgendado={() => { setShowAgendar(null); carregarCaso(); }}
+                  onCancelar={() => setShowAgendar(null)}
+                />
+              ) : (
+                <>
+                  <div style={{ fontWeight:700, fontSize:14, color:'#084BA6', marginBottom:8 }}>
+                    {isAnalista ? 'Relatórios prontos — agendar reunião com cliente' : 'Relatórios prontos — agende sua reunião com o analista'}
+                  </div>
+                  <button onClick={() => setShowAgendar(1)} style={{ ...btn('#0D63DB'), fontSize:12 }}>
+                    <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Escolher horário
+                  </button>
+                </>
+              )}
             </div>
           )}
         </Secao>
@@ -736,8 +793,8 @@ export default function Caso() {
           ) : (
             <div style={{ paddingTop:14, color:'#64748b', fontSize:13 }}>
               {analisesConcluidas
-                ? 'Os relatórios estão prontos. O analista irá agendar a reunião em breve.'
-                : 'A reunião será disponível após a conclusão dos relatórios.'}
+                ? 'Clique em "Escolher horário" acima para agendar sua reunião com o analista.'
+                : 'A reunião será liberada após a conclusão dos relatórios de análise.'}
             </div>
           )}
         </Secao>
@@ -789,18 +846,58 @@ export default function Caso() {
                 </div>
               )}
 
+              {/* Cliente — ações após parecer jurídico entregue */}
+              {isCliente && juridica.entregue_em && (
+                <div style={{ marginTop:16, padding:'14px 16px', background:'#eff6ff', borderRadius:10, border:'1px solid #bfdbfe' }}>
+                  <div style={{ fontWeight:700, fontSize:13, color:'#084BA6', marginBottom:4 }}>Próximos passos</div>
+                  <div style={{ fontSize:12, color:'#1e40af', marginBottom:12, lineHeight:1.6 }}>
+                    Seu analista entrará em contato para orientá-lo sobre a habilitação no leiloeiro e a estratégia de lance.
+                    Enquanto isso, adicione o leilão à sua agenda para não perder a data.
+                  </div>
+                  <a
+                    href={linkGoogleAgenda()}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 16px', background:'#4285F4', color:'white', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 48 48" style={{flexShrink:0}}>
+                      <path fill="#fff" d="M24 22v4h7c-.3 1.6-1.3 3-2.7 3.9l4.3 3.3c2.5-2.3 4-5.7 4-9.7 0-.9-.1-1.8-.2-2.6H24z"/>
+                      <path fill="#fff" d="M13.5 28.9l-1 .8-3.5 2.7C11.3 35.6 15.4 38 20 38c3.3 0 6.1-1.1 8.1-3l-4.3-3.3c-1.1.7-2.4 1.1-3.8 1.1-3 0-5.5-2-6.5-4.9z"/>
+                      <path fill="#fff" d="M9 17.3c-.7 1.4-1 3-1 4.7s.3 3.3 1 4.7l4.5-3.5c-.2-.7-.4-1.4-.4-2.2s.1-1.5.4-2.2L9 17.3z"/>
+                      <path fill="#fff" d="M20 14c1.7 0 3.3.6 4.5 1.8l3.4-3.4C25.9 10.5 23.1 9 20 9c-4.6 0-8.7 2.4-11 6.1l4.5 3.5c1-2.9 3.5-4.6 6.5-4.6z"/>
+                    </svg>
+                    Adicionar ao Google Agenda
+                  </a>
+                </div>
+              )}
+
               {/* Advogado — formulário de checklist */}
               {isAdvogado && !juridica.entregue_em && (
                 <ChecklistJuridico juridica={juridica} casoId={caso.id} onSalvo={carregarCaso}/>
               )}
 
-              {/* 2ª reunião — analista agenda após parecer */}
-              {isAnalista && juridica.entregue_em && !reuniao2 && (
+              {/* 2ª reunião — analista ou cliente agenda após parecer */}
+              {juridica.entregue_em && !reuniao2 && (isAnalista || (COTAS_PLANO[role]?.reunioes || 0) >= 2) && (
                 <div style={{ marginTop:16, padding:'14px', background:'#ecfdf5', borderRadius:10, border:'1px solid #bbf7d0' }}>
-                  <div style={{ fontWeight:700, fontSize:13, color:'#166534', marginBottom:8 }}>Agendar 2ª reunião com cliente para aprovação</div>
-                  <button onClick={() => nav('/atendimento')} style={{ ...btn('#10b981'), fontSize:12 }}>
-                    <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Agendar 2ª reunião
-                  </button>
+                  {showAgendar === 2 ? (
+                    <AgendarReuniao
+                      casoId={caso.id}
+                      analistaId={caso.analista_id}
+                      reuniaoNum={2}
+                      titulo="Agendar 2ª Reunião — Aprovação"
+                      onAgendado={() => { setShowAgendar(null); carregarCaso(); }}
+                      onCancelar={() => setShowAgendar(null)}
+                    />
+                  ) : (
+                    <>
+                      <div style={{ fontWeight:700, fontSize:13, color:'#166534', marginBottom:8 }}>
+                        {isAnalista ? 'Agendar 2ª reunião com cliente para aprovação' : 'Agende a 2ª reunião para aprovação do parecer'}
+                      </div>
+                      <button onClick={() => setShowAgendar(2)} style={{ ...btn('#10b981'), fontSize:12 }}>
+                        <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Escolher horário
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -837,6 +934,20 @@ export default function Caso() {
               )}
               {reuniao2.observacoes && (
                 <div style={{ marginTop:10, fontSize:12, color:'#475569' }}><strong>Observações:</strong> {reuniao2.observacoes}</div>
+              )}
+              {/* Botão Google Agenda para o leilão — visível ao cliente */}
+              {isCliente && (
+                <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid #e2e8f0' }}>
+                  <div style={{ fontSize:12, color:'#64748b', marginBottom:8 }}>Não esqueça de salvar o leilão na sua agenda:</div>
+                  <a
+                    href={linkGoogleAgenda()}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 14px', background:'#4285F4', color:'white', borderRadius:8, fontWeight:700, fontSize:12, textDecoration:'none' }}
+                  >
+                    <Calendar size={13}/> Adicionar ao Google Agenda
+                  </a>
+                </div>
               )}
             </div>
           </Secao>

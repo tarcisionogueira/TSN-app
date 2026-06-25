@@ -175,9 +175,9 @@ function MainLayout() {
 
   useEffect(() => {
     if (!isLoggedIn || role !== 'explorador' || !user?.id) return;
-    supabase.from('perfis').select('analises_bonus, bonus_exibido').eq('id', user.id).single()
+    supabase.from('perfis').select('bonus_mercado, bonus_exibido').eq('id', user.id).single()
       .then(({ data }) => {
-        if (data?.analises_bonus > 0 && !data?.bonus_exibido) setShowBonus(true);
+        if (data?.bonus_mercado > 0 && !data?.bonus_exibido) setShowBonus(true);
       });
   }, [isLoggedIn, role, user?.id]);
 

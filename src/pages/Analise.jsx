@@ -96,7 +96,8 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
   );
 }
 
-const LIMITE_POR_ROLE = { explorador: 0, top1: 20, top2: 20 }; // 0 = usa bônus
+// Limite de relatórios mercadológicos+viabilidade por plano/mês (0 = usa bônus para explorador)
+const LIMITE_POR_ROLE = { explorador: 0, top1: 5, top2: 15 };
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 const ROLES_SEM_LIMITE = ['assessorado','clube','analista','advogado','admin'];
 const ROLES_COM_CNJ   = ['top1','top2','assessorado','clube','analista','advogado','admin'];
@@ -119,13 +120,13 @@ export default function Analise() {
   useEffect(() => {
     if (!user || semLimite) return;
     const col = role === 'explorador'
-      ? 'analises_mes, analises_count, analises_bonus'
+      ? 'analises_mes, analises_count, bonus_mercado'
       : 'analises_mes, analises_count';
     supabase.from('perfis').select(col).eq('id', user.id).single()
       .then(({ data, error }) => {
         if (error || !data) return;
         if (role === 'explorador') {
-          const bonus = data.analises_bonus || 0;
+          const bonus = data.bonus_mercado || 0;
           setAnalisesBonus(bonus);
           setAnalisesUsadas(0);
           setAnalisesBloqueado(bonus <= 0);
@@ -454,7 +455,7 @@ export default function Analise() {
     if (user && isNovo) {
       if (role === 'explorador') {
         const novoBonus = Math.max(0, analisesBonus - 1);
-        await supabase.from('perfis').update({ analises_bonus: novoBonus }).eq('id', user.id);
+        await supabase.from('perfis').update({ bonus_mercado: novoBonus }).eq('id', user.id);
         setAnalisesBonus(novoBonus);
         if (novoBonus <= 0) setAnalisesBloqueado(true);
       } else if (role === 'top1') {
