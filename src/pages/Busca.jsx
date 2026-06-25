@@ -156,6 +156,9 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 18,
       }).addTo(leafletRef.current);
       markersRef.current = L.layerGroup().addTo(leafletRef.current);
+      // Corrige tiles incompletos quando o container foi montado enquanto estava oculto
+      setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 50);
+      setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 300);
       setMapReady(true);
     });
     return () => {
