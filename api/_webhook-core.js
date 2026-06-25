@@ -12,7 +12,7 @@
  *   email:       string | null
  *   gatewayCustomerId: string | null   // id do cliente no gateway
  *   gatewayPaymentId:  string          // id único do pagamento no gateway
- *   gateway:     'asaas' | 'pagarme'
+ *   gateway:     'mercadopago' | 'asaas'
  * }
  */
 
@@ -55,9 +55,7 @@ export function mapearPlano(valor, descricao = '') {
 export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
   // 1. Tenta por ID do gateway no campo correto do perfil
   if (gatewayCustomerId) {
-    const campo = gateway === 'pagarme' ? 'pagarme_id'
-                : gateway === 'mercadopago' ? 'mp_id'
-                : 'asaas_id';
+    const campo = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';
     const { data } = await supabase
       .from('perfis')
       .select('id, indicado_por, role, role_anterior, inadimplente_desde')
@@ -93,9 +91,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
   const mapeado = mapearPlano(valor, descricao);
 
   // Atualiza perfil: limpa inadimplência, atualiza plano/role
-  const campoId = gateway === 'pagarme' ? 'pagarme_id'
-               : gateway === 'mercadopago' ? 'mp_id'
-               : 'asaas_id';
+  const campoId = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';
   const update = {
     inadimplente_desde: null,
     [campoId]: gatewayCustomerId || undefined,
