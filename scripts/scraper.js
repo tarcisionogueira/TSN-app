@@ -1158,6 +1158,185 @@ async function scraperELeiloes(page = 1) {
   }
 }
 
+// ─── SCRAPER KC LEILÕES ───────────────────────────────────────────────────────
+
+async function scraperKcLeiloes(page = 1) {
+  console.log(`  KC Leilões página ${page}...`);
+  try {
+    const url = `https://www.kcleiloes.com.br/imoveis?page=${page}`;
+    const html = await fetchHtml(url, { headers: { Referer: 'https://www.kcleiloes.com.br/' } });
+    const imoveis = [];
+    const seen = new Set();
+    const linkRegex = /href="([^"]*\/(?:lote|imovel|leilao|produto)\/[^"?#]+)"/gi;
+    let m;
+    while ((m = linkRegex.exec(html)) !== null && imoveis.length < 100) {
+      const href = m[1].split('?')[0];
+      if (seen.has(href)) continue;
+      seen.add(href);
+      const pos = html.indexOf(m[0]);
+      const ctx = html.slice(Math.max(0, pos - 400), pos + 700);
+      const titulo = ctx.match(/<h[2-4][^>]*>([^<]+)<\/h[2-4]>/i)?.[1]?.trim() || '';
+      const valorMatch = ctx.match(/R\$\s*([\d.]+,\d{2})/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
+      if (!valor) continue;
+      const foto = ctx.match(/<img[^>]*(?:src|data-src)="([^"]+(?:jpg|jpeg|png|webp)[^"]*)"/i)?.[1] || null;
+      const id = href.split('/').filter(Boolean).pop();
+      imoveis.push({
+        fonte: 'KCLEILOES',
+        fonte_id: `kc_${id}`,
+        titulo: titulo.slice(0, 120) || `Imóvel KC ${id}`,
+        tipo: normalizarTipo(titulo),
+        modalidade: titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+        estado: '',
+        cidade: '',
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valor,
+        area_m2: 0,
+        descricao: titulo.slice(0, 300),
+        link_edital: href.startsWith('http') ? href : `https://www.kcleiloes.com.br${href}`,
+        link_foto: foto ? (foto.startsWith('http') ? foto : `https://www.kcleiloes.com.br${foto}`) : null,
+        leiloeiro: 'KC Leilões',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+    console.log(`    KC Leilões p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro KC Leilões p${page}: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER PÁTIO ROCHA ──────────────────────────────────────────────────────
+
+async function scraperPatioRocha(page = 1) {
+  console.log(`  Pátio Rocha página ${page}...`);
+  try {
+    const urls = [
+      `https://www.patiorocha.com.br/leiloes/imoveis?page=${page}`,
+      `https://www.patiorocha.com.br/imoveis?pagina=${page}`,
+      `https://www.patiorocha.com.br/categorias/imoveis?page=${page}`,
+    ];
+    let html = '';
+    for (const url of urls) {
+      try {
+        html = await fetchHtml(url, { headers: { Referer: 'https://www.patiorocha.com.br/' } });
+        if (html.length > 1000) break;
+      } catch { continue; }
+    }
+    if (!html) return [];
+    const imoveis = [];
+    const seen = new Set();
+    const linkRegex = /href="([^"]*\/(?:lote|imovel|leilao|produto|lot)\d*[^"?#]*)"/gi;
+    let m;
+    while ((m = linkRegex.exec(html)) !== null && imoveis.length < 100) {
+      const href = m[1].split('?')[0];
+      if (seen.has(href) || href.length < 5) continue;
+      seen.add(href);
+      const pos = html.indexOf(m[0]);
+      const ctx = html.slice(Math.max(0, pos - 400), pos + 700);
+      const titulo = ctx.match(/<h[2-4][^>]*>([^<]+)<\/h[2-4]>/i)?.[1]?.trim() || '';
+      const valorMatch = ctx.match(/R\$\s*([\d.]+,\d{2})/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
+      if (!valor) continue;
+      const foto = ctx.match(/<img[^>]*(?:src|data-src)="([^"]+(?:jpg|jpeg|png|webp)[^"]*)"/i)?.[1] || null;
+      const id = href.split('/').filter(Boolean).pop();
+      imoveis.push({
+        fonte: 'PATIOROCHA',
+        fonte_id: `pr_${id}`,
+        titulo: titulo.slice(0, 120) || `Imóvel Pátio Rocha ${id}`,
+        tipo: normalizarTipo(titulo),
+        modalidade: titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+        estado: '',
+        cidade: '',
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valor,
+        area_m2: 0,
+        descricao: titulo.slice(0, 300),
+        link_edital: href.startsWith('http') ? href : `https://www.patiorocha.com.br${href}`,
+        link_foto: foto ? (foto.startsWith('http') ? foto : `https://www.patiorocha.com.br${foto}`) : null,
+        leiloeiro: 'Pátio Rocha',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+    console.log(`    Pátio Rocha p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro Pátio Rocha p${page}: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
+// ─── SCRAPER ALBERTO MACEDO ───────────────────────────────────────────────────
+
+async function scraperAlbertoMacedo(page = 1) {
+  console.log(`  Alberto Macedo página ${page}...`);
+  try {
+    const urls = [
+      `https://www.albertomacedo.com.br/leiloes/imoveis?page=${page}`,
+      `https://www.albertomacedo.com.br/imoveis?page=${page}`,
+      `https://www.leiloeiro.com.br/leiloeiro/alberto-macedo?pagina=${page}`,
+    ];
+    let html = '';
+    for (const url of urls) {
+      try {
+        html = await fetchHtml(url, { headers: { Referer: 'https://www.albertomacedo.com.br/' } });
+        if (html.length > 1000) break;
+      } catch { continue; }
+    }
+    if (!html) return [];
+    const imoveis = [];
+    const seen = new Set();
+    const linkRegex = /href="([^"]*\/(?:lote|imovel|leilao|produto|lot)[^"?#]*)"/gi;
+    let m;
+    while ((m = linkRegex.exec(html)) !== null && imoveis.length < 100) {
+      const href = m[1].split('?')[0];
+      if (seen.has(href) || href.length < 5) continue;
+      seen.add(href);
+      const pos = html.indexOf(m[0]);
+      const ctx = html.slice(Math.max(0, pos - 400), pos + 700);
+      const titulo = ctx.match(/<h[2-4][^>]*>([^<]+)<\/h[2-4]>/i)?.[1]?.trim() || '';
+      const valorMatch = ctx.match(/R\$\s*([\d.]+,\d{2})/);
+      const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
+      if (!valor) continue;
+      const foto = ctx.match(/<img[^>]*(?:src|data-src)="([^"]+(?:jpg|jpeg|png|webp)[^"]*)"/i)?.[1] || null;
+      const id = href.split('/').filter(Boolean).pop();
+      const base = href.startsWith('http') ? '' : 'https://www.albertomacedo.com.br';
+      imoveis.push({
+        fonte: 'ALBERTOMACEDO',
+        fonte_id: `am_${id}`,
+        titulo: titulo.slice(0, 120) || `Imóvel Alberto Macedo ${id}`,
+        tipo: normalizarTipo(titulo),
+        modalidade: titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+        estado: '',
+        cidade: '',
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valor,
+        area_m2: 0,
+        descricao: titulo.slice(0, 300),
+        link_edital: href.startsWith('http') ? href : `${base}${href}`,
+        link_foto: foto ? (foto.startsWith('http') ? foto : `${base}${foto}`) : null,
+        leiloeiro: 'Alberto Macedo',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      });
+    }
+    console.log(`    Alberto Macedo p${page}: ${imoveis.length} imóveis`);
+    return imoveis;
+  } catch (err) {
+    console.log(`    Erro Alberto Macedo p${page}: ${err.message.slice(0, 80)}`);
+    return [];
+  }
+}
+
 // ─── NORMALIZADORES ──────────────────────────────────────────────────────────
 
 function toTitleCase(str) {
@@ -1383,6 +1562,36 @@ async function main() {
   console.log('\n📋 Scraping Banco do Brasil...');
   for (let page = 0; page <= 10; page++) {
     const imoveis = await scraperBancoBrasil(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 12. KC Leilões
+  console.log('\n📋 Scraping KC Leilões...');
+  for (let page = 1; page <= 5; page++) {
+    const imoveis = await scraperKcLeiloes(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 13. Pátio Rocha
+  console.log('\n📋 Scraping Pátio Rocha...');
+  for (let page = 1; page <= 5; page++) {
+    const imoveis = await scraperPatioRocha(page);
+    await salvarImoveis(imoveis);
+    total += imoveis.length;
+    if (imoveis.length === 0) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // 14. Alberto Macedo
+  console.log('\n📋 Scraping Alberto Macedo...');
+  for (let page = 1; page <= 5; page++) {
+    const imoveis = await scraperAlbertoMacedo(page);
     await salvarImoveis(imoveis);
     total += imoveis.length;
     if (imoveis.length === 0) break;

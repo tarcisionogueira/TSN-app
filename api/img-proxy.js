@@ -31,6 +31,12 @@ export default async function handler(req) {
     'www.biassi.com.br',
     'hastapublica.com.br',
     'www.hastapublica.com.br',
+    'kcleiloes.com.br',
+    'www.kcleiloes.com.br',
+    'patiorocha.com.br',
+    'www.patiorocha.com.br',
+    'albertomacedo.com.br',
+    'www.albertomacedo.com.br',
   ]);
   let targetUrl;
   try {
