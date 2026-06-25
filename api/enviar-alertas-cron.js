@@ -1,11 +1,11 @@
 export const config = { runtime: 'edge' };
 
+import { isCronAuthorized } from './_auth.js';
+
 export default async function handler(req) {
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('ok', { status: 200 });
 
-  const CRON_SECRET = process.env.CRON_SECRET;
-  const secret = req.headers.get('x-cron-secret') || new URL(req.url).searchParams.get('secret');
-  if (!CRON_SECRET || secret !== CRON_SECRET) return new Response('unauthorized', { status: 401 });
+  if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;

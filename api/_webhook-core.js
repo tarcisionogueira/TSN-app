@@ -35,7 +35,8 @@ export function mapearPlano(valor, descricao = '') {
   const desc = descricao.toLowerCase();
 
   // Investidor Pro — mensal ou anual parcelado
-  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // Investidor Pro anual
+  if (dentroFaixa(v, 99.9))  return { plano: 'top2', role: 'top2' }; // Investidor Pro mensal
+  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // Investidor Pro anual (12×)
 
   // Leilão Club — verificar ANTES de assessorado pois ambos têm opção de R$5.000
   if (dentroFaixa(v, 5000) && desc.includes('clube')) return { plano: 'clube', role: 'clube' };

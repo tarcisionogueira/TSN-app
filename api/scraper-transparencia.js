@@ -196,7 +196,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Endpoint não configurado (CRON_SECRET ausente)' });
   }
 
-  const enviado = req.headers['x-cron-secret'] ?? '';
+  const authBearer = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+  const enviado = req.headers['x-cron-secret'] || authBearer || '';
   if (enviado !== cronSecret) {
     return res.status(401).json({ error: 'Não autorizado' });
   }

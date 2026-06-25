@@ -23,8 +23,8 @@ export default async function handler(req, res) {
   if (!ACCESS_TOKEN) return res.status(500).json({ error: 'Pagamento não configurado' });
 
   const { paymentId, valor, referencia } = req.body || {};
-  if (!paymentId && !referencia) {
-    return res.status(400).json({ error: 'paymentId ou referencia obrigatório' });
+  if (!paymentId && !valor) {
+    return res.status(400).json({ error: 'paymentId ou valor obrigatório' });
   }
 
   try {
@@ -44,8 +44,8 @@ export default async function handler(req, res) {
       });
     }
 
-    // Busca por pagamentos PIX recentes (últimas 2h) com o valor esperado
-    const desde = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    // Busca por pagamentos PIX recentes (últimas 30min) com o valor esperado
+    const desde = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const url = `${MP_BASE}/v1/payments/search?payment_type_id=account_money,pix&begin_date=${desde}&status=approved&limit=20`;
     const mpRes = await fetch(url, {
       headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },

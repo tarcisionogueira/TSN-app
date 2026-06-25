@@ -163,7 +163,12 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Endpoint não configurado' }), { status: 500 });
   }
   const _url = new URL(req.url);
-  const sent = req.headers.get('x-cron-secret') || _url.searchParams.get('secret') || '';
+  // Vercel cron envia: Authorization: Bearer <CRON_SECRET>
+  // Chamadas manuais podem enviar: x-cron-secret header ou ?secret= query param
+  const authHeader = req.headers.get('authorization') || '';
+  const sent = req.headers.get('x-cron-secret')
+    || _url.searchParams.get('secret')
+    || authHeader.replace(/^Bearer\s+/i, '');
   if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
@@ -186,17 +191,11 @@ export default async function handler(req) {
   if (qEstados) {
     estados = qEstados.split(',').map(s => s.trim().toUpperCase()).filter(s => /^[A-Z]{2}$/.test(s) && ESTADOS_GEOCOD.includes(s));
   } else if (req.method === 'GET') {
-    // Cron */10 0,1,2,3,4 * * * — cada invocação processa 1 estado pelo horário UTC
-    // 00:00→AC, 00:10→AL, ..., 04:20→TO  (27 estados em 270 min)
+    // Cron */10 * * * * — processa todos os pendentes 24h/dia.
+    // Rotaciona estado pelo minuto UTC para distribuir carga entre invocações consecutivas.
     const now = new Date();
-    const hora = now.getUTCHours(); // 0,1,2,3,4
-    const minuto = now.getUTCMinutes();
-    const idx = hora * 6 + Math.floor(minuto / 10);
-    if (idx < 0 || idx >= ESTADOS_GEOCOD.length) {
-      return new Response(JSON.stringify({ msg: 'idle', hora, minuto, idx }), {
-        status: 200, headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const minutoTotal = now.getUTCHours() * 6 + Math.floor(now.getUTCMinutes() / 10);
+    const idx = minutoTotal % ESTADOS_GEOCOD.length;
     estados = [ESTADOS_GEOCOD[idx]];
   } else if (req.method === 'POST') {
     try {

@@ -3,9 +3,8 @@ export const config = { runtime: 'edge' };
 // Chame esse endpoint UMA VEZ para registrar o webhook no Daily.co
 // GET /api/setup-daily-webhook?secret=CRON_SECRET (somente admin)
 export default async function handler(req) {
-  const CRON_SECRET = process.env.CRON_SECRET;
-  const sentSecret = req.headers.get('x-cron-secret') || '';
-  if (!CRON_SECRET || sentSecret !== CRON_SECRET) {
+  const { isCronAuthorized } = await import('./_auth.js');
+  if (!isCronAuthorized(req)) {
     return new Response(JSON.stringify({ error: 'Acesso negado' }), {
       status: 401, headers: { 'Content-Type': 'application/json' },
     });

@@ -11,9 +11,8 @@ const APP_URL     = process.env.APP_BASE_URL     || 'https://bidprobrasil.com.br
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
-  // Autenticação via CRON_SECRET (mesmo padrão dos outros endpoints)
-  const sent = req.headers.get('x-cron-secret') || '';
-  if (!CRON_SECRET || sent !== CRON_SECRET) {
+  const { isCronAuthorized } = await import('./_auth.js');
+  if (!isCronAuthorized(req)) {
     return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
   }
 

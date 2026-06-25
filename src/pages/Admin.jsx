@@ -2372,7 +2372,7 @@ const defaultPromo = () => ({ codigo: '', produto: 'top2', descricao_condicoes: 
 function buildProdutosPromo(planos) {
   const fmt = (v, d = 2) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })}`;
   if (!planos) return [
-    { key: 'top2', label: 'Investidor Pro — R$ 49,90/mês' },
+    { key: 'top2', label: 'Investidor Pro — R$ 99,90/mês' },
     { key: 'assessorado', label: 'Assessoria — R$ 500/mês × 12' },
     { key: 'assessorado_vista', label: 'Assessoria À Vista' },
     { key: 'clube', label: 'Leilão Club — R$ 5.000/mês × 12' },
@@ -2683,11 +2683,11 @@ function UsuariosPlanoDetalhe({ planoKey }) {
   const pNome = (key) => planosCtx?.[key]?.nome || key;
   const LABEL = {
     explorador: 'Explorador (Grátis)',
-    top2: `${pNome('top2')} (R$${planosCtx?.top2?.preco?.toFixed(2) || '49,90'}/mês)`,
+    top2: `${pNome('top2')} (R$${planosCtx?.top2?.preco?.toFixed(2) || '99,90'}/mês)`,
     assessorado: `${pNome('assessorado')} (R$${planosCtx?.assessorado?.preco?.toFixed(2) || '500'}/mês)`,
     clube: `${pNome('clube')} (R$${planosCtx?.clube?.preco ? (planosCtx.clube.preco/1000).toFixed(0)+'k' : '5k'}/mês)`,
   };
-  const PRECO = { explorador: 0, top2: planosCtx?.top2?.preco || 49.90, assessorado: planosCtx?.assessorado?.preco || 500, clube: planosCtx?.clube?.preco || 5000 };
+  const PRECO = { explorador: 0, top2: planosCtx?.top2?.preco || 99.90, assessorado: planosCtx?.assessorado?.preco || 500, clube: planosCtx?.clube?.preco || 5000 };
   const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   React.useEffect(() => {

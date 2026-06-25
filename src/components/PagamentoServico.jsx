@@ -159,24 +159,8 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
     });
   }, [PIX_KEY, PIX_TITULAR, PIX_CIDADE, servico.valor, servico.id]);
 
-  // Registra payment no MP para polling preciso (não gera taxa, só registra)
-  useEffect(() => {
-    if (!PIX_KEY) return;
-    (async () => {
-      try {
-        const data = await apiCall('/api/mp-checkout', {
-          method: 'POST',
-          body: JSON.stringify({
-            valor: servico.valor,
-            descricao: servico.nome,
-            email: user?.email,
-            metodoPagamento: 'pix',
-          }),
-        });
-        if (data?.paymentId) setPaymentId(data.paymentId);
-      } catch { /* fallback: polling por valor */ }
-    })();
-  }, []);
+  // PIX estático: não cria payment no MP (o cliente paga direto na chave PIX da conta).
+  // Polling usa apenas valor + referência para localizar o recebimento na conta MP.
 
   const verificar = async () => {
     if (etapa === 'confirmado') return;

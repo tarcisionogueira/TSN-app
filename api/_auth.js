@@ -87,3 +87,38 @@ export async function getUserRoleById(userId) {
     return null;
   }
 }
+
+/**
+ * Valida CRON_SECRET para endpoints chamados pelo Vercel Cron.
+ * Vercel envia: Authorization: Bearer <CRON_SECRET>
+ * Chamadas manuais podem enviar: x-cron-secret header ou ?secret= query param.
+ *
+ * Funciona com Edge Runtime (req = Request) e Node.js Runtime (req = IncomingMessage).
+ * Retorna true se autorizado.
+ */
+export function isCronAuthorized(req) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+
+  // Edge Runtime: req.headers.get()
+  // Node.js Runtime: req.headers['x']
+  const getH = (name) => {
+    if (typeof req.headers?.get === 'function') return req.headers.get(name) || '';
+    return (req.headers?.[name] || req.headers?.[name.toLowerCase()] || '');
+  };
+
+  const auth = getH('authorization').replace(/^Bearer\s+/i, '');
+  const xCron = getH('x-cron-secret');
+
+  let secret = xCron || auth;
+
+  // Query param fallback (?secret=) para chamadas manuais
+  if (!secret) {
+    try {
+      const url = new URL(req.url, 'http://localhost');
+      secret = url.searchParams.get('secret') || '';
+    } catch { /* ignore */ }
+  }
+
+  return secret === cronSecret;
+}

@@ -64,10 +64,9 @@ async function check(nome, fn) {
 export default async function handler(req) {
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
-  // Cron Vercel usa CRON_SECRET; chamada manual exige autenticação admin
-  const cronSecret = process.env.CRON_SECRET;
-  const sentCron = req.headers.get('x-cron-secret') || (new URL(req.url)).searchParams.get('secret') || '';
-  const isCron = cronSecret && sentCron === cronSecret;
+  // Cron Vercel usa Authorization: Bearer <CRON_SECRET>; chamada manual exige autenticação admin
+  const { isCronAuthorized } = await import('./_auth.js');
+  const isCron = isCronAuthorized(req);
 
   if (!isCron) {
     const user = await getUser(req);

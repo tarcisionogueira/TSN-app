@@ -7,21 +7,17 @@
 
 export const config = { runtime: 'edge' };
 
+import { isCronAuthorized } from './_auth.js';
+
 const SUPABASE    = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const RESEND_KEY  = process.env.RESEND_API_KEY;
 const FROM        = process.env.APP_FROM_EMAIL || 'TSN App <alertas@bidprobrasil.com.br>';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
-const CRON_SECRET = process.env.CRON_SECRET;
 const BASE_URL    = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
 export default async function handler(req) {
-  if (!CRON_SECRET) {
-    console.error('[mp-saque-cron] CRON_SECRET não configurado');
-    return new Response(JSON.stringify({ error: 'Endpoint não configurado' }), { status: 500 });
-  }
-  const secret = req.headers.get('x-cron-secret') || new URL(req.url).searchParams.get('secret');
-  if (secret !== CRON_SECRET) return new Response('unauthorized', { status: 401 });
+  if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
 
   // Busca saques pendentes
   const res = await fetch(`${SUPABASE}/rest/v1/mp_saques?status=eq.pendente&order=solicitado_em.asc`, {

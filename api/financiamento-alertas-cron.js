@@ -1,16 +1,10 @@
 import { alertarErro } from './_error-alert.js';
+import { isCronAuthorized } from './_auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end();
 
-  const CRON_SECRET = process.env.CRON_SECRET;
-  if (!CRON_SECRET) {
-    console.error('[financiamento-alertas] CRON_SECRET não configurado');
-    return res.status(500).json({ error: 'Endpoint não configurado' });
-  }
-
-  const sent = req.headers['x-cron-secret'] || '';
-  if (sent !== CRON_SECRET) return res.status(401).json({ error: 'Não autorizado' });
+  if (!isCronAuthorized(req)) return res.status(401).json({ error: 'Não autorizado' });
 
   const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
   const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;

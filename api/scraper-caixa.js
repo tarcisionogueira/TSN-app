@@ -312,18 +312,19 @@ export default async function handler(req, res) {
   }
 
   // Protege contra chamadas externas não autorizadas.
-  // Aceita: (1) CRON_SECRET no header/query, (2) JWT de admin via Authorization.
+  // Aceita: (1) CRON_SECRET via x-cron-secret header ou Authorization: Bearer, (2) JWT de admin.
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     console.error('[scraper-caixa] CRON_SECRET não configurado — acesso bloqueado');
     return res.status(500).json({ error: 'Endpoint não configurado' });
   }
   if (cronSecret) {
-    const sent = req.headers['x-cron-secret'] || '';
+    const authHeader = req.headers['authorization'] || '';
+    const bearerVal = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const sent = req.headers['x-cron-secret'] || bearerVal || '';
     if (sent !== cronSecret) {
       // Fallback: aceitar JWT de usuário admin (chamada manual pelo painel)
-      const authHeader = req.headers['authorization'] || '';
-      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      const token = bearerVal;
       let isAdmin = false;
       if (token) {
         try {
