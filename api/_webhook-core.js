@@ -35,8 +35,7 @@ export function mapearPlano(valor, descricao = '') {
   const desc = descricao.toLowerCase();
 
   // Investidor Pro — mensal ou anual parcelado
-  if (dentroFaixa(v, 49.9))  return { plano: 'top2', role: 'top2' };
-  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // anual à vista
+  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // Investidor Pro anual
 
   // Leilão Club — verificar ANTES de assessorado pois ambos têm opção de R$5.000
   if (dentroFaixa(v, 5000) && desc.includes('clube')) return { plano: 'clube', role: 'clube' };
@@ -170,7 +169,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
 export async function processarVencido({ gatewayCustomerId, email, gateway }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente && !cliente.inadimplente_desde) {
-    const ROLES_PAGANTES = ['top1', 'top2', 'assessorado', 'clube', 'top1_anual', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+    const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
     const update = { inadimplente_desde: new Date().toISOString().slice(0, 10) };
     if (ROLES_PAGANTES.includes(cliente.role)) {
       update.role_anterior = cliente.role;
@@ -196,7 +195,7 @@ async function setExpiracaoDocumentos(userId) {
 export async function processarRecusado({ gatewayCustomerId, email, motivo, gateway }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente) {
-    const ROLES_PAGANTES = ['top1', 'top2', 'assessorado', 'clube', 'top1_anual', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+    const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
     const update = {
       pagamento_erro:      motivo || 'RECUSADO',
       pagamento_erro_data: new Date().toISOString(),

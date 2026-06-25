@@ -8,7 +8,7 @@ import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
 
-const PLANOS_PAGOS = ['top1', 'top2', 'clube', 'assessorado'];
+const PLANOS_PAGOS = ['top2', 'clube', 'assessorado'];
 
 // Mapeia mensagens técnicas de erro do Asaas para orientações amigáveis
 const MENSAGENS_RECUSA = [
@@ -281,7 +281,7 @@ export default function Checkout() {
     if (!mpDesligadoManualmente) {
       // ── Tenta Mercado Pago primeiro ───────────────────────────────────
       try {
-        const planoRecorrente = ['clube', 'top1', 'top2'].includes(planoApiKey);
+        const planoRecorrente = ['clube', 'top2'].includes(planoApiKey);
         const action = planoRecorrente ? 'criar_assinatura' : 'criar_preferencia';
         const res = await apiCall('/api/mp', {
           method: 'POST',
@@ -486,7 +486,7 @@ export default function Checkout() {
             Plano {plano.nome}
           </h2>
 
-          {/* Toggle mensal/anual — top1 */}
+          {/* Toggle mensal/anual — Investidor Pro (top2) */}
           {temToggleAnual && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 20, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
               {[
