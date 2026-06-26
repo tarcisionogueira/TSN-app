@@ -226,6 +226,20 @@ export function extrairGenerico(html, urlBase) {
   return out;
 }
 
+/** Extrai URLs de páginas de detalhe a partir de uma página de listagem. */
+export function extrairLinksListagem(html, urlBase) {
+  if (!html) return [];
+  const padrao = /\/(lote|imovel|im[oó]vel|leilao|leil[ãa]o|produto|item|lot)[\/-]?[\w\-]*\d/i;
+  const urls = new Set();
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)) {
+    const href = m[1];
+    if (!padrao.test(href)) continue;
+    const abs = _abs(href, urlBase);
+    if (abs) urls.add(abs.split('#')[0]);
+  }
+  return [...urls];
+}
+
 // ── 3. FALLBACK COM IA (Claude) ─────────────────────────────────────────────
 /** Usa Claude para extrair campos quando a heurística falha. Custa ~US$ 0,005-0,012/página. */
 export async function extrairComIA(html, url) {
