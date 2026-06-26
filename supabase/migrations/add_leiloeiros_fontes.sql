@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS leiloeiros_fontes (
   url_base        text         NOT NULL,           -- ex.: https://site.com/imoveis?page=
   paginacao_param text         DEFAULT 'page',     -- nome do parâmetro de página
   perfil_parser   text         DEFAULT 'generico', -- generico | json_api | custom_<nome>
+  -- Canal de integração: 'api' assume como principal; cai para 'scraper' na falha.
+  canal_preferido text         DEFAULT 'scraper',  -- 'api' | 'scraper'
+  api_url         text,                            -- endpoint oficial do leiloeiro (quando houver)
+  api_status      text         DEFAULT NULL,       -- 'ok' | 'falha' | NULL (última checagem)
+  api_ultimo_ok   timestamptz,
   max_paginas     int          DEFAULT 10,
   prioridade      int          DEFAULT 5,          -- 1 (alta) .. 9 (baixa)
   ativo           boolean      DEFAULT true,
@@ -66,3 +71,24 @@ ON CONFLICT (nome, url_base) DO NOTHING;
 ALTER TABLE imoveis_leilao ADD COLUMN IF NOT EXISTS link_matricula text;
 ALTER TABLE imoveis_leilao ADD COLUMN IF NOT EXISTS qualidade_ok   boolean DEFAULT NULL;
 ALTER TABLE imoveis_leilao ADD COLUMN IF NOT EXISTS qualidade_faltando text;
+
+-- ── 4. DEDUPLICAÇÃO ─────────────────────────────────────────────────────────
+-- Chave determinística do imóvel (preenchida pelo scraper via chaveDedup()).
+-- O mesmo bem em fontes diferentes recebe a MESMA chave.
+ALTER TABLE imoveis_leilao ADD COLUMN IF NOT EXISTS dedup_chave text;
+CREATE INDEX IF NOT EXISTS idx_imoveis_dedup ON imoveis_leilao (dedup_chave);
+
+-- Auditoria: lista grupos de imóveis com a mesma chave (duplicados entre fontes).
+-- Use no Admin/SQL para conferir a deduplicação manualmente.
+CREATE OR REPLACE VIEW imoveis_duplicados AS
+SELECT dedup_chave,
+       COUNT(*)                         AS qtd,
+       array_agg(DISTINCT fonte)        AS fontes,
+       array_agg(id)                    AS ids,
+       MIN(valor_minimo)                AS menor_valor,
+       MAX(valor_minimo)                AS maior_valor
+FROM imoveis_leilao
+WHERE dedup_chave IS NOT NULL AND ativo = true
+GROUP BY dedup_chave
+HAVING COUNT(*) > 1
+ORDER BY qtd DESC;

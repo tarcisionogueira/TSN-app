@@ -152,11 +152,38 @@ const _abs = (href, base) => {
   try { return new URL(href, base).href; } catch { return href; }
 };
 
+/** Normaliza data para 'YYYY-MM-DD'. Aceita ISO ou 'DD/MM/YYYY'. */
+export function normalizarData(s) {
+  if (!s) return null;
+  const dmy = String(s).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  const iso = String(s).match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return null;
+}
+
+/** Procura a data do leilão priorizando proximidade de palavras-âncora. */
+export function extrairData(html) {
+  if (!html) return null;
+  const texto = html.replace(/<[^>]+>/g, ' ');
+  // Prioriza datas próximas de "leilão", "praça", "data" — evita pegar data de cadastro
+  const ancora = texto.match(/(?:leil[ãa]o|pra[çc]a|encerr|data\s+do\s+leil)[^\d]{0,40}(\d{2}\/\d{2}\/\d{4})/i);
+  if (ancora) return normalizarData(ancora[1]);
+  // Fallback: primeira data futura plausível no texto
+  const todas = [...texto.matchAll(/(\d{2}\/\d{2}\/\d{4})/g)].map(m => m[1]);
+  for (const d of todas) {
+    const iso = normalizarData(d);
+    if (iso && iso >= new Date().toISOString().slice(0, 10)) return iso;
+  }
+  return null;
+}
+
 /** Extrai campos de uma página de detalhe usando padrões comuns. */
 export function extrairGenerico(html, urlBase) {
   if (!html) return null;
   const out = { titulo: null, valor_minimo: 0, valor_avaliacao: 0, link_foto: null,
-                link_edital: null, link_matricula: null, descricao: null, numero_matricula: null };
+                link_edital: null, link_matricula: null, descricao: null, numero_matricula: null,
+                data_leilao: null };
 
   // schema.org / Open Graph (mais confiável)
   const og = (p) => (html.match(new RegExp(`<meta[^>]+property=["']og:${p}["'][^>]+content=["']([^"']+)["']`, 'i')) || [])[1];
@@ -190,6 +217,9 @@ export function extrairGenerico(html, urlBase) {
   const mat = html.match(/matr[ií]cula[^\d]{0,20}(\d[\d.\-\/]{2,})/i);
   if (mat) out.numero_matricula = mat[1];
 
+  // data do leilão/praça: "leilão ... 12/07/2026" ou "1ª praça: 12/07/2026"
+  out.data_leilao = jsonLd?.startDate ? normalizarData(jsonLd.startDate) : extrairData(html);
+
   out.descricao = og('description') || jsonLd?.description ||
     (html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) || [])[1] || null;
 
@@ -210,7 +240,8 @@ export async function extrairComIA(html, url) {
     .slice(0, 18000);
 
   const prompt = `Extraia os dados deste imóvel de leilão do HTML abaixo. Responda APENAS com JSON válido, sem texto extra, no formato:
-{"titulo":string|null,"valor_minimo":number,"valor_avaliacao":number,"link_foto":string|null,"link_edital":string|null,"link_matricula":string|null,"numero_matricula":string|null,"descricao":string|null}
+{"titulo":string|null,"valor_minimo":number,"valor_avaliacao":number,"link_foto":string|null,"link_edital":string|null,"link_matricula":string|null,"numero_matricula":string|null,"descricao":string|null,"data_leilao":"YYYY-MM-DD"|null}
+A data do leilão é o campo mais importante: procure por "leilão", "praça", "data" e converta para YYYY-MM-DD.
 URL base para resolver links relativos: ${url}
 HTML:\n${limpo}`;
 
@@ -233,19 +264,54 @@ HTML:\n${limpo}`;
     if (parsed.link_foto)      parsed.link_foto = _abs(parsed.link_foto, url);
     if (parsed.link_edital)    parsed.link_edital = _abs(parsed.link_edital, url);
     if (parsed.link_matricula) parsed.link_matricula = _abs(parsed.link_matricula, url);
+    if (parsed.data_leilao)    parsed.data_leilao = normalizarData(parsed.data_leilao);
     return parsed;
   } catch { return null; }
 }
 
 // ── 4. CHECAGEM DE QUALIDADE ────────────────────────────────────────────────
-/** Valida os campos-base. Retorna { ok, faltando: string[] }. */
-export function checarQualidade(imovel) {
+/**
+ * Valida os campos obrigatórios. Sem DATA o imóvel é DESCARTADO (descartar=true) —
+ * sem data não há análise nem agendamento de refresh.
+ * Modo estrito (padrão): exige data + valor + foto + edital + matrícula.
+ * Retorna { ok, faltando:[], descartar }.
+ */
+export function checarQualidade(imovel, { estrito = true } = {}) {
   const faltando = [];
+  const semData = !imovel?.data_leilao;
+  if (semData)                                      faltando.push('data');
   if (!imovel?.valor_minimo || imovel.valor_minimo <= 0) faltando.push('valor');
-  if (!imovel?.link_foto)   faltando.push('foto');
-  if (!imovel?.descricao)   faltando.push('descricao');
-  if (!imovel?.link_edital && !imovel?.link_matricula) faltando.push('documentos');
-  return { ok: faltando.length === 0, faltando };
+  if (!imovel?.link_foto)                           faltando.push('foto');
+  if (estrito) {
+    if (!imovel?.link_edital)    faltando.push('edital');
+    if (!imovel?.link_matricula) faltando.push('matricula');
+  } else if (!imovel?.link_edital && !imovel?.link_matricula) {
+    faltando.push('documentos');
+  }
+  // Descarta de vez quando falta o que inviabiliza o fluxo (data é o gatilho principal).
+  const descartar = semData || !imovel?.valor_minimo;
+  return { ok: faltando.length === 0, faltando, descartar };
+}
+
+// ── 4b. DEDUPLICAÇÃO ────────────────────────────────────────────────────────
+const _norm = (s) => (s || '').toString().toLowerCase().normalize('NFD')
+  .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+
+/**
+ * Chave de deduplicação determinística. Prioridade:
+ *  1) matrícula (identifica o imóvel de forma única no cartório)
+ *  2) CEP + valor mínimo
+ *  3) endereço normalizado + cidade
+ * Imóveis com a mesma chave são o mesmo bem em fontes diferentes.
+ */
+export function chaveDedup(imovel) {
+  const mat = _norm(imovel?.numero_matricula);
+  if (mat && mat.length >= 3) return `mat:${mat}`;
+  const cep = _norm(imovel?.cep);
+  if (cep && cep.length === 8 && imovel?.valor_minimo) return `cep:${cep}:${Math.round(imovel.valor_minimo)}`;
+  const end = _norm(imovel?.endereco), cid = _norm(imovel?.cidade);
+  if (end && cid) return `end:${cid}:${end}`.slice(0, 80);
+  return null; // sem chave confiável → não deduplica (evita falso positivo)
 }
 
 /**
@@ -271,5 +337,7 @@ export async function extrairImovel(html, url, { permitirIA = true } = {}) {
     fonte = 'incompleto';
   }
 
-  return { imovel, fonte_extracao: fonte, qualidade: q };
+  // Sem data (ou sem valor) não entra no fluxo — análise e refresh dependem disso.
+  if (q.descartar) fonte = 'descartado';
+  return { imovel, fonte_extracao: fonte, qualidade: q, descartar: q.descartar };
 }
