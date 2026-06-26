@@ -278,7 +278,10 @@ HTML:\n${limpo}`;
  */
 export function checarQualidade(imovel, { estrito = true } = {}) {
   const faltando = [];
-  const semData = !imovel?.data_leilao;
+  // Venda direta não tem data de leilão — pode ser arrematada a qualquer momento.
+  // Não exige nem descarta por data; deve sempre aparecer.
+  const ehVendaDireta = imovel?.modalidade === 'venda_direta';
+  const semData = !ehVendaDireta && !imovel?.data_leilao;
   if (semData)                                      faltando.push('data');
   if (!imovel?.valor_minimo || imovel.valor_minimo <= 0) faltando.push('valor');
   if (!imovel?.link_foto)                           faltando.push('foto');
@@ -288,8 +291,9 @@ export function checarQualidade(imovel, { estrito = true } = {}) {
   } else if (!imovel?.link_edital && !imovel?.link_matricula) {
     faltando.push('documentos');
   }
-  // Descarta de vez quando falta o que inviabiliza o fluxo (data é o gatilho principal).
-  const descartar = semData || !imovel?.valor_minimo;
+  // Descarta quando falta o que inviabiliza o fluxo: sem valor sempre; sem data
+  // só descarta se NÃO for venda direta (venda direta entra sem data).
+  const descartar = (semData && !ehVendaDireta) || !imovel?.valor_minimo;
   return { ok: faltando.length === 0, faltando, descartar };
 }
 
