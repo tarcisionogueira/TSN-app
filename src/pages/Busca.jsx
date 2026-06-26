@@ -92,7 +92,7 @@ function svgPin(cor) {
   )}`;
 }
 
-function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista, visivel }) {
+function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista, visivel, height }) {
   const mapContainerRef = useRef(null);
   const leafletRef = useRef(null);
   const markersRef = useRef(null);
@@ -277,7 +277,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   }, [visivel]);
 
   return (
-    <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: 'calc(100vh - 320px)', minHeight: 380, position: 'relative', isolation: 'isolate', zIndex: 0 }}>
+    <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: height || 'calc(100vh - 320px)', minHeight: 380, position: 'relative', isolation: 'isolate', zIndex: 0 }}>
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
       {carregando && (
         <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '6px 16px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#64748b' }}>
@@ -572,6 +572,7 @@ export default function Busca() {
     const [coluna, dir] = sortAtivo === 'desconto_desc' ? ['desconto_percentual', false]
       : sortAtivo === 'desconto_asc' ? ['desconto_percentual', true]
       : sortAtivo === 'valor_asc'    ? ['valor_minimo', true]
+      : sortAtivo === 'data_asc'     ? ['data_leilao', true]
       : ['valor_minimo', false];
 
     try {
@@ -1084,7 +1085,7 @@ export default function Busca() {
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}
-      <div style={{ display:'flex', flexDirection:'column', gap:14, overflow: vista === 'mapa' ? 'hidden' : undefined, maxHeight: vista === 'mapa' ? '100vh' : undefined }}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14, overflow: (vista === 'mapa' || vista === 'ambos') ? 'hidden' : undefined, maxHeight: (vista === 'mapa' || vista === 'ambos') ? '100vh' : undefined }}>
 
         {/* Filtros Salvos */}
         {user?.id && (
@@ -1132,6 +1133,12 @@ export default function Busca() {
                 style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='lista' ? 'white' : 'transparent', color: vista==='lista' ? '#111111' : '#64748b', boxShadow: vista==='lista' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 ☰ Lista
               </button>
+              {!isMobile && (
+                <button onClick={() => setVista('ambos')}
+                  style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='ambos' ? 'white' : 'transparent', color: vista==='ambos' ? '#111111' : '#64748b', boxShadow: vista==='ambos' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                  ⊞ Mapa+Lista
+                </button>
+              )}
               <button onClick={() => setVista('mapa')}
                 style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='mapa' ? 'white' : 'transparent', color: vista==='mapa' ? '#111111' : '#64748b', boxShadow: vista==='mapa' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 🗺️ Mapa
@@ -1147,6 +1154,7 @@ export default function Busca() {
                 <option value="desconto_asc">Menor desconto primeiro</option>
                 <option value="valor_asc">Menor valor primeiro</option>
                 <option value="valor_desc">Maior valor primeiro</option>
+                <option value="data_asc">Encerra em breve</option>
               </select>
               {selecionados.length>0 && (
                 <button onClick={()=>irParaAnalise(resultados.find(r=>r.id===selecionados[0]))}
@@ -1204,11 +1212,55 @@ export default function Busca() {
 
         {/* Vista Mapa embutido — usa snapshot dos filtros no momento da busca */}
         {buscaFeita && filtrosBusca && (
-          <div style={{ display: vista === 'mapa' ? 'block' : 'none' }}>
-            <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} totalLista={totalResultados} visivel={vista === 'mapa'} />
+          <div style={{ display: (vista === 'mapa' || vista === 'ambos') ? 'block' : 'none' }}>
+            {vista === 'ambos' ? (
+              <div style={{ display:'flex', gap:14, height:'calc(100vh - 320px)', minHeight:380 }}>
+                <div style={{ flex:'0 0 55%', minWidth:0 }}>
+                  <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} totalLista={totalResultados} visivel={vista === 'ambos'} height="100%" />
+                </div>
+                <div style={{ flex:'1 1 45%', minWidth:0, overflowY:'auto', display:'flex', flexDirection:'column', gap:8 }}>
+                  {resultadosFiltrados.slice(0, 30).map((im) => {
+                    const desc = desconto(im);
+                    const getImgSrc = (im) => {
+                      const foto = im.foto;
+                      const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
+                      if (!foto) return isCef ? imgUrlCaixa({ ...im, fonte_id: im.fonteId }) : null;
+                      if (foto.includes('supabase.co') || foto.startsWith('/')) return foto;
+                      if (isCef) return imgUrlCaixa({ ...im, fonte_id: im.fonteId }) || `/api/img-proxy?url=${encodeURIComponent(foto)}`;
+                      return `/api/img-proxy?url=${encodeURIComponent(foto)}`;
+                    };
+                    const imgSrc = getImgSrc(im);
+                    return (
+                      <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state: { imovel: im } })}
+                        style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', cursor:'pointer', gap:0, flexShrink:0 }}
+                        onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'}
+                        onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                        <LazyImage src={imgSrc} alt={im.titulo} style={{ width:72, height:72, flexShrink:0 }} />
+                        <div style={{ padding:'8px 10px', flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:'#111', marginBottom:2, lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{im.titulo || 'Imóvel'}</div>
+                          <div style={{ fontSize:10, color:'#64748b', marginBottom:4 }}>📍 {im.cidade} — {im.estado}</div>
+                          <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap' }}>
+                            <span style={{ fontSize:12, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
+                            {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{desc}%</span>}
+                          </div>
+                          {im.dataLeilao && <div style={{ fontSize:9, color:'#94a3b8', marginTop:2 }}>📅 {fmtData(im.dataLeilao)}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {resultadosFiltrados.length > 30 && (
+                    <div style={{ textAlign:'center', fontSize:11, color:'#94a3b8', padding:'8px 0' }}>
+                      + {resultadosFiltrados.length - 30} imóveis — use Lista para ver todos
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} totalLista={totalResultados} visivel={vista === 'mapa'} />
+            )}
           </div>
         )}
-        {vista === 'mapa' && !buscaFeita && (
+        {(vista === 'mapa' || vista === 'ambos') && !buscaFeita && (
           <div style={{ borderRadius:14, border:'1px solid #e2e8f0', height:'calc(100vh - 320px)', minHeight:380, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, background:'#f8fafc', color:'#94a3b8' }}>
             <span style={{ fontSize:32 }}>🗺️</span>
             <span style={{ fontSize:14, fontWeight:600 }}>Configure os filtros e selecione um estado para ver os imóveis no mapa</span>
