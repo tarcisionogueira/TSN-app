@@ -226,6 +226,8 @@ async function scraperCEFcsv(uf) {
 
       const numeroLimpo = m.id.replace(/\s/g, '');
       const linkDetalhe = m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroLimpo}`;
+      // Matrícula e edital têm URL determinística no portal da Caixa (a partir do nº do imóvel)
+      const linkMatricula = `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${numeroLimpo}`;
       // CEF não fornece URL de foto no CSV — construir a partir do número do imóvel
       const fotoUrl = `https://venda-imoveis.caixa.gov.br/fotos/F${numeroLimpo}.jpg`;
       const descParts = [m.modalidade, m.tipo, m.situacao_ocup, m.descricao_csv].filter(Boolean);
@@ -244,6 +246,8 @@ async function scraperCEFcsv(uf) {
         area_m2: 0,
         descricao: descParts.join(' — ') || null,
         link_edital: linkDetalhe,
+        link_matricula: linkMatricula,
+        url_lote: linkDetalhe,
         link_foto: fotoUrl,
         _foto_original: fotoUrl,
         leiloeiro: 'Caixa Econômica Federal',
