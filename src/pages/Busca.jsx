@@ -270,12 +270,14 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   // Quando o container fica visível novamente, corrige tamanho do mapa
   useEffect(() => {
     if (visivel && leafletRef.current) {
-      setTimeout(() => leafletRef.current?.invalidateSize(), 50);
+      // Duplo fire: 100ms para layout inicial, 400ms após possível transição CSS
+      setTimeout(() => leafletRef.current?.invalidateSize(), 100);
+      setTimeout(() => leafletRef.current?.invalidateSize(), 400);
     }
   }, [visivel]);
 
   return (
-    <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: 'calc(100vh - 220px)', minHeight: 400, position: 'relative', isolation: 'isolate', zIndex: 0 }}>
+    <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: 'calc(100vh - 320px)', minHeight: 380, position: 'relative', isolation: 'isolate', zIndex: 0 }}>
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
       {carregando && (
         <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '6px 16px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#64748b' }}>
@@ -1082,7 +1084,7 @@ export default function Busca() {
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}
-      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14, overflow: vista === 'mapa' ? 'hidden' : undefined, maxHeight: vista === 'mapa' ? '100vh' : undefined }}>
 
         {/* Filtros Salvos */}
         {user?.id && (
@@ -1207,7 +1209,7 @@ export default function Busca() {
           </div>
         )}
         {vista === 'mapa' && !buscaFeita && (
-          <div style={{ borderRadius:14, border:'1px solid #e2e8f0', height:'calc(100vh - 220px)', minHeight:400, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, background:'#f8fafc', color:'#94a3b8' }}>
+          <div style={{ borderRadius:14, border:'1px solid #e2e8f0', height:'calc(100vh - 320px)', minHeight:380, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, background:'#f8fafc', color:'#94a3b8' }}>
             <span style={{ fontSize:32 }}>🗺️</span>
             <span style={{ fontSize:14, fontWeight:600 }}>Configure os filtros e selecione um estado para ver os imóveis no mapa</span>
           </div>
