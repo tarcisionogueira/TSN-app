@@ -288,9 +288,12 @@ export default function Festa() {
       <div style={styles.card}>
         {/* Cabeçalho */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ fontSize: 52, marginBottom: 6 }}>🌾</div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: '#111' }}>Festa da Colheita</h1>
-          <p style={{ margin: '6px 0 0', fontSize: 13, color: '#64748b' }}>Escola dos meus filhos · 2026</p>
+          <div style={{ fontSize: 52, marginBottom: 10 }}>🌾</div>
+          <div style={{ display: 'inline-block', background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', borderRadius: 12, padding: '4px 16px', marginBottom: 10 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>Festa da Colheita 2026</span>
+          </div>
+          <h1 style={{ margin: '6px 0 2px', fontSize: 24, fontWeight: 900, color: '#111' }}>Padaria Mascote</h1>
+          <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>Bem-vindo! Escolha como pagar 🎉</p>
         </div>
 
         {/* Campo de valor */}

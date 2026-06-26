@@ -55,9 +55,9 @@ export default async function handler(req) {
 
   const payload = {
     transaction_amount: valorNum,
-    description: 'Festa da Colheita',
+    description: 'Padaria Mascote — Festa da Colheita 2026',
     payer: { email },
-    statement_descriptor: 'FESTADACOLHEITA',
+    statement_descriptor: 'PADARIAMASCOTE',
   };
 
   if (metodo === 'pix') {
