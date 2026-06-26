@@ -189,6 +189,17 @@ function mapearColunaCaixa(row) {
   };
 }
 
+// Detecta forma de pagamento do imóvel CEF a partir do texto (descrição + modalidade).
+// Retorna null quando não há informação confiável (imóvel é omitido dos filtros de pagamento).
+function formaPagamentoCEF(descricao, modalidade, financiamento) {
+  const texto = `${descricao || ''} ${modalidade || ''} ${financiamento || ''}`
+    .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/hipotec|com onus|gravame/.test(texto)) return 'hipotecado';
+  if (/fgts|financ|parcelament|consorcio/.test(texto)) return 'financiado';
+  if (/a vista|avista|recursos proprios/.test(texto)) return 'a_vista';
+  return null;
+}
+
 async function scraperCEFcsv(uf) {
   console.log(`  CEF CSV ${uf}...`);
   try {
@@ -220,9 +231,9 @@ async function scraperCEFcsv(uf) {
 
       const modalLower = m.modalidade.toLowerCase();
       const isLeilao = modalLower.includes('leil');
-      const finLower = (m.financiamento || '').toLowerCase();
-      const isFinanciado = finLower.includes('sim') || finLower.includes('financ') || finLower.includes('fgts')
-        || modalLower.includes('financ') || modalLower.includes('fgts');
+      // Forma de pagamento: a Caixa NÃO tem coluna de financiamento no CSV —
+      // a info está no texto da descrição. Escaneia descrição + modalidade.
+      const formaPagamento = formaPagamentoCEF(m.descricao_csv, m.modalidade, m.financiamento);
 
       const numeroLimpo = m.id.replace(/\s/g, '');
       const linkDetalhe = m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroLimpo}`;
@@ -252,7 +263,7 @@ async function scraperCEFcsv(uf) {
         _foto_original: fotoUrl,
         leiloeiro: 'Caixa Econômica Federal',
         data_leilao: null,
-        forma_pagamento: isFinanciado ? 'financiado' : 'a_vista',
+        forma_pagamento: formaPagamento,
         numero_edital: m.numero_edital || null,
         numero_matricula: m.numero_matricula || null,
         numero_processo: m.numero_processo || null,

@@ -96,6 +96,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   const mapContainerRef = useRef(null);
   const leafletRef = useRef(null);
   const markersRef = useRef(null);
+  const resizeObsRef = useRef(null);
   const [imoveisMapa, setImoveisMapa] = React.useState([]);
   const [mapReady, setMapReady] = React.useState(false);
   const [carregando, setCarregando] = React.useState(true);
@@ -159,9 +160,18 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       // Corrige tiles incompletos quando o container foi montado enquanto estava oculto
       setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 50);
       setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 300);
+      // ResizeObserver: recalcula o mapa sempre que o container muda de tamanho
+      // (resolve Mapa+Lista, troca de aba e resize de janela de forma robusta)
+      if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
+        resizeObsRef.current = new ResizeObserver(() => {
+          if (leafletRef.current) leafletRef.current.invalidateSize();
+        });
+        resizeObsRef.current.observe(mapContainerRef.current);
+      }
       setMapReady(true);
     });
     return () => {
+      if (resizeObsRef.current) { resizeObsRef.current.disconnect(); resizeObsRef.current = null; }
       if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null; }
       setMapReady(false);
     };
