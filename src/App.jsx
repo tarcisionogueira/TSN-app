@@ -63,6 +63,7 @@ import Caso from './pages/Caso';
 import CriarContrato from './pages/CriarContrato';
 import ContratosTemplates from './pages/ContratosTemplates';
 import OnrRegistro from './pages/OnrRegistro';
+import Festa from './pages/Festa';
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -249,6 +250,7 @@ export default function App() {
           <Route path="/cadastro-parceiro/:token" element={<ConviteLeiloeiro />} />
           <Route path="/leiloeiro/:token" element={<ConviteLeiloeiro />} />
           <Route path="/leiloeiro" element={<PrivateRoute roles={['leiloeiro','admin']}><LeiloeiroPortal /></PrivateRoute>} />
+          <Route path="/festa" element={<Festa />} />
           <Route path="/c/:token" element={<ContratoLink />} />
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />
           <Route path="*" element={<MainLayout />} />
