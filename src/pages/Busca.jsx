@@ -247,11 +247,11 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           circle.bindPopup(`<div style="font-size:12px"><b>📍 ${cidade}</b><br>Imóveis aguardando geocodificação.<br><span style="color:#92400e">Localização aproximada da cidade.</span></div>`);
           markersRef.current.addLayer(circle);
         }).catch(() => {});
-      } else if (raioAtivo && centroRaio) {
+      } else if (raioAtivo && centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
         const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
-        leafletRef.current.setView([centroRaio.lat, centroRaio.lng], zoom);
-      } else if (centroRaio) {
-        leafletRef.current.setView([centroRaio.lat, centroRaio.lng], 11);
+        try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], zoom); } catch {}
+      } else if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
+        try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], 11); } catch {}
       } else if (bounds.length > 0) {
         // Ajusta para mostrar todos os pins
         leafletRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
@@ -262,8 +262,9 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   // Zoom quando centroRaio muda (ex: cidade selecionada sem busca)
   useEffect(() => {
     if (!mapReady || !leafletRef.current || !centroRaio) return;
+    if (!isFinite(centroRaio.lat) || !isFinite(centroRaio.lng)) return;
     const zoom = raioAtivo ? (raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8) : 11;
-    leafletRef.current.flyTo([centroRaio.lat, centroRaio.lng], zoom, { duration: 1 });
+    try { leafletRef.current.flyTo([centroRaio.lat, centroRaio.lng], zoom, { duration: 1 }); } catch {}
   }, [centroRaio, raioAtivo, raioKm, mapReady]);
 
   // Quando o container fica visível novamente, corrige tamanho do mapa
