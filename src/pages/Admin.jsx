@@ -4584,10 +4584,18 @@ function ScrapersTab() {
                     {total.toLocaleString('pt-BR')}
                   </div>
                   <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, marginBottom: 10 }}>imóveis no banco</div>
-                  <button onClick={() => rodarSysDebug(debugKey)} disabled={sysDebugRodando[debugKey]}
-                    style={{ padding: '4px 10px', borderRadius: 6, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
-                    {sysDebugRodando[debugKey] ? '⏳' : '🔍 Diagnóstico'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => rodarSysDebug(debugKey)} disabled={sysDebugRodando[debugKey]}
+                      style={{ padding: '4px 10px', borderRadius: 6, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+                      {sysDebugRodando[debugKey] ? '⏳' : '🔍 Diagnóstico'}
+                    </button>
+                    {s.tipo === 'scraper' && (
+                      <button onClick={triggerPuppeteer} disabled={puppeteerStatus?.rodando}
+                        style={{ padding: '4px 10px', borderRadius: 6, background: puppeteerStatus?.rodando ? '#f1f5f9' : s.cor, color: puppeteerStatus?.rodando ? '#94a3b8' : 'white', border: 'none', cursor: puppeteerStatus?.rodando ? 'default' : 'pointer', fontSize: 10, fontWeight: 700 }}>
+                        {puppeteerStatus?.rodando ? '⏳ Rodando…' : '▶ Executar'}
+                      </button>
+                    )}
+                  </div>
                   {sysDebug[debugKey] && (
                     <div style={{ marginTop: 8, background: sysDebug[debugKey].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '8px 10px', border: `1px solid ${sysDebug[debugKey].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>
                       <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, color: sysDebug[debugKey].status === 200 ? '#059669' : '#dc2626', display: 'flex', justifyContent: 'space-between' }}>
