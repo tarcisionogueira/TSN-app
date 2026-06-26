@@ -151,7 +151,8 @@ export default async function handler(req) {
   for (const path of ['/api/system-status']) {
     itens.push(await check(`API interna — ${path}`, async () => {
       const r = await fetch(`${APP_URL}${path}`);
-      if (!r.ok && r.status !== 405) throw new Error(`HTTP ${r.status}`);
+      // 401/403 = servidor respondendo corretamente (rota protegida sem token)
+      if (!r.ok && r.status !== 405 && r.status !== 401 && r.status !== 403) throw new Error(`HTTP ${r.status}`);
       return { status: 'ok', detalhe: `${path} respondendo` };
     }));
   }
