@@ -48,10 +48,12 @@ export default async function handler(req) {
   const { cpf, email, produto } = await req.json();
 
   // ── Verificação de email único ──
+  // perfis não armazena e-mail; usa a função email_existe (SECURITY DEFINER)
+  // que checa o Auth sem expor qual usuário.
   if (email && !cpf) {
-    const r = await sb(`perfis?email=eq.${encodeURIComponent(email)}&select=id`);
-    const rows = await r.json();
-    return new Response(JSON.stringify({ temConta: Array.isArray(rows) && rows.length > 0, campo: 'email' }), { status: 200, headers });
+    const r = await sb('rpc/email_existe', { method: 'POST', body: JSON.stringify({ p_email: email }) });
+    const existe = await r.json().catch(() => false);
+    return new Response(JSON.stringify({ temConta: existe === true, campo: 'email' }), { status: 200, headers });
   }
 
   if (!cpf) return new Response(JSON.stringify({ temConta: false }), { status: 200, headers });
