@@ -288,7 +288,6 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 
   return (
     <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', height: height || 'calc(100vh - 320px)', minHeight: 380, position: 'relative', isolation: 'isolate', zIndex: 0 }}>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
       {carregando && (
         <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '6px 16px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, color: '#64748b' }}>
           Carregando imóveis…

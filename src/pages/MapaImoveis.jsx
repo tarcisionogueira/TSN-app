@@ -258,7 +258,6 @@ export default function MapaImoveis() {
             Carregando imóveis…
           </div>
         )}
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
       </div>
 
