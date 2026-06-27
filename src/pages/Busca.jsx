@@ -842,7 +842,7 @@ export default function Busca() {
         {analisesBonus > 0 ? `🎁 ${analisesBonus} análise${analisesBonus !== 1 ? 's' : ''} bônus disponível${analisesBonus !== 1 ? 'is' : ''}` : '🔒 Análises bônus esgotadas'}
       </div>
     )}
-    <div style={{ maxWidth:1280, margin:'0 auto', padding: isMobile ? '16px 12px' : '24px 20px', display:'grid', gridTemplateColumns: isMobile ? '1fr' : '280px 1fr', gap:20, alignItems:'start' }}>
+    <div style={{ maxWidth:1280, margin:'0 auto', padding: isMobile ? '16px 12px' : '24px 20px', display:'grid', gridTemplateColumns: isMobile ? '1fr' : (showFiltros ? '280px 1fr' : 'auto 1fr'), gap:20, alignItems:'start' }}>
 
       {/* SIDEBAR */}
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
