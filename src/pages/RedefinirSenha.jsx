@@ -62,7 +62,7 @@ export default function RedefinirSenha() {
       <div style={{ background: 'white', borderRadius: 20, padding: '40px 36px', width: '100%', maxWidth: 420, boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
 
         {/* Logo clicável */}
-        <button onClick={() => nav(-1)}
+        <button onClick={() => nav('/login')}
           style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
           <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
             <Briefcase size={20} color="white" />
