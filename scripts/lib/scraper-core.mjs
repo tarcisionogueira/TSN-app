@@ -290,24 +290,29 @@ HTML:\n${limpo}`;
  * Modo estrito (padrão): exige data + valor + foto + edital + matrícula.
  * Retorna { ok, faltando:[], descartar }.
  */
+// Só as praças datadas clássicas (1ª/2ª) exigem data. Qualquer outra modalidade
+// — venda direta, venda online, licitação, praça única, nome desconhecido —
+// aparece sem exigir data (não descartamos por causa do nome da praça).
+export function modalidadeExigeData(modalidade) {
+  return modalidade === 'primeiro_leilao' || modalidade === 'segundo_leilao';
+}
+
 export function checarQualidade(imovel, { estrito = true } = {}) {
   const faltando = [];
-  // Venda direta não tem data de leilão — pode ser arrematada a qualquer momento.
-  // Não exige nem descarta por data; deve sempre aparecer.
-  const ehVendaDireta = imovel?.modalidade === 'venda_direta';
-  const semData = !ehVendaDireta && !imovel?.data_leilao;
+  const exigeData = modalidadeExigeData(imovel?.modalidade);
+  const semData = exigeData && !imovel?.data_leilao;
   if (semData)                                      faltando.push('data');
   if (!imovel?.valor_minimo || imovel.valor_minimo <= 0) faltando.push('valor');
   if (!imovel?.link_foto)                           faltando.push('foto');
   if (estrito) {
-    if (!imovel?.link_edital)    faltando.push('edital');
+    if (!imovel?.link_edital && !imovel?.link_regras_venda) faltando.push('edital');
     if (!imovel?.link_matricula) faltando.push('matricula');
-  } else if (!imovel?.link_edital && !imovel?.link_matricula) {
+  } else if (!imovel?.link_edital && !imovel?.link_matricula && !imovel?.link_regras_venda) {
     faltando.push('documentos');
   }
-  // Descarta quando falta o que inviabiliza o fluxo: sem valor sempre; sem data
-  // só descarta se NÃO for venda direta (venda direta entra sem data).
-  const descartar = (semData && !ehVendaDireta) || !imovel?.valor_minimo;
+  // Descarta apenas o que inviabiliza o fluxo: sem valor sempre; sem data só
+  // quando a modalidade é praça datada (1ª/2ª) e a data não veio.
+  const descartar = semData || !imovel?.valor_minimo;
   return { ok: faltando.length === 0, faltando, descartar };
 }
 

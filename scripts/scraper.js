@@ -200,6 +200,41 @@ function formaPagamentoCEF(descricao, modalidade, financiamento) {
   return null;
 }
 
+// Normaliza a modalidade de venda da Caixa para os valores usados no app.
+// CRÍTICO: 'venda_direta' isenta o imóvel da exigência de data no fluxo.
+function normalizarModalidadeCEF(modalidade) {
+  const m = (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  // Vendas sem data (contínuas): venda direta, venda online → tratadas como venda_direta
+  if (m.includes('venda') && (m.includes('direta') || m.includes('online'))) return 'venda_direta';
+  if (m.includes('licitac')) return 'licitacao_aberta';
+  if (/(^|[^\d])1.{0,3}(leil|praca)/.test(m) || m.includes('primeiro')) return 'primeiro_leilao';
+  if (/(^|[^\d])2.{0,3}(leil|praca)/.test(m) || m.includes('segundo')) return 'segundo_leilao';
+  if (m.includes('unica') && m.includes('praca')) return 'primeiro_leilao'; // praça única é datada
+  if (m.includes('leil') || m.includes('praca')) return 'judicial';
+  // Fallback: nunca descarta — preserva como extrajudicial (aparece no site)
+  return 'extrajudicial';
+}
+
+// Extrai número da matrícula do texto da descrição ("Matrícula(s): nº 12.345").
+function extrairMatriculaTexto(texto) {
+  const m = (texto || '').match(/matr[ií]cula[^\d]{0,18}(\d[\d.\-\/]{2,})/i);
+  return m ? m[1] : null;
+}
+
+// Extrai CEP embutido no endereço ("..., CEP: 40010-000, ...").
+function extrairCEP(texto) {
+  const m = (texto || '').match(/CEP[:\s]+(\d{5}-?\d{3})/i);
+  return m ? m[1].replace('-', '') : null;
+}
+
+// Extrai área em m² da descrição ("50,00 m²", "área de 120m2").
+function extrairAreaM2(texto) {
+  const m = (texto || '').match(/([\d.]+,?\d*)\s*m[²2]/i);
+  if (!m) return 0;
+  const n = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+
 async function scraperCEFcsv(uf) {
   console.log(`  CEF CSV ${uf}...`);
   try {
@@ -229,8 +264,9 @@ async function scraperCEFcsv(uf) {
       const valorAval = parseBRNumber(m.valor_avaliacao);
       if (!m.id || valorMin <= 0) return null;
 
-      const modalLower = m.modalidade.toLowerCase();
-      const isLeilao = modalLower.includes('leil');
+      // Modalidade normalizada (venda_direta, 1ª/2ª praça, licitação, judicial...)
+      const modalidadeNorm = normalizarModalidadeCEF(m.modalidade);
+      const ehVendaDireta = modalidadeNorm === 'venda_direta';
       // Forma de pagamento: a Caixa NÃO tem coluna de financiamento no CSV —
       // a info está no texto da descrição. Escaneia descrição + modalidade.
       const formaPagamento = formaPagamentoCEF(m.descricao_csv, m.modalidade, m.financiamento);
@@ -241,22 +277,30 @@ async function scraperCEFcsv(uf) {
       const linkMatricula = `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${numeroLimpo}`;
       // CEF não fornece URL de foto no CSV — construir a partir do número do imóvel
       const fotoUrl = `https://venda-imoveis.caixa.gov.br/fotos/F${numeroLimpo}.jpg`;
+      // Extrai dados do texto: CEP no endereço, matrícula e área na descrição
+      const cep = extrairCEP(m.logradouro) || extrairCEP(m.descricao_csv);
+      const enderecoLimpo = toTitleCase((m.logradouro || '').replace(/\s*[-–,]?\s*CEP[:\s]+\d{5}-?\d{3}/i, '').trim());
+      const numeroMatricula = m.numero_matricula || extrairMatriculaTexto(m.descricao_csv);
+      const areaM2 = extrairAreaM2(m.descricao_csv);
       const descParts = [m.modalidade, m.tipo, m.situacao_ocup, m.descricao_csv].filter(Boolean);
       return {
         fonte: 'CEF',
         fonte_id: `cef_${numeroLimpo}`,
         titulo: `${m.tipo || 'Imóvel'} — ${m.bairro} ${m.cidade} ${uf}`.trim(),
         tipo: normalizarTipo(m.tipo),
-        modalidade: isLeilao ? 'judicial' : 'extrajudicial',
+        modalidade: modalidadeNorm,
         estado: uf,
         cidade: toTitleCase(m.cidade),
         bairro: toTitleCase(m.bairro),
-        endereco: toTitleCase(m.logradouro),
+        endereco: enderecoLimpo,
+        cep: cep || null,
         valor_avaliacao: valorAval,
         valor_minimo: valorMin,
-        area_m2: 0,
+        area_m2: areaM2,
         descricao: descParts.join(' — ') || null,
-        link_edital: linkDetalhe,
+        // Venda direta → "regra de venda online"; leilão → edital
+        link_edital: ehVendaDireta ? null : linkDetalhe,
+        link_regras_venda: ehVendaDireta ? linkDetalhe : null,
         link_matricula: linkMatricula,
         url_lote: linkDetalhe,
         link_foto: fotoUrl,
@@ -265,8 +309,10 @@ async function scraperCEFcsv(uf) {
         data_leilao: null,
         forma_pagamento: formaPagamento,
         numero_edital: m.numero_edital || null,
-        numero_matricula: m.numero_matricula || null,
+        numero_matricula: numeroMatricula,
         numero_processo: m.numero_processo || null,
+        dedup_chave: numeroMatricula ? `mat:${numeroMatricula.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+                    : (cep && valorMin ? `cep:${cep}:${Math.round(valorMin)}` : null),
       };
     }).filter(Boolean);
 
