@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 import { useIsMobile } from '../utils/useIsMobile';
 import { DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -9,8 +10,10 @@ const ROLES_ELEGÍVEIS = ['admin', 'consultor', 'analista', 'advogado'];
 
 const STATUS_LABEL = { pendente: 'Pendente', pago: 'Pago', cancelado: 'Cancelado' };
 const STATUS_COLOR = { pendente: '#d97706', pago: '#16a34a', cancelado: '#94a3b8' };
-const SAQUE_STATUS_LABEL = { pendente: 'Aguardando', aprovado: 'Aprovado', pago: 'Pago', recusado: 'Recusado' };
-const SAQUE_STATUS_COLOR = { pendente: '#d97706', aprovado: '#0D63DB', pago: '#16a34a', recusado: '#ef4444' };
+// Extrato unificado (/api/saque)
+const EXTRATO_STATUS_LABEL = { disponivel: 'Disponível', solicitado: 'Solicitado', sacado: 'Sacado', cancelado: 'Cancelado' };
+const EXTRATO_STATUS_COLOR = { disponivel: '#16a34a', solicitado: '#d97706', sacado: '#0D63DB', cancelado: '#94a3b8' };
+const TIPO_LABEL = { comissao_venda: 'Comissão de venda', honorario_exito: 'Honorário de êxito', saque: 'Saque' };
 
 function fmt(v) {
   return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -26,7 +29,8 @@ export default function Comissoes() {
   const isMobile = useIsMobile();
 
   const [comissoes, setComissoes] = useState([]);
-  const [saques, setSaques] = useState([]);
+  const [saldoApi, setSaldoApi] = useState(0);
+  const [extrato, setExtrato] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState('resumo'); // resumo | analitico | saques
   const [pixKey, setPixKey] = useState('');
@@ -42,14 +46,18 @@ export default function Comissoes() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const [{ data: c }, { data: s }, { data: p }, { data: cf }] = await Promise.all([
+    const [{ data: c }, { data: p }, { data: cf }, saqueRes] = await Promise.all([
       supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('saques').select('*').eq('usuario_id', user.id).order('criado_em', { ascending: false }),
       supabase.from('perfis').select('chave_pix').eq('id', user.id).maybeSingle(),
       supabase.from('config_financeira').select('*'),
+      apiCall('/api/saque'),
     ]);
     setComissoes(c || []);
-    setSaques(s || []);
+    try {
+      const sq = await saqueRes.json();
+      setSaldoApi(Number(sq.saldo || 0));
+      setExtrato(Array.isArray(sq.extrato) ? sq.extrato : []);
+    } catch { setSaldoApi(0); setExtrato([]); }
     const k = p?.chave_pix || '';
     setPixKey(k);
     setPixKeySalva(k);
@@ -84,17 +92,19 @@ export default function Comissoes() {
 
     setSolicitandoSaque(true);
     setMsgSaque(null);
-    const { error } = await supabase.from('saques').insert({
-      usuario_id: user.id,
-      valor,
-      pix_key: pixKeySalva,
-    });
-    if (error) setMsgSaque({ tipo: 'erro', txt: 'Erro ao solicitar saque.' });
-    else {
-      setMsgSaque({ tipo: 'ok', txt: 'Saque solicitado! Processamos em até 3 dias úteis.' });
-      setValorSaque('');
-      setShowSaqueForm(false);
-      carregar();
+    try {
+      const res = await apiCall('/api/saque', { method: 'POST', body: JSON.stringify({ valor }) });
+      const data = await res.json();
+      if (res.ok) {
+        setMsgSaque({ tipo: 'ok', txt: `Saque solicitado! Saldo restante: ${fmt(data.saldo_restante)}` });
+        setValorSaque('');
+        setShowSaqueForm(false);
+        carregar();
+      } else {
+        setMsgSaque({ tipo: 'erro', txt: data.error || 'Erro ao solicitar saque.' });
+      }
+    } catch {
+      setMsgSaque({ tipo: 'erro', txt: 'Erro ao solicitar saque.' });
     }
     setSolicitandoSaque(false);
     setTimeout(() => setMsgSaque(null), 5000);
@@ -102,8 +112,8 @@ export default function Comissoes() {
 
   const totalPendente = comissoes.filter(c => c.status === 'pendente').reduce((a, c) => a + Number(c.valor_comissao), 0);
   const totalPago = comissoes.filter(c => c.status === 'pago').reduce((a, c) => a + Number(c.valor_comissao), 0);
-  const totalSaquesPendentes = saques.filter(s => ['pendente','aprovado'].includes(s.status)).reduce((a, s) => a + Number(s.valor), 0);
-  const totalDisponivel = Math.max(0, totalPendente - totalSaquesPendentes);
+  // Saldo disponível p/ saque vem da API unificada (/api/saque)
+  const totalDisponivel = saldoApi;
 
   // Agrupamento por gateway
   const porGateway = comissoes.reduce((acc, c) => {
@@ -231,7 +241,7 @@ export default function Comissoes() {
 
         {/* Abas */}
         <div style={{ display: 'flex', gap: 4, background: 'white', borderRadius: 10, padding: 4, border: '1px solid #e2e8f0', marginBottom: 20, width: 'fit-content' }}>
-          {[['resumo','Resumo'], ['analitico','Por venda'], ['saques','Saques']].map(([a, l]) => (
+          {[['resumo','Resumo'], ['analitico','Por venda'], ['saques','Extrato']].map(([a, l]) => (
             <button key={a} onClick={() => setAba(a)} style={abaStyle(a)}>{l}</button>
           ))}
         </div>
@@ -332,26 +342,33 @@ export default function Comissoes() {
           </div>
         )}
 
-        {/* Saques */}
+        {/* Extrato / Saques */}
         {aba === 'saques' && (
           <div style={cardStyle}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 14 }}>Histórico de saques</div>
-            {saques.length === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhuma solicitação de saque ainda.</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 14 }}>Extrato de saldo</div>
+            {extrato.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhum lançamento ainda.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {saques.map(s => (
-                  <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#f8fafc', borderRadius: 8, gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#111111' }}>{fmt(s.valor)}</div>
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>PIX: {s.pix_key} · {fmtData(s.criado_em)}</div>
-                      {s.observacao && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{s.observacao}</div>}
+                {extrato.map(e => {
+                  const negativo = Number(e.valor) < 0;
+                  return (
+                    <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#f8fafc', borderRadius: 8, gap: 12, flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#111111' }}>{TIPO_LABEL[e.tipo] || e.tipo}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{e.descricao} · {fmtData(e.criado_em)}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 800, fontSize: 14, color: negativo ? '#ef4444' : '#16a34a' }}>
+                          {negativo ? '−' : '+'}{fmt(Math.abs(Number(e.valor)))}
+                        </div>
+                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: (EXTRATO_STATUS_COLOR[e.status] || '#94a3b8') + '22', color: EXTRATO_STATUS_COLOR[e.status] || '#94a3b8', whiteSpace: 'nowrap' }}>
+                          {EXTRATO_STATUS_LABEL[e.status] || e.status}
+                        </span>
+                      </div>
                     </div>
-                    <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: SAQUE_STATUS_COLOR[s.status] + '22', color: SAQUE_STATUS_COLOR[s.status], whiteSpace: 'nowrap' }}>
-                      {SAQUE_STATUS_LABEL[s.status]}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -5944,6 +5944,129 @@ function FinanceiroTab() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRESTAÇÃO DE CONTAS TAB — saldos da equipe + solicitações de saque (/api/saque)
+// ═══════════════════════════════════════════════════════════════════════════════
+function PrestacaoContasTab() {
+  const [saldos, setSaldos] = React.useState([]);
+  const [pendentes, setPendentes] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [processando, setProcessando] = React.useState({});
+  const [msg, setMsg] = React.useState(null);
+
+  const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+  const carregar = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiCall('/api/saque?todos=1');
+      const data = await res.json();
+      setSaldos(Array.isArray(data.saldos) ? data.saldos : []);
+      setPendentes(Array.isArray(data.pendentes) ? data.pendentes : []);
+    } catch { setSaldos([]); setPendentes([]); }
+    setLoading(false);
+  }, []);
+
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const acao = async (id, acaoTipo) => {
+    setMsg(null);
+    setProcessando(p => ({ ...p, [id]: true }));
+    try {
+      const res = await apiCall(`/api/saque?id=${id}`, { method: 'PATCH', body: JSON.stringify({ acao: acaoTipo }) });
+      const data = await res.json();
+      if (res.ok) {
+        setMsg({ tipo: 'ok', txt: acaoTipo === 'pagar' ? 'Saque marcado como pago.' : 'Saque recusado.' });
+        await carregar();
+      } else {
+        setMsg({ tipo: 'erro', txt: data.error || 'Erro ao processar.' });
+      }
+    } catch {
+      setMsg({ tipo: 'erro', txt: 'Erro ao processar.' });
+    }
+    setProcessando(p => ({ ...p, [id]: false }));
+  };
+
+  const S2 = {
+    card: { background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '20px 24px', marginBottom: 20 },
+  };
+
+  return (
+    <div style={{ maxWidth: 980 }}>
+      {msg && (
+        <div style={{ background: msg.tipo === 'ok' ? '#dcfce7' : '#fee2e2', color: msg.tipo === 'ok' ? '#15803d' : '#dc2626', borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+          {msg.txt}
+        </div>
+      )}
+
+      {/* Solicitações pendentes */}
+      <div style={S2.card}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 14 }}>Solicitações de saque</div>
+        {loading ? (
+          <div style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</div>
+        ) : pendentes.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px 0', fontSize: 14 }}>Nenhuma solicitação pendente.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {pendentes.map(p => (
+              <div key={p.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{fmtBRL(Math.abs(Number(p.valor)))}</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{p.descricao}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{new Date(p.criado_em).toLocaleString('pt-BR')}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => acao(p.id, 'pagar')} disabled={processando[p.id]}
+                    style={{ padding: '7px 18px', background: processando[p.id] ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    Pagar
+                  </button>
+                  <button onClick={() => acao(p.id, 'recusar')} disabled={processando[p.id]}
+                    style={{ padding: '7px 18px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    Recusar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Saldos da equipe */}
+      <div style={S2.card}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 14 }}>Saldos da equipe</div>
+        {loading ? (
+          <div style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</div>
+        ) : saldos.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px 0', fontSize: 14 }}>Nenhum saldo registrado.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={S.table}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                  {['Nome', 'Papel', 'Disponível', 'Pendente', 'Chave PIX'].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: 12 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {saldos.map(s => (
+                  <tr key={s.user_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '8px 10px', color: '#111' }}>{s.nome || '—'}</td>
+                    <td style={{ padding: '8px 10px', color: '#64748b', textTransform: 'capitalize' }}>{s.role || '—'}</td>
+                    <td style={{ padding: '8px 10px', fontWeight: 700, color: '#059669' }}>{fmtBRL(s.saldo_disponivel)}</td>
+                    <td style={{ padding: '8px 10px', color: '#d97706' }}>{fmtBRL(s.saque_pendente)}</td>
+                    <td style={{ padding: '8px 10px', color: '#64748b' }}>{s.chave_pix || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // MARKETING TAB — inteligência de buscas, demográficos, SDR e oportunidades
 // (visível APENAS para role === 'admin')
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -6469,7 +6592,7 @@ function MarketingTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Configurações'];
+const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Prestação de contas', 'Configurações'];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AGENDA TAB — Disponibilidade dos analistas e geração de slots
@@ -7044,6 +7167,7 @@ export default function Admin() {
         {tab === 'CNJ'            && <CnjTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Financeiro'     && <FinanceiroTab />}
+        {tab === 'Prestação de contas' && <PrestacaoContasTab />}
         {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}
       </div>
     </div>
