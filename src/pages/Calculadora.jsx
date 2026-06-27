@@ -321,12 +321,14 @@ export default function Calculadora() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1 }}>
               <Target size={15} /> Teto máximo de lance
             </div>
-            <div style={{ fontSize: temDados ? 32 : 22, fontWeight: 900, margin: '6px 0 2px' }}>
-              {temDados ? `R$ ${fmt(teto, 0)}` : '—'}
+            <div style={{ fontSize: temDados ? (teto > 0 ? 32 : 20) : 22, fontWeight: 900, margin: '6px 0 2px' }}>
+              {!temDados ? '—' : teto > 0 ? `R$ ${fmt(teto, 0)}` : 'Meta inatingível'}
             </div>
-            {temDados
-              ? <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter ROI de {fmtPct(metaRoi, 0)} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}).</div>
-              : <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>Preencha <strong>Arrematação</strong> e <strong>Valor de mercado</strong> para calcular.</div>
+            {!temDados
+              ? <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>Preencha <strong>Arrematação</strong> e <strong>Valor de mercado</strong> para calcular.</div>
+              : teto > 0
+                ? <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter ROI de {fmtPct(metaRoi, 0)} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}).</div>
+                : <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>Nenhum lance atinge o ROI de {fmtPct(metaRoi, 0)} com esses custos. Reduza a meta ou revise os parâmetros.</div>
             }
           </div>
 
