@@ -180,7 +180,10 @@ export default function Login() {
     setErro(''); setLoading(true);
     try {
       if (!form.nome || !form.email || !form.senha) throw new Error('Preencha nome, email e senha.');
-      if (form.senha.length < 6) throw new Error('Senha deve ter ao menos 6 caracteres.');
+      // Senha forte: 8+ com maiúscula, minúscula, número e caractere especial
+      if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.senha)) {
+        throw new Error('A senha deve ter ao menos 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.');
+      }
       if (!aceite) throw new Error('É necessário aceitar os Termos de Uso e a Política de Privacidade.');
       const { error } = await supabase.auth.signUp({
         email: form.email,
@@ -363,7 +366,7 @@ export default function Login() {
                 <input value={form.endereco} onChange={e => up('endereco', e.target.value)} placeholder="Cidade, Estado" style={inp} />
               </div>
               <div>
-                <label style={lbl}>Senha * (mínimo 6 caracteres)</label>
+                <label style={lbl}>Senha * (mín. 8: maiúscula, minúscula, número e especial)</label>
                 <div style={{ position: 'relative' }}>
                   <input type={showSenha ? 'text' : 'password'} value={form.senha} onChange={e => up('senha', e.target.value)}
                     placeholder="••••••••" required style={{ ...inp, paddingRight: 44 }} />

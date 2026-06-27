@@ -21,8 +21,9 @@ const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || '';
 const fmtBRL = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const calcParcelaMaisJuros = (valor, n) => {
-  if (n === 1) return valor;
-  const taxa = n <= 3 ? 0.0199 : n <= 6 ? 0.0249 : n <= 9 ? 0.0299 : 0.0349;
+  // Até 3x sem juros; a partir de 4x o cliente assume os juros
+  if (n <= 3) return valor / n;
+  const taxa = n <= 6 ? 0.0249 : n <= 9 ? 0.0299 : 0.0349;
   return (valor * Math.pow(1 + taxa, n / 12)) / n;
 };
 
@@ -432,12 +433,12 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar }) {
             const total = pv * n;
             return (
               <option key={n} value={n}>
-                {n}× de {fmtBRL(pv)}{n === 1 ? ' — sem juros' : ` (total ${fmtBRL(total)})`}
+                {n}× de {fmtBRL(pv)}{n <= 3 ? ' — sem juros' : ` (total ${fmtBRL(total)})`}
               </option>
             );
           })}
         </select>
-        {parcelas > 1 && (
+        {parcelas > 3 && (
           <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
             ⚠️ Taxas de {((parcelaValor * parcelas / servico.valor - 1) * 100).toFixed(1)}% assumidas pelo cliente.
           </div>

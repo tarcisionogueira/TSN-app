@@ -35,7 +35,10 @@ export default function RedefinirSenha() {
   const handleRedefinir = async (e) => {
     e.preventDefault();
     setErro('');
-    if (senha.length < 6) { setErro('A senha deve ter ao menos 6 caracteres.'); return; }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) {
+      setErro('A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.');
+      return;
+    }
     if (senha !== confirmar) { setErro('As senhas não coincidem.'); return; }
     setLoading(true);
     try {
