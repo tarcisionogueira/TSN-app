@@ -132,6 +132,15 @@ export default function Login() {
 
   const up = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+  // Máscaras de digitação
+  const maskCPF = (v) => v.replace(/\D/g, '').slice(0, 11)
+    .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  const maskTel = (v) => {
+    const d = v.replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 10) return d.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d)/, '$1-$2');
+    return d.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2');
+  };
+
   const handleGoogle = async () => {
     if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
     // Salva ref antes do redirect OAuth (sessionStorage pode ser limpo em alguns browsers)
@@ -191,7 +200,7 @@ export default function Login() {
         options: {
           emailRedirectTo: `${window.location.origin}/`,
           data: {
-            nome: form.nome, cpf: form.cpf, telefone: form.telefone, endereco: form.endereco, role: 'explorador',
+            nome: form.nome, cpf: form.cpf.replace(/\D/g, ''), telefone: form.telefone.replace(/\D/g, ''), endereco: form.endereco, role: 'explorador',
             lgpd_aceito: true, lgpd_data: new Date().toISOString(),
             ref_codigo: refCodigo || undefined,
           },
@@ -350,15 +359,15 @@ export default function Login() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={lbl}>CPF</label>
-                  <input value={form.cpf}
-                    onChange={e => { up('cpf', e.target.value); setCpfCheck(null); }}
+                  <input value={form.cpf} inputMode="numeric"
+                    onChange={e => { up('cpf', maskCPF(e.target.value)); setCpfCheck(null); }}
                     onBlur={e => checarCPF(e.target.value)}
                     placeholder="000.000.000-00"
                     style={{ ...inp, borderColor: cpfCheck?.temConta ? (cpfCheck.temAcesso ? '#dc2626' : '#d97706') : undefined }} />
                 </div>
                 <div>
                   <label style={lbl}>Telefone</label>
-                  <input value={form.telefone} onChange={e => up('telefone', e.target.value)} placeholder="(00) 90000-0000" style={inp} />
+                  <input value={form.telefone} inputMode="numeric" onChange={e => up('telefone', maskTel(e.target.value))} placeholder="(00) 90000-0000" style={inp} />
                 </div>
               </div>
               <div>

@@ -119,11 +119,11 @@ export default function Convite() {
           </div>
 
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#7c3aed', color: 'white', fontSize: 13, fontWeight: 700, padding: '6px 16px', borderRadius: 20, marginBottom: 24 }}>
-            <Briefcase size={14} /> Convite de Equipe TSN Ativos
+            <Briefcase size={14} /> Convite de Equipe BidPro Brasil
           </div>
 
           <h1 style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: '0 0 12px', lineHeight: 1.2 }}>
-            Você foi convidado para integrar a equipe TSN Ativos como{' '}
+            Você foi convidado para integrar a equipe BidPro Brasil como{' '}
             <span style={{ color: '#a78bfa' }}>{rolesLabel}</span>
           </h1>
 
@@ -170,7 +170,7 @@ export default function Convite() {
   }
 
   // ── Client invite view (original) ────────────────────────────────────────────
-  const nomeConvidante = link.perfis?.nome || 'TSN Ativos';
+  const nomeConvidante = link.perfis?.nome || 'BidPro Brasil';
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #111111 0%, #111111 50%, #111111 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -183,7 +183,7 @@ export default function Convite() {
         </div>
 
         <h1 style={{ fontSize: 32, fontWeight: 900, color: 'white', margin: '0 0 12px', lineHeight: 1.2 }}>
-          {nomeConvidante} te convidou para o TSN Ativos
+          {nomeConvidante} te convidou para o BidPro Brasil
         </h1>
 
         <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.7, margin: '0 0 36px' }}>
