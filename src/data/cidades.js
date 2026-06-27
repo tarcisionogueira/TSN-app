@@ -34,3 +34,33 @@ export async function buscarCidadesEstado(uf) {
     return [];
   }
 }
+
+// Lista nacional de cidades (todas as ~5.570) como "Cidade - UF", com cache.
+// Usada para autocomplete no cadastro (sem precisar escolher o estado antes).
+export async function buscarTodasCidades() {
+  const cacheKey = 'ibge_cidades_brasil';
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const { ts, data } = JSON.parse(cached);
+      if (Date.now() - ts < IBGE_CACHE_TTL) return data;
+    }
+  } catch {}
+  try {
+    const res = await fetch(
+      'https://servicodados.ibge.gov.br/api/v1/localidades/municipios?orderBy=nome',
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) return [];
+    const json = await res.json();
+    const lista = json.map(m => {
+      const uf = m.microrregiao?.mesorregiao?.UF?.sigla
+        || m.regiao_imediata?.regiao_intermediaria?.UF?.sigla || '';
+      return uf ? `${m.nome} - ${uf}` : m.nome;
+    });
+    try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: lista })); } catch {}
+    return lista;
+  } catch {
+    return [];
+  }
+}

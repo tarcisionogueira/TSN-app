@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { trackCadastro } from '../utils/gtag';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { buscarTodasCidades } from '../data/cidades';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -140,6 +141,15 @@ export default function Login() {
     if (d.length <= 10) return d.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d)/, '$1-$2');
     return d.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2');
   };
+
+  // Autocomplete de cidade (IBGE nacional, carregado uma vez)
+  const [cidadesBR, setCidadesBR] = useState([]);
+  useEffect(() => { buscarTodasCidades().then(setCidadesBR).catch(() => {}); }, []);
+  const sugestoesCidade = (() => {
+    const q = (form.endereco || '').toLowerCase().trim();
+    if (q.length < 2 || !cidadesBR.length) return [];
+    return cidadesBR.filter(c => c.toLowerCase().includes(q)).slice(0, 8);
+  })();
 
   const handleGoogle = async () => {
     if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
@@ -371,8 +381,13 @@ export default function Login() {
                 </div>
               </div>
               <div>
-                <label style={lbl}>Endereço</label>
-                <input value={form.endereco} onChange={e => up('endereco', e.target.value)} placeholder="Cidade, Estado" style={inp} />
+                <label style={lbl}>Cidade / Endereço</label>
+                <input value={form.endereco} onChange={e => up('endereco', e.target.value)}
+                  placeholder="Comece a digitar a cidade…" style={inp}
+                  list="cidades-datalist" autoComplete="off" />
+                <datalist id="cidades-datalist">
+                  {sugestoesCidade.map(c => <option key={c} value={c} />)}
+                </datalist>
               </div>
               <div>
                 <label style={lbl}>Senha * (mín. 8: maiúscula, minúscula, número e especial)</label>
