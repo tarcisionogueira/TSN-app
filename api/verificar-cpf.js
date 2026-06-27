@@ -70,7 +70,7 @@ export default async function handler(req) {
 
   // Sem produto específico — só informa que tem conta (nunca expõe userId)
   if (!produto) {
-    return new Response(JSON.stringify({ temConta: true, role, temAcesso: false, ehBeneficio: false }), { status: 200, headers });
+    return new Response(JSON.stringify({ temConta: true, temAcesso: false, ehBeneficio: false }), { status: 200, headers });
   }
 
   // ── Verifica se é produto de plano (assinatura) ──
@@ -79,7 +79,7 @@ export default async function handler(req) {
     const nivelAtual = hierarquia.indexOf(role);
     const nivelDesejado = hierarquia.indexOf(produto.planoKey);
     const temAcesso = nivelAtual >= nivelDesejado && nivelDesejado >= 0;
-    return new Response(JSON.stringify({ temConta: true, role, temAcesso, ehBeneficio: true }), { status: 200, headers });
+    return new Response(JSON.stringify({ temConta: true, temAcesso, ehBeneficio: true }), { status: 200, headers });
   }
 
   // ── Verifica curso ou ebook ──
@@ -92,17 +92,17 @@ export default async function handler(req) {
 
     if (ehBeneficio) {
       const temAcesso = PLANOS_COM_CONTEUDO.includes(role);
-      return new Response(JSON.stringify({ temConta: true, role, temAcesso, ehBeneficio: true }), { status: 200, headers });
+      return new Response(JSON.stringify({ temConta: true, temAcesso, ehBeneficio: true }), { status: 200, headers });
     } else {
       const rc = await sb(`compras_produtos?user_id=eq.${encodeURIComponent(userId)}&produto_tipo=eq.${encodeURIComponent(produto.tipo)}&produto_id=eq.${encodeURIComponent(produto.id)}&status=eq.ativo&select=id`);
       const compras = await rc.json();
       const jaComprou = Array.isArray(compras) && compras.length > 0;
       return new Response(
-        JSON.stringify({ temConta: true, role, temAcesso: jaComprou, ehBeneficio: false, produtoPago: true }),
+        JSON.stringify({ temConta: true, temAcesso: jaComprou, ehBeneficio: false, produtoPago: true }),
         { status: 200, headers }
       );
     }
   }
 
-  return new Response(JSON.stringify({ temConta: true, role, temAcesso: false, ehBeneficio: false }), { status: 200, headers });
+  return new Response(JSON.stringify({ temConta: true, temAcesso: false, ehBeneficio: false }), { status: 200, headers });
 }
