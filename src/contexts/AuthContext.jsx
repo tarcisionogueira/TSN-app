@@ -120,6 +120,17 @@ export function AuthProvider({ children }) {
           try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
           sessionStorage.removeItem('tsn_convite_codigo');
         }
+        // Redirect pós-OAuth (login Google): leva ao destino preservado antes
+        // do redirect (plano/checkout, next ou produto). HashRouter usa #/...
+        if (event === 'SIGNED_IN') {
+          const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
+          if (oauthDest) {
+            sessionStorage.removeItem('tsn_oauth_redirect');
+            if (window.location.hash.replace(/^#/, '') !== oauthDest) {
+              window.location.hash = oauthDest;
+            }
+          }
+        }
       }
       // Encerra o modo suporte ao sair da sessão
       if (event === 'SIGNED_IN') updateActivity();

@@ -158,6 +158,16 @@ export default function Login() {
     if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
     // Salva ref antes do redirect OAuth (sessionStorage pode ser limpo em alguns browsers)
     if (refCodigo) sessionStorage.setItem('tsn_ref_codigo', refCodigo);
+    // O fluxo OAuth NÃO passa pelo handleLogin, então calculamos aqui o destino
+    // pós-login (plano/checkout, next ou produto) e o AuthContext o consome.
+    const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');
+    const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
+    const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
+    let dest = '';
+    if (produtoRedirect) dest = produtoRedirect;
+    else if (planoPendente) dest = `/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`;
+    else if (nextParam) dest = nextParam;
+    if (dest) sessionStorage.setItem('tsn_oauth_redirect', dest);
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       // Usa apenas a origem — o Supabase redireciona para a URL configurada em
