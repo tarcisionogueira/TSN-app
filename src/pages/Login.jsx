@@ -46,20 +46,12 @@ export default function Login() {
     const token = sessionStorage.getItem('tsn_convite_equipe');
     if (!token) return;
     try {
-      const { data: convite } = await supabase
-        .from('convites_equipe')
-        .select('*')
-        .eq('token', token)
-        .eq('ativo', true)
-        .single();
-      if (!convite) return;
-      if (convite.expira_em && new Date(convite.expira_em) < new Date()) return;
-      const primaryRole = convite.roles?.[0];
-      if (primaryRole) {
-        await supabase.from('perfis').update({ role: primaryRole }).eq('id', userId);
-      }
-      await supabase.from('convites_equipe').update({ usado_em: new Date().toISOString(), usado_por: userId, ativo: false }).eq('token', token);
-      sessionStorage.removeItem('tsn_convite_equipe');
+      // RPC SECURITY DEFINER: valida (ativo/expira_em/usado_em), atribui o role
+      // e marca o convite como usado. Atualizar perfis/convites direto do cliente
+      // é barrado pela RLS (usuário comum não altera o próprio role).
+      const { data, error } = await supabase.rpc('usar_convite_equipe', { p_token: token, p_user_id: userId });
+      if (error) throw error;
+      if (data?.ok) sessionStorage.removeItem('tsn_convite_equipe');
     } catch (e) {
       console.error('Erro ao processar convite de equipe:', e);
     }

@@ -47,10 +47,15 @@ export default function RedefinirSenha() {
       setSucesso(true);
       await supabase.auth.signOut();
     } catch (err) {
-      setErro(err.message || 'Erro ao redefinir senha.');
+      const m = err.message || '';
+      setErro(/new password should be different/i.test(m)
+        ? 'A nova senha deve ser diferente da anterior.'
+        : (m || 'Erro ao redefinir senha.'));
     }
     setLoading(false);
   };
+
+  const senhaForte = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha);
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -104,7 +109,7 @@ export default function RedefinirSenha() {
                     type={showSenha ? 'text' : 'password'}
                     value={senha}
                     onChange={e => setSenha(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo 8 caracteres"
                     required
                     autoFocus
                     style={{ ...inp, paddingRight: 44 }}
@@ -143,13 +148,13 @@ export default function RedefinirSenha() {
                     ))}
                   </div>
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                    {senha.length < 6 ? 'Muito curta' : senha.length < 9 ? 'Fraca' : senha.length < 12 ? 'Média' : 'Forte'}
+                    {senha.length < 8 ? 'Muito curta' : !senhaForte ? 'Falta maiúscula, número ou símbolo' : 'Forte'}
                   </div>
                 </div>
               )}
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
-              <button type="submit" disabled={loading || senha !== confirmar || senha.length < 6}
-                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || senha !== confirmar || senha.length < 6) ? 0.6 : 1 }}>
+              <button type="submit" disabled={loading || senha !== confirmar || !senhaForte}
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || senha !== confirmar || !senhaForte) ? 0.6 : 1 }}>
                 {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Salvando...</> : 'Salvar nova senha'}
               </button>
             </form>

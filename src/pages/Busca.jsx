@@ -1320,7 +1320,7 @@ export default function Busca() {
                         -{desc}%
                       </div>
                     )}
-                    {im.fonte==='CEF' && (
+                    {(im.fonte==='CEF' || im.fonte==='caixa') && (
                       <div style={{ position:'absolute', top:8, left:8, background:'#c2410c', color:'white', fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:8 }}>CAIXA</div>
                     )}
                   </div>
