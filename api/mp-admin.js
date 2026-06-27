@@ -30,10 +30,9 @@ async function mpGet(path) {
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
 
-  let user;
-  try { user = await getAuthUser(req); } catch {
-    return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
-  }
+  // getAuthUser retorna null (não lança); sem este guard, isAdmin(user.id) quebra
+  const user = await getAuthUser(req);
+  if (!user) return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
 
   if (!(await isAdmin(user.id))) {
     return new Response(JSON.stringify({ error: 'Acesso negado' }), { status: 403 });

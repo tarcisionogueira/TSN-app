@@ -10,11 +10,9 @@ import { onrAjax, invalidateSession } from './_onr.js';
 export const config = { runtime: 'edge' };
 
 export default async function handler(req) {
-  try {
-    await getAuthUser(req);
-  } catch {
-    return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
-  }
+  // getAuthUser retorna null (não lança) quando o token falta/é inválido
+  const user = await getAuthUser(req);
+  if (!user) return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const uf     = (searchParams.get('uf') || '').trim().toUpperCase();

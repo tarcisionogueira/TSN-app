@@ -4,7 +4,7 @@
  * Chamado a cada 8s pelo frontend durante o fluxo de confirmação.
  */
 import { getUser } from './_auth.js';
-import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 const STATUS_APROVADO = new Set(['approved', 'authorized']);
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   const ip = getIP(req);
   const rl = checkRateLimit(`mp-verificar-pix:${ip}`, 30, 60_000);
-  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
+  if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
 
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autorizado' });

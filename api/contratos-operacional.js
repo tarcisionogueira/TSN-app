@@ -1,4 +1,4 @@
-import { getUser, getUserRole } from './_auth.js';
+import { getUser, getUserRoleById } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autorizado' });
 
-  const role = await getUserRole(user.id);
+  const role = await getUserRoleById(user.id);
   if (role !== 'admin') return res.status(403).json({ error: 'Apenas administradores podem gerar contratos operacionais' });
 
   if (req.method !== 'POST') return res.status(405).end();

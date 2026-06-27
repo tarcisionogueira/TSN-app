@@ -153,9 +153,10 @@ export default async function handler(req, res) {
       const info = PLANOS[plano];
       let linkPagamento, subscriptionId;
 
+      let cobranca;
       if (info.avulso) {
         // Pagamento único — sem renovação automática
-        const cobranca = await asaasPost('/payments', {
+        cobranca = await asaasPost('/payments', {
           customer: customerId,
           billingType: 'UNDEFINED',
           value: info.valor,

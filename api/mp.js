@@ -209,7 +209,8 @@ export default async function handler(req) {
   }
 
   const { action, ...params } = body;
-  params.userId = params.userId || user.id;
+  // Segurança: o usuário do checkout é SEMPRE o autenticado (evita IDOR)
+  params.userId = user.id;
 
   try {
     let result;
