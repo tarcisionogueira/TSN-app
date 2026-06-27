@@ -224,9 +224,11 @@ function csvToImoveis(csv, uf) {
       valor_minimo: valorMinimo,
       desconto_percentual: descontoPct != null ? Math.round(descontoPct) : null,
       modalidade: modalidadeNorm,
-      // Caixa venda direta → "regras de venda online"; leiloeiro → edital
-      link_edital: ehVendaDireta ? null : (linkDocumento.trim() || null),
-      link_regras_venda: ehVendaDireta ? (linkDocumento.trim() || null) : null,
+      // Caixa venda direta → "regras de venda online"; leiloeiro → edital.
+      // Só guarda se for URL real — a CSV às vezes traz só o rótulo do documento
+      // (ex.: "Venda Direta Online", "Leilão SFI - Edital Único"), que não é link.
+      link_edital: (!ehVendaDireta && /^https?:\/\//i.test(linkDocumento.trim())) ? linkDocumento.trim() : null,
+      link_regras_venda: (ehVendaDireta && /^https?:\/\//i.test(linkDocumento.trim())) ? linkDocumento.trim() : null,
       link_matricula: linkMatricula,
       url_lote: urlLote,
       link_foto: linkFoto.trim() || null,

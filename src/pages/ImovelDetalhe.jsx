@@ -6,6 +6,11 @@ import { supabase } from '../utils/supabase';
 import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
 
+// Botões de documento só aparecem quando o valor é uma URL real — o scraper da
+// Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
+const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim());
+const ehMatriculaValida = (v) => ehUrl(v) && !/matricula\.asp/i.test(v);
+
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
 
 const TIPO_ANEXO_LABEL = {
@@ -528,21 +533,21 @@ export default function ImovelDetalhe() {
                 )}
 
                 {/* Botões de PDF */}
-                {(imovel.linkEdital || (imovel.linkMatricula && !/matricula\.asp/i.test(imovel.linkMatricula)) || imovel.linkRegrasVenda) && (
+                {(ehUrl(imovel.linkEdital) || ehMatriculaValida(imovel.linkMatricula) || ehUrl(imovel.linkRegrasVenda)) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {imovel.linkEdital && (
+                    {ehUrl(imovel.linkEdital) && (
                       <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#084BA6', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
                         📄 Edital
                       </a>
                     )}
-                    {imovel.linkRegrasVenda && (
+                    {ehUrl(imovel.linkRegrasVenda) && (
                       <a href={imovel.linkRegrasVenda} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
                         📋 Regras de Venda Online
                       </a>
                     )}
-                    {imovel.linkMatricula && !/matricula\.asp/i.test(imovel.linkMatricula) && (
+                    {ehMatriculaValida(imovel.linkMatricula) && (
                       <a href={imovel.linkMatricula} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
                         📄 Matrícula
