@@ -42,6 +42,7 @@ import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
 import Login from './pages/Login';
+import CompletarCadastro from './pages/CompletarCadastro';
 import RedefinirSenha from './pages/RedefinirSenha';
 import Checkout from './pages/Checkout';
 import Admin from './pages/Admin';
@@ -155,12 +156,14 @@ function PopupInadimplente({ dias }) {
 
 // Redireciona não-logados para /login preservando o destino
 function PrivateRoute({ children, roles }) {
-  const { isLoggedIn, role, loading, ativo } = useAuth();
+  const { isLoggedIn, role, loading, ativo, cadastroIncompleto } = useAuth();
   const loc = useLocation();
   if (loading) return null;
   if (!isLoggedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
   // Bloqueio de conta inativa é GLOBAL (rotas fora do MainLayout: /admin, /leiloeiro...)
   if (!ativo) return <ContaInativa />;
+  // Cadastro incompleto (ex.: login Google sem CPF/LGPD) → completar antes de usar o app
+  if (cadastroIncompleto && loc.pathname !== '/completar-cadastro') return <Navigate to="/completar-cadastro" replace />;
   if (roles && !roles.includes(role)) return <Navigate to="/" replace />;
   return children;
 }
@@ -202,6 +205,7 @@ function MainLayout() {
           <Route path="/" element={<Landing />} />
           <Route path="/planos" element={<Planos />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
+          <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<PrivateRoute><ImovelDetalhe /></PrivateRoute>} />
           <Route path="/mapa" element={<PrivateRoute><MapaImoveis /></PrivateRoute>} />
           <Route path="/analise" element={<PrivateRoute><Analise /></PrivateRoute>} />
