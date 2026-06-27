@@ -4,7 +4,7 @@
  *
  * Body: { slot_id, caso_id, reuniao_numero (1|2) }
  */
-export const runtime = 'edge';
+export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
 
@@ -75,6 +75,20 @@ export default async function handler(req) {
   }
   const [slot] = await slotRes.json();
   if (!slot) return new Response(JSON.stringify({ error: 'Slot não encontrado ou já reservado' }), { status: 409 });
+
+  // Sorteio/fixação do analista: definido na 1ª reunião e mantido no caso.
+  // Usa o analista do slot; se ausente, sorteia entre os analistas ativos.
+  if (!caso.analista_id) {
+    let analistaId = slot.analista_id;
+    if (!analistaId) {
+      const ans = await (await sb('perfis?role=eq.analista&ativo=eq.true&select=id')).json();
+      if (Array.isArray(ans) && ans.length) analistaId = ans[Math.floor(Math.random() * ans.length)].id;
+    }
+    if (analistaId) {
+      await sb(`casos?id=eq.${caso_id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ analista_id: analistaId }) });
+      caso.analista_id = analistaId;
+    }
+  }
 
   // 3. Cria sala Daily.co
   const DAILY_KEY = process.env.DAILY_API_KEY;

@@ -37,12 +37,12 @@ async function getRoleFor(userId) {
   return r.data?.[0]?.role || null;
 }
 
-// Sorteia 1 analista e 1 advogado entre os ATIVOS (se só houver 1, sempre o mesmo).
-async function sortearEquipe() {
-  const pick = (arr) => (Array.isArray(arr) && arr.length) ? arr[Math.floor(Math.random() * arr.length)].id : null;
-  const an = await dbFetch(`perfis?role=eq.analista&ativo=eq.true&select=id`);
-  const ad = await dbFetch(`perfis?role=eq.advogado&ativo=eq.true&select=id`);
-  return { analista_id: pick(an.data), advogado_id: pick(ad.data) };
+// Herda a equipe já sorteada no caso (analista na reunião, advogado no jurídico).
+// O sorteio NÃO acontece aqui — apenas reaproveita quem o fluxo já definiu.
+async function equipeDoCaso(imovel_id, cliente_id) {
+  const r = await dbFetch(`casos?imovel_id=eq.${imovel_id}&cliente_id=eq.${cliente_id}&select=analista_id,advogado_id&order=criado_em.desc&limit=1`);
+  const c = r.data?.[0] || {};
+  return { analista_id: c.analista_id || null, advogado_id: c.advogado_id || null };
 }
 
 // Distribui o honorário de êxito (10% do valor) no ledger. Idempotente.
@@ -275,8 +275,8 @@ export default async function handler(req) {
       return json({ error: 'imovel_id e arrematante_id são obrigatórios' }, 400);
     }
 
-    // Sorteia a equipe (analista + advogado) que receberá o honorário no êxito
-    const equipe = await sortearEquipe();
+    // Herda a equipe sorteada no caso (analista na reunião, advogado no jurídico)
+    const equipe = await equipeDoCaso(imovel_id, arrematante_id);
 
     // Cria arrematacao
     const r = await dbFetch('arrematacoes', {

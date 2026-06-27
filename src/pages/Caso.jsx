@@ -423,7 +423,13 @@ export default function Caso() {
         // pré-preenche o que a IA já tem nos relatórios
       });
       if (error && !error.message.includes('duplicate')) throw error;
-      await supabase.from('casos').update({ status_etapa:'juridico_solicitado' }).eq('id', caso.id);
+      // Sorteia o advogado entre os ativos no momento do encaminhamento (uma vez)
+      let advogadoId = caso.advogado_id;
+      if (!advogadoId) {
+        const { data: advs } = await supabase.from('perfis').select('id').eq('role','advogado').eq('ativo', true);
+        if (advs?.length) advogadoId = advs[Math.floor(Math.random() * advs.length)].id;
+      }
+      await supabase.from('casos').update({ status_etapa:'juridico_solicitado', advogado_id: advogadoId || null }).eq('id', caso.id);
       await carregarCaso();
       setMsg('Análise jurídica solicitada. O advogado tem 10 dias para devolutiva.');
     } catch (e) {

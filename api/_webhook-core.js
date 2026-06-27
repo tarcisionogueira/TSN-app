@@ -128,7 +128,8 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
         .eq('id', cliente.indicado_por)
         .single();
 
-      if (consultor?.role === 'consultor' && consultor?.ativo !== false) {
+      // Comissão fixa de indicação: consultor, analista e advogado podem indicar
+      if (['consultor', 'analista', 'advogado'].includes(consultor?.role) && consultor?.ativo !== false) {
         const pct = Number(consultor.comissao_afiliado_pct || 0);
         if (pct > 0) {
           const valorComissao = Number((valor * pct / 100).toFixed(2));
