@@ -155,8 +155,12 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       await import('leaflet.markercluster');
       delete L.Icon.Default.prototype._getIconUrl;
       leafletRef.current = L.map(mapContainerRef.current, { center: [-15.8, -47.9], zoom: 5 });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 18,
+      // CARTO basemaps (permite uso por apps; o tile.openstreetmap.org bloqueia
+      // tráfego de aplicativo em produção -> mapa cinza/"falhado").
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+        subdomains: 'abcd',
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19,
       }).addTo(leafletRef.current);
       // Cluster agrupa os marcadores (evita travar com milhares de pins).
       // Os círculos de raio aproximado ficam numa camada própria, pois o

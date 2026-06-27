@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '../utils/supabase';
 import { useNavigate } from 'react-router-dom';
 
-const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+// CARTO basemaps: permite uso por apps (o tile.openstreetmap.org bloqueia em produção).
+const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>';
 
 // Limite de imóveis carregados por bbox conforme zoom
 function limitePorZoom(z) {
@@ -154,7 +155,7 @@ export default function MapaImoveis() {
         zoomControl: true,
       });
 
-      L.tileLayer(TILE_URL, { attribution: ATTRIBUTION, maxZoom: 18 }).addTo(map);
+      L.tileLayer(TILE_URL, { subdomains: 'abcd', attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map);
 
       // Cluster com estilo personalizado
       const cluster = L.markerClusterGroup({
