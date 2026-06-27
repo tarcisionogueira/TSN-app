@@ -96,6 +96,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   const mapContainerRef = useRef(null);
   const leafletRef = useRef(null);
   const markersRef = useRef(null);
+  const circlesRef = useRef(null);
   const resizeObsRef = useRef(null);
   const [imoveisMapa, setImoveisMapa] = React.useState([]);
   const [mapReady, setMapReady] = React.useState(false);
@@ -150,13 +151,18 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   // Inicializa mapa
   useEffect(() => {
     if (!mapContainerRef.current || leafletRef.current) return;
-    import('leaflet').then(L => {
+    import('leaflet').then(async L => {
+      await import('leaflet.markercluster');
       delete L.Icon.Default.prototype._getIconUrl;
       leafletRef.current = L.map(mapContainerRef.current, { center: [-15.8, -47.9], zoom: 5 });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 18,
       }).addTo(leafletRef.current);
-      markersRef.current = L.layerGroup().addTo(leafletRef.current);
+      // Cluster agrupa os marcadores (evita travar com milhares de pins).
+      // Os círculos de raio aproximado ficam numa camada própria, pois o
+      // markerClusterGroup só agrupa marcadores.
+      markersRef.current = L.markerClusterGroup({ maxClusterRadius: 60, showCoverageOnHover: false, chunkedLoading: true }).addTo(leafletRef.current);
+      circlesRef.current = L.layerGroup().addTo(leafletRef.current);
       // Corrige tiles incompletos quando o container foi montado enquanto estava oculto
       setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 50);
       setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 300);
@@ -182,6 +188,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
     if (!mapReady || !leafletRef.current || !markersRef.current) return;
     import('leaflet').then(L => {
       markersRef.current.clearLayers();
+      if (circlesRef.current) circlesRef.current.clearLayers();
       const bounds = [];
       imoveisMapa.forEach(im => {
         if (!im.latitude || !im.longitude) return;
@@ -229,7 +236,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
             dashArray: '4 4',
           });
           circle.bindPopup(popupHTML, { maxWidth: 240 });
-          markersRef.current.addLayer(circle);
+          circlesRef.current.addLayer(circle);
         }
         bounds.push([im.latitude, im.longitude]);
       });
