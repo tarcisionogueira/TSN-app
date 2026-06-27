@@ -64,7 +64,12 @@ async function distribuirHonorarios(arr) {
       descricao: `Honorário de êxito (${label} ${pct}%) — arremate #${arr.id}`, status: 'disponivel',
     });
   };
-  add(adminRow?.id, cfg.admin_pct, 'admin');       // admin fixo, sempre participa
+  // Admin sempre participa e ABSORVE a parte de quem ainda não foi sorteado
+  // (sem advogado/analista, o admin recebe esses percentuais — total sempre 10%).
+  let adminPct = Number(cfg.admin_pct) || 0;
+  if (!arr.advogado_id) adminPct += Number(cfg.advogado_pct) || 0;
+  if (!arr.analista_id) adminPct += Number(cfg.analista_pct) || 0;
+  add(adminRow?.id, adminPct, 'admin');
   add(arr.advogado_id, cfg.advogado_pct, 'advogado');
   add(arr.analista_id, cfg.analista_pct, 'analista');
 
