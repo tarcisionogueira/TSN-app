@@ -74,7 +74,8 @@ export default async function handler(req, res) {
 
     if (!imRes.ok) {
       const txt = await imRes.text();
-      return res.status(500).json({ error: `Erro ao buscar imóvel: ${txt.slice(0, 200)}` });
+      console.error(`[calcular-score] buscar imóvel falhou (${imRes.status}): ${txt}`);
+      return res.status(500).json({ error: 'Erro ao buscar imóvel' });
     }
 
     const [imovel] = await imRes.json();

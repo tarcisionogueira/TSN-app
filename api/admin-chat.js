@@ -22,7 +22,13 @@ export default async function handler(req) {
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return new Response(JSON.stringify({ error: 'CLAUDE_KEY não configurada' }), { status: 500 });
 
-  const { mensagem, historico = [], contexto_cnj, filtro_chamados, gerar_relatorio } = await req.json();
+  let reqBody;
+  try {
+    reqBody = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  const { mensagem, historico = [], contexto_cnj, filtro_chamados, gerar_relatorio } = reqBody;
 
   let contextoBlocos = [];
 

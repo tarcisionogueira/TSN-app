@@ -5,7 +5,7 @@
  */
 export const runtime = 'edge';
 
-import { isCronAuthorized, getAuthUser } from './_auth.js';
+import { isCronAuthorized, getAuthUser, getUserRoleById } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -64,6 +64,8 @@ export default async function handler(req) {
   if (!isCron) {
     const user = await getAuthUser(req);
     if (!user) return new Response('Unauthorized', { status: 401 });
+    const role = await getUserRoleById(user.id);
+    if (role !== 'admin') return new Response(JSON.stringify({ error: 'Apenas administradores' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   }
 
   // Busca todas as disponibilidades ativas

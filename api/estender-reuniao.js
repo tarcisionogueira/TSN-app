@@ -20,7 +20,12 @@ export default async function handler(req) {
   const DAILY_KEY = process.env.DAILY_API_KEY;
   if (!DAILY_KEY) return new Response(JSON.stringify({ error: 'DAILY_API_KEY não configurada' }), { status: 500 });
 
-  const body = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
   const { roomName } = body;
   const minutosExtras = Math.min(Math.max(1, Number(body.minutosExtras) || 30), 120);
   if (!roomName) return new Response(JSON.stringify({ error: 'roomName obrigatório' }), { status: 400 });

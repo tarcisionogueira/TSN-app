@@ -155,10 +155,12 @@ function PopupInadimplente({ dias }) {
 
 // Redireciona não-logados para /login preservando o destino
 function PrivateRoute({ children, roles }) {
-  const { isLoggedIn, role, loading } = useAuth();
+  const { isLoggedIn, role, loading, ativo } = useAuth();
   const loc = useLocation();
   if (loading) return null;
   if (!isLoggedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  // Bloqueio de conta inativa é GLOBAL (rotas fora do MainLayout: /admin, /leiloeiro...)
+  if (!ativo) return <ContaInativa />;
   if (roles && !roles.includes(role)) return <Navigate to="/" replace />;
   return children;
 }
@@ -182,7 +184,7 @@ function MainLayout() {
       });
   }, [isLoggedIn, role, user?.id]);
 
-  if (isLoggedIn && !ativo) return <ContaInativa />;
+  if (isLoggedIn && !loading && !ativo) return <ContaInativa />;
   if (isLoggedIn && !loading) {
     if (role === 'admin' && loc.pathname === '/') return <Navigate to="/admin" replace />;
     if (['analista','consultor','advogado'].includes(role) && loc.pathname === '/') return <Navigate to="/atendimento" replace />;
@@ -225,6 +227,7 @@ function MainLayout() {
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />
           <Route path="/cancelar-alertas" element={<CancelarAlertas />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
       <Footer />

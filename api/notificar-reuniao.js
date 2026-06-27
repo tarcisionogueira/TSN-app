@@ -17,7 +17,13 @@ export default async function handler(req) {
   const RESEND_KEY = process.env.RESEND_API_KEY;
   if (!RESEND_KEY) return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500 });
 
-  const { clienteEmail, clienteNome, imovelNome, imovelCidade, reuniaoEm, reuniaoDuracao, meetLink: meetLinkRaw, calendarUrl: calendarUrlRaw } = await req.json();
+  let reqBody;
+  try {
+    reqBody = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  const { clienteEmail, clienteNome, imovelNome, imovelCidade, reuniaoEm, reuniaoDuracao, meetLink: meetLinkRaw, calendarUrl: calendarUrlRaw } = reqBody;
 
   // Sanitiza URLs para evitar injeção de javascript: ou data: em emails enviados a clientes
   function sanitizarUrl(u) {

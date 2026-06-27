@@ -106,7 +106,8 @@ export default async function handler(req) {
 
   if (!uploadRes.ok) {
     const err = await uploadRes.text();
-    return new Response(JSON.stringify({ error: `Erro ao salvar no storage: ${err}` }), { status: 500 });
+    console.error('baixar-doc storage erro:', err);
+    return new Response(JSON.stringify({ error: 'Erro ao salvar no storage' }), { status: 500 });
   }
 
   const urlPublica = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
@@ -133,7 +134,8 @@ export default async function handler(req) {
     // Remove arquivo do storage se falhar ao registrar
     await storage(`object/${BUCKET}/${storagePath}`, { method: 'DELETE' });
     const err = await insertRes.text();
-    return new Response(JSON.stringify({ error: `Erro ao registrar anexo: ${err}` }), { status: 500 });
+    console.error('baixar-doc registrar anexo erro:', err);
+    return new Response(JSON.stringify({ error: 'Erro ao registrar anexo' }), { status: 500 });
   }
 
   const [anexo] = await insertRes.json();

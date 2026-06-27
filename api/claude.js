@@ -31,7 +31,12 @@ export default async function handler(req) {
     });
   }
 
-  const body = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
   const { useSearch, messages, tools, system, model, max_tokens } = body;
 
   // Campos críticos fixos no servidor — cliente não pode sobrescrever modelo, tokens ou system prompt

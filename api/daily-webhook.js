@@ -12,12 +12,14 @@ export default async function handler(req, res) {
 
   // Verifica segredo compartilhado enviado pelo Daily.co no header
   const DAILY_WEBHOOK_SECRET = process.env.DAILY_WEBHOOK_SECRET;
-  if (DAILY_WEBHOOK_SECRET) {
-    const sentSecret = req.headers['x-daily-webhook-secret'] || req.headers['authorization'] || '';
-    const clean = sentSecret.replace(/^Bearer\s+/i, '').trim();
-    if (clean !== DAILY_WEBHOOK_SECRET) {
-      return res.status(401).json({ error: 'Webhook secret inválido' });
-    }
+  if (!DAILY_WEBHOOK_SECRET) {
+    console.error('daily-webhook: DAILY_WEBHOOK_SECRET não configurado');
+    return res.status(500).json({ error: 'webhook não configurado' });
+  }
+  const sentSecret = req.headers['x-daily-webhook-secret'] || req.headers['authorization'] || '';
+  const clean = sentSecret.replace(/^Bearer\s+/i, '').trim();
+  if (clean !== DAILY_WEBHOOK_SECRET) {
+    return res.status(401).json({ error: 'Webhook secret inválido' });
   }
 
   const event = req.body;

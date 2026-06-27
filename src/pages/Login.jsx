@@ -164,7 +164,8 @@ export default function Login() {
       } else if (planoPendente) {
         nav(`/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`);
       } else if (nextParam) {
-        nav(decodeURIComponent(nextParam));
+        // nextParam já vem decodificado de URLSearchParams — não decodificar de novo
+        nav(nextParam);
       } else {
         nav('/');
       }

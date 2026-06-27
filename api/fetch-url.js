@@ -60,6 +60,7 @@ export default async function handler(req) {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: `Erro ao buscar URL: ${e.message}` }), { status: 500 });
+    console.error('fetch-url erro:', e);
+    return new Response(JSON.stringify({ error: 'Erro ao buscar URL' }), { status: 500 });
   }
 }

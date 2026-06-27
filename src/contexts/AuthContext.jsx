@@ -45,7 +45,8 @@ async function fetchPerfil(userId) {
   }
 
   return {
-    role: data?.role || 'aluno',
+    // Sem perfil carregado → menor privilégio (explorador), nunca um role usável por engano
+    role: data?.role || 'explorador',
     ativo: data?.ativo !== false,
     inadimplenteDias,
   };
@@ -58,7 +59,7 @@ function loadImpersonate() {
 
 export function AuthProvider({ children }) {
   const [user, setUser]             = useState(null);
-  const [role, setRole]             = useState('aluno');
+  const [role, setRole]             = useState('explorador');
   const [ativo, setAtivo]           = useState(true);
   const [inadimplenteDias, setInad] = useState(0);
   const [loading, setLoading]       = useState(true);

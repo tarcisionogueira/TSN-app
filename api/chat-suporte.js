@@ -53,7 +53,13 @@ export default async function handler(req) {
     status: 500, headers: { 'Content-Type': 'application/json' },
   });
 
-  const { mensagens, memoria } = await req.json();
+  let reqBody;
+  try {
+    reqBody = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  const { mensagens, memoria } = reqBody;
   if (!mensagens?.length) return new Response(JSON.stringify({ error: 'mensagens obrigatório' }), {
     status: 400, headers: { 'Content-Type': 'application/json' },
   });

@@ -21,7 +21,13 @@ export default async function handler(req) {
   const DAILY_KEY = process.env.DAILY_API_KEY;
   if (!DAILY_KEY) return new Response(JSON.stringify({ error: 'DAILY_API_KEY não configurada' }), { status: 500 });
 
-  const { solicitacaoId, reuniaoEm, duracaoMin = 30 } = await req.json();
+  let reqBody;
+  try {
+    reqBody = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  const { solicitacaoId, reuniaoEm, duracaoMin = 30 } = reqBody;
   if (!solicitacaoId || !reuniaoEm) {
     return new Response(JSON.stringify({ error: 'solicitacaoId e reuniaoEm são obrigatórios' }), { status: 400 });
   }
