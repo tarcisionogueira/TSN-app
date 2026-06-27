@@ -192,10 +192,17 @@ function mapearColunaCaixa(row) {
 // Detecta forma de pagamento do imóvel CEF a partir do texto (descrição + modalidade).
 // Retorna null quando não há informação confiável (imóvel é omitido dos filtros de pagamento).
 function formaPagamentoCEF(descricao, modalidade, financiamento) {
-  const texto = `${descricao || ''} ${modalidade || ''} ${financiamento || ''}`
+  // A coluna 'financiamento' do CSV é um flag Sim/Não — é a fonte autoritativa.
+  const fin = (financiamento || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const texto = `${descricao || ''} ${modalidade || ''}`
     .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  // Hipoteca/ônus tem prioridade (independe do flag)
   if (/hipotec|com onus|gravame/.test(texto)) return 'hipotecado';
-  if (/fgts|financ|parcelament|consorcio/.test(texto)) return 'financiado';
+  // Flag explícito Sim/Não da Caixa
+  if (fin === 'sim') return 'financiado';
+  if (fin === 'nao') return 'a_vista';
+  // Fallback por texto (caso o flag venha vazio)
+  if (/fgts|financ|parcelament|consorci/.test(texto)) return 'financiado';
   if (/a vista|avista|recursos proprios/.test(texto)) return 'a_vista';
   return null;
 }
