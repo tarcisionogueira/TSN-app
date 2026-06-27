@@ -37,6 +37,49 @@ async function getRoleFor(userId) {
   return r.data?.[0]?.role || null;
 }
 
+// Sorteia 1 analista e 1 advogado entre os ATIVOS (se só houver 1, sempre o mesmo).
+async function sortearEquipe() {
+  const pick = (arr) => (Array.isArray(arr) && arr.length) ? arr[Math.floor(Math.random() * arr.length)].id : null;
+  const an = await dbFetch(`perfis?role=eq.analista&ativo=eq.true&select=id`);
+  const ad = await dbFetch(`perfis?role=eq.advogado&ativo=eq.true&select=id`);
+  return { analista_id: pick(an.data), advogado_id: pick(ad.data) };
+}
+
+// Distribui o honorário de êxito (10% do valor) no ledger. Idempotente.
+async function distribuirHonorarios(arr) {
+  if (!arr || arr.honorarios_status === 'distribuido') return null;
+  const valor = Number(arr.valor_arrematado || 0);
+  if (valor <= 0) return null;
+
+  const cfg = (await dbFetch('config_honorarios?id=eq.1&select=admin_pct,advogado_pct,analista_pct')).data?.[0]
+            || { admin_pct: 4.5, advogado_pct: 5, analista_pct: 0.5 };
+  const adminRow = (await dbFetch('perfis?role=eq.admin&ativo=eq.true&select=id&order=criado_em.asc&limit=1')).data?.[0];
+
+  const lancamentos = [];
+  const add = (uid, pct, label) => {
+    if (!uid || !pct) return;
+    lancamentos.push({
+      user_id: uid, tipo: 'honorario_exito', valor: +(valor * pct / 100).toFixed(2),
+      origem_tipo: 'arrematacao', origem_id: String(arr.id),
+      descricao: `Honorário de êxito (${label} ${pct}%) — arremate #${arr.id}`, status: 'disponivel',
+    });
+  };
+  add(adminRow?.id, cfg.admin_pct, 'admin');       // admin fixo, sempre participa
+  add(arr.advogado_id, cfg.advogado_pct, 'advogado');
+  add(arr.analista_id, cfg.analista_pct, 'analista');
+
+  if (lancamentos.length) {
+    await dbFetch('saldo_lancamentos', { method: 'POST', body: JSON.stringify(lancamentos), headers: { Prefer: 'return=minimal' } });
+  }
+  const total = lancamentos.reduce((s, l) => s + l.valor, 0);
+  await dbFetch(`arrematacoes?id=eq.${arr.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ honorarios_valor: total, honorarios_status: 'distribuido' }),
+    headers: { Prefer: 'return=minimal' },
+  });
+  return { total, lancamentos: lancamentos.length };
+}
+
 export const config = { runtime: 'edge' };
 
 export default async function handler(req) {
@@ -232,6 +275,9 @@ export default async function handler(req) {
       return json({ error: 'imovel_id e arrematante_id são obrigatórios' }, 400);
     }
 
+    // Sorteia a equipe (analista + advogado) que receberá o honorário no êxito
+    const equipe = await sortearEquipe();
+
     // Cria arrematacao
     const r = await dbFetch('arrematacoes', {
       method: 'POST',
@@ -245,6 +291,9 @@ export default async function handler(req) {
         observacoes: observacoes || null,
         criado_por: user.id,
         status: 'em_processo',
+        analista_id: equipe.analista_id,
+        advogado_id: equipe.advogado_id,
+        honorarios_status: 'pendente',
       }),
     });
     if (!r.ok) return json({ error: 'Erro ao criar arrematação', detail: r.data }, 500);
@@ -281,7 +330,13 @@ export default async function handler(req) {
     });
     if (!r.ok) return json({ error: 'Erro ao atualizar arrematação', detail: r.data }, 500);
     const updated = Array.isArray(r.data) ? r.data[0] : r.data;
-    return json({ ok: true, arrematacao: updated });
+
+    // Êxito → distribui o honorário de 10% (idempotente)
+    let honorarios = null;
+    if (allowed.status === 'finalizado') {
+      try { honorarios = await distribuirHonorarios(updated); } catch (e) { console.error('honorarios', e); }
+    }
+    return json({ ok: true, arrematacao: updated, honorarios });
   }
 
   return json({ error: 'Método não permitido' }, 405);

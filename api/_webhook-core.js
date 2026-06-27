@@ -154,6 +154,12 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
               gateway_payment_id: gatewayPaymentId,
               gateway,
             });
+            // Credita o saldo unificado (razão saldo_lancamentos) — fonte do saque
+            await supabase.from('saldo_lancamentos').insert({
+              user_id: cliente.indicado_por, tipo: 'comissao_venda', valor: valorComissao,
+              origem_tipo: 'assinatura', origem_id: gatewayPaymentId,
+              descricao: `Comissão de afiliado — ${mapeado.plano} (${pct}%)`, status: 'disponivel',
+            });
           }
         }
       }

@@ -17,6 +17,12 @@ ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS chave_pix text;
 ALTER TABLE public.casos ADD COLUMN IF NOT EXISTS analista_id uuid;
 ALTER TABLE public.casos ADD COLUMN IF NOT EXISTS advogado_id uuid;
 
+-- 3b) Colunas em arrematacoes: equipe sorteada + controle do honorário (idempotência)
+ALTER TABLE public.arrematacoes ADD COLUMN IF NOT EXISTS analista_id uuid;
+ALTER TABLE public.arrematacoes ADD COLUMN IF NOT EXISTS advogado_id uuid;
+ALTER TABLE public.arrematacoes ADD COLUMN IF NOT EXISTS honorarios_valor   numeric(12,2);
+ALTER TABLE public.arrematacoes ADD COLUMN IF NOT EXISTS honorarios_status  text DEFAULT 'pendente'; -- pendente | distribuido | cancelado
+
 -- 4) Razão de saldo (ledger): toda comissão/honorário/saque é um lançamento.
 --    saldo do usuário = SUM(valor) WHERE status='disponivel'  (créditos +, saques -)
 CREATE TABLE IF NOT EXISTS public.saldo_lancamentos (
@@ -27,7 +33,8 @@ CREATE TABLE IF NOT EXISTS public.saldo_lancamentos (
   origem_tipo  text,                   -- 'arrematacao' | 'venda_produto' | ...
   origem_id    text,                   -- id da arrematação/venda
   descricao    text,
-  status       text NOT NULL DEFAULT 'disponivel', -- disponivel | sacado | cancelado
+  -- Crédito: 'disponivel'. Saque: 'solicitado' (reservado) -> 'sacado' (pago). 'cancelado' = ignora.
+  status       text NOT NULL DEFAULT 'disponivel',
   criado_em    timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_saldo_user ON public.saldo_lancamentos (user_id, status);
@@ -41,8 +48,10 @@ CREATE POLICY saldo_self ON public.saldo_lancamentos FOR SELECT TO authenticated
 -- View de saldo consolidado por usuário (prestação de contas)
 CREATE OR REPLACE VIEW public.saldo_usuarios AS
 SELECT p.id AS user_id, p.nome, p.role, p.chave_pix,
-       COALESCE(SUM(sl.valor) FILTER (WHERE sl.status = 'disponivel'), 0) AS saldo_disponivel,
-       COALESCE(SUM(sl.valor) FILTER (WHERE sl.status = 'sacado'   AND sl.valor < 0), 0) AS total_sacado
+       -- Saldo = créditos − saques (solicitados reservam; cancelados ignorados)
+       COALESCE(SUM(sl.valor) FILTER (WHERE sl.status <> 'cancelado'), 0) AS saldo_disponivel,
+       COALESCE(-SUM(sl.valor) FILTER (WHERE sl.status = 'sacado'), 0)    AS total_sacado,
+       COALESCE(-SUM(sl.valor) FILTER (WHERE sl.status = 'solicitado'), 0) AS saque_pendente
 FROM public.perfis p
 LEFT JOIN public.saldo_lancamentos sl ON sl.user_id = p.id
 WHERE p.role IN ('admin','analista','advogado','consultor')
