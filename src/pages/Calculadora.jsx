@@ -9,8 +9,8 @@ const ROLES_COM_ACESSO = ['top1', 'top2', 'assessorado', 'clube', 'consultor', '
 
 // ITBI + registro: fixo no pior cenário (média 5-6%; usamos 5% conservador)
 const ITBI_FIXO = 5;
-// Honorários advocatícios: aplicados em todas as modalidades
-const HONORARIOS_PCT = 10; // já embutido no motor (vArremate * 0.10)
+// Honorários advocatícios (sucumbência): só em leilão judicial. No extrajudicial não há.
+const HONORARIOS_PCT = 10; // aplicado pelo motor apenas quando origem === 'judicial'
 // Taxa do leiloeiro: padrão de mercado
 const TAXA_LEILOEIRO_PADRAO = 5;
 
@@ -162,6 +162,7 @@ export default function Calculadora() {
 
   const inputs = useMemo(() => ({
     objetivoCompra: 'investimento',
+    origem,
     tabelaAmortizacao: tabela,
     valorMercado: Number(mercado) || 0,
     valorLocacao: 0,
@@ -176,7 +177,7 @@ export default function Calculadora() {
     prazoMeses: Number(prazoMeses) || 0,
     cetAnual: Number(cet) || 0,
     prazoVendaMeses: Number(prazoVenda) || 1,
-  }), [tabela, mercado, reforma, debitos, iptuMensal, condominioMensal, sinal, prazoMeses, cet, prazoVenda, isAVista]);
+  }), [origem, tabela, mercado, reforma, debitos, iptuMensal, condominioMensal, sinal, prazoMeses, cet, prazoVenda, isAVista]);
 
   const vArr = Number(arrematacao) || 0;
   const vMerc = Number(mercado) || 0;

@@ -56,7 +56,12 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
   const tabelaAmort = inputs.tabelaAmortizacao || 'sac';
 
   const taxaLeiloeiro = vArremate * (taxaLeiloeiroPct / 100);
-  const honorarios = vArremate * 0.10;
+  // Honorários advocatícios (sucumbência) só existem em leilão JUDICIAL.
+  // No extrajudicial (Caixa) não se aplicam. Pode ser sobrescrito por inputs.honorariosPercentual.
+  const honorariosPct = inputs.honorariosPercentual != null
+    ? Number(inputs.honorariosPercentual)
+    : (inputs.origem === 'judicial' ? 10 : 0);
+  const honorarios = vArremate * (honorariosPct / 100);
   const itbiRegistro = vArremate * (itbiPct / 100);
   const custosExtra = taxaLeiloeiro + honorarios + itbiRegistro + debitos + manutencao + laudemio + foreiro;
   const custoCarrrego = (iptu + cond) * pVenda;
