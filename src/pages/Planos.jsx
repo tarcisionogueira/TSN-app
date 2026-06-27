@@ -221,10 +221,10 @@ export default function Planos() {
               </div>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Leilão Club</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-                <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{pLabel('clube', 'precoLabel', 'R$ 5.000')}</div>
+                <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{PLANOS.clube?.preco ? fmtR(PLANOS.clube.preco / 12) : 'R$ 5.000'}</div>
                 <div style={{ fontSize: 15, color: '#a5b4fc', fontWeight: 600 }}>/mês</div>
               </div>
-              <div style={{ fontSize: 13, color: '#818cf8', marginBottom: 6 }}>Total {PLANOS.clube?.preco ? fmtR(PLANOS.clube.preco * 12) : 'R$ 60.000'} em 12 meses</div>
+              <div style={{ fontSize: 13, color: '#818cf8', marginBottom: 6 }}>Total {PLANOS.clube?.preco ? fmtR(PLANOS.clube.preco) : 'R$ 60.000'} em 12 meses</div>
               <div style={{ fontSize: 12, color: '#a5b4fc', marginBottom: 20, opacity: 0.8 }}>Ou 12× no cartão/PIX — juros a partir da 4ª parcela</div>
               <div style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.35)', borderRadius: 10, padding: '10px 14px', marginBottom: 20 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#c7d2fe' }}>+ 10% de honorários sobre cada arrematação</div>

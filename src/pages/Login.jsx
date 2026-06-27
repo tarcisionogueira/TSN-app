@@ -121,7 +121,7 @@ export default function Login() {
       if (error) throw error;
       setModo('recuperar_sucesso');
     } catch (err) {
-      setErro(err.message || 'Erro ao enviar email de recuperação.');
+      setErro(traduzErroAuth(err.message) || 'Erro ao enviar email de recuperação.');
     }
     setLoading(false);
   };

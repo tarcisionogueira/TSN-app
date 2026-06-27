@@ -46,6 +46,8 @@ export default function RedefinirSenha() {
       if (error) throw error;
       setSucesso(true);
       await supabase.auth.signOut();
+      // Redireciona para o login automaticamente após redefinir a senha
+      setTimeout(() => nav('/login'), 2500);
     } catch (err) {
       const m = err.message || '';
       setErro(/new password should be different/i.test(m)
@@ -167,7 +169,7 @@ export default function RedefinirSenha() {
             <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 16px', display: 'block' }} />
             <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#111111' }}>Senha redefinida!</h2>
             <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-              Sua senha foi alterada com sucesso. Faça login para continuar.
+              Sua senha foi alterada com sucesso. Redirecionando para o login…
             </p>
             <button onClick={() => nav('/login')}
               style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
