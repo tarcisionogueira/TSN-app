@@ -199,10 +199,9 @@ function csvToImoveis(csv, uf) {
       ? `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroImovel}`
       : null;
 
-    // Matrícula do imóvel no cartório (portal da Caixa)
-    const linkMatricula = numeroImovel
-      ? `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${numeroImovel}`
-      : null;
+    // A Caixa removeu o endpoint direto de matrícula (matricula.asp -> HTTP 404).
+    // A matrícula segue acessível pela página do imóvel (urlLote / "Ver no portal da Caixa").
+    const linkMatricula = null;
 
     // Parse data do leilão (formato DD/MM/YYYY ou YYYY-MM-DD)
     let dataLeilao = null;

@@ -528,7 +528,7 @@ export default function ImovelDetalhe() {
                 )}
 
                 {/* Botões de PDF */}
-                {(imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda) && (
+                {(imovel.linkEdital || (imovel.linkMatricula && !/matricula\.asp/i.test(imovel.linkMatricula)) || imovel.linkRegrasVenda) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                     {imovel.linkEdital && (
                       <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
@@ -542,7 +542,7 @@ export default function ImovelDetalhe() {
                         📋 Regras de Venda Online
                       </a>
                     )}
-                    {imovel.linkMatricula && (
+                    {imovel.linkMatricula && !/matricula\.asp/i.test(imovel.linkMatricula) && (
                       <a href={imovel.linkMatricula} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
                         📄 Matrícula
