@@ -69,6 +69,9 @@ export default function Login() {
   const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  const [emailNaoConfirmado, setEmailNaoConfirmado] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
   const [cpfCheck, setCpfCheck] = useState(null); // null | { temConta, temAcesso, role }
   const [cpfChecking, setCpfChecking] = useState(false);
@@ -163,9 +166,40 @@ export default function Login() {
     });
   };
 
+  // Traduz mensagens de erro do Supabase Auth para português
+  const traduzErroAuth = (msg = '') => {
+    const m = String(msg);
+    if (/invalid login credentials/i.test(m)) return 'Email ou senha incorretos.';
+    if (/email not confirmed/i.test(m)) return 'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada e o spam, ou reenvie a confirmação abaixo.';
+    if (/already registered|already been registered/i.test(m)) return 'Este e-mail já está cadastrado. Faça login ou recupere a senha.';
+    if (/password should be at least/i.test(m)) return 'A senha é muito curta. Use ao menos 8 caracteres.';
+    if (/email rate limit|over_email_send_rate/i.test(m)) return 'Muitas tentativas de envio de e-mail. Aguarde alguns minutos e tente novamente.';
+    if (/for security purposes|rate limit|too many requests/i.test(m)) return 'Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo.';
+    if (/invalid email|unable to validate email|email address.*invalid/i.test(m)) return 'E-mail inválido. Confira o endereço digitado.';
+    if (/new password should be different/i.test(m)) return 'A nova senha deve ser diferente da anterior.';
+    return m || 'Ocorreu um erro. Tente novamente.';
+  };
+
+  const reenviarConfirmacao = async () => {
+    if (!form.email) { setErro('Informe seu e-mail no campo acima para reenviar a confirmação.'); return; }
+    setReenviando(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: form.email,
+        options: { emailRedirectTo: `${window.location.origin}/` },
+      });
+      if (error) throw error;
+      setReenviado(true); setErro('');
+    } catch (err) {
+      setErro(traduzErroAuth(err.message));
+    }
+    setReenviando(false);
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
-    setErro(''); setLoading(true);
+    setErro(''); setEmailNaoConfirmado(false); setReenviado(false); setLoading(true);
     try {
       const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.senha });
       if (error) throw error;
@@ -189,7 +223,8 @@ export default function Login() {
         nav('/');
       }
     } catch (err) {
-      setErro(err.message === 'Invalid login credentials' ? 'Email ou senha incorretos.' : err.message);
+      if (/email not confirmed/i.test(err.message || '')) setEmailNaoConfirmado(true);
+      setErro(traduzErroAuth(err.message));
     }
     setLoading(false);
   };
@@ -224,7 +259,7 @@ export default function Login() {
       }
       setModo('sucesso');
     } catch (err) {
-      setErro(err.message);
+      setErro(traduzErroAuth(err.message));
     }
     setLoading(false);
   };
@@ -309,6 +344,17 @@ export default function Login() {
                 </button>
               </div>
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
+              {emailNaoConfirmado && !reenviado && (
+                <button type="button" onClick={reenviarConfirmacao} disabled={reenviando}
+                  style={{ width: '100%', padding: '10px', background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  {reenviando ? 'Reenviando…' : 'Reenviar e-mail de confirmação'}
+                </button>
+              )}
+              {reenviado && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#15803d' }}>
+                  ✅ Confirmação reenviada. Verifique sua caixa de entrada e o spam.
+                </div>
+              )}
               <button type="submit" disabled={loading}
                 style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
                 {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Entrando...</> : 'Entrar'}
