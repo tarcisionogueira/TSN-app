@@ -23,6 +23,7 @@ const STATUS_ARR = {
 
 function SecaoArrematacao({ imovelId, imovelTitulo }) {
   const { user, role } = useAuth();
+  const nav = useNavigate();
   const [dados, setDados] = useState(null); // { arrematacao, anexos, docs }
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState({ processo: true, pessoal: true });

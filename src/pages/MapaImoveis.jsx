@@ -218,7 +218,7 @@ export default function MapaImoveis() {
             </span>
           )}
         </div>
-        <button onClick={() => navigate('/buskar')} style={{ fontSize: 12, padding: '5px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>
+        <button onClick={() => navigate('/buscar')} style={{ fontSize: 12, padding: '5px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>
           Ver lista →
         </button>
       </div>
