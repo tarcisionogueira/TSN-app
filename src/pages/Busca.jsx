@@ -129,7 +129,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const { data } = await aplicarFiltros(
         supabase
           .from('imoveis_leilao')
-          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel')
+          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id')
           .not('latitude', 'is', null)
           .neq('latitude', 0)
           .limit(2000)
@@ -1334,13 +1334,13 @@ export default function Busca() {
                     <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
                       {im.tipo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8 }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
                       <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:8, background:modalColor.bg, color:modalColor.color }}>
-                        {im.modalidade==='judicial'?'Judicial':'Extrajudicial'}
+                        {MODAL_LABEL[im.modalidade] || im.modalidade || 'Leilão'}
                       </span>
                       {im.fracionado && <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:8 }}>⚠ Fração</span>}
                     </div>
 
                     <div style={{ fontWeight:700, color:'#111111', fontSize: isMobile ? 14 : 12, lineHeight:1.3, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
-                      {im.titulo||im.nome}
+                      {im.titulo || 'Imóvel'}
                     </div>
 
                     <div style={{ fontSize:10, color:'#64748b', display:'flex', alignItems:'center', gap:3, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
@@ -1351,6 +1351,12 @@ export default function Busca() {
                         </span>
                       )}
                     </div>
+
+                    {im.descricao && (
+                      <div style={{ fontSize:10, color:'#64748b', lineHeight:1.4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+                        {im.descricao}
+                      </div>
+                    )}
 
                     <div style={{ marginTop:2 }}>
                       <div style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:0.4 }}>Lance Mín.</div>
