@@ -4,6 +4,7 @@ import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, Ba
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import ScoreRisco from '../components/ScoreRisco';
+import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
 
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
 
