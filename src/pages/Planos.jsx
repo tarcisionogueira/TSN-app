@@ -24,6 +24,12 @@ export default function Planos() {
 
   useEffect(() => { fetchPlanosComConfig().then(setPLANOS); }, []);
 
+  // Formata um valor; usado para totais/economias derivados do planos_config.
+  const fmtR = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Preço de um plano vindo do banco, com fallback ao label estático.
+  const pLabel = (key, field, fallback) => PLANOS[key]?.[field] ?? fallback;
+  const ativoPlano = (key) => PLANOS[key]?.ativo !== false; // mostra durante o load (undefined)
+
   const ir = (key) => {
     const plano = PLANOS[key];
     if (!plano) return;
@@ -120,13 +126,13 @@ export default function Planos() {
             <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Investidor Pro</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
               <div style={{ fontSize: 48, fontWeight: 900, color: 'white' }}>
-                {periodo === 'anual' ? 'R$ 66,42' : 'R$ 99,90'}
+                {periodo === 'anual' ? pLabel('top2', 'precoMensalAnualLabel', 'R$ 66,42') : pLabel('top2', 'precoLabel', 'R$ 99,90')}
               </div>
               <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
             </div>
             {periodo === 'anual'
-              ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>R$ 797,00/ano · economize R$ 401,80</div>
-              : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou R$ 66,42/mês no plano anual (-25%)</div>}
+              ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>{pLabel('top2', 'precoAnualLabel', 'R$ 797,00')}/ano{PLANOS.top2?.preco && PLANOS.top2?.precoAnual ? ` · economize ${fmtR(PLANOS.top2.preco * 12 - PLANOS.top2.precoAnual)}` : ''}</div>
+              : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou {pLabel('top2', 'precoMensalAnualLabel', 'R$ 66,42')}/mês no plano anual (-25%)</div>}
             <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.15)', border: '1px solid rgba(134,239,172,0.3)', color: '#86efac', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 20, alignSelf: 'flex-start' }}>
               Cancele quando quiser
             </div>
@@ -183,9 +189,10 @@ export default function Planos() {
           <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 880, margin: '0 auto' }}>
 
             {/* Assessoria */}
+            {ativoPlano('assessorado') && (
             <div style={{ background: 'white', borderRadius: 20, border: atual('assessorado') ? '2px solid #d97706' : '1px solid #fed7aa', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(217,119,6,0.08)' }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#d97706', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Assessoria</div>
-              <div style={{ fontSize: 42, fontWeight: 900, color: '#111', marginBottom: 4 }}>R$ 5.000</div>
+              <div style={{ fontSize: 42, fontWeight: 900, color: '#111', marginBottom: 4 }}>{pLabel('assessorado', 'precoLabel', 'R$ 5.000')}</div>
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>por arrematação · pagamento único</div>
               <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 20 }}>Parcelável em até 12× — juros a partir da 4ª parcela</div>
               <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 10, padding: '10px 14px', marginBottom: 20 }}>
@@ -203,8 +210,10 @@ export default function Planos() {
                 {atual('assessorado') ? 'Seu plano atual' : 'Contratar assessoria →'}
               </button>
             </div>
+            )}
 
             {/* Leilão Club */}
+            {ativoPlano('clube') && (
             <div style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e1b4b 100%)', borderRadius: 20, border: '2px solid #6366f1', padding: '32px 28px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 40px rgba(99,102,241,0.3)' }}>
               <div style={{ position: 'absolute', top: -30, right: -30, width: 150, height: 150, borderRadius: '50%', background: 'rgba(99,102,241,0.08)' }} />
               <div style={{ position: 'absolute', top: 20, right: 20, background: '#4f46e5', color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -212,10 +221,10 @@ export default function Planos() {
               </div>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Leilão Club</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-                <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>R$ 5.000</div>
+                <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{pLabel('clube', 'precoLabel', 'R$ 5.000')}</div>
                 <div style={{ fontSize: 15, color: '#a5b4fc', fontWeight: 600 }}>/mês</div>
               </div>
-              <div style={{ fontSize: 13, color: '#818cf8', marginBottom: 6 }}>Total R$ 60.000 em 12 meses</div>
+              <div style={{ fontSize: 13, color: '#818cf8', marginBottom: 6 }}>Total {PLANOS.clube?.preco ? fmtR(PLANOS.clube.preco * 12) : 'R$ 60.000'} em 12 meses</div>
               <div style={{ fontSize: 12, color: '#a5b4fc', marginBottom: 20, opacity: 0.8 }}>Ou 12× no cartão/PIX — juros a partir da 4ª parcela</div>
               <div style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.35)', borderRadius: 10, padding: '10px 14px', marginBottom: 20 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#c7d2fe' }}>+ 10% de honorários sobre cada arrematação</div>
@@ -232,6 +241,7 @@ export default function Planos() {
                 {atual('clube') ? 'Seu plano atual' : 'Entrar no Clube →'}
               </button>
             </div>
+            )}
           </div>
         )}
 
