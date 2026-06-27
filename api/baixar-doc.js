@@ -9,9 +9,10 @@
  * Acesso: planos pagos (top2, assessorado, clube) + staff
  */
 
-export const runtime = 'edge';
+export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
+import { hostPermitido } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -63,6 +64,10 @@ export default async function handler(req) {
   const { url, tipo = 'outro', imovel_id, caso_id, nome, data_leilao } = body;
   if (!url || !imovel_id) {
     return new Response(JSON.stringify({ error: 'url e imovel_id são obrigatórios' }), { status: 400 });
+  }
+  // Anti-SSRF: só baixa de hosts de leiloeiros/CEF na whitelist exata
+  if (!hostPermitido(url)) {
+    return new Response(JSON.stringify({ error: 'Domínio não permitido' }), { status: 403 });
   }
 
   // Baixa o arquivo da URL original

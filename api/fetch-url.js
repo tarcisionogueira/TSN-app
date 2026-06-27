@@ -3,6 +3,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
+import { hostPermitido } from './_allowed-hosts.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -20,6 +21,10 @@ export default async function handler(req) {
 
   if (!url || !/^https:\/\//.test(url)) {
     return new Response(JSON.stringify({ error: 'URL inválida' }), { status: 400 });
+  }
+  // Anti-SSRF: só hosts de leiloeiros/CEF na whitelist exata
+  if (!hostPermitido(url)) {
+    return new Response(JSON.stringify({ error: 'Domínio não permitido' }), { status: 403 });
   }
 
   try {
