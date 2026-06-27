@@ -53,6 +53,10 @@ export default async function handler(req) {
 
   // ── Estratégia 1: URLs diretas previsíveis (padrão Caixa) ──
   const candidatos = [
+    // Padrão real da Caixa: /fotos/F{id}NN.jpg (F + número + índice da foto)
+    `${BASE}/fotos/F${id}21.jpg`,
+    `${BASE}/fotos/F${id}1.jpg`,
+    `${BASE}/fotos/F${id}.jpg`,
     `${BASE}/sistema/imgs/foto_imovel/${id}_1.jpg`,
     `${BASE}/sistema/imgs/foto_imovel/${id}.jpg`,
     `${BASE}/sistema/imgs/foto_imovel/${id}_1.jpeg`,
@@ -81,6 +85,7 @@ export default async function handler(req) {
 
     const imgMatch =
       html.match(/(?:id=["']imgFoto["']|class=["'][^"']*foto[^"']*["'])[^>]*src=["']([^"']+)["']/i) ||
+      html.match(/src=["']([^"']*\/fotos\/F?[^"']+\.(?:jpg|jpeg|png|gif))["']/i) ||
       html.match(/src=["']([^"']*foto_imovel[^"']+)["']/i) ||
       html.match(/src=["']([^"']*\/sistema\/imgs\/[^"']+\.(?:jpg|jpeg|png|gif))["']/i);
 
