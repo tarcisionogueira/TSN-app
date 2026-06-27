@@ -308,12 +308,16 @@ export default function ImovelDetalhe() {
   const id = loc.state?.imovel?.id || paramId;
 
   useEffect(() => {
-    if (imovel) return;
+    // A busca por raio passa o imóvel no state SEM edital/matrícula/descrição.
+    // Se esses documentos faltam, busca o registro completo no banco (o state
+    // serve só para o paint imediato, sem spinner).
+    const faltamDocs = !imovel || (!imovel.linkEdital && !imovel.linkMatricula && !imovel.descricao);
+    if (!faltamDocs) return;
     if (!id) { nav('/buscar'); return; }
-    setLoading(true);
+    if (!imovel) setLoading(true);
     supabase.from('imoveis_leilao').select('*').eq('id', id).single()
       .then(({ data }) => {
-        if (!data) { nav('/buscar'); return; }
+        if (!data) { if (!imovel) nav('/buscar'); return; }
         setImovel({
           id: data.id, titulo: data.titulo, tipo: data.tipo, modalidade: data.modalidade,
           estado: data.estado, cidade: data.cidade, bairro: data.bairro, endereco: data.endereco,
