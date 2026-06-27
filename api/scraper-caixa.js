@@ -196,7 +196,7 @@ function csvToImoveis(csv, uf) {
 
     // URL da página do imóvel no portal da Caixa (funciona para todos os imóveis)
     const urlLote = numeroImovel
-      ? `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroImovel}`
+      ? `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=${numeroImovel}`
       : null;
 
     // A Caixa removeu o endpoint direto de matrícula (matricula.asp -> HTTP 404).
