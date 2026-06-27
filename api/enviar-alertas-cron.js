@@ -23,7 +23,7 @@ export default async function handler(req) {
   let enviados = 0;
 
   const RESEND_KEY = process.env.RESEND_API_KEY;
-  const FROM = process.env.APP_FROM_EMAIL || 'TSN Ativos <alertas@tsnativos.com.br>';
+  const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <alertas@bidprobrasil.com.br>';
   const BASE_URL = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
   for (const alerta of alertas || []) {

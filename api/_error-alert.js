@@ -5,7 +5,7 @@
  */
 
 const RESEND_KEY = process.env.RESEND_API_KEY;
-const FROM = process.env.APP_FROM_EMAIL || 'TSN Ativos <alertas@tsnativos.com.br>';
+const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <alertas@bidprobrasil.com.br>';
 const ADMIN_EMAIL = process.env.ADMIN_ALERT_EMAIL || 'tarcisioaraujo@reimob.com.br';
 const IS_PROD = process.env.VERCEL_ENV === 'production';
 

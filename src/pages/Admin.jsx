@@ -5476,6 +5476,7 @@ function EquipeTab() {
     const token = crypto.randomUUID();
     const { data: novo } = await supabase.from('convites_equipe').insert({
       token, roles, criado_por: user.id,
+      expira_em: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // validade 7 dias
     }).select().single();
     const link = `${window.location.origin}/#/convite/${token}`;
     setLinkGerado({ token, link, roles });
