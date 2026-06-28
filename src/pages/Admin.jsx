@@ -630,6 +630,8 @@ function UsuariosTab() {
                         <th style={S.th}>Valor</th>
                         <th style={S.th}>Versão Termos</th>
                         <th style={S.th}>ID Asaas</th>
+                        <th style={S.th}>IP</th>
+                        <th style={S.th}>Dispositivo</th>
                       </tr></thead>
                       <tbody>
                         {auditoriaData.aceites.map((a, i) => (
@@ -638,7 +640,9 @@ function UsuariosTab() {
                             <td style={S.td}>{a.plano_key || a.plano || '—'}</td>
                             <td style={S.td}>{a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</td>
                             <td style={S.td}>{a.versao_termos || a.termos_versao || '—'}</td>
-                            <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.asaas_customer_id || a.asaas_id || '—'}</td>
+                            <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.asaas_customer_id || a.asaas_id || a.asaas_payment_id || '—'}</td>
+                            <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.ip || '—'}</td>
+                            <td style={{ ...S.td, fontSize: 11, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.user_agent || ''}>{a.user_agent || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
