@@ -153,27 +153,29 @@ export function AuthProvider({ children }) {
       }
     });
 
-    // Realtime: detecta mudança de role/inadimplência pelo webhook sem precisar de refresh
-    let perfilChannel = null;
-    supabase.auth.getSession().then(({ data }) => {
+    // Reavalia o perfil (role/inadimplência/cadastro) quando a aba volta ao foco.
+    // Antes mantínhamos 1 conexão Realtime por usuário (supabase.channel por uid),
+    // o que estoura o teto de 200 conexões simultâneas do plano Free em escala.
+    // O refetch no foco entrega o mesmo efeito (mudanças do webhook refletem ao
+    // voltar à aba) sem custo de conexão persistente.
+    const refetchPerfil = async () => {
+      const { data } = await supabase.auth.getSession();
       const uid = data.session?.user?.id;
       if (!uid) return;
-      perfilChannel = supabase.channel(`perfil-role-${uid}`)
-        .on('postgres_changes', {
-          event: 'UPDATE', schema: 'public', table: 'perfis', filter: `id=eq.${uid}`,
-        }, async () => {
-          const p = await fetchPerfil(uid);
-          setRole(p.role);
-          setAtivo(p.ativo);
-          setInad(p.inadimplenteDias);
-          setCadastroIncompleto(p.cadastroIncompleto ?? false);
-        })
-        .subscribe();
-    });
+      const p = await fetchPerfil(uid);
+      setRole(p.role);
+      setAtivo(p.ativo);
+      setInad(p.inadimplenteDias);
+      setCadastroIncompleto(p.cadastroIncompleto ?? false);
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') refetchPerfil(); };
+    window.addEventListener('focus', refetchPerfil);
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       subscription.unsubscribe();
-      if (perfilChannel) supabase.removeChannel(perfilChannel);
+      window.removeEventListener('focus', refetchPerfil);
+      document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('click', onActivity);
       window.removeEventListener('keydown', onActivity);
     };
