@@ -62,7 +62,7 @@ export default function MapaImoveis() {
 
     let q = supabase
       .from('imoveis_leilao')
-      .select('id, titulo, cidade, estado, tipo, valor_minimo, latitude, longitude, link_foto')
+      .select('id, titulo, cidade, estado, tipo, valor_minimo, latitude, longitude, link_foto, fonte, fonte_id')
       .eq('ativo', true)
       .not('latitude', 'is', null)
       .neq('latitude', 0)
@@ -105,10 +105,15 @@ export default function MapaImoveis() {
         const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [24, 36], iconAnchor: [12, 36], popupAnchor: [0, -36] });
         const marker = L.marker([im.latitude, im.longitude], { icon });
         const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+        // Foto da Caixa via hotlink direto (Vercel é bloqueada); outros usam link_foto.
+        const _num = (im.fonte_id || '').replace(/^(caixa_|cef_)/, '');
+        const _fotoSrc = (im.fonte === 'caixa' || im.fonte === 'CEF')
+          ? (_num ? `https://venda-imoveis.caixa.gov.br/fotos/F${_num}21.jpg` : '')
+          : (typeof im.link_foto === 'string' ? im.link_foto : '');
         marker.bindPopup(`
           <div style="font-family:Inter,sans-serif;min-width:200px">
-            ${typeof im.link_foto === 'string' && im.link_foto
-              ? `<img src="${im.link_foto}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px" onerror="this.style.display='none'"/>`
+            ${_fotoSrc
+              ? `<img src="${_fotoSrc}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px" onerror="this.style.display='none'"/>`
               : ''}
             <div style="font-weight:700;font-size:13px;color:#111;margin-bottom:4px">${im.titulo || 'Imóvel'}</div>
             <div style="font-size:12px;color:#64748b;margin-bottom:6px">${im.cidade || ''} — ${im.estado || ''}</div>
@@ -265,10 +270,17 @@ export default function MapaImoveis() {
       {/* Painel inferior ao clicar num pin */}
       {selecionado && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', borderTop: '1px solid #e2e8f0', padding: '16px 20px', zIndex: 2000, boxShadow: '0 -4px 20px rgba(0,0,0,0.1)', display: 'flex', gap: 14, alignItems: 'center' }}>
-          {typeof selecionado.link_foto === 'string' && selecionado.link_foto && (
-            <img src={selecionado.link_foto} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }}
-              onError={e => e.target.style.display = 'none'} />
-          )}
+          {(() => {
+            const num = (selecionado.fonte_id || '').replace(/^(caixa_|cef_)/, '');
+            const ehCaixa = selecionado.fonte === 'caixa' || selecionado.fonte === 'CEF';
+            const fotoSel = ehCaixa
+              ? (num ? `https://venda-imoveis.caixa.gov.br/fotos/F${num}21.jpg` : null)
+              : (typeof selecionado.link_foto === 'string' && selecionado.link_foto ? selecionado.link_foto : null);
+            return fotoSel ? (
+              <img src={fotoSel} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }}
+                onError={e => e.target.style.display = 'none'} />
+            ) : null;
+          })()}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: '#111', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selecionado.titulo}</div>
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{selecionado.cidade} — {selecionado.estado}</div>

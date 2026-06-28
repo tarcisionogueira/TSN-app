@@ -356,19 +356,18 @@ export default function ImovelDetalhe() {
   const descColor = desc >= 40 ? '#15803d' : desc >= 20 ? '#92400e' : '#dc2626';
   const descBg    = desc >= 40 ? '#dcfce7' : desc >= 20 ? '#fef9c3' : '#fee2e2';
 
+  // Foto da Caixa: hotlink DIRETO (navegador do usuário; o IP da Vercel é bloqueado
+  // pela Caixa). Padrão F{numero}21.jpg. onError no <img> cai no placeholder.
+  const caixaFotoUrl = () => {
+    const id = (imovel.fonteId || '').replace(/^(caixa_|cef_)/, '');
+    return id ? `https://venda-imoveis.caixa.gov.br/fotos/F${id}21.jpg` : null;
+  };
   const getImgSrc = () => {
     const foto = imovel.foto;
     const isCef = imovel.fonte === 'CEF' || imovel.fonte === 'caixa';
-    if (!foto) {
-      if (!isCef) return null;
-      const id = (imovel.fonteId || '').replace(/^(caixa_|cef_)/, '');
-      return id ? `/api/img-caixa?id=${encodeURIComponent(id)}` : null;
-    }
+    if (!foto) return isCef ? caixaFotoUrl() : null;
     if (foto.includes('supabase.co') || foto.startsWith('/')) return foto;
-    if (isCef) {
-      const id = (imovel.fonteId || '').replace(/^(caixa_|cef_)/, '');
-      return id ? `/api/img-caixa?id=${encodeURIComponent(id)}` : `/api/img-proxy?url=${encodeURIComponent(foto)}`;
-    }
+    if (isCef) return caixaFotoUrl() || `/api/img-proxy?url=${encodeURIComponent(foto)}`;
     return `/api/img-proxy?url=${encodeURIComponent(foto)}`;
   };
   const imgDetalheSrc = getImgSrc();

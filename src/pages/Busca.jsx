@@ -214,7 +214,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 
         const popupHTML = `
           <div style="font-family:Inter,sans-serif;min-width:190px;max-width:220px">
-            ${im.link_foto ? `<img src="${im.fonte === 'CEF' || im.fonte === 'caixa' ? '/api/img-caixa?id=' + encodeURIComponent((im.fonte_id||'').replace(/^(caixa_|cef_)/,'')) : '/api/img-proxy?url=' + encodeURIComponent(im.link_foto)}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>` : ''}
+            ${im.link_foto ? `<img src="${im.fonte === 'CEF' || im.fonte === 'caixa' ? 'https://venda-imoveis.caixa.gov.br/fotos/F' + encodeURIComponent((im.fonte_id||'').replace(/^(caixa_|cef_)/,'')) + '21.jpg' : '/api/img-proxy?url=' + encodeURIComponent(im.link_foto)}" onerror="this.style.display='none'" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>` : ''}
             <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${im.titulo || 'Imóvel'}</div>
             <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${im.cidade} — ${im.estado}</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
@@ -786,10 +786,13 @@ export default function Busca() {
     buscarPagina(1, filtros, sortBy, centro, raioAtivo, raioKmAtivo, cidadesNaArea);
   };
 
+  // Foto da Caixa: HOTLINK DIRETO no navegador do usuário (IP residencial não é
+  // bloqueado pela Caixa). O proxy /api/img-caixa roda na Vercel, cujo IP a Caixa
+  // bloqueia → por isso as fotos sumiam. Padrão F{numero}21.jpg (validado).
   const imgUrlCaixa = (im) => {
     if (im.fonte !== 'caixa' && im.fonte !== 'CEF') return null;
     const id = (im.fonte_id || '').replace(/^(caixa_|cef_)/, '');
-    return id ? `/api/img-caixa?id=${encodeURIComponent(id)}` : null;
+    return id ? `https://venda-imoveis.caixa.gov.br/fotos/F${id}21.jpg` : null;
   };
 
   const irParaAnalise = (im) => {
