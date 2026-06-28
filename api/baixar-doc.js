@@ -13,6 +13,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
 import { hostPermitido } from './_allowed-hosts.js';
+import { fetchViaBrightData } from './_brightdata.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -88,10 +89,17 @@ export default async function handler(req) {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
-    const resp = await fetch(url, { signal: ctrl.signal, redirect: 'follow' });
+    let resp = await fetch(url, { signal: ctrl.signal, redirect: 'follow' }).catch(() => null);
     clearTimeout(timer);
 
-    if (!resp.ok) throw new Error(`HTTP ${resp.status} ao baixar ${url}`);
+    // Fallback: a fonte bloqueou o IP do servidor (ex.: Caixa bloqueia a Vercel).
+    // Tenta via Bright Data Web Unlocker (respeitando o teto semanal). Se BD não
+    // estiver configurado ou o teto for atingido, retorna null e mantém o erro.
+    if (!resp || !resp.ok) {
+      const bd = await fetchViaBrightData(url);
+      if (bd && bd.ok) resp = bd;
+    }
+    if (!resp || !resp.ok) throw new Error(`HTTP ${resp?.status || 'falha'} ao baixar ${url}`);
 
     contentType = resp.headers.get('content-type') || 'application/octet-stream';
 
