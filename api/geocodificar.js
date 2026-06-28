@@ -206,12 +206,12 @@ export default async function handler(req) {
   if (qEstados) {
     estados = qEstados.split(',').map(s => s.trim().toUpperCase()).filter(s => /^[A-Z]{2}$/.test(s) && ESTADOS_GEOCOD.includes(s));
   } else if (req.method === 'GET') {
-    // Cron */10 * * * * — processa todos os pendentes 24h/dia.
-    // Rotaciona estado pelo minuto UTC para distribuir carga entre invocações consecutivas.
-    const now = new Date();
-    const minutoTotal = now.getUTCHours() * 6 + Math.floor(now.getUTCMinutes() / 10);
-    const idx = minutoTotal % ESTADOS_GEOCOD.length;
-    estados = [ESTADOS_GEOCOD[idx]];
+    // Cron */10 — processa a FILA GLOBAL de pendentes (qualquer estado), do mais
+    // recente ao mais antigo. Antes processava 1 estado por execução (rotação por
+    // minuto UTC), o que desperdiçava execuções em estados sem pendência. Processar
+    // a fila global mantém toda execução útil e maximiza a vazão dentro do limite
+    // de 1 req/s do Nominatim — zerando o backlog muito mais rápido, sem custo.
+    estados = null;
   } else if (req.method === 'POST') {
     try {
       const body = await req.json();

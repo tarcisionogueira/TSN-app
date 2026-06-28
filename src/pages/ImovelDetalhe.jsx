@@ -333,6 +333,7 @@ export default function ImovelDetalhe() {
           pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
           numeroProcesso: data.numero_processo,
+          latitude: data.latitude, longitude: data.longitude,
           scoreFinanceiro: data.score_financeiro ?? null,
           scoreJuridico: data.score_juridico ?? null,
         });
@@ -374,6 +375,21 @@ export default function ImovelDetalhe() {
   const PLANOS_ANALISE = ['admin', 'analista', 'assessorado'];
   const podeFazerAnalise = PLANOS_ANALISE.includes(role);
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
+  const precoM2 = imovel.areaM2 > 0 && imovel.valorMinimo ? imovel.valorMinimo / imovel.areaM2 : null;
+
+  // Localização no Google: Street View por coordenadas (quando geocodificado) ou
+  // busca pelo endereço. Sem chave de API — usa as URLs públicas do Google Maps.
+  const _lat = imovel.latitude ?? imovel.lat;
+  const _lng = imovel.longitude ?? imovel.lng;
+  const temCoord = _lat != null && _lng != null && !(Number(_lat) === 0 && Number(_lng) === 0);
+  const enderecoCompleto = [imovel.endereco, imovel.bairro, imovel.cidade, imovel.estado, 'Brasil'].filter(Boolean).join(', ');
+  const temLocal = temCoord || !!(imovel.endereco || imovel.cidade);
+  const streetViewUrl = temCoord
+    ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${_lat},${_lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(enderecoCompleto)}`;
+  const mapaUrl = temCoord
+    ? `https://www.google.com/maps/search/?api=1&query=${_lat},${_lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(enderecoCompleto)}`;
 
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: 80 }}>
@@ -440,6 +456,24 @@ export default function ImovelDetalhe() {
                   </span>
                 )}
               </div>
+              {/* Localização no Google: Street View + Mapa */}
+              {temLocal && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
+                  <a href={streetViewUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, color: '#4338ca', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                    👁️ Street View
+                  </a>
+                  <a href={mapaUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: 10, color: '#0e7490', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                    <MapPin size={14} /> Ver no mapa
+                  </a>
+                  {!temCoord && (
+                    <span style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center' }}>
+                      Localização aproximada pelo endereço
+                    </span>
+                  )}
+                </div>
+              )}
               {(imovel.scoreFinanceiro !== null || imovel.scoreJuridico !== null) && (
                 <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
                   <ScoreRisco scoreFinanceiro={imovel.scoreFinanceiro} scoreJuridico={imovel.scoreJuridico} size="md" />
@@ -467,6 +501,12 @@ export default function ImovelDetalhe() {
                   <div style={{ background: '#dcfce7', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Economia potencial</div>
                     <div style={{ fontSize: 22, fontWeight: 900, color: '#15803d' }}>{fmtBRL(economia)}</div>
+                  </div>
+                )}
+                {precoM2 && (
+                  <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Preço por m²</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(precoM2)}</div>
                   </div>
                 )}
               </div>
