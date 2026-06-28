@@ -129,7 +129,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const { data } = await aplicarFiltros(
         supabase
           .from('imoveis_leilao')
-          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id')
+          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id, area_m2, link_edital, link_matricula, score_juridico, score_financeiro')
           .not('latitude', 'is', null)
           .neq('latitude', 0)
           .limit(2000)
@@ -221,6 +221,9 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
               ${desc ? `<span style="font-size:10px;font-weight:800;background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:20px">-${desc}%</span>` : ''}
               ${pgtoLabel ? `<span style="font-size:10px;font-weight:700;background:${pgtoBg};color:${pgtoColor};padding:1px 6px;border-radius:20px">${pgtoLabel}</span>` : ''}
               ${nivelLabel ? `<span style="font-size:10px;font-weight:600;background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:20px">${nivelLabel}</span>` : ''}
+              ${im.area_m2 > 0 && im.valor_minimo ? `<span style="font-size:10px;font-weight:700;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:20px">R$ ${Math.round(im.valor_minimo/im.area_m2).toLocaleString('pt-BR')}/m²</span>` : ''}
+              ${/^https?:\/\//i.test(im.link_edital||'') ? `<span style="font-size:10px;font-weight:700;background:#eff6ff;color:#084BA6;padding:1px 6px;border-radius:20px">📄 Edital</span>` : ''}
+              ${/^https?:\/\//i.test(im.link_matricula||'') && !/matricula\.asp/i.test(im.link_matricula||'') ? `<span style="font-size:10px;font-weight:700;background:#f0fdf4;color:#15803d;padding:1px 6px;border-radius:20px">📄 Matrícula</span>` : ''}
             </div>
             <div style="font-size:15px;font-weight:900;color:#0D63DB;margin-bottom:8px">${fmt(im.valor_minimo)}</div>
             <button onclick="window.location.hash='/imovel/${im.id}'" style="width:100%;padding:7px;background:#0D63DB;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">Ver detalhes →</button>
@@ -1265,6 +1268,7 @@ export default function Busca() {
                           <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap' }}>
                             <span style={{ fontSize:12, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
                             {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{desc}%</span>}
+                            {im.areaM2 > 0 && im.valorMinimo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'0 5px', borderRadius:20 }}>R$ {Math.round(im.valorMinimo/im.areaM2).toLocaleString('pt-BR')}/m²</span>}
                           </div>
                           {im.dataLeilao && <div style={{ fontSize:9, color:'#94a3b8', marginTop:2 }}>📅 {fmtData(im.dataLeilao)}</div>}
                         </div>
@@ -1368,6 +1372,23 @@ export default function Busca() {
                         <div style={{ fontSize:10, color:'#64748b' }}>Aval. {fmtBRL(im.valorAvaliacao)}</div>
                       )}
                     </div>
+
+                    {/* Indicadores de decisão: R$/m², disponibilidade de docs e score */}
+                    {(() => {
+                      const m2 = im.areaM2 > 0 && im.valorMinimo ? Math.round(im.valorMinimo / im.areaM2) : null;
+                      const temEdital = /^https?:\/\//i.test(im.linkEdital || '');
+                      const temMatricula = /^https?:\/\//i.test(im.linkMatricula || '') && !/matricula\.asp/i.test(im.linkMatricula || '');
+                      const score = im.scoreJuridico ?? im.scoreFinanceiro ?? null;
+                      if (!m2 && !temEdital && !temMatricula && score == null) return null;
+                      return (
+                        <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+                          {m2 && <span style={{ fontSize:9, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>R$ {m2.toLocaleString('pt-BR')}/m²</span>}
+                          {temEdital && <span title="Edital disponível" style={{ fontSize:9, background:'#eff6ff', color:'#084BA6', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>📄 Edital</span>}
+                          {temMatricula && <span title="Matrícula disponível" style={{ fontSize:9, background:'#f0fdf4', color:'#15803d', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>📄 Matrícula</span>}
+                          {score != null && <span title="Score de análise" style={{ fontSize:9, background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:8, fontWeight:800 }}>★ {score}</span>}
+                        </div>
+                      );
+                    })()}
 
                     <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
                       {(im.pagamento||[]).filter(Boolean).map(p => {
