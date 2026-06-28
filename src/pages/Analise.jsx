@@ -136,7 +136,7 @@ export default function Analise() {
             setAnalisesUsadas(count);
             setAnalisesBloqueado(count >= limiteRole);
           } else {
-            supabase.from('perfis').update({ analises_mes: mesAtual(), analises_count: 0 }).eq('id', user.id);
+            // Mês virou: a contagem é zerada server-side no próximo consumo (consumir_analise).
             setAnalisesUsadas(0);
             setAnalisesBloqueado(false);
           }
@@ -451,19 +451,16 @@ export default function Analise() {
       } catch { /* portfólio local já foi salvo — erro de rede não bloqueia o usuário */ }
     }
 
-    // Contabiliza análise ao salvar pela primeira vez
-    if (user && isNovo) {
-      if (role === 'explorador') {
-        const novoBonus = Math.max(0, analisesBonus - 1);
-        await supabase.from('perfis').update({ bonus_mercado: novoBonus }).eq('id', user.id);
-        setAnalisesBonus(novoBonus);
-        if (novoBonus <= 0) setAnalisesBloqueado(true);
-      } else if (role === 'top1') {
-        const mes = mesAtual();
-        const novoCount = analisesUsadas + 1;
-        await supabase.from('perfis').update({ analises_mes: mes, analises_count: novoCount }).eq('id', user.id);
-        setAnalisesUsadas(novoCount);
-        if (novoCount >= limiteRole) setAnalisesBloqueado(true);
+    // Contabiliza a análise SERVER-SIDE (cota protegida contra adulteração no cliente).
+    // A função consumir_analise() usa auth.uid() e aplica os limites por plano.
+    if (user && isNovo && !semLimite) {
+      const { data: cota } = await supabase.rpc('consumir_analise');
+      if (cota?.tipo === 'bonus') {
+        setAnalisesBonus(cota.restante);
+        if (cota.restante <= 0) setAnalisesBloqueado(true);
+      } else if (cota?.tipo === 'mensal') {
+        setAnalisesUsadas(cota.usadas);
+        if (cota.usadas >= cota.limite) setAnalisesBloqueado(true);
       }
     }
   };
