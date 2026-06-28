@@ -7,6 +7,7 @@ import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
+import { TERMOS_VERSAO } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
 
 const PLANOS_PAGOS = ['top2', 'clube', 'assessorado'];
@@ -229,15 +230,18 @@ export default function Checkout() {
   const logAceite = async (planoKey, valor, asaasData) => {
     if (!user) return;
     try {
-      await supabase.from('aceites_plano').insert({
-        user_id: user.id,
-        user_email: user.email,
-        plano_key: planoKey,
-        valor: valor,
-        asaas_payment_id: asaasData?.subscriptionId || asaasData?.customerId || null,
-        asaas_subscription_id: asaasData?.subscriptionId || null,
-        user_agent: navigator.userAgent,
-        termos_versao: '1.0',
+      // Server-side: grava o aceite com o IP de origem (prova para chargeback)
+      await apiCall('/api/registrar-aceite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plano_key: planoKey,
+          valor,
+          asaas_payment_id: asaasData?.subscriptionId || asaasData?.customerId || null,
+          asaas_subscription_id: asaasData?.subscriptionId || null,
+          user_agent: navigator.userAgent,
+          termos_versao: TERMOS_VERSAO,
+        }),
       });
     } catch (_) {}
   };

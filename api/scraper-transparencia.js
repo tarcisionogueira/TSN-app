@@ -120,8 +120,10 @@ function normalizarCeis(item) {
   return {
     fonte: 'ceis',
     fonte_id: `ceis_${item.id ?? item.codigoSancao ?? item.cpfCnpj ?? Math.random()}`,
-    cpf_cnpj: item.cpfCnpj ?? item.numeroCpfCnpj ?? null,
-    nome_sancionado: item.nomeSancionado ?? item.razaoSocialCadastro ?? null,
+    // A API do Portal da Transparência aninha a entidade em sancionado/pessoa
+    // (não em item.cpfCnpj). Lê vários caminhos e guarda só dígitos.
+    cpf_cnpj: (item.sancionado?.codigoFormatado ?? item.pessoa?.cpfFormatado ?? item.pessoa?.cnpjFormatado ?? item.pessoa?.numeroInscricaoSocial ?? item.cpfCnpj ?? item.numeroCpfCnpj ?? '').toString().replace(/\D/g, '') || null,
+    nome_sancionado: item.sancionado?.nome ?? item.pessoa?.nome ?? item.pessoa?.razaoSocialReceita ?? item.nomeSancionado ?? item.razaoSocialCadastro ?? null,
     tipo_sancao: item.tipoSancao?.descricaoResumida ?? item.tipoSancao ?? null,
     orgao_sancionador: item.orgaoSancionador?.nome ?? item.orgaoSancionador ?? null,
     data_inicio_sancao: parseDateBR(item.dataInicioSancao ?? item.dataPublicacao),
@@ -140,8 +142,10 @@ function normalizarCnep(item) {
   return {
     fonte: 'cnep',
     fonte_id: `cnep_${item.id ?? item.codigoSancao ?? item.cpfCnpj ?? Math.random()}`,
-    cpf_cnpj: item.cpfCnpj ?? item.numeroCpfCnpj ?? null,
-    nome_sancionado: item.nomeSancionado ?? item.razaoSocialCadastro ?? null,
+    // A API do Portal da Transparência aninha a entidade em sancionado/pessoa
+    // (não em item.cpfCnpj). Lê vários caminhos e guarda só dígitos.
+    cpf_cnpj: (item.sancionado?.codigoFormatado ?? item.pessoa?.cpfFormatado ?? item.pessoa?.cnpjFormatado ?? item.pessoa?.numeroInscricaoSocial ?? item.cpfCnpj ?? item.numeroCpfCnpj ?? '').toString().replace(/\D/g, '') || null,
+    nome_sancionado: item.sancionado?.nome ?? item.pessoa?.nome ?? item.pessoa?.razaoSocialReceita ?? item.nomeSancionado ?? item.razaoSocialCadastro ?? null,
     tipo_sancao: item.tipoSancao?.descricaoResumida ?? item.tipoSancao ?? null,
     orgao_sancionador: item.orgaoSancionador?.nome ?? item.orgaoSancionador ?? null,
     data_inicio_sancao: parseDateBR(item.dataInicioSancao ?? item.dataPublicacao),

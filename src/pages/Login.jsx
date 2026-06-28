@@ -121,7 +121,7 @@ export default function Login() {
       if (error) throw error;
       setModo('recuperar_sucesso');
     } catch (err) {
-      setErro(err.message || 'Erro ao enviar email de recuperação.');
+      setErro(traduzErroAuth(err.message) || 'Erro ao enviar email de recuperação.');
     }
     setLoading(false);
   };
@@ -290,7 +290,7 @@ export default function Login() {
         )}
 
         {/* Logo clicável */}
-        <button onClick={() => nav(-1)}
+        <button onClick={() => nav('/')}
           style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
           <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
             <Briefcase size={20} color="white" />

@@ -20,10 +20,10 @@ function isSessionExpired() {
 }
 
 async function fetchPerfil(userId) {
-  if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0 };
+  if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0, cadastroIncompleto: false };
   const { data } = await supabase
     .from('perfis')
-    .select('role, ativo, inadimplente_desde')
+    .select('role, ativo, inadimplente_desde, cpf, lgpd_aceito')
     .eq('id', userId)
     .single();
 
@@ -41,14 +41,18 @@ async function fetchPerfil(userId) {
       role_anterior: data.role,
       role: 'explorador',
     }).eq('id', userId);
-    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias };
+    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: (!data?.cpf || !data?.lgpd_aceito) };
   }
 
+  const roleFinal = data?.role || 'explorador';
+  const ehCliente = !ROLES_OPERACIONAIS.includes(roleFinal);
   return {
     // Sem perfil carregado → menor privilégio (explorador), nunca um role usável por engano
-    role: data?.role || 'explorador',
+    role: roleFinal,
     ativo: data?.ativo !== false,
     inadimplenteDias,
+    // Cliente sem CPF ou sem aceite LGPD (ex.: cadastro via Google) precisa completar
+    cadastroIncompleto: ehCliente && (!data?.cpf || !data?.lgpd_aceito),
   };
 }
 
@@ -62,6 +66,7 @@ export function AuthProvider({ children }) {
   const [role, setRole]             = useState('explorador');
   const [ativo, setAtivo]           = useState(true);
   const [inadimplenteDias, setInad] = useState(0);
+  const [cadastroIncompleto, setCadastroIncompleto] = useState(false);
   const [loading, setLoading]       = useState(true);
   // Modo suporte: admin/analista visualizando a conta de um cliente
   const [impersonate, setImpersonate] = useState(loadImpersonate);
@@ -99,6 +104,7 @@ export function AuthProvider({ children }) {
       setRole(p.role);
       setAtivo(p.ativo);
       setInad(p.inadimplenteDias);
+      setCadastroIncompleto(p.cadastroIncompleto ?? false);
       // Vincula o cliente ao consultor que o indicou (link de afiliado),
       // inclusive no login Google onde o trigger não recebe o código.
       // Só tenta no sign-in real (não em token refresh, user_updated, etc.)
@@ -114,21 +120,26 @@ export function AuthProvider({ children }) {
           try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}
           sessionStorage.removeItem('tsn_ref_codigo');
         }
-        // Vincula via link de convite
+        // Vincula via link de convite (cliente)
         const convite = sessionStorage.getItem('tsn_convite_codigo');
         if (convite) {
           try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
           sessionStorage.removeItem('tsn_convite_codigo');
         }
-        // Redirect pós-OAuth (login Google): leva ao destino preservado antes
-        // do redirect (plano/checkout, next ou produto). HashRouter usa #/...
-        if (event === 'SIGNED_IN') {
-          const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
-          if (oauthDest) {
-            sessionStorage.removeItem('tsn_oauth_redirect');
-            if (window.location.hash.replace(/^#/, '') !== oauthDest) {
-              window.location.hash = oauthDest;
-            }
+        // Convite de equipe — funciona também no login Google (antes só por senha)
+        const conviteEq = sessionStorage.getItem('tsn_convite_equipe');
+        if (conviteEq) {
+          try { await supabase.rpc('usar_convite_equipe', { p_token: conviteEq, p_user_id: u.id }); } catch (_) {}
+          sessionStorage.removeItem('tsn_convite_equipe');
+        }
+        // Redirect pós-login social (Google): leva ao destino preservado antes do
+        // redirect (plano/checkout, next ou produto). Cobre SIGNED_IN e
+        // INITIAL_SESSION (o Supabase às vezes emite INITIAL_SESSION ao voltar do OAuth).
+        const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
+        if (oauthDest) {
+          sessionStorage.removeItem('tsn_oauth_redirect');
+          if (window.location.hash.replace(/^#/, '') !== oauthDest) {
+            window.location.hash = oauthDest;
           }
         }
       }
@@ -154,6 +165,7 @@ export function AuthProvider({ children }) {
           setRole(p.role);
           setAtivo(p.ativo);
           setInad(p.inadimplenteDias);
+          setCadastroIncompleto(p.cadastroIncompleto ?? false);
         })
         .subscribe();
     });
@@ -189,7 +201,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role, ativo, inadimplenteDias, loading,
+      user, role, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto,
       isAdmin: role === 'admin',
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,

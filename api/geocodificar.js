@@ -123,7 +123,7 @@ function cacheKey(im) {
   return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
 }
 
-async function processarLote(estadosFilter, lote = 50) {
+async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
   const r = await sb(
     `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
   );
@@ -131,9 +131,15 @@ async function processarLote(estadosFilter, lote = 50) {
   const imoveis = await r.json();
   if (!imoveis.length) return { processados: 0 };
 
-  const res = { processados: imoveis.length, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0 };
+  // processados conta o que de fato foi tratado: o lote pode ser interrompido antes do fim
+  // se o orçamento de tempo (deadline) acabar — por isso não usamos imoveis.length aqui.
+  const res = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, interrompido: false };
 
   for (const im of imoveis) {
+    // Cada item pode levar até ~27s (3 níveis de cascata × timeout de 8s do Nominatim).
+    // Paramos ANTES de iniciar um novo item se o deadline já passou — evita estourar o maxDuration de 300s.
+    if (Date.now() > deadline) { res.interrompido = true; break; }
+
     const key = cacheKey(im);
     let coords, fromCache = false;
 
@@ -150,6 +156,7 @@ async function processarLote(estadosFilter, lote = 50) {
     const salvo = await salvarCoords(im.id, coords);
     if (salvo && coords) { res[coords.nivel]++; if (fromCache) res.cache_hits++; }
     else res.falhas++;
+    res.processados++;
     if (!fromCache) await sleep(1100);
   }
 
@@ -217,7 +224,7 @@ export default async function handler(req) {
   // Modo cron (GET): loop até acabar todos os pendentes ou restar <30s de margem
   // Modo manual (POST): processa 1 lote de 50 e retorna (para o admin monitorar em tempo real)
   if (modoManual) {
-    const res = await processarLote(estadosFilter, 50);
+    const res = await processarLote(estadosFilter, 50, Date.now() + 270_000);
     if (!res) return new Response(JSON.stringify({ error: 'Supabase error' }), { status: 500 });
     if (!res.processados) return new Response(JSON.stringify({ processados: 0, msg: 'Nenhum imóvel pendente' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
@@ -226,10 +233,11 @@ export default async function handler(req) {
   // Modo cron: loop interno — processa tudo que couber em ~270s (margem de 30s antes do timeout)
   const LIMITE_MS = 270_000;
   const inicio = Date.now();
+  const deadline = inicio + LIMITE_MS;
   const total = { processados: 0, endereco: 0, bairro: 0, cidade: 0, falhas: 0, cache_hits: 0, lotes: 0 };
 
-  while (Date.now() - inicio < LIMITE_MS) {
-    const res = await processarLote(estadosFilter, 50);
+  while (Date.now() < deadline) {
+    const res = await processarLote(estadosFilter, 50, deadline);
     if (!res || res.processados === 0) break; // sem mais pendentes
     total.processados += res.processados;
     total.endereco    += res.endereco;
@@ -238,7 +246,8 @@ export default async function handler(req) {
     total.falhas      += res.falhas;
     total.cache_hits  += res.cache_hits;
     total.lotes++;
-    if (res.processados < 50) break; // último lote
+    if (res.interrompido) break;     // deadline atingido no meio do lote — encerra com folga antes dos 300s
+    if (res.processados < 50) break; // último lote (menos de 50 pendentes)
   }
 
   return new Response(JSON.stringify(total), {
