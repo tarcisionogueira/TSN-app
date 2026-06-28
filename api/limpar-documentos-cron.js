@@ -1,8 +1,8 @@
 /**
  * GET /api/limpar-documentos-cron
  * Cron diário: apaga arquivos de imovel_anexos onde:
- *   - data_leilao + 90 dias < hoje
- *   - arrematado = false
+ *   - data_leilao + 30 dias < hoje
+ *   - arrematado = false (arrematados ficam permanentes)
  *   - storage_path IS NOT NULL (arquivo existe no bucket)
  *
  * Mantém registros do banco (sem storage_path) para auditoria.
@@ -47,7 +47,7 @@ export default async function handler(req) {
 
   const hoje = new Date();
   const corte = new Date(hoje);
-  corte.setDate(corte.getDate() - 90);
+  corte.setDate(corte.getDate() - 30); // retenção: 30 dias após o leilão (não arrematados)
   const corteISO = corte.toISOString().slice(0, 10); // YYYY-MM-DD
 
   // Busca anexos elegíveis para exclusão (leilão encerrado há 90+ dias, não arrematado, com arquivo)

@@ -310,6 +310,15 @@ export default async function handler(req) {
       headers: { Prefer: 'return=minimal' },
     });
 
+    // Documentos do imóvel passam a ser PERMANENTES (o cron de retenção só apaga
+    // anexos com arrematado=false). Garante que matrícula/edital do lote arrematado
+    // não sejam removidos após o leilão.
+    await dbFetch(`imovel_anexos?imovel_id=eq.${imovel_id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ arrematado: true }),
+      headers: { Prefer: 'return=minimal' },
+    });
+
     const arrematacao = Array.isArray(r.data) ? r.data[0] : r.data;
     return json({ ok: true, arrematacao }, 201);
   }

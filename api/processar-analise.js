@@ -144,8 +144,11 @@ export default async function handler(req) {
     ? await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(caso.imovel_id)}&select=*`)).json()
     : [null];
 
-  // 2. Documentos anexados (matrícula/edital)
-  const anexos = await (await sb(`imovel_anexos?caso_id=eq.${encodeURIComponent(caso_id)}&tipo=in.(matricula,edital)&select=id,tipo,url,nome`)).json();
+  // 2. Documentos anexados ao IMÓVEL (matrícula/edital) — imovel_anexos é por
+  //    imovel_id (compartilhado entre casos), NÃO por caso_id (coluna inexistente).
+  const anexos = caso.imovel_id
+    ? await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&tipo=in.(matricula,edital)&storage_path=not.is.null&select=id,tipo,url,nome`)).json()
+    : [];
   if (!Array.isArray(anexos) || anexos.length === 0) {
     return new Response(JSON.stringify({ error: 'Anexe a matrícula e/ou o edital ao caso antes de gerar a análise.' }), { status: 422 });
   }

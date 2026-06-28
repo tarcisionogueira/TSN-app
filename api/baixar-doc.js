@@ -70,6 +70,19 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Domínio não permitido' }), { status: 403 });
   }
 
+  // Dedup: 1 cópia compartilhada por imóvel. Se já existe esse tipo de doc para o
+  // imóvel (com arquivo no bucket), reusa — sem novo download nem custo.
+  const jaRes = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovel_id)}&tipo=eq.${encodeURIComponent(tipo)}&storage_path=not.is.null&select=id,url,storage_path&limit=1`);
+  if (jaRes.ok) {
+    const existentes = await jaRes.json().catch(() => []);
+    if (Array.isArray(existentes) && existentes[0]) {
+      const e = existentes[0];
+      return new Response(JSON.stringify({ storage_path: e.storage_path, url_publica: e.url, anexo_id: e.id, reused: true }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   // Baixa o arquivo da URL original
   let fileBuffer, contentType, fileName;
   try {
@@ -135,7 +148,6 @@ export default async function handler(req) {
     method: 'POST',
     body: JSON.stringify({
       imovel_id,
-      caso_id: caso_id || null,
       tipo,
       nome: fileName,
       url: urlPublica,
