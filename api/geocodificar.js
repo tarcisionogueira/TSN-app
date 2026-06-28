@@ -6,6 +6,9 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...opts,
+    // Nenhuma chamada ao Supabase pode pendurar a função: timeout de 20s evita que
+    // um PATCH/SELECT lento estoure o limite de 300s da serverless function.
+    signal: opts.signal || AbortSignal.timeout(20000),
     headers: {
       apikey: SUPABASE_SERVICE_KEY,
       Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
@@ -93,7 +96,9 @@ async function salvarCoords(id, coords) {
   // Se a coluna não existir ainda, tenta sem ela
   const body = coords
     ? { latitude: coords.lat, longitude: coords.lng, geocod_nivel: coords.nivel }
-    : { latitude: 0, longitude: 0, geocod_nivel: null };
+    // Falha definitiva: marca 'falhou' (latitude=0) para sair da fila e não ser
+    // re-tentado a cada ciclo (cada falha custa ~28s em 3 níveis do Nominatim).
+    : { latitude: 0, longitude: 0, geocod_nivel: 'falhou' };
 
   let res = await sb(`imoveis_leilao?id=eq.${id}`, {
     method: 'PATCH',
@@ -127,8 +132,10 @@ function cacheKey(im) {
 }
 
 async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
+  // Pendentes = sem coordenada (latitude NULL) ou sentinela 0 ainda NÃO marcada como
+  // 'falhou'. Itens marcados 'falhou' saem da fila (não são re-tentados todo ciclo).
   const r = await sb(
-    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,latitude.eq.0)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
+    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,and(latitude.eq.0,geocod_nivel.is.null))&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
   );
   if (!r.ok) return null;
   const imoveis = await r.json();
