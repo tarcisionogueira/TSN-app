@@ -60,6 +60,7 @@ export default function Login() {
   const produtoParam = params.get('produto') || ''; // tipo:id ex: curso:abc123
   const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [emailNaoConfirmado, setEmailNaoConfirmado] = useState(false);
   const [reenviando, setReenviando] = useState(false);
@@ -147,25 +148,33 @@ export default function Login() {
   })();
 
   const handleGoogle = async () => {
-    if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
-    // Salva ref antes do redirect OAuth (sessionStorage pode ser limpo em alguns browsers)
-    if (refCodigo) sessionStorage.setItem('tsn_ref_codigo', refCodigo);
-    // O fluxo OAuth NÃO passa pelo handleLogin, então calculamos aqui o destino
-    // pós-login (plano/checkout, next ou produto) e o AuthContext o consome.
-    const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');
-    const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
-    const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
-    let dest = '';
-    if (produtoRedirect) dest = produtoRedirect;
-    else if (planoPendente) dest = `/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`;
-    else if (nextParam) dest = nextParam;
-    if (dest) sessionStorage.setItem('tsn_oauth_redirect', dest);
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      // Usa apenas a origem — o Supabase redireciona para a URL configurada em
-      // Authentication > URL Configuration > Site URL no painel do Supabase.
-      options: { redirectTo: window.location.origin },
-    });
+    setErro(''); setGoogleLoading(true);
+    try {
+      if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
+      // Salva ref antes do redirect OAuth (sessionStorage pode ser limpo em alguns browsers)
+      if (refCodigo) sessionStorage.setItem('tsn_ref_codigo', refCodigo);
+      // O fluxo OAuth NÃO passa pelo handleLogin, então calculamos aqui o destino
+      // pós-login (plano/checkout, next ou produto) e o AuthContext o consome.
+      const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');
+      const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
+      const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
+      let dest = '';
+      if (produtoRedirect) dest = produtoRedirect;
+      else if (planoPendente) dest = `/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`;
+      else if (nextParam) dest = nextParam;
+      if (dest) sessionStorage.setItem('tsn_oauth_redirect', dest);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        // Usa apenas a origem — o Supabase redireciona para a URL configurada em
+        // Authentication > URL Configuration > Site URL no painel do Supabase.
+        options: { redirectTo: window.location.origin },
+      });
+      if (error) throw error;
+      // Em sucesso, o browser redireciona para o Google (não volta aqui).
+    } catch (err) {
+      setErro(traduzErroAuth(err.message) || 'Não foi possível conectar com o Google. Tente novamente.');
+      setGoogleLoading(false);
+    }
   };
 
   // Traduz mensagens de erro do Supabase Auth para português
@@ -367,10 +376,10 @@ export default function Login() {
               <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>ou continue com</span>
               <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}/>
             </div>
-            <button type="button" onClick={handleGoogle}
-              style={{ width: '100%', padding: '11px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <button type="button" onClick={handleGoogle} disabled={googleLoading}
+              style={{ width: '100%', padding: '11px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 14, cursor: googleLoading ? 'not-allowed' : 'pointer', opacity: googleLoading ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.7 2.4 30.2 0 24 0 14.7 0 6.8 5.5 3 13.5l7.9 6.1C12.8 13.6 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z"/><path fill="#FBBC05" d="M10.9 28.4A14.4 14.4 0 0 1 9.5 24c0-1.5.3-3 .8-4.4L2.4 13.5A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.4 10.5l8.5-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.6 2.2-7.7 2.2-6.1 0-11.2-4.1-13.1-9.6l-7.9 6.1C6.8 42.5 14.7 48 24 48z"/></svg>
-              Entrar com Google
+              {googleLoading ? 'Conectando…' : 'Entrar com Google'}
             </button>
 
             <div style={{ marginTop: 16, textAlign: 'center' }}>
@@ -542,10 +551,10 @@ export default function Login() {
               <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>ou cadastre-se com</span>
               <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}/>
             </div>
-            <button type="button" onClick={handleGoogle}
-              style={{ width: '100%', padding: '11px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <button type="button" onClick={handleGoogle} disabled={googleLoading}
+              style={{ width: '100%', padding: '11px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 14, cursor: googleLoading ? 'not-allowed' : 'pointer', opacity: googleLoading ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.7 2.4 30.2 0 24 0 14.7 0 6.8 5.5 3 13.5l7.9 6.1C12.8 13.6 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z"/><path fill="#FBBC05" d="M10.9 28.4A14.4 14.4 0 0 1 9.5 24c0-1.5.3-3 .8-4.4L2.4 13.5A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.4 10.5l8.5-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.6 2.2-7.7 2.2-6.1 0-11.2-4.1-13.1-9.6l-7.9 6.1C6.8 42.5 14.7 48 24 48z"/></svg>
-              Cadastrar com Google
+              {googleLoading ? 'Conectando…' : 'Cadastrar com Google'}
             </button>
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>Já tem conta? </span>

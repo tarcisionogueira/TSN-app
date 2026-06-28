@@ -1,22 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-
-class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(e) { return { error: e }; }
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{ padding: 40, fontFamily: 'monospace', background: '#fff1f2', minHeight: '100vh' }}>
-          <h2 style={{ color: '#dc2626' }}>Erro ao carregar o app</h2>
-          <pre style={{ color: '#7f1d1d', whiteSpace: 'pre-wrap', fontSize: 13 }}>{String(this.state.error)}</pre>
-          <pre style={{ color: '#991b1b', whiteSpace: 'pre-wrap', fontSize: 11 }}>{this.state.error?.stack}</pre>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 import { trackPageView } from './utils/gtag';
 import { supabase } from './utils/supabase';
 import { useAuth, AuthProvider } from './contexts/AuthContext';

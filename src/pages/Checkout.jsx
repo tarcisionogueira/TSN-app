@@ -637,7 +637,7 @@ export default function Checkout() {
               <div style={{ fontSize: 40, marginBottom: 12 }}>🔗</div>
               <p style={{ fontWeight: 800, color: '#111111', marginBottom: 8, fontSize: 16 }}>Página de pagamento aberta!</p>
               <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, marginBottom: 20 }}>
-                Complete o pagamento na aba que abrimos. <strong>Não precisa fazer mais nada</strong> — assim que o pagamento cair, seu plano é ativado automaticamente.
+                Complete o pagamento na página de pagamento. <strong>Não precisa fazer mais nada</strong> — assim que o pagamento cair, seu plano é ativado automaticamente. Se a página não abrir, use o botão abaixo.
               </p>
               <a href={linkPagamento} target="_blank" rel="noopener noreferrer"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px', background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box', marginBottom: 10 }}>

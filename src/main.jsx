@@ -17,11 +17,23 @@ class RootErrorBoundary extends React.Component {
   static getDerivedStateFromError(e) { return { error: e }; }
   render() {
     if (this.state.error) {
+      const dev = import.meta.env.DEV;
       return (
-        <div style={{ padding: 40, fontFamily: 'monospace', background: '#fff1f2', minHeight: '100vh' }}>
-          <h2 style={{ color: '#dc2626' }}>Erro ao carregar o app</h2>
-          <pre style={{ color: '#7f1d1d', whiteSpace: 'pre-wrap', fontSize: 13 }}>{String(this.state.error)}</pre>
-          <pre style={{ color: '#991b1b', whiteSpace: 'pre-wrap', fontSize: 11 }}>{this.state.error?.stack}</pre>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: 24, fontFamily: "'Inter', sans-serif" }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: '36px 32px', maxWidth: 440, width: '100%', textAlign: 'center', boxShadow: '0 12px 40px rgba(0,0,0,0.1)' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
+            <h2 style={{ color: '#111111', fontWeight: 900, margin: '0 0 8px' }}>Algo deu errado</h2>
+            <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
+              Tivemos um problema ao carregar esta página. Tente recarregar — se persistir, fale com o suporte.
+            </p>
+            <button onClick={() => window.location.reload()}
+              style={{ padding: '12px 28px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+              Recarregar página
+            </button>
+            {dev && (
+              <pre style={{ marginTop: 20, textAlign: 'left', color: '#991b1b', whiteSpace: 'pre-wrap', fontSize: 11, background: '#fff1f2', padding: 12, borderRadius: 8, overflow: 'auto', maxHeight: 240 }}>{String(this.state.error)}{'\n'}{this.state.error?.stack}</pre>
+            )}
+          </div>
         </div>
       );
     }

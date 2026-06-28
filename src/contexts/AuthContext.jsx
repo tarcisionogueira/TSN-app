@@ -89,6 +89,7 @@ export function AuthProvider({ children }) {
       setRole(p.role);
       setAtivo(p.ativo);
       setInad(p.inadimplenteDias);
+      setCadastroIncompleto(p.cadastroIncompleto ?? false);
       setLoading(false);
     });
 
