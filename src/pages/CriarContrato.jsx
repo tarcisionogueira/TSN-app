@@ -100,8 +100,9 @@ export default function CriarContrato() {
       const path = `contratos-docs/${user.id}/${Date.now()}.${ext}`;
       const { data, error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
       if (error) throw error;
-      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(data.path);
-      setArquivoUrl(urlData.publicUrl);
+      // Bucket privado: signed URL de 1 ano
+      const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(data.path, 60 * 60 * 24 * 365);
+      setArquivoUrl(signed?.signedUrl || '');
     } catch (e) {
       setErro('Erro ao enviar arquivo: ' + e.message);
       setArquivoDoc(null);
@@ -158,8 +159,8 @@ export default function CriarContrato() {
         const path = `contratos-ref/${user.id}/${Date.now()}-${f.name}`;
         const { data: up } = await supabase.storage.from('documentos').upload(path, f, { upsert: false });
         if (up?.path) {
-          const { data: url } = supabase.storage.from('documentos').getPublicUrl(up.path);
-          refs.push({ nome: f.name, url: url.publicUrl });
+          const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(up.path, 60 * 60 * 24 * 365);
+          refs.push({ nome: f.name, url: signed?.signedUrl || null });
         }
       }
 

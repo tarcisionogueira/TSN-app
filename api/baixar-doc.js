@@ -115,7 +115,20 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Erro ao salvar no storage' }), { status: 500 });
   }
 
-  const urlPublica = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
+  // Bucket privado: gera signed URL de 1 ano (acessível por token, inclusive pelo
+  // Anthropic em processar-analise). Fallback para a URL pública se a assinatura falhar.
+  let urlPublica = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
+  try {
+    const signRes = await storage(`object/sign/${BUCKET}/${storagePath}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+    });
+    if (signRes.ok) {
+      const { signedURL } = await signRes.json();
+      if (signedURL) urlPublica = `${SUPABASE_URL}/storage/v1${signedURL}`;
+    }
+  } catch (_) { /* mantém fallback */ }
 
   // Registra em imovel_anexos
   const insertRes = await sb('imovel_anexos', {

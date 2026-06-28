@@ -108,8 +108,9 @@ export default function OnrRegistro() {
       setUploads(p => ({ ...p, [key]: 'error' }));
       return;
     }
-    const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(data.path);
-    setDocs(p => ({ ...p, [key]: { nome: file.name, url: publicUrl } }));
+    // Bucket privado: gera signed URL de 1 ano (token não-adivinhável)
+    const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(data.path, 60 * 60 * 24 * 365);
+    setDocs(p => ({ ...p, [key]: { nome: file.name, url: signed?.signedUrl || null, path: data.path } }));
     setUploads(p => ({ ...p, [key]: 'done' }));
   };
 
