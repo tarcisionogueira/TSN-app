@@ -259,12 +259,26 @@ export default function Checkout() {
     } catch (_) {}
   };
 
+  // Evita DUPLICIDADE de assinatura: antes de criar uma nova recorrência,
+  // cancela qualquer assinatura ativa do cliente nos dois gateways (idempotente).
+  // Só roda uma vez por sessão de checkout.
+  const cancelouAnterioresRef = useRef(false);
+  const cancelarAssinaturasAnteriores = async () => {
+    if (cancelouAnterioresRef.current || !user?.email) return;
+    cancelouAnterioresRef.current = true;
+    await Promise.allSettled([
+      apiCall('/api/mp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'cancelar_assinatura', email: user.email }) }),
+      apiCall('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'cancelar_assinatura', email: user.email }) }),
+    ]);
+  };
+
   // Tenta pagar via Asaas (backup) com dados já preenchidos
   const pagarAsaas = async () => {
     setLoading(true);
     setErro('');
     setOfertandoFallback(false);
     try {
+      if (['clube', 'top2'].includes(planoApiKey)) await cancelarAssinaturasAnteriores();
       const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -292,6 +306,9 @@ export default function Checkout() {
     setLoading(true);
     setErro('');
     setOfertandoFallback(false);
+
+    // Anti-duplicidade: cancela assinaturas ativas antes de criar a nova recorrência
+    if (['clube', 'top2'].includes(planoApiKey)) await cancelarAssinaturasAnteriores();
 
     // Verifica se MP está ativo (admin pode desligar manualmente no painel)
     const { data: cfgRows } = await supabase.from('config_financeira').select('gateway,ativo');

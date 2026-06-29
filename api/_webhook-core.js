@@ -193,6 +193,9 @@ export async function processarVencido({ gatewayCustomerId, email, gateway }) {
 // ── CHARGEBACK / DISPUTA ──────────────────────────────────────────────────────
 // Identifica o chargeback, monta o dossiê de defesa (aceite com IP/UA/versão +
 // pagamento), registra em `chargebacks`, suspende o acesso e alerta a equipe.
+// TODO (pendência): submissão AUTOMÁTICA da defesa via API de disputas do MP.
+// Adiado até poder validar contra a API real — ver docs/PENDENCIAS_PAGAMENTOS.md.
+// Hoje o dossiê fica pronto e copiável em /admin/chargebacks (envio manual).
 export async function processarChargeback({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gatewaySubscriptionId, gateway, evento, motivo, raw }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
 
