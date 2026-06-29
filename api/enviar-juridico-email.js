@@ -13,7 +13,7 @@ import { enviarEmail } from './_email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const INBOUND_DOMAIN = process.env.INBOUND_EMAIL_DOMAIN || 'inbound.bidprobrasil.com.br';
+const INBOUND_DOMAIN = process.env.INBOUND_EMAIL_DOMAIN || 'bidprobrasil.com.br';
 const APP_URL = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
 function json(obj, status = 200) {

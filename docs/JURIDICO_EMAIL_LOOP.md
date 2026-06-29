@@ -26,7 +26,7 @@ Para o analista/admin, aparece no **Atendimento** (chat interno).
 2. **Webhook** no Resend: evento **`email.received`** apontando para
    `https://bidprobrasil.com.br/api/inbound-juridico`. Copiar o **signing secret**.
 3. **Variáveis de ambiente** (Vercel → Production + Preview):
-   - `INBOUND_EMAIL_DOMAIN` = o domínio de recebimento (ex.: `inbound.bidprobrasil.com.br`)
+   - `INBOUND_EMAIL_DOMAIN` = o domínio de recebimento (ex.: `bidprobrasil.com.br (raiz — recebimento no domínio existente, sem custo de domínio novo)`)
    - `INBOUND_WEBHOOK_SECRET` = o `whsec_...` do webhook
    - (já existentes) `RESEND_API_KEY`, `VITE_SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `CLAUDE_KEY`
 4. Garantir que o **domínio de envio** (`bidprobrasil.com.br`) está verificado para envio (já está).
