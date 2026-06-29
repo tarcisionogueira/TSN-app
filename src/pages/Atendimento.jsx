@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, CheckCircle2, Send, Paperclip, Bot, Loader2, UserCheck, RefreshCw, AlertCircle, Clock, User } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { apiCall } from '../utils/apiCall';
 
 const STATUS_CFG = {
   aberto:               { label: 'Aberto',             cor: '#10b981', bg: '#d1fae5' },
@@ -96,6 +97,13 @@ export default function Atendimento() {
     if (msgErr) { alert('Erro ao enviar mensagem. Tente novamente.'); setEnviando(false); return; }
     if (msg) setMensagens(prev => [...prev, msg]);
     await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
+    // Notifica o cliente por e-mail (essencial para leads sem conta)
+    if (texto.trim() && chamadoAtivo.user_email) {
+      apiCall('/api/notificar-cliente', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chamado_id: chamadoAtivo.id, mensagem: texto }),
+      }).catch(() => {});
+    }
     setTexto(''); setAnexos([]);
     setEnviando(false);
   }
