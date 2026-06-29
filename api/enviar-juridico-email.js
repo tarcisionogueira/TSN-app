@@ -75,8 +75,20 @@ export default async function handler(req) {
 
   // Anexos do imóvel
   const anexos = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&select=nome,url,tipo`)).json();
-  // Relatório de avaliação documental APENAS (não mercadológico/financeiro)
-  const [doc] = await (await sb(`analise_relatorios?caso_id=eq.${encodeURIComponent(caso_id)}&tipo=eq.juridica_preliminar&select=conteudo_md,versao&order=versao.desc&limit=1`)).json();
+  // Triagem jurídica completa do sistema (documental + judicial/CNJ + sanções).
+  // NÃO inclui mercadológico nem viabilidade financeira.
+  const [doc] = await (await sb(`analise_relatorios?caso_id=eq.${encodeURIComponent(caso_id)}&tipo=eq.juridica_preliminar&select=conteudo_md,conteudo_json,versao&order=versao.desc&limit=1`)).json();
+  const dj = doc?.conteudo_json || {};
+  const linhaTri = (rotulo, valor) => valor ? `<tr><td style="padding:3px 10px 3px 0;color:#64748b;white-space:nowrap">${esc(rotulo)}</td><td style="padding:3px 0">${valor}</td></tr>` : '';
+  const triagemHtml = (dj.executado?.nome || dj.numero_processo || dj.score_juridico != null || (dj.sancoes||[]).length || (dj.riscos||[]).length) ? `
+    <table style="border-collapse:collapse;margin:6px 0;font-size:14px">
+      ${linhaTri('Executado', dj.executado?.nome ? `${esc(dj.executado.nome)}${dj.executado.cpf_cnpj ? ` <span style="color:#94a3b8">(${esc(dj.executado.cpf_cnpj)})</span>` : ''}` : '')}
+      ${linhaTri('Processo (CNJ)', dj.numero_processo ? esc(dj.numero_processo) : '')}
+      ${linhaTri('Score jurídico', dj.score_juridico != null ? `${esc(dj.score_juridico)}/100` : '')}
+      ${linhaTri('Sanções CEIS/CNEP', (dj.sancoes||[]).length ? `<strong>${(dj.sancoes).length}</strong> encontrada(s)` : '0 (nada encontrado)')}
+    </table>
+    ${(dj.riscos||[]).length ? `<p style="margin:8px 0 2px;font-weight:700">Gravames/ônus identificados:</p><ul style="margin:0;padding-left:18px">${dj.riscos.map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
+  ` : '';
 
   const token = caso.juridico_token || (crypto.randomUUID().split('-')[0] + crypto.randomUUID().split('-')[0]);
   const replyTo = `juridico+${token}@${INBOUND_DOMAIN}`;
@@ -98,7 +110,9 @@ export default async function handler(req) {
     <p style="font-weight:700;margin:18px 0 4px">Documentos anexos a este e-mail:</p>
     ${listaAnexos}
     <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
-    <p style="font-weight:700;margin:0 0 4px">Avaliação documental preliminar do sistema (para sua conferência):</p>
+    <p style="font-weight:700;margin:0 0 4px">Triagem jurídica do sistema — levantamento de dados (CNJ/processo, sanções CEIS/CNEP e gravames):</p>
+    ${triagemHtml || '<p style="color:#64748b">— triagem estruturada ainda não disponível —</p>'}
+    <p style="font-weight:700;margin:16px 0 4px">Parecer documental + judicial preliminar (para sua conferência):</p>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.55">${mdToHtml(doc?.conteudo_md)}</div>
     <p style="margin:18px 0 0">Caso identifique <strong>divergências</strong> em relação a esta avaliação, por favor aponte na resposta — usamos seus apontamentos para aprimorar a análise.</p>
     <p style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;margin:16px 0;font-size:14px">
