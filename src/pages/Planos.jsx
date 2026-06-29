@@ -23,6 +23,23 @@ export default function Planos() {
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   const [faqAberto, setFaqAberto] = useState(null);
   const [periodo, setPeriodo] = useState('mensal');
+  const [dv, setDv] = useState({ open: false, nome: '', email: user?.email || '', msg: '', enviando: false, ok: false, erro: '' });
+
+  const enviarDuvida = async () => {
+    setDv(d => ({ ...d, enviando: true, erro: '' }));
+    try {
+      const r = await fetch('/api/duvida', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: dv.nome, email: dv.email, mensagem: dv.msg, origem: 'planos' }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erro ao enviar');
+      setDv(s => ({ ...s, enviando: false, ok: true }));
+    } catch (e) {
+      setDv(s => ({ ...s, enviando: false, erro: e.message }));
+    }
+  };
 
   useEffect(() => { fetchPlanosComConfig().then(setPLANOS); }, []);
 
@@ -167,26 +184,17 @@ export default function Planos() {
             Assessoria Personalizada
           </div>
           <h2 style={{ fontSize: 'clamp(22px,4vw,34px)', fontWeight: 900, color: '#111', margin: '0 0 12px' }}>
-            A equipe TSN do seu lado, do lance à posse.
+            A nossa equipe do seu lado, do lance à posse.
           </h2>
           <p style={{ color: '#64748b', fontSize: 15, maxWidth: 520, margin: '0 auto', lineHeight: 1.7 }}>
             Para quem quer resultado com segurança total — análise, estratégia, documentação e registro feitos por especialistas.
           </p>
         </div>
 
-        {!user ? (
-          <div style={{ background: 'white', borderRadius: 20, border: '2px dashed #cbd5e1', padding: '52px 32px', textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
-            <div style={{ fontSize: 52, marginBottom: 14 }}>🔒</div>
-            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#111', marginBottom: 10 }}>Faça login para ver os planos de assessoria</h3>
-            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 28, lineHeight: 1.7 }}>
-              Os planos Assessoria e Leilão Club são exclusivos para membros cadastrados na plataforma.
-            </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => nav('/login')} style={{ padding: '12px 28px', background: '#111', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Entrar na minha conta</button>
-              <button onClick={() => nav('/login')} style={{ padding: '12px 28px', background: 'transparent', color: '#111', border: '2px solid #e2e8f0', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Criar conta grátis</button>
-            </div>
-          </div>
-        ) : (
+        <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, maxWidth: 560, margin: '0 auto 22px', lineHeight: 1.6 }}>
+          Disponível para contratação pelos membros <strong style={{ color: '#64748b' }}>Investidor Pro</strong>, direto na plataforma.
+        </p>
+        {(
           <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 880, margin: '0 auto' }}>
 
             {/* Assessoria */}
@@ -232,10 +240,10 @@ export default function Planos() {
                 <div style={{ fontSize: 11, color: '#a5b4fc', marginTop: 3 }}>Cobrado apenas em caso de sucesso</div>
               </div>
               <p style={{ fontSize: 14, color: '#c7d2fe', marginBottom: 20, lineHeight: 1.7 }}>
-                Mentoria contínua com assessoria ilimitada para todas as suas arrematações. Acesso total à plataforma e à equipe TSN.
+                Mentoria contínua com assessoria ilimitada para todas as suas arrematações. Acesso total à plataforma e à nossa equipe.
               </p>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
-                {['Tudo dos planos anteriores', 'Arrematações ilimitadas com assessoria completa', 'Encontros regulares com Tarcísio (sócio TSN)', 'Oportunidades exclusivas de leilões', 'Estratégia de portfólio personalizada', 'Suporte prioritário com analista dedicado', 'Após 12 meses: cancele a qualquer momento'].map(t => <CheckItem key={t} txt={t} light />)}
+                {['Tudo dos planos anteriores', 'Arrematações ilimitadas com assessoria completa', 'Encontros regulares com Tarcísio (sócio fundador)', 'Oportunidades exclusivas de leilões', 'Estratégia de portfólio personalizada', 'Suporte prioritário com analista dedicado', 'Após 12 meses: cancele a qualquer momento'].map(t => <CheckItem key={t} txt={t} light />)}
               </div>
               <button onClick={() => ir('clube')} disabled={atual('clube')}
                 style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('clube') ? 'rgba(255,255,255,0.1)' : '#6366f1', color: atual('clube') ? '#a5b4fc' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('clube') ? 'default' : 'pointer', boxShadow: atual('clube') ? 'none' : '0 4px 20px rgba(99,102,241,0.45)' }}>
@@ -278,13 +286,45 @@ export default function Planos() {
           </div>
         </div>
 
-        <p style={{ textAlign: 'center', marginTop: 52, fontSize: 13, color: '#94a3b8' }}>
-          Dúvidas?{' '}
-          <span style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}
-            onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}>
-            Fale com nossa equipe pelo chat
-          </span>
-        </p>
+        {/* ── Tirar dúvida (vai por e-mail ao consultor) ── */}
+        <div style={{ maxWidth: 560, margin: '52px auto 0', textAlign: 'center' }}>
+          {!dv.open && !dv.ok && (
+            <p style={{ fontSize: 14, color: '#64748b' }}>
+              Ficou com alguma dúvida?{' '}
+              <span style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }} onClick={() => setDv(d => ({ ...d, open: true }))}>
+                Envie sua pergunta
+              </span>{' '}— respondemos por e-mail.
+            </p>
+          )}
+
+          {dv.open && !dv.ok && (
+            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '22px 22px', textAlign: 'left', boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 12 }}>Tirar uma dúvida</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                <input value={dv.nome} onChange={e => setDv(d => ({ ...d, nome: e.target.value }))} placeholder="Seu nome"
+                  style={{ flex: 1, minWidth: 160, padding: '11px 13px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14 }} />
+                <input value={dv.email} onChange={e => setDv(d => ({ ...d, email: e.target.value }))} placeholder="Seu e-mail" type="email"
+                  style={{ flex: 1, minWidth: 160, padding: '11px 13px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14 }} />
+              </div>
+              <textarea value={dv.msg} onChange={e => setDv(d => ({ ...d, msg: e.target.value }))} placeholder="Escreva sua dúvida…" rows={4}
+                style={{ width: '100%', padding: '11px 13px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }} />
+              {dv.erro && <div style={{ color: '#b91c1c', fontSize: 13, marginTop: 8 }}>{dv.erro}</div>}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button onClick={() => setDv(d => ({ ...d, open: false }))} style={{ padding: '10px 18px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#64748b', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={enviarDuvida} disabled={dv.enviando}
+                  style={{ padding: '10px 22px', border: 'none', borderRadius: 10, background: '#0D63DB', color: 'white', fontWeight: 700, fontSize: 13, cursor: dv.enviando ? 'default' : 'pointer', opacity: dv.enviando ? 0.7 : 1 }}>
+                  {dv.enviando ? 'Enviando…' : 'Enviar dúvida'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {dv.ok && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 16, padding: '22px', color: '#15803d', fontWeight: 600, fontSize: 14 }}>
+              ✅ Dúvida enviada! Nossa equipe vai responder no seu e-mail em breve.
+            </div>
+          )}
+        </div>
       </div>
 
       <style>{`
