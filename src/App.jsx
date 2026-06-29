@@ -36,6 +36,7 @@ import MapaImoveis from './pages/MapaImoveis';
 import Promo from './pages/Promo';
 import Convite from './pages/Convite';
 import ConviteEquipe from './pages/ConviteEquipe';
+import AdvogadoPortal from './pages/AdvogadoPortal';
 import ConviteLeiloeiro from './pages/ConviteLeiloeiro';
 import LeiloeiroPortal from './pages/LeiloeiroPortal';
 import EbookPage from './pages/EbookPage';
@@ -215,6 +216,7 @@ function MainLayout() {
           <Route path="/comissoes" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><Comissoes /></PrivateRoute>} />
           <Route path="/admin/chargebacks" element={<PrivateRoute roles={['admin']}><AdminChargebacks /></PrivateRoute>} />
           <Route path="/atendimento" element={<PrivateRoute roles={['analista','consultor','admin','advogado']}><Atendimento /></PrivateRoute>} />
+          <Route path="/advogado" element={<PrivateRoute roles={['advogado','admin']}><AdvogadoPortal /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />
           <Route path="/cancelar-alertas" element={<CancelarAlertas />} />

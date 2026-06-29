@@ -270,6 +270,13 @@ export default function Header() {
             </button>
           )}
 
+          {effectiveRole === 'advogado' && (
+            <button onClick={() => nav('/advogado')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/advogado') ? '#7c3aed' : '#7c3aed22', color: '#c4b5fd', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              ⚖️ Advogado
+            </button>
+          )}
+
           {['analista','consultor','advogado','admin'].includes(effectiveRole) && (
             <button onClick={() => nav('/atendimento')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/atendimento') ? '#0891b2' : '#0891b222', color: '#67e8f9', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -367,6 +374,12 @@ export default function Header() {
             <button onClick={() => { nav('/consultor'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#6ee7b7', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               🤝 Comercial
+            </button>
+          )}
+          {effectiveRole === 'advogado' && (
+            <button onClick={() => { nav('/advogado'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              ⚖️ Advogado
             </button>
           )}
           {['analista','consultor','advogado','admin'].includes(effectiveRole) && (
