@@ -52,6 +52,7 @@ async function salvarImoveis(imoveis, fonte) {
 
   const rows = imoveis.map(im => ({
     ...im,
+    ativo: true, // coletado agora ⇒ está ativo (reativa lotes que voltaram)
     viavel: im.valor_avaliacao > 0 ? (1 - im.valor_minimo / im.valor_avaliacao) >= 0.3 : null,
     score_viabilidade: im.valor_avaliacao > 0
       ? Math.min(100, Math.round((1 - im.valor_minimo / im.valor_avaliacao) * 150))
@@ -101,127 +102,173 @@ async function capturarRespostasJSON(page, urlAlvo, { waitSelector, timeout = 20
 }
 
 // ─── MEGA LEILÕES ─────────────────────────────────────────────────────────────
+// Estrutura validada contra HTML real (debug_fetch): a listagem é renderizada no
+// servidor. Cada card é <div data-key="ID"><div class="card open">...; "open" =
+// ATIVO (lotes encerrados não têm a classe "open"). Paginação: ?pagina=N (sem
+// filtro de estado = varre TODOS os imóveis). Campos: .card-title (título +
+// "X m²"), .card-price (1ª praça ≈ avaliação), .card-instance-value (valor por
+// praça → menor = piso/lance mínimo), .card-locality[title]="Cidade, UF",
+// .card-instance-title (Judicial/Extrajudicial), .card-status, datas de praça,
+// categoria no path do href → tipo.
 
-async function scraperMegaLeiloes(browser, uf) {
-  console.log(`  Mega Leilões ${uf}...`);
+const MEGA_CAT_TIPO = {
+  'apartamentos': 'apartamento',
+  'casas': 'casa',
+  'terrenos-e-lotes': 'terreno',
+  'comerciais': 'comercial',
+  'salas-comerciais': 'comercial',
+  'lojas': 'comercial',
+  'galpoes': 'comercial',
+  'predios': 'comercial',
+  'conjuntos-comerciais': 'comercial',
+  'vagas-de-garagem': 'comercial',
+  'hoteis': 'comercial',
+  'imoveis-rurais': 'rural',
+  'fazendas': 'rural',
+  'sitios-e-chacaras': 'rural',
+};
+
+// Extrai os cards ATIVOS de uma página da listagem (executado no contexto do navegador)
+async function coletarMegaPagina(page) {
+  return await page.evaluate(() => {
+    const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+    const toNum = s => {
+      const m = (s || '').match(/(\d[\d.]*,\d{2})/);
+      return m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : 0;
+    };
+    const parseData = txt => {
+      const m = (txt || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:[^\d]*(\d{2}):(\d{2}))?/);
+      if (!m) return null;
+      return `${m[3]}-${m[2]}-${m[1]}T${m[4] || '00'}:${m[5] || '00'}:00-03:00`;
+    };
+    const out = [];
+    document.querySelectorAll('div[data-key]').forEach(cont => {
+      const card = cont.querySelector('.card');
+      if (!card) return;
+      // Somente ATIVOS: classe "open" e status sem "encerrad"
+      if (!card.classList.contains('open')) return;
+      const status = norm(card.querySelector('.card-status')?.textContent).toLowerCase();
+      if (status.includes('encerrad') || status.includes('arrematad') || status.includes('vendido')) return;
+
+      const a = card.querySelector('a.card-title') || card.querySelector('a.card-image') || card.querySelector('a[href]');
+      const href = (a?.href || '').split('?')[0];
+      if (!href) return;
+
+      const valores = Array.from(card.querySelectorAll('.card-instance-value'))
+        .map(el => toNum(el.textContent)).filter(v => v > 0);
+      const cardPrice = toNum(card.querySelector('.card-price')?.textContent);
+      if (cardPrice > 0) valores.push(cardPrice);
+
+      // datas das praças → escolhe a próxima data futura (a que poderemos participar)
+      const datas = Array.from(card.querySelectorAll('[class*="instance-date"]'))
+        .map(el => parseData(el.textContent)).filter(Boolean).sort();
+      const agora = new Date().toISOString();
+      const dataLeilao = datas.find(d => d >= agora) || datas[0] || null;
+
+      out.push({
+        id: cont.getAttribute('data-key'),
+        href,
+        titulo: norm(card.querySelector('.card-title')?.textContent),
+        numero: norm(card.querySelector('.card-number')?.textContent),
+        localidade: card.querySelector('.card-locality')?.getAttribute('title')
+          || norm(card.querySelector('.card-locality')?.textContent),
+        instTitle: norm(card.querySelector('.card-instance-title')?.textContent),
+        valores,
+        dataLeilao,
+        foto: card.querySelector('.card-image')?.getAttribute('data-bg')
+          || card.querySelector('img')?.getAttribute('src') || null,
+      });
+    });
+    return out;
+  });
+}
+
+function mapearMega(c) {
+  const valores = (c.valores || []).filter(v => v > 0);
+  if (!valores.length) return null;
+  const valAval = Math.max(...valores);   // 1ª praça ≈ avaliação
+  const valMin = Math.min(...valores);    // última praça = piso/lance mínimo
+  if (!valMin) return null;
+
+  let cidade = '', estado = '';
+  const loc = (c.localidade || '').match(/^(.*?),?\s*([A-Z]{2})\s*$/);
+  if (loc) { cidade = loc[1].trim(); estado = loc[2]; }
+  if (!estado) {
+    const ufPath = (c.href.match(/\/imoveis\/[a-z-]+\/([a-z]{2})\//) || [])[1];
+    if (ufPath) estado = ufPath.toUpperCase();
+  }
+
+  const categoria = (c.href.match(/\/imoveis\/([a-z-]+)\//) || [])[1] || '';
+  const tipo = MEGA_CAT_TIPO[categoria] || normalizarTipo(c.titulo);
+  const areaM = (c.titulo || '').match(/(\d+(?:[.,]\d+)?)\s*m[²2]/i);
+  const area = areaM ? parseFloat(areaM[1].replace('.', '').replace(',', '.')) : 0;
+  const modalidade = /judicial/i.test(c.instTitle) && !/extra/i.test(c.instTitle)
+    ? 'judicial' : (/extra/i.test(c.instTitle) ? 'extrajudicial'
+    : (/judicial/i.test(c.titulo) ? 'judicial' : 'extrajudicial'));
+
+  return {
+    fonte: 'MEGA',
+    fonte_id: `mega_${c.id}`,
+    titulo: (c.titulo || `Imóvel Mega ${estado}`).slice(0, 160),
+    tipo,
+    modalidade,
+    estado,
+    cidade: toTitleCase(cidade),
+    bairro: '',
+    endereco: '',
+    valor_avaliacao: valAval,
+    valor_minimo: valMin,
+    area_m2: area || 0,
+    descricao: [c.titulo, c.numero, c.instTitle].filter(Boolean).join(' — ').slice(0, 500),
+    link_edital: c.href,
+    link_foto: c.foto,
+    leiloeiro: 'Mega Leilões',
+    data_leilao: c.dataLeilao,
+    forma_pagamento: 'a_vista',
+  };
+}
+
+// Varre TODAS as páginas da listagem de imóveis do Mega (somente ativos).
+async function scraperMegaLeiloes(browser) {
+  console.log('  Mega Leilões — varrendo todas as páginas...');
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
 
+  const imoveis = [];
+  const seen = new Set();
+  const MAX_PAGINAS = 300; // trava de segurança (não-silenciosa)
   try {
-    const respostas = await capturarRespostasJSON(
-      page,
-      `https://www.megaleiloes.com.br/imoveis/${uf}`,
-      { waitSelector: '[class*="product"], [class*="card"], [class*="lote"], [class*="item"]' }
-    );
-
-    // Procura resposta com lista de imóveis
-    let lotes = [];
-    for (const { url, data } of respostas) {
-      const candidato = data?.data || data?.items || data?.lots || data?.products
-        || data?.results || data?.imoveis || (Array.isArray(data) ? data : null);
-      if (candidato?.length >= 2) {
-        console.log(`    Mega ${uf}: API encontrada em ${url.slice(0, 80)} (${candidato.length} itens)`);
-        lotes = candidato;
+    let p = 1;
+    for (; p <= MAX_PAGINAS; p++) {
+      const url = `https://www.megaleiloes.com.br/imoveis?pagina=${p}`;
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        try { await page.waitForSelector('div[data-key] .card', { timeout: 8000 }); } catch {}
+      } catch (e) {
+        console.log(`    Mega p${p}: erro de navegação (${e.message.slice(0, 50)}) — parando`);
         break;
       }
-    }
+      const cards = await coletarMegaPagina(page);
+      if (!cards.length) { console.log(`    Mega p${p}: 0 cards — fim da paginação`); break; }
 
-    // Fallback: extrai do DOM
-    if (!lotes.length) {
-      lotes = await page.evaluate(() => {
-        const items = [];
-        const cards = document.querySelectorAll(
-          '[class*="product-item"], [class*="card-lote"], [class*="lote-item"], article, [data-id]'
-        );
-        cards.forEach(card => {
-          const link = card.querySelector('a[href]');
-          const titulo = card.querySelector('h1,h2,h3,h4,[class*="title"],[class*="nome"]');
-          const valorEl = card.querySelector('[class*="price"],[class*="valor"],[class*="lance"]');
-          const imgEl = card.querySelector('img,[class*="image"]');
-          const valor = valorEl?.textContent || card.textContent.match(/R\$\s*[\d.,]+/)?.[0] || '';
-          if (!valor) return;
-          items.push({
-            _dom: true,
-            href: link?.href || '',
-            titulo: titulo?.textContent?.trim() || '',
-            valor: valor.trim(),
-            foto: imgEl?.src || imgEl?.dataset?.src || null,
-          });
-        });
-        return items;
-      });
-      if (lotes.length) console.log(`    Mega ${uf}: DOM fallback — ${lotes.length} cards`);
-    }
-
-    if (!lotes.length) {
-      console.log(`    Mega ${uf}: 0 imóveis`);
-      return [];
-    }
-
-    const imoveis = lotes.map((lot, idx) => {
-      if (lot._dom) {
-        const valor = parseBRL(lot.valor);
-        if (!valor) return null;
-        const id = lot.href.split('/').filter(Boolean).pop()?.split('?')[0] || `${uf}_${idx}`;
-        return {
-          fonte: 'MEGA',
-          fonte_id: `mega_${id}`,
-          titulo: lot.titulo.slice(0, 120) || `Imóvel Mega ${uf}`,
-          tipo: normalizarTipo(lot.titulo),
-          modalidade: lot.titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
-          estado: uf,
-          cidade: '',
-          bairro: '',
-          endereco: '',
-          valor_avaliacao: 0,
-          valor_minimo: valor,
-          area_m2: 0,
-          descricao: '',
-          link_edital: lot.href || `https://www.megaleiloes.com.br`,
-          link_foto: lot.foto,
-          leiloeiro: 'Mega Leilões',
-          data_leilao: null,
-          forma_pagamento: 'a_vista',
-        };
+      let novos = 0;
+      for (const c of cards) {
+        if (!c.id || seen.has(c.id)) continue;
+        seen.add(c.id);
+        const im = mapearMega(c);
+        if (im) { imoveis.push(im); novos++; }
       }
-
-      // Mapeamento API JSON
-      const id = lot.id || lot.lot_id || lot.codigo || idx;
-      const titulo = lot.title || lot.titulo || lot.name || lot.nome || lot.descricao || '';
-      const cidade = lot.city || lot.cidade || lot.municipio || '';
-      const estado = lot.state || lot.uf || lot.estado || uf;
-      const valMin = parseBRL(lot.min_bid || lot.lance_inicial || lot.valor_minimo || lot.price || lot.preco || 0);
-      const valAval = parseBRL(lot.appraisal || lot.valor_avaliacao || lot.avaliacao || 0);
-      if (!valMin) return null;
-
-      return {
-        fonte: 'MEGA',
-        fonte_id: `mega_${id}`,
-        titulo: titulo.slice(0, 120) || `Imóvel Mega ${uf}`,
-        tipo: normalizarTipo(lot.type || lot.tipo || titulo),
-        modalidade: (lot.judicial || titulo.toLowerCase().includes('judicial')) ? 'judicial' : 'extrajudicial',
-        estado: String(estado).toUpperCase().slice(0, 2) || uf,
-        cidade: toTitleCase(cidade),
-        bairro: toTitleCase(lot.neighborhood || lot.bairro || ''),
-        endereco: toTitleCase(lot.address || lot.endereco || ''),
-        valor_avaliacao: valAval,
-        valor_minimo: valMin,
-        area_m2: parseFloat(lot.area || lot.area_m2 || lot.metragem || 0),
-        descricao: (lot.description || lot.descricao || titulo).slice(0, 500),
-        link_edital: lot.url || lot.link || `https://www.megaleiloes.com.br/lote/${id}`,
-        link_foto: lot.image || lot.thumbnail || lot.foto || lot.image_url || null,
-        leiloeiro: lot.auctioneer || lot.leiloeiro || 'Mega Leilões',
-        data_leilao: lot.end_date || lot.data_leilao || lot.data_fim || null,
-        forma_pagamento: 'a_vista',
-      };
-    }).filter(Boolean);
-
-    console.log(`    Mega ${uf}: ${imoveis.length} imóveis`);
+      console.log(`    Mega p${p}: ${cards.length} ativos (${novos} novos, acumulado ${imoveis.length})`);
+      if (novos === 0) { console.log('    Mega: página sem novos — fim da paginação'); break; }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    if (p > MAX_PAGINAS) console.log(`    ⚠️ Mega atingiu o limite de ${MAX_PAGINAS} páginas — pode haver mais imóveis`);
+    console.log(`  Mega Leilões: ${imoveis.length} imóveis ativos coletados`);
     return imoveis;
   } catch (err) {
-    console.log(`    Erro Mega ${uf}: ${err.message.slice(0, 80)}`);
-    return [];
+    console.log(`  Erro Mega Leilões: ${err.message.slice(0, 100)}`);
+    return imoveis;
   } finally {
     await page.close();
   }
@@ -650,14 +697,31 @@ async function main() {
   let total = 0;
 
   try {
-    // 1. Mega Leilões — 10 UFs principais
+    // 1. Mega Leilões — varre TODAS as páginas (todos os estados), somente ativos
     console.log('📋 Mega Leilões...');
-    const ufsMega = ['SP', 'RJ', 'MG', 'PR', 'RS', 'SC', 'GO', 'DF', 'BA', 'PE'];
-    for (const uf of ufsMega) {
-      const imoveis = await scraperMegaLeiloes(browser, uf);
-      await salvarImoveis(imoveis, `Mega ${uf}`);
+    {
+      const runStart = new Date().toISOString();
+      const imoveis = await scraperMegaLeiloes(browser);
+      // salva em lotes de 500 para não estourar payload
+      for (let i = 0; i < imoveis.length; i += 500) {
+        await salvarImoveis(imoveis.slice(i, i + 500), `Mega ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
+      }
       total += imoveis.length;
-      await new Promise(r => setTimeout(r, 2400));
+      // Desativa lotes Mega que saíram do ar (encerrados) — só se a coleta foi
+      // saudável (>50), para um erro de rede não zerar o acervo.
+      if (imoveis.length > 50) {
+        const { error, count } = await supabase
+          .from('imoveis_leilao')
+          .update({ ativo: false }, { count: 'exact' })
+          .eq('fonte', 'MEGA')
+          .eq('ativo', true)
+          .eq('arrematado', false)
+          .lt('atualizado_em', runStart);
+        if (error) console.error('  Erro ao desativar Mega encerrados:', error.message);
+        else console.log(`  🔻 Mega: ${count ?? 0} lotes encerrados desativados`);
+      } else {
+        console.log('  ⚠️ Mega coletou ≤50 — pulando desativação por segurança');
+      }
     }
 
     // 2. Sold Leilões — até 5 páginas
