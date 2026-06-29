@@ -425,8 +425,8 @@ export default function Calculadora() {
         if (isPago) return null;
 
         const isExplorador = user && r === 'explorador';
-        const checkoutUrl = `/checkout?plano=top2${refAtivo ? `&ref=${refAtivo}` : ''}`;
-        const irAssinar = () => nav(user ? checkoutUrl : `/login?plano=top2${refAtivo ? `&ref=${refAtivo}` : ''}`);
+        // Leva à página interna do plano (vende o valor; o preço fica lá)
+        const irAssinar = () => nav('/plano/top2');
 
         return (
           <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#084BA6 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
@@ -439,7 +439,7 @@ export default function Calculadora() {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-                  ⭐ Investidor Pro — R$ 49,90/mês
+                  ⭐ Investidor Pro — o plano completo
                 </div>
                 <h3 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>
                   {isExplorador
@@ -456,7 +456,7 @@ export default function Calculadora() {
                 </p>
                 <button onClick={irAssinar}
                   style={{ padding: '12px 24px', background: 'white', color: '#084BA6', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
-                  Assinar Investidor Pro →
+                  Conhecer o Investidor Pro →
                 </button>
               </div>
 
