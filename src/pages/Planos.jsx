@@ -5,14 +5,16 @@ import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 
-const FAQS = [
-  { q: 'Posso cancelar o plano a qualquer momento?', r: 'Sim. O plano Investidor Pro é mensal sem fidelidade — cancele quando quiser, sem multa e sem burocracia.' },
+// FAQs montados com os valores reais do planos_config (evita valores fixos
+// divergentes). Os labels de preço chegam já formatados.
+const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel }) => [
+  { q: 'Posso cancelar o plano a qualquer momento?', r: 'Sim. No plano mensal (sem fidelidade), cancele quando quiser, sem multa. No plano anual, você cancela a renovação automática a qualquer momento — sem novas cobranças e sem estorno do período já contratado, mantendo o acesso até o fim dos 12 meses.' },
   { q: 'Como funcionam os 10% de honorários?', r: 'Os honorários incidem apenas sobre o valor da arrematação em caso de sucesso. Se não arrematar, não há cobrança alguma.' },
-  { q: 'O plano Assessoria cobre quantas arrematações?', r: 'Uma arrematação por contrato, com acompanhamento completo do início até a imissão de posse. O acesso ao sistema é extensível até a conclusão.' },
+  { q: 'O plano Assessoria cobre quantas arrematações?', r: 'Uma arrematação por contrato. O assessorado tem até 12 meses para realizar a arrematação — buscando oportunidades e também recebendo indicações da nossa equipe —, com acompanhamento completo do início até a imissão de posse.' },
   { q: 'O Leilão Club inclui arrematações ilimitadas?', r: 'Sim. Com o Clube você tem acesso a assessoria contínua para todas as arrematações durante a vigência do plano.' },
   { q: 'Posso pagar parcelado no cartão?', r: 'Sim. Aceitamos crédito, débito e PIX. Parcelamento em até 12× disponível — a partir da 4ª parcela os juros são assumidos pelo cliente conforme a operadora.' },
   { q: 'O que é o relatório de viabilidade?', r: 'Nossa IA analisa edital, matrícula e documentos do imóvel e gera um relatório completo com análise mercadológica, financeira e jurídica em menos de 5 minutos.' },
-  { q: 'Qual a diferença entre pagar mensal e anual?', r: 'No plano anual você economiza 25% — paga R$ 66,42/mês em vez de R$ 99,90. O valor total de R$ 797,00 é cobrado uma única vez.' },
+  { q: 'Qual a diferença entre pagar mensal e anual?', r: `No plano anual você economiza ${economiaPctLabel} — paga o equivalente a ${mesAnualLabel}/mês (${anoLabel} cobrados uma única vez) em vez de ${precoMesLabel}/mês no mensal.` },
 ];
 
 export default function Planos() {
@@ -29,6 +31,17 @@ export default function Planos() {
   // Preço de um plano vindo do banco, com fallback ao label estático.
   const pLabel = (key, field, fallback) => PLANOS[key]?.[field] ?? fallback;
   const ativoPlano = (key) => PLANOS[key]?.ativo !== false; // mostra durante o load (undefined)
+
+  // Valores reais do Investidor Pro (planos_config) para o FAQ
+  const _precoMes = Number(PLANOS.top2?.preco) || 49.90;
+  const _precoAno = Number(PLANOS.top2?.precoAnual) || 449.90;
+  const _economiaPct = _precoMes ? Math.round((1 - _precoAno / (_precoMes * 12)) * 100) : 25;
+  const FAQS = buildFAQS({
+    precoMesLabel: fmtR(_precoMes),
+    mesAnualLabel: fmtR(_precoAno / 12),
+    anoLabel: fmtR(_precoAno),
+    economiaPctLabel: `${_economiaPct}%`,
+  });
 
   const ir = (key) => {
     const plano = PLANOS[key];
@@ -104,7 +117,7 @@ export default function Planos() {
           <div style={{ background: 'white', borderRadius: 20, border: atual('explorador') ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Explorador</div>
             <div style={{ fontSize: 48, fontWeight: 900, color: '#111', marginBottom: 2 }}>Grátis</div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 28 }}>Para sempre · sem cartão</div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 28 }}>Sem cartão de crédito</div>
             <p style={{ fontSize: 14, color: '#64748b', marginBottom: 28, lineHeight: 1.7 }}>
               Explore leilões em todo o Brasil, acesse cursos e use a calculadora de arrematação sem pagar nada.
             </p>
@@ -126,15 +139,15 @@ export default function Planos() {
             <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Investidor Pro</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
               <div style={{ fontSize: 48, fontWeight: 900, color: 'white' }}>
-                {periodo === 'anual' ? pLabel('top2', 'precoMensalAnualLabel', 'R$ 66,42') : pLabel('top2', 'precoLabel', 'R$ 99,90')}
+                {periodo === 'anual' ? pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49') : pLabel('top2', 'precoLabel', 'R$ 49,90')}
               </div>
               <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
             </div>
             {periodo === 'anual'
-              ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>{pLabel('top2', 'precoAnualLabel', 'R$ 797,00')}/ano{PLANOS.top2?.preco && PLANOS.top2?.precoAnual ? ` · economize ${fmtR(PLANOS.top2.preco * 12 - PLANOS.top2.precoAnual)}` : ''}</div>
-              : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou {pLabel('top2', 'precoMensalAnualLabel', 'R$ 66,42')}/mês no plano anual (-25%)</div>}
+              ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>{pLabel('top2', 'precoAnualLabel', 'R$ 449,90')}/ano{PLANOS.top2?.preco && PLANOS.top2?.precoAnual ? ` · economize ${fmtR(PLANOS.top2.preco * 12 - PLANOS.top2.precoAnual)}` : ''}</div>
+              : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou {pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49')}/mês no plano anual (-25%)</div>}
             <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.15)', border: '1px solid rgba(134,239,172,0.3)', color: '#86efac', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 20, alignSelf: 'flex-start' }}>
-              Cancele quando quiser
+              {periodo === 'anual' ? 'Cancele a renovação automática quando quiser' : 'Cancele quando quiser'}
             </div>
             <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 20, lineHeight: 1.7 }}>
               Relatório completo de viabilidade por IA + análise documental e jurídica com base nos anexos do leilão. Até 15 relatórios de cada tipo por mês.
@@ -249,7 +262,7 @@ export default function Planos() {
         <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, maxWidth: 820, margin: '56px auto 0' }}>
           {[
             { icon: '🔒', titulo: 'Pagamento 100% seguro', sub: 'Crédito, débito e PIX com ambiente certificado' },
-            { icon: '✅', titulo: 'Cancele quando quiser', sub: 'Plano mensal sem fidelidade e sem burocracia' },
+            { icon: '✅', titulo: 'Cancele quando quiser', sub: 'No mensal, sem fidelidade. No anual, cancele a renovação automática — sem estorno do período já contratado' },
             { icon: '🤝', titulo: 'Equipe especializada', sub: 'Analistas, advogados e sócio disponíveis para você' },
           ].map(({ icon, titulo, sub }) => (
             <div key={titulo} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px 20px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
