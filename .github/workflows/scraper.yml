@@ -3,7 +3,12 @@ name: Scraper Diário de Leilões
 on:
   schedule:
     - cron: '0 9 * * *'  # 6h BRT (9h UTC)
-  workflow_dispatch:       # Permite rodar manualmente
+  workflow_dispatch:       # Permite rodar manualmente (e via botão do Admin → /api/trigger-scraper)
+    inputs:
+      ufs:
+        description: 'Estados CEF (ex: SP,RJ,BA) — vazio = todos'
+        required: false
+        default: ''
 
 jobs:
   scraper:
@@ -27,6 +32,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           CLAUDE_KEY: ${{ secrets.CLAUDE_KEY }}
+          UFS: ${{ github.event.inputs.ufs }}
         run: node scripts/scraper.js
 
       - name: Notify on failure

@@ -5,7 +5,10 @@ import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 const GITHUB_TOKEN = process.env.GITHUB_ACTIONS_TOKEN;
 const REPO_OWNER   = 'tarcisionogueira';
 const REPO_NAME    = 'TSN-app';
-const WORKFLOW_ID  = 'scraper-caixa.yml';
+// Dispara o scraper ROBUSTO (scripts/scraper.js — mapeia colunas por NOME do
+// cabeçalho). NÃO usar scraper-caixa.mjs (índice fixo): a Caixa mudou o layout
+// do CSV e o índice fixo corrompeu 91% do acervo (modalidade=descrição, etc).
+const WORKFLOW_ID  = 'scraper.yml';
 
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {

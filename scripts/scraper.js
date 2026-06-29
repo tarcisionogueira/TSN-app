@@ -323,6 +323,20 @@ async function scraperCEFcsv(uf) {
       };
     }).filter(Boolean);
 
+    // GUARDA ANTI-CORRUPÇÃO: se a Caixa mudar o layout do CSV e o mapeamento por
+    // nome falhar, a maioria cai no fallback (tipo='imovel', modalidade='extrajudicial',
+    // forma_pagamento=null). Foi assim que o scraper de índice fixo (descontinuado)
+    // corrompeu 91% do acervo. Se >60% vier degradado, ABORTA o UF (não faz upsert)
+    // para nunca sobrescrever dados bons com lixo.
+    if (imoveis.length >= 20) {
+      const degradados = imoveis.filter(i => i.tipo === 'imovel' && !i.forma_pagamento).length;
+      const taxa = degradados / imoveis.length;
+      if (taxa > 0.6) {
+        console.error(`    🛑 CEF ${uf}: ${(taxa * 100).toFixed(0)}% dos registros degradados (tipo desconhecido + sem forma de pagamento). Layout do CSV provavelmente mudou — ABORTANDO ${uf} (sem upsert) para não corromper o acervo.`);
+        return [];
+      }
+    }
+
     const comFoto = imoveis.filter(i => i._foto_original).length;
     console.log(`    CEF CSV ${uf}: ${imoveis.length} imóveis, ${comFoto} com foto`);
     if (uf === 'SP' && comFoto > 0) {
@@ -1528,7 +1542,12 @@ async function main() {
 
   // 1. CEF via CSV (download direto, sem proteção bot)
   console.log('📋 Scraping CEF CSV...');
-  const ufs = ['SP','RJ','MG','BA','PR','RS','PE','CE','GO','SC','ES','MA','PA','PB','RN','MT','MS','PI','AL','SE','TO','DF','AC','AM','AP','RO','RR'];
+  const TODAS_UFS = ['SP','RJ','MG','BA','PR','RS','PE','CE','GO','SC','ES','MA','PA','PB','RN','MT','MS','PI','AL','SE','TO','DF','AC','AM','AP','RO','RR'];
+  // UFS por env (botão "disparar por estado" do Admin → /api/trigger-scraper → workflow_dispatch)
+  const ufs = (process.env.UFS
+    ? process.env.UFS.split(',').map(s => s.trim().toUpperCase()).filter(u => TODAS_UFS.includes(u))
+    : TODAS_UFS);
+  if (ufs.length === 0) ufs.push(...TODAS_UFS);
   for (const uf of ufs) {
     const imoveis = await scraperCEFcsv(uf);
     await salvarImoveis(imoveis);
