@@ -259,7 +259,7 @@ export default function Header() {
           {effectiveRole === 'leiloeiro' && (
             <button onClick={() => nav('/leiloeiro')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/leiloeiro') ? '#b45309' : '#b4530922', color: '#fcd34d', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              🏛️ Portal do Parceiro
+              🏛️ Leiloeiro Parceiro
             </button>
           )}
 
@@ -360,7 +360,7 @@ export default function Header() {
           {effectiveRole === 'leiloeiro' && (
             <button onClick={() => { nav('/leiloeiro'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#fcd34d', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-              🏛️ Portal do Parceiro
+              🏛️ Leiloeiro Parceiro
             </button>
           )}
           {effectiveRole === 'consultor' && (
