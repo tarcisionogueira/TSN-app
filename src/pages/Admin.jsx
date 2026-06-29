@@ -4102,15 +4102,18 @@ function ScrapersTab() {
     // Contagem de imóveis por fonte
     // Caixa: registros novos têm fonte='caixa', antigos têm fonte=NULL — duas queries separadas pois
     // o Supabase JS não suporta is.null dentro do .or()
+    // O banco grava fonte em MAIÚSCULAS (CEF/MEGA/SOLD/SUPERBID/BB). Conta também
+    // 'caixa' (legado) e NULL para a Caixa, por compatibilidade.
     Promise.all([
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', 'CEF'),
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', 'caixa'),
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('fonte', null),
-      ...['mega','sold','superbid','bb'].map(f =>
+      ...['MEGA','SOLD','SUPERBID','BB'].map(f =>
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', f)
       ),
-    ]).then(([caixaNova, caixaAntiga, mega, sold, superbid, bb]) => {
+    ]).then(([cef, caixaLegado, caixaNull, mega, sold, superbid, bb]) => {
       setLeiloeiroContagem({
-        caixa:    (caixaNova.count || 0) + (caixaAntiga.count || 0),
+        caixa:    (cef.count || 0) + (caixaLegado.count || 0) + (caixaNull.count || 0),
         mega:     mega.count     || 0,
         sold:     sold.count     || 0,
         superbid: superbid.count || 0,
