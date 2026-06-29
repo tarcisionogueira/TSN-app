@@ -626,6 +626,7 @@ export default function Caso() {
   // ─── Enviar para jurídico ────────────────────────────────────────────────
   const encaminharJuridico = async () => {
     if (!caso) return;
+    setSolicitando(p => ({ ...p, juridico:true }));
     try {
       const prazo = new Date(Date.now() + 10*24*60*60*1000).toISOString();
       const { error } = await supabase.from('analise_juridica').insert({
@@ -634,17 +635,26 @@ export default function Caso() {
         // pré-preenche o que a IA já tem nos relatórios
       });
       if (error && !error.message.includes('duplicate')) throw error;
-      // Sorteia o advogado entre os ativos no momento do encaminhamento (uma vez)
+      // Sorteia o advogado entre os ativos (uma vez) e fixa no caso
       let advogadoId = caso.advogado_id;
       if (!advogadoId) {
         const { data: advs } = await supabase.from('perfis').select('id').eq('role','advogado').eq('ativo', true);
-        if (advs?.length) advogadoId = advs[Math.floor(Math.random() * advs.length)].id;
+        if (advs?.length) {
+          advogadoId = advs[Math.floor(Math.random() * advs.length)].id;
+          await supabase.from('casos').update({ advogado_id: advogadoId }).eq('id', caso.id);
+        }
       }
-      await supabase.from('casos').update({ status_etapa:'juridico_solicitado', advogado_id: advogadoId || null }).eq('id', caso.id);
+      // Um clique: envia ao advogado por e-mail (anexos + avaliação documental),
+      // marca o caso como solicitado e abre o acompanhamento no Atendimento interno.
+      const r = await apiCall('/api/enviar-juridico-email', { method:'POST', body: JSON.stringify({ caso_id: caso.id }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao enviar e-mail ao advogado');
       await carregarCaso();
-      setMsg('Análise jurídica solicitada. O advogado tem 10 dias para devolutiva.');
+      setMsg(`📨 Documentação enviada ao advogado (${d.advogado}) com ${d.anexos} anexo(s). A devolutiva chega por e-mail e aparece no Atendimento. Prazo de 10 dias.`);
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
+    } finally {
+      setSolicitando(p => ({ ...p, juridico:false }));
     }
   };
 
@@ -1002,9 +1012,12 @@ export default function Caso() {
               {/* Encaminhar para jurídico (pós-reunião 1, analista) */}
               {isAnalista && reuniao1.status === 'realizada' && !juridica && podeSolicitarJuridico && (
                 <div style={{ marginTop:16, padding:'14px', background:'#fefce8', borderRadius:10, border:'1px solid #fde68a' }}>
-                  <div style={{ fontWeight:700, fontSize:13, color:'#92400e', marginBottom:8 }}>Encaminhar para análise jurídica</div>
-                  <button onClick={encaminharJuridico} style={{ ...btn('#d97706'), fontSize:12 }}>
-                    <ClipboardList size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Encaminhar ao Jurídico
+                  <div style={{ fontWeight:700, fontSize:13, color:'#92400e', marginBottom:4 }}>Encaminhar para análise jurídica</div>
+                  <div style={{ fontSize:11, color:'#a16207', marginBottom:8 }}>Um clique envia ao advogado, por e-mail, todos os anexos + a avaliação documental. A devolutiva dele volta automaticamente para o Atendimento.</div>
+                  <button onClick={encaminharJuridico} disabled={!!solicitando.juridico} style={{ ...btn('#d97706'), fontSize:12, opacity: solicitando.juridico?0.6:1 }}>
+                    {solicitando.juridico
+                      ? <><Loader2 size={13} style={{marginRight:6,verticalAlign:'middle',animation:'spin 1s linear infinite'}}/>Enviando…</>
+                      : <><ClipboardList size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Encaminhar ao Jurídico</>}
                   </button>
                 </div>
               )}

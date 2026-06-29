@@ -14,6 +14,7 @@ const STATUS_CFG = {
 // Segmento do solicitante — para priorizar e organizar a fila.
 // Ordem = prioridade de atendimento (do cliente mais valioso ao curioso).
 const SEGMENTOS = {
+  interno:     { label: 'Interno / Jurídico', curto: 'Interno', cor: '#0f766e', bg: '#ccfbf1' },
   clube:       { label: 'Leilão Club',   curto: 'Club',      cor: '#7c3aed', bg: '#f3e8ff' },
   assessorado: { label: 'Assessorado',   curto: 'Assessor.', cor: '#b45309', bg: '#fef3c7' },
   investidor:  { label: 'Investidor Pro', curto: 'Inv. Pro', cor: '#0D63DB', bg: '#dbeafe' },
@@ -21,6 +22,7 @@ const SEGMENTOS = {
   curioso:     { label: 'Curioso',       curto: 'Curioso',   cor: '#64748b', bg: '#f1f5f9' },
   outro:       { label: 'Outro',         curto: 'Outro',     cor: '#94a3b8', bg: '#f8fafc' },
 };
+const ORDEM_SEG = ['interno', 'clube', 'assessorado', 'investidor', 'explorador', 'curioso'];
 // Resolve o segmento de um chamado (curioso = sem cadastro).
 const segOf = c => c.segmento || (c.user_id ? 'outro' : 'curioso');
 
@@ -29,16 +31,14 @@ const segOf = c => c.segmento || (c.user_id ? 'outro' : 'curioso');
 const ESCOPO_PAPEL = {
   admin: null,
   consultor: ['curioso', 'explorador', 'outro'], // não-clientes (Comercial)
-  analista: ['investidor', 'assessorado', 'clube'], // clientes
-  advogado: [], // canal interno com analista/admin — não atende clientes
+  analista: ['investidor', 'assessorado', 'clube', 'interno'], // clientes + jurídico interno
+  advogado: [], // responde por e-mail; não acessa o painel de clientes
 };
 
 export default function Atendimento() {
   const { user, effectiveRole } = useAuth();
   const escopo = ESCOPO_PAPEL[effectiveRole] ?? []; // papéis fora da lista não atendem
-  const segsVisiveis = (escopo === null
-    ? ['clube', 'assessorado', 'investidor', 'explorador', 'curioso']
-    : ['clube', 'assessorado', 'investidor', 'explorador', 'curioso'].filter(s => escopo.includes(s)));
+  const segsVisiveis = (escopo === null ? ORDEM_SEG : ORDEM_SEG.filter(s => escopo.includes(s)));
   const [chamados, setChamados] = useState([]);
   const [filtro, setFiltro] = useState('pendentes');
   const [segFiltro, setSegFiltro] = useState('todos');
@@ -327,22 +327,33 @@ export default function Atendimento() {
             {mensagens.length === 0 && (
               <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: 20 }}>Sem mensagens ainda</div>
             )}
-            {mensagens.map(m => (
-              <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: m.autor_tipo === 'cliente' ? 'flex-start' : 'flex-end' }}>
+            {mensagens.map(m => {
+              const isSistema = m.autor_tipo === 'sistema';
+              const incoming = m.autor_tipo === 'cliente' || m.autor_tipo === 'advogado';
+              const bg = m.autor_tipo === 'cliente' ? '#f8fafc' : m.autor_tipo === 'ia' ? '#eff6ff'
+                : m.autor_tipo === 'advogado' ? '#ccfbf1' : isSistema ? '#fef9c3' : '#ecfdf5';
+              const bd = m.autor_tipo === 'cliente' ? '#e2e8f0' : m.autor_tipo === 'ia' ? '#bae6fd'
+                : m.autor_tipo === 'advogado' ? '#5eead4' : isSistema ? '#fde68a' : '#86efac';
+              return (
+              <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isSistema ? 'center' : incoming ? 'flex-start' : 'flex-end' }}>
                 <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>
                   {m.autor_tipo === 'ia' ? (
                     <><Bot size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />BidPro Assistente · {fmtHora(m.criado_em)}</>
+                  ) : m.autor_tipo === 'advogado' ? (
+                    <>⚖️ Advogado (por e-mail) · {fmtHora(m.criado_em)}</>
                   ) : m.autor_tipo === 'atendente' ? (
                     <>{m.autor_nome || 'Atendente'} · {fmtHora(m.criado_em)}</>
+                  ) : isSistema ? (
+                    <>{m.autor_nome || 'Sistema'} · {fmtHora(m.criado_em)}</>
                   ) : (
                     <><User size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.autor_nome || 'Cliente'} · {fmtHora(m.criado_em)}</>
                   )}
                 </div>
                 <div style={{
-                  maxWidth: '76%', padding: '10px 14px', borderRadius: 12,
-                  background: m.autor_tipo === 'cliente' ? '#f8fafc' : m.autor_tipo === 'ia' ? '#eff6ff' : '#ecfdf5',
-                  color: '#111111', fontSize: 13, lineHeight: 1.6,
-                  border: `1px solid ${m.autor_tipo === 'cliente' ? '#e2e8f0' : m.autor_tipo === 'ia' ? '#bae6fd' : '#86efac'}`,
+                  maxWidth: isSistema ? '90%' : '76%', padding: '10px 14px', borderRadius: 12,
+                  background: bg, color: '#111111', fontSize: 13, lineHeight: 1.6,
+                  fontStyle: isSistema ? 'italic' : 'normal', textAlign: isSistema ? 'center' : 'left',
+                  border: `1px solid ${bd}`,
                 }}>
                   {m.autor_tipo === 'ia' && (
                     <div style={{ fontSize: 10, fontWeight: 700, color: '#0D63DB', marginBottom: 5 }}>Resposta automática</div>
@@ -354,7 +365,8 @@ export default function Atendimento() {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
             <div ref={msgEndRef} />
           </div>
 
