@@ -1522,8 +1522,10 @@ async function salvarImoveis(imoveis) {
     };
   }));
 
-  // Remove campos internos não presentes no schema
-  const rows = comViabilidade.map(({ raw: _raw, _foto_original: _fo, ...rest }) => rest);
+  // Remove campos internos não presentes no schema da tabela imoveis_leilao.
+  // ATENÇÃO: dedup_chave NÃO é coluna — se vazar no payload, o PostgREST rejeita
+  // o lote inteiro (400) e NADA é salvo (foi o que mantinha o acervo CEF sem atualizar).
+  const rows = comViabilidade.map(({ raw: _raw, _foto_original: _fo, dedup_chave: _dc, ...rest }) => rest);
 
   const { error } = await supabase
     .from('imoveis_leilao')
