@@ -5,13 +5,14 @@
  */
 const RESEND_KEY = process.env.RESEND_API_KEY;
 
-export async function enviarEmail({ from, to, subject, html, text, attachments, replyTo, headers }) {
+export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers }) {
   if (!RESEND_KEY) return { ok: false, error: 'sem_resend' };
   const payload = {
     from: from || 'BidPro Brasil <noreply@bidprobrasil.com.br>',
     to: Array.isArray(to) ? to : [to],
     subject,
   };
+  if (cc?.length) payload.cc = Array.isArray(cc) ? cc : [cc];
   if (html) payload.html = html;
   if (text) payload.text = text;
   if (replyTo) payload.reply_to = replyTo;

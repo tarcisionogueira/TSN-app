@@ -62,16 +62,33 @@ export default async function handler(req) {
   const [caso] = await (await sb(`casos?id=eq.${encodeURIComponent(caso_id)}&select=*`)).json();
   if (!caso) return json({ error: 'Caso não encontrado' }, 404);
 
-  // Advogado: o do caso, senão o advogado padrão
+  // Advogado responsável (para registro no caso); usado como fallback de destino.
   let advogadoId = caso.advogado_id;
   if (!advogadoId) {
     const [adv] = await (await sb(`perfis?role=eq.advogado&select=id,nome&limit=1`)).json();
     advogadoId = adv?.id;
   }
-  if (!advogadoId) return json({ error: 'Nenhum advogado cadastrado para receber o caso' }, 400);
-  const [advPerfil] = await (await sb(`perfis?id=eq.${advogadoId}&select=nome`)).json();
-  const advEmail = await emailDoUsuario(advogadoId);
-  if (!advEmail) return json({ error: 'Não foi possível obter o e-mail do advogado' }, 400);
+  const [advPerfil] = advogadoId ? await (await sb(`perfis?id=eq.${advogadoId}&select=nome`)).json() : [null];
+
+  // Destinatários configurados (do escritório do advogado do caso + os globais).
+  // copia=false → "Para" (To); copia=true → "Cópia" (CC).
+  const filtroAdv = advogadoId ? `&or=(advogado_id.is.null,advogado_id.eq.${advogadoId})` : `&advogado_id=is.null`;
+  const dests = await (await sb(`juridico_destinatarios?ativo=eq.true${filtroAdv}&select=nome,email,copia`)).json();
+  const norm = e => String(e || '').trim().toLowerCase();
+  let toList = (Array.isArray(dests) ? dests : []).filter(d => d.copia === false && d.email).map(d => norm(d.email));
+  let ccList = (Array.isArray(dests) ? dests : []).filter(d => d.copia === true && d.email).map(d => norm(d.email));
+  // CC extra passado na requisição (ad-hoc)
+  if (body.cc) ccList = ccList.concat((Array.isArray(body.cc) ? body.cc : String(body.cc).split(/[,;]/)).map(norm));
+
+  // Fallback: sem lista de "Para" configurada → usa o e-mail do advogado do caso.
+  if (!toList.length) {
+    const advEmail = await emailDoUsuario(advogadoId);
+    if (!advEmail) return json({ error: 'Configure os destinatários do jurídico (ou um advogado com e-mail no caso).' }, 400);
+    toList = [norm(advEmail)];
+  }
+  // Dedup: remove de CC quem já está no Para
+  ccList = [...new Set(ccList)].filter(e => e && !toList.includes(e));
+  const nomePrincipal = (Array.isArray(dests) && dests.find(d => d.copia === false)?.nome) || advPerfil?.nome || 'Doutor(a)';
 
   // Anexos do imóvel
   const anexos = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&select=nome,url,tipo`)).json();
@@ -103,7 +120,7 @@ export default async function handler(req) {
   const token = caso.juridico_token || (crypto.randomUUID().split('-')[0] + crypto.randomUUID().split('-')[0]);
   const replyTo = `juridico+${token}@${INBOUND_DOMAIN}`;
   const refCurto = String(caso_id).split('-')[0].toUpperCase();
-  const advNome = advPerfil?.nome || 'Doutor(a)';
+  const advNome = nomePrincipal;
 
   const listaAnexos = (anexos || []).length
     ? `<ul style="margin:6px 0 0;padding-left:18px">${anexos.map(a => `<li>${esc(a.nome)} <span style="color:#94a3b8">(${esc(a.tipo)})</span></li>`).join('')}</ul>`
@@ -136,7 +153,8 @@ export default async function handler(req) {
 
   const r = await enviarEmail({
     from: 'BidPro Brasil Jurídico <noreply@bidprobrasil.com.br>',
-    to: advEmail,
+    to: toList,
+    cc: ccList,
     replyTo,
     subject: `Análise documental para confirmação de viabilidade — Caso ${refCurto}`,
     html,
@@ -156,7 +174,7 @@ export default async function handler(req) {
   });
   // Auditoria
   await sb('juridico_emails', { method: 'POST', prefer: 'return=minimal',
-    body: { caso_id, direcao: 'saida', message_id: r.id, de: 'noreply@bidprobrasil.com.br', para: advEmail, assunto: `Análise documental — Caso ${refCurto}`, anexos: attachments.map(a => ({ filename: a.filename })) } });
+    body: { caso_id, direcao: 'saida', message_id: r.id, de: 'noreply@bidprobrasil.com.br', para: [...toList, ...ccList.map(c => `cc:${c}`)].join(', '), assunto: `Análise documental — Caso ${refCurto}`, anexos: attachments.map(a => ({ filename: a.filename })) } });
 
   // Chat interno (visível a analista/admin) amarrado ao caso
   let [chamado] = await (await sb(`chamados?caso_id=eq.${encodeURIComponent(caso_id)}&segmento=eq.interno&select=id&limit=1`)).json();
