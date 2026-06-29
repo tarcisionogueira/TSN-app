@@ -298,16 +298,10 @@ export default function Login() {
           </div>
         )}
 
-        {/* Logo clicável */}
+        {/* Logomarca clicável (centralizada) */}
         <button onClick={() => nav('/')}
-          style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-          <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
-            <Briefcase size={20} color="white" />
-          </div>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontWeight: 900, fontSize: 16, color: '#111111', letterSpacing: '-0.5px' }}>BidPro Brasil</div>
-            <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
-          </div>
+          style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: 30, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <img src="/logo.svg" alt="BidPro Brasil" style={{ height: 46 }} />
         </button>
 
         {/* Sucesso cadastro */}
