@@ -173,28 +173,38 @@ async function coletarMega(ufs, deadline) {
     const r = await fetchVia(url, { headers: { Referer: 'https://www.megaleiloes.com.br/' } });
     via = r.via;
     const html = r.text; const seen = new Set(); const antes = out.length;
-    const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:product|lote|item|card)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+    // Cards têm <div> aninhados → regex de bloco quebra. Abordagem: achar os links
+    // de lote reais (/imoveis/<categoria>/<uf>/<cidade>/<slug> — 4+ segmentos) e
+    // extrair preço/área/foto de uma JANELA DE CONTEXTO a partir do link.
+    const reLote = /href="(https:\/\/www\.megaleiloes\.com\.br\/imoveis\/[^"/]+\/[a-z]{2}\/[^"/]+\/[^"?#]+)"/gi;
     let m;
-    while ((m = cardRegex.exec(html)) !== null && (out.length - antes) < 60) {
-      const card = m[1];
-      const href = (card.match(/href="([^"]*(?:lote|imovel|produto)[^"]*)"/i) || [])[1] || '';
-      if (!href || seen.has(href)) continue; seen.add(href);
-      const valor = parseNum((card.match(/R\$\s*([\d.,]+)/) || [])[1]);
+    while ((m = reLote.exec(html)) !== null && (out.length - antes) < 80) {
+      const href = m[1];
+      if (seen.has(href)) continue; seen.add(href);
+      const ctx = html.slice(m.index, m.index + 1400); // card a partir do link
+      const valor = parseNum((ctx.match(/R\$\s*([\d.]+,\d{2})/) || [])[1]);
       if (!valor) continue;
-      const titulo = ((card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i) || [])[1] || '').replace(/<[^>]+>/g, '').trim();
-      const aval = parseNum((card.match(/(?:avalia[çc][aã]o|avaliado)[^\d]*([\d.,]+)/i) || [])[1]);
-      const foto = (card.match(/<img[^>]*(?:src|data-src)="([^"]+(?:jpg|jpeg|png|webp)[^"]*)"/i) || [])[1] || null;
-      const area = parseNum((card.match(/(\d+[.,]?\d*)\s*m[²2]/i) || [])[1]);
-      const id = href.split('/').filter(Boolean).pop().split('?')[0];
+      const aval = parseNum((ctx.match(/avalia[^R]{0,40}R\$\s*([\d.]+,\d{2})/i) || [])[1]);
+      const area = parseNum((ctx.match(/([\d.]+)\s*m[²2]/i) || [])[1]);
+      const foto = (ctx.match(/(?:src|data-src)="([^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i) || [])[1] || null;
+      // /imoveis/<categoria>/<uf>/<cidade>/<slug>
+      const seg = href.replace('https://www.megaleiloes.com.br/imoveis/', '').split('/');
+      const categoria = seg[0] || '';
+      const ufHref = (seg[1] || uf).toUpperCase();
+      const cidadeSlug = seg[2] || '';
+      const slug = seg.slice(3).join('-') || seg[seg.length - 1] || '';
+      const titleCase = s => s.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim();
+      const titulo = titleCase(decodeURIComponent(slug)).slice(0, 120);
       out.push({
-        fonte: 'MEGA', fonte_id: `mega_${id}`,
-        titulo: titulo.slice(0, 120) || `Imóvel Mega Leilões ${uf}`,
-        tipo: normalizarTipo(titulo),
-        modalidade: titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
-        estado: uf, cidade: '', bairro: '', endereco: '',
+        fonte: 'MEGA', fonte_id: `mega_${slug.slice(0, 80) || (m.index)}`,
+        titulo: titulo || `Imóvel Mega Leilões ${uf}`,
+        tipo: normalizarTipo(`${categoria} ${titulo}`),
+        modalidade: /judicial/i.test(ctx) ? 'judicial' : 'extrajudicial',
+        estado: ufHref.length === 2 ? ufHref : uf,
+        cidade: titleCase(decodeURIComponent(cidadeSlug)), bairro: '', endereco: '',
         valor_avaliacao: aval, valor_minimo: valor, area_m2: area,
         descricao: titulo.slice(0, 300) || null,
-        link_edital: href.startsWith('http') ? href : `https://www.megaleiloes.com.br${href}`,
+        link_edital: href,
         link_foto: foto ? (foto.startsWith('http') ? foto : `https://www.megaleiloes.com.br${foto}`) : null,
         leiloeiro: 'Mega Leilões', data_leilao: null, forma_pagamento: null,
       });
