@@ -25,6 +25,7 @@ import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
 import PlanoDetalhe from './pages/PlanoDetalhe';
+import AdminChargebacks from './pages/AdminChargebacks';
 import Login from './pages/Login';
 import CompletarCadastro from './pages/CompletarCadastro';
 import RedefinirSenha from './pages/RedefinirSenha';
@@ -212,6 +213,7 @@ function MainLayout() {
           <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
           <Route path="/perfil" element={<PrivateRoute><Perfil /></PrivateRoute>} />
           <Route path="/comissoes" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><Comissoes /></PrivateRoute>} />
+          <Route path="/admin/chargebacks" element={<PrivateRoute roles={['admin']}><AdminChargebacks /></PrivateRoute>} />
           <Route path="/atendimento" element={<PrivateRoute roles={['analista','consultor','admin','advogado']}><Atendimento /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />
