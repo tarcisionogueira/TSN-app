@@ -128,26 +128,38 @@ export default function Checkout() {
     }
   }, [mpStatus]);
 
-  // Polling automático — verifica a cada 8s se o Asaas confirmou o pagamento
+  // Polling automático — verifica a cada 8s se o Asaas confirmou o pagamento.
+  // Trava de segurança: para após ~10 min (75 tentativas) e avisa o cliente,
+  // em vez de ficar "aguardando" para sempre se o webhook falhar.
   useEffect(() => {
     if (!asaasIds || pago) return;
     setVerificando(true);
+    let tentativas = 0;
+    const MAX_TENTATIVAS = 75; // 75 × 8s ≈ 10 min
     const verificar = async () => {
+      tentativas += 1;
       try {
         const res = await apiCall('/api/verificar-pagamento', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(asaasIds),
         });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.confirmado && !jaConfirmouRef.current) {
-          jaConfirmouRef.current = true;
-          clearInterval(pollingRef.current);
-          setVerificando(false);
-          confirmarPagamento();
+        if (res.ok) {
+          const data = await res.json();
+          if (data.confirmado && !jaConfirmouRef.current) {
+            jaConfirmouRef.current = true;
+            clearInterval(pollingRef.current);
+            setVerificando(false);
+            confirmarPagamento();
+            return;
+          }
         }
       } catch (_) {}
+      if (tentativas >= MAX_TENTATIVAS && !jaConfirmouRef.current) {
+        clearInterval(pollingRef.current);
+        setVerificando(false);
+        setErro('Ainda não recebemos a confirmação do pagamento. Se você já pagou, o acesso é liberado automaticamente assim que o banco confirmar (pode levar alguns minutos). Você pode fechar esta tela com segurança — ou tentar novamente.');
+      }
     };
     verificar(); // primeira verificação imediata
     pollingRef.current = setInterval(verificar, 8000);
