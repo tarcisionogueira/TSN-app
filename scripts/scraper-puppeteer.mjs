@@ -715,7 +715,6 @@ async function main() {
           .update({ ativo: false }, { count: 'exact' })
           .eq('fonte', 'MEGA')
           .eq('ativo', true)
-          .eq('arrematado', false)
           .lt('atualizado_em', runStart);
         if (error) console.error('  Erro ao desativar Mega encerrados:', error.message);
         else console.log(`  🔻 Mega: ${count ?? 0} lotes encerrados desativados`);
