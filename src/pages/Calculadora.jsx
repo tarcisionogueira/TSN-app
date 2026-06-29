@@ -18,9 +18,10 @@ const inp = { width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', b
 const lbl = { fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 };
 
 function fmtInput(v) {
-  const n = Number(String(v).replace(/\D/g, ''));
-  if (!n && n !== 0) return '';
-  return n.toLocaleString('pt-BR');
+  if (v === '' || v == null) return '';
+  const n = Number(v);
+  if (isNaN(n)) return '';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function Campo({ label, value, onChange, prefix = '', suffix = '', type = 'number', placeholder = '' }) {
@@ -28,17 +29,17 @@ function Campo({ label, value, onChange, prefix = '', suffix = '', type = 'numbe
   const [displayVal, setDisplayVal] = React.useState(isMoney ? fmtInput(value) : String(value || ''));
   React.useEffect(() => {
     if (!isMoney) return;
-    const raw = Number(String(value).replace(/\D/g, ''));
-    const formatted = raw ? fmtInput(raw) : (value === '' ? '' : fmtInput(value));
-    setDisplayVal(formatted);
+    setDisplayVal(value === '' || value == null ? '' : fmtInput(value));
   }, [value, isMoney]);
 
   const handleChange = (e) => {
     const raw = e.target.value;
     if (isMoney) {
+      // Modelo "centavos": cada dígito digitado é centavo → mostra sempre 2 casas
       const digits = raw.replace(/\D/g, '');
-      setDisplayVal(digits ? Number(digits).toLocaleString('pt-BR') : '');
-      onChange(digits || '');
+      const reais = digits ? Number(digits) / 100 : '';
+      setDisplayVal(reais === '' ? '' : fmtInput(reais));
+      onChange(reais === '' ? '' : reais);
     } else {
       onChange(raw);
     }
@@ -379,8 +380,9 @@ export default function Calculadora() {
 
               <div style={{ marginTop: 4 }} />
               <Linha label="Capital mobilizado" valor={`R$ ${fmt(m.capitalMobilizado, 2)}`} destaque />
-              <Linha label="Comissão de venda (corretagem)" valor={`– R$ ${fmt(m.comissao, 2)}`} sublabel="deduzida na revenda" cor="#dc2626" />
-              <Linha label="Imposto sobre o ganho (IR 15%)" valor={`– R$ ${fmt(m.ir, 2)}`} sublabel="ganho de capital na revenda" cor="#dc2626" />
+              <Linha label="Valor de venda estimado" valor={`R$ ${fmt(m.valorRef, 2)}`} sublabel="90% do valor de mercado (conservador)" cor="#0D63DB" />
+              <Linha label="Comissão de venda (corretagem)" valor={`– R$ ${fmt(m.comissao, 2)}`} sublabel="5% sobre a venda" cor="#dc2626" />
+              <Linha label="Imposto sobre o ganho (IR 15%)" valor={`– R$ ${fmt(m.ir, 2)}`} sublabel="15% sobre o ganho de capital" cor="#dc2626" />
               <Linha label="Entrada no caixa (venda)" valor={`R$ ${fmt(entradaCaixa, 2)}`} destaque cor="#0D63DB" />
               <Linha label="Lucro líquido" valor={`R$ ${fmt(m.lucro, 2)}`} destaque cor={m.lucro >= 0 ? '#059669' : '#dc2626'} />
               <Linha label="ROI / ROE" valor={fmtPct(m.roi, 2)} destaque cor={m.roi >= 0 ? '#059669' : '#dc2626'} />
@@ -446,8 +448,11 @@ export default function Calculadora() {
                       ? 'Gostou da calculadora? Acesse a plataforma completa.'
                       : 'Invista com mais segurança e inteligência'}
                 </h3>
-                <p style={{ color: '#93c5fd', fontSize: 13, lineHeight: 1.7, margin: '0 0 18px' }}>
-                  Relatório de viabilidade, análise jurídica do edital e matrícula, análise processual do imóvel e análises ilimitadas — tudo em uma plataforma.
+                <p style={{ color: '#bfdbfe', fontSize: 13, lineHeight: 1.7, margin: '0 0 10px' }}>
+                  Esta calculadora é só o começo. No <strong style={{ color: 'white' }}>Investidor Pro</strong> você tem a <strong style={{ color: 'white' }}>informação completa de cada imóvel</strong>: relatório de viabilidade, análise jurídica do edital e da matrícula, análise processual e o <strong style={{ color: 'white' }}>Bid Score</strong> da operação — tudo para dar o lance certo, com segurança.
+                </p>
+                <p style={{ color: '#93c5fd', fontSize: 12, lineHeight: 1.6, margin: '0 0 18px', fontWeight: 600 }}>
+                  📊 Pare de adivinhar: veja o imóvel por inteiro antes do lance.
                 </p>
                 <button onClick={irAssinar}
                   style={{ padding: '12px 24px', background: 'white', color: '#084BA6', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
