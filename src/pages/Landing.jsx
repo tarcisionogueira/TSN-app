@@ -147,6 +147,17 @@ export default function Landing() {
                 <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.65, margin: 0 }}>{r}</p>
               </div>
             ))}
+            {/* 6º card — fecha o grid e converte */}
+            <div style={{ borderRadius: 16, border: '1px solid #0D63DB', padding: '24px 22px', background: 'linear-gradient(135deg,#0a1f3d,#0d2a50)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{ background: 'rgba(52,211,153,0.15)', borderRadius: 10, padding: 8, flexShrink: 0 }}><Sparkles size={17} color="#34d399" /></div>
+                <h3 style={{ fontSize: 15, fontWeight: 800, color: 'white', margin: 0, lineHeight: 1.3 }}>As 5 respostas em um número</h3>
+              </div>
+              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.65, margin: '0 0 14px' }}>O Bid Score reúne tudo numa nota de 0 a 100. Veja o de cada imóvel antes de dar o lance.</p>
+              <button onClick={() => ir('/buscar')} style={{ alignSelf: 'flex-start', padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                Buscar imóveis <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -336,7 +347,7 @@ export default function Landing() {
           <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.8, maxWidth: 620, margin: '0 auto 48px' }}>
             A Bid Pro Brasil nasceu da experiência prática no mercado de leilões imobiliários. Nossa equipe inclui analistas, advogados especializados em pós-arrematação e o sócio fundador à frente da formação dos arrematadores.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, maxWidth: 800, margin: '0 auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(165px,1fr))', gap: 16, maxWidth: 820, margin: '0 auto' }}>
             {[
               { emoji: '⚖️', cargo: 'Jurídico',         desc: 'Advogados especializados em pós-arrematação, registro e regularização' },
               { emoji: '📊', cargo: 'Análise',           desc: 'Analistas que revisam cada imóvel antes do lance do cliente' },
@@ -463,7 +474,7 @@ export default function Landing() {
           </div>
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ fontSize: 11, color: '#334155' }}>© {new Date().getFullYear()} Bid Pro Brasil. Todos os direitos reservados.</div>
-            <div style={{ fontSize: 11, color: '#334155' }}>CNPJ · suporte@tsn.com.br</div>
+            <div style={{ fontSize: 11, color: '#334155' }}>suporte@bidprobrasil.com.br</div>
           </div>
         </div>
       </footer>
