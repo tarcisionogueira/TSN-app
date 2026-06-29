@@ -211,9 +211,10 @@ async function coletarMega(ufs, deadline) {
     }
     if (out.length === antes && !diag) {
       const deepHrefs = (html.match(reLote) || []).length;
-      const ccIdx = html.search(/class="card open|class="cards-container|class="card-content/);
-      const cardSample = ccIdx >= 0 ? html.slice(ccIdx, ccIdx + 1600).replace(/\s+/g, ' ') : null;
-      diag = { uf, http: r.status, via: r.via, deepHrefs, cardSample, ...htmlDiag(html) };
+      // Mira no card REAL (card open), pulando o cabeçalho do cards-container
+      const ci = html.indexOf('card open');
+      const cardSample = ci >= 0 ? html.slice(ci, ci + 2000).replace(/\s+/g, ' ') : html.slice(html.indexOf('cards-container'), html.indexOf('cards-container') + 2000).replace(/\s+/g, ' ');
+      diag = { uf, http: r.status, via: r.via, deepHrefs, todosHrefs: [...new Set((html.match(/href="[^"]{8,90}"/gi) || []))].slice(0, 14), cardSample, ...htmlDiag(html) };
     }
   }
   return { rows: out, via, diag };
