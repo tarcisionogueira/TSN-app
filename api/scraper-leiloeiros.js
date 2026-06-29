@@ -201,7 +201,7 @@ async function coletarMega(ufs, deadline) {
     // Cards têm <div> aninhados → regex de bloco quebra. Abordagem: achar os links
     // de lote reais (/imoveis/<categoria>/<uf>/<cidade>/<slug> — 4+ segmentos) e
     // extrair preço/área/foto de uma JANELA DE CONTEXTO a partir do link.
-    const reLote = /href="(?:https:\/\/www\.megaleiloes\.com\.br)?(\/imoveis\/[^"/]+\/[a-z]{2}\/[^"/]+\/[^"?#]+)"/gi;
+    const reLote = /href="(?:https:\/\/www\.megaleiloes\.com\.br)?(\/imoveis\/[^"/?#]+\/[a-z]{2}\/[^"/?#]+\/[^"/?#]+)[^"]*"/gi;
     let m;
     while ((m = reLote.exec(html)) !== null && (out.length - antes) < 80) {
       const href = `https://www.megaleiloes.com.br${m[1]}`;
