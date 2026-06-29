@@ -71,6 +71,29 @@ async function salvarImoveis(imoveis, fonte) {
   else console.log(`  ✅ ${fonte}: ${rows.length} imóveis salvos`);
 }
 
+// Salva em lotes de 500 e desativa os obsoletos da fonte (lotes que saíram do
+// ar). Trava de segurança: só desativa se a coleta foi saudável (>50), para um
+// erro de rede não zerar o acervo. Retorna a quantidade coletada.
+async function salvarEFinalizar(imoveis, fonte) {
+  const runStart = new Date().toISOString();
+  for (let i = 0; i < imoveis.length; i += 500) {
+    await salvarImoveis(imoveis.slice(i, i + 500), `${fonte} ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
+  }
+  if (imoveis.length > 50) {
+    const { error, count } = await supabase
+      .from('imoveis_leilao')
+      .update({ ativo: false }, { count: 'exact' })
+      .eq('fonte', fonte)
+      .eq('ativo', true)
+      .lt('atualizado_em', runStart);
+    if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
+    else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados`);
+  } else {
+    console.log(`  ⚠️ ${fonte} coletou ${imoveis.length} (≤50) — pulando desativação por segurança`);
+  }
+  return imoveis.length;
+}
+
 // ─── INTERCEPTADOR DE REDE ────────────────────────────────────────────────────
 
 async function capturarRespostasJSON(page, urlAlvo, { waitSelector, timeout = 20000 } = {}) {
@@ -403,130 +426,88 @@ async function scraperSold(browser, pageNum = 1) {
 
 // ─── SUPERBID ─────────────────────────────────────────────────────────────────
 
-async function scraperSuperbid(browser, pageNum = 1) {
-  console.log(`  Superbid página ${pageNum}...`);
+// Superbid: chama a API pública de offers direto do contexto do navegador
+// (mesma usada pelo site). searchType=opened = somente ativos; filtra imóveis;
+// pagina de 100 em 100 até acabar. API validada na captura (debug_fetch).
+async function scraperSuperbid(browser) {
+  console.log('  Superbid — API offers (todas as páginas, somente abertos)...');
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
-  await page.setExtraHTTPHeaders({
-    'Accept-Language': 'pt-BR,pt;q=0.9',
-    'Origin': 'https://www.superbid.net',
-    'Referer': 'https://www.superbid.net/categorias/imoveis',
-  });
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
 
   try {
-    const url = `https://www.superbid.net/categorias/imoveis?page=${pageNum}`;
-    const respostas = await capturarRespostasJSON(page, url, {
-      waitSelector: '[class*="card"], [class*="product"], [class*="offer"]',
-      timeout: 25000,
+    // Abre o site para herdar origem/sessão antes de chamar a API interna
+    await page.goto('https://www.superbid.net/categorias/imoveis', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await new Promise(r => setTimeout(r, 2500));
+
+    const offers = await page.evaluate(async () => {
+      const FIELDS = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
+      const apiUrl = n => `https://offer-query.superbid.net/offers/?portalId=[2,15]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${FIELDS}`;
+      const all = [];
+      for (let n = 1; n <= 100; n++) {
+        let data;
+        try {
+          const r = await fetch(apiUrl(n), { headers: { Accept: 'application/json' } });
+          if (!r.ok) break;
+          data = await r.json();
+        } catch { break; }
+        const arr = data.offers || data.content || data.results || data.items || (Array.isArray(data) ? data : []);
+        if (!arr || !arr.length) break;
+        all.push(...arr);
+        if (arr.length < 100) break;
+      }
+      return all;
     });
 
-    let offers = [];
-    for (const { url: apiUrl, data } of respostas) {
-      const candidato = data?.offers || data?.data?.offers || data?.items
-        || data?.results || data?.content || (Array.isArray(data) ? data : null);
-      if (candidato?.length >= 2) {
-        console.log(`    Superbid p${pageNum}: API em ${apiUrl.slice(0, 80)} (${candidato.length} itens)`);
-        offers = candidato;
-        break;
-      }
-    }
-
-    if (!offers.length) {
-      offers = await page.evaluate(() => {
-        const items = [];
-        const cards = document.querySelectorAll('[class*="card"], [class*="product"], [data-offer-id], article');
-        cards.forEach(card => {
-          const link = card.querySelector('a[href]');
-          const titulo = card.querySelector('h1,h2,h3,[class*="title"],[class*="name"]');
-          const valorEl = card.querySelector('[class*="price"],[class*="value"],[class*="bid"]');
-          const imgEl = card.querySelector('img');
-          const locEl = card.querySelector('[class*="location"],[class*="city"],[class*="state"]');
-          const valor = valorEl?.textContent || card.textContent.match(/R\$\s*[\d.,]+/)?.[0] || '';
-          if (!valor) return;
-          items.push({
-            _dom: true,
-            href: link?.href || '',
-            titulo: titulo?.textContent?.trim() || '',
-            valor: valor.trim(),
-            foto: imgEl?.src || null,
-            local: locEl?.textContent?.trim() || '',
-          });
-        });
-        return items;
-      });
-      if (offers.length) console.log(`    Superbid p${pageNum}: DOM fallback — ${offers.length} cards`);
-    }
-
-    if (!offers.length) {
-      console.log(`    Superbid p${pageNum}: 0 imóveis`);
-      return [];
-    }
-
-    const imoveis = offers.map((of, idx) => {
-      if (of._dom) {
-        const valor = parseBRL(of.valor);
-        if (!valor) return null;
-        const id = of.href.split('/').filter(Boolean).pop()?.split('?')[0] || `${pageNum}_${idx}`;
-        const estadoMatch = of.local.match(/[-–]\s*([A-Z]{2})$/);
-        return {
-          fonte: 'SUPERBID',
-          fonte_id: `sbid_${id}`,
-          titulo: of.titulo.slice(0, 120) || 'Imóvel Superbid',
-          tipo: normalizarTipo(of.titulo),
-          modalidade: 'extrajudicial',
-          estado: estadoMatch?.[1] || '',
-          cidade: of.local.replace(/\s*[-–]\s*[A-Z]{2}$/, '').trim(),
-          bairro: '',
-          endereco: '',
-          valor_avaliacao: 0,
-          valor_minimo: valor,
-          area_m2: 0,
-          descricao: '',
-          link_edital: of.href || 'https://www.superbid.net',
-          link_foto: of.foto,
-          leiloeiro: 'Superbid',
-          data_leilao: null,
-          forma_pagamento: 'a_vista',
-        };
-      }
-
+    console.log(`    Superbid: ${offers.length} offers abertas coletadas`);
+    const seen = new Set();
+    const imoveis = offers.map(of => {
       const p = of.product || {};
-      const loc = p.location || of.location || {};
-      const det = of.offerDetail || of.detail || {};
-      const id = of.id || of.offerId || idx;
-      const titulo = p.shortDesc || p.description || of.title || of.name || '';
-      const cidadeCompleta = loc.city || of.city || '';
-      const estadoMatch = cidadeCompleta.match(/[-–]\s*([A-Z]{2})$/);
+      const loc = (p.location && typeof p.location === 'object') ? p.location : {};
+      const locStr = typeof p.location === 'string' ? p.location : (loc.city || '');
+      const det = of.offerDetail || {};
+      const id = of.id || of.offerId;
+      if (!id || seen.has(id)) return null;
+      seen.add(id);
 
-      const valMin = parseFloat(det.initialBidValue || det.currentMinBid || of.initialBidValue || of.minBid || of.price || 0);
+      const titulo = p.shortDesc || of.title || '';
+      const estadoMatch = (locStr || '').match(/[-–]\s*([A-Z]{2})\s*$/);
+      const valMin = parseFloat(det.initialBidValue || det.currentMinBid || of.price || 0);
+      const valAval = parseFloat(det.referenceValue || det.directSaleValue || 0);
       if (!valMin) return null;
+
+      // productType.description costuma ser genérico ("imoveis"); usa subCategory
+      // ou, na falta, infere do título.
+      const sub = p.subCategory?.description || '';
+      const tipoRaw = (sub && !/im[oó]ve/i.test(sub)) ? sub : titulo;
+      const linkURL = of.linkURL || '';
 
       return {
         fonte: 'SUPERBID',
         fonte_id: `sbid_${id}`,
-        titulo: titulo.slice(0, 120) || `Imóvel Superbid`,
-        tipo: normalizarTipo(p.subCategory?.description || of.category),
-        modalidade: (of.auction?.subMarketplaces || []).some(s => s.desc === 'Judicial') ? 'judicial' : 'extrajudicial',
-        estado: estadoMatch?.[1] || loc.state || '',
-        cidade: cidadeCompleta.replace(/\s*[-–]\s*[A-Z]{2}$/, '').trim(),
-        bairro: loc.neighborhood || '',
-        endereco: loc.street || '',
-        valor_avaliacao: parseFloat(det.referenceValue || det.directSaleValue || of.referenceValue || 0),
+        titulo: (titulo || 'Imóvel Superbid').slice(0, 160),
+        tipo: normalizarTipo(tipoRaw),
+        modalidade: (of.auction?.subMarketplaces || []).some(s => /judicial/i.test(s.desc || s.description || '')) ? 'judicial' : 'extrajudicial',
+        estado: (estadoMatch?.[1] || loc.state || loc.uf || '').toString().toUpperCase().slice(0, 2),
+        cidade: toTitleCase((locStr || '').replace(/\s*[-–]\s*[A-Z]{2}\s*$/, '').trim()),
+        bairro: toTitleCase(loc.neighborhood || ''),
+        endereco: toTitleCase(loc.street || ''),
+        valor_avaliacao: valAval,
         valor_minimo: valMin,
         area_m2: 0,
-        descricao: (of.offerDescription || '').replace(/<[^>]+>/g, '').slice(0, 500),
-        link_edital: `https://www.superbid.net/lote/${id}`,
-        link_foto: p.thumbnailUrl || of.image || null,
-        leiloeiro: of.store?.name || of.seller?.name || 'Superbid',
-        data_leilao: of.endDate || null,
+        descricao: (of.offerDescription || titulo).replace(/<[^>]+>/g, '').slice(0, 500),
+        link_edital: linkURL.startsWith('http') ? linkURL : (linkURL ? `https://www.superbid.net${linkURL}` : `https://www.superbid.net/oferta/${id}`),
+        link_foto: p.thumbnailUrl || null,
+        leiloeiro: of.store?.name || 'Superbid',
+        data_leilao: of.endDate || of.endDateTime || null,
         forma_pagamento: 'a_vista',
       };
     }).filter(Boolean);
 
-    console.log(`    Superbid p${pageNum}: ${imoveis.length} imóveis`);
+    console.log(`    Superbid: ${imoveis.length} imóveis mapeados`);
     return imoveis;
   } catch (err) {
-    console.log(`    Erro Superbid p${pageNum}: ${err.message.slice(0, 80)}`);
+    console.log(`  Erro Superbid: ${err.message.slice(0, 100)}`);
     return [];
   } finally {
     await page.close();
@@ -733,15 +714,9 @@ async function main() {
       await new Promise(r => setTimeout(r, 2400));
     }
 
-    // 3. Superbid via browser — até 6 páginas
+    // 3. Superbid — API offers, todas as páginas, somente abertos
     console.log('\n📋 Superbid...');
-    for (let page = 1; page <= 6; page++) {
-      const imoveis = await scraperSuperbid(browser, page);
-      await salvarImoveis(imoveis, `Superbid p${page}`);
-      total += imoveis.length;
-      if (imoveis.length === 0) break;
-      await new Promise(r => setTimeout(r, 2400));
-    }
+    total += await salvarEFinalizar(await scraperSuperbid(browser), 'SUPERBID');
 
     // 4. Banco do Brasil — até 4 páginas
     console.log('\n📋 Banco do Brasil...');
