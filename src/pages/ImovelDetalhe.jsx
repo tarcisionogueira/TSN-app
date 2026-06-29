@@ -31,6 +31,7 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
   const { user, role } = useAuth();
   const nav = useNavigate();
   const [dados, setDados] = useState(null); // { arrematacao, anexos, docs }
+  const [fluxoOk, setFluxoOk] = useState(false); // pipeline completo (até parecer jurídico)
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState({ processo: true, pessoal: true });
   const [modalAberto, setModalAberto] = useState(false);
@@ -54,6 +55,11 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
       const t = await token();
       const r = await fetch(`/api/arrematacoes?imovel_id=${imovelId}`, { headers: { Authorization: `Bearer ${t}` } });
       if (r.ok) setDados(await r.json());
+      // Só libera "Registrar Arrematação" após o fluxo: análise + relatórios +
+      // reunião + devolutiva jurídica (status_etapa >= juridico_concluido).
+      const ETAPAS_PRONTO = ['juridico_concluido', 'segunda_reuniao', 'arrematado', 'honorarios_pagos', 'procuracao_assinada', 'pos_arrematacao'];
+      const { data: cs } = await supabase.from('casos').select('status_etapa').eq('imovel_id', imovelId);
+      setFluxoOk((cs || []).some(c => ETAPAS_PRONTO.includes(c.status_etapa)));
     } finally { setLoading(false); }
   };
 
@@ -162,8 +168,13 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
           {arr && podeEscrever && arr.status !== 'cancelado' && (
             <button onClick={() => atualizarStatus('cancelado')} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#991b1b', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>✕ Cancelar</button>
           )}
-          {!arr && podeEscrever && (
+          {!arr && podeEscrever && fluxoOk && (
             <button onClick={() => setModalAberto(true)} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#7c3aed', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>+ Registrar Arrematação</button>
+          )}
+          {!arr && podeEscrever && !fluxoOk && (
+            <span style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', maxWidth: 320, textAlign: 'right' }}>
+              Disponível após concluir análise, relatórios, reunião e o parecer jurídico.
+            </span>
           )}
         </div>
       </div>
