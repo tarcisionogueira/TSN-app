@@ -100,7 +100,7 @@ export default function Landing() {
             <span style={{ background: 'linear-gradient(90deg, #60a5fa 0%, #34d399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>segurança e inteligência.</span>
           </h1>
           <p style={{ fontSize: 'clamp(15px,2vw,18px)', color: '#94a3b8', maxWidth: 600, margin: '0 auto 40px', lineHeight: 1.75 }}>
-            A plataforma TSN analisa editais, mapeia riscos jurídicos, calcula a viabilidade financeira e conecta você com especialistas — tudo antes do primeiro lance.
+            A <strong style={{ color: '#ffffff', fontWeight: 800 }}>Bid Pro Brasil</strong> lê o edital, <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>mapeia os riscos jurídicos</strong> e calcula a <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>viabilidade financeira</strong> de cada imóvel — e te dá uma resposta clara <span style={{ color: '#34d399', fontWeight: 700 }}>antes do primeiro lance</span>.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={cadastrar}
@@ -112,7 +112,7 @@ export default function Landing() {
               <Search size={16} /> Buscar imóveis
             </button>
           </div>
-          <p style={{ color: '#475569', fontSize: 12, marginTop: 18 }}>Grátis para sempre · sem cartão de crédito</p>
+          <p style={{ color: '#475569', fontSize: 12, marginTop: 18 }}>Comece grátis · sem cartão de crédito</p>
 
           {/* Stats */}
           <div style={{ display: 'flex', gap: 40, justifyContent: 'center', marginTop: 60, flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 48 }}>
@@ -362,7 +362,7 @@ export default function Landing() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
             {[
-              { nome: 'Explorador', preco: 'Grátis', sub: 'Para sempre · sem cartão', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], cta: 'Começar grátis', destaque: false },
+              { nome: 'Explorador', preco: 'Grátis', sub: 'Sem cartão de crédito', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], cta: 'Começar grátis', destaque: false },
               { nome: 'Investidor Pro', preco: 'R$ 99,90', sub: '/mês · sem fidelidade', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Consulta processual integrada'], cta: 'Assinar agora', destaque: true },
               { nome: 'Assessoria', preco: 'R$ 5.000', sub: 'por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista TSN dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], cta: 'Fazer login para contratar', destaque: false },
             ].map(({ nome, preco, sub, cor, items, cta, destaque }) => (
@@ -429,7 +429,7 @@ export default function Landing() {
             style={{ padding: '16px 40px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 900, fontSize: 17, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 32px rgba(13,99,219,0.5)' }}>
             Criar conta grátis <ArrowRight size={18} />
           </button>
-          <p style={{ color: '#475569', fontSize: 12, marginTop: 16 }}>Grátis para sempre · sem cartão · cancele quando quiser</p>
+          <p style={{ color: '#475569', fontSize: 12, marginTop: 16 }}>Comece grátis · sem cartão · cancele quando quiser</p>
         </div>
       </section>
 
@@ -438,7 +438,7 @@ export default function Landing() {
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 32, marginBottom: 40 }}>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: 'white', marginBottom: 8 }}>TSN Leilões</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: 'white', marginBottom: 8 }}>Bid Pro Brasil</div>
               <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.7 }}>Plataforma de aquisição em leilão imobiliário com inteligência e segurança jurídica.</div>
             </div>
             <div>
@@ -462,7 +462,7 @@ export default function Landing() {
             </div>
           </div>
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-            <div style={{ fontSize: 11, color: '#334155' }}>© {new Date().getFullYear()} TSN Leilões. Todos os direitos reservados.</div>
+            <div style={{ fontSize: 11, color: '#334155' }}>© {new Date().getFullYear()} Bid Pro Brasil. Todos os direitos reservados.</div>
             <div style={{ fontSize: 11, color: '#334155' }}>CNPJ · suporte@tsn.com.br</div>
           </div>
         </div>
