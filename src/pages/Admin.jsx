@@ -6914,11 +6914,23 @@ function CnjTab() {
   // Detecta se a mensagem é uma busca CNJ
   function detectarCNJ(texto) {
     const num = texto.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/);
-    if (num) return { numero_processo: num[0], uf: (texto.match(/\b([A-Z]{2})\b/) || [])[1] || 'BA' };
-    const parteMatch = texto.match(/(?:nome(?:\s+da\s+parte)?|parte|devedor|proprietário)[:\s]+([^,\n]+)/i);
     const ufMatch = texto.match(/\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/i);
-    if (parteMatch && ufMatch) return { nome_parte: parteMatch[1].trim(), uf: ufMatch[1].toUpperCase() };
+    // Busca nacional por padrão (cobre todos os TJs/TRFs + superiores).
+    if (num) return { numero_processo: num[0], uf: ufMatch ? ufMatch[1].toUpperCase() : undefined, nacional: true };
+    const parteMatch = texto.match(/(?:nome(?:\s+da\s+parte)?|parte|devedor|propriet[aá]rio)[:\s]+([^,\n]+)/i);
+    if (parteMatch) return { nome_parte: parteMatch[1].trim(), uf: ufMatch ? ufMatch[1].toUpperCase() : undefined, nacional: true };
     return null;
+  }
+
+  const [monitorando, setMonitorando] = React.useState({});
+  async function monitorar(proc) {
+    const id = proc.numero;
+    setMonitorando(p => ({ ...p, [id]: 'loading' }));
+    try {
+      const r = await apiCall('/api/monitorar-processo', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numero_processo: proc.numero, uf: (proc.tribunal || '').replace(/^TJ|^TRF\d?/, '') || undefined, rotulo: proc.classe || proc.assuntos || '' }) });
+      setMonitorando(p => ({ ...p, [id]: r.ok ? 'ok' : 'erro' }));
+    } catch { setMonitorando(p => ({ ...p, [id]: 'erro' })); }
   }
 
   async function aplicarContextoConv() {
@@ -7025,8 +7037,29 @@ function CnjTab() {
             + Carregar conversas de usuários
           </button>
           <span style={{ fontSize: 11, color: '#cbd5e1' }}>|</span>
-          <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Dica: cole o número do processo ou escreva "nome da parte: João Silva, BA" para busca automática</span>
+          <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Dica: cole o número do processo ou escreva "nome da parte: João Silva" (busca nacional)</span>
         </div>
+
+        {/* Processos encontrados — com opção de monitorar (cron diário avisa novidades) */}
+        {resultadoCnj?.processos?.length > 0 && (
+          <div style={{ padding: '8px 20px 0', display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto', flexShrink: 0 }}>
+            {resultadoCnj.processos.slice(0, 10).map(proc => {
+              const st = monitorando[proc.numero];
+              return (
+                <div key={proc.numero} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, background: proc.tem_bloqueante ? '#fef2f2' : '#f8fafc', border: '1px solid #eef2f7', borderRadius: 8, padding: '6px 10px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, color: '#111111' }}>{proc.numero}</span> <span style={{ color: '#94a3b8' }}>· {proc.tribunal} · {proc.classe || '—'}</span>
+                    {proc.tem_suspensiva && <span style={{ color: '#b91c1c', fontWeight: 700 }}> · ⚠️ risco de suspensão</span>}
+                  </div>
+                  <button onClick={() => monitorar(proc)} disabled={st === 'loading' || st === 'ok'}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 7, border: 'none', cursor: st === 'ok' ? 'default' : 'pointer', fontWeight: 700, background: st === 'ok' ? '#dcfce7' : '#0D63DB', color: st === 'ok' ? '#15803d' : 'white', whiteSpace: 'nowrap' }}>
+                    {st === 'ok' ? '🔔 Monitorando' : st === 'loading' ? '…' : st === 'erro' ? 'Erro — tentar' : '🔔 Monitorar'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Mensagens */}
         <div ref={chatRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>

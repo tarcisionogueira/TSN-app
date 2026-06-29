@@ -17,12 +17,12 @@ export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
 
-  const { numero_processo, nome_parte, uf } = req.body || {};
+  const { numero_processo, nome_parte, uf, nacional = true } = req.body || {};
   if (!numero_processo && !nome_parte) return res.status(400).json({ error: 'Informe numero_processo ou nome_parte' });
-  if (!uf) return res.status(400).json({ error: 'UF obrigatório' });
+  if (!nacional && !uf) return res.status(400).json({ error: 'UF obrigatório (ou use nacional:true)' });
 
   try {
-    const r = await buscarProcessosCNJ({ numero_processo, nome_parte, uf });
+    const r = await buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional });
     if (r.erros?.some(e => /UF inválida/.test(e))) return res.status(400).json({ error: r.erros[0] });
     return res.status(200).json(r);
   } catch (err) {

@@ -198,8 +198,10 @@ export default async function handler(req, res) {
   const ehExtrajudicial = imovel?.modalidade === 'extrajudicial';
   const uf = imovel?.estado;
   const tarefasCNJ = [];
-  if (numeroProcesso && uf) tarefasCNJ.push(buscarProcessosCNJ({ numero_processo: numeroProcesso, uf }));
-  if ((ehExtrajudicial || !numeroProcesso) && executadoNome && uf) tarefasCNJ.push(buscarProcessosCNJ({ nome_parte: executadoNome, uf }));
+  // Por número: o tribunal está embutido no nº CNJ — basta a UF (barato).
+  if (numeroProcesso) tarefasCNJ.push(buscarProcessosCNJ({ numero_processo: numeroProcesso, uf, nacional: !uf }));
+  // Por nome do devedor: varredura NACIONAL (pega ações em qualquer estado/justiça).
+  if ((ehExtrajudicial || !numeroProcesso) && executadoNome) tarefasCNJ.push(buscarProcessosCNJ({ nome_parte: executadoNome, uf, nacional: true }));
   if (tarefasCNJ.length) {
     try {
       const resCNJ = await Promise.all(tarefasCNJ);

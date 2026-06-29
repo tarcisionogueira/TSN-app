@@ -32,6 +32,7 @@
     { "path": "/api/financiamento-alertas-cron","schedule": "0 7 * * *"    },
     { "path": "/api/limpar-documentos-cron",  "schedule": "0 2 * * *"    },
     { "path": "/api/gerar-slots",             "schedule": "0 1 * * *"    },
-    { "path": "/api/scraper-leiloeiros",      "schedule": "0 8 * * 1,4"  }
+    { "path": "/api/scraper-leiloeiros",      "schedule": "0 8 * * 1,4"  },
+    { "path": "/api/cnj-monitor-cron",        "schedule": "0 10 * * *"   }
   ]
 }

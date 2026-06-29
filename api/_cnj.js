@@ -58,6 +58,11 @@ const RISCOS_MAP = [
 // Categorias que indicam tentativa de suspender/anular/atrasar o leilão
 const CATEGORIAS_SUSPENSIVAS = ['Suspensão', 'Nulidade', 'Embargos', 'Ação Anulatória', 'Consignação', 'Tutela Urgente', 'Liminar', 'Impugnação', 'Recurso Pendente'];
 
+// Tribunais superiores disponíveis na API pública do DataJud
+const SUPERIORES = ['stj', 'tst', 'tse'];
+// Conjunto nacional: todos os TJs + todos os TRFs + superiores (deduplicado)
+const TODOS_TRIBUNAIS = [...new Set([...Object.values(TRIBUNAL_ESTADUAL), ...Object.values(TRF_MAP), ...SUPERIORES])];
+
 const FASES_RISCO = {
   'Execução': 'alto', 'Cumprimento de Sentença': 'alto', 'Execução Fiscal': 'alto',
   'Conhecimento': 'medio', 'Recurso': 'medio', 'Liquidação': 'medio', 'Cautelar': 'baixo',
@@ -153,12 +158,13 @@ export function gerarParecerRisco(processos) {
  * Consulta o CNJ DataJud por número de processo OU por nome da parte, na UF dada.
  * Retorna { processos, total, tribunais_consultados, erros, parecer }.
  */
-export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf }) {
+export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional = false }) {
   if (!CNJ_KEY) return { processos: [], total: 0, tribunais_consultados: [], erros: ['CNJ_DATAJUD_KEY ausente'], parecer: gerarParecerRisco([]) };
   const ufUp = String(uf || '').toUpperCase();
   const estadual = TRIBUNAL_ESTADUAL[ufUp];
   const trf = TRF_MAP[ufUp];
-  if (!estadual) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([]) };
+  // nacional = varre todos os TJs + TRFs + superiores; senão, foca na UF + STJ.
+  if (!nacional && !estadual) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([]) };
 
   let query;
   if (numero_processo) {
@@ -170,8 +176,14 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf }) {
     return { processos: [], total: 0, tribunais_consultados: [], erros: ['informe numero_processo ou nome_parte'], parecer: gerarParecerRisco([]) };
   }
 
-  const tribunais = [estadual, trf, 'stj'].filter(Boolean);
-  const resultados = await Promise.all(tribunais.map(t => buscarTribunal(t, query)));
+  const tribunais = nacional ? TODOS_TRIBUNAIS : [estadual, trf, 'stj'].filter(Boolean);
+  // Em modo nacional são ~36 tribunais — roda em lotes para não estourar conexões.
+  const resultados = [];
+  const LOTE = 8;
+  for (let i = 0; i < tribunais.length; i += LOTE) {
+    const parte = tribunais.slice(i, i + LOTE);
+    resultados.push(...await Promise.all(parte.map(t => buscarTribunal(t, query))));
+  }
   const processos = [];
   const erros = [];
   for (const r of resultados) {
