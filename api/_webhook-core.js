@@ -190,6 +190,77 @@ export async function processarVencido({ gatewayCustomerId, email, gateway }) {
   return { ok: true };
 }
 
+// ── CHARGEBACK / DISPUTA ──────────────────────────────────────────────────────
+// Identifica o chargeback, monta o dossiê de defesa (aceite com IP/UA/versão +
+// pagamento), registra em `chargebacks`, suspende o acesso e alerta a equipe.
+export async function processarChargeback({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gatewaySubscriptionId, gateway, evento, motivo, raw }) {
+  const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
+
+  // Busca o aceite mais relevante (por pagamento → por usuário → por email)
+  let aceite = null;
+  try {
+    if (gatewayPaymentId) {
+      const { data } = await supabase.from('aceites_plano').select('*')
+        .or(`asaas_payment_id.eq.${gatewayPaymentId},asaas_subscription_id.eq.${gatewayPaymentId}`)
+        .order('aceito_em', { ascending: false }).limit(1);
+      aceite = data?.[0] || null;
+    }
+    if (!aceite && cliente?.id) {
+      const { data } = await supabase.from('aceites_plano').select('*')
+        .eq('user_id', cliente.id).order('aceito_em', { ascending: false }).limit(1);
+      aceite = data?.[0] || null;
+    }
+    if (!aceite && email) {
+      const { data } = await supabase.from('aceites_plano').select('*')
+        .eq('user_email', email).order('aceito_em', { ascending: false }).limit(1);
+      aceite = data?.[0] || null;
+    }
+  } catch (e) { console.error(`[${gateway}] dossiê aceite:`, e.message); }
+
+  const dossie = {
+    resumo: 'Defesa de chargeback — serviço digital (plataforma de análise de leilões) contratado, com aceite eletrônico dos termos e acesso disponibilizado ao cliente.',
+    cliente: { id: cliente?.id || null, email: email || aceite?.user_email || null },
+    pagamento: { gateway, payment_id: gatewayPaymentId, subscription_id: gatewaySubscriptionId || null, valor, descricao: descricao || motivo || evento },
+    aceite: aceite ? {
+      aceito_em: aceite.aceito_em, ip: aceite.ip, user_agent: aceite.user_agent,
+      termos_versao: aceite.termos_versao, plano_key: aceite.plano_key, valor: aceite.valor, gateway: aceite.gateway || null,
+    } : null,
+    gerado_em: new Date().toISOString(),
+  };
+
+  try {
+    await supabase.from('chargebacks').upsert({
+      gateway,
+      gateway_payment_id: gatewayPaymentId,
+      gateway_subscription_id: gatewaySubscriptionId || null,
+      user_id: cliente?.id || null,
+      user_email: email || aceite?.user_email || null,
+      plano_key: aceite?.plano_key || null,
+      valor,
+      status: 'aberto',
+      motivo: motivo || descricao || evento,
+      evento,
+      dossie,
+      defesa_status: aceite ? 'pendente' : 'sem_evidencia',
+      raw: raw || null,
+      atualizado_em: new Date().toISOString(),
+    }, { onConflict: 'gateway,gateway_payment_id' });
+  } catch (e) {
+    console.error(`[${gateway}] insert chargeback:`, e.message);
+  }
+
+  // Suspende o acesso (mesmo efeito de inadimplência) enquanto a disputa corre
+  try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (_) {}
+
+  // Alerta a equipe
+  alertarErro(
+    `⚠️ Chargeback recebido (${gateway}) — ${email || gatewayPaymentId} — R$ ${valor}. Defesa: ${aceite ? 'dossiê pronto' : 'SEM evidência de aceite'}.`,
+    { gatewayPaymentId, plano: aceite?.plano_key, temAceite: !!aceite },
+  ).catch(() => {});
+
+  return { ok: true, chargeback: true, defesa: aceite ? 'dossie_pronto' : 'sem_evidencia' };
+}
+
 async function setExpiracaoDocumentos(userId) {
   const expira = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
   // Só seta em docs que ainda não têm expira_em (não sobrescreve prazo já existente)

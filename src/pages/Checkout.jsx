@@ -227,7 +227,7 @@ export default function Checkout() {
   const ehUpgrade = ehMudanca && plano.preco > (planoAtual?.preco || 0);
 
   // Log de aceite para proteção contra chargeback
-  const logAceite = async (planoKey, valor, asaasData) => {
+  const logAceite = async (planoKey, valor, asaasData, gateway = null) => {
     if (!user) return;
     try {
       // Server-side: grava o aceite com o IP de origem (prova para chargeback)
@@ -241,6 +241,7 @@ export default function Checkout() {
           asaas_subscription_id: asaasData?.subscriptionId || null,
           user_agent: navigator.userAgent,
           termos_versao: TERMOS_VERSAO,
+          gateway,
         }),
       });
     } catch (_) {}
@@ -262,7 +263,7 @@ export default function Checkout() {
       setGatewayUsado('asaas');
       const link = data.linkPagamento;
       setLinkPagamento(link);
-      await logAceite(planoApiKey, plano.preco, data);
+      await logAceite(planoApiKey, plano.preco, data, 'asaas');
       if (link) window.location.href = link;
       const ids = { subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null };
       setAsaasIds(ids);
@@ -299,7 +300,7 @@ export default function Checkout() {
         const link = data.initPoint || data.init_point;
         setGatewayUsado('mp');
         setLinkPagamento(link);
-        await logAceite(planoApiKey, plano.preco, { mp_preference_id: data.preferenceId || data.assinaturaId });
+        await logAceite(planoApiKey, plano.preco, { mp_preference_id: data.preferenceId || data.assinaturaId }, 'mp');
         if (link) window.location.href = link;
         setLoading(false);
         return;
