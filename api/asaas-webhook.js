@@ -7,7 +7,16 @@ import {
   processarConfirmado,
   processarVencido,
   processarRecusado,
+  processarChargeback,
 } from './_webhook-core.js';
+
+const EVENTOS_CHARGEBACK = [
+  'PAYMENT_CHARGEBACK_REQUESTED',
+  'PAYMENT_CHARGEBACK_DISPUTE',
+  'PAYMENT_AWAITING_CHARGEBACK_REVERSAL',
+  'PAYMENT_DISPUTE',
+  'CHARGEBACK',
+];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -59,6 +68,16 @@ export default async function handler(req, res) {
       const result = await processarRecusado({
         ...contexto,
         motivo: pag?.refusedReason || 'PAYMENT_REFUSED',
+      });
+      return res.status(200).json(result);
+    }
+    if (EVENTOS_CHARGEBACK.includes(tipo)) {
+      const result = await processarChargeback({
+        ...contexto,
+        gatewaySubscriptionId: pag?.subscription || null,
+        evento: tipo,
+        motivo: pag?.chargeback?.reason || pag?.chargeback?.status || tipo,
+        raw: event,
       });
       return res.status(200).json(result);
     }

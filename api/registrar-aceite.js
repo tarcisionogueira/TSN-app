@@ -37,6 +37,7 @@ export default async function handler(req) {
     ip,
     user_agent: userAgent,
     termos_versao: body.termos_versao || null,
+    gateway: body.gateway || null,
   };
 
   const r = await fetch(`${SUPABASE_URL}/rest/v1/aceites_plano`, {
