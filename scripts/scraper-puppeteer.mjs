@@ -759,9 +759,17 @@ async function scraperSodre(browser) {
     await page.goto('https://www.sodresantoro.com.br/imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(r => setTimeout(r, 3000));
     let prev = 0, estavel = 0;
-    for (let i = 0; i < 200 && estavel < 4; i++) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await new Promise(r => setTimeout(r, 1600));
+    for (let i = 0; i < 250 && estavel < 5; i++) {
+      await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+        // também clica em "ver/carregar/mostrar mais" e "próxima página"
+        const re = /(ver|carregar|mostrar)\s+mais|pr[óo]xim|load\s*more/i;
+        document.querySelectorAll('button, a, [role="button"]').forEach(b => {
+          const t = (b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '');
+          if (re.test(t)) { try { b.click(); } catch (_) {} }
+        });
+      });
+      await new Promise(r => setTimeout(r, 1800));
       const n = lotesMap.size;
       if (n <= prev) estavel++; else { estavel = 0; prev = n; }
     }
