@@ -176,10 +176,10 @@ async function coletarMega(ufs, deadline) {
     // Cards têm <div> aninhados → regex de bloco quebra. Abordagem: achar os links
     // de lote reais (/imoveis/<categoria>/<uf>/<cidade>/<slug> — 4+ segmentos) e
     // extrair preço/área/foto de uma JANELA DE CONTEXTO a partir do link.
-    const reLote = /href="(https:\/\/www\.megaleiloes\.com\.br\/imoveis\/[^"/]+\/[a-z]{2}\/[^"/]+\/[^"?#]+)"/gi;
+    const reLote = /href="(?:https:\/\/www\.megaleiloes\.com\.br)?(\/imoveis\/[^"/]+\/[a-z]{2}\/[^"/]+\/[^"?#]+)"/gi;
     let m;
     while ((m = reLote.exec(html)) !== null && (out.length - antes) < 80) {
-      const href = m[1];
+      const href = `https://www.megaleiloes.com.br${m[1]}`;
       if (seen.has(href)) continue; seen.add(href);
       const ctx = html.slice(m.index, m.index + 1800); // card a partir do link
       const valor = parseNum((ctx.match(/R\$\s*([\d][\d.]*(?:,\d{1,2})?)/) || [])[1]);
@@ -210,10 +210,9 @@ async function coletarMega(ufs, deadline) {
       });
     }
     if (out.length === antes && !diag) {
-      reLote.lastIndex = 0;
-      const first = reLote.exec(html);
       const deepHrefs = (html.match(reLote) || []).length;
-      const cardSample = first ? html.slice(first.index, first.index + 1000).replace(/\s+/g, ' ') : null;
+      const ccIdx = html.search(/class="card open|class="cards-container|class="card-content/);
+      const cardSample = ccIdx >= 0 ? html.slice(ccIdx, ccIdx + 1600).replace(/\s+/g, ' ') : null;
       diag = { uf, http: r.status, via: r.via, deepHrefs, cardSample, ...htmlDiag(html) };
     }
   }
@@ -279,6 +278,8 @@ export default async function handler(req, res) {
   }
 
   const saida = { ok: true, brightDataDisponivel: brightDataDisponivel(), runStart, total_upsert: totalUpsert, fontes: resultado };
-  console.log('[scraper-leiloeiros]', JSON.stringify(saida));
+  // Loga cada fonte em SUA linha (evita truncamento do JSON grande ocultar fontes do fim)
+  resultado.forEach(f => console.log('[leil]', f.fonte, JSON.stringify(f)));
+  console.log('[scraper-leiloeiros]', JSON.stringify({ runStart, total_upsert: totalUpsert }));
   return res.status(200).json(saida);
 }
