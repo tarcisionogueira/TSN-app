@@ -734,6 +734,83 @@ async function scraperPortalZuk(browser) {
   }
 }
 
+// ─── SODRÉ SANTORO ────────────────────────────────────────────────────────────
+// Nuxt SPA. Os lotes vêm de POST /api/search-lots (results[] com campos ricos:
+// lot_title, lot_category, lot_description, bid_initial, lot_city/state,
+// auction_status, datas, lot_is_judicial). Como não temos o body do POST,
+// interceptamos a própria chamada do site e rolamos para paginar.
+async function scraperSodre(browser) {
+  console.log('  Sodré Santoro — interceptando /api/search-lots...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const lotesMap = new Map();
+  page.on('response', async (resp) => {
+    if (!/\/api\/search-lots/.test(resp.url())) return;
+    try {
+      const j = await resp.json();
+      (j?.results || []).forEach(r => {
+        const id = String(r.lot_id || r.id || '');
+        if (id) lotesMap.set(id, r);
+      });
+    } catch {}
+  });
+  try {
+    await page.goto('https://www.sodresantoro.com.br/imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
+    await new Promise(r => setTimeout(r, 3000));
+    let prev = 0, estavel = 0;
+    for (let i = 0; i < 200 && estavel < 4; i++) {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await new Promise(r => setTimeout(r, 1600));
+      const n = lotesMap.size;
+      if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+    }
+
+    const parseData = (s) => {
+      const m = (s || '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+      return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00-03:00` : null;
+    };
+    const lotes = [...lotesMap.values()];
+    console.log(`    Sodré: ${lotes.length} lotes capturados`);
+    const imoveis = lotes.map(r => {
+      if ((r.auction_status || '').toLowerCase() !== 'aberto') return null; // só ativos
+      const valMin = parseFloat(r.bid_initial || r.bid_actual || 0);
+      if (!valMin) return null;
+      const titulo = r.lot_title || r.lot_description?.slice(0, 120) || 'Imóvel Sodré';
+      const ufMatch = (titulo.match(/-\s*([A-Za-z]{2})\s*$/) || [])[1];
+      const uf = (ufMatch || '').toUpperCase();
+      const area = parseFloat(r.lot_total_area || r.lot_useful_area || 0) || 0;
+      return {
+        fonte: 'SODRE',
+        fonte_id: `sodre_${r.lot_id || r.id}`,
+        titulo: String(titulo).slice(0, 180),
+        tipo: normalizarTipo(r.lot_category || titulo),
+        modalidade: r.lot_is_judicial ? 'judicial' : 'extrajudicial',
+        estado: uf,
+        cidade: toTitleCase(r.lot_city || ''),
+        bairro: toTitleCase(r.lot_neighborhood || ''),
+        endereco: toTitleCase(r.lot_street || ''),
+        valor_avaliacao: 0,
+        valor_minimo: valMin,
+        area_m2: area,
+        descricao: String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500),
+        link_edital: `https://www.sodresantoro.com.br/imoveis/lote/${r.lot_id || r.id}`,
+        link_foto: r.lot_image || r.image || null,
+        leiloeiro: 'Sodré Santoro',
+        data_leilao: parseData(r.auction_date_init || r.auction_date_end),
+        forma_pagamento: 'a_vista',
+      };
+    }).filter(Boolean);
+    console.log(`    Sodré: ${imoveis.length} imóveis mapeados`);
+    return imoveis;
+  } catch (err) {
+    console.log(`  Erro Sodré: ${err.message.slice(0, 100)}`);
+    return [];
+  } finally {
+    await page.close();
+  }
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -806,6 +883,10 @@ async function main() {
     // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos
     console.log('\n📋 PortalZuk (Zukerman)...');
     total += await salvarEFinalizar(await scraperPortalZuk(browser), 'ZUK');
+
+    // 5. Sodré Santoro — API search-lots interceptada, somente ativos
+    console.log('\n📋 Sodré Santoro...');
+    total += await salvarEFinalizar(await scraperSodre(browser), 'SODRE');
 
   } finally {
     await browser.close();
