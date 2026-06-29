@@ -16,10 +16,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  { fonte: 'SUPERBID', url: 'https://www.superbid.net/categorias/imoveis' },
-  { fonte: 'SOLD',     url: 'https://www.sold.com.br/leiloes-de-imoveis' },
-  { fonte: 'BB',       url: 'https://www.seuimovelbb.com.br/imoveis' },
-  { fonte: 'ZUK',      url: 'https://www.zukerman.com.br/imoveis' },
+  { fonte: 'ZUK',     url: 'https://www.portalzuk.com.br/leilao-de-imoveis' },
+  { fonte: 'FREITAS', url: 'https://www.freitasleiloeiro.com.br/lotes/imoveis' },
+  { fonte: 'SODRE',   url: 'https://www.sodresantoro.com.br/imoveis' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
