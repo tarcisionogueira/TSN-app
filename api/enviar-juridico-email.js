@@ -89,6 +89,16 @@ export default async function handler(req) {
     </table>
     ${(dj.riscos||[]).length ? `<p style="margin:8px 0 2px;font-weight:700">Gravames/ônus identificados:</p><ul style="margin:0;padding-left:18px">${dj.riscos.map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
   ` : '';
+  // Situação do devedor / risco de suspensão (foco no extrajudicial)
+  const procs = dj.processos_cnj || [];
+  const suspensivoHtml = (procs.length || dj.modalidade === 'extrajudicial') ? `
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
+    <p style="font-weight:700;margin:0 0 4px">Situação do devedor e risco de suspensão/atraso do leilão${dj.modalidade ? ` (${esc(dj.modalidade)})` : ''}:</p>
+    ${dj.risco_suspensao ? '<p style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;color:#991b1b;margin:6px 0"><strong>⚠️ Atenção:</strong> foram localizadas ações em nome do devedor que podem <strong>suspender, anular ou atrasar</strong> o leilão. Confirmar urgência.</p>' : ''}
+    ${procs.length
+      ? `<ul style="margin:6px 0 0;padding-left:18px;font-size:13px">${procs.map(p => `<li><strong>${esc(p.numero || 's/nº')}</strong> · ${esc(p.tribunal||'')} · ${esc(p.classe||'')}${(p.categorias_risco||[]).length ? ` <span style="color:#b91c1c">[${esc((p.categorias_risco||[]).join(', '))}]</span>` : ''}${p.data_ajuizamento ? ` · ajuiz. ${esc(p.data_ajuizamento)}` : ''}</li>`).join('')}</ul>`
+      : '<p style="color:#64748b;font-size:13px">Não foram localizadas ações suspensivas nos tribunais consultados — <strong>favor confirmar</strong> a situação do devedor fiduciante e eventual ação tentando obstar o leilão.</p>'}
+  ` : '';
 
   const token = caso.juridico_token || (crypto.randomUUID().split('-')[0] + crypto.randomUUID().split('-')[0]);
   const replyTo = `juridico+${token}@${INBOUND_DOMAIN}`;
@@ -112,6 +122,7 @@ export default async function handler(req) {
     <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
     <p style="font-weight:700;margin:0 0 4px">Triagem jurídica do sistema — levantamento de dados (CNJ/processo, sanções CEIS/CNEP e gravames):</p>
     ${triagemHtml || '<p style="color:#64748b">— triagem estruturada ainda não disponível —</p>'}
+    ${suspensivoHtml}
     <p style="font-weight:700;margin:16px 0 4px">Parecer documental + judicial preliminar (para sua conferência):</p>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.55">${mdToHtml(doc?.conteudo_md)}</div>
     <p style="margin:18px 0 0">Caso identifique <strong>divergências</strong> em relação a esta avaliação, por favor aponte na resposta — usamos seus apontamentos para aprimorar a análise.</p>

@@ -23,6 +23,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
+import { buscarProcessosCNJ } from './_cnj.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -100,11 +101,14 @@ async function extrairDoc(anexo) {
   return parseJSON(txt) || {};
 }
 
-function calcularScoreJuridico({ riscos, sancoes, temProcesso }) {
+function calcularScoreJuridico({ riscos, sancoes, temProcesso, processosCNJ = [] }) {
   let score = 100;
   score -= (riscos?.length || 0) * 12;   // cada gravame/ônus encontrado
   score -= (sancoes?.length || 0) * 10;  // cada sanção CEIS/CNEP do executado
   if (temProcesso) score -= 8;           // existência de processo judicial
+  // Ações do devedor que podem suspender/anular/atrasar o leilão
+  if (processosCNJ.some(p => p.tem_suspensiva)) score -= 25;
+  score -= processosCNJ.filter(p => p.tem_bloqueante).length * 15;
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
@@ -184,8 +188,40 @@ export default async function handler(req, res) {
     secoesFaltando.push('executado_nao_identificado');
   }
 
+  // 4b. CNJ DataJud — busca processual abrangente.
+  //  - judicial: pelo nº do processo do edital;
+  //  - extrajudicial (ou sem nº): pelo NOME do devedor, para detectar ações
+  //    tentando suspender/anular/atrasar o leilão (anulatória, embargos, tutela,
+  //    consignação, liminar, nulidade do leilão...).
+  let processosCNJ = [];
+  let parecerCNJ = null;
+  const ehExtrajudicial = imovel?.modalidade === 'extrajudicial';
+  const uf = imovel?.estado;
+  const tarefasCNJ = [];
+  if (numeroProcesso && uf) tarefasCNJ.push(buscarProcessosCNJ({ numero_processo: numeroProcesso, uf }));
+  if ((ehExtrajudicial || !numeroProcesso) && executadoNome && uf) tarefasCNJ.push(buscarProcessosCNJ({ nome_parte: executadoNome, uf }));
+  if (tarefasCNJ.length) {
+    try {
+      const resCNJ = await Promise.all(tarefasCNJ);
+      const todos = resCNJ.flatMap(r => r?.processos || []);
+      processosCNJ = todos.filter((p, i, a) => a.findIndex(x => x.numero === p.numero) === i);
+      parecerCNJ = resCNJ.map(r => r?.parecer).filter(Boolean).sort((a, b) =>
+        ({ vermelho: 0, amarelo: 1, verde: 2 }[a.nivel] - { vermelho: 0, amarelo: 1, verde: 2 }[b.nivel]))[0] || null;
+    } catch { secoesFaltando.push('cnj_datajud'); }
+  } else if (ehExtrajudicial && !executadoNome) {
+    secoesFaltando.push('cnj_devedor_nao_identificado');
+  }
+  const riscoSuspensao = processosCNJ.some(p => p.tem_suspensiva);
+  // Resumo enxuto para o relatório/e-mail (evita JSON gigante)
+  const processosResumo = processosCNJ.slice(0, 12).map(p => ({
+    numero: p.numero, tribunal: p.tribunal, classe: p.classe, assuntos: p.assuntos,
+    fase: p.fase, data_ajuizamento: p.data_ajuizamento, nivel_risco: p.nivel_risco,
+    categorias_risco: [...new Set((p.riscos || []).map(r => r.categoria))],
+    tem_suspensiva: p.tem_suspensiva, tem_bloqueante: p.tem_bloqueante,
+  }));
+
   // 5. Scores
-  const scoreJuridico = calcularScoreJuridico({ riscos, sancoes, temProcesso: !!numeroProcesso });
+  const scoreJuridico = calcularScoreJuridico({ riscos, sancoes, temProcesso: !!numeroProcesso, processosCNJ });
   const scoreFinanceiro = calcularScoreFinanceiro(imovel);
 
   // 6. Parecer consolidado
@@ -197,7 +233,11 @@ export default async function handler(req, res) {
     } : null,
     executado: { nome: executadoNome, cpf_cnpj: executadoDoc },
     numero_processo: numeroProcesso,
+    modalidade: imovel?.modalidade || null,
     riscos, sancoes,
+    processos_cnj: processosResumo,
+    risco_suspensao: riscoSuspensao,
+    parecer_cnj: parecerCNJ,
     score_juridico: scoreJuridico, score_financeiro: scoreFinanceiro,
   };
 
@@ -206,12 +246,14 @@ export default async function handler(req, res) {
     parecerMd = await claude({
       model: MODEL,
       max_tokens: 3000,
-      system: 'Você é um analista jurídico de leilões de imóveis no Brasil. Gere um parecer claro e objetivo em MARKDOWN (pt-BR) com as seções: ## Resumo, ## Análise Documental (averbações/ônus da matrícula e do edital), ## Análise Judicial (executado, processo, sanções CEIS/CNEP), ## Recomendação. Seja direto, prático e prudente. Não invente dados que não estejam no JSON.',
+      system: `Você é um analista jurídico de leilões de imóveis no Brasil. Gere um parecer claro e objetivo em MARKDOWN (pt-BR) com as seções: ## Resumo, ## Análise Documental (averbações/ônus da matrícula e do edital), ## Análise Judicial (executado, processo, sanções CEIS/CNEP), ## Situação do Devedor e Risco de Suspensão, ## Recomendação.
+Na seção "Situação do Devedor e Risco de Suspensão" use o campo processos_cnj: liste ações em nome do devedor que possam SUSPENDER, ANULAR ou ATRASAR o leilão (ex.: ação anulatória/revisional, embargos à arrematação, tutela de urgência/liminar, consignação em pagamento, discussão de nulidade do leilão). Se modalidade='extrajudicial', dê ênfase especial a esse risco (no extrajudicial o edital não traz processo, mas o devedor fiduciante pode estar litigando). Se risco_suspensao=true, destaque como ALERTA ALTO. Se não houver processos, diga que não foram localizadas ações suspensivas nos tribunais consultados e recomende confirmação manual.
+Seja direto, prático e prudente. Não invente dados que não estejam no JSON.`,
       messages: [{ role: 'user', content: `Dados coletados (JSON):\n\n${JSON.stringify(dados, null, 2)}\n\nObservações extraídas dos documentos:\n${obs.join('\n') || '—'}` }],
     });
   } catch {
     secoesFaltando.push('parecer');
-    parecerMd = `## Parecer (parcial)\nNão foi possível gerar o parecer automático no momento.\n\n- **Gravames/ônus:** ${riscos.join('; ') || '—'}\n- **Sanções CEIS/CNEP:** ${sancoes.length}\n- **Score jurídico:** ${scoreJuridico}/100`;
+    parecerMd = `## Parecer (parcial)\nNão foi possível gerar o parecer automático no momento.\n\n- **Gravames/ônus:** ${riscos.join('; ') || '—'}\n- **Sanções CEIS/CNEP:** ${sancoes.length}\n- **Processos do devedor (CNJ):** ${processosResumo.length}${riscoSuspensao ? ' — ⚠️ ação que pode suspender/atrasar o leilão' : ''}\n- **Score jurídico:** ${scoreJuridico}/100`;
   }
 
   const incompleto = secoesFaltando.length > 0;
@@ -243,6 +285,8 @@ export default async function handler(req, res) {
     numero_processo: numeroProcesso,
     riscos,
     sancoes_encontradas: sancoes.length,
+    processos_cnj: processosResumo.length,
+    risco_suspensao: riscoSuspensao,
     incompleto,
     secoes_faltando: secoesFaltando,
     parecer_md: parecerMd,
