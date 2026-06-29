@@ -45,6 +45,17 @@ async function fetchVia(targetUrl, { accept = 'text/html,application/json;q=0.9,
   return { ok: false, status: resp?.status || 0, contentType: '', via: bd ? 'brightdata' : 'direct', text: '' };
 }
 
+// Salva conteúdo bruto da fonte no Supabase (debug_fetch) p/ inspeção via MCP.
+async function gravarDebug(fonte, url, status, contentType, via, conteudo) {
+  try {
+    await sb('debug_fetch', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ fonte, url, status, content_type: contentType, via, conteudo: (conteudo || '').slice(0, 400000) }),
+    });
+  } catch (_) { /* ignore */ }
+}
+
 function parseNum(v) {
   if (v == null) return 0;
   if (typeof v === 'number') return v;
@@ -96,6 +107,8 @@ async function coletarSold(paginas, deadline) {
       if (p === 1) {
         const lp = await fetchVia('https://www.sold.com.br/leiloes-de-imoveis', { headers: { Referer: 'https://www.sold.com.br/' } });
         diag = { http: r.status, contentType: r.contentType, api: htmlDiag(r.text), listagem: { http: lp.status, ct: lp.contentType, via: lp.via, ...htmlDiag(lp.text) } };
+        await gravarDebug('SOLD-api', url, r.status, r.contentType, r.via, r.text);
+        await gravarDebug('SOLD-listagem', 'https://www.sold.com.br/leiloes-de-imoveis', lp.status, lp.contentType, lp.via, lp.text);
       }
       break;
     }
@@ -144,6 +157,7 @@ async function coletarSuperbid(paginas, deadline) {
       const off = data?.offers || data?.data?.offers || data?.result?.offers || data?.content || data?.items || data?.results || [];
       if (off.length) { offers = off; break; }
       tentativas.push({ api: url.replace('https://offer-query.superbid.net', '').slice(0, 24), http: r.status, keys: data ? Object.keys(data).slice(0, 6) : null, amostra: r.text.slice(0, 160) });
+      if (p === 1) await gravarDebug('SUPERBID', url, r.status, r.contentType, r.via, r.text);
     }
     if (!offers.length) { if (p === 1) diag = { via, tentativas }; break; }
     for (const of of offers) {
@@ -226,6 +240,7 @@ async function coletarMega(ufs, deadline) {
       const ci = html.indexOf('card open');
       const cardSample = ci >= 0 ? html.slice(ci, ci + 2000).replace(/\s+/g, ' ') : html.slice(html.indexOf('cards-container'), html.indexOf('cards-container') + 2000).replace(/\s+/g, ' ');
       diag = { uf, http: r.status, via: r.via, deepHrefs, todosHrefs: [...new Set((html.match(/href="[^"]{8,90}"/gi) || []))].slice(0, 14), cardSample, ...htmlDiag(html) };
+      await gravarDebug('MEGA', url, r.status, r.contentType, r.via, html);
     }
   }
   return { rows: out, via, diag };
