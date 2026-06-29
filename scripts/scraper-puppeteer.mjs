@@ -647,6 +647,93 @@ async function scraperBancoBrasil(browser, pageNum = 1) {
 
 // ─── RELATÓRIO DE CAPTAÇÃO ────────────────────────────────────────────────────
 
+// ─── PORTALZUK (ZUKERMAN) ─────────────────────────────────────────────────────
+// Listagem server-rendered com SCROLL INFINITO (sem links de página). Card:
+// .card-property → a[href*="/imovel/uf/cidade/..."] (title rico: tipo, endereço,
+// cidade/UF, comitente), .card-property-price-lote (tipo), .card-property-address
+// (cidade/UF), .card-property-news (ocupação), R$ no corpo (praças), img (foto).
+async function scraperPortalZuk(browser) {
+  console.log('  PortalZuk (Zukerman) — scroll infinito...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  try {
+    await page.goto('https://www.portalzuk.com.br/leilao-de-imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
+    try { await page.waitForSelector('.card-property', { timeout: 10000 }); } catch {}
+
+    // Rola até parar de carregar novos cards (cap de segurança)
+    let prev = 0, estavel = 0;
+    for (let i = 0; i < 250 && estavel < 4; i++) {
+      const n = await page.evaluate(() => { window.scrollTo(0, document.body.scrollHeight); return document.querySelectorAll('.card-property').length; });
+      await new Promise(r => setTimeout(r, 1400));
+      if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+    }
+
+    const cards = await page.evaluate(() => {
+      const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+      const out = [];
+      document.querySelectorAll('.card-property').forEach(card => {
+        const a = card.querySelector('a[href*="/imovel/"]');
+        const href = (a?.href || '').split('?')[0];
+        if (!href) return;
+        const title = a?.getAttribute('title') || '';
+        const tipo = norm(card.querySelector('.card-property-price-lote')?.textContent);
+        const addr = norm(card.querySelector('.card-property-address')?.textContent);
+        const ocup = norm(card.querySelector('.card-property-news')?.textContent);
+        const img = card.querySelector('img')?.getAttribute('src') || null;
+        const valores = (card.textContent.match(/R\$\s*[\d.]+,\d{2}/g) || []);
+        out.push({ href, title, tipo, addr, ocup, img, valores });
+      });
+      return out;
+    });
+
+    console.log(`    PortalZuk: ${cards.length} cards`);
+    const seen = new Set();
+    const imoveis = cards.map(c => {
+      const idm = c.href.match(/(\d+(?:-\d+)?)\/?$/);
+      const id = idm ? idm[1] : c.href;
+      if (seen.has(id)) return null;
+      seen.add(id);
+      const vals = c.valores.map(v => parseBRL(v)).filter(v => v > 0);
+      const valAval = vals.length ? Math.max(...vals) : 0;
+      const valMin = vals.length ? Math.min(...vals) : 0;
+      if (!valMin) return null;
+      const pm = c.href.match(/\/imovel\/([a-z]{2})\/([^/]+)\//i);
+      const uf = (pm?.[1] || '').toUpperCase();
+      const cidade = pm?.[2] ? toTitleCase(pm[2].replace(/-/g, ' ')) : '';
+      const tipoRaw = c.tipo || c.title;
+      const modalidade = /judicial/i.test(c.title) ? 'judicial' : 'extrajudicial';
+      return {
+        fonte: 'ZUK',
+        fonte_id: `zuk_${id}`,
+        titulo: (c.title || `Imóvel PortalZuk ${uf}`).slice(0, 180),
+        tipo: normalizarTipo(tipoRaw),
+        modalidade,
+        estado: uf,
+        cidade,
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: valAval,
+        valor_minimo: valMin,
+        area_m2: 0,
+        descricao: [c.title, c.ocup].filter(Boolean).join(' — ').slice(0, 500),
+        link_edital: c.href,
+        link_foto: c.img,
+        leiloeiro: 'Zukerman (PortalZuk)',
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      };
+    }).filter(Boolean);
+    console.log(`    PortalZuk: ${imoveis.length} imóveis mapeados`);
+    return imoveis;
+  } catch (err) {
+    console.log(`  Erro PortalZuk: ${err.message.slice(0, 100)}`);
+    return [];
+  } finally {
+    await page.close();
+  }
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -716,15 +803,9 @@ async function main() {
       await scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }),
       'SOLD');
 
-    // 4. Banco do Brasil — até 4 páginas
-    console.log('\n📋 Banco do Brasil...');
-    for (let page = 1; page <= 4; page++) {
-      const imoveis = await scraperBancoBrasil(browser, page);
-      await salvarImoveis(imoveis, `BB p${page}`);
-      total += imoveis.length;
-      if (imoveis.length === 0) break;
-      await new Promise(r => setTimeout(r, 2400));
-    }
+    // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos
+    console.log('\n📋 PortalZuk (Zukerman)...');
+    total += await salvarEFinalizar(await scraperPortalZuk(browser), 'ZUK');
 
   } finally {
     await browser.close();
