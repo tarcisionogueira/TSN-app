@@ -8,7 +8,7 @@ on:
       base_url:
         description: 'Base URL do deploy (preview da branch ou producao)'
         required: false
-        default: 'https://tsn-app-git-claude-bidpro-b-8596d8-tarcisio-nogueira-s-projects.vercel.app'
+        default: 'https://tsn-app-git-main-tarcisio-nogueira-s-projects.vercel.app'
       fontes:
         description: 'fontes (sold,mega,superbid)'
         required: false
@@ -24,6 +24,7 @@ jobs:
         run: |
           URL="${{ github.event.inputs.base_url }}/api/scraper-leiloeiros?fontes=${{ github.event.inputs.fontes }}"
           echo "GET $URL"
-          curl -sS --max-time 295 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n" || true
+          if [ -z "$CRON_SECRET" ]; then echo "::warning::CRON_SECRET vazio — cadastre o secret no GitHub (Settings > Secrets and variables > Actions)"; fi
+          curl -sSL --max-time 295 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n" || true
           echo "--- resposta ---"
           python3 -m json.tool resp.json || cat resp.json
