@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, X, Send, Paperclip, Bot, Loader2, UserCheck, ArrowLeft, Plus, ChevronRight } from 'lucide-react';
+import { X, Send, Paperclip, Bot, Loader2, UserCheck, ArrowLeft, Plus, ChevronRight } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
@@ -22,6 +22,19 @@ const STATUS_LABEL = {
   aberto: 'Em aberto', aguardando_atendente: 'Aguardando atendente',
   em_atendimento: 'Em atendimento', finalizado: 'Finalizado',
 };
+
+// Marca "B" do BidPro (mesmo glifo do logo.svg). `quadrado` desenha o fundo azul.
+function MarcaBP({ size = 30, quadrado = true }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      {quadrado && <rect width="40" height="40" rx="9" fill="#0D63DB" />}
+      <path d="M10 8h12c4 0 7 2.5 7 6s-3 5.5-3 5.5 4 1.5 4 6c0 4-3.5 6.5-8 6.5H10V8z" fill="white" />
+      <path d="M15 13h6c1.5 0 3 1 3 2.5S22.5 18 21 18h-6v-5z" fill="#0D63DB" />
+      <path d="M15 23h7c2 0 3.5 1 3.5 2.8S24 28.5 22 28.5h-7V23z" fill="#0D63DB" />
+      <path d="M26 9l6-1-4 6h4l-7 10 2-7h-4l3-8z" fill="#60a5fa" opacity="0.9" />
+    </svg>
+  );
+}
 
 export default function ChatSuporte() {
   const { user, effectiveRole, isLoggedIn } = useAuth();
@@ -289,14 +302,21 @@ export default function ChatSuporte() {
 
   return (
     <>
-      {/* Botão flutuante */}
+      {/* Botão flutuante — círculo no tema do header (preto) com a marca B */}
       {!isOpen && (
-        <button onClick={() => setIsOpen(true)} title="Suporte / Ajuda"
-          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, height: 48, padding: '0 20px 0 16px', borderRadius: 999, background: 'linear-gradient(135deg,#084BA6,#0D63DB)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(37,99,235,0.45)', transition: 'transform 0.15s, box-shadow 0.15s' }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(37,99,235,0.6)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(37,99,235,0.45)'; }}>
-          <MessageCircle size={20} />
-          <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>Suporte</span>
+        <button onClick={() => setIsOpen(true)} title="Precisa de ajuda? Fale com a gente"
+          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, height: 58, borderRadius: 999, background: '#111111', color: 'white', border: '1px solid #1f2937', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 0, padding: 0, overflow: 'hidden', boxShadow: '0 8px 24px rgba(17,17,17,0.28)', transition: 'gap 0.2s, padding 0.2s, box-shadow 0.2s, transform 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(17,17,17,0.36)'; e.currentTarget.style.gap = '10px'; e.currentTarget.style.paddingRight = '20px'; const lbl = e.currentTarget.querySelector('[data-fab-label]'); if (lbl) { lbl.style.maxWidth = '120px'; lbl.style.opacity = '1'; } }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(17,17,17,0.28)'; e.currentTarget.style.gap = '0px'; e.currentTarget.style.paddingRight = '0px'; const lbl = e.currentTarget.querySelector('[data-fab-label]'); if (lbl) { lbl.style.maxWidth = '0px'; lbl.style.opacity = '0'; } }}>
+          {/* Disco com a marca + indicador online */}
+          <span style={{ position: 'relative', width: 58, height: 58, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <MarcaBP size={30} />
+            <span style={{ position: 'absolute', top: 12, right: 12, width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: '2px solid #111111' }} />
+          </span>
+          {/* Rótulo revelado no hover */}
+          <span data-fab-label style={{ maxWidth: 0, opacity: 0, whiteSpace: 'nowrap', overflow: 'hidden', fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', transition: 'max-width 0.25s, opacity 0.2s' }}>
+            Precisa de ajuda?
+          </span>
         </button>
       )}
 
