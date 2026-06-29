@@ -63,6 +63,25 @@ function normalizarTipo(t) {
   return 'imovel';
 }
 
+// Diagnóstico estrutural de uma resposta HTML (para reverse-engineer os seletores)
+function htmlDiag(text) {
+  const t = text || '';
+  const classes = [...new Set((t.match(/class="[^"]*(?:card|lote|lot|imovel|im[óo]vel|product|result|listing|leilao|grid)[^"]*"/gi) || []).map(c => c.slice(0, 90)))].slice(0, 10);
+  const apiHints = [...new Set((t.match(/["'](\/(?:api|_next|graphql)\/[^"'?\s]+|https?:\/\/[^"'\s]*\/(?:api|graphql)[^"'?\s]*)["']/gi) || []).map(s => s.replace(/["']/g, '')))].slice(0, 10);
+  const precoIdx = t.search(/R\$\s*[\d.]/);
+  const precoCtx = precoIdx >= 0 ? t.slice(Math.max(0, precoIdx - 350), precoIdx + 220).replace(/\s+/g, ' ') : null;
+  const hrefs = [...new Set((t.match(/href="[^"]*(?:lote|imovel|lot)[^"]*"/gi) || []).map(h => h.slice(0, 90)))].slice(0, 6);
+  return {
+    len: t.length,
+    temNextData: /__NEXT_DATA__|__NUXT__|__INITIAL_STATE__|window\.__/.test(t),
+    temLdJson: /application\/ld\+json/.test(t),
+    classesCard: classes,
+    hrefsLote: hrefs,
+    apiHints,
+    precoCtx,
+  };
+}
+
 // ─── SOLD (API JSON) ───────────────────────────────────────────────────────────
 async function coletarSold(paginas, deadline) {
   const out = []; let via = '-', diag = null;
@@ -73,7 +92,13 @@ async function coletarSold(paginas, deadline) {
     via = r.via;
     let data = null; try { data = JSON.parse(r.text); } catch { /* */ }
     const lots = data?.lots || data?.data || data?.results || data?.items || [];
-    if (!lots.length) { if (p === 1) diag = { http: r.status, contentType: r.contentType, amostra: r.text.slice(0, 300) }; break; }
+    if (!lots.length) {
+      if (p === 1) {
+        const lp = await fetchVia('https://www.sold.com.br/leiloes-de-imoveis', { headers: { Referer: 'https://www.sold.com.br/' } });
+        diag = { http: r.status, contentType: r.contentType, api: htmlDiag(r.text), listagem: { http: lp.status, ct: lp.contentType, via: lp.via, ...htmlDiag(lp.text) } };
+      }
+      break;
+    }
     for (const lot of lots) {
       const loc = lot.location || lot.address || {};
       const vmin = parseNum(lot.minimum_bid || lot.initial_bid || lot.price);
@@ -110,7 +135,7 @@ async function coletarSuperbid(paginas, deadline) {
     via = r.via;
     let data = null; try { data = JSON.parse(r.text); } catch { /* */ }
     const offers = data?.offers || data?.data?.offers || data?.result?.offers || data?.content || data?.items || data?.results || [];
-    if (!offers.length) { if (p === 1) diag = { http: r.status, contentType: r.contentType, keys: data ? Object.keys(data).slice(0, 8) : null, amostra: r.text.slice(0, 300) }; break; }
+    if (!offers.length) { if (p === 1) diag = { http: r.status, contentType: r.contentType, via: r.via, keys: data ? Object.keys(data).slice(0, 8) : null, amostra: r.text.slice(0, 400) }; break; }
     for (const of of offers) {
       const pr = of.product || {}; const loc = pr.location || {}; const det = of.offerDetail || {};
       const vmin = parseNum(det.initialBidValue || det.currentMinBid);
@@ -174,7 +199,7 @@ async function coletarMega(ufs, deadline) {
         leiloeiro: 'Mega Leilões', data_leilao: null, forma_pagamento: null,
       });
     }
-    if (out.length === antes && !diag) diag = { uf, http: r.status, contentType: r.contentType, amostra: html.slice(0, 300) };
+    if (out.length === antes && !diag) diag = { uf, http: r.status, contentType: r.contentType, via: r.via, ...htmlDiag(html) };
   }
   return { rows: out, via, diag };
 }

@@ -1,0 +1,29 @@
+name: Trigger Leiloeiros (manual)
+
+# Dispara o endpoint /api/scraper-leiloeiros via curl autenticado com CRON_SECRET.
+# Usado para iterar/validar os parsers (Sold/Mega/Superbid) sem expor o segredo na URL.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL do deploy (preview da branch ou producao)'
+        required: false
+        default: 'https://tsn-app-git-claude-bidpro-b-8596d8-tarcisio-nogueira-s-projects.vercel.app'
+      fontes:
+        description: 'fontes (sold,mega,superbid)'
+        required: false
+        default: 'sold,mega,superbid'
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl scraper-leiloeiros
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          URL="${{ github.event.inputs.base_url }}/api/scraper-leiloeiros?fontes=${{ github.event.inputs.fontes }}"
+          echo "GET $URL"
+          curl -sS --max-time 295 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n" || true
+          echo "--- resposta ---"
+          python3 -m json.tool resp.json || cat resp.json
