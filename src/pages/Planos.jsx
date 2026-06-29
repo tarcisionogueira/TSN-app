@@ -23,7 +23,7 @@ export default function Planos() {
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   const [faqAberto, setFaqAberto] = useState(null);
   const [periodo, setPeriodo] = useState('mensal');
-  const [dv, setDv] = useState({ open: false, nome: '', email: user?.email || '', msg: '', enviando: false, ok: false, erro: '' });
+  const [dv, setDv] = useState({ open: false, nome: '', email: user?.email || '', tel: '', msg: '', enviando: false, ok: false, erro: '' });
 
   const enviarDuvida = async () => {
     setDv(d => ({ ...d, enviando: true, erro: '' }));
@@ -31,7 +31,7 @@ export default function Planos() {
       const r = await fetch('/api/duvida', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: dv.nome, email: dv.email, mensagem: dv.msg, origem: 'planos' }),
+        body: JSON.stringify({ nome: dv.nome, email: dv.email, telefone: dv.tel, mensagem: dv.msg, origem: 'duvida_planos' }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Erro ao enviar');
@@ -191,10 +191,15 @@ export default function Planos() {
           </p>
         </div>
 
-        <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, maxWidth: 560, margin: '0 auto 22px', lineHeight: 1.6 }}>
-          Disponível para contratação pelos membros <strong style={{ color: '#64748b' }}>Investidor Pro</strong>, direto na plataforma.
-        </p>
-        {(
+        {!user ? (
+          <div style={{ background: 'white', borderRadius: 20, border: '1px solid #e2e8f0', padding: '36px 32px', textAlign: 'center', maxWidth: 600, margin: '0 auto', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🤝</div>
+            <h3 style={{ fontSize: 19, fontWeight: 800, color: '#111', marginBottom: 10 }}>Também oferecemos assessoria e mentoria em leilões</h3>
+            <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
+              Para quem quer ir além: acompanhamento completo da análise à imissão de posse, e mentoria contínua para escalar com método. Conheça as opções de assessoria e mentoria dentro da plataforma.
+            </p>
+          </div>
+        ) : (
           <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 880, margin: '0 auto' }}>
 
             {/* Assessoria */}
@@ -303,9 +308,11 @@ export default function Planos() {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
                 <input value={dv.nome} onChange={e => setDv(d => ({ ...d, nome: e.target.value }))} placeholder="Seu nome"
                   style={{ flex: 1, minWidth: 160, padding: '11px 13px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14 }} />
-                <input value={dv.email} onChange={e => setDv(d => ({ ...d, email: e.target.value }))} placeholder="Seu e-mail" type="email"
+                <input value={dv.email} onChange={e => setDv(d => ({ ...d, email: e.target.value }))} placeholder="Seu e-mail (para a resposta)" type="email"
                   style={{ flex: 1, minWidth: 160, padding: '11px 13px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14 }} />
               </div>
+              <input value={dv.tel} onChange={e => setDv(d => ({ ...d, tel: e.target.value }))} placeholder="Telefone / WhatsApp (opcional)" type="tel"
+                style={{ width: '100%', padding: '11px 13px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', marginBottom: 10 }} />
               <textarea value={dv.msg} onChange={e => setDv(d => ({ ...d, msg: e.target.value }))} placeholder="Escreva sua dúvida…" rows={4}
                 style={{ width: '100%', padding: '11px 13px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }} />
               {dv.erro && <div style={{ color: '#b91c1c', fontSize: 13, marginTop: 8 }}>{dv.erro}</div>}
