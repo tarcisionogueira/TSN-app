@@ -4077,6 +4077,7 @@ function ScrapersTab() {
   const [linkLeiloeiro, setLinkLeiloeiro] = useState(null);
   // Progresso "executar todos" do Caixa (estado a estado)
   const [caixaTodos, setCaixaTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '' });
+  const [leil, setLeil] = useState({ rodando: false, msg: '', erro: '' });
   const [geocDebug, setGeocDebug] = useState(null);
   const [geocDebugRodando, setGeocDebugRodando] = useState(false);
   const [sysDebug, setSysDebug] = useState({});
@@ -4173,6 +4174,22 @@ function ScrapersTab() {
       } catch (e) {
         setScraperRegiao(g => ({ ...g, [regiao]: { rodando: false, erro: e.message } }));
       }
+    }
+  }
+
+  // Trigger manual dos leiloeiros (Sold/Mega/Superbid) via Bright Data — endpoint Vercel,
+  // autenticado pela sessão do admin (sem precisar de CRON_SECRET na URL).
+  async function triggerLeiloeiros() {
+    setLeil({ rodando: true, msg: '', erro: '' });
+    try {
+      const r = await apiCall('/api/scraper-leiloeiros?fontes=sold,mega,superbid', { method: 'POST' });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      const resumo = (d.fontes || []).map(f => `${f.fonte} ${f.coletados ?? 0}`).join(' · ');
+      setLeil({ rodando: false, msg: `${d.total_upsert} salvos — ${resumo}`, erro: '' });
+      setTimeout(() => apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}), 3000);
+    } catch (e) {
+      setLeil({ rodando: false, msg: '', erro: e.message });
     }
   }
 
@@ -4494,8 +4511,19 @@ function ScrapersTab() {
                         style={{ padding: '5px 12px', borderRadius: 7, background: caixaTodos.rodando ? '#f1f5f9' : '#c2410c', color: caixaTodos.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: caixaTodos.rodando ? 'default' : 'pointer', border: 'none' }}>
                         {caixaTodos.rodando ? `⏳ ${caixaTodos.ufAtual} [${caixaTodos.atual}/${caixaTodos.total}]` : '▶ Executar todos'}
                       </button>
+                      <button onClick={triggerLeiloeiros} disabled={leil.rodando}
+                        title="Sold + Mega + Superbid via Bright Data"
+                        style={{ padding: '5px 12px', borderRadius: 7, background: leil.rodando ? '#f1f5f9' : '#4f46e5', color: leil.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: leil.rodando ? 'default' : 'pointer', border: 'none' }}>
+                        {leil.rodando ? '⏳ Leiloeiros (BD)…' : '▶ Leiloeiros (BD)'}
+                      </button>
                     </div>
                   </div>
+
+                  {(leil.msg || leil.erro) && (
+                    <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 600, color: leil.erro ? '#dc2626' : '#16a34a' }}>
+                      {leil.erro ? `❌ Leiloeiros (BD): ${leil.erro}` : `✅ Leiloeiros (BD): ${leil.msg}`}
+                    </div>
+                  )}
 
                   {/* Contador + progresso */}
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
