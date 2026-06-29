@@ -745,6 +745,13 @@ async function scraperSodre(browser) {
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   const lotesMap = new Map();
+  let reqInfo = null;
+  page.on('request', req => {
+    if (reqInfo) return;
+    if (/\/api\/search-lots/.test(req.url()) && req.method() === 'POST') {
+      reqInfo = { url: req.url(), body: req.postData() || '', headers: req.headers() };
+    }
+  });
   page.on('response', async (resp) => {
     if (!/\/api\/search-lots/.test(resp.url())) return;
     try {
@@ -757,21 +764,52 @@ async function scraperSodre(browser) {
   });
   try {
     await page.goto('https://www.sodresantoro.com.br/imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
-    await new Promise(r => setTimeout(r, 3000));
-    let prev = 0, estavel = 0;
-    for (let i = 0; i < 250 && estavel < 5; i++) {
-      await page.evaluate(() => {
-        window.scrollTo(0, document.body.scrollHeight);
-        // também clica em "ver/carregar/mostrar mais" e "próxima página"
-        const re = /(ver|carregar|mostrar)\s+mais|pr[óo]xim|load\s*more/i;
-        document.querySelectorAll('button, a, [role="button"]').forEach(b => {
-          const t = (b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '');
-          if (re.test(t)) { try { b.click(); } catch (_) {} }
-        });
-      });
-      await new Promise(r => setTimeout(r, 1800));
-      const n = lotesMap.size;
-      if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+    await new Promise(r => setTimeout(r, 3500));
+
+    // Replica o POST search-lots paginando (incrementa page/offset/from no corpo)
+    const setPagina = (obj, p) => {
+      if (!obj || typeof obj !== 'object') return false;
+      for (const k of ['page', 'pageNumber', 'pagina', 'currentPage', 'pageIndex']) if (k in obj) { obj[k] = p; return true; }
+      if ('offset' in obj && ('limit' in obj || 'size' in obj)) { obj.offset = (p - 1) * (Number(obj.limit || obj.size) || 20); return true; }
+      if ('from' in obj && 'size' in obj) { obj.from = (p - 1) * (Number(obj.size) || 20); return true; }
+      if (obj.pagination && setPagina(obj.pagination, p)) return true;
+      if (obj.filters && setPagina(obj.filters, p)) return true;
+      return false;
+    };
+    let baseBody = null;
+    try { baseBody = JSON.parse(reqInfo?.body || 'null'); } catch {}
+    const temPaginacao = baseBody && setPagina(JSON.parse(JSON.stringify(baseBody)), 2);
+    if (temPaginacao) {
+      const hdrs = { ...(reqInfo.headers || {}) };
+      ['host', 'content-length', 'accept-encoding', 'connection'].forEach(h => delete hdrs[h]);
+      hdrs['content-type'] = hdrs['content-type'] || 'application/json';
+      for (let p = 1; p <= 100; p++) {
+        const b = JSON.parse(JSON.stringify(baseBody));
+        setPagina(b, p);
+        let arr = [];
+        try {
+          arr = await page.evaluate(async (url, headers, body) => {
+            const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), credentials: 'include' });
+            if (!r.ok) return [];
+            const j = await r.json();
+            return j?.results || [];
+          }, reqInfo.url, hdrs, b);
+        } catch { arr = []; }
+        if (!arr.length) break;
+        let novos = 0;
+        arr.forEach(r => { const id = String(r.lot_id || r.id || ''); if (id && !lotesMap.has(id)) { lotesMap.set(id, r); novos++; } });
+        if (novos === 0) break;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    } else {
+      // Sem campo de paginação detectado — tenta o scroll como fallback
+      let prev = 0, estavel = 0;
+      for (let i = 0; i < 60 && estavel < 4; i++) {
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await new Promise(r => setTimeout(r, 1500));
+        const n = lotesMap.size;
+        if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+      }
     }
 
     const parseData = (s) => {
