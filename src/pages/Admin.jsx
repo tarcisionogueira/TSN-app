@@ -638,7 +638,7 @@ function UsuariosTab() {
                           <tr key={i}>
                             <td style={S.td}>{fmtData(a.aceito_em)}</td>
                             <td style={S.td}>{a.plano_key || a.plano || '—'}</td>
-                            <td style={S.td}>{a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</td>
+                            <td style={S.td}>{a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
                             <td style={S.td}>{a.versao_termos || a.termos_versao || '—'}</td>
                             <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.asaas_customer_id || a.asaas_id || a.asaas_payment_id || '—'}</td>
                             <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.ip || '—'}</td>
@@ -701,7 +701,7 @@ function UsuariosTab() {
                           <tr key={i}>
                             <td style={S.td}>{fmtData(cp.criado_em)}</td>
                             <td style={S.td}>{cp.produto_tipo || '—'} / {cp.produto_id || '—'}</td>
-                            <td style={S.td}>{cp.valor != null ? `R$ ${Number(cp.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</td>
+                            <td style={S.td}>{cp.valor != null ? `R$ ${Number(cp.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
                             <td style={S.td}>{cp.status || '—'}</td>
                           </tr>
                         ))}
@@ -1327,8 +1327,8 @@ function ConfigTab() {
     setPlanos(prev => prev.map(p => p.plano_key === key ? { ...p, [field]: value } : p));
   }
 
-  const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
-  const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—';
+  const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+  const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
   const COLS = '2fr 110px 140px 90px 70px 80px 90px';
 
   return (
@@ -1523,7 +1523,7 @@ function ConfigTab() {
               const ok = Math.abs(soma - total) <= 0.01;
               return (
                 <div style={{ padding: '6px 14px', borderRadius: 20, background: ok ? '#f0fdf4' : '#fef2f2', color: ok ? '#16a34a' : '#ef4444', fontWeight: 700, fontSize: 13 }}>
-                  {soma.toFixed(1)}% / {total.toFixed(1)}%
+                  {soma.toFixed(2)}% / {total.toFixed(2)}%
                   <span style={{ marginLeft: 6 }}>{ok ? '✓' : '✗'}</span>
                 </div>
               );
@@ -1641,7 +1641,7 @@ function ConfigTab() {
                 {key === 'clube' && cfg.multa_cancelamento_pct > 0 && (
                   <div style={{ fontSize: 11, color: '#64748b' }}>
                     Ex: cancelar no 4° mês → {Number(cfg.fidelidade_meses || 12) - 4} meses restantes →
-                    multa ≈ {cfg.multa_cancelamento_pct}% × {Number(cfg.fidelidade_meses || 12) - 4} × (valor mensal)
+                    multa ≈ {Number(cfg.multa_cancelamento_pct).toFixed(2)}% × {Number(cfg.fidelidade_meses || 12) - 4} × (valor mensal)
                   </div>
                 )}
               </div>
@@ -2498,7 +2498,7 @@ function PromoTab() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {links.map(l => {
                   const linkUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${l.codigo}`;
-                  const desconto = l.desconto_pct > 0 ? `${l.desconto_pct}% off` : l.desconto_valor > 0 ? `R$ ${l.desconto_valor} off` : 'sem desconto';
+                  const desconto = l.desconto_pct > 0 ? `${Number(l.desconto_pct).toFixed(2)}% off` : l.desconto_valor > 0 ? `R$ ${Number(l.desconto_valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} off` : 'sem desconto';
                   return (
                     <div key={l.id} style={{ padding: '14px 16px', border: `1px solid ${l.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, background: l.ativo ? 'white' : '#fff5f5' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
@@ -3197,7 +3197,7 @@ function DashboardTab() {
                         {isConsultor && <>
                           <span style={{ fontSize: 11, background: '#eff6ff', color: '#084BA6', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>👥 {met.leadsSDR || 0} leads</span>
                           <span style={{ fontSize: 11, background: '#f0fdf4', color: '#15803d', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>🎯 {met.leadsConv || 0} convertidos</span>
-                          <span style={{ fontSize: 11, background: '#fef9c3', color: '#92400e', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💰 R$ {Number(met.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}</span>
+                          <span style={{ fontSize: 11, background: '#fef9c3', color: '#92400e', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💰 R$ {Number(met.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>💬 {met.chamados || 0} atend.</span>
                         </>}
                         {isAnalista && <>
@@ -3307,7 +3307,7 @@ function DashboardTab() {
                   <div style={{ marginBottom: 4 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 3 }}>
                       <span>Armazenamento: {dados.dbSizeMB !== null ? `${dbMB.toFixed(1)} MB de 500 MB gratuitos` : 'Carregando…'}</span>
-                      <span style={{ fontWeight: 700, color: corDB }}>{pctFree.toFixed(0)}%</span>
+                      <span style={{ fontWeight: 700, color: corDB }}>{pctFree.toFixed(2)}%</span>
                     </div>
                     <div style={{ background: '#f1f5f9', borderRadius: 6, height: 7, overflow: 'hidden' }}>
                       <div style={{ width: `${pctFree}%`, height: '100%', background: corDB, borderRadius: 6, transition: 'width 0.6s' }} />
@@ -3317,7 +3317,7 @@ function DashboardTab() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 3 }}>
                       <span>Usuários ativos: {fmtN(dados.total)} de 50.000</span>
-                      <span style={{ fontWeight: 700, color: alertaUsuarios ? '#dc2626' : '#10b981' }}>{((dados.total / 50000) * 100).toFixed(1)}%</span>
+                      <span style={{ fontWeight: 700, color: alertaUsuarios ? '#dc2626' : '#10b981' }}>{((dados.total / 50000) * 100).toFixed(2)}%</span>
                     </div>
                     <div style={{ background: '#f1f5f9', borderRadius: 6, height: 7, overflow: 'hidden' }}>
                       <div style={{ width: `${Math.min(100, (dados.total / 50000) * 100)}%`, height: '100%', background: alertaUsuarios ? '#dc2626' : '#10b981', borderRadius: 6, transition: 'width 0.6s' }} />
@@ -5837,7 +5837,7 @@ function FinanceiroTab() {
     setSaques(p => p.filter(s => s.id !== saqueId));
   };
 
-  const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const totalPendente = saques.filter(s => s.status === 'pendente').reduce((a, s) => a + Number(s.valor), 0);
 
   const S2 = {
@@ -5990,7 +5990,7 @@ function PrestacaoContasTab() {
   const [processando, setProcessando] = React.useState({});
   const [msg, setMsg] = React.useState(null);
 
-  const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const carregar = React.useCallback(async () => {
     setLoading(true);
@@ -6406,7 +6406,7 @@ function MarketingTab() {
               return buscas.pagamentos.map(([tipo, count]) => (
                 <div key={tipo} style={{ marginBottom: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
-                    <span>{tipo}</span><span style={{ fontWeight: 700 }}>{count} ({total > 0 ? ((count / total) * 100).toFixed(0) : 0}%)</span>
+                    <span>{tipo}</span><span style={{ fontWeight: 700 }}>{count} ({total > 0 ? ((count / total) * 100).toFixed(2) : '0,00'}%)</span>
                   </div>
                   <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8 }}>
                     <div style={{ background: 'linear-gradient(90deg,#d97706,#fbbf24)', borderRadius: 4, height: 8, width: `${total > 0 ? (count / total) * 100 : 0}%` }} />
@@ -6426,7 +6426,7 @@ function MarketingTab() {
             { label: 'Total de usuários', value: perfisData.total, color: '#111111' },
             { label: 'Usuários ativos', value: perfisData.ativos, color: '#059669' },
             { label: 'Usuários inativos', value: perfisData.inativos, color: '#dc2626' },
-            { label: 'Taxa de atividade', value: perfisData.total > 0 ? ((perfisData.ativos / perfisData.total) * 100).toFixed(0) + '%' : '—', color: '#0D63DB' },
+            { label: 'Taxa de atividade', value: perfisData.total > 0 ? ((perfisData.ativos / perfisData.total) * 100).toFixed(2) + '%' : '—', color: '#0D63DB' },
           ].map(k => (
             <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
               <div style={kpiStyle(k.color)}>{k.value}</div>
@@ -6494,7 +6494,7 @@ function MarketingTab() {
           {[
             { label: 'Total de leads', value: sdrData.total, color: '#111111' },
             { label: 'Convertidos', value: sdrData.convertidos, color: '#059669' },
-            { label: 'Taxa de conversão', value: sdrData.total > 0 ? ((sdrData.convertidos / sdrData.total) * 100).toFixed(1) + '%' : '—', color: '#0D63DB' },
+            { label: 'Taxa de conversão', value: sdrData.total > 0 ? ((sdrData.convertidos / sdrData.total) * 100).toFixed(2) + '%' : '—', color: '#0D63DB' },
             { label: 'Leads novos', value: sdrData.leadsStatus['novo'] || 0, color: '#d97706' },
           ].map(k => (
             <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px' }}>
@@ -6508,12 +6508,13 @@ function MarketingTab() {
             <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Funil de leads</div>
             {FUNNEL_STEPS.map((step, i) => {
               const count = sdrData.leadsStatus[step] || 0;
-              const pct = sdrData.total > 0 ? ((count / sdrData.total) * 100).toFixed(0) : 0;
+              const pct = sdrData.total > 0 ? (count / sdrData.total) * 100 : 0;
+              const pctLabel = pct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
               return (
                 <div key={step} style={{ marginBottom: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 3 }}>
                     <span style={{ textTransform: 'capitalize' }}>{step}</span>
-                    <span style={{ fontWeight: 700, color: FUNNEL_COLORS[i] }}>{count} ({pct}%)</span>
+                    <span style={{ fontWeight: 700, color: FUNNEL_COLORS[i] }}>{count} ({pctLabel}%)</span>
                   </div>
                   <div style={{ background: '#e2e8f0', borderRadius: 4, height: 10 }}>
                     <div style={{ background: FUNNEL_COLORS[i], borderRadius: 4, height: 10, width: `${pct}%` }} />

@@ -37,7 +37,7 @@ export async function fetchPlanosComConfig() {
       precoMensalAnual: anual ? anual / 12 : null,
       precoMensalAnualLabel: anual ? fmt(anual / 12) : null,
       precoVista: vista,
-      precoVistaLabel: vista ? fmt(vista, 0) : null,
+      precoVistaLabel: vista ? fmt(vista) : null,
       desconto_vista_pct: cfg.desconto_vista_pct ?? 0,
       comissao_pct: cfg.comissao_pct ?? 0,
       cobrar: cfg.cobrar,
@@ -50,10 +50,10 @@ export async function fetchPlanosComConfig() {
       honorarios_exito_pct: cfg.honorarios_exito_pct ?? 0,
       // label de periodicidade para assessorado/clube
       periodicidade: (['assessorado', 'clube'].includes(cfg.plano_key) && vista)
-        ? `/mês · 12 meses · ou ${fmt(vista, 0)} à vista`
+        ? `/mês · 12 meses · ou ${fmt(vista)} à vista`
         : base.periodicidade,
       precoVistaLabel2: vista
-        ? `${fmt(vista, 0)} à vista (${cfg.desconto_vista_pct > 0 ? cfg.desconto_vista_pct.toFixed(0) + '% off' : 'à vista'})`
+        ? `${fmt(vista)} à vista (${cfg.desconto_vista_pct > 0 ? Number(cfg.desconto_vista_pct).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '% off' : 'à vista'})`
         : null,
     };
   });

@@ -104,7 +104,7 @@ export default function MapaImoveis() {
         const cor = COR_TIPO[im.tipo] || '#111111';
         const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [24, 36], iconAnchor: [12, 36], popupAnchor: [0, -36] });
         const marker = L.marker([im.latitude, im.longitude], { icon });
-        const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+        const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
         // Foto da Caixa via hotlink direto (Vercel é bloqueada); outros usam link_foto.
         const _num = (im.fonte_id || '').replace(/^(caixa_|cef_)/, '');
         const _fotoSrc = (im.fonte === 'caixa' || im.fonte === 'CEF')
@@ -208,7 +208,7 @@ export default function MapaImoveis() {
     carregarPorBbox(leafletMap.current);
   }, [filtroTipo, filtroEstado, carregarPorBbox]);
 
-  const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+  const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
   const TIPOS = ['apartamento', 'casa', 'terreno', 'comercial', 'sala', 'galpao', 'rural', 'vaga', 'imovel'];
 
   return (

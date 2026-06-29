@@ -126,7 +126,7 @@ export default function AdminFinanceiro() {
               {pctBacen >= 70 ? <AlertTriangle size={15} color={corBacen} /> : <Info size={15} color={corBacen} />}
               <span style={{ fontSize: 13, fontWeight: 800, color: '#111111' }}>Volume mensal — Limite Bacen</span>
               <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: corBacen }}>
-                R$ {fmt(volumeMes)} / R$ {fmt(LIMITE_BACEN)} ({pctBacen.toFixed(1)}%)
+                R$ {fmt(volumeMes)} / R$ {fmt(LIMITE_BACEN)} ({pctBacen.toFixed(2)}%)
               </span>
             </div>
             <div style={{ height: 7, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>

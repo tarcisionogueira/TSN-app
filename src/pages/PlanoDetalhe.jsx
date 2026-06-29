@@ -67,7 +67,8 @@ export default function PlanoDetalhe() {
   const precoMes = Number(plano?.preco) || 49.90;
   const precoAno = Number(plano?.precoAnual) || 449.90;
   const mesNoAnual = precoAno / 12;
-  const economiaPct = precoMes ? Math.round((1 - precoAno / (precoMes * 12)) * 100) : 25;
+  const economiaPct = precoMes ? (1 - precoAno / (precoMes * 12)) * 100 : 25;
+  const economiaPctLabel = Number(economiaPct).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const temAnual = !gratis && precoAno > 0;
   const numRelatorios = 15;
 
@@ -76,7 +77,7 @@ export default function PlanoDetalhe() {
   if (gratis) {
     termo = 'Ao criar sua conta gratuita, você concorda com os Termos de Uso e a Política de Privacidade da Bid Pro Brasil. O plano Explorador é gratuito, sem cobrança e sem necessidade de cartão de crédito. Recursos pagos (relatório documental e jurídico, Bid Score completo) exigem a contratação de um plano pago.';
   } else if (periodo === 'anual') {
-    termo = `Você está contratando o plano ${info.nome} (anual) por ${fmtR(precoAno)}, cobrado uma única vez (equivalente a ${fmtR(mesNoAnual)}/mês, ${economiaPct}% de desconto), com acesso por 12 meses. A renovação é automática ao fim do período; você pode cancelá-la a qualquer momento — sem novas cobranças e sem estorno do período já contratado, mantendo o acesso até o fim dos 12 meses. Inclui até ${numRelatorios} relatórios de cada tipo por mês. Você concorda com os Termos de Uso e a Política de Privacidade.`;
+    termo = `Você está contratando o plano ${info.nome} (anual) por ${fmtR(precoAno)}, cobrado uma única vez (equivalente a ${fmtR(mesNoAnual)}/mês, ${economiaPctLabel}% de desconto), com acesso por 12 meses. A renovação é automática ao fim do período; você pode cancelá-la a qualquer momento — sem novas cobranças e sem estorno do período já contratado, mantendo o acesso até o fim dos 12 meses. Inclui até ${numRelatorios} relatórios de cada tipo por mês. Você concorda com os Termos de Uso e a Política de Privacidade.`;
   } else {
     termo = `Você está contratando o plano ${info.nome} (mensal) por ${fmtR(precoMes)}/mês, em assinatura recorrente sem fidelidade. Você pode cancelar quando quiser, sem multa; o acesso permanece até o fim do ciclo já pago. Inclui até ${numRelatorios} relatórios de cada tipo por mês. Você concorda com os Termos de Uso e a Política de Privacidade.`;
   }
@@ -104,7 +105,7 @@ export default function PlanoDetalhe() {
           {/* Toggle mensal/anual (só Pro) */}
           {temAnual && (
             <div style={{ display: 'inline-flex', gap: 4, background: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 4, marginBottom: 18 }}>
-              {[['mensal', 'Mensal', null], ['anual', 'Anual', `-${economiaPct}%`]].map(([k, label, badge]) => (
+              {[['mensal', 'Mensal', null], ['anual', 'Anual', `-${economiaPctLabel}%`]].map(([k, label, badge]) => (
                 <button key={k} onClick={() => setPeriodo(k)}
                   style={{ padding: '8px 20px', borderRadius: 9, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: periodo === k ? 'white' : 'transparent', color: periodo === k ? '#084BA6' : '#cbd5e1', display: 'flex', alignItems: 'center', gap: 6 }}>
                   {label}
@@ -123,7 +124,7 @@ export default function PlanoDetalhe() {
             ? <div style={{ fontSize: 13, color: info.destaque ? '#93c5fd' : '#94a3b8', marginTop: 4 }}>Sem cartão de crédito</div>
             : periodo === 'anual'
               ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginTop: 6 }}>{fmtR(precoAno)}/ano · economize {fmtR(precoMes * 12 - precoAno)}</div>
-              : <div style={{ fontSize: 13, color: info.destaque ? '#7dd3fc' : '#64748b', marginTop: 6 }}>ou {fmtR(mesNoAnual)}/mês no plano anual (−{economiaPct}%)</div>}
+              : <div style={{ fontSize: 13, color: info.destaque ? '#7dd3fc' : '#64748b', marginTop: 6 }}>ou {fmtR(mesNoAnual)}/mês no plano anual (−{economiaPctLabel}%)</div>}
         </div>
 
         {/* Por que assinar */}

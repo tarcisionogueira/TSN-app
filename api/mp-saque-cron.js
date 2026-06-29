@@ -28,7 +28,7 @@ export default async function handler(req) {
   if (!saques?.length) return new Response(JSON.stringify({ ok: true, pendentes: 0 }), { status: 200 });
 
   const total = saques.reduce((s, r) => s + Number(r.valor), 0);
-  const fmtBRL = v => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const fmtBRL = v => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const linhas = saques.map(s => `
     <tr style="border-bottom:1px solid #e2e8f0">

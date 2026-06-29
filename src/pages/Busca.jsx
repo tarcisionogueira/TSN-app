@@ -198,9 +198,9 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         if (!im.latitude || !im.longitude) return;
         const cor = COR_TIPO[im.tipo] || '#111111';
         const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [22, 33], iconAnchor: [11, 33], popupAnchor: [0, -33] });
-        const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+        const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
         const marker = L.marker([im.latitude, im.longitude], { icon });
-        const desc = im.desconto_percentual ? Math.round(im.desconto_percentual) : null;
+        const desc = im.desconto_percentual ? Number(im.desconto_percentual).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
         const pgto = im.forma_pagamento;
         const pgtoLabel = pgto === 'financiado' ? 'Financiado' : pgto === 'hipotecado' ? 'Hipotecado' : pgto === 'a_vista' ? 'À Vista' : null;
         const pgtoColor = pgto === 'financiado' ? '#16a34a' : pgto === 'hipotecado' ? '#92400e' : '#475569';
@@ -221,7 +221,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
               ${desc ? `<span style="font-size:10px;font-weight:800;background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:20px">-${desc}%</span>` : ''}
               ${pgtoLabel ? `<span style="font-size:10px;font-weight:700;background:${pgtoBg};color:${pgtoColor};padding:1px 6px;border-radius:20px">${pgtoLabel}</span>` : ''}
               ${nivelLabel ? `<span style="font-size:10px;font-weight:600;background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:20px">${nivelLabel}</span>` : ''}
-              ${im.area_m2 > 0 && im.valor_minimo ? `<span style="font-size:10px;font-weight:700;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:20px">R$ ${Math.round(im.valor_minimo/im.area_m2).toLocaleString('pt-BR')}/m²</span>` : ''}
+              ${im.area_m2 > 0 && im.valor_minimo ? `<span style="font-size:10px;font-weight:700;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:20px">R$ ${Number(im.valor_minimo/im.area_m2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/m²</span>` : ''}
               ${/^https?:\/\//i.test(im.link_edital||'') ? `<span style="font-size:10px;font-weight:700;background:#eff6ff;color:#084BA6;padding:1px 6px;border-radius:20px">📄 Edital</span>` : ''}
               ${/^https?:\/\//i.test(im.link_matricula||'') && !/matricula\.asp/i.test(im.link_matricula||'') ? `<span style="font-size:10px;font-weight:700;background:#f0fdf4;color:#15803d;padding:1px 6px;border-radius:20px">📄 Matrícula</span>` : ''}
             </div>
@@ -842,7 +842,8 @@ export default function Busca() {
   const resultadosPagina = resultados;
   const totalPaginas = Math.max(1, Math.ceil(totalResultados / POR_PAGINA));
 
-  const desconto = (im) => im.descontoPercentual ? Math.round(im.descontoPercentual) : (im.valorAvaliacao>0 ? Math.round((1-im.valorMinimo/im.valorAvaliacao)*100) : 0);
+  const desconto = (im) => im.descontoPercentual ? Number(im.descontoPercentual) : (im.valorAvaliacao>0 ? (1-im.valorMinimo/im.valorAvaliacao)*100 : 0);
+  const fmtDesc = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div style={{ position:'relative' }}>
@@ -1045,8 +1046,8 @@ export default function Busca() {
               <div>
                 <label style={lbl}>Valor de Lance (R$)</label>
                 <div style={{ fontSize:11, color:'#475569', fontWeight:600, marginBottom:8, display:'flex', justifyContent:'space-between' }}>
-                  <span>{filtros.valorMin ? 'R$ ' + Number(filtros.valorMin).toLocaleString('pt-BR') : 'R$ 0'}</span>
-                  <span>{filtros.valorMax ? 'R$ ' + Number(filtros.valorMax).toLocaleString('pt-BR') : 'Sem limite'}</span>
+                  <span>{filtros.valorMin ? 'R$ ' + Number(filtros.valorMin).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'R$ 0,00'}</span>
+                  <span>{filtros.valorMax ? 'R$ ' + Number(filtros.valorMax).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sem limite'}</span>
                 </div>
                 <div style={{ position:'relative', height:20, marginBottom:4 }}>
                   <input type="range" min={0} max={5000000} step={50000}
@@ -1267,8 +1268,8 @@ export default function Busca() {
                           <div style={{ fontSize:10, color:'#64748b', marginBottom:4 }}>📍 {im.cidade} — {im.estado}</div>
                           <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap' }}>
                             <span style={{ fontSize:12, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
-                            {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{desc}%</span>}
-                            {im.areaM2 > 0 && im.valorMinimo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'0 5px', borderRadius:20 }}>R$ {Math.round(im.valorMinimo/im.areaM2).toLocaleString('pt-BR')}/m²</span>}
+                            {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
+                            {im.areaM2 > 0 && im.valorMinimo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'0 5px', borderRadius:20 }}>R$ {Number(im.valorMinimo/im.areaM2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/m²</span>}
                           </div>
                           {im.dataLeilao && <div style={{ fontSize:9, color:'#94a3b8', marginTop:2 }}>📅 {fmtData(im.dataLeilao)}</div>}
                         </div>
@@ -1328,7 +1329,7 @@ export default function Busca() {
                     }
                     {desc>0 && (
                       <div style={{ position:'absolute', top:8, right:8, background: desc>=40?'#16a34a':desc>=20?'#d97706':'#dc2626', color:'white', fontWeight:900, fontSize:13, padding:'3px 8px', borderRadius:8 }}>
-                        -{desc}%
+                        -{fmtDesc(desc)}%
                       </div>
                     )}
                     {(im.fonte==='CEF' || im.fonte==='caixa') && (
@@ -1375,14 +1376,14 @@ export default function Busca() {
 
                     {/* Indicadores de decisão: R$/m², disponibilidade de docs e score */}
                     {(() => {
-                      const m2 = im.areaM2 > 0 && im.valorMinimo ? Math.round(im.valorMinimo / im.areaM2) : null;
+                      const m2 = im.areaM2 > 0 && im.valorMinimo ? im.valorMinimo / im.areaM2 : null;
                       const temEdital = /^https?:\/\//i.test(im.linkEdital || '');
                       const temMatricula = /^https?:\/\//i.test(im.linkMatricula || '') && !/matricula\.asp/i.test(im.linkMatricula || '');
                       const score = im.scoreJuridico ?? im.scoreFinanceiro ?? null;
                       if (!m2 && !temEdital && !temMatricula && score == null) return null;
                       return (
                         <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
-                          {m2 && <span style={{ fontSize:9, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>R$ {m2.toLocaleString('pt-BR')}/m²</span>}
+                          {m2 && <span style={{ fontSize:9, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>R$ {Number(m2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/m²</span>}
                           {temEdital && <span title="Edital disponível" style={{ fontSize:9, background:'#eff6ff', color:'#084BA6', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>📄 Edital</span>}
                           {temMatricula && <span title="Matrícula disponível" style={{ fontSize:9, background:'#f0fdf4', color:'#15803d', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>📄 Matrícula</span>}
                           {score != null && <span title="Score de análise" style={{ fontSize:9, background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:8, fontWeight:800 }}>★ {score}</span>}

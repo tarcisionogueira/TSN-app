@@ -26,9 +26,9 @@ export default function TabelaAmortizacao({ sacTabela, priceTabela, d }) {
             ))}
           </div>
           <div style={{ padding: '0 16px 12px', fontSize: 12, color: '#64748b', display: 'flex', gap: 20 }}>
-            <span>Total pago: <b style={{ color: '#dc2626' }}>R$ {fmt(total.parcela, 0)}</b></span>
-            <span>Total juros: <b style={{ color: '#f97316' }}>R$ {fmt(total.juros, 0)}</b></span>
-            <span>Principal: <b>R$ {fmt(total.amortizacao, 0)}</b></span>
+            <span>Total pago: <b style={{ color: '#dc2626' }}>R$ {fmt(total.parcela)}</b></span>
+            <span>Total juros: <b style={{ color: '#f97316' }}>R$ {fmt(total.juros)}</b></span>
+            <span>Principal: <b>R$ {fmt(total.amortizacao)}</b></span>
           </div>
           <div style={{ maxHeight: 320, overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>

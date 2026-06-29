@@ -440,7 +440,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar }) {
         </select>
         {parcelas > 3 && (
           <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
-            ⚠️ Taxas de {((parcelaValor * parcelas / servico.valor - 1) * 100).toFixed(1)}% assumidas pelo cliente.
+            ⚠️ Taxas de {((parcelaValor * parcelas / servico.valor - 1) * 100).toFixed(2)}% assumidas pelo cliente.
           </div>
         )}
       </div>

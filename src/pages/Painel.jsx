@@ -110,7 +110,7 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
           ].map(([l,v,c,bg])=>(
             <div key={l} style={{ padding:'16px 18px', background:bg, borderRight:'1px solid #e2e8f0', textAlign:'center' }}>
               <div style={{ fontSize:10, color:c, fontWeight:800, textTransform:'uppercase', marginBottom:4 }}>{l}</div>
-              <div style={{ fontSize:22, fontWeight:900, color:c }}>R$ {fmt(Math.abs(v),0)}</div>
+              <div style={{ fontSize:22, fontWeight:900, color:c }}>R$ {fmt(Math.abs(v))}</div>
             </div>
           ))}
         </div>
@@ -169,7 +169,7 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
                   <span style={{ fontSize:11, color:'#475569', fontWeight:600, flexShrink:0, width:120 }}>{l.categoria}</span>
                   <span style={{ fontSize:12, color:'#334155', flex:1 }}>{l.descricao}</span>
                   <span style={{ fontSize:13, fontWeight:700, color:l.tipo==='entrada'?'#10b981':'#ef4444', flexShrink:0, width:100, textAlign:'right' }}>
-                    {l.tipo==='entrada'?'+ ':'- '}R$ {fmt(l.valor,0)}
+                    {l.tipo==='entrada'?'+ ':'- '}R$ {fmt(l.valor)}
                   </span>
                   <button onClick={()=>remover(l.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#ef4444', padding:2, flexShrink:0 }}>
                     <Trash2 size={12}/>
@@ -450,9 +450,9 @@ export default function Painel() {
         {[
           { l:'Imóveis', v: imoveis.length, c:'#0D63DB', bg:'#eff6ff' },
           { l:'Total Investido', v:`R$ ${fmt(imoveis.reduce((s,i)=>s+Number(i.valorArrematacao||0),0),0)}`, c:'#ef4444', bg:'#fef2f2' },
-          { l:'Entradas', v:`R$ ${fmt(totalEntradas,0)}`, c:'#10b981', bg:'#f0fdf4' },
-          { l:'Saídas', v:`R$ ${fmt(totalSaidas,0)}`, c:'#f59e0b', bg:'#fffbeb' },
-          { l:'Saldo Real', v:`R$ ${fmt(totalEntradas-totalSaidas,0)}`, c:(totalEntradas-totalSaidas)>=0?'#10b981':'#ef4444', bg:(totalEntradas-totalSaidas)>=0?'#f0fdf4':'#fef2f2' },
+          { l:'Entradas', v:`R$ ${fmt(totalEntradas)}`, c:'#10b981', bg:'#f0fdf4' },
+          { l:'Saídas', v:`R$ ${fmt(totalSaidas)}`, c:'#f59e0b', bg:'#fffbeb' },
+          { l:'Saldo Real', v:`R$ ${fmt(totalEntradas-totalSaidas)}`, c:(totalEntradas-totalSaidas)>=0?'#10b981':'#ef4444', bg:(totalEntradas-totalSaidas)>=0?'#f0fdf4':'#fef2f2' },
         ].map(k=>(
           <div key={k.l} style={{ background:k.bg, borderRadius:12, padding:'14px 16px', border:`1px solid ${k.c}20` }}>
             <div style={{ fontSize:11, fontWeight:700, color:k.c, textTransform:'uppercase', marginBottom:4 }}>{k.l}</div>
@@ -512,14 +512,14 @@ export default function Painel() {
                           </select>
                         </td>
                         <td style={{ padding:'12px 14px', fontWeight:800, color:'#111111' }}>
-                          R$ {fmt(Number(im.valorArrematacao||0),0)}
+                          R$ {fmt(Number(im.valorArrematacao||0))}
                         </td>
                         <td style={{ padding:'12px 14px', fontWeight:700, color:'#ef4444' }}>
-                          R$ {fmt(totalDesembolsado,0)}
+                          R$ {fmt(totalDesembolsado)}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
                           {entradaVenda > 0
-                            ? <span style={{ fontWeight:800, color:'#10b981' }}>R$ {fmt(entradaVenda,0)}</span>
+                            ? <span style={{ fontWeight:800, color:'#10b981' }}>R$ {fmt(entradaVenda)}</span>
                             : <span style={{ color:'#cbd5e1', fontSize:12 }}>Não vendido</span>}
                         </td>
                         <td style={{ padding:'12px 14px' }}>
@@ -792,8 +792,8 @@ export default function Painel() {
                       <div style={{ fontWeight:800, fontSize:13, color:'#111111', marginBottom:4 }}>{im.nome||'Sem nome'}</div>
                       <div style={{ fontSize:11, color:'#64748b', marginBottom:6 }}>{im.cidade||'—'}</div>
                       <div style={{ display:'flex', justifyContent:'space-between', fontSize:11 }}>
-                        <span style={{ color:'#ef4444' }}>Saídas: R$ {fmt(c.saidas,0)}</span>
-                        <span style={{ color:'#10b981' }}>Entradas: R$ {fmt(c.entradas,0)}</span>
+                        <span style={{ color:'#ef4444' }}>Saídas: R$ {fmt(c.saidas)}</span>
+                        <span style={{ color:'#10b981' }}>Entradas: R$ {fmt(c.entradas)}</span>
                       </div>
                     </div>
                   );
@@ -805,9 +805,9 @@ export default function Painel() {
           {/* Barra de totais consolidados + export */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'14px 20px', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:18, flexWrap:'wrap' }}>
-              <div><span style={{ fontSize:10, color:'#16a34a', fontWeight:800, textTransform:'uppercase' }}>Entradas</span><div style={{ fontSize:18, fontWeight:900, color:'#10b981' }}>R$ {fmt(totalEntradas,0)}</div></div>
-              <div><span style={{ fontSize:10, color:'#dc2626', fontWeight:800, textTransform:'uppercase' }}>Saídas</span><div style={{ fontSize:18, fontWeight:900, color:'#ef4444' }}>R$ {fmt(totalSaidas,0)}</div></div>
-              <div><span style={{ fontSize:10, color:(totalEntradas-totalSaidas)>=0?'#16a34a':'#dc2626', fontWeight:800, textTransform:'uppercase' }}>Saldo Geral</span><div style={{ fontSize:18, fontWeight:900, color:(totalEntradas-totalSaidas)>=0?'#10b981':'#ef4444' }}>R$ {fmt(totalEntradas-totalSaidas,0)}</div></div>
+              <div><span style={{ fontSize:10, color:'#16a34a', fontWeight:800, textTransform:'uppercase' }}>Entradas</span><div style={{ fontSize:18, fontWeight:900, color:'#10b981' }}>R$ {fmt(totalEntradas)}</div></div>
+              <div><span style={{ fontSize:10, color:'#dc2626', fontWeight:800, textTransform:'uppercase' }}>Saídas</span><div style={{ fontSize:18, fontWeight:900, color:'#ef4444' }}>R$ {fmt(totalSaidas)}</div></div>
+              <div><span style={{ fontSize:10, color:(totalEntradas-totalSaidas)>=0?'#16a34a':'#dc2626', fontWeight:800, textTransform:'uppercase' }}>Saldo Geral</span><div style={{ fontSize:18, fontWeight:900, color:(totalEntradas-totalSaidas)>=0?'#10b981':'#ef4444' }}>R$ {fmt(totalEntradas-totalSaidas)}</div></div>
             </div>
             <button onClick={exportarPDFFinanceiro}
               style={{ padding:'9px 16px', background:'#f59e0b', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:7 }}>
@@ -878,9 +878,9 @@ export default function Painel() {
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'10px 16px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
                       <div style={{ fontWeight:800, color:'#111111', fontSize:14 }}>🏠 {g.nome}{g.cidade?<span style={{ fontSize:12, color:'#94a3b8', fontWeight:500 }}> · {g.cidade}</span>:null}</div>
                       <div style={{ display:'flex', gap:14, fontSize:12 }}>
-                        <span style={{ color:'#10b981', fontWeight:700 }}>+ R$ {fmt(ent,0)}</span>
-                        <span style={{ color:'#ef4444', fontWeight:700 }}>− R$ {fmt(sai,0)}</span>
-                        <span style={{ color:sld>=0?'#10b981':'#ef4444', fontWeight:900 }}>Saldo R$ {fmt(sld,0)}</span>
+                        <span style={{ color:'#10b981', fontWeight:700 }}>+ R$ {fmt(ent)}</span>
+                        <span style={{ color:'#ef4444', fontWeight:700 }}>− R$ {fmt(sai)}</span>
+                        <span style={{ color:sld>=0?'#10b981':'#ef4444', fontWeight:900 }}>Saldo R$ {fmt(sld)}</span>
                       </div>
                     </div>
                     <div style={{ overflowX:'auto' }}>
@@ -904,7 +904,7 @@ export default function Painel() {
                               <td style={{ padding:'9px 14px', fontSize:12, color:'#475569' }}>{l.categoria}</td>
                               <td style={{ padding:'9px 14px', fontSize:12, color:'#64748b' }}>{l.descricao||'—'}</td>
                               <td style={{ padding:'9px 14px', fontWeight:800, color:l.tipo==='entrada'?'#10b981':'#ef4444', whiteSpace:'nowrap' }}>
-                                {l.tipo==='entrada'?'+ ':'− '}R$ {fmt(Number(l.valor),0)}
+                                {l.tipo==='entrada'?'+ ':'− '}R$ {fmt(Number(l.valor))}
                               </td>
                               <td style={{ padding:'9px 14px' }}>
                                 <button onClick={()=>removerLancamento(g.id, l.id)}

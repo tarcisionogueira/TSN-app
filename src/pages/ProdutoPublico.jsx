@@ -89,7 +89,7 @@ export default function ProdutoPublico({ tipo }) {
           )}
 
           <div style={{ fontSize: 11, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>
-            {tipo === 'curso' ? 'Curso' : 'eBook'} · {isPago ? `R$ ${Number(produto.preco).toFixed(0)}` : 'Gratuito com assinatura'}
+            {tipo === 'curso' ? 'Curso' : 'eBook'} · {isPago ? `R$ ${Number(produto.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Gratuito com assinatura'}
           </div>
           <h1 style={{ fontSize: 30, fontWeight: 900, lineHeight: 1.2, margin: '0 0 14px' }}>{produto.titulo}</h1>
           {produto.subtitulo && <p style={{ color: '#60a5fa', fontSize: 15, fontWeight: 600, margin: '0 0 16px' }}>{produto.subtitulo}</p>}
@@ -121,7 +121,7 @@ export default function ProdutoPublico({ tipo }) {
         <div style={{ position: 'sticky', top: 24 }}>
           <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px' }}>
             <div style={{ fontSize: 34, fontWeight: 900, color: '#111111', marginBottom: 4 }}>
-              {isPago ? `R$ ${Number(produto.preco).toFixed(0)}` : 'Gratuito'}
+              {isPago ? `R$ ${Number(produto.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Gratuito'}
             </div>
             <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>
               {isPago ? 'Pagamento único' : 'Incluído na assinatura Investidor Pro'}

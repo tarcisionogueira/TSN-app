@@ -14,7 +14,7 @@ export function gerarPDFFinanceiro({ grupos, totalEntradas, totalSaidas }) {
       <td>${l.categoria || '—'}</td>
       <td>${l.descricao || '—'}</td>
       <td class="c"><span class="${l.tipo === 'entrada' ? 'g' : 'rd'}">${l.tipo === 'entrada' ? 'Entrada' : 'Saída'}</span></td>
-      <td class="r ${l.tipo === 'entrada' ? 'g' : 'rd'}">${l.tipo === 'entrada' ? '+ ' : '− '}R$ ${fmt(Number(l.valor), 0)}</td>
+      <td class="r ${l.tipo === 'entrada' ? 'g' : 'rd'}">${l.tipo === 'entrada' ? '+ ' : '− '}R$ ${fmt(Number(l.valor))}</td>
     </tr>`).join('');
 
   const secoes = grupos.map(g => {
@@ -29,8 +29,8 @@ export function gerarPDFFinanceiro({ grupos, totalEntradas, totalSaidas }) {
         <tbody>
           ${linhasGrupo(g)}
           <tr style="background:#f1f5f9;font-weight:700;">
-            <td colspan="4">Subtotal — Entradas R$ ${fmt(ent, 0)} · Saídas R$ ${fmt(sai, 0)}</td>
-            <td class="r ${sld >= 0 ? 'g' : 'rd'}">Saldo R$ ${fmt(sld, 0)}</td>
+            <td colspan="4">Subtotal — Entradas R$ ${fmt(ent)} · Saídas R$ ${fmt(sai)}</td>
+            <td class="r ${sld >= 0 ? 'g' : 'rd'}">Saldo R$ ${fmt(sld)}</td>
           </tr>
         </tbody>
       </table>
@@ -71,15 +71,15 @@ export function gerarPDFFinanceiro({ grupos, totalEntradas, totalSaidas }) {
 <div class="grid3">
   <div class="card" style="background:#f0fdf4;border-color:#bbf7d0;">
     <div class="card-l" style="color:#16a34a;">Entradas</div>
-    <div class="card-v g">R$ ${fmt(totalEntradas, 0)}</div>
+    <div class="card-v g">R$ ${fmt(totalEntradas)}</div>
   </div>
   <div class="card" style="background:#fef2f2;border-color:#fecaca;">
     <div class="card-l" style="color:#dc2626;">Saídas</div>
-    <div class="card-v rd">R$ ${fmt(totalSaidas, 0)}</div>
+    <div class="card-v rd">R$ ${fmt(totalSaidas)}</div>
   </div>
   <div class="card" style="background:${saldo >= 0 ? '#f0fdf4' : '#fef2f2'};border-color:${saldo >= 0 ? '#bbf7d0' : '#fecaca'};">
     <div class="card-l" style="color:${saldo >= 0 ? '#16a34a' : '#dc2626'};">Saldo Geral</div>
-    <div class="card-v ${saldo >= 0 ? 'g' : 'rd'}">R$ ${fmt(saldo, 0)}</div>
+    <div class="card-v ${saldo >= 0 ? 'g' : 'rd'}">R$ ${fmt(saldo)}</div>
   </div>
 </div>
 

@@ -30,7 +30,7 @@ export default function AdminChargebacks() {
   };
   useEffect(() => { carregar(); }, []);
 
-  const fmtR = (v) => v == null ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const fmtR = (v) => v == null ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtD = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
   const copiar = (cb) => { try { navigator.clipboard.writeText(JSON.stringify(cb.dossie, null, 2)); } catch (_) {} };
 

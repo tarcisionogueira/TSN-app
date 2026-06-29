@@ -235,7 +235,7 @@ export default function Membros() {
                   <div style={{ display:'flex', gap:12, fontSize:11, color:'#94a3b8' }}>
                     <span><BookOpen size={11}/> {c.aulas} aulas</span>
                     <span style={{ marginLeft:'auto', fontWeight:800, color:c.preco===0?'#10b981':c.cor }}>
-                      {c.preco===0?'Gratuito':`R$ ${c.preco}`}
+                      {c.preco===0?'Gratuito':`R$ ${Number(c.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </span>
                   </div>
                 </div>

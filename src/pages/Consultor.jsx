@@ -309,8 +309,8 @@ export default function Consultor() {
         {[
           { l:'Clientes na carteira', v: carteira.length, c:'#0D63DB', bg:'#eff6ff', icon:Users, onClick:()=>{ setFiltroCarteira('todos'); setAba('carteira'); } },
           { l:'Clientes pagantes', v: clientesPagantes, c:'#8b5cf6', bg:'#ede9fe', icon:TrendingUp, onClick:()=>{ setFiltroCarteira('pagantes'); setAba('carteira'); } },
-          { l:'Comissão pendente', v:`R$ ${fmt(totalPendente,0)}`, c:'#f59e0b', bg:'#fffbeb', icon:Clock, onClick:()=>{ setFiltroComissao('pendente'); setAba('comissoes'); } },
-          { l:'Comissão recebida', v:`R$ ${fmt(totalPago,0)}`, c:'#10b981', bg:'#f0fdf4', icon:CheckCircle2, onClick:()=>{ setFiltroComissao('pago'); setAba('comissoes'); } },
+          { l:'Comissão pendente', v:`R$ ${fmt(totalPendente)}`, c:'#f59e0b', bg:'#fffbeb', icon:Clock, onClick:()=>{ setFiltroComissao('pendente'); setAba('comissoes'); } },
+          { l:'Comissão recebida', v:`R$ ${fmt(totalPago)}`, c:'#10b981', bg:'#f0fdf4', icon:CheckCircle2, onClick:()=>{ setFiltroComissao('pago'); setAba('comissoes'); } },
         ].map(k=>(
           <div key={k.l} onClick={k.onClick}
             style={{ background:k.bg, borderRadius:12, padding:'14px 16px', border:`1px solid ${k.c}40`, cursor:'pointer', transition:'box-shadow 0.15s', boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}
@@ -344,7 +344,7 @@ export default function Consultor() {
                     <div style={{ fontSize:11, fontWeight:800, color:'#059669', textTransform:'uppercase', marginBottom:4 }}>Seu código de indicação</div>
                     <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
                       <span style={{ fontSize:24, fontWeight:900, color:'#111111', letterSpacing:2 }}>{codigo}</span>
-                      <span style={{ fontSize:12, color:'#64748b' }}>Comissão de <strong>{pct}%</strong> sobre produtos e assinaturas.</span>
+                      <span style={{ fontSize:12, color:'#64748b' }}>Comissão de <strong>{Number(pct).toFixed(2)}%</strong> sobre produtos e assinaturas.</span>
                     </div>
                   </div>
                 )}
@@ -400,7 +400,7 @@ export default function Consultor() {
                       ...cursos.map(c=>({
                         emoji: c.emoji||'🎓',
                         label: c.titulo,
-                        sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toFixed(0)}`:'· Incluído na assinatura'}`,
+                        sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`:'· Incluído na assinatura'}`,
                         url: `${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`,
                         comissao: c.comissao_pct != null ? Number(c.comissao_pct) : pct,
                         recorrente: false,
@@ -408,7 +408,7 @@ export default function Consultor() {
                       ...ebooks.map(e=>({
                         emoji: '📖',
                         label: e.titulo,
-                        sub: `eBook${Number(e.preco)>0?` · R$ ${Number(e.preco).toFixed(0)}`:'· Incluído na assinatura'}`,
+                        sub: `eBook${Number(e.preco)>0?` · R$ ${Number(e.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`:'· Incluído na assinatura'}`,
                         url: `${origin}/#/p/ebook/${e.id}${codigo?`?ref=${codigo}`:''}`,
                         comissao: e.comissao_pct != null ? Number(e.comissao_pct) : pct,
                         recorrente: false,
@@ -646,9 +646,9 @@ export default function Consultor() {
                         <tr key={c.id} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
                           <td style={{ padding:'10px 14px', textTransform:'capitalize' }}>{c.origem}</td>
                           <td style={{ padding:'10px 14px', color:'#475569' }}>{c.referencia||'—'}</td>
-                          <td style={{ padding:'10px 14px' }}>R$ {fmt(Number(c.valor_base),0)}</td>
+                          <td style={{ padding:'10px 14px' }}>R$ {fmt(Number(c.valor_base))}</td>
                           <td style={{ padding:'10px 14px' }}>{Number(c.percentual)}%</td>
-                          <td style={{ padding:'10px 14px', fontWeight:800, color:'#10b981' }}>R$ {fmt(Number(c.valor_comissao),0)}</td>
+                          <td style={{ padding:'10px 14px', fontWeight:800, color:'#10b981' }}>R$ {fmt(Number(c.valor_comissao))}</td>
                           <td style={{ padding:'10px 14px', color:'#64748b' }}>{c.competencia?fmtData(c.competencia):'—'}</td>
                           <td style={{ padding:'10px 14px' }}>
                             <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20,
