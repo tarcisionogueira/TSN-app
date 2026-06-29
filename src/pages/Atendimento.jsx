@@ -24,8 +24,21 @@ const SEGMENTOS = {
 // Resolve o segmento de um chamado (curioso = sem cadastro).
 const segOf = c => c.segmento || (c.user_id ? 'outro' : 'curioso');
 
+// Escopo de atendimento por papel (espelha a RLS no banco).
+// null = vê todos. [] = não atende clientes (canal interno).
+const ESCOPO_PAPEL = {
+  admin: null,
+  consultor: ['curioso', 'explorador', 'outro'], // não-clientes (Comercial)
+  analista: ['investidor', 'assessorado', 'clube'], // clientes
+  advogado: [], // canal interno com analista/admin — não atende clientes
+};
+
 export default function Atendimento() {
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
+  const escopo = ESCOPO_PAPEL[effectiveRole] ?? []; // papéis fora da lista não atendem
+  const segsVisiveis = (escopo === null
+    ? ['clube', 'assessorado', 'investidor', 'explorador', 'curioso']
+    : ['clube', 'assessorado', 'investidor', 'explorador', 'curioso'].filter(s => escopo.includes(s)));
   const [chamados, setChamados] = useState([]);
   const [filtro, setFiltro] = useState('pendentes');
   const [segFiltro, setSegFiltro] = useState('todos');
@@ -147,6 +160,7 @@ export default function Atendimento() {
   const contSeg = seg => chamados.filter(c => segOf(c) === seg).length;
   const buscaLower = busca.toLowerCase();
   const chamadosFiltrados = chamados.filter(c => {
+    if (escopo !== null && !escopo.includes(segOf(c))) return false; // escopo do papel (simulação fiel + defesa em profundidade)
     if (segFiltro !== 'todos' && segOf(c) !== segFiltro) return false;
     if (!busca.trim()) return true;
     return (c.user_nome || '').toLowerCase().includes(buscaLower) ||
@@ -190,13 +204,14 @@ export default function Atendimento() {
             ))}
           </div>
 
-          {/* Filtros por segmento de cliente */}
+          {/* Filtros por segmento de cliente (somente os do escopo do papel) */}
+          {segsVisiveis.length > 0 && (
           <div style={{ padding: '8px 12px', display: 'flex', gap: 5, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
             <button onClick={() => setSegFiltro('todos')}
               style={{ padding: '4px 10px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: segFiltro === 'todos' ? '#111111' : '#f1f5f9', color: segFiltro === 'todos' ? 'white' : '#64748b' }}>
               Todos
             </button>
-            {['clube', 'assessorado', 'investidor', 'explorador', 'curioso'].map(seg => {
+            {segsVisiveis.map(seg => {
               const cfg = SEGMENTOS[seg];
               const n = contSeg(seg);
               const sel = segFiltro === seg;
@@ -208,6 +223,7 @@ export default function Atendimento() {
               );
             })}
           </div>
+          )}
 
           {/* Busca por cliente ou atendente */}
           <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>
@@ -227,7 +243,11 @@ export default function Atendimento() {
                 <Loader2 size={20} color="#0D63DB" style={{ animation: 'spin 1s linear infinite' }} />
               </div>
             ) : chamadosFiltrados.length === 0 ? (
-              <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Nenhum chamado</div>
+              <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13, lineHeight: 1.5 }}>
+                {escopo !== null && escopo.length === 0
+                  ? 'Seu acesso é interno (com analista e administração). Você não recebe chamados de clientes por aqui.'
+                  : 'Nenhum chamado'}
+              </div>
             ) : chamadosFiltrados.map(c => {
               const s = STATUS_CFG[c.status] || STATUS_CFG.aberto;
               const ativo = chamadoAtivo?.id === c.id;

@@ -246,7 +246,7 @@ export default function ChatSuporte() {
     }).eq('id', ticket.id);
     await supabase.from('chamados_mensagens').insert({
       chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'Sistema',
-      conteudo: '— Cliente solicitou atendimento humano. Um membro da equipe assumirá em breve. —',
+      conteudo: '✅ Encaminhamos você para um especialista da nossa equipe. Você será respondido por aqui mesmo o quanto antes (em horário comercial). Pode deixar mais detalhes enquanto isso, que já adiantamos o atendimento.',
       anexos: [],
     });
     setTicket(prev => ({ ...prev, status: 'aguardando_atendente' }));
