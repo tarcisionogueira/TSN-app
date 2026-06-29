@@ -5,10 +5,11 @@ import {
   BarChart3, TrendingUp, ShieldAlert, Gavel, DollarSign, Download,
   Calendar, Video, MessageSquare, ChevronDown, ChevronUp,
   Lock, ExternalLink,
-  Check, Send, ClipboardList, Save,
+  Check, Send, ClipboardList, Save, Upload, Sparkles, Scale,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 import { useIsMobile } from '../utils/useIsMobile';
 import AgendarReuniao from '../components/AgendarReuniao';
 
@@ -151,6 +152,216 @@ function AnaliseCard({ info, job, relatorio, onSolicitar, solicitando, podeSolic
           <button onClick={() => window.print()} style={{ ...btn('#64748b'), fontSize:11, padding:'6px 12px', marginTop:10 }}>
             <Download size={12} style={{marginRight:5,verticalAlign:'middle'}}/>Imprimir / Salvar PDF
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Análise jurídica automática (IA) — apenas equipe ─────────────────────────
+const scoreColor = (s) => s >= 70 ? '#10b981' : s >= 40 ? '#f59e0b' : '#ef4444';
+
+function ScorePill({ label, valor }) {
+  if (valor == null) return null;
+  const c = scoreColor(valor);
+  return (
+    <div style={{ padding:'8px 14px', borderRadius:10, background:c+'18', border:`1px solid ${c}40`, minWidth:120 }}>
+      <div style={{ fontSize:10, fontWeight:700, color:'#64748b', marginBottom:2 }}>{label}</div>
+      <div style={{ fontSize:20, fontWeight:900, color:c }}>{valor}<span style={{ fontSize:11, color:'#94a3b8', fontWeight:700 }}> /100</span></div>
+    </div>
+  );
+}
+
+// Linha de upload de um documento (matrícula ou edital)
+function DocUploadRow({ tipo, label, anexo, enviando, onArquivo }) {
+  const ref = useRef(null);
+  const aceitos = 'application/pdf,image/png,image/jpeg';
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
+      <div style={{ width:30, height:30, borderRadius:8, background: anexo ? '#ecfdf5' : '#eef2f7', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+        {anexo ? <CheckCircle2 size={15} color="#10b981"/> : <FileText size={15} color="#94a3b8"/>}
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{label}</div>
+        <div style={{ fontSize:11, color: anexo ? '#10b981' : '#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+          {anexo ? `Anexado: ${anexo.nome}` : 'Nenhum arquivo (PDF, JPG ou PNG)'}
+        </div>
+      </div>
+      <input
+        ref={ref} type="file" accept={aceitos} style={{ display:'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onArquivo(tipo, f); e.target.value=''; }}
+      />
+      <button
+        onClick={() => ref.current?.click()}
+        disabled={!!enviando}
+        style={{ ...btn(anexo ? '#64748b' : '#0D63DB'), fontSize:12, padding:'7px 12px', flexShrink:0, opacity: enviando?0.6:1, display:'flex', alignItems:'center', gap:6 }}
+      >
+        {enviando === tipo
+          ? <Loader2 size={13} style={{ animation:'spin 1s linear infinite' }}/>
+          : <Upload size={13}/>}
+        {anexo ? 'Substituir' : 'Anexar'}
+      </button>
+    </div>
+  );
+}
+
+function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido }) {
+  const [anexos, setAnexos] = useState([]);
+  const [enviando, setEnviando] = useState(null);   // 'matricula' | 'edital' | null
+  const [gerando, setGerando] = useState(false);
+  const [erro, setErro] = useState('');
+  const [res, setRes] = useState(relatorioInicial?.conteudo_json || null);
+  const [parecerMd, setParecerMd] = useState(relatorioInicial?.conteudo_md || '');
+  const [aberto, setAberto] = useState(false);
+
+  const carregarAnexos = useCallback(async () => {
+    if (!imovelId) return;
+    const { data } = await supabase.from('imovel_anexos')
+      .select('id,tipo,nome,criado_em')
+      .eq('imovel_id', imovelId)
+      .in('tipo', ['matricula', 'edital']);
+    setAnexos(data || []);
+  }, [imovelId]);
+
+  useEffect(() => { carregarAnexos(); }, [carregarAnexos]);
+
+  const anexoDe = (tipo) => anexos.find(a => a.tipo === tipo);
+
+  const enviarArquivo = async (tipo, file) => {
+    if (!imovelId) { setErro('Imóvel não vinculado ao caso.'); return; }
+    setErro(''); setEnviando(tipo);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('imovel_id', imovelId);
+      fd.append('tipo', tipo);
+      const r = await fetch('/api/upload-anexo', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token || ''}` },
+        body: fd,
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Falha no upload do documento.');
+      await carregarAnexos();
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setEnviando(null);
+    }
+  };
+
+  const gerar = async () => {
+    setErro(''); setGerando(true);
+    try {
+      const r = await apiCall('/api/processar-analise', { method:'POST', body: JSON.stringify({ caso_id: casoId }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Falha ao gerar a análise.');
+      setRes(j);
+      setParecerMd(j.parecer_md || '');
+      setAberto(true);
+      onConcluido?.();
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setGerando(false);
+    }
+  };
+
+  // Normaliza a resposta da API e o conteudo_json salvo (formatos levemente diferentes)
+  const v = res || {};
+  const scoreJ = v.score_juridico;
+  const scoreF = v.score_financeiro;
+  const riscos = Array.isArray(v.riscos) ? v.riscos : [];
+  const executadoNome = v.executado?.nome ?? (typeof v.executado === 'string' ? v.executado : null);
+  const executadoDoc = v.executado?.cpf_cnpj ?? v.executado_cpf_cnpj ?? null;
+  const numeroProcesso = v.numero_processo ?? null;
+  const sancoesN = Array.isArray(v.sancoes) ? v.sancoes.length : (v.sancoes_encontradas ?? null);
+  const incompleto = v.incompleto;
+  const temResultado = scoreJ != null || parecerMd;
+
+  const temMatricula = !!anexoDe('matricula');
+  const temEdital = !!anexoDe('edital');
+  const temAlgum = temMatricula || temEdital;
+
+  return (
+    <div style={{ ...card, padding:'16px 18px', border:'1px solid #c7d2fe', background:'#f5f7ff' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+        <div style={{ width:34, height:34, borderRadius:9, background:'#eef2ff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <Sparkles size={17} color="#4f46e5"/>
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800, fontSize:14, color:'#111111' }}>Análise jurídica automática (IA)</div>
+          <div style={{ fontSize:11.5, color:'#64748b' }}>Equipe — anexe matrícula/edital e gere o parecer com score</div>
+        </div>
+      </div>
+
+      <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
+        <DocUploadRow tipo="matricula" label="Matrícula" anexo={anexoDe('matricula')} enviando={enviando} onArquivo={enviarArquivo}/>
+        <DocUploadRow tipo="edital" label="Edital" anexo={anexoDe('edital')} enviando={enviando} onArquivo={enviarArquivo}/>
+      </div>
+
+      {erro && (
+        <div style={{ marginTop:10, padding:'8px 12px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, fontSize:12, color:'#991b1b' }}>
+          {erro}
+        </div>
+      )}
+
+      <button
+        onClick={gerar}
+        disabled={!temAlgum || gerando}
+        style={{ ...btn('#4f46e5'), marginTop:12, width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:8, opacity: (!temAlgum || gerando) ? 0.55 : 1, cursor: (!temAlgum || gerando) ? 'not-allowed' : 'pointer' }}
+      >
+        {gerando ? <Loader2 size={15} style={{ animation:'spin 1s linear infinite' }}/> : <Scale size={15}/>}
+        {gerando ? 'Gerando análise...' : (temResultado ? 'Regerar análise' : 'Gerar análise')}
+      </button>
+      {!temAlgum && (
+        <div style={{ fontSize:11, color:'#94a3b8', marginTop:6, textAlign:'center' }}>
+          Anexe a matrícula e/ou o edital para liberar a análise.
+        </div>
+      )}
+
+      {temResultado && (
+        <div style={{ marginTop:14, paddingTop:14, borderTop:'1px solid #e2e8f0' }}>
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:12 }}>
+            <ScorePill label="SCORE JURÍDICO" valor={scoreJ}/>
+            <ScorePill label="SCORE FINANCEIRO" valor={scoreF}/>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+            {executadoNome && <div><span style={lbl}>Executado</span><div style={{ fontSize:13, fontWeight:700 }}>{executadoNome}{executadoDoc ? ` · ${executadoDoc}` : ''}</div></div>}
+            {numeroProcesso && <div><span style={lbl}>Processo</span><div style={{ fontSize:13, fontWeight:700 }}>{numeroProcesso}</div></div>}
+            {sancoesN != null && <div><span style={lbl}>Sanções CEIS/CNEP</span><div style={{ fontSize:13, fontWeight:700, color: sancoesN>0 ? '#ef4444':'#10b981' }}>{sancoesN}</div></div>}
+            {riscos.length > 0 && <div><span style={lbl}>Gravames/ônus</span><div style={{ fontSize:13, fontWeight:700, color:'#d97706' }}>{riscos.length}</div></div>}
+          </div>
+
+          {riscos.length > 0 && (
+            <div style={{ marginBottom:12 }}>
+              <span style={lbl}>Riscos identificados</span>
+              <ul style={{ margin:'4px 0 0', paddingLeft:18, fontSize:12, color:'#475569', lineHeight:1.6 }}>
+                {riscos.map((r, i) => <li key={i}>{r}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {parecerMd && (
+            <div>
+              <button onClick={() => setAberto(o => !o)} style={{ background:'none', border:'none', color:'#0D63DB', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:4, padding:0 }}>
+                {aberto ? 'Ocultar parecer' : 'Ver parecer completo'} {aberto ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+              </button>
+              {aberto && (
+                <div style={{ marginTop:10, padding:'14px', background:'white', borderRadius:10, border:'1px solid #e2e8f0', fontSize:12, color:'#475569', lineHeight:1.7, whiteSpace:'pre-wrap', maxHeight:340, overflow:'auto' }}>
+                  {parecerMd}
+                </div>
+              )}
+            </div>
+          )}
+
+          {incompleto && (
+            <div style={{ marginTop:10, padding:'8px 12px', background:'#fef3c7', borderRadius:8, fontSize:11, color:'#92400e' }}>
+              <AlertTriangle size={12} style={{ marginRight:4, verticalAlign:'middle' }}/> Análise parcial — algumas seções não puderam ser obtidas.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -715,6 +926,14 @@ export default function Caso() {
           badge={`${jobs.filter(j=>j.status==='concluido').length} de ${TIPOS_ANALISE.length} concluídas`}
         >
           <div style={{ display:'flex', flexDirection:'column', gap:10, paddingTop:14 }}>
+            {(isAnalista || isAdvogado) && (
+              <AnaliseAutomatica
+                casoId={caso.id}
+                imovelId={caso.imovel_id}
+                relatorioInicial={getRel('juridica_preliminar')}
+                onConcluido={carregarCaso}
+              />
+            )}
             {TIPOS_ANALISE.map(info => (
               <AnaliseCard
                 key={info.tipo}
