@@ -181,10 +181,10 @@ async function coletarMega(ufs, deadline) {
     while ((m = reLote.exec(html)) !== null && (out.length - antes) < 80) {
       const href = m[1];
       if (seen.has(href)) continue; seen.add(href);
-      const ctx = html.slice(m.index, m.index + 1400); // card a partir do link
-      const valor = parseNum((ctx.match(/R\$\s*([\d.]+,\d{2})/) || [])[1]);
+      const ctx = html.slice(m.index, m.index + 1800); // card a partir do link
+      const valor = parseNum((ctx.match(/R\$\s*([\d][\d.]*(?:,\d{1,2})?)/) || [])[1]);
       if (!valor) continue;
-      const aval = parseNum((ctx.match(/avalia[^R]{0,40}R\$\s*([\d.]+,\d{2})/i) || [])[1]);
+      const aval = parseNum((ctx.match(/avalia[^R]{0,40}R\$\s*([\d][\d.]*(?:,\d{1,2})?)/i) || [])[1]);
       const area = parseNum((ctx.match(/([\d.]+)\s*m[²2]/i) || [])[1]);
       const foto = (ctx.match(/(?:src|data-src)="([^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i) || [])[1] || null;
       // /imoveis/<categoria>/<uf>/<cidade>/<slug>
@@ -209,7 +209,13 @@ async function coletarMega(ufs, deadline) {
         leiloeiro: 'Mega Leilões', data_leilao: null, forma_pagamento: null,
       });
     }
-    if (out.length === antes && !diag) diag = { uf, http: r.status, contentType: r.contentType, via: r.via, ...htmlDiag(html) };
+    if (out.length === antes && !diag) {
+      reLote.lastIndex = 0;
+      const first = reLote.exec(html);
+      const deepHrefs = (html.match(reLote) || []).length;
+      const cardSample = first ? html.slice(first.index, first.index + 1000).replace(/\s+/g, ' ') : null;
+      diag = { uf, http: r.status, via: r.via, deepHrefs, cardSample, ...htmlDiag(html) };
+    }
   }
   return { rows: out, via, diag };
 }
