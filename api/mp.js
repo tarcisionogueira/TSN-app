@@ -186,9 +186,24 @@ async function verificar({ paymentId, assinaturaId }) {
   return { tipo: 'pagamento', status: p.status, statusDetalhe: p.status_detail, dados: p };
 }
 
-async function cancelarAssinatura({ assinaturaId }) {
-  const s = await mpPut(`/preapproval/${assinaturaId}`, { status: 'cancelled' });
-  return { ok: true, status: s.status };
+async function cancelarAssinatura({ assinaturaId, email }) {
+  // Cancela a renovação automática. Se não vier o id da assinatura, busca os
+  // preapprovals ativos do pagador por e-mail (espelha o fluxo do Asaas).
+  let ids = [];
+  if (assinaturaId) {
+    ids = [assinaturaId];
+  } else if (email) {
+    try {
+      const r = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`);
+      ids = (r?.results || []).map(x => x.id).filter(Boolean);
+    } catch (_) { ids = []; }
+  }
+  if (!ids.length) return { ok: true, cancelados: 0, nenhuma: true };
+  let cancelados = 0;
+  for (const id of ids) {
+    try { await mpPut(`/preapproval/${id}`, { status: 'cancelled' }); cancelados++; } catch (_) {}
+  }
+  return { ok: true, cancelados };
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────

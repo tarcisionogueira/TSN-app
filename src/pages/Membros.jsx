@@ -427,10 +427,16 @@ export default function Membros() {
                     if (!user?.email) return;
                     setCancelando(true);
                     try {
-                      const r = await apiCall('/api/asaas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'cancelar_assinatura', email: user.email }) });
-                      const d = await r.json();
-                      if (!r.ok) throw new Error(d.error || 'Erro ao cancelar');
-                      setCancelMsg('Plano cancelado com sucesso. Você mantém o acesso até o fim do período pago.');
+                      // Cancela a renovação automática nos dois gateways (MP é o
+                      // principal; Asaas é o fallback) — idempotente por e-mail.
+                      const [rMp, rAs] = await Promise.allSettled([
+                        apiCall('/api/mp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'cancelar_assinatura', email: user.email }) }),
+                        apiCall('/api/asaas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'cancelar_assinatura', email: user.email }) }),
+                      ]);
+                      const okMp = rMp.status === 'fulfilled' && rMp.value.ok;
+                      const okAs = rAs.status === 'fulfilled' && rAs.value.ok;
+                      if (!okMp && !okAs) throw new Error('Não foi possível cancelar a renovação. Fale com o suporte.');
+                      setCancelMsg('Renovação automática cancelada. Você mantém o acesso até o fim do período já pago — sem novas cobranças.');
                     } catch(e) {
                       setCancelMsg('Erro: ' + e.message);
                     }
