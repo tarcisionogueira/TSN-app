@@ -418,7 +418,7 @@ export default function Perfil() {
                         <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
                           {[r.imovel_cidade, r.imovel_estado].filter(Boolean).join('/')}
                           {r.valor_minimo ? ` · ${fmtBRL(r.valor_minimo)}` : ''}
-                          {desc > 0 ? ` · -${desc}%` : ''}
+                          {desc > 0 ? ` · -${Number(desc).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : ''}
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>

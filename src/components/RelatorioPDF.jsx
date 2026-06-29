@@ -78,15 +78,15 @@ ${d.observacoes?`<div class="obs av"><b style="font-size:9px;text-transform:uppe
 <div class="viab av" style="border-color:${isViavel?'#10b981':'#dc2626'};background:${isViavel?'#d1fae5':'#fee2e2'};">
   <div style="font-size:15px;font-weight:900;color:${isViavel?'#065f46':'#b91c1c'};">${isViavel?'✓ OPERAÇÃO VIÁVEL — APROVADA':'✗ OPERAÇÃO REPROVADA — RETORNO INSUFICIENTE'}</div>
   <div style="font-size:10px;color:${isViavel?'#047857':'#dc2626'};margin-top:4px;">
-    ${isUsoProprio?`Economia de R$ ${fmt(m.lucro,0)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 40% mínimos':'Abaixo dos 40% exigidos pela BidPro Brasil'} · Teto de disputa: R$ ${fmt(teto,0)}`}
+    ${isUsoProprio?`Economia de R$ ${fmt(m.lucro)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 40% mínimos':'Abaixo dos 40% exigidos pela BidPro Brasil'} · Teto de disputa: R$ ${fmt(teto)}`}
   </div>
 </div>
 
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;" class="av">
-  ${[['Capital Aportado',`R$ ${fmt(m.capitalMobilizado,0)}`,'#dc2626'],
-     [isUsoProprio?'Economia Real':'Lucro Líquido',`R$ ${fmt(m.lucro,0)}`,(m.lucro>=0?'#059669':'#dc2626')],
+  ${[['Capital Aportado',`R$ ${fmt(m.capitalMobilizado)}`,'#dc2626'],
+     [isUsoProprio?'Economia Real':'Lucro Líquido',`R$ ${fmt(m.lucro)}`,(m.lucro>=0?'#059669':'#dc2626')],
      ['Yield Locação',`${fmtPct(m.yieldMensal)}/mês`,'#7c3aed'],
-     ['Teto Disputa',`R$ ${fmt(teto,0)}`,'#d97706']].map(([l,v,c])=>`
+     ['Teto Disputa',`R$ ${fmt(teto)}`,'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
 
@@ -96,12 +96,12 @@ ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</
 <div class="av">
   <h3>A) Capital Mobilizado (Saídas)</h3>
   <table>
-    <tr><th>Item</th><th class="c">% do Aporte</th><th class="r">Lance Base</th><th class="r">Teto (R$ ${fmt(teto,0)})</th></tr>
+    <tr><th>Item</th><th class="c">% do Aporte</th><th class="r">Lance Base</th><th class="r">Teto (R$ ${fmt(teto)})</th></tr>
     ${[
       ['Arrematação/Sinal', isAVista?m.vArremate:m.valorSinal, isAVista?mt.vArremate:mt.valorSinal],
       ['Honorários Jurídicos TSN (10%)', m.honorarios, mt.honorarios],
-      [`Taxa Leiloeiro (${d.taxaLeiloeiroPercentual}%)`, m.taxaLeiloeiro, mt.taxaLeiloeiro],
-      [`ITBI + Registro (${d.itbiPercentual}%)`, m.itbiRegistro, mt.itbiRegistro],
+      [`Taxa Leiloeiro (${fmtPct(d.taxaLeiloeiroPercentual)})`, m.taxaLeiloeiro, mt.taxaLeiloeiro],
+      [`ITBI + Registro (${fmtPct(d.itbiPercentual)})`, m.itbiRegistro, mt.itbiRegistro],
       ...(d.laudemio>0?[['Laudêmio', m.laudemio, mt.laudemio]]:[]),
       ...(d.foreiro>0?[['Foreiro', m.foreiro, mt.foreiro]]:[]),
       ...(d.debitosAssumidos>0?[['Débitos Assumidos', m.debitos, mt.debitos]]:[]),
@@ -148,8 +148,8 @@ ${sec.def?`<div class="av"><h2>Defesa da Arrematação</h2><pre>${sec.def}</pre>
 ${mercado?`<div class="av">
 <h2>Avaliação Mercadológica</h2>
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
-  ${[['Preço Médio/m²',`R$ ${fmt(mercado.precoMedioM2||0,0)}`,'#0D63DB'],
-     ['Aluguel Médio',`R$ ${fmt(mercado.aluguelMedio||0,0)}/mês`,'#7c3aed'],
+  ${[['Preço Médio/m²',`R$ ${fmt(mercado.precoMedioM2||0)}`,'#0D63DB'],
+     ['Aluguel Médio',`R$ ${fmt(mercado.aluguelMedio||0)}/mês`,'#7c3aed'],
      ['Yield Bruto',fmtPct(mercado.yieldBruto||0),'#059669'],
      ['Yield Líquido',fmtPct(mercado.yieldLiquido||0),'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
@@ -157,10 +157,10 @@ ${mercado?`<div class="av">
 ${mercado.comentario?`<p style="font-size:10px;color:#475569;margin:0 0 10px;background:#f8fafc;padding:8px;border-radius:4px;">${mercado.comentario}</p>`:''}
 ${mercado.vendas?.length?`<h3>Amostras de Venda (${mercado.totalAmostrasVenda} encontradas)</h3>
 <table><tr><th>Imóvel</th><th class="r">Valor Total</th><th class="r">R$/m²</th><th>Fonte</th></tr>
-${mercado.vendas.slice(0,8).map(v=>`<tr><td>${v.descricao}</td><td class="r g">R$ ${fmt(v.valor,0)}</td><td class="r">R$ ${fmt(v.valorM2,0)}</td><td style="font-size:9px;color:#94a3b8">${v.fonte}</td></tr>`).join('')}</table>`:''}
+${mercado.vendas.slice(0,8).map(v=>`<tr><td>${v.descricao}</td><td class="r g">R$ ${fmt(v.valor)}</td><td class="r">R$ ${fmt(v.valorM2)}</td><td style="font-size:9px;color:#94a3b8">${v.fonte}</td></tr>`).join('')}</table>`:''}
 ${mercado.locacoes?.length?`<h3>Amostras de Locação</h3>
 <table><tr><th>Imóvel</th><th class="r">Aluguel/mês</th><th>Fonte</th></tr>
-${mercado.locacoes.map(l=>`<tr><td>${l.descricao}</td><td class="r" style="color:#7c3aed;font-weight:700;">R$ ${fmt(l.valorMensal,0)}</td><td style="font-size:9px;color:#94a3b8">${l.fonte}</td></tr>`).join('')}</table>`:''}
+${mercado.locacoes.map(l=>`<tr><td>${l.descricao}</td><td class="r" style="color:#7c3aed;font-weight:700;">R$ ${fmt(l.valorMensal)}</td><td style="font-size:9px;color:#94a3b8">${l.fonte}</td></tr>`).join('')}</table>`:''}
 </div>`:''}
 
 ${sec.loc?`<div class="av"><h2>Projeção de Rentabilidade por Locação</h2><pre>${sec.loc}</pre></div>`:''}
@@ -182,26 +182,26 @@ ${fluxo.linhas.map((r,i)=>`<tr style="background:${i%2===0?'white':'#f8fafc'}">
 
 ${!isAVista&&sacTab?.length>0?`<div class="pb av">
 <h2>Tabelas de Financiamento — SAC vs PRICE</h2>
-<p style="font-size:9px;color:#475569;margin-bottom:8px;">Principal: R$ ${fmt((d.valorArrematacao||0)*(1-(d.sinalPercentual||0)/100),0)} · CET: ${d.cetAnual}% a.a. · Prazo: ${d.prazoMeses} meses</p>
+<p style="font-size:9px;color:#475569;margin-bottom:8px;">Principal: R$ ${fmt((d.valorArrematacao||0)*(1-(d.sinalPercentual||0)/100))} · CET: ${fmtPct(d.cetAnual)} a.a. · Prazo: ${d.prazoMeses} meses</p>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
   <div style="background:#f8fafc;border-radius:5px;padding:10px;">
     <div style="font-weight:900;margin-bottom:4px;">SAC</div>
-    <div style="font-size:10px;">1ª Parcela: <b>R$ ${fmt(sacTab[0]?.parcela||0,0)}</b></div>
-    <div style="font-size:10px;">Última: <b>R$ ${fmt(sacTab[sacTab.length-1]?.parcela||0,0)}</b></div>
-    <div style="font-size:10px;">Total Pago: <b class="rd">R$ ${fmt(sacTotal,0)}</b></div>
+    <div style="font-size:10px;">1ª Parcela: <b>R$ ${fmt(sacTab[0]?.parcela||0)}</b></div>
+    <div style="font-size:10px;">Última: <b>R$ ${fmt(sacTab[sacTab.length-1]?.parcela||0)}</b></div>
+    <div style="font-size:10px;">Total Pago: <b class="rd">R$ ${fmt(sacTotal)}</b></div>
   </div>
   <div style="background:#f8fafc;border-radius:5px;padding:10px;">
     <div style="font-weight:900;margin-bottom:4px;">PRICE</div>
-    <div style="font-size:10px;">Parcela Fixa: <b>R$ ${fmt(priceTab[0]?.parcela||0,0)}</b></div>
-    <div style="font-size:10px;">Total Pago: <b class="rd">R$ ${fmt(priceTotal,0)}</b></div>
-    <div style="font-size:10px;">Diferença: <b class="am">R$ ${fmt(Math.abs(priceTotal-sacTotal),0)} (${priceTotal>sacTotal?'SAC mais barato':'PRICE mais barato'})</b></div>
+    <div style="font-size:10px;">Parcela Fixa: <b>R$ ${fmt(priceTab[0]?.parcela||0)}</b></div>
+    <div style="font-size:10px;">Total Pago: <b class="rd">R$ ${fmt(priceTotal)}</b></div>
+    <div style="font-size:10px;">Diferença: <b class="am">R$ ${fmt(Math.abs(priceTotal-sacTotal))} (${priceTotal>sacTotal?'SAC mais barato':'PRICE mais barato'})</b></div>
   </div>
 </div>
 <table><tr><th>Mês</th><th class="r">SAC Parcela</th><th class="r">SAC Saldo</th><th class="r">PRICE Parcela</th><th class="r">PRICE Saldo</th></tr>
 ${sacTab.filter((_,i)=>i<5||i===sacTab.length-1||i%Math.max(1,Math.floor(sacTab.length/10))===0).slice(0,18).map((r,i)=>`
 <tr style="background:${i%2===0?'white':'#f8fafc'}">
-<td>${r.mes}</td><td class="r">R$ ${fmt(r.parcela,0)}</td><td class="r bl">R$ ${fmt(r.saldo,0)}</td>
-<td class="r">R$ ${fmt(priceTab[r.mes-1]?.parcela||0,0)}</td><td class="r bl">R$ ${fmt(priceTab[r.mes-1]?.saldo||0,0)}</td></tr>`).join('')}
+<td>${r.mes}</td><td class="r">R$ ${fmt(r.parcela)}</td><td class="r bl">R$ ${fmt(r.saldo)}</td>
+<td class="r">R$ ${fmt(priceTab[r.mes-1]?.parcela||0)}</td><td class="r bl">R$ ${fmt(priceTab[r.mes-1]?.saldo||0)}</td></tr>`).join('')}
 </table>
 </div>`:''}
 

@@ -52,12 +52,12 @@ export default function Planos() {
   // Valores reais do Investidor Pro (planos_config) para o FAQ
   const _precoMes = Number(PLANOS.top2?.preco) || 49.90;
   const _precoAno = Number(PLANOS.top2?.precoAnual) || 449.90;
-  const _economiaPct = _precoMes ? Math.round((1 - _precoAno / (_precoMes * 12)) * 100) : 25;
+  const _economiaPct = _precoMes ? (1 - _precoAno / (_precoMes * 12)) * 100 : 25;
   const FAQS = buildFAQS({
     precoMesLabel: fmtR(_precoMes),
     mesAnualLabel: fmtR(_precoAno / 12),
     anoLabel: fmtR(_precoAno),
-    economiaPctLabel: `${_economiaPct}%`,
+    economiaPctLabel: `${Number(_economiaPct).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
   });
 
   const ir = (key) => {

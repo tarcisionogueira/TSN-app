@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       const email = userData?.email;
       if (!email) continue;
 
-      const fmtBRL = v => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—';
+      const fmtBRL = v => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
       const fmtData = d => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
       const linhasHtml = vencimentos.map(v =>

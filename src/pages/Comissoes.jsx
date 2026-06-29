@@ -310,7 +310,7 @@ export default function Comissoes() {
                           <td style={{ padding: '8px 10px', color: '#111111', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.referencia || c.origem}</td>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{gw || '—'}</td>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmt(c.valor_base)}</td>
-                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{Number(c.percentual).toFixed(1)}%</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{Number(c.percentual).toFixed(2)}%</td>
                           <td style={{ padding: '8px 10px', fontWeight: 600, color: '#111111', whiteSpace: 'nowrap' }}>{fmt(comissaoBruta)}</td>
                           <td style={{ padding: '8px 10px', color: taxaCredito > 0 ? '#ef4444' : '#94a3b8', whiteSpace: 'nowrap' }}>
                             {taxaCredito > 0 ? `−${fmt(descontoCredito)} (${taxaCredito}%)` : '—'}

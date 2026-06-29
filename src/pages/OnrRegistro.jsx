@@ -180,7 +180,7 @@ export default function OnrRegistro() {
     ? calcItbi(Number(String(form.valor_arrematacao).replace(/\D/g, '')) || 0, Number(form.aliquota_itbi) || 2)
     : null;
 
-  const fmtBRL = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+  const fmtBRL = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
   const etapaIdx = ETAPAS.indexOf(etapa);
 
   // ─── STATUS badge ────────────────────────────────────────────────────────────

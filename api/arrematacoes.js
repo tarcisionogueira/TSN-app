@@ -61,7 +61,7 @@ async function distribuirHonorarios(arr) {
     lancamentos.push({
       user_id: uid, tipo: 'honorario_exito', valor: +(valor * pct / 100).toFixed(2),
       origem_tipo: 'arrematacao', origem_id: String(arr.id),
-      descricao: `Honorário de êxito (${label} ${pct}%) — arremate #${arr.id}`, status: 'disponivel',
+      descricao: `Honorário de êxito (${label} ${Number(pct).toFixed(2)}%) — arremate #${arr.id}`, status: 'disponivel',
     });
   };
   // Admin sempre participa e ABSORVE a parte de quem ainda não foi sorteado

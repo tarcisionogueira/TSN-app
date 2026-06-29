@@ -24,7 +24,7 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl)
 
   const unsubLink = `${baseUrl}?${utm}&utm_content=unsub#/cancelar-alertas?token=${unsubToken}`;
 
-  const formatBRL = (v) => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}` : '—';
+  const formatBRL = (v) => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 
   const TIPO_LABEL = {
     apartamento: 'Apartamento', casa: 'Casa', terreno: 'Terreno/Lote',
@@ -48,7 +48,7 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl)
   };
 
   const cardsHTML = imoveis.slice(0, 6).map((im) => {
-    const desconto = im.desconto_percentual ? Math.round(im.desconto_percentual) : null;
+    const desconto = im.desconto_percentual ? Number(im.desconto_percentual).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
     const tipoLabel = TIPO_LABEL[im.tipo] || 'Imóvel';
     const modalLabel = MODAL_LABEL[im.modalidade] || im.modalidade || '';
     const localizacao = [im.bairro, im.cidade, im.estado].filter(Boolean).join(', ');

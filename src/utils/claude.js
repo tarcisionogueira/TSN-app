@@ -51,7 +51,7 @@ export async function buscarImoveis(filtros) {
 - Tipo: ${tipo || 'qualquer (casa, apartamento, terreno, comercial)'}
 - Estado: ${estado || 'SP'}
 - Cidade: ${cidade || 'capital do estado'}
-- Lance mínimo: R$ ${valorMin ? Number(valorMin).toLocaleString('pt-BR') : '50.000'} a R$ ${valorMax ? Number(valorMax).toLocaleString('pt-BR') : '5.000.000'}
+- Lance mínimo: R$ ${valorMin ? Number(valorMin).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '50.000,00'} a R$ ${valorMax ? Number(valorMax).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '5.000.000,00'}
 - Modalidade: ${modalidade || 'judicial e extrajudicial'}
 - Pagamento: ${(pagamento||[]).length ? pagamento.join(', ') : 'qualquer'}
 
@@ -114,7 +114,7 @@ async function gerarExemplosImoveis(filtros) {
   const prompt = `Gere 8 imóveis em leilão FICTÍCIOS mas altamente REALISTAS para o mercado brasileiro:
 - Estado: ${estado||'SP'}, Cidade: ${cidade||'São Paulo'}
 - Tipo: ${tipo||'variado'}, Modalidade: ${modalidade||'misto'}
-- Faixa de lance: R$ ${valorMin||50000} a R$ ${valorMax||2000000}
+- Faixa de lance: R$ ${Number(valorMin||50000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a R$ ${Number(valorMax||2000000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 
 Retorne JSON array com campos: id, titulo, tipo, endereco, cidade, estado, modalidade, pagamento(array), valorAvaliacao, valorMinimo, areaM2, dataLeilao, leiloeiro, plataforma, urlLote, descricao, destaques(array)
 Apenas JSON, sem markdown.`;
@@ -333,14 +333,14 @@ TIPO: ${inputs.tipo || 'apartamento'}
 ${inputs.nomeCondominio ? `CONDOMÍNIO: ${inputs.nomeCondominio}` : ''}
 
 DADOS FINANCEIROS:
-- Lance base: R$ ${(inputs.valorArrematacao||0).toLocaleString('pt-BR')}
-- Capital mobilizado: R$ ${(metricas.capitalMobilizado||0).toLocaleString('pt-BR')}
-- Lucro/Economia: R$ ${(metricas.lucro||0).toLocaleString('pt-BR')}
-- Retorno: ${(metricas.roi||0).toFixed(1)}%
-- Teto de disputa: R$ ${(inputs._teto||0).toLocaleString('pt-BR')}
+- Lance base: R$ ${(inputs.valorArrematacao||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+- Capital mobilizado: R$ ${(metricas.capitalMobilizado||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+- Lucro/Economia: R$ ${(metricas.lucro||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+- Retorno: ${(metricas.roi||0).toFixed(2)}%
+- Teto de disputa: R$ ${(inputs._teto||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 
 DADOS DE MERCADO:
-- Preço médio/m²: R$ ${(mercado?.precoMedioM2||0).toLocaleString('pt-BR')}
+- Preço médio/m²: R$ ${(mercado?.precoMedioM2||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 - Yield locação: ${(mercado?.yieldBruto||0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido||0).toFixed(2)}% líquido
 ${mercado?.comentario ? `- Análise de mercado: ${mercado.comentario}` : ''}
 

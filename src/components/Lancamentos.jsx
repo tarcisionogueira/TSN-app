@@ -32,7 +32,7 @@ export default function Lancamentos({ lancamentos, onChange }) {
         ].map((s, i) => (
           <div key={i} style={{ background: s.bg, borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{s.label}</div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: s.color, marginTop: 3 }}>R$ {fmt(s.value, 0)}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: s.color, marginTop: 3 }}>R$ {fmt(s.value)}</div>
           </div>
         ))}
       </div>
@@ -77,7 +77,7 @@ export default function Lancamentos({ lancamentos, onChange }) {
               <div style={{ fontSize: 10, color: '#94a3b8' }}>{l.data} · {l.categoria}</div>
             </div>
             <div style={{ fontWeight: 800, fontSize: 13, color: l.tipo === 'entrada' ? '#10b981' : '#dc2626', flexShrink: 0 }}>
-              {l.tipo === 'entrada' ? '+' : '-'} R$ {fmt(l.valor, 0)}
+              {l.tipo === 'entrada' ? '+' : '-'} R$ {fmt(l.valor)}
             </div>
             <button onClick={() => remover(l.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
               <Trash2 size={12} />

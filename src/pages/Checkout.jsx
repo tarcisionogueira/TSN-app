@@ -562,7 +562,7 @@ export default function Checkout() {
             const promo = promoInfo.desconto_pct > 0
               ? orig * (1 - promoInfo.desconto_pct / 100)
               : promoInfo.desconto_valor > 0 ? Math.max(0, orig - promoInfo.desconto_valor) : orig;
-            const fmtR = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+            const fmtR = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>

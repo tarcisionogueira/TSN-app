@@ -13,7 +13,8 @@ export default function PropertyCard({ imovel, onFavToggle }) {
   const TIcon = TIPO_ICONS[imovel.tipo] || Building2;
   const tColor = TIPO_COLORS[imovel.tipo] || '#0D63DB';
   const desconto = imovel.valorAvaliacao && imovel.valorMinimo
-    ? Math.round((1 - imovel.valorMinimo / imovel.valorAvaliacao) * 100) : null;
+    ? (1 - imovel.valorMinimo / imovel.valorAvaliacao) * 100 : null;
+  const descontoLabel = desconto != null ? Number(desconto).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
 
   const handleFav = (e) => {
     e.stopPropagation();
@@ -47,7 +48,7 @@ export default function PropertyCard({ imovel, onFavToggle }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            {desconto && <span style={{ background: '#dc2626', color: 'white', fontSize: 10, fontWeight: 800, padding: '3px 7px', borderRadius: 6 }}>-{desconto}%</span>}
+            {desconto && <span style={{ background: '#dc2626', color: 'white', fontSize: 10, fontWeight: 800, padding: '3px 7px', borderRadius: 6 }}>-{descontoLabel}%</span>}
             <button onClick={handleFav} style={{ background: fav ? '#fee2e2' : '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 6, cursor: 'pointer', display: 'flex' }}>
               <Heart size={14} color={fav ? '#dc2626' : '#94a3b8'} fill={fav ? '#dc2626' : 'none'} />
             </button>
@@ -67,12 +68,12 @@ export default function PropertyCard({ imovel, onFavToggle }) {
           {imovel.valorAvaliacao && (
             <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px' }}>
               <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Avaliação</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#64748b', marginTop: 2 }}>R$ {fmt(imovel.valorAvaliacao, 0)}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#64748b', marginTop: 2 }}>R$ {fmt(imovel.valorAvaliacao)}</div>
             </div>
           )}
           <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '8px 10px' }}>
             <div style={{ fontSize: 9, color: '#16a34a', fontWeight: 700, textTransform: 'uppercase' }}>Lance Mínimo</div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: '#15803d', marginTop: 2 }}>R$ {fmt(imovel.valorMinimo, 0)}</div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: '#15803d', marginTop: 2 }}>R$ {fmt(imovel.valorMinimo)}</div>
           </div>
         </div>
 

@@ -120,7 +120,7 @@ export default async function handler(req) {
       const unsubToken = btoa(`${alerta.user_id}:unsubscribe`);
       const unsubUrl = `${BASE_URL}/#/cancelar-alertas?token=${unsubToken}`;
 
-      const fmtBRL = v => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0 }) : '—';
+      const fmtBRL = v => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
       const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : null;
 
       const cardsHtml = top6.map((im, i) => {

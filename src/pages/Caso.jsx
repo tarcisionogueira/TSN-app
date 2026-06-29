@@ -678,7 +678,7 @@ export default function Caso() {
 
       await supabase.from('casos').update({ status_etapa:'arrematado' }).eq('id', caso.id);
       setArrematacao(arr);
-      setMsg(`Arrematação registrada! Honorários de ${fmt(honorariosValor)} serão cobrados (${honorariosConfig.total_pct}%).`);
+      setMsg(`Arrematação registrada! Honorários de ${fmt(honorariosValor)} serão cobrados (${Number(honorariosConfig.total_pct).toFixed(2)}%).`);
       await carregarCaso();
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
@@ -1195,7 +1195,7 @@ export default function Caso() {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
                 <div><span style={lbl}>Valor Arrematado</span><div style={{ fontSize:18, fontWeight:900, color:'#059669' }}>{fmt(arrematacao.valor_arrematado)}</div></div>
                 <div>
-                  <span style={lbl}>Honorários ({honorariosConfig.total_pct}%)</span>
+                  <span style={lbl}>Honorários ({Number(honorariosConfig.total_pct).toFixed(2)}%)</span>
                   <div style={{ fontSize:18, fontWeight:900, color:'#111111' }}>{fmt(arrematacao.honorarios_valor)}</div>
                 </div>
               </div>
@@ -1244,9 +1244,9 @@ export default function Caso() {
                 </div>
                 {arrForm.valor_arrematado && (
                   <div style={{ padding:'10px 14px', background:'#f0fdf4', borderRadius:8, fontSize:12, color:'#166534' }}>
-                    Honorários estimados ({honorariosConfig.total_pct}%): <strong>{fmt(parseFloat(String(arrForm.valor_arrematado).replace(/\./g,'').replace(',','.'))*honorariosConfig.total_pct/100)}</strong>
+                    Honorários estimados ({Number(honorariosConfig.total_pct).toFixed(2)}%): <strong>{fmt(parseFloat(String(arrForm.valor_arrematado).replace(/\./g,'').replace(',','.'))*honorariosConfig.total_pct/100)}</strong>
                     <div style={{ fontSize:11, marginTop:4, color:'#64748b' }}>
-                      Admin {honorariosConfig.admin_pct}% · Advogado {honorariosConfig.advogado_pct}% · Analista {honorariosConfig.analista_pct}%
+                      Admin {Number(honorariosConfig.admin_pct).toFixed(2)}% · Advogado {Number(honorariosConfig.advogado_pct).toFixed(2)}% · Analista {Number(honorariosConfig.analista_pct).toFixed(2)}%
                     </div>
                   </div>
                 )}

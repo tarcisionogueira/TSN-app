@@ -159,7 +159,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
             await supabase.from('saldo_lancamentos').insert({
               user_id: cliente.indicado_por, tipo: 'comissao_venda', valor: valorComissao,
               origem_tipo: 'assinatura', origem_id: gatewayPaymentId,
-              descricao: `Comissão de afiliado — ${mapeado.plano} (${pct}%)`, status: 'disponivel',
+              descricao: `Comissão de afiliado — ${mapeado.plano} (${pct.toFixed(2)}%)`, status: 'disponivel',
             });
           }
         }
@@ -257,7 +257,7 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
 
   // Alerta a equipe
   alertarErro(
-    `⚠️ Chargeback recebido (${gateway}) — ${email || gatewayPaymentId} — R$ ${valor}. Defesa: ${aceite ? 'dossiê pronto' : 'SEM evidência de aceite'}.`,
+    `⚠️ Chargeback recebido (${gateway}) — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Defesa: ${aceite ? 'dossiê pronto' : 'SEM evidência de aceite'}.`,
     { gatewayPaymentId, plano: aceite?.plano_key, temAceite: !!aceite },
   ).catch(() => {});
 
