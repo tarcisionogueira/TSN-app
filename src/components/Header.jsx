@@ -136,7 +136,7 @@ const ROLE_LABELS_STATIC = {
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { user, role, loading, impersonate, encerrarSuporte, roleSimulado, simularRole } = useAuth();
+  const { user, role, effectiveRole, loading, impersonate, encerrarSuporte, roleSimulado, simularRole } = useAuth();
   const planosCtx = usePlanos();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -152,7 +152,7 @@ export default function Header() {
   const linksPrivados = [
     { path: '/buscar', label: 'Leilões', icon: Search, tourId: 'leiloes' },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
-    ...(ROLES_CALC.includes(role) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
+    ...(ROLES_CALC.includes(effectiveRole) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
   // Enquanto auth carrega: mostra links públicos para evitar flash
   const links = (!loading && user)
@@ -256,40 +256,31 @@ export default function Header() {
             </button>
           ))}
 
-          {(role === 'leiloeiro' || role === 'admin') && (
+          {effectiveRole === 'leiloeiro' && (
             <button onClick={() => nav('/leiloeiro')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/leiloeiro') ? '#b45309' : '#b4530922', color: '#fcd34d', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              🏛️ Portal Leiloeiro
+              🏛️ Portal do Parceiro
             </button>
           )}
 
-          {(role === 'consultor' || role === 'admin') && (
+          {effectiveRole === 'consultor' && (
             <button onClick={() => nav('/consultor')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/consultor') ? '#059669' : '#05966922', color: '#6ee7b7', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              🤝 Consultor
+              🤝 Comercial
             </button>
           )}
 
-          {['analista','consultor','admin'].includes(role) && (
+          {['analista','consultor','advogado','admin'].includes(effectiveRole) && (
             <button onClick={() => nav('/atendimento')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/atendimento') ? '#0891b2' : '#0891b222', color: '#67e8f9', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               <Headphones size={14} /> Atendimento
             </button>
           )}
 
-          {role === 'admin' && (
+          {effectiveRole === 'admin' && (
             <button onClick={() => nav('/admin')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/admin') ? '#7c3aed' : '#7c3aed22', color: '#c4b5fd', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               ⚙️ Admin
-            </button>
-          )}
-
-          {/* Botão Suporte abre chat */}
-          {user && (
-            <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
-              title="Suporte"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              <MessageSquare size={14} /> Suporte
             </button>
           )}
 
@@ -321,7 +312,7 @@ export default function Header() {
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
                     { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
                     { path: '/planos', label: 'Minha Assinatura', icon: Tag },
-                    ...(['admin','consultor','analista','advogado'].includes(role)
+                    ...(['admin','consultor','analista','advogado'].includes(effectiveRole)
                       ? [{ path: '/comissoes', label: 'Minhas Comissões', icon: DollarSign }]
                       : []),
                   ].map(item => (
@@ -366,28 +357,30 @@ export default function Header() {
               <l.icon size={16} /> {l.label}
             </button>
           ))}
-          {(role === 'leiloeiro' || role === 'admin') && (
+          {effectiveRole === 'leiloeiro' && (
             <button onClick={() => { nav('/leiloeiro'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#fcd34d', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-              🏛️ Portal Leiloeiro
+              🏛️ Portal do Parceiro
             </button>
           )}
-          {(role === 'consultor' || role === 'admin') && (
+          {effectiveRole === 'consultor' && (
             <button onClick={() => { nav('/consultor'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#6ee7b7', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-              🤝 Consultor
+              🤝 Comercial
             </button>
           )}
-          {role === 'admin' && (
+          {['analista','consultor','advogado','admin'].includes(effectiveRole) && (
+            <button onClick={() => { nav('/atendimento'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#67e8f9', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              <Headphones size={16} /> Atendimento
+            </button>
+          )}
+          {effectiveRole === 'admin' && (
             <button onClick={() => { nav('/admin'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               ⚙️ Admin
             </button>
           )}
-          <button onClick={() => { window.dispatchEvent(new CustomEvent('tsn:open-chat')); setOpen(false); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-            <MessageSquare size={16} /> Suporte
-          </button>
           {user
             ? <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#ef4444', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
                 <LogOut size={16} /> Sair

@@ -11,10 +11,24 @@ const STATUS_CFG = {
   finalizado:           { label: 'Finalizado',         cor: '#64748b', bg: '#f1f5f9' },
 };
 
+// Segmento do solicitante — para priorizar e organizar a fila.
+// Ordem = prioridade de atendimento (do cliente mais valioso ao curioso).
+const SEGMENTOS = {
+  clube:       { label: 'Leilão Club',   curto: 'Club',      cor: '#7c3aed', bg: '#f3e8ff' },
+  assessorado: { label: 'Assessorado',   curto: 'Assessor.', cor: '#b45309', bg: '#fef3c7' },
+  investidor:  { label: 'Investidor Pro', curto: 'Inv. Pro', cor: '#0D63DB', bg: '#dbeafe' },
+  explorador:  { label: 'Explorador',    curto: 'Explorad.', cor: '#0891b2', bg: '#cffafe' },
+  curioso:     { label: 'Curioso',       curto: 'Curioso',   cor: '#64748b', bg: '#f1f5f9' },
+  outro:       { label: 'Outro',         curto: 'Outro',     cor: '#94a3b8', bg: '#f8fafc' },
+};
+// Resolve o segmento de um chamado (curioso = sem cadastro).
+const segOf = c => c.segmento || (c.user_id ? 'outro' : 'curioso');
+
 export default function Atendimento() {
   const { user } = useAuth();
   const [chamados, setChamados] = useState([]);
   const [filtro, setFiltro] = useState('pendentes');
+  const [segFiltro, setSegFiltro] = useState('todos');
   const [chamadoAtivo, setChamadoAtivo] = useState(null);
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState('');
@@ -130,15 +144,16 @@ export default function Atendimento() {
   const fmtData = d => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
   const fmtHora = d => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const cont = s => chamados.filter(c => c.status === s).length;
+  const contSeg = seg => chamados.filter(c => segOf(c) === seg).length;
   const buscaLower = busca.toLowerCase();
-  const chamadosFiltrados = busca.trim()
-    ? chamados.filter(c =>
-        (c.user_nome || '').toLowerCase().includes(buscaLower) ||
-        (c.user_email || '').toLowerCase().includes(buscaLower) ||
-        (c.atendente_nome || '').toLowerCase().includes(buscaLower) ||
-        (c.titulo || '').toLowerCase().includes(buscaLower)
-      )
-    : chamados;
+  const chamadosFiltrados = chamados.filter(c => {
+    if (segFiltro !== 'todos' && segOf(c) !== segFiltro) return false;
+    if (!busca.trim()) return true;
+    return (c.user_nome || '').toLowerCase().includes(buscaLower) ||
+      (c.user_email || '').toLowerCase().includes(buscaLower) ||
+      (c.atendente_nome || '').toLowerCase().includes(buscaLower) ||
+      (c.titulo || '').toLowerCase().includes(buscaLower);
+  });
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '310px 1fr', gap: 20, maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start' }}>
@@ -165,7 +180,7 @@ export default function Atendimento() {
             ))}
           </div>
 
-          {/* Filtros */}
+          {/* Filtros de status */}
           <div style={{ padding: '8px 12px', display: 'flex', gap: 5, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
             {[['pendentes', 'Pendentes'], ['todos', 'Todos'], ['finalizado', 'Finalizados']].map(([k, l]) => (
               <button key={k} onClick={() => setFiltro(k)}
@@ -173,6 +188,25 @@ export default function Atendimento() {
                 {l}
               </button>
             ))}
+          </div>
+
+          {/* Filtros por segmento de cliente */}
+          <div style={{ padding: '8px 12px', display: 'flex', gap: 5, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+            <button onClick={() => setSegFiltro('todos')}
+              style={{ padding: '4px 10px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: segFiltro === 'todos' ? '#111111' : '#f1f5f9', color: segFiltro === 'todos' ? 'white' : '#64748b' }}>
+              Todos
+            </button>
+            {['clube', 'assessorado', 'investidor', 'explorador', 'curioso'].map(seg => {
+              const cfg = SEGMENTOS[seg];
+              const n = contSeg(seg);
+              const sel = segFiltro === seg;
+              return (
+                <button key={seg} onClick={() => setSegFiltro(seg)} title={cfg.label}
+                  style={{ padding: '4px 10px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: sel ? cfg.cor : cfg.bg, color: sel ? 'white' : cfg.cor }}>
+                  {cfg.curto}{n > 0 ? ` ${n}` : ''}
+                </button>
+              );
+            })}
           </div>
 
           {/* Busca por cliente ou atendente */}
@@ -206,10 +240,11 @@ export default function Atendimento() {
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#111111', lineHeight: 1.3, flex: 1, marginRight: 6 }}>{c.titulo}</span>
                     <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: s.bg, color: s.cor, whiteSpace: 'nowrap' }}>{s.label}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>
-                    <User size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />
-                    {c.user_nome || c.user_email?.split('@')[0]}
-                    {' · '}{fmtData(c.criado_em)}
+                  <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                    {(() => { const sg = SEGMENTOS[segOf(c)] || SEGMENTOS.outro; return (
+                      <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 8, background: sg.bg, color: sg.cor }}>{sg.curto}</span>
+                    ); })()}
+                    <span><User size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{c.user_nome || c.user_email?.split('@')[0]}{' · '}{fmtData(c.criado_em)}</span>
                   </div>
                   {c.atendente_nome && (
                     <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Atend.: {c.atendente_nome}</div>
@@ -233,7 +268,12 @@ export default function Atendimento() {
           {/* Cabeçalho do chamado ativo */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: '#111111' }}>{chamadoAtivo.titulo}</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#111111', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {chamadoAtivo.titulo}
+                {(() => { const sg = SEGMENTOS[segOf(chamadoAtivo)] || SEGMENTOS.outro; return (
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, background: sg.bg, color: sg.cor }}>{sg.label}</span>
+                ); })()}
+              </div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                 <User size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                 {chamadoAtivo.user_nome || chamadoAtivo.user_email}

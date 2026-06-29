@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, X, Send, Paperclip, Bot, Loader2, UserCheck } from 'lucide-react';
+import { MessageCircle, X, Send, Paperclip, Bot, Loader2, UserCheck, ArrowLeft, Plus, ChevronRight } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
@@ -9,9 +9,25 @@ const STAFF_ROLES = ['admin', 'analista', 'consultor', 'advogado'];
 const AVISO_MS = 2 * 60 * 1000;
 const FECHAR_MS = 30 * 60 * 1000;
 
+// Mapeia o role/plano do cliente para o segmento carimbado no chamado.
+function segmentoDoRole(r) {
+  if (r === 'explorador') return 'explorador';
+  if (r === 'top1' || r === 'top2') return 'investidor';
+  if (r === 'assessorado') return 'assessorado';
+  if (r === 'clube') return 'clube';
+  return 'outro';
+}
+
+const STATUS_LABEL = {
+  aberto: 'Em aberto', aguardando_atendente: 'Aguardando atendente',
+  em_atendimento: 'Em atendimento', finalizado: 'Finalizado',
+};
+
 export default function ChatSuporte() {
-  const { user, role, isLoggedIn } = useAuth();
+  const { user, effectiveRole, isLoggedIn } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [view, setView] = useState('lista'); // 'lista' | 'novo' | 'conversa'
+  const [listaChamados, setListaChamados] = useState([]);
   const [ticket, setTicket] = useState(null);
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState('');
@@ -20,7 +36,6 @@ export default function ChatSuporte() {
   const [loadingIA, setLoadingIA] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [anexos, setAnexos] = useState([]);
-  const [novoTicket, setNovoTicket] = useState(false);
   const [precisaAtendente, setPrecisaAtendente] = useState(false);
   const [memoriaIA, setMemoriaIA] = useState('');
   const fileRef = useRef();
@@ -34,7 +49,7 @@ export default function ChatSuporte() {
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
   useEffect(() => {
     if (isOpen && user) {
-      carregarTicket();
+      carregarLista();
       supabase.from('perfis').select('memoria_ia').eq('id', user.id).single()
         .then(({ data }) => { if (data?.memoria_ia) setMemoriaIA(data.memoria_ia); });
     }
@@ -109,24 +124,33 @@ export default function ChatSuporte() {
     return () => { clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current); };
   }, [ticket?.id]);
 
-  if (!isLoggedIn || STAFF_ROLES.includes(role)) return null;
+  if (!isLoggedIn || STAFF_ROLES.includes(effectiveRole)) return null;
 
-  async function carregarTicket() {
+  // Lista TODOS os atendimentos do cliente (abertos e finalizados)
+  async function carregarLista() {
     setCarregando(true);
     const { data } = await supabase.from('chamados').select('*')
-      .eq('user_id', user.id).in('status', ['aberto', 'em_atendimento'])
-      .order('criado_em', { ascending: false }).limit(1);
-    if (data?.length) {
-      setTicket(data[0]);
-      const { data: msgs } = await supabase.from('chamados_mensagens').select('*')
-        .eq('chamado_id', data[0].id).order('criado_em', { ascending: true });
-      setMensagens(msgs || []);
-      setNovoTicket(false);
-    } else {
-      setTicket(null);
-      setNovoTicket(true);
-    }
+      .eq('user_id', user.id)
+      .order('atualizado_em', { ascending: false, nullsFirst: false })
+      .order('criado_em', { ascending: false });
+    const lista = data || [];
+    setListaChamados(lista);
+    // Sem nenhum atendimento ainda → já abre o formulário de nova dúvida
+    setView(lista.length ? 'lista' : 'novo');
+    setTicket(null); setMensagens([]); setPrecisaAtendente(false);
     setCarregando(false);
+  }
+
+  async function abrirChamado(c) {
+    setCarregando(true);
+    setTicket(c);
+    const { data: msgs } = await supabase.from('chamados_mensagens').select('*')
+      .eq('chamado_id', c.id).order('criado_em', { ascending: true });
+    setMensagens(msgs || []);
+    setPrecisaAtendente(false);
+    setView('conversa');
+    setCarregando(false);
+    resetTimers();
   }
 
   async function criarChamado() {
@@ -134,7 +158,7 @@ export default function ChatSuporte() {
     setEnviando(true);
     const { data: novo } = await supabase.from('chamados').insert({
       user_id: user.id, user_email: user.email, user_nome: nomeUsuario,
-      titulo: descricao.slice(0, 80),
+      titulo: descricao.slice(0, 80), segmento: segmentoDoRole(effectiveRole),
     }).select().single();
     if (!novo) { setEnviando(false); return; }
     setTicket(novo);
@@ -144,7 +168,7 @@ export default function ChatSuporte() {
     }).select().single();
     const msgs = msg ? [msg] : [];
     setMensagens(msgs);
-    setNovoTicket(false);
+    setView('conversa');
     setDescricao(''); setAnexos([]);
     resetTimers();
     await dispararIA(novo, msgs);
@@ -290,29 +314,25 @@ export default function ChatSuporte() {
           {/* Header */}
           <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#0D63DB)', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {view !== 'lista' && (
+                <button onClick={() => carregarLista()} title="Voltar aos meus atendimentos"
+                  style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}>
+                  <ArrowLeft size={18} />
+                </button>
+              )}
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Bot size={19} color="white" />
               </div>
               <div>
                 <div style={{ color: 'white', fontWeight: 800, fontSize: 14 }}>Suporte BidPro Brasil</div>
                 <div style={{ color: '#93c5fd', fontSize: 11 }}>
-                  {ticket ? (isFinalizado ? 'Atendimento encerrado' : `Chamado #${ticket.id.slice(0, 8).toUpperCase()}`) : 'Assistente disponível'}
+                  {view === 'conversa' && ticket ? (isFinalizado ? 'Atendimento encerrado' : `Chamado #${ticket.id.slice(0, 8).toUpperCase()}`)
+                    : view === 'novo' ? 'Nova dúvida'
+                    : 'Meus atendimentos'}
                 </div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              {ticket && !isFinalizado && (
-                <button onClick={() => { setTicket(null); setMensagens([]); setNovoTicket(true); setPrecisaAtendente(false); clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current); }} title="Novo chamado"
-                  style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                  + Novo
-                </button>
-              )}
-              {isFinalizado && (
-                <button onClick={() => { setTicket(null); setMensagens([]); setNovoTicket(true); setPrecisaAtendente(false); }} title="Novo chamado"
-                  style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                  Novo chamado
-                </button>
-              )}
               <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
                 <X size={18} />
               </button>
@@ -323,7 +343,40 @@ export default function ChatSuporte() {
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
               <Loader2 size={22} color="#0D63DB" style={{ animation: 'spin 1s linear infinite' }} />
             </div>
-          ) : novoTicket ? (
+          ) : view === 'lista' ? (
+            /* Lista de todos os atendimentos do cliente */
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', flexShrink: 0 }}>
+                <button onClick={() => { setDescricao(''); setAnexos([]); setView('novo'); }}
+                  style={{ width: '100%', padding: '10px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <Plus size={15} /> Nova dúvida
+                </button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 12px' }}>
+                {listaChamados.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: '24px 12px' }}>Você ainda não tem atendimentos.</p>
+                ) : listaChamados.map(c => {
+                  const fin = c.status === 'finalizado';
+                  return (
+                    <button key={c.id} onClick={() => abrirChamado(c)}
+                      style={{ width: '100%', textAlign: 'left', background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '11px 13px', marginBottom: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.titulo || 'Atendimento'}</div>
+                        <div style={{ fontSize: 11, marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 700, color: fin ? '#64748b' : '#15803d' }}>{STATUS_LABEL[c.status] || c.status}</span>
+                          <span style={{ color: '#cbd5e1' }}>·</span>
+                          <span style={{ color: '#94a3b8' }}>{new Date(c.atualizado_em || c.criado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+                        </div>
+                      </div>
+                      <ChevronRight size={16} color="#cbd5e1" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : view === 'novo' ? (
             /* Formulário novo chamado */
             <div style={{ padding: 20, flexShrink: 0 }}>
               <p style={{ fontSize: 13, color: '#475569', margin: '0 0 14px', lineHeight: 1.6 }}>

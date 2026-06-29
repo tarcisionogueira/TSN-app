@@ -69,7 +69,7 @@ export default async function handler(req) {
     const chamadoRes = await sb('chamados', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: null, user_email: email, user_nome: nome || email, titulo, status: 'aberto' }),
+      body: JSON.stringify({ user_id: null, user_email: email, user_nome: nome || email, titulo, status: 'aberto', segmento: 'curioso' }),
     });
     const [chamado] = await chamadoRes.json();
     if (chamado?.id) {
