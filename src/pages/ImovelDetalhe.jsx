@@ -395,12 +395,20 @@ export default function ImovelDetalhe() {
   const temCoord = _lat != null && _lng != null && !(Number(_lat) === 0 && Number(_lng) === 0);
   const enderecoCompleto = [imovel.endereco, imovel.bairro, imovel.cidade, imovel.estado, 'Brasil'].filter(Boolean).join(', ');
   const temLocal = temCoord || !!(imovel.endereco || imovel.cidade);
-  const streetViewUrl = temCoord
-    ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${_lat},${_lng}`
-    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(enderecoCompleto)}`;
-  const mapaUrl = temCoord
-    ? `https://www.google.com/maps/search/?api=1&query=${_lat},${_lng}`
-    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(enderecoCompleto)}`;
+  // Endereço completo (rua + número) é mais preciso que a coordenada geocodificada
+  // (que costuma cair no centro do bairro/cidade). Quando há endereço, priorizamos.
+  const temEnderecoPreciso = !!(imovel.endereco && /\d/.test(imovel.endereco));
+  const qEndereco = encodeURIComponent(enderecoCompleto);
+  const streetViewUrl = temEnderecoPreciso
+    ? `https://www.google.com/maps/search/?api=1&query=${qEndereco}`
+    : temCoord
+      ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${_lat},${_lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
+  const mapaUrl = temEnderecoPreciso
+    ? `https://www.google.com/maps/search/?api=1&query=${qEndereco}`
+    : temCoord
+      ? `https://www.google.com/maps/search/?api=1&query=${_lat},${_lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
 
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: 80 }}>
@@ -548,12 +556,16 @@ export default function ImovelDetalhe() {
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Descrição
                 </h2>
-                <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{imovel.descricao}</p>
+                <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {(imovel.descricao || '')
+                    .replace(/0[.,]00\s+de\s+área\s+(total|do\s+terreno)[,;]?\s*/gi, '')
+                    .replace(/,\s*,/g, ',').replace(/\s+,/g, ',').replace(/,\s*\./g, '.').replace(/\s{2,}/g, ' ').trim()}
+                </p>
               </div>
             )}
 
             {/* Documentos */}
-            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda) && (
+            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda || imovel.urlLote) && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Documentos
@@ -584,8 +596,16 @@ export default function ImovelDetalhe() {
                 )}
 
                 {/* Botões de PDF */}
-                {(ehUrl(imovel.linkEdital) || ehMatriculaValida(imovel.linkMatricula) || ehUrl(imovel.linkRegrasVenda)) && (
+                {(ehUrl(imovel.linkEdital) || ehMatriculaValida(imovel.linkMatricula) || ehUrl(imovel.linkRegrasVenda) || ehUrl(imovel.urlLote)) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    {/* Página oficial do lote (Caixa): acesso à matrícula/edital quando o
+                        link direto não abre fora da sessão do site. */}
+                    {ehUrl(imovel.urlLote) && (
+                      <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, color: '#4338ca', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                        🔗 Ver no site oficial (matrícula e detalhes)
+                      </a>
+                    )}
                     {ehUrl(imovel.linkEdital) && (
                       <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#084BA6', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
