@@ -234,12 +234,43 @@ function extrairCEP(texto) {
   return m ? m[1].replace('-', '') : null;
 }
 
-// Extrai área em m² da descrição ("50,00 m²", "área de 120m2").
+// Extrai área em m² da descrição.
+// Formato atual da Caixa (ponto decimal): "0.00 de área total, 53.68 de área
+// privativa, 1200.00 de área do terreno". Prioriza privativa > total > terreno
+// (ignorando zeros). Mantém fallback para o formato genérico "50,00 m²".
 function extrairAreaM2(texto) {
-  const m = (texto || '').match(/([\d.]+,?\d*)\s*m[²2]/i);
+  const t = texto || '';
+  const labels = [
+    /([\d.]+)\s*de [áa]rea privativa/i,
+    /([\d.]+)\s*de [áa]rea total/i,
+    /([\d.]+)\s*de [áa]rea do terreno/i,
+  ];
+  for (const re of labels) {
+    const mm = t.match(re);
+    if (mm) {
+      const n = parseFloat(mm[1]); // ponto = decimal no CSV da Caixa
+      if (!isNaN(n) && n > 0) return n;
+    }
+  }
+  const m = t.match(/([\d.]+,?\d*)\s*m[²2]/i);
   if (!m) return 0;
   const n = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
   return isNaN(n) ? 0 : n;
+}
+
+// Infere o tipo do imóvel CEF. A coluna "tipo" do CSV atual vem vazia; o tipo
+// é a 1ª palavra da descrição ("Apartamento, 0.00 de área total, ..."). Espelha
+// o mapeamento usado no backfill do banco para manter consistência.
+function inferirTipoCEF(m) {
+  if (m.tipo) return normalizarTipo(m.tipo);
+  const seg = (m.descricao_csv || '').split(/[,\-–—\n]/)[0]
+    .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/apartament/.test(seg)) return 'apartamento';
+  if (/casa|sobrado/.test(seg)) return 'casa';
+  if (/terreno|lote|gleba/.test(seg)) return 'terreno';
+  if (/loja|sala|comerc|galp|predio|conjunto|box/.test(seg)) return 'comercial';
+  if (/rural|sitio|fazenda|chacara/.test(seg)) return 'rural';
+  return 'imovel';
 }
 
 async function scraperCEFcsv(uf) {
@@ -289,12 +320,14 @@ async function scraperCEFcsv(uf) {
       const enderecoLimpo = toTitleCase((m.logradouro || '').replace(/\s*[-–,]?\s*CEP[:\s]+\d{5}-?\d{3}/i, '').trim());
       const numeroMatricula = m.numero_matricula || extrairMatriculaTexto(m.descricao_csv);
       const areaM2 = extrairAreaM2(m.descricao_csv);
+      const tipoNorm = inferirTipoCEF(m);
+      const TIPO_LABEL = { apartamento: 'Apartamento', casa: 'Casa', terreno: 'Terreno', comercial: 'Imóvel comercial', rural: 'Imóvel rural', imovel: 'Imóvel' };
       const descParts = [m.modalidade, m.tipo, m.situacao_ocup, m.descricao_csv].filter(Boolean);
       return {
         fonte: 'CEF',
         fonte_id: `cef_${numeroLimpo}`,
-        titulo: `${m.tipo || 'Imóvel'} — ${m.bairro} ${m.cidade} ${uf}`.trim(),
-        tipo: normalizarTipo(m.tipo),
+        titulo: `${m.tipo || TIPO_LABEL[tipoNorm]} — ${m.bairro} ${m.cidade} ${uf}`.trim(),
+        tipo: tipoNorm,
         modalidade: modalidadeNorm,
         estado: uf,
         cidade: toTitleCase(m.cidade),
