@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, BarChart3, ShieldCheck, FileText, TrendingUp, Zap,
   ChevronRight, CheckCircle2, Star, Gavel, Users, Lock, Clock,
-  MapPin, ArrowRight, ChevronDown, ChevronUp,
+  MapPin, ArrowRight, ChevronDown, ChevronUp, Sparkles, BadgeCheck, HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,6 +12,22 @@ const STATS = [
   { v: '11',      l: 'estados atendidos' },
   { v: '8 anos',  l: 'de experiência no mercado' },
   { v: '< 5 min', l: 'para gerar análise completa' },
+];
+
+// As 5 perguntas que travam todo mundo (insight de posicionamento) — e como a Bid Pro responde.
+const PERGUNTAS = [
+  { q: 'Esse imóvel é seguro?',            r: 'A análise jurídica e o Bid Score mapeiam ônus, processos e sanções do executado antes do lance.', icon: ShieldCheck },
+  { q: 'Tem alguma bomba escondida?',      r: 'A IA lê o edital e a matrícula e destaca penhoras, usufruto, indisponibilidade e risco de evicção.', icon: FileText },
+  { q: 'Quanto realmente vale?',           r: 'Comparativos de mercado e a viabilidade calculam o valor real e o desconto efetivo da oportunidade.', icon: BarChart3 },
+  { q: 'Quanto vou gastar depois?',        r: 'O relatório lista débitos, IPTU, condomínio e custos de regularização a confirmar antes de arrematar.', icon: TrendingUp },
+  { q: 'Vale a pena entrar nesse leilão?', r: 'O Bid Score traduz tudo numa nota de 0 a 100 e numa recomendação clara: arrematar ou passar.', icon: Gavel },
+];
+
+// Exemplos de Bid Score (assinatura visual da marca — estilo "Serasa dos leilões").
+const BID_EXEMPLOS = [
+  { nota: 94, cor: '#10b981', bg: '#f0fdf4', emoji: '🟢', t: 'Excelente oportunidade', d: 'Sem ônus relevantes na matrícula. Desconto de 38% sobre o mercado.' },
+  { nota: 73, cor: '#f59e0b', bg: '#fffbeb', emoji: '🟡', t: 'Boa oportunidade',        d: 'Imóvel ocupado — prever custo e prazo de desocupação.' },
+  { nota: 31, cor: '#ef4444', bg: '#fef2f2', emoji: '🔴', t: 'Risco elevado',           d: 'Três processos pendentes e penhora ativa. Recomendação: passar.' },
 ];
 
 const PASSOS = [
@@ -53,6 +69,7 @@ const PARA_QUEM = [
 ];
 
 const FAQS = [
+  { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 100 (🟢🟡🔴) que resume o risco e a oportunidade de cada imóvel — juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o relatório Documental + Jurídico (Investidor Pro) completa o Bid Score da operação.' },
   { q: 'Preciso ter experiência em leilões para usar a plataforma?', r: 'Não. A plataforma foi criada para guiar tanto iniciantes quanto investidores experientes. O plano Explorador é gratuito e inclui cursos de formação.' },
   { q: 'A análise da IA substitui um advogado?', r: 'Ela é o primeiro filtro — identifica riscos em segundos. Para arrematações reais, os planos de assessoria incluem análise jurídica feita pela equipe especializada TSN.' },
   { q: 'Posso cancelar a assinatura quando quiser?', r: 'Sim. Os planos Investidor e Investidor Pro são mensais sem fidelidade. Cancele quando quiser, sem multa.' },
@@ -76,7 +93,7 @@ export default function Landing() {
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(ellipse at 15% 85%, rgba(13,99,219,0.18) 0%, transparent 55%), radial-gradient(ellipse at 85% 15%, rgba(99,102,241,0.12) 0%, transparent 55%)' }} />
         <div style={{ maxWidth: 820, margin: '0 auto', position: 'relative' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(13,99,219,0.15)', border: '1px solid rgba(13,99,219,0.3)', borderRadius: 24, padding: '6px 18px', fontSize: 11, color: '#93c5fd', fontWeight: 800, marginBottom: 28, textTransform: 'uppercase', letterSpacing: 1.5 }}>
-            <Gavel size={12} /> Plataforma de Leilões Imobiliários
+            <ShieldCheck size={12} /> A camada de confiança dos leilões do Brasil
           </div>
           <h1 style={{ fontSize: 'clamp(32px, 6vw, 60px)', fontWeight: 900, color: 'white', lineHeight: 1.08, margin: '0 0 22px', letterSpacing: '-1.5px' }}>
             Arremate imóveis com<br />
@@ -105,6 +122,71 @@ export default function Landing() {
                 <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>{l}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── AS 5 PERGUNTAS ───────────────────────────────────────────── */}
+      <section style={{ padding: '80px 20px', background: 'white' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>O problema real</div>
+            <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 12px' }}>Oportunidade nunca faltou. Resposta, sim.</h2>
+            <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.7, maxWidth: 640, margin: '0 auto 8px' }}>
+              Existem milhares de imóveis excelentes em leilão. O que faz 99% das pessoas desistirem é não conseguir responder a 5 perguntas. A Bid Pro responde todas — antes do lance.
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, marginTop: 36 }}>
+            {PERGUNTAS.map(({ q, r, icon: Icon }) => (
+              <div key={q} style={{ borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px 22px', background: '#f8fafc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{ background: '#eff6ff', borderRadius: 10, padding: 8, flexShrink: 0 }}><Icon size={17} color="#0D63DB" /></div>
+                  <h3 style={{ fontSize: 15, fontWeight: 800, color: '#111', margin: 0, lineHeight: 1.3 }}>{q}</h3>
+                </div>
+                <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.65, margin: 0 }}>{r}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── BID SCORE (assinatura) ───────────────────────────────────── */}
+      <section style={{ padding: '80px 20px', background: 'linear-gradient(135deg, #080f1a 0%, #0a1f3d 60%, #0d2a50 100%)' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, alignItems: 'center' }}>
+            <div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '6px 16px', fontSize: 11, color: '#34d399', fontWeight: 800, marginBottom: 18, textTransform: 'uppercase', letterSpacing: 1 }}>
+                <Sparkles size={12} /> Bid Score
+              </div>
+              <h2 style={{ fontSize: 'clamp(24px,4vw,38px)', fontWeight: 900, color: 'white', margin: '0 0 16px', lineHeight: 1.15 }}>
+                Uma nota que responde: <span style={{ background: 'linear-gradient(90deg,#60a5fa,#34d399)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>você compraria este imóvel?</span>
+              </h2>
+              <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.8, marginBottom: 22 }}>
+                Em vez de 180 páginas de edital e matrícula, a Bid Pro traduz tudo em uma nota de 0 a 100 — risco jurídico, viabilidade financeira, ocupação e documentação num só lugar. Como o Serasa dos leilões.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '16px 18px' }}>
+                <BadgeCheck size={22} color="#34d399" style={{ flexShrink: 0, marginTop: 1 }} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: 'white', marginBottom: 4 }}>IA + Especialistas certificados TSN</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6 }}>A inteligência faz 95% da análise em minutos. Nossos especialistas validam os casos críticos — você não depende de uma máquina sozinha.</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {BID_EXEMPLOS.map(({ nota, cor, bg, emoji, t, d }) => (
+                <div key={nota} style={{ background: 'white', borderRadius: 16, padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 18, boxShadow: '0 8px 28px rgba(0,0,0,0.25)' }}>
+                  <div style={{ width: 70, height: 70, borderRadius: 16, background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: `2px solid ${cor}` }}>
+                    <div style={{ fontSize: 26, fontWeight: 900, color: cor, lineHeight: 1 }}>{nota}</div>
+                    <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, marginTop: 2 }}>BID SCORE</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 3 }}>{emoji} {t}</div>
+                    <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>{d}</div>
+                  </div>
+                </div>
+              ))}
+              <p style={{ color: '#475569', fontSize: 12, textAlign: 'center', marginTop: 4 }}>Exemplos ilustrativos. Cada imóvel recebe seu Bid Score após a análise.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -280,9 +362,9 @@ export default function Landing() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
             {[
-              { nome: 'Explorador', preco: 'Grátis', sub: 'Para sempre · sem cartão', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos', 'Acesso ao site do leiloeiro'], cta: 'Começar grátis', destaque: false },
-              { nome: 'Investidor Pro', preco: 'R$ 99,90', sub: '/mês · sem fidelidade', cor: '#0D63DB', items: ['Tudo do Explorador', 'Análises ilimitadas por IA', 'Análise jurídica completa', 'Comparativos de mercado', 'Consulta processual integrada'], cta: 'Assinar agora', destaque: true },
-              { nome: 'Assessoria', preco: 'R$ 5.000', sub: 'por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Equipe TSN dedicada', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], cta: 'Fazer login para contratar', destaque: false },
+              { nome: 'Explorador', preco: 'Grátis', sub: 'Para sempre · sem cartão', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], cta: 'Começar grátis', destaque: false },
+              { nome: 'Investidor Pro', preco: 'R$ 99,90', sub: '/mês · sem fidelidade', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Consulta processual integrada'], cta: 'Assinar agora', destaque: true },
+              { nome: 'Assessoria', preco: 'R$ 5.000', sub: 'por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista TSN dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], cta: 'Fazer login para contratar', destaque: false },
             ].map(({ nome, preco, sub, cor, items, cta, destaque }) => (
               <div key={nome} style={{ background: destaque ? '#eff6ff' : 'white', borderRadius: 18, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '24px 20px', position: 'relative', boxShadow: destaque ? `0 8px 28px ${cor}20` : '0 2px 8px rgba(0,0,0,0.04)' }}>
                 {destaque && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: cor, color: 'white', fontSize: 9, fontWeight: 800, padding: '3px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, whiteSpace: 'nowrap' }}>Mais popular</div>}
