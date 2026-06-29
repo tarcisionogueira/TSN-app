@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const STATS = [
   { v: 'R$ 70M+', l: 'em arrematações assessoradas' },
-  { v: '11',      l: 'estados atendidos' },
+  { v: '11',      l: 'estados com operações realizadas' },
   { v: '8 anos',  l: 'de experiência no mercado' },
   { v: '< 5 min', l: 'para gerar análise completa' },
 ];
@@ -34,7 +34,7 @@ const PASSOS = [
   { n: '01', icon: Search,    cor: '#0D63DB', titulo: 'Encontre o imóvel',     desc: 'Busque em todos os leiloeiros credenciados do Brasil. Filtre por tipo, cidade, valor e data do leilão.' },
   { n: '02', icon: FileText,  cor: '#8b5cf6', titulo: 'Analise a viabilidade', desc: 'Carregue o edital e a matrícula. A IA extrai dados e gera análise financeira, jurídica e mercadológica em minutos.' },
   { n: '03', icon: ShieldCheck,cor:'#10b981', titulo: 'Identifique os riscos',  desc: 'Penhoras, usufruto, hipotecas, ações judiciais e outros ônus que podem inviabilizar a posse — tudo mapeado antes do lance.' },
-  { n: '04', icon: Gavel,     cor: '#f59e0b', titulo: 'Arremate com segurança', desc: 'Com a equipe TSN do seu lado — da estratégia de lance à documentação e ao registro do imóvel.' },
+  { n: '04', icon: Gavel,     cor: '#f59e0b', titulo: 'Arremate com segurança', desc: 'Com a nossa equipe do seu lado — da estratégia de lance à documentação e ao registro do imóvel.' },
 ];
 
 const RECURSOS = [
@@ -43,7 +43,7 @@ const RECURSOS = [
   { icon: ShieldCheck, titulo: 'Análise jurídica completa',   desc: 'Gravames, ônus reais, processos judiciais e riscos de evicção identificados antes da arrematação.' },
   { icon: BarChart3,   titulo: 'Comparativos de mercado',     desc: 'Imóveis similares na mesma rua ou condomínio para defender o valor da oferta com dados reais.' },
   { icon: FileText,    titulo: 'Relatório executivo PDF',     desc: 'Documento profissional para apresentar ao cliente, ao sócio ou à família antes de arrematar.' },
-  { icon: MapPin,      titulo: 'Cobertura nacional',         desc: '11 estados, todos os tipos de leilão: judicial, extrajudicial, imóveis comerciais e residenciais.' },
+  { icon: MapPin,      titulo: 'Atuação em todo o Brasil',    desc: 'O leilão segue a legislação federal — você pode arrematar em qualquer estado. Já temos operações realizadas em 11 estados e crescendo.' },
 ];
 
 const PARA_QUEM = [
@@ -57,24 +57,25 @@ const PARA_QUEM = [
     emoji: '📈',
     titulo: 'Quero investir em leilões',
     desc: 'Monte um portfólio estruturado com análise de ROI, yield e comparativos de mercado. Escale com método, não com sorte.',
-    items: ['Relatório de viabilidade com IA', 'Projeções SAC e Price', 'Yield de locação mensal/anual', 'Análises ilimitadas'],
+    items: ['Relatório de viabilidade com IA', 'Projeções SAC e Price', 'Yield de locação mensal/anual', 'Cota mensal de análises por IA'],
     destaque: true,
   },
   {
     emoji: '🤝',
     titulo: 'Sou consultor ou advogado',
     desc: 'Entregue análises profissionais em minutos, não dias. Relatórios em PDF prontos para o cliente final, com sua marca.',
-    items: ['Relatório PDF personalizável', 'Consulta processual integrada', 'Análise jurídica em segundos', 'Suporte especializado TSN'],
+    items: ['Relatório PDF personalizável', 'Consulta processual integrada', 'Análise jurídica em segundos', 'Suporte especializado Bid Pro'],
   },
 ];
 
 const FAQS = [
   { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 100 (🟢🟡🔴) que resume o risco e a oportunidade de cada imóvel — juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o relatório Documental + Jurídico (Investidor Pro) completa o Bid Score da operação.' },
   { q: 'Preciso ter experiência em leilões para usar a plataforma?', r: 'Não. A plataforma foi criada para guiar tanto iniciantes quanto investidores experientes. O plano Explorador é gratuito e inclui cursos de formação.' },
-  { q: 'A análise da IA substitui um advogado?', r: 'Ela é o primeiro filtro — identifica riscos em segundos. Para arrematações reais, os planos de assessoria incluem análise jurídica feita pela equipe especializada TSN.' },
-  { q: 'Posso cancelar a assinatura quando quiser?', r: 'Sim. Os planos Investidor e Investidor Pro são mensais sem fidelidade. Cancele quando quiser, sem multa.' },
-  { q: 'Como funciona a assessoria da equipe TSN?', r: 'Nos planos Assessoria e Leilão Club, a equipe acompanha você do estudo do imóvel ao registro final — estratégia de lance, documentação, regularização e imissão de posse.' },
-  { q: 'O sistema funciona para leilões judiciais e extrajudiciais?', r: 'Sim, para ambos. A plataforma integra leiloeiros credenciados pelas Juntas Comerciais em 11 estados.' },
+  { q: 'A análise da IA substitui um advogado?', r: 'Ela é o primeiro filtro — identifica riscos em segundos. Para arrematações reais, os planos de assessoria incluem análise jurídica feita pela nossa equipe especializada.' },
+  { q: 'As análises por IA são ilimitadas?', r: 'Não. Cada análise consome dados pagos de fontes externas, por isso os planos têm uma cota mensal de análises. Se uma fonte estiver instável no momento da solicitação, avisamos e liberamos o relatório assim que possível (em até 24–48h), continuando as tentativas.' },
+  { q: 'Posso cancelar a assinatura quando quiser?', r: 'Sim. O plano Investidor Pro é mensal sem fidelidade. Cancele quando quiser, sem multa.' },
+  { q: 'Como funciona a assessoria?', r: 'No plano Assessoria, a equipe acompanha você do estudo do imóvel ao registro final — estratégia de lance, documentação, regularização e imissão de posse.' },
+  { q: 'Em quais lugares posso arrematar?', r: 'Em todo o Brasil. O leilão segue a legislação federal, igual para todos os estados. Já realizamos operações em 11 estados e seguimos crescendo.' },
 ];
 
 export default function Landing() {
@@ -167,7 +168,7 @@ export default function Landing() {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '16px 18px' }}>
                 <BadgeCheck size={22} color="#34d399" style={{ flexShrink: 0, marginTop: 1 }} />
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: 'white', marginBottom: 4 }}>IA + Especialistas certificados TSN</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: 'white', marginBottom: 4 }}>IA + Especialistas certificados Bid Pro</div>
                   <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6 }}>A inteligência faz 95% da análise em minutos. Nossos especialistas validam os casos críticos — você não depende de uma máquina sozinha.</div>
                 </div>
               </div>
@@ -333,14 +334,14 @@ export default function Landing() {
           <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12 }}>Quem está do seu lado</div>
           <h2 style={{ fontSize: 'clamp(24px,4vw,34px)', fontWeight: 900, color: '#111', margin: '0 0 14px' }}>8 anos formando arrematadores no Brasil</h2>
           <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.8, maxWidth: 620, margin: '0 auto 48px' }}>
-            A TSN nasceu da experiência prática no mercado de leilões imobiliários. Nossa equipe inclui analistas, advogados especializados em pós-arrematação e o sócio fundador disponível para os clientes dos planos premium.
+            A Bid Pro Brasil nasceu da experiência prática no mercado de leilões imobiliários. Nossa equipe inclui analistas, advogados especializados em pós-arrematação e o sócio fundador à frente da formação dos arrematadores.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, maxWidth: 800, margin: '0 auto' }}>
             {[
               { emoji: '⚖️', cargo: 'Jurídico',         desc: 'Advogados especializados em pós-arrematação, registro e regularização' },
               { emoji: '📊', cargo: 'Análise',           desc: 'Analistas que revisam cada imóvel antes do lance do cliente' },
               { emoji: '🏛️', cargo: 'Relações Cartoriais',desc: 'Equipe com acesso direto a cartórios para agilizar o registro' },
-              { emoji: '👤', cargo: 'Sócio Fundador',    desc: 'Acompanhamento pessoal de Tarcísio nos planos Assessoria e Clube' },
+              { emoji: '👤', cargo: 'Sócio Fundador',    desc: 'Tarcísio conduz a parte educacional no Leilão Club — o clube de negócios da Bid Pro' },
             ].map(({ emoji, cargo, desc }) => (
               <div key={cargo} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                 <div style={{ fontSize: 34, marginBottom: 12 }}>{emoji}</div>
@@ -352,25 +353,24 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── PLANOS PREVIEW ───────────────────────────────────────────── */}
+      {/* ── PLANOS PREVIEW (sem preços — fonte de verdade é a tela /planos) ── */}
       <section style={{ padding: '80px 20px', background: 'white' }}>
         <div style={{ maxWidth: 960, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 48 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Planos</div>
             <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 12px' }}>Comece grátis. Evolua no seu ritmo.</h2>
-            <p style={{ color: '#64748b', fontSize: 15 }}>Sem fidelidade nos planos mensais. Cancele quando quiser.</p>
+            <p style={{ color: '#64748b', fontSize: 15 }}>Do plano gratuito à assessoria completa — veja preços e condições atualizados na página de planos.</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
             {[
-              { nome: 'Explorador', preco: 'Grátis', sub: 'Sem cartão de crédito', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], cta: 'Começar grátis', destaque: false },
-              { nome: 'Investidor Pro', preco: 'R$ 99,90', sub: '/mês · sem fidelidade', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Consulta processual integrada'], cta: 'Assinar agora', destaque: true },
-              { nome: 'Assessoria', preco: 'R$ 5.000', sub: 'por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista TSN dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], cta: 'Fazer login para contratar', destaque: false },
-            ].map(({ nome, preco, sub, cor, items, cta, destaque }) => (
+              { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], destaque: false },
+              { nome: 'Investidor Pro', tag: 'Mais popular', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Cota mensal de análises'], destaque: true },
+              { nome: 'Assessoria', tag: 'Por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], destaque: false },
+            ].map(({ nome, tag, cor, items, destaque }) => (
               <div key={nome} style={{ background: destaque ? '#eff6ff' : 'white', borderRadius: 18, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '24px 20px', position: 'relative', boxShadow: destaque ? `0 8px 28px ${cor}20` : '0 2px 8px rgba(0,0,0,0.04)' }}>
                 {destaque && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: cor, color: 'white', fontSize: 9, fontWeight: 800, padding: '3px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, whiteSpace: 'nowrap' }}>Mais popular</div>}
-                <div style={{ fontSize: 12, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 }}>{nome}</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: '#111', marginBottom: 2 }}>{preco}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 18 }}>{sub}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6 }}>{nome}</div>
+                <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16, fontWeight: 600 }}>{tag}</div>
                 <div style={{ height: 1, background: '#f1f5f9', margin: '0 0 16px' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
                   {items.map(item => (
@@ -380,17 +380,17 @@ export default function Landing() {
                     </div>
                   ))}
                 </div>
-                <button onClick={cadastrar}
+                <button onClick={() => nav('/planos')}
                   style={{ width: '100%', padding: '10px', border: destaque ? 'none' : `2px solid ${cor}`, borderRadius: 10, background: destaque ? cor : 'transparent', color: destaque ? 'white' : cor, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                  {cta}
+                  Ver detalhes do plano
                 </button>
               </div>
             ))}
           </div>
           <div style={{ textAlign: 'center', marginTop: 28 }}>
             <button onClick={() => nav('/planos')}
-              style={{ padding: '12px 28px', border: '2px solid #e2e8f0', borderRadius: 10, background: 'transparent', color: '#64748b', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              Ver todos os planos em detalhe <ChevronRight size={15} />
+              style={{ padding: '14px 32px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 28px rgba(13,99,219,0.35)' }}>
+              Ver planos e preços <ChevronRight size={16} />
             </button>
           </div>
         </div>
