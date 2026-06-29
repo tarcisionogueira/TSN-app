@@ -175,4 +175,4 @@ export const calcularDepositoJudicial = ({
 export const fmt = (v, dec = 2) =>
   Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
-export const fmtPct = (v, dec = 1) => `${Number(v || 0).toFixed(dec)}%`;
+export const fmtPct = (v, dec = 2) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec })}%`;

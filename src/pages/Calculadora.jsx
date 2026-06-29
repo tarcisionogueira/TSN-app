@@ -322,13 +322,13 @@ export default function Calculadora() {
               <Target size={15} /> Teto máximo de lance
             </div>
             <div style={{ fontSize: temDados ? (teto > 0 ? 32 : 20) : 22, fontWeight: 900, margin: '6px 0 2px' }}>
-              {!temDados ? '—' : teto > 0 ? `R$ ${fmt(teto, 0)}` : 'Meta inatingível'}
+              {!temDados ? '—' : teto > 0 ? `R$ ${fmt(teto, 2)}` : 'Meta inatingível'}
             </div>
             {!temDados
               ? <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>Preencha <strong>Arrematação</strong> e <strong>Valor de mercado</strong> para calcular.</div>
               : teto > 0
-                ? <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter ROI de {fmtPct(metaRoi, 0)} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}).</div>
-                : <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>Nenhum lance atinge o ROI de {fmtPct(metaRoi, 0)} com esses custos. Reduza a meta ou revise os parâmetros.</div>
+                ? <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter ROI de {fmtPct(metaRoi, 2)} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}).</div>
+                : <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>Nenhum lance atinge o ROI de {fmtPct(metaRoi, 2)} com esses custos. Reduza a meta ou revise os parâmetros.</div>
             }
           </div>
 
@@ -339,16 +339,16 @@ export default function Calculadora() {
                 <TrendingUp size={16} color="#0D63DB" /> Cenário no lance atual
               </div>
 
-              <Linha label="Desconto sobre avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 1) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
-              <Linha label="Valor de arrematação" valor={`R$ ${fmt(vArr, 0)}`} />
+              <Linha label="Desconto sobre avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 2) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
+              <Linha label="Valor de arrematação" valor={`R$ ${fmt(vArr, 2)}`} />
               <Linha
                 label="Custos do leilão"
-                valor={`R$ ${fmt(custosLeilao, 0)}`}
+                valor={`R$ ${fmt(custosLeilao, 2)}`}
                 sublabel="Comissão do leiloeiro + honorários + ITBI e registro"
               />
-              {m.debitos > 0 && <Linha label="Débitos assumidos" valor={`R$ ${fmt(m.debitos, 0)}`} />}
-              {m.manutencao > 0 && <Linha label="Reforma estimada" valor={`R$ ${fmt(m.manutencao, 0)}`} />}
-              {m.custoCarrrego > 0 && <Linha label="Carrego (IPTU + cond.)" valor={`R$ ${fmt(m.custoCarrrego, 0)}`} />}
+              {m.debitos > 0 && <Linha label="Débitos assumidos" valor={`R$ ${fmt(m.debitos, 2)}`} />}
+              {m.manutencao > 0 && <Linha label="Reforma estimada" valor={`R$ ${fmt(m.manutencao, 2)}`} />}
+              {m.custoCarrrego > 0 && <Linha label="Carrego (IPTU + cond.)" valor={`R$ ${fmt(m.custoCarrrego, 2)}`} />}
 
               {/* Necessidade de caixa — o que precisa ter disponível */}
               <div style={{ margin: '12px 0 4px', padding: '12px 14px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -357,31 +357,33 @@ export default function Calculadora() {
                   <span style={{ fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
                     {isAVista ? 'Total na arrematação' : 'Total no ato (sinal + custos)'}
                   </span>
-                  <span style={{ fontSize: 15, fontWeight: 900, color: '#1e3a8a' }}>R$ {fmt(desembolsoArrematacao, 0)}</span>
+                  <span style={{ fontSize: 15, fontWeight: 900, color: '#1e3a8a' }}>R$ {fmt(desembolsoArrematacao, 2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 13, color: '#084BA6', fontWeight: 600 }}>Parcela mensal a suportar</span>
                   <span style={{ fontSize: 15, fontWeight: 900, color: '#1e3a8a' }}>
-                    {isAVista ? '—' : `R$ ${fmt(m.parcelaMedia, 0)}`}
+                    {isAVista ? '—' : `R$ ${fmt(m.parcelaMedia, 2)}`}
                   </span>
                 </div>
               </div>
 
               {!isAVista && (
                 <>
-                  <Linha label="Sinal / entrada" valor={`R$ ${fmt(m.valorSinal, 0)}`} />
+                  <Linha label="Sinal / entrada" valor={`R$ ${fmt(m.valorSinal, 2)}`} />
                   <Linha
                     label={origem === 'judicial' ? 'Parcela (CPC 895)' : `Parcela (${nomeTabela})`}
-                    valor={`R$ ${fmt(m.parcelaMedia, 0)}`} />
-                  <Linha label="Saldo p/ quitação" valor={`R$ ${fmt(m.saldoDevedor, 0)}`} sublabel={origem === 'judicial' ? 'Saldo restante das parcelas' : 'Saldo devedor ao vender'} />
+                    valor={`R$ ${fmt(m.parcelaMedia, 2)}`} />
+                  <Linha label="Saldo p/ quitação" valor={`R$ ${fmt(m.saldoDevedor, 2)}`} sublabel={origem === 'judicial' ? 'Saldo restante das parcelas' : 'Saldo devedor ao vender'} />
                 </>
               )}
 
               <div style={{ marginTop: 4 }} />
-              <Linha label="Capital mobilizado" valor={`R$ ${fmt(m.capitalMobilizado, 0)}`} destaque />
-              <Linha label="Entrada no caixa (venda)" valor={`R$ ${fmt(entradaCaixa, 0)}`} destaque cor="#0D63DB" />
-              <Linha label="Lucro líquido" valor={`R$ ${fmt(m.lucro, 0)}`} destaque cor={m.lucro >= 0 ? '#059669' : '#dc2626'} />
-              <Linha label="ROI / ROE" valor={fmtPct(m.roi, 1)} destaque cor={m.roi >= 0 ? '#059669' : '#dc2626'} />
+              <Linha label="Capital mobilizado" valor={`R$ ${fmt(m.capitalMobilizado, 2)}`} destaque />
+              <Linha label="Comissão de venda (corretagem)" valor={`– R$ ${fmt(m.comissao, 2)}`} sublabel="deduzida na revenda" cor="#dc2626" />
+              <Linha label="Imposto sobre o ganho (IR 15%)" valor={`– R$ ${fmt(m.ir, 2)}`} sublabel="ganho de capital na revenda" cor="#dc2626" />
+              <Linha label="Entrada no caixa (venda)" valor={`R$ ${fmt(entradaCaixa, 2)}`} destaque cor="#0D63DB" />
+              <Linha label="Lucro líquido" valor={`R$ ${fmt(m.lucro, 2)}`} destaque cor={m.lucro >= 0 ? '#059669' : '#dc2626'} />
+              <Linha label="ROI / ROE" valor={fmtPct(m.roi, 2)} destaque cor={m.roi >= 0 ? '#059669' : '#dc2626'} />
 
               {/* Aviso conservador */}
               <div style={{ marginTop: 14, padding: '10px 12px', background: '#fef9c3', borderRadius: 8, display: 'flex', gap: 8 }}>
