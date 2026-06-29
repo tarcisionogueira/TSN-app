@@ -298,10 +298,18 @@ export default function Login() {
           </div>
         )}
 
-        {/* Logomarca clicável (centralizada) */}
+        {/* Marca BidPro Brasil (wordmark — legível no fundo claro) */}
         <button onClick={() => nav('/')}
-          style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: 30, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-          <img src="/logo.svg" alt="BidPro Brasil" style={{ height: 46 }} />
+          style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 11, width: '100%', marginBottom: 30, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <div style={{ background: '#0D63DB', borderRadius: 12, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(13,99,219,0.30)', flexShrink: 0 }}>
+            <span style={{ color: 'white', fontWeight: 900, fontSize: 24, letterSpacing: '-1px' }}>B</span>
+          </div>
+          <div style={{ textAlign: 'left', lineHeight: 1 }}>
+            <div style={{ fontSize: 21, fontWeight: 900, letterSpacing: '-0.5px' }}>
+              <span style={{ color: '#111111' }}>Bid</span><span style={{ color: '#0D63DB' }}>Pro</span><span style={{ color: '#111111' }}> Brasil</span>
+            </div>
+            <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: 4 }}>Leilão &amp; Investimentos</div>
+          </div>
         </button>
 
         {/* Sucesso cadastro */}
