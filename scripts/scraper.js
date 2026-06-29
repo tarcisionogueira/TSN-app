@@ -1720,14 +1720,16 @@ async function main() {
     await new Promise(r => setTimeout(r, 1500));
   }
 
-  // Desativa imóveis não arrematados sem atualização há 90 dias
+  // Desativa imóveis sem atualização há 90 dias (saíram das fontes).
+  // Obs: não existe coluna 'arrematado' na tabela — filtrar por ela quebrava
+  // a query e a desativação nunca rodava (imóveis obsoletos ficavam ativos).
   const noventaDiasAtras = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  await supabase
+  const { error: errDesativar } = await supabase
     .from('imoveis_leilao')
     .update({ ativo: false })
     .lt('atualizado_em', noventaDiasAtras)
-    .eq('ativo', true)
-    .eq('arrematado', false);
+    .eq('ativo', true);
+  if (errDesativar) console.error('Erro ao desativar obsoletos:', errDesativar.message);
 
   console.log(`\n✅ Scraping concluído. ${total} imóveis processados.\n`);
 }
