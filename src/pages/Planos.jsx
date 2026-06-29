@@ -97,18 +97,6 @@ export default function Planos() {
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 80px' }}>
 
-        {/* ── Toggle Mensal / Anual ── */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: -20, marginBottom: 36, position: 'relative', zIndex: 10 }}>
-          <div style={{ background: 'white', borderRadius: 14, padding: 5, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', display: 'inline-flex', gap: 4, border: '1px solid #e2e8f0' }}>
-            {[['mensal', 'Mensal', null], ['anual', 'Anual', '-25%']].map(([key, label, badge]) => (
-              <button key={key} onClick={() => setPeriodo(key)}
-                style={{ padding: '9px 24px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer', background: periodo === key ? '#0D63DB' : 'transparent', color: periodo === key ? 'white' : '#64748b', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 7 }}>
-                {label}
-                {badge && <span style={{ background: periodo === key ? 'rgba(255,255,255,0.25)' : '#dcfce7', color: periodo === key ? 'white' : '#16a34a', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 10 }}>{badge}</span>}
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* ── 2 Planos principais: Explorador + Investidor Pro ── */}
         <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 20, maxWidth: 920, margin: '0 auto 64px', alignItems: 'stretch' }}>
@@ -124,9 +112,9 @@ export default function Planos() {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
               {['Busca de leilões em todo o Brasil', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos', 'Acesso ao site do leiloeiro'].map(t => <CheckItem key={t} txt={t} />)}
             </div>
-            <button onClick={() => ir('explorador')} disabled={atual('explorador')}
+            <button onClick={() => nav('/plano/explorador')} disabled={atual('explorador')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('explorador') ? '#f1f5f9' : '#111', color: atual('explorador') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('explorador') ? 'default' : 'pointer' }}>
-              {atual('explorador') ? 'Seu plano atual' : 'Começar Grátis →'}
+              {atual('explorador') ? 'Seu plano atual' : 'Conhecer o plano →'}
             </button>
           </div>
 
@@ -166,7 +154,7 @@ export default function Planos() {
                 '15 relatórios documentais e jurídicos/mês',
               ].map(t => <CheckItem key={t} txt={t} light />)}
             </div>
-            <button onClick={() => periodo === 'anual' ? irAnual('top2') : ir('top2')} disabled={atual('top2')}
+            <button onClick={() => nav('/plano/top2')} disabled={atual('top2')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('top2') ? 'rgba(255,255,255,0.15)' : 'white', color: atual('top2') ? '#93c5fd' : '#084BA6', fontWeight: 800, fontSize: 15, cursor: atual('top2') ? 'default' : 'pointer', boxShadow: atual('top2') ? 'none' : '0 4px 16px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               {atual('top2') ? 'Seu plano atual' : <><span>Assinar Investidor Pro</span> <ArrowRight size={16} /></>}
             </button>

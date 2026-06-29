@@ -24,6 +24,7 @@ import Calculadora from './pages/Calculadora';
 import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
+import PlanoDetalhe from './pages/PlanoDetalhe';
 import Login from './pages/Login';
 import CompletarCadastro from './pages/CompletarCadastro';
 import RedefinirSenha from './pages/RedefinirSenha';
@@ -187,6 +188,7 @@ function MainLayout() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/planos" element={<Planos />} />
+          <Route path="/plano/:key" element={<PlanoDetalhe />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<PrivateRoute><ImovelDetalhe /></PrivateRoute>} />
