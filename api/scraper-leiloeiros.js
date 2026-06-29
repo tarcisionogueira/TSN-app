@@ -1,23 +1,18 @@
 /**
- * POST/GET /api/scraper-leiloeiros
+ * GET/POST /api/scraper-leiloeiros
  * Scraper de leiloeiros (Sold, Mega, Superbid) via Bright Data (Web Unlocker).
  *
- * Por que aqui (e não no GitHub Actions): a Vercel tem as env do Bright Data
- * (BRIGHTDATA_API_TOKEN/ZONE) e o BD desbloqueia as fontes que barram IPs de
- * cloud (Sold/Mega/Superbid retornam 403 ao IP da Vercel/Actions). Assim o fluxo
- * é TESTÁVEL: dispara → confere o banco.
+ * Roda na Vercel (onde estão as env do Bright Data). As fontes barram IPs de cloud
+ * (Vercel/Actions) → 403; o BD desbloqueia. Testável: dispara → confere o banco.
+ * fetch direto primeiro (rápido); se 403/erro → fetchViaBrightData (sob teto semanal).
  *
- * Estratégia de fetch: tenta fetch direto (rápido) e, se a fonte bloquear (403)
- * ou falhar, cai para fetchViaBrightData (sob teto semanal — nunca estoura custo).
+ * Runtime Node neste projeto usa a assinatura (req, res) — responder via res.* (um
+ * `return new Response()` seria IGNORADO e a função travaria até o timeout).
  *
- * Acesso: CRON_SECRET (cron/manual) ou JWT de admin/analista.
- * Query: ?fontes=sold,mega,superbid (default todas) · ?sold_paginas=3 · ?mega_ufs=SP,RJ,MG,BA
- * Resposta: { ok, runStart, fontes: [{fonte, via, coletados, http, amostra?}], upsert }
- *
- * Diagnóstico: se uma fonte retornar 0, inclui http/contentType e os 1ºs 300
- * caracteres da resposta — para corrigir o parser em 1 iteração.
+ * Acesso: CRON_SECRET (?secret=/header x-cron-secret) ou JWT admin/analista.
+ * Query: ?fontes=sold,mega,superbid · ?sold_paginas=3 · ?superbid_paginas=2 · ?mega_ufs=SP,RJ,MG,BA
  */
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { fetchViaBrightData, brightDataDisponivel } from './_brightdata.js';
 import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
@@ -25,10 +20,6 @@ import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-}
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -38,16 +29,15 @@ function sb(path, opts = {}) {
 }
 
 // fetch direto; se 403/erro → Bright Data (sob teto). Retorna sempre o texto bruto.
-async function fetchVia(url, { accept = 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8', headers = {} } = {}) {
+async function fetchVia(targetUrl, { accept = 'text/html,application/json;q=0.9,*/*;q=0.8', headers = {} } = {}) {
   const h = { 'User-Agent': UA, Accept: accept, 'Accept-Language': 'pt-BR,pt;q=0.9', ...headers };
   let resp = null;
-  try { resp = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(20000) }); } catch { resp = null; }
+  try { resp = await fetch(targetUrl, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(8000) }); } catch { resp = null; }
   if (resp && resp.ok) {
     const text = await resp.text().catch(() => '');
     if (text) return { ok: true, status: resp.status, contentType: resp.headers.get('content-type') || '', via: 'direct', text };
   }
-  // Fallback Bright Data (desbloqueia anti-bot)
-  const bd = await fetchViaBrightData(url);
+  const bd = await fetchViaBrightData(targetUrl);
   if (bd) {
     const text = await bd.text().catch(() => '');
     if (text) return { ok: true, status: bd.status, contentType: bd.headers.get('content-type') || '', via: 'brightdata', text };
@@ -74,13 +64,14 @@ function normalizarTipo(t) {
 }
 
 // ─── SOLD (API JSON) ───────────────────────────────────────────────────────────
-async function coletarSold(paginas) {
+async function coletarSold(paginas, deadline) {
   const out = []; let via = '-', diag = null;
   for (let p = 1; p <= paginas; p++) {
+    if (Date.now() > deadline) break;
     const url = `https://www.sold.com.br/api/v1/lots?category_ids=1&status=open&page=${p}&per_page=50&order=relevance`;
     const r = await fetchVia(url, { accept: 'application/json', headers: { Referer: 'https://www.sold.com.br/leiloes-de-imoveis', 'x-requested-with': 'XMLHttpRequest' } });
     via = r.via;
-    let data = null; try { data = JSON.parse(r.text); } catch { /* não-JSON */ }
+    let data = null; try { data = JSON.parse(r.text); } catch { /* */ }
     const lots = data?.lots || data?.data || data?.results || data?.items || [];
     if (!lots.length) { if (p === 1) diag = { http: r.status, contentType: r.contentType, amostra: r.text.slice(0, 300) }; break; }
     for (const lot of lots) {
@@ -110,9 +101,10 @@ async function coletarSold(paginas) {
 }
 
 // ─── SUPERBID (API JSON) ─────────────────────────────────────────────────────────
-async function coletarSuperbid(paginas) {
+async function coletarSuperbid(paginas, deadline) {
   const out = []; let via = '-', diag = null;
   for (let p = 1; p <= paginas; p++) {
+    if (Date.now() > deadline) break;
     const url = `https://offer-query.superbid.net/seo/offers/?locale=pt_BR&portalId=%5B2%2C15%5D&requestOrigin=marketplace&timeZoneId=America%2FSao_Paulo&orderBy=score%3Adesc&pageNumber=${p}&pageSize=50&searchType=opened&categoryId=imoveis`;
     const r = await fetchVia(url, { accept: 'application/json', headers: { Origin: 'https://www.superbid.net', Referer: 'https://www.superbid.net/categorias/imoveis' } });
     via = r.via;
@@ -148,14 +140,14 @@ async function coletarSuperbid(paginas) {
 }
 
 // ─── MEGA (HTML anti-bot) ────────────────────────────────────────────────────────
-async function coletarMega(ufs) {
+async function coletarMega(ufs, deadline) {
   const out = []; let via = '-', diag = null;
   for (const uf of ufs) {
+    if (Date.now() > deadline) break;
     const url = `https://www.megaleiloes.com.br/imoveis?estado=${uf}`;
     const r = await fetchVia(url, { headers: { Referer: 'https://www.megaleiloes.com.br/' } });
     via = r.via;
-    const html = r.text;
-    const seen = new Set(); let antes = out.length;
+    const html = r.text; const seen = new Set(); const antes = out.length;
     const cardRegex = /<(?:article|div)[^>]*class="[^"]*(?:product|lote|item|card)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
     let m;
     while ((m = cardRegex.exec(html)) !== null && (out.length - antes) < 60) {
@@ -201,34 +193,36 @@ async function upsert(rows) {
   return n;
 }
 
-export default async function handler(req) {
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
-  if (req.method !== 'POST' && req.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
-  if (!SERVICE_KEY) return json({ error: 'Supabase não configurado' }, 500);
+export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!SERVICE_KEY) return res.status(500).json({ error: 'Supabase não configurado' });
 
-  // Auth: CRON_SECRET ou admin/analista
+  // Auth: CRON_SECRET (?secret=/header) ou JWT admin/analista
   if (!isCronAuthorized(req)) {
     const user = await getUser(req);
-    if (!user) return json({ error: 'Não autenticado' }, 401);
+    if (!user) return res.status(401).json({ error: 'Não autenticado' });
     const role = await getUserRoleById(user.id);
-    if (role !== 'admin' && role !== 'analista') return json({ error: 'Apenas admin/analista' }, 403);
+    if (role !== 'admin' && role !== 'analista') return res.status(403).json({ error: 'Apenas admin/analista' });
   }
 
-  const url = new URL(req.url, 'http://localhost');
-  const fontes = (url.searchParams.get('fontes') || 'sold,mega,superbid').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  const soldPaginas = parseInt(url.searchParams.get('sold_paginas') || '3', 10);
-  const sbidPaginas = parseInt(url.searchParams.get('superbid_paginas') || '2', 10);
-  const megaUfs = (url.searchParams.get('mega_ufs') || 'SP,RJ,MG,BA').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  const q = req.query || {};
+  const fontes = String(q.fontes || 'sold,mega,superbid').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const soldPaginas = parseInt(q.sold_paginas || '3', 10);
+  const sbidPaginas = parseInt(q.superbid_paginas || '2', 10);
+  const megaUfs = String(q.mega_ufs || 'SP,RJ,MG,BA').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 
   const runStart = new Date().toISOString();
+  const deadline = Date.now() + 240000; // orçamento 240s (< maxDuration 300)
   const resultado = [];
   let totalUpsert = 0;
 
   for (const f of fontes) {
+    if (Date.now() > deadline) { resultado.push({ fonte: f.toUpperCase(), pulado: 'deadline' }); continue; }
     let r;
-    if (f === 'sold') r = await coletarSold(soldPaginas);
-    else if (f === 'superbid') r = await coletarSuperbid(sbidPaginas);
-    else if (f === 'mega') r = await coletarMega(megaUfs);
+    if (f === 'sold') r = await coletarSold(soldPaginas, deadline);
+    else if (f === 'superbid') r = await coletarSuperbid(sbidPaginas, deadline);
+    else if (f === 'mega') r = await coletarMega(megaUfs, deadline);
     else continue;
 
     const up = r.rows.length ? await upsert(r.rows) : 0;
@@ -240,11 +234,10 @@ export default async function handler(req) {
         method: 'DELETE', headers: { Prefer: 'return=minimal' },
       }).catch(() => {});
     }
-
     resultado.push({ fonte: f.toUpperCase(), via: r.via, coletados: r.rows.length, upsert: up, ...(r.diag ? { diagnostico: r.diag } : {}) });
   }
 
   const saida = { ok: true, brightDataDisponivel: brightDataDisponivel(), runStart, total_upsert: totalUpsert, fontes: resultado };
   console.log('[scraper-leiloeiros]', JSON.stringify(saida));
-  return json(saida);
+  return res.status(200).json(saida);
 }

@@ -20,7 +20,7 @@
  * Observação: a obtenção dos documentos é manual (upload). A matrícula da
  * Caixa não tem URL direta; o analista baixa no portal e anexa ao caso.
  */
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 
@@ -118,28 +118,27 @@ function calcularScoreFinanceiro(imovel) {
   return Math.max(0, Math.min(100, Math.round(s)));
 }
 
-export default async function handler(req) {
-  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   const user = await getUser(req);
-  if (!user) return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
 
   const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role`)).json();
   if (!perfil || !ROLES_STAFF.includes(perfil.role)) {
-    return new Response(JSON.stringify({ error: 'Apenas a equipe pode gerar a análise.' }), { status: 403 });
+    return res.status(403).json({ error: 'Apenas a equipe pode gerar a análise.' });
   }
-  if (!CLAUDE_KEY) return new Response(JSON.stringify({ error: 'IA não configurada (CLAUDE_KEY)' }), { status: 500 });
+  if (!CLAUDE_KEY) return res.status(500).json({ error: 'IA não configurada (CLAUDE_KEY)' });
 
-  let body;
-  try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400 }); }
+  const body = req.body || {};
   const { caso_id } = body;
-  if (!caso_id) return new Response(JSON.stringify({ error: 'caso_id obrigatório' }), { status: 400 });
+  if (!caso_id) return res.status(400).json({ error: 'caso_id obrigatório' });
 
   const secoesFaltando = [];
 
   // 1. Caso + imóvel
   const [caso] = await (await sb(`casos?id=eq.${encodeURIComponent(caso_id)}&select=id,imovel_id,cliente_id`)).json();
-  if (!caso) return new Response(JSON.stringify({ error: 'Caso não encontrado' }), { status: 404 });
+  if (!caso) return res.status(404).json({ error: 'Caso não encontrado' });
   const [imovel] = caso.imovel_id
     ? await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(caso.imovel_id)}&select=*`)).json()
     : [null];
@@ -150,7 +149,7 @@ export default async function handler(req) {
     ? await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&tipo=in.(matricula,edital)&storage_path=not.is.null&select=id,tipo,url,nome`)).json()
     : [];
   if (!Array.isArray(anexos) || anexos.length === 0) {
-    return new Response(JSON.stringify({ error: 'Anexe a matrícula e/ou o edital ao caso antes de gerar a análise.' }), { status: 422 });
+    return res.status(422).json({ error: 'Anexe a matrícula e/ou o edital ao caso antes de gerar a análise.' });
   }
 
   // 3. Extração por IA
@@ -235,7 +234,7 @@ export default async function handler(req) {
     }).catch(() => {});
   }
 
-  return new Response(JSON.stringify({
+  return res.status(200).json({
     ok: true,
     score_juridico: scoreJuridico,
     score_financeiro: scoreFinanceiro,
@@ -247,5 +246,5 @@ export default async function handler(req) {
     incompleto,
     secoes_faltando: secoesFaltando,
     parecer_md: parecerMd,
-  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
 }
