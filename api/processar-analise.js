@@ -149,10 +149,20 @@ export default async function handler(req, res) {
 
   // 2. Documentos anexados ao IMÓVEL (matrícula/edital) — imovel_anexos é por
   //    imovel_id (compartilhado entre casos), NÃO por caso_id (coluna inexistente).
-  const anexos = caso.imovel_id
+  let anexos = caso.imovel_id
     ? await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&tipo=in.(matricula,edital,regras_venda)&storage_path=not.is.null&select=id,tipo,url,nome`)).json()
     : [];
-  if (!Array.isArray(anexos) || anexos.length === 0) {
+  if (!Array.isArray(anexos)) anexos = [];
+  // Fallback (leiloeiros): sem anexo no storage, usa o edital/regras PÚBLICOS do
+  // próprio imóvel (URL real, não a matricula.asp da Caixa que exige sessão).
+  if (anexos.length === 0) {
+    const ehUrlPub = v => typeof v === 'string' && /^https?:\/\//i.test(v) && !/matricula\.asp|detalhe-imovel\.asp/i.test(v);
+    const pub = [];
+    if (ehUrlPub(imovel?.link_edital)) pub.push({ tipo: 'edital', url: imovel.link_edital, nome: 'Edital' });
+    if (ehUrlPub(imovel?.link_regras_venda)) pub.push({ tipo: 'regras_venda', url: imovel.link_regras_venda, nome: 'Regras de venda' });
+    if (pub.length) anexos = pub;
+  }
+  if (anexos.length === 0) {
     // Imóvel da Caixa sem documento anexado → enfileira captura automática da
     // matrícula (GitHub Actions/Puppeteer); a análise é gerada quando ela chegar.
     const ehCEF = /caixa|cef/i.test(imovel?.fonte || '');

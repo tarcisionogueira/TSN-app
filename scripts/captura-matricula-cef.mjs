@@ -1,9 +1,9 @@
 /**
- * Captura automática da matrícula CEF.
+ * Captura automática dos DOCUMENTOS CEF (matrícula + edital/regra de venda online).
  * Lê a fila `cef_matricula_fila` (status=pendente), abre o imóvel no site da Caixa
- * via Puppeteer (mesma sessão que já usamos para fotos), captura a matrícula em PDF,
- * sobe no Storage (bucket 'documentos') e registra em `imovel_anexos` (tipo=matricula).
- * A IA (processar-analise) passa a processar sem upload manual.
+ * via Puppeteer (mesma sessão que já usamos para fotos), captura os documentos em PDF,
+ * sobe no Storage (bucket 'documentos') e registra em `imovel_anexos`
+ * (tipo=matricula / edital / regras_venda). A IA (processar-analise) processa sem upload manual.
  *
  * Roda no GitHub Actions (egress liberado). Secrets: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
@@ -15,6 +15,7 @@ const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABAS
 const BUCKET = 'documentos';
 const LOTE = Number(process.env.MATRICULA_LOTE || 25);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const ehUrl = v => typeof v === 'string' && /^https?:\/\//i.test(v) && !/detalhe-imovel\.asp/i.test(v);
 
 // CPF válido gerado (descartável) — usado só se o site exigir o formulário de busca.
 function gerarCPF() {
@@ -24,46 +25,60 @@ function gerarCPF() {
   return [...n, d1, d2].join('');
 }
 
-async function capturar(page, hdniip) {
-  const detalhe = `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${hdniip}`;
-  const matricula = `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${hdniip}`;
-  // 1) Visita o detalhe (estabelece cookies/sessão), como o foto-cef já faz.
-  await page.goto(detalhe, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-  // 2) Abre a matrícula na mesma sessão.
-  const resp = await page.goto(matricula, { waitUntil: 'networkidle2', timeout: 30000 });
+// Navega para uma URL na sessão atual e devolve um PDF (response PDF direto ou página impressa).
+async function capturarUrl(page, url) {
+  const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
   const ct = (resp?.headers()?.['content-type'] || '').toLowerCase();
-
   if (ct.includes('pdf')) {
     const buf = Buffer.from(await resp.buffer());
-    if (buf.length > 1000) return { buffer: buf, mime: 'application/pdf' };
+    if (buf.length > 1000) return buf;
   }
-  // HTML: valida que não é página de erro/sem matrícula, e imprime em PDF.
   const txt = (await page.evaluate(() => document.body?.innerText || '')).toLowerCase();
-  if (/n[aã]o encontrad|indispon[ií]vel|erro|sess[aã]o expirad/.test(txt) && txt.length < 400) {
-    return { erro: 'pagina_sem_matricula' };
-  }
+  if (/n[aã]o encontrad|indispon[ií]vel|sess[aã]o expirad/.test(txt) && txt.length < 400) return null;
   const pdf = Buffer.from(await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' } }));
-  if (pdf.length < 2000) return { erro: 'pdf_vazio' };
-  return { buffer: pdf, mime: 'application/pdf' };
+  return pdf.length > 2000 ? pdf : null;
 }
 
-async function salvarAnexo(imovelId, buffer) {
-  const path = `casos/${imovelId}/matricula_cef_auto.pdf`;
+async function salvarAnexo(imovelId, buffer, tipo, nome) {
+  const path = `casos/${imovelId}/${tipo}_cef_auto.pdf`;
   const up = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: 'application/pdf', upsert: true });
   if (up.error) throw new Error('upload: ' + up.error.message);
   const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
   const url = signed.data?.signedUrl || null;
-  // upsert por (imovel_id, tipo) — substitui matrícula anterior
-  const { data: existente } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('tipo', 'matricula').limit(1);
-  const row = { imovel_id: imovelId, tipo: 'matricula', nome: 'Matrícula (CEF, automática).pdf', url, storage_path: path, tamanho_kb: Math.round(buffer.length / 1024), role_criador: 'sistema' };
+  const row = { imovel_id: imovelId, tipo, nome, url, storage_path: path, tamanho_kb: Math.round(buffer.length / 1024), role_criador: 'sistema' };
+  const { data: existente } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('tipo', tipo).limit(1);
   if (existente?.length) await supabase.from('imovel_anexos').update(row).eq('id', existente[0].id);
   else await supabase.from('imovel_anexos').insert(row);
+}
+
+async function processar(page, item) {
+  const { data: imovel } = await supabase.from('imoveis_leilao').select('link_edital, link_regras_venda').eq('id', item.imovel_id).single();
+  const capturados = [];
+
+  // 1) Matrícula (sempre): matricula.asp na sessão do detalhe
+  await page.goto(`https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${item.hdniip}`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+  const matri = await capturarUrl(page, `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${item.hdniip}`);
+  if (matri) { await salvarAnexo(item.imovel_id, matri, 'matricula', 'Matrícula (CEF, automática).pdf'); capturados.push('matricula'); }
+
+  // 2) Edital (se houver link real)
+  if (ehUrl(imovel?.link_edital)) {
+    const ed = await capturarUrl(page, imovel.link_edital).catch(() => null);
+    if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
+  }
+  // 3) Regra de venda online (se houver link real) — quando não há edital
+  if (ehUrl(imovel?.link_regras_venda)) {
+    const rg = await capturarUrl(page, imovel.link_regras_venda).catch(() => null);
+    if (rg) { await salvarAnexo(item.imovel_id, rg, 'regras_venda', 'Regras de venda online (CEF, automático).pdf'); capturados.push('regras_venda'); }
+  }
+
+  if (!capturados.length) throw new Error('nenhum_documento_capturado');
+  return capturados;
 }
 
 async function main() {
   const { data: fila } = await supabase.from('cef_matricula_fila').select('*').eq('status', 'pendente').order('criado_em', { ascending: true }).limit(LOTE);
   if (!fila?.length) { console.log('Fila vazia.'); return; }
-  console.log(`Processando ${fila.length} matrícula(s) CEF...`);
+  console.log(`Processando ${fila.length} imóvel(is) CEF...`);
 
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
   const page = await browser.newPage();
@@ -73,12 +88,10 @@ async function main() {
   for (const item of fila) {
     await supabase.from('cef_matricula_fila').update({ status: 'processando', tentativas: (item.tentativas || 0) + 1 }).eq('id', item.id);
     try {
-      const r = await capturar(page, item.hdniip);
-      if (r.erro || !r.buffer) throw new Error(r.erro || 'sem_conteudo');
-      await salvarAnexo(item.imovel_id, r.buffer);
+      const docs = await processar(page, item);
       await supabase.from('cef_matricula_fila').update({ status: 'ok', erro: null, processado_em: new Date().toISOString() }).eq('id', item.id);
       ok++;
-      console.log(`✓ ${item.imovel_id}`);
+      console.log(`✓ ${item.imovel_id}: ${docs.join(', ')}`);
     } catch (e) {
       await supabase.from('cef_matricula_fila').update({ status: 'erro', erro: String(e.message).slice(0, 300), processado_em: new Date().toISOString() }).eq('id', item.id);
       erros++;

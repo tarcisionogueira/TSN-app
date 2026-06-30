@@ -22,6 +22,7 @@ const TIPO_DOC_LABEL = {
   identidade: 'Identidade/CPF', comprovante_pagamento: 'Comprovante de Pagamento',
   procuracao: 'Procuração', cnd: 'CND/Certidão', outro: 'Outro',
 };
+const TIPO_DOC_IMOVEL = { matricula: 'Matrícula', edital: 'Edital', regras_venda: 'Regras de venda online' };
 const STATUS_ARR = {
   em_processo: { label: 'Em Processo', bg: '#fef9c3', color: '#92400e' },
   finalizado:  { label: 'Finalizado',  bg: '#dcfce7', color: '#166534' },
@@ -407,6 +408,7 @@ export default function ImovelDetalhe() {
   const { id: paramId } = useParams();
   const { user, role } = useAuth();
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
+  const [anexosDocs, setAnexosDocs] = useState([]);
   const [loading, setLoading] = useState(!loc.state?.imovel);
   const [imgError, setImgError] = useState(false);
 
@@ -455,6 +457,17 @@ export default function ImovelDetalhe() {
     }).catch(() => {});
     return () => { cancel = true; };
   }, [imovel?.id, imovel?.pontosProximos]);
+
+  // Documentos do imóvel (matrícula/edital/regra) capturados/anexados — clientes
+  // logados podem ver e baixar (RLS libera esses tipos).
+  useEffect(() => {
+    if (!imovel?.id) return;
+    let cancel = false;
+    supabase.from('imovel_anexos').select('tipo,nome,url').eq('imovel_id', imovel.id)
+      .in('tipo', ['matricula', 'edital', 'regras_venda']).not('storage_path', 'is', null)
+      .then(({ data }) => { if (!cancel) setAnexosDocs(data || []); });
+    return () => { cancel = true; };
+  }, [imovel?.id]);
 
   if (loading) return (
     <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -723,11 +736,26 @@ export default function ImovelDetalhe() {
             )}
 
             {/* Documentos */}
-            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda) && (
+            {(anexosDocs.length > 0 || imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda) && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Documentos
                 </h2>
+
+                {/* Documentos disponíveis para download (capturados/anexados) */}
+                {anexosDocs.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+                    {anexosDocs.filter(a => ehUrl(a.url)).map((a, i) => {
+                      const lbl = TIPO_DOC_IMOVEL[a.tipo] || a.nome || 'Documento';
+                      return (
+                        <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                          📄 {lbl}
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Números de referência */}
                 {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso) && (
