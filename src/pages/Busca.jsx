@@ -262,6 +262,11 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         bounds.push([im.latitude, im.longitude]);
       });
 
+      // invalidateSize ANTES de centralizar: em login novo o container pode ter
+      // dimensão "velha" quando o fitBounds roda — sem isto, o zoom falha e o mapa
+      // fica no Brasil inteiro. Recalcular o tamanho garante o enquadramento certo.
+      try { leafletRef.current.invalidateSize(); } catch {}
+
       // PRIORIDADE DE CENTRALIZAÇÃO (o mapa deve sempre "acompanhar" o filtro):
       // 1) Raio ligado  -> centra no centro do raio com zoom proporcional ao raio.
       // 2) Há pins       -> ENQUADRA todos os pins do filtro (fitBounds). É isto que
@@ -319,7 +324,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         }).catch(() => {});
       }
     });
-  }, [imoveisMapa, mapReady, centroRaio, raioAtivo, raioKm]);
+  }, [imoveisMapa, mapReady, centroRaio, raioAtivo, raioKm, visivel]);
 
   // Zoom quando o centro do RAIO muda (ex.: cidade selecionada com raio ligado).
   // Sem raio quem comanda o enquadramento é o fitBounds dos pins acima — não
@@ -417,9 +422,11 @@ export default function Busca() {
     return next;
   });
 
-  // Preset por residência: na PRIMEIRA visita (sem deep-link e sem filtros salvos
-  // na sessão), pré-seleciona a cidade/UF do endereço do assinante. Depois disso
-  // os filtros ficam por conta do usuário (não sobrescrevemos o que ele mexeu).
+  // Preset inicial na PRIMEIRA visita (sem deep-link e sem filtros na sessão):
+  // PRIORIDADE para a cidade de RESIDÊNCIA do assinante; só se não houver endereço
+  // cadastrado é que cai para o último alerta salvo. Efeito ÚNICO e sequencial —
+  // evita a corrida entre "residência" e "último alerta" (que fazia o preset vir
+  // da última busca em vez da cidade do usuário). Não sobrescreve se já interagiu.
   const presetTentado = useRef(false);
   useEffect(() => {
     if (presetTentado.current || filtrosFromUrl) { presetTentado.current = true; return; }
@@ -428,17 +435,30 @@ export default function Busca() {
     if (temSessao) { presetTentado.current = true; return; }
     if (!user?.id) return; // aguarda o usuário carregar
     presetTentado.current = true;
-    supabase.from('perfis').select('endereco_uf,endereco_cidade').eq('id', user.id).single()
-      .then(({ data }) => {
-        const uf = (data?.endereco_uf || '').toUpperCase();
-        const cidade = data?.endereco_cidade || '';
-        if (!uf && !cidade) return;
-        setFiltrosPersist(prev => {
-          const jaTem = prev.estado || prev.cidades?.length || prev.tipos?.length || prev.modalidades?.length || prev.pagamento?.length || prev.valorMin || prev.valorMax;
-          if (jaTem) return prev; // usuário já interagiu — não mexe
-          return { ...prev, estado: uf || prev.estado, cidades: cidade ? [cidade] : prev.cidades };
-        });
+    (async () => {
+      // 1) Residência (prioridade)
+      let uf = '', cidade = '';
+      try {
+        const { data } = await supabase.from('perfis').select('endereco_uf,endereco_cidade').eq('id', user.id).single();
+        uf = (data?.endereco_uf || '').toUpperCase();
+        cidade = data?.endereco_cidade || '';
+      } catch {}
+      // 2) Fallback: último alerta salvo (só quando não há endereço de residência)
+      let alerta = null;
+      if (!uf && !cidade) {
+        try {
+          const { data } = await supabase.from('alertas_email').select('filtros').eq('user_id', user.id).single();
+          if (data?.filtros?.estado) alerta = data.filtros;
+        } catch {}
+      }
+      setFiltrosPersist(prev => {
+        const jaTem = prev.estado || prev.cidades?.length || prev.tipos?.length || prev.modalidades?.length || prev.pagamento?.length || prev.valorMin || prev.valorMax;
+        if (jaTem) return prev; // usuário já interagiu — não mexe
+        if (uf || cidade) return { ...prev, estado: uf || prev.estado, cidades: cidade ? [cidade] : prev.cidades };
+        if (alerta) return { ...FILTROS_INICIAL, ...alerta };
+        return prev;
       });
+    })();
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [filtrosSalvos, setFiltrosSalvos] = useState([]);
@@ -499,22 +519,7 @@ export default function Busca() {
       .then(({ data }) => setFiltrosSalvos(data || []));
   }, [user?.id]);
 
-  // Pré-filtro de cidade: se sessão sem filtros, usa preferências do último alerta do usuário
-  useEffect(() => {
-    if (!user?.id) return;
-    if (filtrosFromUrl) return; // deep-link tem prioridade
-    let ss = null;
-    try { ss = sessionStorage.getItem('busca_filtros'); } catch {}
-    if (ss) return; // sessionStorage tem prioridade
-    supabase.from('alertas_email').select('filtros').eq('user_id', user.id).single()
-      .then(({ data }) => {
-        if (!data?.filtros?.estado) return;
-        setFiltrosPersist(prev => {
-          if (prev.estado) return prev; // já preenchido por outro efeito
-          return { ...FILTROS_INICIAL, ...data.filtros };
-        });
-      });
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // (preset por residência/último alerta unificado no efeito sequencial acima)
 
   // Deep-link do email: ao carregar com filtros na URL, dispara busca automática
   const deepLinkDisparado = useRef(false);
