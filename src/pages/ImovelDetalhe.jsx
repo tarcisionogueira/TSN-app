@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
 
@@ -440,6 +441,21 @@ export default function ImovelDetalhe() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // On-demand: se o imóvel tem coordenada mas ainda não tem pontos próximos,
+  // calcula na hora (não espera o cron) — útil para imóveis recém-abertos.
+  useEffect(() => {
+    const la = imovel?.latitude ?? imovel?.lat, lo = imovel?.longitude ?? imovel?.lng;
+    const temC = la != null && lo != null && !(Number(la) === 0 && Number(lo) === 0);
+    if (!imovel?.id || !temC || imovel.pontosProximos) return;
+    let cancel = false;
+    apiCall(`/api/proximidades-imovel?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
+      if (!cancel && d?.pontos && Object.keys(d.pontos).length) {
+        setImovel(prev => prev ? { ...prev, pontosProximos: d.pontos } : prev);
+      }
+    }).catch(() => {});
+    return () => { cancel = true; };
+  }, [imovel?.id, imovel?.pontosProximos]);
+
   if (loading) return (
     <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center', color: '#64748b' }}>
@@ -566,7 +582,7 @@ export default function ImovelDetalhe() {
               {/* Localização: mapa embutido + botões para abrir no Google */}
               {temLocal && (
                 <div style={{ marginTop: 16 }}>
-                  {temCoord && <MiniMapa lat={Number(_lat)} lng={Number(_lng)} pontos={imovel.pontosProximos} />}
+                  {temCoord && <MiniMapa key={imovel.pontosProximos ? 'm-com-pontos' : 'm-so-imovel'} lat={Number(_lat)} lng={Number(_lng)} pontos={imovel.pontosProximos} />}
                   {/* Legenda dos pontos próximos (atratividade) */}
                   {temCoord && imovel.pontosProximos && Object.keys(imovel.pontosProximos).length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
