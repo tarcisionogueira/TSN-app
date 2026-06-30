@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scale, Building2, Mail, FileText, DollarSign, Plus, Trash2, Save, Loader2, ArrowRight, Users } from 'lucide-react';
+import { Scale, Building2, Mail, FileText, DollarSign, Plus, Trash2, Save, Loader2, ArrowRight, MessageSquare, Paperclip } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
@@ -26,7 +26,7 @@ export default function AdvogadoPortal() {
       <p style={{ color: '#64748b', fontSize: 14, margin: '0 0 20px' }}>Gerencie seu escritório, os e-mails em cópia e acompanhe seus casos e honorários.</p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {[['escritorio', 'Meu Escritório', Building2], ['casos', 'Casos Recebidos', FileText], ['honorarios', 'Honorários', DollarSign]].map(([k, label, Icon]) => (
+        {[['escritorio', 'Meu Escritório', Building2], ['casos', 'Casos Recebidos', FileText], ['atendimentos', 'Atendimentos', MessageSquare], ['honorarios', 'Honorários', DollarSign]].map(([k, label, Icon]) => (
           <button key={k} onClick={() => k === 'honorarios' ? nav('/comissoes') : setAba(k)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: aba === k ? '#7c3aed' : '#f1f5f9', color: aba === k ? 'white' : '#64748b' }}>
             <Icon size={14} /> {label}
@@ -36,6 +36,65 @@ export default function AdvogadoPortal() {
 
       {aba === 'escritorio' && <SecaoEscritorio />}
       {aba === 'casos' && <SecaoCasos user={user} nav={nav} />}
+      {aba === 'atendimentos' && <SecaoAtendimentos />}
+    </div>
+  );
+}
+
+function SecaoAtendimentos() {
+  const [itens, setItens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [aberto, setAberto] = useState(null);
+  useEffect(() => {
+    (async () => {
+      try { const r = await apiCall('/api/advogado-atendimentos'); const d = await r.json(); setItens(d.atendimentos || []); } catch (_) {}
+      setLoading(false);
+    })();
+  }, []);
+  const fmt = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  if (loading) return <div style={{ padding: 30, textAlign: 'center' }}><Loader2 size={20} color="#7c3aed" style={{ animation: 'spin 1s linear infinite' }} /></div>;
+  if (!itens.length) return <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>Nenhum atendimento ainda. Quando um caso for encaminhado por e-mail, a conversa aparece aqui.</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {itens.map(it => (
+        <div key={it.caso_id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
+          <button onClick={() => setAberto(aberto === it.caso_id ? null : it.caso_id)}
+            style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', border: 'none', background: 'white', cursor: 'pointer' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.imovel || 'Imóvel'} <span style={{ color: '#94a3b8', fontWeight: 400 }}>· {it.tipo_leilao || '—'}</span></div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{it.thread.length} mensagem(ns) na conversa</div>
+            </div>
+            <ArrowRight size={16} color="#cbd5e1" style={{ transform: aberto === it.caso_id ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
+          </button>
+          {aberto === it.caso_id && (
+            <div style={{ borderTop: '1px solid #f1f5f9', padding: '14px 18px', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Thread contínuo: demanda enviada + suas devolutivas, em ordem */}
+              {it.thread.map((m, i) => {
+                const ehDemanda = m.tipo === 'demanda';
+                return (
+                  <div key={i} style={{ alignSelf: ehDemanda ? 'flex-start' : 'flex-end', maxWidth: '88%' }}>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3 }}>
+                      {ehDemanda ? '📨 Demanda recebida' : '⚖️ Sua devolutiva'} · {fmt(m.data)}
+                    </div>
+                    <div style={{ padding: '10px 13px', borderRadius: 12, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap',
+                      background: ehDemanda ? 'white' : '#ccfbf1', border: `1px solid ${ehDemanda ? '#e2e8f0' : '#5eead4'}`, color: '#111' }}>
+                      {ehDemanda && m.assunto && <div style={{ fontWeight: 700, marginBottom: 4 }}>{m.assunto}</div>}
+                      {m.texto || (ehDemanda ? 'Documentação e triagem enviadas por e-mail.' : '(sem texto)')}
+                      {(m.anexos || []).length > 0 && (
+                        <div style={{ marginTop: 6, fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Paperclip size={11} /> {m.anexos.length} anexo(s)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
