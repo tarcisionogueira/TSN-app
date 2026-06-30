@@ -166,7 +166,9 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   useEffect(() => {
     if (!mapContainerRef.current || leafletRef.current) return;
     import('leaflet').then(async L => {
-      await import('leaflet.markercluster');
+      // markercluster é PLUGIN: se falhar ao carregar/anexar, NÃO pode impedir o
+      // mapa de ficar pronto (senão a centralização nunca roda → mapa no Brasil).
+      try { await import('leaflet.markercluster'); } catch (e) { console.warn('[mapa] markercluster falhou', e); }
       delete L.Icon.Default.prototype._getIconUrl;
       // zoomControl no canto inferior direito: o topo-esquerdo é ocupado pelo
       // painel "Ver lista" (estilo Google) — evita os controles ficarem escondidos.
@@ -179,12 +181,15 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 19,
       }).addTo(leafletRef.current);
-      // Cluster agrupa os marcadores (evita travar com milhares de pins).
-      // Os círculos de raio aproximado ficam numa camada própria, pois o
-      // markerClusterGroup só agrupa marcadores.
-      // disableClusteringAtZoom: ao aproximar (zoom ≥ 16) mostra cada imóvel no seu
-      // ponto; spiderfyOnMaxZoom separa os que caíram em coordenadas idênticas.
-      markersRef.current = L.markerClusterGroup({ maxClusterRadius: 55, showCoverageOnHover: false, chunkedLoading: true, disableClusteringAtZoom: 16, spiderfyOnMaxZoom: true, zoomToBoundsOnClick: true }).addTo(leafletRef.current);
+      // Cluster agrupa os marcadores (evita travar com milhares de pins). Se o
+      // plugin não estiver disponível, cai para um layerGroup simples — assim o
+      // mapa SEMPRE fica pronto e centraliza, mesmo sem clusterização.
+      try {
+        markersRef.current = (typeof L.markerClusterGroup === 'function')
+          ? L.markerClusterGroup({ maxClusterRadius: 55, showCoverageOnHover: false, chunkedLoading: true, disableClusteringAtZoom: 16, spiderfyOnMaxZoom: true, zoomToBoundsOnClick: true })
+          : L.layerGroup();
+      } catch (e) { console.warn('[mapa] markerClusterGroup falhou, usando layerGroup', e); markersRef.current = L.layerGroup(); }
+      markersRef.current.addTo(leafletRef.current);
       circlesRef.current = L.layerGroup().addTo(leafletRef.current);
       // Corrige tiles incompletos quando o container foi montado enquanto estava oculto
       setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 50);
@@ -274,6 +279,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   // Roda algumas vezes (retry) porque, em login novo, o container pode ter
   // dimensão "velha" quando o fitBounds roda (e aí o mapa ficava no Brasil inteiro).
   useEffect(() => {
+    console.warn('[mapa] centralizar?', { mapReady, temMapa: !!leafletRef.current, visivel, imoveis: imoveisMapa.length, raioAtivo });
     if (!mapReady || !leafletRef.current || !visivel) return;
     const pts = imoveisMapa
       .map(im => [Number(im.latitude), Number(im.longitude)])
@@ -302,7 +308,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           const inliers = pts.filter((p, i) => dists[i] <= thr);
           if (inliers.length >= Math.ceil(pts.length * 0.6)) fit = inliers;
         }
-        try { map.fitBounds(fit, { padding: [40, 40], maxZoom: 13 }); } catch {}
+        console.warn('[mapa] fitBounds', fit.length, 'pts', fit[0]);
+        try { map.fitBounds(fit, { padding: [40, 40], maxZoom: 13 }); } catch (e) { console.warn('[mapa] fitBounds erro', e); }
         return;
       }
       if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
