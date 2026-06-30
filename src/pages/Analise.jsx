@@ -540,29 +540,16 @@ export default function Analise() {
     // Snapshots dos dados no momento do clique — a geração roda no provider e
     // não depende mais desta tela ficar montada.
     const dSnap = { ...d };
-    const metricasSnap = metricas;
-    const tetoSnap = teto;
-    const cenarioSnap = isAVista ? 'À Vista' : 'Alavancado';
-    showMsg('Geração iniciada — pode navegar pelo sistema; acompanhe em "Análises" no topo.');
+    const mercadoInputs = {
+      endereco: dSnap.endereco || dSnap.cidade, tipoImovel: dSnap.tipo,
+      areaM2: dSnap.areaM2, cidade: dSnap.cidade, estado: dSnap.estado,
+      nomeCondominio: dSnap.nomeCondominio || '',
+    };
+    const parecerInputs = { d: dSnap, metricas, teto, cenario: isAVista ? 'À Vista' : 'Alavancado' };
+    showMsg('Geração iniciada no servidor — pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
       { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null },
-      async () => {
-        // 1) Avaliação mercadológica (IA, web search)
-        const res = await analisarMercado({
-          endereco: dSnap.endereco || dSnap.cidade, tipoImovel: dSnap.tipo,
-          areaM2: dSnap.areaM2, cidade: dSnap.cidade, estado: dSnap.estado,
-          nomeCondominio: dSnap.nomeCondominio || '',
-        });
-        let valorMercado = null, valorLocacao = null;
-        if (res?.precoMedioM2 && dSnap.areaM2) valorMercado = Math.round(res.precoMedioM2 * dSnap.areaM2 * 0.9);
-        if (res?.aluguelMedio) valorLocacao = Math.round(res.aluguelMedio);
-        // 2) Laudo executivo de viabilidade (IA)
-        let parecerTxt = '';
-        try {
-          parecerTxt = await gerarParecer({ ...dSnap, valorMercado: valorMercado || dSnap.valorMercado, _cenario: cenarioSnap, _teto: tetoSnap }, metricasSnap, res);
-        } catch { /* laudo é complementar */ }
-        return { mercado: res, parecer: parecerTxt, valorMercado, valorLocacao };
-      }
+      { mercadoInputs, parecerInputs }
     );
   };
 
