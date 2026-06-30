@@ -276,6 +276,10 @@ export default function Analise() {
   const [juridicoEnviado, setJuridicoEnviado] = useState(false);
   const [docsLeiloeiro, setDocsLeiloeiro] = useState([]); // anexos do imóvel (matrícula/edital/regras)
   const isStaffAnalise = ['analista','advogado','admin','consultor'].includes(role);
+  // Cliente: analisar imóvel de leiloeiro ainda não integrado (fora da base)
+  const [externoLink, setExternoLink] = useState('');
+  const [externoEnviando, setExternoEnviando] = useState(false);
+  const [externoNotificado, setExternoNotificado] = useState(false);
 
   // Controle de abertura por seção
   const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:true, viabilidade:true, fluxo:true, laudo:true, matricula:true, cnj:true, guia:true, financiamento:true });
@@ -433,6 +437,51 @@ export default function Analise() {
       setLoadDoc(false);
     } else {
       showMsg('Use arquivos .pdf ou .txt.', 'error');
+    }
+  };
+
+  // ─── Cliente: analisar imóvel de leiloeiro ainda NÃO integrado ─────────────
+  // O cliente cola o link do lote e/ou anexa edital/matrícula. Reaproveita a
+  // extração por URL/arquivo (antes restrita à equipe) para liberar a geração
+  // dos relatórios e avisa a equipe (solicitacoes 'leiloeiro_sugerido') para
+  // avaliar integrar o leiloeiro. É uma análise "fora da base" — sem a garantia
+  // da curadoria BidPro; depende do que o cliente forneceu.
+  const dominioDoLink = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } };
+  const analisarLeiloeiroExterno = async () => {
+    const link = externoLink.trim();
+    const temDoc = !!(textoDoc.trim() || textoMatricula.trim());
+    if (!link && !temDoc) { showMsg('Cole o link do lote ou anexe o edital/matrícula primeiro.', 'error'); return; }
+    if (link && !/^https?:\/\//.test(link)) { showMsg('Informe um link válido (https://...).', 'error'); return; }
+    setExternoEnviando(true);
+    try {
+      // 1) Extrai os dados do imóvel a partir do que o cliente forneceu
+      if (link) {
+        setUrlEdital(link);
+        try { const ext = await extrairDadosDocumentoUrl(link); aplicarExtracao(ext); }
+        catch { /* extração pode falhar; segue com anexos/dados manuais */ }
+      } else if (temDoc) {
+        await extrairDoc();
+      }
+      // 2) Avisa a equipe para avaliar integrar este leiloeiro (uma única vez)
+      if (user && !externoNotificado) {
+        const dominio = dominioDoLink(link);
+        const { error } = await supabase.from('solicitacoes').insert({
+          user_id: user.id,
+          imovel_ref: d.id || 'externo',
+          imovel_nome: d.nome || d.endereco || 'Imóvel fora da base',
+          imovel_cidade: d.cidade || '',
+          tipo: 'leiloeiro_sugerido',
+          status: 'solicitado',
+          notas_analista: `Análise fora da base (cliente). Link: ${link || '(somente anexos)'}${dominio ? ` · domínio: ${dominio}` : ''}.`,
+        });
+        if (error) throw error;
+      }
+      setExternoNotificado(true);
+      showMsg('Análise liberada! Gere os relatórios acima. A equipe foi avisada para avaliar integrar este leiloeiro.');
+    } catch {
+      showMsg('Não foi possível liberar a análise. Tente novamente.', 'error');
+    } finally {
+      setExternoEnviando(false);
     }
   };
 
@@ -826,6 +875,41 @@ export default function Analise() {
                 ))}
               </div>
               {docMsg && <div style={{ marginTop:14, padding:'10px 14px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e' }}>{docMsg}</div>}
+
+              {/* ── Imóvel de leiloeiro ainda não integrado (visível ao cliente) ── */}
+              {!isStaffAnalise && (
+                <div style={{ marginTop:18, border:'1px dashed #c4b5fd', background:'#faf5ff', borderRadius:14, padding:'16px 18px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                    <Building2 size={17} color="#7c3aed"/>
+                    <div style={{ fontSize:14, fontWeight:800, color:'#111' }}>Imóvel de outro leiloeiro?</div>
+                  </div>
+                  <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>
+                    Se o imóvel é de um leiloeiro que ainda não está na nossa base, cole o link do lote e/ou anexe o edital/matrícula.
+                    A IA extrai os dados e libera os relatórios acima. <strong>É uma análise fora da base</strong> — os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.
+                  </div>
+                  {externoNotificado ? (
+                    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:10, fontSize:12, fontWeight:700, color:'#065f46' }}>
+                      <CheckCircle2 size={15}/> Análise liberada — gere os relatórios acima. Equipe avisada.
+                    </div>
+                  ) : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      <input value={externoLink} onChange={e=>setExternoLink(e.target.value)} placeholder="Link do lote / página do leiloeiro (https://...)"
+                        style={{ width:'100%', padding:'10px 12px', border:'1px solid #ddd6fe', borderRadius:9, fontSize:13, color:'#111', boxSizing:'border-box' }}
+                        onKeyDown={e=>{ if(e.key==='Enter' && !externoEnviando) analisarLeiloeiroExterno(); }}/>
+                      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                        <label style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 14px', border:'2px dashed #ddd6fe', borderRadius:10, color:'#7c3aed', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                          <UploadCloud size={15}/> {textoDoc.trim() ? 'Edital anexado ✓' : 'Anexar edital/matrícula (PDF/TXT)'}
+                          <input type="file" accept=".pdf,.txt" onChange={handleFileUpload} style={{display:'none'}}/>
+                        </label>
+                        <button onClick={analisarLeiloeiroExterno} disabled={externoEnviando || analisesBloqueado}
+                          style={{ flex:1, minWidth:180, padding:'10px 16px', background:(externoEnviando||analisesBloqueado)?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:(externoEnviando||analisesBloqueado)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                          {externoEnviando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Liberando...</> : analisesBloqueado ? <><Lock size={14}/> Limite atingido</> : <><Sparkles size={15}/> Liberar análise deste imóvel</>}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

@@ -21,6 +21,13 @@ const AVALIACOES = [
   { key:'processual',    label:'Avaliação Processual',                    desc:'Análise processual do imóvel com extração de riscos e pendências. Liberação em até 24h.',          icon:Scale,     cor:'#8b5cf6', bg:'#ede9fe', via:'integracao' },
 ];
 
+// Tipos de solicitação fora do catálogo de avaliações (workflow /analise).
+const TIPO_LABEL_EXTRA = {
+  consulta: 'Revisão pelo analista',
+  juridico: 'Encaminhamento jurídico',
+  leiloeiro_sugerido: 'Leiloeiro sugerido (fora da base)',
+};
+
 const ROLES_ANALISTA = ['analista','advogado','admin'];
 
 // Estado de uma solicitação (row do Supabase)
@@ -624,7 +631,7 @@ export default function Painel() {
                     {todasSolics.map(s => (
                       <div key={s.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', background:'white', borderRadius:10, border:'1px solid #e2e8f0', flexWrap:'wrap' }}>
                         <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, background:'#fef3c7', color:'#92400e' }}>
-                          {AVALIACOES.find(a=>a.key===s.tipo)?.label || s.tipo}
+                          {AVALIACOES.find(a=>a.key===s.tipo)?.label || TIPO_LABEL_EXTRA[s.tipo] || s.tipo}
                         </span>
                         <span style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{s.imovel_nome}</span>
                         {s.imovel_cidade && <span style={{ fontSize:12, color:'#64748b' }}>{s.imovel_cidade}</span>}
