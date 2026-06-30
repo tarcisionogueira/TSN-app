@@ -300,6 +300,25 @@ export default function Analise() {
   const isViavel = isUsoProprio ? true : metricas.roi >= META;
   const riscosBloqueantes = (d.riscos||[]).filter(r => r.tipo === 'bloqueante');
 
+  // ─── Cenários de disputa (relatório mercadológico) ─────────────────────────
+  // "Sem disputa": arremata pelo lance base. "Com disputa": pior caso aceitável —
+  // a concorrência empurra o preço até o teto que ainda preserva 40% de lucro
+  // líquido (piso). Tudo calculado na MELHOR condição de pagamento.
+  const PISO_LUCRO = 40;
+  const cenariosDisputa = useMemo(() => {
+    const lanceBase = d.valorArrematacao || 0;
+    const podeFin = !d.somenteAVista;
+    const mAV = calcularMetricasCenario(d, lanceBase, true);
+    const mFIN = podeFin ? calcularMetricasCenario(d, lanceBase, false) : null;
+    // Melhor condição = maior retorno no lance base (sem disputa)
+    const usarAVista = !mFIN || mAV.roi >= mFIN.roi;
+    const condLabel = usarAVista ? 'À Vista' : 'Financiado / Alavancado';
+    const semDisputa = usarAVista ? mAV : mFIN;
+    const tetoBest = calcularTetoLance(d, usarAVista, PISO_LUCRO, d.valorMercado || 0);
+    const comDisputa = calcularMetricasCenario(d, tetoBest, usarAVista);
+    return { condLabel, usarAVista, lanceBase, semDisputa, tetoBest, comDisputa };
+  }, [d]);
+
   const sacTab = useMemo(() => {
     const p = (d.valorArrematacao||0) * (1 - (d.sinalPercentual||0)/100);
     return calcularSAC(p, d.cetAnual||0, d.prazoMeses||0);
@@ -1460,6 +1479,54 @@ export default function Analise() {
               </button>
             ))}
           </div>
+
+          {/* Cenários de disputa — Sem disputa vs Com disputa (piso de 40% de lucro) */}
+          {!isUsoProprio && d.valorArrematacao > 0 && d.valorMercado > 0 && (() => {
+            const cd = cenariosDisputa;
+            const pisoOk = cd.tetoBest > cd.lanceBase;
+            const cards = [
+              { tag:'SEM DISPUTA', cor:'#10b981', bg:'#f0fdf4', lance:cd.lanceBase, m:cd.semDisputa, nota:'Arremata pelo lance base' },
+              { tag:'COM DISPUTA — PIOR CASO', cor:'#f59e0b', bg:'#fef3c7', lance:cd.tetoBest, m:cd.comDisputa, nota:`Piso de ${PISO_LUCRO}% de lucro líquido` },
+            ];
+            return (
+              <div style={{ border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
+                <div style={{ background:'#0B48A6', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:13, fontWeight:800, color:'white' }}>Cenários de Disputa</span>
+                  <span style={{ fontSize:11, fontWeight:700, color:'white', background:'rgba(255,255,255,0.18)', borderRadius:20, padding:'2px 10px' }}>Melhor condição: {cd.condLabel}</span>
+                </div>
+                <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+                  {cards.map(c => (
+                    <div key={c.tag} style={{ border:`2px solid ${c.cor}`, borderRadius:12, overflow:'hidden' }}>
+                      <div style={{ background:c.bg, padding:'8px 14px', fontSize:11, fontWeight:800, color:c.cor, letterSpacing:0.5 }}>{c.tag}</div>
+                      <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:7 }}>
+                        {[
+                          ['Lance', `R$ ${fmt(c.lance)}`],
+                          ['Capital aportado', `R$ ${fmt(c.m.capitalMobilizado)}`],
+                          ['Lucro líquido', `R$ ${fmt(c.m.lucro)}`],
+                        ].map(([l,v]) => (
+                          <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12 }}>
+                            <span style={{ color:'#64748b' }}>{l}</span><span style={{ fontWeight:700, color:'#111' }}>{v}</span>
+                          </div>
+                        ))}
+                        <div style={{ marginTop:4, background:c.cor, borderRadius:8, padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span style={{ fontSize:11, fontWeight:700, color:'white', opacity:0.9 }}>{cd.usarAVista ? 'ROI' : 'ROE'}</span>
+                          <span style={{ fontSize:18, fontWeight:900, color:'white' }}>{fmtPct(c.m.roi)}</span>
+                        </div>
+                        <div style={{ fontSize:10, color:'#94a3b8' }}>{c.nota}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding:'0 14px 14px' }}>
+                  <div style={{ background: pisoOk ? '#f0fdf4' : '#fef2f2', border:`1px solid ${pisoOk ? '#bbf7d0' : '#fecaca'}`, borderRadius:10, padding:'10px 14px', fontSize:12, color: pisoOk ? '#15803d' : '#b91c1c', lineHeight:1.6 }}>
+                    {pisoOk
+                      ? <><strong>Validação:</strong> mesmo numa disputa, dá para cobrir até <strong>R$ {fmt(cd.tetoBest)}</strong> mantendo o piso de {PISO_LUCRO}% de lucro líquido. Acima desse lance, a operação deixa de compensar — é o limite para parar de dar lances.</>
+                      : <><strong>Atenção:</strong> no lance base o retorno já está abaixo de {PISO_LUCRO}%. Não há margem para disputa — só compensa abaixo de <strong>R$ {fmt(cd.tetoBest)}</strong>.</>}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* KPIs grandes */}
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:12 }}>
