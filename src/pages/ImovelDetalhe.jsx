@@ -882,11 +882,11 @@ export default function ImovelDetalhe() {
                 <div style={{ marginBottom: 10 }}>
                   <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#111111', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
-                    <ExternalLink size={15} /> {/caixa|cef/i.test(imovel.fonte || '') ? 'Ver no portal da Caixa (matrícula e edital)' : 'Ir ao leiloeiro (matrícula e edital)'}
+                    <ExternalLink size={15} /> {/caixa|cef/i.test(imovel.fonte || '') ? 'Ver anúncio no portal da Caixa' : 'Ver anúncio no site do leiloeiro'}
                   </a>
                   <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
-                    ⚠️ Se o link estiver expirado, o imóvel pode ter sido vendido.{' '}
-                    {imovel.fonte === 'caixa' && (
+                    ⚠️ Confira se o anúncio ainda está ativo — se o link estiver expirado, o imóvel pode já ter sido vendido.{' '}
+                    {/caixa|cef/i.test(imovel.fonte || '') && (
                       <a href="https://venda-imoveis.caixa.gov.br/sistema/busca-imovel.asp" target="_blank" rel="noopener noreferrer"
                         style={{ color: '#0D63DB', fontWeight: 600 }}>
                         Buscar na CEF →
