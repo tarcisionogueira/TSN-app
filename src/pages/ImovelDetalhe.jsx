@@ -547,13 +547,19 @@ export default function ImovelDetalhe() {
   // dá 404). Hotlink direto funciona no navegador do usuário.
   const matriculaUrl = caixaMatriculaUrl({ fonte: imovel.fonte, estado: imovel.estado, fonteId: imovel.fonteId })
     || (ehMatriculaValida(imovel.linkMatricula) ? imovel.linkMatricula : null);
-  // Venda direta → "Regras de venda online" (página do portal, onde ficam as regras);
-  // leilão → "Edital".
+  // Venda direta → "Regras de venda online"; leilão → "Edital". MAS só rotulamos
+  // como o documento quando o link é um ARQUIVO de verdade. Quando é apenas a
+  // página do anúncio no portal (detalhe-imovel.asp = mesmo destino do url_lote),
+  // o botão na prática abre o site do leiloeiro → rótulo honesto "Acessar leiloeiro".
   const isVendaDireta = (imovel.modalidade || '') === 'venda_direta';
-  const regrasEditalUrl = isVendaDireta
-    ? (ehUrl(imovel.linkRegrasVenda) ? imovel.linkRegrasVenda : (ehUrl(imovel.urlLote) ? imovel.urlLote : null))
-    : (ehUrl(imovel.linkEdital) ? imovel.linkEdital : (ehUrl(imovel.urlLote) ? imovel.urlLote : null));
-  const regrasEditalLabel = isVendaDireta ? 'Regras de venda online' : 'Edital';
+  const docRegras = isVendaDireta ? imovel.linkRegrasVenda : imovel.linkEdital;
+  const regrasEhDocReal = ehRegrasDoc(docRegras, imovel.urlLote);
+  const regrasEditalUrl = regrasEhDocReal
+    ? docRegras
+    : (ehUrl(docRegras) ? docRegras : (ehUrl(imovel.urlLote) ? imovel.urlLote : null));
+  const regrasEditalLabel = regrasEhDocReal
+    ? (isVendaDireta ? 'Regras de venda online' : 'Edital')
+    : 'Acessar leiloeiro';
   const temNumerosRef = !!(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso);
   const temCardDocumentos = !!matriculaUrl || !!regrasEditalUrl || temNumerosRef;
 
@@ -832,7 +838,7 @@ export default function ImovelDetalhe() {
                     {regrasEditalUrl && (
                       <a href={regrasEditalUrl} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        <ScrollText size={15} /> {regrasEditalLabel}
+                        {regrasEhDocReal ? <ScrollText size={15} /> : <ExternalLink size={15} />} {regrasEditalLabel}
                       </a>
                     )}
                   </div>

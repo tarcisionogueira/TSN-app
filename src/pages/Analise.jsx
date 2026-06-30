@@ -785,10 +785,17 @@ export default function Analise() {
               const matriculaCef = caixaMatriculaUrl({ fonte: imovelInicial?.fonte, estado: imovelInicial?.estado, fonteId: imovelInicial?.fonteId });
               const docsView = topicos.map(t => {
                 const a = docsLeiloeiro.find(x => x.tipo === t);
-                const fb = t==='edital' ? imovelInicial?.linkEdital
-                  : t==='matricula' ? (matriculaCef || imovelInicial?.linkMatricula)
-                  : imovelInicial?.linkRegrasVenda;
-                const url = (a?.url && /^https?:\/\//.test(a.url)) ? a.url : (ehArquivo(fb) ? fb : null);
+                const anexoUrl = (a?.url && /^https?:\/\//.test(a.url)) ? a.url : null;
+                let url;
+                if (t === 'matricula') {
+                  // Prefere o PDF estático da Caixa (limpo, abre igual à tela do
+                  // imóvel) ao anexo capturado — que às vezes é um "print" de
+                  // visualizador, com baixa legibilidade. Anexo só como fallback.
+                  url = matriculaCef || anexoUrl || (ehArquivo(imovelInicial?.linkMatricula) ? imovelInicial.linkMatricula : null);
+                } else {
+                  const fb = t==='edital' ? imovelInicial?.linkEdital : imovelInicial?.linkRegrasVenda;
+                  url = anexoUrl || (ehArquivo(fb) ? fb : null);
+                }
                 return { t, label: docMap[t], url };
               });
               const algum = docsView.some(x => x.url);
