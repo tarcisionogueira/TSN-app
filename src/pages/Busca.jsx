@@ -92,9 +92,10 @@ function svgPin(cor) {
   )}`;
 }
 
-// Normaliza cidade (minúscula, sem acento) — igual ao cidade_norm do banco.
-// Resolve o bug de filtrar "Santana de Parnaíba" e não casar "Santana de Parnaiba".
-const normCidade = (c) => (c || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+// Normaliza cidade IGUAL ao cidade_norm do banco: minúscula, sem acento/cedilha e
+// sem pontuação/espaços. Assim "Santana de Parnaíba" = "Santana de Parnaiba",
+// "Embu-Guaçu" = "Embu Guacu" = "embuguacu", "Sant'Ana" = "Santana", etc.
+const normCidade = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 
 function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista, visivel, height }) {
   const mapContainerRef = useRef(null);
