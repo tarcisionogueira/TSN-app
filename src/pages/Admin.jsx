@@ -1380,10 +1380,15 @@ function ConfigTab() {
                     <div style={{ fontWeight: 700, fontSize: 13, color: '#111111' }}>{r.nome}</div>
                   </div>
 
-                  {/* Col 2: Valor R$ */}
+                  {/* Col 2: Valor R$ (clube/assessorado: este campo é o TOTAL de 12 meses) */}
                   <div>
                     <InputBRL value={r.preco} onChange={v => updateRow(r._id, r._tipo, 'preco', v)}
                       style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
+                    {(r._id === 'clube' || r._id === 'assessorado') && Number(r.preco) > 0 && (
+                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 3, fontWeight: 600 }}>
+                        total 12 meses · = {fmtBRL(Number(r.preco) / 12)}/mês
+                      </div>
+                    )}
                   </div>
 
                   {/* Col 3: Desc. à vista % */}
@@ -2386,9 +2391,10 @@ function buildProdutosPromo(planos) {
   ['top2', 'assessorado', 'clube'].forEach(key => {
     const p = planos[key];
     if (!p || p.ativo === false) return;
-    const label = p.assinatura
-      ? `${p.nome} — ${fmt(p.preco)}/mês`
-      : `${p.nome} — ${fmt(p.preco)} × 12`;
+    const ehDozeMeses = key === 'assessorado' || key === 'clube';
+    const label = ehDozeMeses
+      ? `${p.nome} — ${fmt(p.preco / 12)}/mês × 12 (total ${fmt(p.preco)})`
+      : `${p.nome} — ${fmt(p.preco)}/mês`;
     result.push({ key, label });
     if (!p.assinatura && p.precoVista) {
       result.push({ key: `${key}_vista`, label: `${p.nome} À Vista — ${fmt(p.precoVista)} (${p.desconto_vista_pct || 20}% off)` });

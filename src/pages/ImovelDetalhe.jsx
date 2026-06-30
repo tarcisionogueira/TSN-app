@@ -409,6 +409,7 @@ export default function ImovelDetalhe() {
   const { user, role } = useAuth();
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
   const [anexosDocs, setAnexosDocs] = useState([]);
+  const [buscandoDocs, setBuscandoDocs] = useState('');
   const [loading, setLoading] = useState(!loc.state?.imovel);
   const [imgError, setImgError] = useState(false);
 
@@ -468,6 +469,14 @@ export default function ImovelDetalhe() {
       .then(({ data }) => { if (!cancel) setAnexosDocs(data || []); });
     return () => { cancel = true; };
   }, [imovel?.id]);
+
+  const buscarDocsCaixa = async () => {
+    setBuscandoDocs('loading');
+    try {
+      const r = await apiCall('/api/capturar-matricula-cef', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imovel_id: imovel.id }) });
+      setBuscandoDocs(r.ok ? 'ok' : 'erro');
+    } catch { setBuscandoDocs('erro'); }
+  };
 
   if (loading) return (
     <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -741,6 +750,19 @@ export default function ImovelDetalhe() {
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Documentos
                 </h2>
+
+                {/* Staff: buscar documentos na Caixa (enfileira captura automática) */}
+                {['admin', 'analista'].includes(role) && /caixa|cef/i.test(imovel.fonte || '') && !anexosDocs.some(a => a.tipo === 'matricula') && (
+                  <div style={{ marginBottom: 14 }}>
+                    <button onClick={buscarDocsCaixa} disabled={buscandoDocs === 'loading' || buscandoDocs === 'ok'}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: buscandoDocs === 'ok' ? '#dcfce7' : '#eef2ff', color: buscandoDocs === 'ok' ? '#15803d' : '#4338ca', border: `1px solid ${buscandoDocs === 'ok' ? '#bbf7d0' : '#c7d2fe'}`, borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: buscandoDocs === 'ok' ? 'default' : 'pointer' }}>
+                      {buscandoDocs === 'ok' ? '✓ Na fila — documentos chegam em alguns minutos'
+                        : buscandoDocs === 'loading' ? 'Enfileirando…'
+                        : buscandoDocs === 'erro' ? 'Erro — tentar de novo'
+                        : '🔎 Buscar documentos na Caixa (automático)'}
+                    </button>
+                  </div>
+                )}
 
                 {/* Documentos disponíveis para download (capturados/anexados) */}
                 {anexosDocs.length > 0 && (
