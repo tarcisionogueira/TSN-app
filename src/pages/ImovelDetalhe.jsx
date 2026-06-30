@@ -101,7 +101,8 @@ function ImoveisSimilares({ imovel, nav }) {
           return (
             <button key={it.id} onClick={() => { nav('/imovel/' + it.id); window.scrollTo(0, 0); }}
               style={{ textAlign: 'left', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: 'white', cursor: 'pointer', padding: 0 }}>
-              <div style={{ height: 110, background: '#f1f5f9', backgroundImage: it.link_foto ? `url(${it.link_foto})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', position: 'relative' }}>
+              <div style={{ height: 110, background: '#f1f5f9', backgroundImage: it.link_foto ? `url(${it.link_foto})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {!it.link_foto && <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Sem foto</span>}
                 {desc > 0 && <span style={{ position: 'absolute', top: 8, right: 8, background: '#16a34a', color: 'white', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 8 }}>-{desc}%</span>}
               </div>
               <div style={{ padding: '10px 12px' }}>
@@ -419,10 +420,12 @@ export default function ImovelDetalhe() {
     // A busca por raio passa o imóvel no state SEM edital/matrícula/descrição.
     // Se esses documentos faltam, busca o registro completo no banco (o state
     // serve só para o paint imediato, sem spinner).
-    const faltamDocs = !imovel || (!imovel.linkEdital && !imovel.linkMatricula && !imovel.descricao);
-    if (!faltamDocs) return;
+    // Já temos ESTE imóvel com documentos? então não precisa buscar.
+    const jaCarregado = imovel && imovel.id === id && (imovel.linkEdital || imovel.linkMatricula || imovel.descricao);
+    if (jaCarregado) return;
     if (!id) { nav('/buscar'); return; }
-    if (!imovel) setLoading(true);
+    // Navegou para outro imóvel (ex.: card de similares) → recarrega do zero.
+    if (!imovel || imovel.id !== id) { setLoading(true); setImgError(false); setAnexosDocs([]); }
     supabase.from('imoveis_leilao').select('*').eq('id', id).single()
       .then(({ data }) => {
         if (!data) { if (!imovel) nav('/buscar'); return; }
@@ -928,10 +931,7 @@ export default function ImovelDetalhe() {
         </div>
       </div>
 
-      {/* Seção Arrematação — visível para roles com acesso ou se for o arrematante */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 40px' }}>
-        <SecaoArrematacao imovelId={id} imovelTitulo={imovel.titulo} />
-      </div>
+      {/* Seção Arrematação removida desta tela — a arrematação é registrada no Caso. */}
 
       <style>{`
         @media (max-width: 900px) {
