@@ -565,7 +565,7 @@ export default function ImovelDetalhe() {
             )}
 
             {/* Documentos */}
-            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda || imovel.urlLote) && (
+            {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda) && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Documentos
@@ -596,16 +596,8 @@ export default function ImovelDetalhe() {
                 )}
 
                 {/* Botões de PDF */}
-                {(ehUrl(imovel.linkEdital) || ehMatriculaValida(imovel.linkMatricula) || ehUrl(imovel.linkRegrasVenda) || ehUrl(imovel.urlLote)) && (
+                {(ehUrl(imovel.linkEdital) || ehMatriculaValida(imovel.linkMatricula) || ehUrl(imovel.linkRegrasVenda)) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {/* Página oficial do lote (Caixa): acesso à matrícula/edital quando o
-                        link direto não abre fora da sessão do site. */}
-                    {ehUrl(imovel.urlLote) && (
-                      <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, color: '#4338ca', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        🔗 Ver no site oficial (matrícula e detalhes)
-                      </a>
-                    )}
                     {ehUrl(imovel.linkEdital) && (
                       <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#084BA6', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
@@ -657,7 +649,7 @@ export default function ImovelDetalhe() {
                 <div style={{ marginBottom: 10 }}>
                   <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#111111', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
-                    <ExternalLink size={15} /> {imovel.fonte === 'caixa' ? 'Ver no portal da Caixa' : 'Ir ao leiloeiro'}
+                    <ExternalLink size={15} /> {/caixa|cef/i.test(imovel.fonte || '') ? 'Ver no portal da Caixa (matrícula e edital)' : 'Ir ao leiloeiro (matrícula e edital)'}
                   </a>
                   <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 6 }}>
                     ⚠️ Se o link estiver expirado, o imóvel pode ter sido vendido.{' '}
