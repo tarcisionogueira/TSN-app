@@ -27,6 +27,25 @@ const STATUS_ARR = {
   cancelado:   { label: 'Cancelado',   bg: '#fee2e2', color: '#991b1b' },
 };
 
+// Mapa embutido (Leaflet/OpenStreetMap) centrado no imóvel.
+function MiniMapa({ lat, lng }) {
+  const ref = useRef(null);
+  const mapRef = useRef(null);
+  useEffect(() => {
+    let cancel = false;
+    import('leaflet').then(({ default: L }) => {
+      if (cancel || !ref.current || mapRef.current) return;
+      const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], 16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      L.circleMarker([lat, lng], { radius: 9, color: '#fff', weight: 3, fillColor: '#0D63DB', fillOpacity: 1 }).addTo(map);
+      mapRef.current = map;
+      setTimeout(() => map.invalidateSize(), 120);
+    });
+    return () => { cancel = true; if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
+  }, [lat, lng]);
+  return <div ref={ref} style={{ height: 240, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }} />;
+}
+
 // Imóveis semelhantes e próximos (mesma cidade/tipo, prioriza o mesmo bairro).
 function ImoveisSimilares({ imovel, nav }) {
   const [itens, setItens] = useState([]);
@@ -521,22 +540,25 @@ export default function ImovelDetalhe() {
                   </span>
                 )}
               </div>
-              {/* Localização no Google: Street View + Mapa */}
+              {/* Localização: mapa embutido + botões para abrir no Google */}
               {temLocal && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
-                  <a href={streetViewUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, color: '#4338ca', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                    👁️ Street View
-                  </a>
-                  <a href={mapaUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: 10, color: '#0e7490', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                    <MapPin size={14} /> Ver no mapa
-                  </a>
-                  {!temCoord && (
-                    <span style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center' }}>
-                      Localização aproximada pelo endereço
-                    </span>
-                  )}
+                <div style={{ marginTop: 16 }}>
+                  {temCoord && <MiniMapa lat={Number(_lat)} lng={Number(_lng)} />}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: temCoord ? 10 : 0 }}>
+                    <a href={streetViewUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, color: '#4338ca', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                      👁️ Street View
+                    </a>
+                    <a href={mapaUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: 10, color: '#0e7490', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                      <MapPin size={14} /> Abrir no Google Maps
+                    </a>
+                    {!temCoord && (
+                      <span style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center' }}>
+                        Localização aproximada pelo endereço
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
               {(imovel.scoreFinanceiro !== null || imovel.scoreJuridico !== null) && (
