@@ -27,23 +27,46 @@ const STATUS_ARR = {
   cancelado:   { label: 'Cancelado',   bg: '#fee2e2', color: '#991b1b' },
 };
 
-// Mapa embutido (Leaflet/OpenStreetMap) centrado no imóvel.
-function MiniMapa({ lat, lng }) {
+// Categorias de pontos próximos (legenda + cor dos pins). Chaves = as do cron.
+const CATS_PROX = {
+  praia:      { label: 'Praia',      emoji: '🏖️', cor: '#0891b2' },
+  transporte: { label: 'Transporte', emoji: '🚌', cor: '#7c3aed' },
+  mercado:    { label: 'Mercado',    emoji: '🛒', cor: '#16a34a' },
+  farmacia:   { label: 'Farmácia',   emoji: '💊', cor: '#dc2626' },
+  saude:      { label: 'Saúde',      emoji: '🏥', cor: '#ef4444' },
+  escola:     { label: 'Escola',     emoji: '🏫', cor: '#f59e0b' },
+  shopping:   { label: 'Shopping',   emoji: '🛍️', cor: '#db2777' },
+};
+const fmtDist = m => m >= 1000 ? `${(m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km` : `${m} m`;
+
+// Mapa embutido (Leaflet/OpenStreetMap) com o imóvel + pontos de interesse próximos.
+function MiniMapa({ lat, lng, pontos }) {
   const ref = useRef(null);
   const mapRef = useRef(null);
   useEffect(() => {
     let cancel = false;
     import('leaflet').then(({ default: L }) => {
       if (cancel || !ref.current || mapRef.current) return;
-      const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], 16);
+      const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], 15);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      L.circleMarker([lat, lng], { radius: 9, color: '#fff', weight: 3, fillColor: '#0D63DB', fillOpacity: 1 }).addTo(map);
+      // Imóvel (marcador principal)
+      L.circleMarker([lat, lng], { radius: 10, color: '#fff', weight: 3, fillColor: '#0D63DB', fillOpacity: 1 }).addTo(map).bindTooltip('Imóvel');
+      // Pontos próximos
+      const grupo = [[lat, lng]];
+      for (const [key, p] of Object.entries(pontos || {})) {
+        if (!p?.lat || !p?.lng) continue;
+        const c = CATS_PROX[key]; if (!c) continue;
+        L.circleMarker([p.lat, p.lng], { radius: 7, color: '#fff', weight: 2, fillColor: c.cor, fillOpacity: 0.95 })
+          .addTo(map).bindTooltip(`${c.emoji} ${c.label}${p.nome ? ' · ' + p.nome : ''} (${fmtDist(p.dist_m)})`);
+        grupo.push([p.lat, p.lng]);
+      }
+      if (grupo.length > 1) { try { map.fitBounds(grupo, { padding: [30, 30], maxZoom: 16 }); } catch (_) {} }
       mapRef.current = map;
       setTimeout(() => map.invalidateSize(), 120);
     });
     return () => { cancel = true; if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
   }, [lat, lng]);
-  return <div ref={ref} style={{ height: 240, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }} />;
+  return <div ref={ref} style={{ height: 260, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }} />;
 }
 
 // Imóveis semelhantes e próximos (mesma cidade/tipo, prioriza o mesmo bairro).
@@ -409,7 +432,7 @@ export default function ImovelDetalhe() {
           pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
           numeroProcesso: data.numero_processo,
-          latitude: data.latitude, longitude: data.longitude,
+          latitude: data.latitude, longitude: data.longitude, pontosProximos: data.pontos_proximos,
           scoreFinanceiro: data.score_financeiro ?? null,
           scoreJuridico: data.score_juridico ?? null,
         });
@@ -543,8 +566,22 @@ export default function ImovelDetalhe() {
               {/* Localização: mapa embutido + botões para abrir no Google */}
               {temLocal && (
                 <div style={{ marginTop: 16 }}>
-                  {temCoord && <MiniMapa lat={Number(_lat)} lng={Number(_lng)} />}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: temCoord ? 10 : 0 }}>
+                  {temCoord && <MiniMapa lat={Number(_lat)} lng={Number(_lng)} pontos={imovel.pontosProximos} />}
+                  {/* Legenda dos pontos próximos (atratividade) */}
+                  {temCoord && imovel.pontosProximos && Object.keys(imovel.pontosProximos).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                      {Object.entries(CATS_PROX).filter(([k]) => imovel.pontosProximos[k]).map(([k]) => {
+                        const p = imovel.pontosProximos[k], c = CATS_PROX[k];
+                        return (
+                          <span key={k} title={p.nome || c.label}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#334155', background: '#f8fafc', border: `1px solid ${c.cor}33`, borderLeft: `3px solid ${c.cor}`, borderRadius: 8, padding: '4px 10px' }}>
+                            {c.emoji} {c.label} <strong style={{ color: c.cor }}>{fmtDist(p.dist_m)}</strong>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
                     <a href={streetViewUrl} target="_blank" rel="noopener noreferrer"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, color: '#4338ca', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
                       👁️ Street View
