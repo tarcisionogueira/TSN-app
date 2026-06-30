@@ -538,12 +538,40 @@ export default function Busca() {
     setRaioAtivoBusca(false);
   };
 
+  // Centro da cidade para raio/auto-zoom. PRIMÁRIO: centroide das coordenadas dos
+  // próprios imóveis no banco (instantâneo, sem dependência externa, e é onde os
+  // imóveis realmente estão). FALLBACK: Nominatim com timeout (cidades sem imóveis
+  // geocodificados). Antes dependia só do Nominatim no navegador, que bloqueia/
+  // pendura chamadas web — travava a busca por raio e o auto-zoom.
   const geocodificarCidade = async (cidade, estado) => {
-    if (!cidade) return null;
-    const query = estado ? `${cidade}, ${estado}, Brasil` : `${cidade}, Brasil`;
+    if (!cidade) { setCentroRaio(null); return null; }
+    // 1) Centroide dos imóveis da cidade (fonte da verdade)
     try {
+      let q = supabase.from('imoveis_leilao')
+        .select('latitude, longitude')
+        .eq('ativo', true).ilike('cidade', cidade)
+        .not('latitude', 'is', null).neq('latitude', 0).limit(500);
+      if (estado) q = q.eq('estado', estado);
+      const { data } = await q;
+      const pts = (data || []).filter(p => p.latitude != null && p.longitude != null && Number(p.latitude) !== 0 && Number(p.longitude) !== 0);
+      if (pts.length) {
+        const lat = pts.reduce((s, p) => s + Number(p.latitude), 0) / pts.length;
+        const lng = pts.reduce((s, p) => s + Number(p.longitude), 0) / pts.length;
+        if (isFinite(lat) && isFinite(lng)) {
+          const centro = { lat, lng, label: cidade };
+          setCentroRaio(centro);
+          return centro;
+        }
+      }
+    } catch {}
+    // 2) Fallback: Nominatim (com timeout para nunca pendurar a busca)
+    try {
+      const query = estado ? `${cidade}, ${estado}, Brasil` : `${cidade}, Brasil`;
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'BidPro-Brasil/1.0' } });
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
       const data = await res.json();
       if (data && data.length > 0) {
         const centro = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: cidade };
