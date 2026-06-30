@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useIsMobile } from '../utils/useIsMobile';
 import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
-  CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer,
+  CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer, ExternalLink,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
   Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck, CreditCard,
