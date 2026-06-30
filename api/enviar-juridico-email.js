@@ -10,6 +10,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { addDiasUteis } from './_dias-uteis.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -170,6 +171,10 @@ export default async function handler(req) {
       status_etapa: 'juridico_solicitado', juridico_status: 'em_revisao',
       juridico_enviado_em: new Date().toISOString(), advogado_id: advogadoId,
       juridico_token: token, juridico_email_id: r.id,
+      // Prazo de devolutiva: 7 dias úteis. Os lembretes (cron) e a reatribuição
+      // por perda de prazo se baseiam neste campo. Zera contadores de lembrete.
+      prazo_juridico: addDiasUteis(new Date(), 7).toISOString(),
+      juridico_lembretes: 0, juridico_ultimo_lembrete: null,
     },
   });
   // Auditoria

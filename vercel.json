@@ -34,6 +34,7 @@
     { "path": "/api/gerar-slots",             "schedule": "0 1 * * *"    },
     { "path": "/api/scraper-leiloeiros",      "schedule": "0 8 * * 1,4"  },
     { "path": "/api/cnj-monitor-cron",        "schedule": "0 10 * * *"   },
+    { "path": "/api/juridico-lembretes-cron", "schedule": "0 12 * * 1-5" },
     { "path": "/api/enriquecer-proximidades", "schedule": "*/15 * * * *" }
   ]
 }
