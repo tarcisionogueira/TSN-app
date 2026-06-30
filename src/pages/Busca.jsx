@@ -269,8 +269,26 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
         try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], zoom); } catch {}
       } else if (bounds.length > 0) {
-        // Sem raio: enquadra todos os pins do filtro (auto-zoom na cidade filtrada).
-        try { leafletRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 }); } catch {}
+        // Sem raio: enquadra os pins do filtro (auto-zoom na cidade filtrada).
+        // Ignora OUTLIERS de coordenada (imóveis com a cidade certa mas lat/lng
+        // geocodificada errada, ex.: "Praia Grande" caindo perto de Ubatuba):
+        // eles continuam como pins, mas não esticam o zoom para fora da cidade.
+        let fitPts = bounds;
+        if (bounds.length >= 4) {
+          const lats = bounds.map(b => b[0]).slice().sort((a, b) => a - b);
+          const lngs = bounds.map(b => b[1]).slice().sort((a, b) => a - b);
+          const mid = arr => arr[Math.floor(arr.length / 2)];
+          const cLat = mid(lats), cLng = mid(lngs);
+          const dists = bounds.map(b => haversine(cLat, cLng, b[0], b[1]));
+          const medDist = dists.slice().sort((a, b) => a - b)[Math.floor(dists.length / 2)];
+          // Mantém o que estiver dentro de max(40km, 4× a distância mediana ao
+          // centro). Cluster compacto (cidade) descarta pins distantes; busca
+          // ampla (estado) tem mediana grande e não descarta nada.
+          const thr = Math.max(40, medDist * 4);
+          const inliers = bounds.filter((b, i) => dists[i] <= thr);
+          if (inliers.length >= Math.ceil(bounds.length * 0.6)) fitPts = inliers;
+        }
+        try { leafletRef.current.fitBounds(fitPts, { padding: [40, 40], maxZoom: 13 }); } catch {}
       } else if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
         try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], 11); } catch {}
       } else if (filtros?.cidades?.length > 0 && filtros?.estado) {
