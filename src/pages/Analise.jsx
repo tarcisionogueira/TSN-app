@@ -859,10 +859,17 @@ export default function Analise() {
             )}
 
             <button onClick={encaminharJuridico} disabled={!reuniaoRealizada || juridicoEnviado}
-              title={!reuniaoRealizada ? 'Disponível após a reunião com o analista' : ''}
+              title={!reuniaoRealizada ? 'Disponível somente após a reunião com o analista' : ''}
               style={{ width:'100%', padding:'11px', background: juridicoEnviado ? '#10b981' : !reuniaoRealizada ? '#e2e8f0' : '#7c3aed', color: (!reuniaoRealizada && !juridicoEnviado) ? '#94a3b8' : 'white', border:'none', borderRadius:12, fontWeight:700, fontSize:13, cursor: (!reuniaoRealizada||juridicoEnviado) ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              {juridicoEnviado ? <><CheckCircle2 size={15}/> Enviado ao jurídico</> : <><Scale size={15}/> Encaminhar ao jurídico</>}
+              {juridicoEnviado ? <><CheckCircle2 size={15}/> Encaminhado ao jurídico</> : <><Scale size={15}/> Encaminhar ao jurídico</>}
             </button>
+            {juridicoEnviado ? (
+              <div style={{ fontSize:10, color:'#0f766e', textAlign:'center', lineHeight:1.4, background:'#f0fdfa', border:'1px solid #99f6e4', borderRadius:8, padding:'6px 8px' }}>
+                📨 Encaminhado. Aguardando a devolutiva do jurídico — prazo de <b>até 7 dias úteis</b>. Você é avisado no Atendimento assim que o parecer chegar.
+              </div>
+            ) : !reuniaoRealizada && (
+              <div style={{ fontSize:10, color:'#94a3b8', textAlign:'center', lineHeight:1.4 }}>Disponível somente após a reunião com o analista.</div>
+            )}
           </div>
         </aside>
         )}
@@ -906,6 +913,13 @@ export default function Analise() {
                       </button>
                       {c.ok && <button onClick={()=>setRelSel(c.k)} style={{ padding:'10px 14px', background:'white', color:c.cor, border:`1px solid ${c.cor}`, borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer' }}>Abrir</button>}
                     </div>
+                    {c.gerando && (
+                      <div style={{ fontSize:11, color:c.cor, lineHeight:1.4, textAlign:'center' }}>
+                        {c.k==='mercado'
+                          ? 'Buscando preços de mercado em tempo real e montando a viabilidade — pode levar até ~2 min. Pode deixar esta aba aberta.'
+                          : 'Lendo documentos e consultando o processo — pode levar até ~1 min.'}
+                      </div>
+                    )}
                   </div>
                 );})}
               </div>
