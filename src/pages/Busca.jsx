@@ -9,6 +9,7 @@ import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils
 import { buscarCidadesEstado, RAIOS_KM } from '../data/cidades';
 import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadge } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
 import ScoreRisco from '../components/ScoreRisco';
@@ -307,7 +308,6 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   // Roda algumas vezes (retry) porque, em login novo, o container pode ter
   // dimensão "velha" quando o fitBounds roda (e aí o mapa ficava no Brasil inteiro).
   useEffect(() => {
-    console.warn('[mapa] centralizar?', { mapReady, temMapa: !!leafletRef.current, visivel, imoveis: imoveisMapa.length, raioAtivo });
     if (!mapReady || !leafletRef.current || !visivel) return;
     const pts = imoveisMapa
       .map(im => [Number(im.latitude), Number(im.longitude)])
@@ -336,8 +336,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           const inliers = pts.filter((p, i) => dists[i] <= thr);
           if (inliers.length >= Math.ceil(pts.length * 0.6)) fit = inliers;
         }
-        console.warn('[mapa] fitBounds', fit.length, 'pts', fit[0]);
-        try { map.fitBounds(fit, { padding: [40, 40], maxZoom: 13 }); } catch (e) { console.warn('[mapa] fitBounds erro', e); }
+        try { map.fitBounds(fit, { padding: [40, 40], maxZoom: 13 }); } catch { /* mapa ainda sem tamanho válido */ }
         return;
       }
       if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
@@ -616,7 +615,21 @@ export default function Busca() {
         }
       }
     } catch {}
-    // 2) Fallback: Nominatim (com timeout para nunca pendurar a busca)
+    // 2) Centróide oficial IBGE (servidor, sem rede externa) — SEMPRE resolve para
+    // qualquer cidade real. É o fallback confiável para o auto-zoom quando os
+    // imóveis ainda não têm coordenada (antes o mapa ficava no Brasil inteiro).
+    if (estado) {
+      try {
+        const res = await apiCall(`/api/centroide-cidade?cidade=${encodeURIComponent(cidade)}&uf=${encodeURIComponent(estado)}`);
+        const d = await res.json();
+        if (d && d.ok && isFinite(d.lat) && isFinite(d.lng)) {
+          const centro = { lat: Number(d.lat), lng: Number(d.lng), label: cidade };
+          setCentroRaio(centro);
+          return centro;
+        }
+      } catch {}
+    }
+    // 3) Último recurso: Nominatim (com timeout para nunca pendurar a busca)
     try {
       const query = estado ? `${cidade}, ${estado}, Brasil` : `${cidade}, Brasil`;
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`;
@@ -894,13 +907,14 @@ export default function Busca() {
     let centro = centroRaio;
     let cidadesNaArea = null;
 
-    if (raioAtivo && filtros.cidades[0]) {
-      setLoading(true);
+    // Resolve o CENTRO da cidade (await) para o auto-zoom do mapa — tanto no modo
+    // raio quanto no modo normal. Antes, no modo normal isso era fire-and-forget e
+    // logo em seguida setCentroBusca(centro=null) atropelava o resultado (corrida)
+    // → o mapa não focava na cidade. Agora esperamos o centro e setamos uma vez só.
+    if (filtros.cidades[0] && (raioAtivo || !centroRaio)) {
+      if (raioAtivo) setLoading(true);
       centro = await geocodificarCidade(filtros.cidades[0], filtros.estado);
       // PostGIS handles radius filtering server-side — Overpass not needed
-    } else if (!centroRaio && filtros.cidades[0]) {
-      // Geocodifica para auto-zoom no mapa mesmo sem raio
-      geocodificarCidade(filtros.cidades[0], filtros.estado).then(c => setCentroBusca(c));
     }
 
     // Salva snapshot dos filtros ativos no momento da busca
