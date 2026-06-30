@@ -401,7 +401,7 @@ export default function Busca() {
   const [raioAtivo, setRaioAtivo] = useState(false);
   const [centroRaio, setCentroRaio] = useState(null);
   const [distancias, setDistancias] = useState({});
-  const [vista, setVista] = useState('lista');
+  const [vista, setVista] = useState('mapa'); // padrão: mapa estilo Google (com lista lateral)
   const [listaSobreMapa, setListaSobreMapa] = useState(true); // painel lista recolhível na vista Mapa (estilo Google)
 
   // Snapshot dos filtros/raio no momento do último clique em Buscar
@@ -1163,12 +1163,6 @@ export default function Busca() {
                 style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='lista' ? 'white' : 'transparent', color: vista==='lista' ? '#111111' : '#64748b', boxShadow: vista==='lista' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 ☰ Lista
               </button>
-              {!isMobile && (
-                <button onClick={() => setVista('ambos')}
-                  style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='ambos' ? 'white' : 'transparent', color: vista==='ambos' ? '#111111' : '#64748b', boxShadow: vista==='ambos' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                  ⊞ Mapa+Lista
-                </button>
-              )}
               <button onClick={() => setVista('mapa')}
                 style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='mapa' ? 'white' : 'transparent', color: vista==='mapa' ? '#111111' : '#64748b', boxShadow: vista==='mapa' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 🗺️ Mapa
@@ -1300,15 +1294,23 @@ export default function Busca() {
                     <div style={{ flex:1, overflowY:'auto', padding:'10px', display:'flex', flexDirection:'column', gap:8 }}>
                       {resultadosFiltrados.slice(0, 60).map((im) => {
                         const desc = desconto(im);
+                        const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
+                        const imgSrc = !im.foto ? (isCef ? imgUrlCaixa({ ...im, fonte_id: im.fonteId }) : null)
+                          : (im.foto.includes('supabase.co') || im.foto.startsWith('/')) ? im.foto
+                          : isCef ? (imgUrlCaixa({ ...im, fonte_id: im.fonteId }) || `/api/img-proxy?url=${encodeURIComponent(im.foto)}`)
+                          : `/api/img-proxy?url=${encodeURIComponent(im.foto)}`;
                         return (
                           <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state:{ imovel: im } })}
-                            style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', padding:'9px 11px', cursor:'pointer', flexShrink:0 }}
+                            style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', cursor:'pointer', flexShrink:0 }}
                             onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                            <div style={{ fontSize:12, fontWeight:700, color:'#111', lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{im.titulo || 'Imóvel'}</div>
-                            <div style={{ fontSize:10, color:'#64748b', margin:'2px 0 4px' }}>📍 {im.cidade} — {im.estado}</div>
-                            <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
-                              <span style={{ fontSize:13, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
-                              {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
+                            <LazyImage src={imgSrc} alt={im.titulo} style={{ width:64, height:64, flexShrink:0 }} />
+                            <div style={{ padding:'7px 10px', flex:1, minWidth:0 }}>
+                              <div style={{ fontSize:12, fontWeight:700, color:'#111', lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{im.titulo || 'Imóvel'}</div>
+                              <div style={{ fontSize:10, color:'#64748b', margin:'2px 0 4px' }}>📍 {im.cidade} — {im.estado}</div>
+                              <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
+                                <span style={{ fontSize:13, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
+                                {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
+                              </div>
                             </div>
                           </div>
                         );
