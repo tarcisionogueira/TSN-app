@@ -422,6 +422,9 @@ export default function ImovelDetalhe() {
 
   const id = loc.state?.imovel?.id || paramId;
 
+  // Abre sempre no TOPO (foto primeiro) — não herda a rolagem da lista/busca.
+  useEffect(() => { window.scrollTo(0, 0); }, [id]);
+
   useEffect(() => {
     // A busca por raio passa o imóvel no state SEM edital/matrícula/descrição.
     // Se esses documentos faltam, busca o registro completo no banco (o state
@@ -479,49 +482,6 @@ export default function ImovelDetalhe() {
     return () => { cancel = true; };
   }, [imovel?.id]);
 
-  // Status da fila de captura CEF (staff) — persiste entre F5 para não parecer
-  // que "nada aconteceu" enquanto o lote (cron ~10min) ainda não rodou.
-  useEffect(() => {
-    if (!imovel?.id || !['admin', 'analista'].includes(role) || !/caixa|cef/i.test(imovel.fonte || '')) return;
-    let cancel = false;
-    supabase.from('cef_matricula_fila').select('status,criado_em,processado_em,erro').eq('imovel_id', imovel.id).maybeSingle()
-      .then(({ data }) => { if (!cancel) setFilaDocs(data || null); });
-    return () => { cancel = true; };
-  }, [imovel?.id, role, imovel?.fonte]);
-
-  const buscarDocsCaixa = async () => {
-    setBuscandoDocs('loading');
-    try {
-      const r = await apiCall('/api/capturar-matricula-cef', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imovel_id: imovel.id }) });
-      if (r.ok) { setBuscandoDocs('ok'); setFilaDocs({ status: 'pendente', criado_em: new Date().toISOString() }); }
-      else setBuscandoDocs('erro');
-    } catch { setBuscandoDocs('erro'); }
-  };
-
-  // Enquanto a captura CEF está na fila, busca os anexos periodicamente e os exibe
-  // assim que ficarem prontos — sem o usuário precisar atualizar a página. Para
-  // quando os documentos chegam ou quando a fila marca erro (captura indisponível).
-  useEffect(() => {
-    if (!imovel?.id) return;
-    const ativo = buscandoDocs === 'ok' || ['pendente', 'processando'].includes(filaDocs?.status);
-    if (!ativo || anexosDocs.length > 0) return;
-    let cancel = false, n = 0, timer;
-    const tick = async () => {
-      if (cancel) return;
-      n++;
-      const { data } = await supabase.from('imovel_anexos').select('tipo,nome,url')
-        .eq('imovel_id', imovel.id).in('tipo', ['matricula', 'edital', 'regras_venda']).not('storage_path', 'is', null);
-      if (cancel) return;
-      if (data && data.length) { setAnexosDocs(data); setBuscandoDocs(''); return; }
-      const { data: f } = await supabase.from('cef_matricula_fila').select('status,erro').eq('imovel_id', imovel.id).maybeSingle();
-      if (cancel) return;
-      if (f) setFilaDocs(prev => ({ ...prev, ...f }));
-      if (f?.status === 'erro') return; // captura falhou — não fica pollando à toa
-      if (n < 45) timer = setTimeout(tick, 20000); // ~15 min
-    };
-    timer = setTimeout(tick, 20000);
-    return () => { cancel = true; clearTimeout(timer); };
-  }, [imovel?.id, buscandoDocs, filaDocs?.status, anexosDocs.length]);
 
   if (loading) return (
     <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -567,17 +527,20 @@ export default function ImovelDetalhe() {
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
   const precoM2 = imovel.areaM2 > 0 && imovel.valorMinimo ? imovel.valorMinimo / imovel.areaM2 : null;
 
-  // Documentos: só conta o que é arquivo/link de verdade (não a página do portal).
-  const temEditalDoc = ehUrl(imovel.linkEdital);
+  // Documentos: links DIRETOS, montados na hora (sem captura/armazenamento/espera).
   // Matrícula CEF: PDF estático em /editais/matricula/<UF>/<num>.pdf (o matricula.asp
   // dá 404). Hotlink direto funciona no navegador do usuário.
   const matriculaUrl = caixaMatriculaUrl({ fonte: imovel.fonte, estado: imovel.estado, fonteId: imovel.fonteId })
     || (ehMatriculaValida(imovel.linkMatricula) ? imovel.linkMatricula : null);
-  const temMatriculaDoc = !!matriculaUrl;
-  const temRegrasDoc = ehRegrasDoc(imovel.linkRegrasVenda, imovel.urlLote);
+  // Venda direta → "Regras de venda online" (página do portal, onde ficam as regras);
+  // leilão → "Edital".
+  const isVendaDireta = (imovel.modalidade || '') === 'venda_direta';
+  const regrasEditalUrl = isVendaDireta
+    ? (ehUrl(imovel.linkRegrasVenda) ? imovel.linkRegrasVenda : (ehUrl(imovel.urlLote) ? imovel.urlLote : null))
+    : (ehUrl(imovel.linkEdital) ? imovel.linkEdital : (ehUrl(imovel.urlLote) ? imovel.urlLote : null));
+  const regrasEditalLabel = isVendaDireta ? 'Regras de venda online' : 'Edital';
   const temNumerosRef = !!(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso);
-  const podeBuscarDocsCaixa = ['admin', 'analista'].includes(role) && /caixa|cef/i.test(imovel.fonte || '') && !anexosDocs.some(a => a.tipo === 'matricula');
-  const temCardDocumentos = anexosDocs.length > 0 || temNumerosRef || temEditalDoc || temMatriculaDoc || temRegrasDoc || podeBuscarDocsCaixa;
+  const temCardDocumentos = !!matriculaUrl || !!regrasEditalUrl || temNumerosRef;
 
   // Localização no Google: Street View por coordenadas (quando geocodificado) ou
   // busca pelo endereço. Sem chave de API — usa as URLs públicas do Google Maps.
@@ -816,44 +779,6 @@ export default function ImovelDetalhe() {
                   <FileText size={18} color="#0D63DB" /> Documentos
                 </h2>
 
-                {/* Staff: capturar documentos na Caixa (enfileira captura automática).
-                    O status da fila persiste no F5 — a captura roda em lote (cron). */}
-                {podeBuscarDocsCaixa && (() => {
-                  const emFila = buscandoDocs === 'ok' || ['pendente', 'processando'].includes(filaDocs?.status);
-                  return (
-                    <div style={{ marginBottom: 14 }}>
-                      {emFila ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>
-                          <Clock size={15} /> Documentos solicitados — captura em lote (~10–15 min). Aparecem aqui automaticamente quando prontos.
-                        </div>
-                      ) : (
-                        <button onClick={buscarDocsCaixa} disabled={buscandoDocs === 'loading'}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: buscandoDocs === 'loading' ? 'default' : 'pointer' }}>
-                          {buscandoDocs === 'loading' ? 'Solicitando…'
-                            : buscandoDocs === 'erro' ? 'Erro — tentar de novo'
-                            : filaDocs?.status === 'erro' ? '↻ Tentar capturar de novo'
-                            : '🔎 Capturar matrícula/edital da Caixa'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Documentos disponíveis para download (capturados/anexados) */}
-                {anexosDocs.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-                    {anexosDocs.filter(a => ehUrl(a.url)).map((a, i) => {
-                      const lbl = TIPO_DOC_IMOVEL[a.tipo] || a.nome || 'Documento';
-                      return (
-                        <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                          📄 {lbl}
-                        </a>
-                      );
-                    })}
-                  </div>
-                )}
-
                 {/* Números de referência */}
                 {(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso) && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -878,26 +803,21 @@ export default function ImovelDetalhe() {
                   </div>
                 )}
 
-                {/* Botões de documento (apenas arquivos/links reais — a página do
-                    portal já está no botão "Ver no portal" da barra lateral) */}
-                {(temEditalDoc || temMatriculaDoc || temRegrasDoc) && (
+                {/* Botões DIRETOS: Matrícula + Regras de venda online/Edital.
+                    Montados na hora a partir dos dados — abrem direto o PDF/portal da
+                    Caixa no navegador (sem captura/espera). */}
+                {(matriculaUrl || regrasEditalUrl) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {temEditalDoc && (
-                      <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#084BA6', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        <FileText size={15} /> Edital
-                      </a>
-                    )}
-                    {temRegrasDoc && (
-                      <a href={imovel.linkRegrasVenda} target="_blank" rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        <ScrollText size={15} /> Regras de venda
-                      </a>
-                    )}
-                    {temMatriculaDoc && (
+                    {matriculaUrl && (
                       <a href={matriculaUrl} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
                         <FileText size={15} /> Matrícula
+                      </a>
+                    )}
+                    {regrasEditalUrl && (
+                      <a href={regrasEditalUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                        <ScrollText size={15} /> {regrasEditalLabel}
                       </a>
                     )}
                   </div>
