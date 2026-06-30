@@ -115,3 +115,83 @@ export async function viacepCanonico(uf, cidade, via, timeoutMs = 6000) {
     return null;
   }
 }
+
+const NOMINATIM_UA = 'BidProBrasil/1.0 (tarcisioaraujo@reimob.com.br)';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Ranking de precisão (maior = melhor). Usado para "só sobe, nunca desce".
+export const NIVEL_RANK = { endereco: 4, rua: 3, bairro: 2, cidade: 1, falhou: 0 };
+export const rankNivel = (n) => NIVEL_RANK[n] ?? 0;
+
+// Busca ESTRUTURADA no Nominatim (trava cidade/estado → sem erro de UF homônima).
+export async function nominatimEstruturado(params) {
+  const qs = new URLSearchParams({ format: 'json', addressdetails: '1', limit: '1', countrycodes: 'br' });
+  if (params.street) qs.set('street', params.street);
+  if (params.city) qs.set('city', params.city);
+  if (params.state) qs.set('state', params.state);
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`, {
+      headers: { 'User-Agent': NOMINATIM_UA },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.length) return null;
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cascata de geocodificação cruzando IBGE (validação/UF + fallback cidade) e
+ * Correios/ViaCEP (limpeza do logradouro + CEP), com o Nominatim como fonte da
+ * coordenada (busca estruturada + validação). Retorna { lat, lng, nivel, cep? }
+ * ou null. `sleepMs`=0 desliga as pausas (uso on-demand de 1 imóvel).
+ */
+export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1100 } = {}) {
+  const { endereco, bairro, cidade, estado } = im;
+  const ufNome = UFS[String(estado || '').trim().toUpperCase()]?.nome || estado;
+  const aceita = (c) => (c && coordValida(c.lat, c.lng, estado, cidade) ? c : null);
+  const pausa = () => (sleepMs > 0 ? sleep(sleepMs) : Promise.resolve());
+
+  // Nível 1 — logradouro + número (estruturado + validação IBGE).
+  const { via, numero } = parseLogradouro(endereco);
+  let cepEnc = null;
+  if (via && Date.now() < deadline) {
+    const street = [via, numero].filter(Boolean).join(' ');
+    const c = aceita(await nominatimEstruturado({ street, city: cidade, state: ufNome }));
+    if (c) return { ...c, nivel: numero ? 'endereco' : 'rua' };
+    await pausa();
+    // Recuperação via Correios: canoniza o logradouro e tenta de novo.
+    if (Date.now() < deadline) {
+      const via2 = await viacepCanonico(estado, cidade, via);
+      if (via2?.logradouro) {
+        cepEnc = via2.cep || null;
+        const street2 = [via2.logradouro, numero].filter(Boolean).join(' ');
+        const c2 = aceita(await nominatimEstruturado({ street: street2, city: cidade, state: ufNome }));
+        if (c2) return { ...c2, nivel: numero ? 'endereco' : 'rua', cep: cepEnc };
+        await pausa();
+      }
+    }
+  }
+
+  // Nível 2 — bairro.
+  if (bairro && bairro.trim() && Date.now() < deadline) {
+    const c = aceita(await nominatimEstruturado({ street: bairro, city: cidade, state: ufNome }));
+    if (c) return { ...c, nivel: 'bairro', cep: cepEnc };
+    await pausa();
+  }
+
+  // Nível 3 — cidade: centróide IBGE (instantâneo, sempre na UF certa).
+  const cen = centroideIBGE(cidade, estado);
+  if (cen) return { lat: cen.lat, lng: cen.lng, nivel: 'cidade', cep: cepEnc };
+
+  // Último recurso: cidade via Nominatim (cidades fora do IBGE local).
+  if (cidade && cidade.trim() && Date.now() < deadline) {
+    const c = aceita(await nominatimEstruturado({ city: cidade, state: ufNome }));
+    if (c) return { ...c, nivel: 'cidade', cep: cepEnc };
+    await pausa();
+  }
+  return null;
+}

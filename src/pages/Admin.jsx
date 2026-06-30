@@ -4076,7 +4076,6 @@ function ScrapersTab() {
   const toggleExpandir = (aba) => setEstadosExpandidos(e => ({ ...e, [aba]: !e[aba] }));
   const [leiloeiroContagem, setLeiloeiroContagem] = useState({}); // fonte → total imóveis no banco
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
-  const [reproc, setReproc] = useState({ rodando: false, nivel: '', melhorados: 0, corrigidos: 0, processados: 0 });
   const [geocPendentes, setGeocPendentes] = useState({});
   const [geocUltimoRefresh, setGeocUltimoRefresh] = useState(null);
   const [parceiros, setParceiros] = useState([]);
@@ -4260,41 +4259,6 @@ function ScrapersTab() {
         setGeocPendentes(p => ({ ...p, [uf]: ufPendentes }));
       });
     }
-  }
-
-  // Reprocessa imóveis JÁ geocodificados para MELHORAR a precisão (in-place):
-  // sobe nível cidade→bairro→rua/endereço (cruzando IBGE + Correios) e corrige
-  // coordenadas inválidas (fora da UF). Não esvazia a fila de novos.
-  async function reprocessarPrecisao() {
-    if (reproc.rodando) return;
-    setReproc({ rodando: true, nivel: 'cidade', melhorados: 0, corrigidos: 0, processados: 0 });
-    let mel = 0, cor = 0, proc = 0, timeouts = 0;
-    // Começa pelos menos precisos (cidade) e depois bairro.
-    for (const nivel of ['cidade', 'bairro']) {
-      let vazios = 0;
-      while (vazios < 2) {
-        let d;
-        try {
-          const r = await apiCall('/api/geocodificar', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reprocessar: nivel, limite: 60 }),
-          });
-          d = await r.json();
-        } catch {
-          if (++timeouts >= 5) { setReproc(s => ({ ...s, rodando: false, erro: '5 timeouts seguidos' })); return; }
-          await new Promise(res => setTimeout(res, 2000));
-          continue;
-        }
-        timeouts = 0;
-        if (d.error) { setReproc(s => ({ ...s, rodando: false, erro: d.error })); return; }
-        mel += d.melhorados || 0; cor += d.corrigidos || 0; proc += d.processados || 0;
-        setReproc({ rodando: true, nivel, melhorados: mel, corrigidos: cor, processados: proc });
-        if (!d.processados) { vazios++; } else { vazios = 0; }
-        await new Promise(res => setTimeout(res, 300));
-      }
-    }
-    setReproc({ rodando: false, nivel: '', melhorados: mel, corrigidos: cor, processados: proc, concluido: true });
-    carregarPendentes();
   }
 
   async function rodarGeocDebug() {
@@ -4732,21 +4696,8 @@ function ScrapersTab() {
                   ? `⏳ ${geocTodos.ufAtual} [${geocTodos.atual}/27] · ${geocTodos.processadosTotal.toLocaleString('pt-BR')} / ${Object.values(geocPendentes).reduce((a, b) => a + b, 0).toLocaleString('pt-BR')} proc`
                   : '▶ Geocodificar todos'}
               </button>
-              <button onClick={reprocessarPrecisao} disabled={reproc.rodando} title="Reprocessa imóveis nível cidade/bairro para subir a precisão (rua/endereço) e corrige coordenadas fora da UF — cruzando IBGE + Correios"
-                style={{ padding: '7px 14px', borderRadius: 8, background: reproc.rodando ? '#f1f5f9' : '#0d9488', color: reproc.rodando ? '#94a3b8' : 'white', border: 'none', cursor: reproc.rodando ? 'default' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                {reproc.rodando
-                  ? `⏳ ${reproc.nivel} · ${(reproc.melhorados + reproc.corrigidos).toLocaleString('pt-BR')} melhorados`
-                  : '✨ Melhorar precisão'}
-              </button>
             </div>
           </div>
-          {(reproc.rodando || reproc.concluido || reproc.erro) && (
-            <div style={{ marginBottom: 12, background: reproc.erro ? '#fef2f2' : '#f0fdfa', border: `1px solid ${reproc.erro ? '#fecaca' : '#99f6e4'}`, borderRadius: 8, padding: '8px 12px', fontSize: 12, color: reproc.erro ? '#dc2626' : '#0f766e', fontWeight: 600 }}>
-              {reproc.erro
-                ? `❌ ${reproc.erro}`
-                : `${reproc.rodando ? '⏳ Reprocessando' : '✅ Concluído'} · nível ${reproc.nivel || '—'} · ${reproc.melhorados.toLocaleString('pt-BR')} subiram de precisão · ${reproc.corrigidos.toLocaleString('pt-BR')} corrigidos (UF errada) · ${reproc.processados.toLocaleString('pt-BR')} analisados`}
-            </div>
-          )}
 
           {sysDebug['geocod'] && (
             <div style={{ marginBottom: 12, background: sysDebug['geocod'].status === 200 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${sysDebug['geocod'].status === 200 ? '#bbf7d0' : '#fecaca'}` }}>

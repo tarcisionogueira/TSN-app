@@ -163,7 +163,10 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
     import('leaflet').then(async L => {
       await import('leaflet.markercluster');
       delete L.Icon.Default.prototype._getIconUrl;
-      leafletRef.current = L.map(mapContainerRef.current, { center: [-15.8, -47.9], zoom: 5 });
+      // zoomControl no canto inferior direito: o topo-esquerdo é ocupado pelo
+      // painel "Ver lista" (estilo Google) — evita os controles ficarem escondidos.
+      leafletRef.current = L.map(mapContainerRef.current, { center: [-15.8, -47.9], zoom: 5, zoomControl: false });
+      L.control.zoom({ position: 'bottomright' }).addTo(leafletRef.current);
       // CARTO basemaps (permite uso por apps; o tile.openstreetmap.org bloqueia
       // tráfego de aplicativo em produção -> mapa cinza/"falhado").
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
@@ -345,7 +348,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         </div>
       )}
       {!carregando && imoveisMapa.length > 0 && (
-        <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, background: 'white', padding: '5px 14px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>
+        <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, background: 'white', padding: '5px 14px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>
           {imoveisMapa.length} imóveis com localização
         </div>
       )}

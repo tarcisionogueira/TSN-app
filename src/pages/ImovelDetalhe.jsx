@@ -448,13 +448,28 @@ export default function ImovelDetalhe() {
           pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
           numeroProcesso: data.numero_processo,
-          latitude: data.latitude, longitude: data.longitude, pontosProximos: data.pontos_proximos,
+          latitude: data.latitude, longitude: data.longitude, pontosProximos: data.pontos_proximos, geocodNivel: data.geocod_nivel,
           scoreFinanceiro: data.score_financeiro ?? null,
           scoreJuridico: data.score_juridico ?? null,
         });
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  // On-demand: ao abrir o imóvel, tenta MELHORAR a precisão da localização na
+  // hora (cruzando IBGE + Correios + Nominatim), sem esperar o cron. Só dispara
+  // se ainda não está no nível rua/endereço. Se melhorar, atualiza a coordenada
+  // e zera as proximidades (o efeito abaixo recalcula no local certo).
+  useEffect(() => {
+    if (!imovel?.id) return;
+    if (imovel.geocodNivel === 'endereco' || imovel.geocodNivel === 'rua') return;
+    let cancel = false;
+    apiCall(`/api/geocodificar-imovel?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
+      if (cancel || !d?.alterado) return;
+      setImovel(prev => prev ? { ...prev, latitude: d.lat, longitude: d.lng, geocodNivel: d.nivel, pontosProximos: null } : prev);
+    }).catch(() => {});
+    return () => { cancel = true; };
+  }, [imovel?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On-demand: se o imóvel tem coordenada mas ainda não tem pontos próximos,
   // calcula na hora (não espera o cron) — útil para imóveis recém-abertos.
