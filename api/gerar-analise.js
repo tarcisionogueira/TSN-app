@@ -94,44 +94,47 @@ Retorne APENAS este JSON (sem markdown):
 }
 
 function promptParecer(inp, m, mercado) {
+  const usoProprio = inp.objetivoCompra === 'uso_proprio';
   return `
-Redija um PARECER EXECUTIVO de arrematação como Gestor Sênior da BidPro Brasil.
+Redija um PARECER EXECUTIVO MERCADOLÓGICO E DE VIABILIDADE FINANCEIRA como Gestor Sênior da BidPro Brasil.
 
-IMÓVEL: ${inp.tipo || inp.tipoImovel} — ${inp.endereco}
-OBJETIVO: ${inp.objetivoCompra === 'uso_proprio' ? 'Uso Próprio' : 'Investimento'}
-CENÁRIO: ${inp._cenario || 'À Vista'}
-ORIGEM: ${inp.origem || 'extrajudicial'}
-CIDADE: ${inp.cidade || ''}
-ESTADO: ${inp.estado || ''}
-TIPO: ${inp.tipo || 'apartamento'}
+ESCOPO ESTRITO: foque EXCLUSIVAMENTE em mercado × valor de aquisição e viabilidade
+financeira. NÃO inclua análise jurídica, consulta de processo/CNJ, débitos, ônus,
+gravames, certidões ou checklist de diligências — isso é tratado nos relatórios
+DOCUMENTAL e JURÍDICO. Não cite riscos jurídicos aqui.
+
+IMÓVEL: ${inp.tipo || inp.tipoImovel} — ${inp.endereco}, ${inp.cidade || ''}/${inp.estado || ''}
+OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
 ${inp.nomeCondominio ? `CONDOMÍNIO: ${inp.nomeCondominio}` : ''}
 
-DADOS FINANCEIROS:
-- Lance base: R$ ${brl(inp.valorArrematacao)}
-- Capital mobilizado: R$ ${brl(m.capitalMobilizado)}
-- Lucro/Economia: R$ ${brl(m.lucro)}
-- Retorno: ${(m.roi || 0).toFixed(2)}%
-- Teto de disputa: R$ ${brl(inp._teto)}
-
-DADOS DE MERCADO:
+MERCADO:
 - Preço médio/m²: R$ ${brl(mercado?.precoMedioM2)}
-- Yield locação: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
-${mercado?.comentario ? `- Análise de mercado: ${mercado.comentario}` : ''}
+- Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
+${mercado?.comentario ? `- Leitura de mercado: ${mercado.comentario}` : ''}
 
-RISCOS JURÍDICOS: ${(inp.riscos || []).map(r => r.texto || r).join('; ') || 'Nenhum identificado'}
+AQUISIÇÃO E RETORNO:
+- Lance SEM disputa (lance base): R$ ${brl(inp.valorArrematacao)}
+- Lance MÁXIMO COM disputa (preserva o piso de lucro): R$ ${brl(inp._teto)}
+- Capital total aportado: R$ ${brl(m.capitalMobilizado)}
+- Lucro/Economia estimada: R$ ${brl(m.lucro)}
+- Retorno (ROI/ROE): ${(m.roi || 0).toFixed(2)}%
 OBSERVAÇÕES: ${inp.observacoes || 'Sem observações adicionais'}
 
-Escreva em português formal. Estruture com 5 seções marcadas com "§ SEÇÃO:":
-§ SEÇÃO: POSICIONAMENTO ESTRATÉGICO
-§ SEÇÃO: DEFESA DA ARREMATAÇÃO
-§ SEÇÃO: ANÁLISE DE RENTABILIDADE (locação, yield, payback)
-§ SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO DA GESTÃO
-§ SEÇÃO: CHECKLIST DE DÉBITOS E DILIGÊNCIAS
+REGRA DE VIABILIDADE:
+${usoProprio
+  ? '- Como é USO PRÓPRIO, o piso de 30% de lucro NÃO se aplica. O foco é a ECONOMIA frente ao valor de mercado (quanto o comprador economiza ao adquirir no leilão em vez de no mercado). Defenda a aquisição pela economia e adequação ao uso.'
+  : '- A operação só é VIÁVEL com no mínimo 30% de lucro líquido. Avalie SEM DISPUTA (lance base) e COM DISPUTA (até o lance máximo que ainda preserva 30%).'}
 
-Na seção CHECKLIST: para cada item, indicar status com [  ] Pendente | [S] Subrogado | [V] Verificado | [!] Atenção.
-Se judicial e hasta pública, IPTU e condomínio subrogados (Lei 9.514/97, CPC art. 908). Se extrajudicial, débitos do arrematante.
-Incluir a concessionária/órgão da região quando conhecido. Sem markdown, sem asteriscos.
-Itens (um por linha, com status e como verificar): 1. ÁGUA E ESGOTO (concessionária da cidade) 2. ENERGIA (distribuidora) 3. GÁS (se aplicável) 4. IPTU — Prefeitura de ${inp.cidade || 'cidade'} 5. CONDOMÍNIO ${inp.nomeCondominio ? `(${inp.nomeCondominio})` : ''} 6. DÉBITOS TRABALHISTAS (TRT) 7. HIPOTECA/FINANCIAMENTO (matrícula).`;
+Escreva em português formal, texto simples (sem markdown/asteriscos). Estruture com "§ SEÇÃO:":
+§ SEÇÃO: POSICIONAMENTO ESTRATÉGICO (mercado × valor de aquisição; desconto real frente ao mercado)
+§ SEÇÃO: CENÁRIOS DE LANCE (sem disputa e com disputa; até onde dá para subir o lance mantendo ${usoProprio ? 'a economia' : 'o piso de 30%'})
+§ SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES considerando o pagamento em parcelas até a revenda; deixe claro que VENDER ANTES dos 12 meses AUMENTA o lucro; cite ROI/ROE, yield de locação como alternativa e payback)
+§ SEÇÃO: DEFESA DA OPERAÇÃO (argumentos objetivos de por que ${usoProprio ? 'a compra para uso compensa' : 'o investimento compensa'})
+§ SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO
+
+IMPORTANTE — SE NÃO HOUVER VIABILIDADE${usoProprio ? ' (economia irrelevante frente ao mercado)' : ' (lucro abaixo de 30%)'}:
+seja DIRETO e CURTO. Explique objetivamente O PORQUÊ (ex.: preço de aquisição próximo do
+mercado, custos elevados, margem insuficiente) e recomende NÃO avançar. Não alongue o relatório.`;
 }
 
 export default async function handler(req, res) {
@@ -185,7 +188,7 @@ export default async function handler(req, res) {
         const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto };
         const pData = await anthropic({
           model: MODEL, max_tokens: 8000,
-          system: 'Você é gestor sênior da BidPro Brasil. Redija pareceres executivos precisos. Nunca use markdown nem asteriscos. Apenas texto simples.',
+          system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA — nada de análise jurídica, CNJ, débitos ou diligências (isso é de outros relatórios). Preciso e persuasivo. Nunca use markdown nem asteriscos. Apenas texto simples.',
           messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado) }],
         }, false);
         parecer = extractText(pData);

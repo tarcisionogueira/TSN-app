@@ -331,63 +331,53 @@ Retorne APENAS este JSON (sem markdown):
   return result;
 }
 
-// Gera parecer executivo completo
+// Gera o parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA (sem jurídico/CNJ).
 export async function gerarParecer(inputs, metricas, mercado) {
+  const brl = (v) => (v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const usoProprio = inputs.objetivoCompra === 'uso_proprio';
   const prompt = `
-Redija um PARECER EXECUTIVO de arrematação como Gestor Sênior da BidPro Brasil.
+Redija um PARECER EXECUTIVO MERCADOLÓGICO E DE VIABILIDADE FINANCEIRA como Gestor Sênior da BidPro Brasil.
 
-IMÓVEL: ${inputs.tipo || inputs.tipoImovel} — ${inputs.endereco}
-OBJETIVO: ${inputs.objetivoCompra === 'uso_proprio' ? 'Uso Próprio' : 'Investimento'}
-CENÁRIO: ${inputs._cenario || 'À Vista'}
-ORIGEM: ${inputs.origem || 'extrajudicial'}
-CIDADE: ${inputs.cidade || ''}
-ESTADO: ${inputs.estado || ''}
-TIPO: ${inputs.tipo || 'apartamento'}
+ESCOPO ESTRITO: foque EXCLUSIVAMENTE em mercado × valor de aquisição e viabilidade
+financeira. NÃO inclua análise jurídica, CNJ, débitos, ônus, gravames, certidões ou
+checklist de diligências — isso é tratado nos relatórios DOCUMENTAL e JURÍDICO.
+
+IMÓVEL: ${inputs.tipo || inputs.tipoImovel} — ${inputs.endereco}, ${inputs.cidade || ''}/${inputs.estado || ''}
+OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
 ${inputs.nomeCondominio ? `CONDOMÍNIO: ${inputs.nomeCondominio}` : ''}
 
-DADOS FINANCEIROS:
-- Lance base: R$ ${(inputs.valorArrematacao||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-- Capital mobilizado: R$ ${(metricas.capitalMobilizado||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-- Lucro/Economia: R$ ${(metricas.lucro||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-- Retorno: ${(metricas.roi||0).toFixed(2)}%
-- Teto de disputa: R$ ${(inputs._teto||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+MERCADO:
+- Preço médio/m²: R$ ${brl(mercado?.precoMedioM2)}
+- Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto||0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido||0).toFixed(2)}% líquido
+${mercado?.comentario ? `- Leitura de mercado: ${mercado.comentario}` : ''}
 
-DADOS DE MERCADO:
-- Preço médio/m²: R$ ${(mercado?.precoMedioM2||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-- Yield locação: ${(mercado?.yieldBruto||0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido||0).toFixed(2)}% líquido
-${mercado?.comentario ? `- Análise de mercado: ${mercado.comentario}` : ''}
-
-RISCOS JURÍDICOS: ${(inputs.riscos||[]).map(r=>r.texto||r).join('; ') || 'Nenhum identificado'}
+AQUISIÇÃO E RETORNO:
+- Lance SEM disputa (lance base): R$ ${brl(inputs.valorArrematacao)}
+- Lance MÁXIMO COM disputa (preserva o piso de lucro): R$ ${brl(inputs._teto)}
+- Capital total aportado: R$ ${brl(metricas.capitalMobilizado)}
+- Lucro/Economia estimada: R$ ${brl(metricas.lucro)}
+- Retorno (ROI/ROE): ${(metricas.roi||0).toFixed(2)}%
 OBSERVAÇÕES: ${inputs.observacoes || 'Sem observações adicionais'}
 
-Escreva em português formal. Estruture com 5 seções marcadas com "§ SEÇÃO:":
-§ SEÇÃO: POSICIONAMENTO ESTRATÉGICO
-§ SEÇÃO: DEFESA DA ARREMATAÇÃO
-§ SEÇÃO: ANÁLISE DE RENTABILIDADE (locação, yield, payback)
-§ SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO DA GESTÃO
-§ SEÇÃO: CHECKLIST DE DÉBITOS E DILIGÊNCIAS
+REGRA DE VIABILIDADE:
+${usoProprio
+  ? '- Como é USO PRÓPRIO, o piso de 30% de lucro NÃO se aplica. Foque na ECONOMIA frente ao mercado e na adequação ao uso.'
+  : '- A operação só é VIÁVEL com no mínimo 30% de lucro líquido. Avalie SEM DISPUTA e COM DISPUTA (até o lance que ainda preserva 30%).'}
 
-Instruções obrigatórias para a seção CHECKLIST DE DÉBITOS E DILIGÊNCIAS:
-- Para cada item do checklist, indicar o status com um dos marcadores: [  ] Pendente verificação | [S] Subrogado ao arrematante | [V] Verificado — sem débito | [!] Atenção — verificar urgente
-- Se a origem for judicial e a arrematação for por hasta pública, marcar os débitos de IPTU e condomínio como subrogados ao arrematante, conforme Lei 9.514/97 e CPC art. 908. Indicar isso explicitamente no item correspondente.
-- Se a origem for extrajudicial (alienação fiduciária), todos os débitos são de responsabilidade do arrematante — indicar isso claramente em cada item relevante.
-- Sempre incluir o nome da concessionária ou órgão responsável da região do imóvel quando conhecido.
-- Não usar markdown. Não usar asteriscos, cerquilhas ou negrito. Usar apenas texto simples.
+Escreva em português formal, texto simples (sem markdown/asteriscos). Estruture com "§ SEÇÃO:":
+§ SEÇÃO: POSICIONAMENTO ESTRATÉGICO (mercado × valor de aquisição; desconto real)
+§ SEÇÃO: CENÁRIOS DE LANCE (sem disputa e com disputa; até onde subir mantendo ${usoProprio ? 'a economia' : 'o piso de 30%'})
+§ SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES com pagamento parcelado até a revenda; deixe claro que VENDER ANTES aumenta o lucro; ROI/ROE, locação como alternativa e payback)
+§ SEÇÃO: DEFESA DA OPERAÇÃO
+§ SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO
 
-Itens obrigatórios do checklist (listar todos, um por linha, com status, nome do órgão/concessionária e instrução de como verificar):
-1. AGUA E ESGOTO — informar a concessionária da cidade (exemplos: EMBASA na Bahia, SAAE em municípios do interior, CORSAN no RS, CAESB no DF, SANEPAR no PR, CEDAE no RJ, SABESP em SP, CAGECE no CE, CAERN no RN, CAEMA no MA, SANEAGO em GO, Compesa em PE, Agespisa no PI). Informar site ou telefone quando conhecido.
-2. ENERGIA ELETRICA — informar a distribuidora da região (exemplos: Coelba na Bahia, CEMIG em MG, ENEL SP/CE/GO/RJ, CELESC em SC, CELPE em PE, COPEL no PR, CEEE no RS, Energisa em MT/MS/PB/SE/TO/RO, Equatorial no MA/AL/GO/PA/PI). Informar site ou telefone quando conhecido.
-3. GAS ENCANADO — se aplicável ao tipo de imóvel e cidade, indicar a distribuidora (exemplos: Comgás em SP, CEG no RJ, Bahiagás na BA, Copergás em PE, Gasmig em MG). Se não aplicável ao tipo ou cidade, indicar expressamente.
-4. IPTU — Prefeitura do município de ${inputs.cidade || 'cidade do imóvel'}. Orientar a consultar o site da prefeitura ou Central de Atendimento municipal. Se origem judicial e hasta pública, indicar subrogação conforme CPC art. 908.
-5. CONDOMINIO — ${inputs.nomeCondominio ? `Condomínio ${inputs.nomeCondominio}: v` : 'V'}erificar débitos condominiais com o síndico ou administradora. Se origem judicial e hasta pública, indicar subrogação. Se extrajudicial, responsabilidade do arrematante.
-6. DEBITOS TRABALHISTAS — orientar a consultar o Tribunal Regional do Trabalho da região para verificar se há penhoras ou execuções trabalhistas vinculadas ao imóvel.
-7. DEBITO HIPOTECARIO E FINANCIAMENTO — orientar a verificar na matrícula do imóvel a existência de alienação fiduciária ou hipoteca vigente, e como proceder para sua quitação ou sub-rogação.`;
+SE NÃO HOUVER VIABILIDADE${usoProprio ? ' (economia irrelevante)' : ' (lucro < 30%)'}: seja DIRETO e CURTO — explique objetivamente o porquê e recomende não avançar, sem alongar.`;
 
   const data = await callAPI({
     model: MODEL,
     max_tokens: 4500,
     messages: [{ role: 'user', content: prompt }],
-    system: 'Você é gestor sênior da BidPro Brasil. Redija pareceres executivos precisos e persuasivos. Nunca use markdown, asteriscos, cerquilhas ou formatação especial. Use apenas texto simples.',
+    system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA — sem análise jurídica, CNJ, débitos ou diligências. Preciso e persuasivo. Nunca use markdown, asteriscos ou formatação especial. Use apenas texto simples.',
   });
 
   return extractText(data);
