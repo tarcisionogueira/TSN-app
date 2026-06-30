@@ -1,5 +1,7 @@
 export const maxDuration = 300;
 
+import { UFS, parseLogradouro, viacepCanonico, centroideIBGE, coordValida } from './_geo.js';
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
@@ -22,13 +24,17 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// Marco: 5.000 imóveis ativos ou 500 novos/mês → migrar para Google Maps Geocoding API
 const NOMINATIM_UA = 'BidProBrasil/1.0 (tarcisioaraujo@reimob.com.br)';
 
-async function nominatim(query) {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`;
+// Busca ESTRUTURADA no Nominatim (trava cidade/estado → sem erro de UF homônima).
+// params: { street, city, state } — cada um opcional. Devolve {lat,lng} ou null.
+async function nominatimEstruturado(params) {
+  const qs = new URLSearchParams({ format: 'json', addressdetails: '1', limit: '1', countrycodes: 'br' });
+  if (params.street) qs.set('street', params.street);
+  if (params.city) qs.set('city', params.city);
+  if (params.state) qs.set('state', params.state);
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`, {
       headers: { 'User-Agent': NOMINATIM_UA },
       signal: AbortSignal.timeout(8000),
     });
@@ -45,46 +51,59 @@ async function nominatim(query) {
 }
 
 /**
- * Geocodificação em cascata com 3 níveis de precisão:
+ * Geocodificação em cascata, cruzando IBGE (validação/UF + fallback cidade) e
+ * Correios/ViaCEP (limpeza do logradouro + CEP). Mantém o Nominatim como fonte
+ * da coordenada, agora com busca estruturada e VALIDAÇÃO contra o IBGE.
  *
- * 1. Endereço completo (endereco + bairro + cidade + estado)  → 'endereco'
- *    Pin exato no mapa, sem círculo.
+ *  1. Endereço (logradouro + número)  → 'endereco' (ou 'rua' se sem número)
+ *  2. Bairro                          → 'bairro'  (±500 m)
+ *  3. Cidade (centróide IBGE, local)  → 'cidade'  (±2 km) — sempre na UF certa
  *
- * 2. Bairro (bairro + cidade + estado)                        → 'bairro'
- *    Pin no centro do bairro + círculo de 500 m no mapa.
- *
- * 3. Cidade (cidade + estado)                                 → 'cidade'
- *    Pin no centro da cidade + círculo de 2.000 m no mapa.
- *
- * Se nenhum nível resolver → retorna null (grava lat=0,lng=0 sentinela).
+ * Retorna { lat, lng, nivel, cep? } ou null (grava sentinela lat=0).
  */
 async function geocodificarCascata(im, deadline = Infinity) {
   const { endereco, bairro, cidade, estado } = im;
+  const ufNome = UFS[String(estado || '').trim().toUpperCase()]?.nome || estado;
+  const aceita = (c) => c && coordValida(c.lat, c.lng, estado, cidade) ? c : null;
 
-  // Nível 1 — endereço completo
-  // Checa o deadline antes de cada nível: como cada chamada ao Nominatim pode
-  // levar até 8s, isso garante que um único item nunca estoure muito além do
-  // orçamento (no pior caso, +1 chamada após o deadline).
-  if (endereco && endereco.trim() && Date.now() < deadline) {
-    const query = [endereco, bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
-    const coords = await nominatim(query);
-    if (coords) return { ...coords, nivel: 'endereco' };
+  // Nível 1 — logradouro + número (busca estruturada + validação IBGE).
+  // Checa o deadline antes de cada chamada (cada Nominatim pode levar até 8s).
+  const { via, numero } = parseLogradouro(endereco);
+  let cepEnc = null;
+  if (via && Date.now() < deadline) {
+    const street = [via, numero].filter(Boolean).join(' ');
+    const c = aceita(await nominatimEstruturado({ street, city: cidade, state: ufNome }));
+    if (c) return { ...c, nivel: numero ? 'endereco' : 'rua' };
     await sleep(1100);
+
+    // Recuperação via Correios: canoniza o logradouro e tenta de novo.
+    if (Date.now() < deadline) {
+      const via2 = await viacepCanonico(estado, cidade, via);
+      if (via2?.logradouro) {
+        cepEnc = via2.cep || null;
+        const street2 = [via2.logradouro, numero].filter(Boolean).join(' ');
+        const c2 = aceita(await nominatimEstruturado({ street: street2, city: cidade, state: ufNome }));
+        if (c2) return { ...c2, nivel: numero ? 'endereco' : 'rua', cep: cepEnc };
+        await sleep(1100);
+      }
+    }
   }
 
-  // Nível 2 — bairro
+  // Nível 2 — bairro (no campo street; cidade/estado travados).
   if (bairro && bairro.trim() && Date.now() < deadline) {
-    const query = [bairro, cidade, estado, 'Brasil'].filter(Boolean).join(', ');
-    const coords = await nominatim(query);
-    if (coords) return { ...coords, nivel: 'bairro' };
+    const c = aceita(await nominatimEstruturado({ street: bairro, city: cidade, state: ufNome }));
+    if (c) return { ...c, nivel: 'bairro', cep: cepEnc };
     await sleep(1100);
   }
 
-  // Nível 3 — cidade
+  // Nível 3 — cidade: centróide IBGE (instantâneo, sempre na UF correta).
+  const cen = centroideIBGE(cidade, estado);
+  if (cen) return { lat: cen.lat, lng: cen.lng, nivel: 'cidade', cep: cepEnc };
+
+  // Último recurso: cidade via Nominatim estruturado (cidades fora do IBGE local).
   if (cidade && cidade.trim() && Date.now() < deadline) {
-    const query = [cidade, estado, 'Brasil'].filter(Boolean).join(', ');
-    const coords = await nominatim(query);
-    if (coords) return { ...coords, nivel: 'cidade' };
+    const c = aceita(await nominatimEstruturado({ city: cidade, state: ufNome }));
+    if (c) return { ...c, nivel: 'cidade', cep: cepEnc };
     await sleep(1100);
   }
 
@@ -93,9 +112,14 @@ async function geocodificarCascata(im, deadline = Infinity) {
 
 async function salvarCoords(id, coords) {
   // Tenta salvar com geocod_nivel (requer migração add_geocod_nivel.sql)
-  // Se a coluna não existir ainda, tenta sem ela
+  // Se a coluna não existir ainda, tenta sem ela.
+  // Ao gravar coordenada nova, ZERA pontos_proximos/proximidades_em: as
+  // proximidades (Overpass) dependem da lat/lng, então precisam ser recalculadas
+  // — senão um imóvel re-geocodificado fica com atrativos do local errado.
   const body = coords
-    ? { latitude: coords.lat, longitude: coords.lng, geocod_nivel: coords.nivel }
+    ? { latitude: coords.lat, longitude: coords.lng, geocod_nivel: coords.nivel,
+        pontos_proximos: null, proximidades_em: null,
+        ...(coords.cep ? { cep: coords.cep } : {}) }
     // Falha definitiva: marca 'falhou' (latitude=0) para sair da fila e não ser
     // re-tentado a cada ciclo (cada falha custa ~28s em 3 níveis do Nominatim).
     : { latitude: 0, longitude: 0, geocod_nivel: 'falhou' };
@@ -173,6 +197,44 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
   return res;
 }
 
+// Ranking de precisão (maior = melhor) para o reprocessamento "melhorar precisão".
+const NIVEL_RANK = { endereco: 4, rua: 3, bairro: 2, cidade: 1, falhou: 0 };
+
+/**
+ * Reprocessa imóveis JÁ geocodificados para MELHORAR a precisão (in-place, sem
+ * apagar o pin atual). Alvo: itens no nível `alvoNivel` ('cidade'/'bairro') OU
+ * com coordenada inválida (fora da UF — os erros cross-UF). Só grava se o novo
+ * resultado for de nível melhor OU se a coordenada atual for inválida.
+ */
+async function reprocessarLote(alvoNivel, estadosFilter, lote = 40, deadline = Infinity) {
+  const filtroNivel = alvoNivel ? `&geocod_nivel=eq.${alvoNivel}` : '';
+  const r = await sb(
+    `imoveis_leilao?select=id,cidade,estado,endereco,bairro,latitude,longitude,geocod_nivel&latitude=not.is.null&latitude=neq.0&ativo=eq.true${filtroNivel}${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
+  );
+  if (!r.ok) return null;
+  const imoveis = await r.json();
+  if (!imoveis.length) return { processados: 0 };
+  const res = { processados: 0, melhorados: 0, corrigidos: 0, mantidos: 0, falhas: 0, interrompido: false };
+
+  for (const im of imoveis) {
+    if (Date.now() > deadline) { res.interrompido = true; break; }
+    const rankAtual = NIVEL_RANK[im.geocod_nivel] ?? 0;
+    const atualInvalida = !coordValida(Number(im.latitude), Number(im.longitude), im.estado, im.cidade);
+    const coords = await geocodificarCascata(im, deadline);
+    if (coords) {
+      const rankNovo = NIVEL_RANK[coords.nivel] ?? 0;
+      if (atualInvalida || rankNovo > rankAtual) {
+        const salvo = await salvarCoords(im.id, coords);
+        if (salvo) { if (atualInvalida) res.corrigidos++; else res.melhorados++; }
+        else res.falhas++;
+      } else res.mantidos++;
+    } else res.mantidos++;
+    res.processados++;
+    await sleep(1100);
+  }
+  return res;
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
@@ -209,6 +271,8 @@ export default async function handler(req) {
   const qEstados = reqUrl.searchParams.get('estados');
   let estados = null;
   let modoManual = false;
+  let reprocessarNivel = null; // 'cidade' | 'bairro' | '' (qualquer) → modo "melhorar precisão"
+  let reprocessarLimite = 40;
 
   if (qEstados) {
     estados = qEstados.split(',').map(s => s.trim().toUpperCase()).filter(s => /^[A-Z]{2}$/.test(s) && ESTADOS_GEOCOD.includes(s));
@@ -223,6 +287,12 @@ export default async function handler(req) {
     try {
       const body = await req.json();
       if (Array.isArray(body.estados) && body.estados.length > 0) estados = body.estados;
+      // Modo "melhorar precisão": reprocessa imóveis já geocodificados.
+      // body.reprocessar = 'cidade' | 'bairro' | 'rua' | '' (qualquer nível)
+      if (typeof body.reprocessar === 'string') {
+        reprocessarNivel = ['cidade', 'bairro', 'rua', 'falhou', ''].includes(body.reprocessar) ? body.reprocessar : 'cidade';
+        if (Number.isFinite(body.limite)) reprocessarLimite = Math.min(120, Math.max(1, body.limite | 0));
+      }
     } catch {}
     modoManual = true;
   }
@@ -234,6 +304,12 @@ export default async function handler(req) {
   // Modo cron (GET): loop até acabar todos os pendentes ou restar <30s de margem
   // Modo manual (POST): processa 1 lote de 50 e retorna (para o admin monitorar em tempo real)
   if (modoManual) {
+    // Modo "melhorar precisão": reprocessa in-place (não esvazia a fila de novos).
+    if (reprocessarNivel !== null) {
+      const res = await reprocessarLote(reprocessarNivel, estadosFilter, reprocessarLimite, Date.now() + 240_000);
+      if (!res) return new Response(JSON.stringify({ error: 'Supabase error' }), { status: 500 });
+      return new Response(JSON.stringify({ modo: 'reprocessar', nivel: reprocessarNivel || 'qualquer', ...res }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+    }
     const res = await processarLote(estadosFilter, 50, Date.now() + 240_000);
     if (!res) return new Response(JSON.stringify({ error: 'Supabase error' }), { status: 500 });
     if (!res.processados) return new Response(JSON.stringify({ processados: 0, msg: 'Nenhum imóvel pendente' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
