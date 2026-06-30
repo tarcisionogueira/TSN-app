@@ -497,6 +497,31 @@ export default function ImovelDetalhe() {
     } catch { setBuscandoDocs('erro'); }
   };
 
+  // Enquanto a captura CEF está na fila, busca os anexos periodicamente e os exibe
+  // assim que ficarem prontos — sem o usuário precisar atualizar a página. Para
+  // quando os documentos chegam ou quando a fila marca erro (captura indisponível).
+  useEffect(() => {
+    if (!imovel?.id) return;
+    const ativo = buscandoDocs === 'ok' || ['pendente', 'processando'].includes(filaDocs?.status);
+    if (!ativo || anexosDocs.length > 0) return;
+    let cancel = false, n = 0, timer;
+    const tick = async () => {
+      if (cancel) return;
+      n++;
+      const { data } = await supabase.from('imovel_anexos').select('tipo,nome,url')
+        .eq('imovel_id', imovel.id).in('tipo', ['matricula', 'edital', 'regras_venda']).not('storage_path', 'is', null);
+      if (cancel) return;
+      if (data && data.length) { setAnexosDocs(data); setBuscandoDocs(''); return; }
+      const { data: f } = await supabase.from('cef_matricula_fila').select('status,erro').eq('imovel_id', imovel.id).maybeSingle();
+      if (cancel) return;
+      if (f) setFilaDocs(prev => ({ ...prev, ...f }));
+      if (f?.status === 'erro') return; // captura falhou — não fica pollando à toa
+      if (n < 45) timer = setTimeout(tick, 20000); // ~15 min
+    };
+    timer = setTimeout(tick, 20000);
+    return () => { cancel = true; clearTimeout(timer); };
+  }, [imovel?.id, buscandoDocs, filaDocs?.status, anexosDocs.length]);
+
   if (loading) return (
     <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center', color: '#64748b' }}>
@@ -794,7 +819,7 @@ export default function ImovelDetalhe() {
                     <div style={{ marginBottom: 14 }}>
                       {emFila ? (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>
-                          <Clock size={15} /> Documentos solicitados — captura em lote (pode levar ~10–15 min). Atualize a página em alguns minutos.
+                          <Clock size={15} /> Documentos solicitados — captura em lote (~10–15 min). Aparecem aqui automaticamente quando prontos.
                         </div>
                       ) : (
                         <button onClick={buscarDocsCaixa} disabled={buscandoDocs === 'loading'}

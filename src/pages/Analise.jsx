@@ -708,6 +708,9 @@ export default function Analise() {
           <div style={{ fontSize:18, fontWeight:900, color:'white', lineHeight:1.2 }}>{d.nome||'Novo Imóvel'}</div>
           {d.cidade && <div style={{ fontSize:12, color:'#94a3b8', marginTop:3, display:'flex', alignItems:'center', gap:5 }}><MapPin size={11}/>{d.cidade}{d.estado?`, ${d.estado}`:''}</div>}
         </div>
+        {/* Status + Salvar + PDF só aparecem quando já há algo gerado (no launcher
+            limpo eram redundantes). */}
+        {(relMercadoGerado || relDocumentalGerado) && (
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <select name="status" value={d.status||'analise'} onChange={upN}
             style={{ fontSize:12, fontWeight:700, border:'1px solid #334155', borderRadius:8, padding:'7px 10px', background:'#111111', color:'white' }}>
@@ -722,6 +725,7 @@ export default function Analise() {
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* Contador de análises por role */}
@@ -767,11 +771,21 @@ export default function Analise() {
           <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Documentos do leiloeiro</div>
             {(() => {
-              const docMap = { edital:'Edital', matricula:'Matrícula', regras_venda:'Regra de venda' };
-              const docsView = ['edital','matricula','regras_venda'].map(t => {
+              const docMap = { edital:'Edital', matricula:'Matrícula', regras_venda:'Regra de venda online' };
+              // Só os tópicos pertinentes à modalidade: venda direta tem "regra de
+              // venda online" (não edital de leilão); leilão judicial/extrajudicial
+              // tem edital. Matrícula vale em todos.
+              const isVendaDireta = (imovelInicial?.modalidade || '') === 'venda_direta';
+              const topicos = isVendaDireta ? ['regras_venda','matricula'] : ['edital','matricula'];
+              // Links válidos: matricula.asp e detalhe-imovel.asp são páginas do
+              // portal (dão 404 / não são arquivo) — não viram link de documento.
+              const ehArquivo = (v) => /^https?:\/\//i.test(v||'') && !/matricula\.asp|detalhe-imovel\.asp/i.test(v);
+              const docsView = topicos.map(t => {
                 const a = docsLeiloeiro.find(x => x.tipo === t);
-                const linkFallback = t==='edital' ? imovelInicial?.linkEdital : t==='matricula' ? imovelInicial?.linkMatricula : null;
-                const url = a?.url || (linkFallback && /^https?:\/\//.test(linkFallback) ? linkFallback : null);
+                const fb = t==='edital' ? imovelInicial?.linkEdital
+                  : t==='matricula' ? imovelInicial?.linkMatricula
+                  : imovelInicial?.linkRegrasVenda;
+                const url = (a?.url && /^https?:\/\//.test(a.url)) ? a.url : (ehArquivo(fb) ? fb : null);
                 return { t, label: docMap[t], url };
               });
               const algum = docsView.some(x => x.url);
@@ -802,10 +816,12 @@ export default function Analise() {
                 { k:'mercado', label:'Mercadológico + Viabilidade', ok: relMercadoGerado },
                 { k:'documental', label:'Documental + Processo', ok: relDocumentalGerado },
               ].map(it => (
-                <button key={it.k} onClick={() => it.ok ? setRelSel(it.k) : (it.k==='mercado' ? gerarRelMercado() : gerarRelDocumental())}
-                  style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', border:'none', background: relSel===it.k ? '#eff6ff' : 'none', borderRadius:8, cursor:'pointer', textAlign:'left', fontSize:13, fontWeight:600, color: it.ok ? '#334155' : '#94a3b8' }}
-                  onMouseEnter={e=>{ if(relSel!==it.k) e.currentTarget.style.background='#f8fafc'; }} onMouseLeave={e=>{ if(relSel!==it.k) e.currentTarget.style.background='none'; }}>
-                  <span style={{ width:18, height:18, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, background: it.ok ? '#dcfce7' : '#f1f5f9', color: it.ok ? '#15803d' : '#94a3b8' }}>{it.ok ? '✓' : '·'}</span>
+                // Não clicável até o relatório ser gerado (geração é pelos cards do centro).
+                <button key={it.k} disabled={!it.ok} onClick={() => { if (it.ok) setRelSel(it.k); }}
+                  title={it.ok ? '' : 'Gere o relatório no centro para abrir aqui'}
+                  style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', border:'none', background: relSel===it.k ? '#eff6ff' : 'none', borderRadius:8, cursor: it.ok?'pointer':'default', textAlign:'left', fontSize:13, fontWeight:600, color: it.ok ? '#334155' : '#cbd5e1' }}
+                  onMouseEnter={e=>{ if(it.ok && relSel!==it.k) e.currentTarget.style.background='#f8fafc'; }} onMouseLeave={e=>{ if(relSel!==it.k) e.currentTarget.style.background='none'; }}>
+                  <span style={{ width:18, height:18, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, background: it.ok ? '#dcfce7' : '#f1f5f9', color: it.ok ? '#15803d' : '#cbd5e1' }}>{it.ok ? '✓' : '·'}</span>
                   {it.label}
                 </button>
               ))}
@@ -855,24 +871,29 @@ export default function Analise() {
               <div style={{ fontSize:13, color:'#64748b', marginBottom:18, lineHeight:1.6 }}>A IA usa automaticamente os dados e documentos deste imóvel. Gere cada relatório — eles vão para a barra lateral e abrem aqui. Com os dois prontos, libera a reunião com o analista.</div>
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
-                  { k:'mercado', cor:'#10b981', bg:'#f0fdf4', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado },
-                  { k:'documental', cor:'#dc2626', bg:'#fef2f2', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false },
-                ].map(c => (
-                  <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white' }}>
+                  { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
+                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, ordem:2 },
+                ].map(c => {
+                  const travado = c.gerando || c.block || c.seqBloqueado;
+                  return (
+                  <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white', opacity: c.seqBloqueado?0.7:1 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                       <div style={{ width:40, height:40, borderRadius:10, background:c.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><c.Icon size={20} color={c.cor}/></div>
-                      <div style={{ fontSize:14, fontWeight:800, color:'#111', lineHeight:1.25 }}>{c.titulo}</div>
+                      <div style={{ fontSize:14, fontWeight:800, color:'#111', lineHeight:1.25 }}><span style={{ color:c.cor }}>{c.ordem}.</span> {c.titulo}</div>
                     </div>
                     <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, flex:1 }}>{c.desc}</div>
                     <div style={{ display:'flex', gap:8 }}>
-                      <button onClick={c.fn} disabled={c.gerando || c.block}
-                        style={{ flex:1, padding:'10px', background: (c.gerando||c.block)?'#cbd5e1':c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: (c.gerando||c.block)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-                        {c.gerando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando...</> : c.block ? <><Lock size={14}/> Limite atingido</> : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}
+                      <button onClick={c.fn} disabled={travado}
+                        style={{ flex:1, padding:'10px', background: travado?'#cbd5e1':c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: travado?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                        {c.gerando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando...</>
+                          : c.block ? <><Lock size={14}/> Limite atingido</>
+                          : c.seqBloqueado ? <><Lock size={14}/> Gere o 1º antes</>
+                          : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}
                       </button>
                       {c.ok && <button onClick={()=>setRelSel(c.k)} style={{ padding:'10px 14px', background:'white', color:c.cor, border:`1px solid ${c.cor}`, borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer' }}>Abrir</button>}
                     </div>
                   </div>
-                ))}
+                );})}
               </div>
               {docMsg && <div style={{ marginTop:14, padding:'10px 14px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e' }}>{docMsg}</div>}
 
@@ -915,7 +936,7 @@ export default function Analise() {
 
           {/* ===== RELATÓRIO: ANÁLISE DOCUMENTAL + PROCESSO ===== */}
           {relSel === 'documental' && (
-            <div style={{ background:'linear-gradient(135deg,#7a0e0e,#dc2626)', borderRadius:16, padding:'18px 22px', color:'white' }}>
+            <div style={{ background:'linear-gradient(135deg,#0f172a,#1e3a8a)', borderRadius:16, padding:'18px 22px', color:'white' }}>
               <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85 }}>Relatório · BidPro Brasil</div>
               <div style={{ fontSize:18, fontWeight:900, marginTop:2 }}>Análise Documental e Processo</div>
               <div style={{ fontSize:12, opacity:0.9, marginTop:4 }}>{d.nome||'Imóvel'}{[d.cidade,d.estado].filter(Boolean).length ? ` · ${[d.cidade,d.estado].filter(Boolean).join(', ')}` : ''}</div>

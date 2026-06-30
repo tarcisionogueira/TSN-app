@@ -1,48 +1,41 @@
-// Vercel Edge Function — proxy seguro para Claude API (chave nunca exposta no browser)
-export const config = { runtime: 'edge' };
-import { getUser, unauthorized } from './_auth.js';
-import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+// Vercel Function (Node) — proxy seguro para Claude API (chave nunca exposta no browser).
+// Node + maxDuration porque a análise mercadológica usa web search e passa dos 25s do
+// Edge (que estourava 504). IMPORTANTE: o runtime Node deste projeto usa a assinatura
+// (req, res) — responder via res.* (um `return new Response()` seria IGNORADO e a
+// função travaria até o timeout).
+export const config = { runtime: 'nodejs', maxDuration: 120 };
+import { getUser } from './_auth.js';
+import { checkRateLimit } from './_rate-limit.js';
 
-export default async function handler(req) {
+const MODELOS_PERMITIDOS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8'];
+
+export default async function handler(req, res) {
+  const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    return res.status(204).end();
   }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
-
-  const ip = getIP(req);
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
   const rl = checkRateLimit(`claude:${ip}`, 30, 60_000);
-  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
+  if (!rl.ok) return res.status(429).json({ error: 'Muitas requisições. Aguarde alguns segundos.' });
 
   const user = await getUser(req);
-  if (!user) return unauthorized();
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
 
   const apiKey = process.env.CLAUDE_KEY;
-  if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'CLAUDE_KEY not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  if (!apiKey) return res.status(500).json({ error: 'CLAUDE_KEY not configured' });
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-  }
+  const body = req.body || {};
   const { useSearch, messages, tools, system, model, max_tokens } = body;
 
-  // Campos críticos fixos no servidor — cliente não pode sobrescrever modelo, tokens ou system prompt
-  const MODELOS_PERMITIDOS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8'];
+  // Campos críticos fixos no servidor — cliente não pode sobrescrever modelo/tokens.
   const modeloSolicitado = model && MODELOS_PERMITIDOS.includes(model) ? model : 'claude-haiku-4-5-20251001';
-  const maxTokensSafe = Math.min(Number(max_tokens) || 1024, 4096);
+  const maxTokensSafe = Math.min(Number(max_tokens) || 1024, 8192);
 
   const payload = {
     model: modeloSolicitado,
@@ -57,24 +50,17 @@ export default async function handler(req) {
     'anthropic-version': '2023-06-01',
     'content-type': 'application/json',
   };
+  if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
 
-  if (useSearch) {
-    headers['anthropic-beta'] = 'web-search-2025-03-05';
+  try {
+    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = await anthropicRes.json();
+    return res.status(anthropicRes.status).json(data);
+  } catch (e) {
+    return res.status(502).json({ error: 'Falha ao chamar a IA', detalhe: String(e?.message || e) });
   }
-
-  const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
-
-  const data = await anthropicRes.json();
-
-  return new Response(JSON.stringify(data), {
-    status: anthropicRes.status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br',
-    },
-  });
 }

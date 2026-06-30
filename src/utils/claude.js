@@ -300,7 +300,7 @@ Retorne APENAS este JSON (sem markdown):
   const data = await callAPI({
     model: MODEL,
     max_tokens: 6000,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
     messages: [{ role: 'user', content: prompt }],
     system: 'Você é um perito avaliador imobiliário sênior. Busque o máximo de amostras possível. Retorne apenas JSON válido.',
   }, true);
