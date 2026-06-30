@@ -447,7 +447,7 @@ export default function ImovelDetalhe() {
           foto: data.link_foto, leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
           pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
-          numeroProcesso: data.numero_processo,
+          numeroProcesso: data.numero_processo, anexos: data.anexos || null, enriquecidoEm: data.enriquecido_em,
           latitude: data.latitude, longitude: data.longitude, pontosProximos: data.pontos_proximos, geocodNivel: data.geocod_nivel,
           scoreFinanceiro: data.score_financeiro ?? null,
           scoreJuridico: data.score_juridico ?? null,
@@ -467,6 +467,30 @@ export default function ImovelDetalhe() {
     apiCall(`/api/geocodificar-imovel?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
       if (cancel || !d?.alterado) return;
       setImovel(prev => prev ? { ...prev, latitude: d.lat, longitude: d.lng, geocodNivel: d.nivel, pontosProximos: null } : prev);
+    }).catch(() => {});
+    return () => { cancel = true; };
+  }, [imovel?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // On-demand: ao abrir um imóvel de LEILOEIRO (não-CEF) ainda não vasculhado,
+  // varre a página do lote atrás de matrícula/edital/regras/anexos/foto e traz
+  // pra cá. Cada leiloeiro guarda esses arquivos em lugar diferente — o servidor
+  // vasculha o HTML inteiro (api/enriquecer-lote). Só dispara uma vez por imóvel.
+  useEffect(() => {
+    if (!imovel?.id) return;
+    const isCef = imovel.fonte === 'CEF' || imovel.fonte === 'caixa';
+    if (isCef || imovel.enriquecidoEm) return;
+    let cancel = false;
+    apiCall(`/api/enriquecer-lote?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
+      if (cancel || !d) return;
+      setImovel(prev => prev ? {
+        ...prev,
+        enriquecidoEm: new Date().toISOString(),
+        anexos: (d.anexos && d.anexos.length) ? d.anexos : prev.anexos,
+        linkMatricula: prev.linkMatricula || d.matricula || null,
+        linkEdital: prev.linkEdital || d.edital || null,
+        linkRegrasVenda: prev.linkRegrasVenda || d.regras || null,
+        foto: prev.foto || d.foto || null,
+      } : prev);
     }).catch(() => {});
     return () => { cancel = true; };
   }, [imovel?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -566,7 +590,13 @@ export default function ImovelDetalhe() {
     ? (isVendaDireta ? 'Regras de venda online' : 'Edital')
     : 'Acessar leiloeiro';
   const temNumerosRef = !!(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso);
-  const temCardDocumentos = !!matriculaUrl || !!regrasEditalUrl || temNumerosRef;
+  // Anexos vasculhados na página do leiloeiro (matrícula/edital/laudo/ônus…).
+  // Não repete os que já viram botão dedicado (matrícula/edital/regras "oficiais").
+  const urlsOficiais = new Set([matriculaUrl, regrasEditalUrl].filter(Boolean));
+  const anexosLeiloeiro = (Array.isArray(imovel.anexos) ? imovel.anexos : [])
+    .filter(a => a && a.url && !urlsOficiais.has(a.url));
+  const temCardDocumentos = !!matriculaUrl || !!regrasEditalUrl || temNumerosRef || anexosLeiloeiro.length > 0;
+  const TIPO_DOC_LABEL = { matricula: 'Matrícula', edital: 'Edital', regras: 'Regras de venda', anexo: 'Anexo' };
 
   // Localização no Google: Street View por coordenadas (quando geocodificado) ou
   // busca pelo endereço. Sem chave de API — usa as URLs públicas do Google Maps.
@@ -846,6 +876,26 @@ export default function ImovelDetalhe() {
                         {regrasEhDocReal ? <ScrollText size={15} /> : <ExternalLink size={15} />} {regrasEditalLabel}
                       </a>
                     )}
+                  </div>
+                )}
+
+                {/* Anexos do leiloeiro — documentos vasculhados na página do lote
+                    (matrícula, edital, laudo, ônus, certidões…). Cada leiloeiro
+                    guarda em lugar diferente; o servidor varre a página e lista aqui. */}
+                {anexosLeiloeiro.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Documentos no leiloeiro</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {anexosLeiloeiro.map((a, i) => (
+                        <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, color: '#334155', fontSize: 13, textDecoration: 'none' }}>
+                          <FileText size={14} color="#0D63DB" style={{ flexShrink: 0 }} />
+                          <span style={{ flexShrink: 0, fontWeight: 700, fontSize: 11, color: '#0D63DB', background: '#eff6ff', padding: '1px 6px', borderRadius: 5 }}>{TIPO_DOC_LABEL[a.tipo] || 'Anexo'}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nome || 'Documento'}</span>
+                          <ExternalLink size={12} color="#94a3b8" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

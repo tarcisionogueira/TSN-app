@@ -42,10 +42,16 @@ const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça',
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
 // Carrega imagem apenas quando o elemento entra na viewport
+// src pode ser uma string OU um array de candidatos (em ordem de preferência).
+// No onError de um candidato, avançamos para o próximo (igual ao detalhe do
+// imóvel: hotlink DIRETO primeiro, proxy só como fallback). Só mostramos o
+// placeholder "Sem foto" quando TODOS os candidatos falharem.
 function LazyImage({ src, alt, style }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
-  const [erro, setErro] = useState(false);
+  const cands = Array.isArray(src) ? src.filter(Boolean) : (src ? [src] : []);
+  const [idx, setIdx] = useState(0);
+  useEffect(() => { setIdx(0); }, [Array.isArray(src) ? src.join('|') : src]);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -55,12 +61,13 @@ function LazyImage({ src, alt, style }) {
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+  const atual = cands[idx] || null;
   return (
     <div ref={ref} style={{ ...style, background:'#f1f5f9', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      {visible && src && !erro
-        ? <img src={src} alt={alt} loading="lazy"
+      {visible && atual
+        ? <img src={atual} alt={alt} loading="lazy"
             style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
-            onError={() => setErro(true)}
+            onError={() => setIdx(i => i + 1)}
           />
         : <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, color:'#cbd5e1', width:'100%', height:'100%' }}>
             <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6"/></svg>
@@ -96,6 +103,27 @@ function svgPin(cor) {
 // sem pontuação/espaços. Assim "Santana de Parnaíba" = "Santana de Parnaiba",
 // "Embu-Guaçu" = "Embu Guacu" = "embuguacu", "Sant'Ana" = "Santana", etc.
 const normCidade = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+
+// Candidatos de foto para o card da busca, em ordem de preferência. Igual ao
+// detalhe do imóvel: o HOTLINK DIRETO funciona no navegador do usuário (IP
+// residencial), enquanto o /api/img-proxy roda na Vercel e é bloqueado por
+// vários hosts de leiloeiro (ex.: ms.sbwebservices.net → 403). Por isso a foto
+// aparecia no detalhe mas não no card. Tentamos: 1) foto direta; 2) padrão Caixa
+// por id; 3) proxy (fallback p/ fontes que bloqueiam hotlink por referer).
+const fotoCandidatos = (im) => {
+  const foto = im.foto;
+  const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
+  const caixaUrl = isCef && im.fonteId
+    ? `https://venda-imoveis.caixa.gov.br/fotos/F${String(im.fonteId).replace(/^(caixa_|cef_)/, '')}21.jpg`
+    : null;
+  // Já hospedado por nós (supabase) ou caminho local: usa direto, sem fallback.
+  if (foto && (foto.includes('supabase.co') || foto.startsWith('/'))) return [foto];
+  const cands = [];
+  if (foto && /^https?:\/\//.test(foto)) cands.push(foto);                 // 1) hotlink direto
+  if (caixaUrl) cands.push(caixaUrl);                                       // 2) padrão de foto da Caixa
+  if (!isCef && foto && /^https?:\/\//.test(foto)) cands.push(`/api/img-proxy?url=${encodeURIComponent(foto)}`); // 3) proxy
+  return cands;
+};
 
 function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista, visivel, height }) {
   const mapContainerRef = useRef(null);
@@ -885,15 +913,6 @@ export default function Busca() {
     buscarPagina(1, filtros, sortBy, centro, raioAtivo, raioKmAtivo, cidadesNaArea);
   };
 
-  // Foto da Caixa: HOTLINK DIRETO no navegador do usuário (IP residencial não é
-  // bloqueado pela Caixa). O proxy /api/img-caixa roda na Vercel, cujo IP a Caixa
-  // bloqueia → por isso as fotos sumiam. Padrão F{numero}21.jpg (validado).
-  const imgUrlCaixa = (im) => {
-    if (im.fonte !== 'caixa' && im.fonte !== 'CEF') return null;
-    const id = (im.fonte_id || '').replace(/^(caixa_|cef_)/, '');
-    return id ? `https://venda-imoveis.caixa.gov.br/fotos/F${id}21.jpg` : null;
-  };
-
   const irParaAnalise = (im) => {
     nav('/caso', { state: { imovel: im } });
   };
@@ -1338,15 +1357,7 @@ export default function Busca() {
                 <div style={{ flex:'1 1 45%', minWidth:0, overflowY:'auto', display:'flex', flexDirection:'column', gap:8 }}>
                   {resultadosFiltrados.slice(0, 30).map((im) => {
                     const desc = desconto(im);
-                    const getImgSrc = (im) => {
-                      const foto = im.foto;
-                      const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
-                      if (!foto) return isCef ? imgUrlCaixa({ ...im, fonte_id: im.fonteId }) : null;
-                      if (foto.includes('supabase.co') || foto.startsWith('/')) return foto;
-                      if (isCef) return imgUrlCaixa({ ...im, fonte_id: im.fonteId }) || `/api/img-proxy?url=${encodeURIComponent(foto)}`;
-                      return `/api/img-proxy?url=${encodeURIComponent(foto)}`;
-                    };
-                    const imgSrc = getImgSrc(im);
+                    const imgSrc = fotoCandidatos(im);
                     return (
                       <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state: { imovel: im } })}
                         style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', cursor:'pointer', gap:0, flexShrink:0 }}
@@ -1387,11 +1398,7 @@ export default function Busca() {
                     <div style={{ flex:1, overflowY:'auto', padding:'10px', display:'flex', flexDirection:'column', gap:8 }}>
                       {resultadosFiltrados.slice(0, 60).map((im) => {
                         const desc = desconto(im);
-                        const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
-                        const imgSrc = !im.foto ? (isCef ? imgUrlCaixa({ ...im, fonte_id: im.fonteId }) : null)
-                          : (im.foto.includes('supabase.co') || im.foto.startsWith('/')) ? im.foto
-                          : isCef ? (imgUrlCaixa({ ...im, fonte_id: im.fonteId }) || `/api/img-proxy?url=${encodeURIComponent(im.foto)}`)
-                          : `/api/img-proxy?url=${encodeURIComponent(im.foto)}`;
+                        const imgSrc = fotoCandidatos(im);
                         return (
                           <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state:{ imovel: im } })}
                             style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', cursor:'pointer', flexShrink:0 }}
@@ -1434,15 +1441,7 @@ export default function Busca() {
             {resultadosPagina.map((im)=>{
               const desc = desconto(im);
               const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#084BA6' };
-              const getImgSrc = (im) => {
-                const foto = im.foto;
-                const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
-                if (!foto) return isCef ? imgUrlCaixa({ ...im, fonte_id: im.fonteId }) : null;
-                if (foto.includes('supabase.co') || foto.startsWith('/')) return foto;
-                if (isCef) return imgUrlCaixa({ ...im, fonte_id: im.fonteId }) || `/api/img-proxy?url=${encodeURIComponent(foto)}`;
-                return `/api/img-proxy?url=${encodeURIComponent(foto)}`;
-              };
-              const imgSrc = getImgSrc(im);
+              const imgSrc = fotoCandidatos(im);
 
               return (
                 <div key={im.id}
@@ -1453,7 +1452,7 @@ export default function Busca() {
 
                   {/* Foto */}
                   <div style={{ width:'100%', height: isMobile ? 180 : 150, background:'#f1f5f9', position:'relative', overflow:'hidden' }}>
-                    {imgSrc
+                    {imgSrc.length
                       ? <LazyImage src={imgSrc} alt={im.titulo} style={{ width:'100%', height:'100%' }}/>
                       : <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, color:'#cbd5e1' }}>
                           <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6"/></svg>
