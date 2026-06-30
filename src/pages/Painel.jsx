@@ -268,7 +268,10 @@ export default function Painel() {
     const updated = imoveis.filter(i=>i.id!==id);
     setImoveis(updated);
     saveImoveis(updated);
-    if (id && user?.id) supabase.from('analises_mercado').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+    if (id && user?.id) {
+      supabase.from('analises_mercado').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+      supabase.from('analises_documental').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+    }
   };
 
   const alterarStatus = (id, status) => {
@@ -278,7 +281,10 @@ export default function Painel() {
     // Arrematou → marca a análise como arrematada (NUNCA é apagada pelo cron).
     if (id && user?.id) {
       const arrematou = ['arrematado','em_reforma','venda','alugado','concluido'].includes(status);
-      if (arrematou) supabase.from('analises_mercado').update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+      if (arrematou) {
+        supabase.from('analises_mercado').update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+        supabase.from('analises_documental').update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+      }
     }
   };
 

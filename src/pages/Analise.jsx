@@ -273,13 +273,17 @@ export default function Analise() {
   // Análise mercadológica roda em SEGUNDO PLANO no AnalisesContext: o usuário pode
   // sair desta tela e navegar/buscar imóveis enquanto gera. "Gerando" deriva do
   // contexto; o resultado é aplicado de volta quando concluído (efeito abaixo).
-  const { iniciar: iniciarAnalise, getAnalise } = useAnalises();
+  const { iniciar: iniciarAnalise, getAnalise, iniciarDocumental, getDocumental } = useAnalises();
   const analiseImovelId = imovelInicial?.id || d.id;
   const analiseEntry = getAnalise(analiseImovelId);
+  const docEntry = getDocumental(analiseImovelId);
   const gerandoMercado = analiseEntry?.status === 'gerando';
-  const [gerandoDocumental, setGerandoDocumental] = useState(false);
+  // Documental também roda em SEGUNDO PLANO no servidor (/api/gerar-documental):
+  // o "gerando"/"pronto" derivam do contexto (persistente, vale entre devices).
+  const gerandoDocumental = docEntry?.status === 'gerando';
   const [relMercadoGerado, setRelMercadoGerado] = useState(false);
-  const [relDocumentalGerado, setRelDocumentalGerado] = useState(false);
+  const relDocumentalGerado = docEntry?.status === 'concluida';
+  const [parecerDocumental, setParecerDocumental] = useState(null); // resultado do servidor
   const [docMsg, setDocMsg] = useState('');
   // Estado do workflow analista → jurídico (sessão)
   const [reuniaoSolicitada, setReuniaoSolicitada] = useState(false);
@@ -579,41 +583,60 @@ export default function Analise() {
     showMsg('Relatório Mercadológico + Viabilidade pronto!');
   }, [analiseEntry?.status, analiseEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Relatório 2: Análise Documental + Processo ────────────────────────────
-  // Lê os documentos do leiloeiro (edital/matrícula) e consulta o processo (CNJ).
-  const gerarRelDocumental = async () => {
-    setGerandoDocumental(true); setDocMsg('');
-    let algumaCoisa = false;
-    try {
-      // 1) Extração documental a partir do que o leiloeiro forneceu
-      const urlDoc = docsLeiloeiro.find(a => a.tipo === 'edital')?.url
-        || imovelInicial?.linkEdital || urlEdital;
-      if (urlDoc && /^https?:\/\//.test(urlDoc)) {
-        try { const ext = await extrairDadosDocumentoUrl(urlDoc); aplicarExtracao(ext); algumaCoisa = true; }
-        catch { /* segue para o processo mesmo sem extração do edital */ }
-      } else if (textoDoc.trim() || textoMatricula.trim()) {
-        try {
-          const textoCompleto = [
-            textoDoc.trim() ? `=== EDITAL ===\n${textoDoc.trim()}` : '',
-            textoMatricula.trim() ? `=== MATRÍCULA ===\n${textoMatricula.trim()}` : '',
-          ].filter(Boolean).join('\n\n');
-          const ext = await extrairDadosDocumento(textoCompleto); aplicarExtracao(ext); algumaCoisa = true;
-        } catch { /* idem */ }
-      }
-      // 2) Consulta do processo no CNJ (quando há nº de processo e UF do imóvel)
-      if (temCNJ && (cnjNumero.trim() || cnjNome.trim()) && d.estado) {
-        try { await buscarCNJ(); algumaCoisa = true; } catch { /* CNJ pode estar indisponível */ }
-      }
-      setRelDocumentalGerado(true);
-      setRelSel('documental');
-      if (!algumaCoisa) setDocMsg('Sem documentos do leiloeiro nem nº de processo — relatório documental ficou limitado. Anexe a matrícula/edital ou informe o processo.');
-      showMsg('Relatório de Análise Documental + Processo gerado!');
-    } catch {
-      showMsg('Erro ao gerar o relatório documental.', 'error');
-    } finally {
-      setGerandoDocumental(false);
-    }
+  // ─── Relatório 2: Análise Documental + Processo (AO MOTOR / servidor) ───────
+  // Dispara /api/gerar-documental: lê edital/matrícula/anexos do lote e consulta o
+  // CNJ NO SERVIDOR. O usuário pode FECHAR a aba — continua e grava no banco; o
+  // resultado é aplicado de volta pelo efeito abaixo. Texto/processo colados na
+  // tela (staff/inclusão manual) são enviados como reforço.
+  const gerarRelDocumental = () => {
+    if (gerandoDocumental) return;
+    setDocMsg('');
+    const payload = {
+      urlEdital: (imovelInicial?.linkEdital || urlEdital || '').trim() || undefined,
+      textoEdital: textoDoc.trim() || undefined,
+      textoMatricula: textoMatricula.trim() || undefined,
+      processoNumero: cnjNumero.trim() || undefined,
+      processoNome: cnjNome.trim() || undefined,
+    };
+    showMsg('Análise documental iniciada no servidor — pode fechar a aba; acompanhe em "Análises" no topo.');
+    iniciarDocumental(
+      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null },
+      payload
+    );
+    setRelSel('documental');
   };
+
+  // Aplica o resultado da documental gerada em segundo plano (riscos, extração,
+  // CNJ e parecer) quando concluída. Roda uma vez por conclusão.
+  const aplicadoDocRef = React.useRef(null);
+  useEffect(() => {
+    if (!docEntry) return;
+    if (docEntry.status === 'gerando') return;
+    if (docEntry.status === 'erro' && aplicadoDocRef.current !== docEntry.updatedAt) {
+      aplicadoDocRef.current = docEntry.updatedAt;
+      showMsg(docEntry.erro || 'Erro ao gerar a análise documental.', 'error');
+      return;
+    }
+    if (docEntry.status !== 'concluida' || !docEntry.result) return;
+    if (aplicadoDocRef.current === docEntry.updatedAt) return;
+    aplicadoDocRef.current = docEntry.updatedAt;
+    const r = docEntry.result;
+    setParecerDocumental(r);
+    // Preenche os riscos do imóvel a partir do que a IA encontrou nos documentos.
+    if (Array.isArray(r.riscos) && r.riscos.length) {
+      setD(p => ({ ...p, riscos: r.riscos.map(x => ({
+        id: Date.now() + Math.random(),
+        texto: x.constaNaDoc === false ? `${x.descricao || x.categoria} (não consta na documentação — confirmar)` : (x.descricao || x.categoria),
+        tipo: x.severidade === 'bloqueante' ? 'bloqueante' : 'alerta',
+      })) }));
+    }
+    // Espelha a consulta CNJ que rodou no servidor, no console de CNJ da tela.
+    if (r.cnj) setCnjResultados({ processos: r.cnj.processos || [], total: r.cnj.total || 0, tribunais_consultados: r.cnj.tribunais || [], parecer: r.cnj.parecer });
+    if (!r.parecer && !(r.documentosLidos || []).length) {
+      setDocMsg('Não foi possível ler documentos automaticamente. Anexe a matrícula/edital ou cole o texto/nº do processo e gere novamente.');
+    }
+    showMsg('Análise Documental + Processo pronta!');
+  }, [docEntry?.status, docEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ambosRelatorios = relMercadoGerado && relDocumentalGerado;
 
@@ -687,9 +710,10 @@ export default function Analise() {
             await supabase.from('relatorios').insert(payload);
           }
         }
-        // Sincroniza o flag arrematado na análise gerada (regra de limpeza: o cron
-        // só apaga as NÃO arrematadas 15 dias após o leilão).
+        // Sincroniza o flag arrematado nas análises geradas (regra de limpeza: o
+        // cron só apaga as NÃO arrematadas 15 dias após o leilão) — mercado + documental.
         await supabase.from('analises_mercado').update({ arrematado: isArrematado }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
+        await supabase.from('analises_documental').update({ arrematado: isArrematado }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
       } catch { /* portfólio local já foi salvo — erro de rede não bloqueia o usuário */ }
     }
 
@@ -949,8 +973,8 @@ export default function Analise() {
                     {c.gerando && (
                       <div style={{ fontSize:11, color:c.cor, lineHeight:1.4, textAlign:'center' }}>
                         {c.k==='mercado'
-                          ? 'Buscando preços de mercado em tempo real e montando a viabilidade — pode levar até ~2 min. Pode deixar esta aba aberta.'
-                          : 'Lendo documentos e consultando o processo — pode levar até ~1 min.'}
+                          ? 'Buscando preços de mercado em tempo real e montando a viabilidade — pode levar até ~2 min. Pode fechar a aba; continua no servidor.'
+                          : 'Lendo edital/matrícula/anexos e consultando o processo no CNJ — roda no servidor; pode fechar a aba.'}
                       </div>
                     )}
                   </div>
@@ -1004,6 +1028,44 @@ export default function Analise() {
               <div style={{ fontSize:12, opacity:0.9, marginTop:4 }}>{d.nome||'Imóvel'}{[d.cidade,d.estado].filter(Boolean).length ? ` · ${[d.cidade,d.estado].filter(Boolean).join(', ')}` : ''}</div>
             </div>
           )}
+
+          {/* Parecer documental gerado NO SERVIDOR (lê edital/matrícula/anexos + CNJ) */}
+          {relSel === 'documental' && parecerDocumental && (
+            <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'20px 22px', display:'flex', flexDirection:'column', gap:14 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                <Scale size={18} color="#1e3a8a"/>
+                <div style={{ fontSize:15, fontWeight:900, color:'#111' }}>Parecer Documental e Jurídico (IA)</div>
+                {parecerDocumental.nivelRisco && (
+                  <span style={{ marginLeft:'auto', fontSize:11, fontWeight:800, padding:'3px 10px', borderRadius:20,
+                    background: parecerDocumental.nivelRisco==='vermelho'?'#fee2e2':parecerDocumental.nivelRisco==='amarelo'?'#fef3c7':'#dcfce7',
+                    color: parecerDocumental.nivelRisco==='vermelho'?'#b91c1c':parecerDocumental.nivelRisco==='amarelo'?'#92400e':'#15803d' }}>
+                    Risco {parecerDocumental.nivelRisco}
+                  </span>
+                )}
+              </div>
+              {(parecerDocumental.documentosLidos || []).length > 0 && (
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {parecerDocumental.documentosLidos.map((dl, i) => (
+                    <a key={i} href={dl.url} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, fontWeight:700, color:'#1e3a8a', background:'#eef2ff', padding:'3px 9px', borderRadius:6, textDecoration:'none' }}>📄 {dl.rotulo}</a>
+                  ))}
+                </div>
+              )}
+              {parecerDocumental.parecer && (
+                <div style={{ fontSize:13.5, color:'#334155', lineHeight:1.75, whiteSpace:'pre-wrap' }}>
+                  {parecerDocumental.parecer.replace(/§\s*SEÇÃO:/g, '\n§ ').trim()}
+                </div>
+              )}
+              {(parecerDocumental.lacunas || []).length > 0 && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:12, padding:'12px 16px' }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:'#92400e', marginBottom:6 }}>⚠ Dados a confirmar (não constam na documentação)</div>
+                  <ul style={{ margin:0, paddingLeft:18, fontSize:12.5, color:'#92400e', lineHeight:1.6 }}>
+                    {parecerDocumental.lacunas.map((l, i) => <li key={i}>{l}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           {relSel === 'documental' && isStaffAnalise && (<>
 
       {/* ── ETAPA 1: DOCUMENTO ── */}

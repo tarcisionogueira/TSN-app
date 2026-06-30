@@ -29,15 +29,18 @@ export default async function handler(req, res) {
 
   const corteLeilao = new Date(Date.now() - DIAS_POS_LEILAO * 86400000).toISOString();
   const corteSemData = new Date(Date.now() - DIAS_SEM_DATA * 86400000).toISOString();
-  const out = { por_leilao: 0, sem_data: 0 };
+  const out = {};
 
-  // 1) Com data de leilão: 15 dias após o leilão, não arrematadas.
-  const r1 = await sb(`analises_mercado?arrematado=eq.false&data_leilao=not.is.null&data_leilao=lt.${corteLeilao}&select=id`, { method: 'DELETE' });
-  if (r1.ok) { const d = await r1.json().catch(() => []); out.por_leilao = Array.isArray(d) ? d.length : 0; }
+  // Mesma regra para a mercadológica E a documental: 15 dias após o leilão sem
+  // arrematar → apaga; sem data → fallback de 60 dias por idade. Arrematado nunca apaga.
+  for (const tabela of ['analises_mercado', 'analises_documental']) {
+    const r1 = await sb(`${tabela}?arrematado=eq.false&data_leilao=not.is.null&data_leilao=lt.${corteLeilao}&select=id`, { method: 'DELETE' });
+    const c1 = r1.ok ? ((await r1.json().catch(() => [])).length || 0) : 0;
+    const r2 = await sb(`${tabela}?arrematado=eq.false&data_leilao=is.null&created_at=lt.${corteSemData}&select=id`, { method: 'DELETE' });
+    const c2 = r2.ok ? ((await r2.json().catch(() => [])).length || 0) : 0;
+    out[tabela] = { por_leilao: c1, sem_data: c2 };
+  }
 
-  // 2) Sem data de leilão: fallback por idade da criação.
-  const r2 = await sb(`analises_mercado?arrematado=eq.false&data_leilao=is.null&created_at=lt.${corteSemData}&select=id`, { method: 'DELETE' });
-  if (r2.ok) { const d = await r2.json().catch(() => []); out.sem_data = Array.isArray(d) ? d.length : 0; }
-
-  return res.status(200).json({ ok: true, ...out, total: out.por_leilao + out.sem_data });
+  const total = Object.values(out).reduce((s, v) => s + v.por_leilao + v.sem_data, 0);
+  return res.status(200).json({ ok: true, ...out, total });
 }

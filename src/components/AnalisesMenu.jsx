@@ -18,8 +18,24 @@ function fotoImovel(im) {
 // roda em segundo plano no AnalisesProvider, então o usuário pode navegar livre).
 // Vazio → CTA para buscar imóveis e fazer a primeira análise.
 export default function AnalisesMenu({ mobile, onNavegar }) {
-  const { analises, emAndamento, remover } = useAnalises();
+  const { analises, documentais, emAndamento, remover } = useAnalises();
   const nav = useNavigate();
+  // Une mercadológica + documental por imóvel: uma linha por imóvel, com o status
+  // mais "ativo" vencendo (gerando > erro > pronta) e rótulo do que cada uma tem.
+  const itens = React.useMemo(() => {
+    const rank = { gerando: 3, erro: 2, concluida: 1 };
+    const by = {};
+    const push = (a, tipo) => {
+      if (!a?.imovelId) return;
+      const cur = by[a.imovelId];
+      const partes = { ...(cur?.partes || {}), [tipo]: a.status };
+      const venc = !cur || (rank[a.status] || 0) > (rank[cur.status] || 0) ? a : cur;
+      by[a.imovelId] = { ...venc, partes, updatedAt: Math.max(cur?.updatedAt || 0, a.updatedAt || 0) };
+    };
+    (analises || []).forEach(a => push(a, 'mercado'));
+    (documentais || []).forEach(a => push(a, 'documental'));
+    return Object.values(by).sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0));
+  }, [analises, documentais]);
   const [aberto, setAberto] = useState(false);
   const ref = useRef(null);
 
@@ -62,7 +78,7 @@ export default function AnalisesMenu({ mobile, onNavegar }) {
             {emAndamento > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={12} /> {emAndamento} em andamento</span>}
           </div>
 
-          {analises.length === 0 ? (
+          {itens.length === 0 ? (
             <div style={{ padding: '22px 16px', textAlign: 'center' }}>
               <BarChart3 size={28} color="#cbd5e1" />
               <div style={{ fontSize: 13, color: '#64748b', margin: '8px 0 14px', lineHeight: 1.5 }}>Você ainda não tem análises.<br />Busque um imóvel para fazer a primeira.</div>
@@ -72,9 +88,10 @@ export default function AnalisesMenu({ mobile, onNavegar }) {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 6 }}>
-              {analises.map(a => {
+              {itens.map(a => {
                 const s = statusInfo(a);
                 const foto = fotoImovel(a.imovel);
+                const tags = Object.keys(a.partes || {});
                 return (
                   <div key={a.imovelId} onClick={() => abrir(a)}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, cursor: 'pointer' }}
@@ -87,9 +104,12 @@ export default function AnalisesMenu({ mobile, onNavegar }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Imóvel'}</div>
                       <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[a.cidade, a.estado].filter(Boolean).join(' — ')}</div>
-                      <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-                        <s.Icon size={11} color={s.cor} style={s.spin ? { animation: 'spin 1s linear infinite' } : undefined} />
-                        <span style={{ color: s.cor, fontWeight: 700 }}>{s.txt}</span>
+                      <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <s.Icon size={11} color={s.cor} style={s.spin ? { animation: 'spin 1s linear infinite' } : undefined} />
+                          <span style={{ color: s.cor, fontWeight: 700 }}>{s.txt}</span>
+                        </span>
+                        {tags.length > 0 && <span style={{ color: '#94a3b8', fontWeight: 600 }}>· {tags.map(t => t === 'mercado' ? 'Mercado' : 'Documental').join(' + ')}</span>}
                       </div>
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
