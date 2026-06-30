@@ -92,6 +92,10 @@ function svgPin(cor) {
   )}`;
 }
 
+// Normaliza cidade (minúscula, sem acento) — igual ao cidade_norm do banco.
+// Resolve o bug de filtrar "Santana de Parnaíba" e não casar "Santana de Parnaiba".
+const normCidade = (c) => (c || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
 function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista, visivel, height }) {
   const mapContainerRef = useRef(null);
   const leafletRef = useRef(null);
@@ -124,7 +128,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         // suportar nomes com espaço/acento/parênteses sem quebrar o agrupamento.
         // No modo raio a cidade vira apenas o CENTRO — a área é definida pelo raio
         // (haversine abaixo), então não restringimos por cidade (igual à lista).
-        if (!raioAtivo && filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike."${c}"`).join(','));
+        if (!raioAtivo && filtros.cidades?.length) q = q.in('cidade_norm', filtros.cidades.map(normCidade));
         // Pagamento: igualdade exata (.in) nos valores canônicos. Combina várias
         // opções como união (Financiado + Hipotecado) sem encadear outro .or.
         if (filtros.pagamento?.length > 0) {
@@ -207,8 +211,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
     import('leaflet').then(L => {
       markersRef.current.clearLayers();
       if (circlesRef.current) circlesRef.current.clearLayers();
-      const bounds = [];
       imoveisMapa.forEach(im => {
+        try {
         if (!im.latitude || !im.longitude) return;
         const cor = COR_TIPO[im.tipo] || '#111111';
         const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [22, 33], iconAnchor: [11, 33], popupAnchor: [0, -33] });
@@ -259,82 +263,57 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           circle.bindPopup(popupHTML, { maxWidth: 240 });
           circlesRef.current.addLayer(circle);
         }
-        bounds.push([im.latitude, im.longitude]);
+        } catch { /* um imóvel ruim não pode quebrar os demais pins */ }
       });
+    });
+  }, [imoveisMapa, mapReady]);
 
-      // invalidateSize ANTES de centralizar: em login novo o container pode ter
-      // dimensão "velha" quando o fitBounds roda — sem isto, o zoom falha e o mapa
-      // fica no Brasil inteiro. Recalcular o tamanho garante o enquadramento certo.
-      try { leafletRef.current.invalidateSize(); } catch {}
+  // ── CENTRALIZAÇÃO (efeito DEDICADO e à prova de timing) ───────────────────
+  // Separado da renderização dos pins: mesmo que um pin dê erro, o mapa centraliza.
+  // Roda algumas vezes (retry) porque, em login novo, o container pode ter
+  // dimensão "velha" quando o fitBounds roda (e aí o mapa ficava no Brasil inteiro).
+  useEffect(() => {
+    if (!mapReady || !leafletRef.current || !visivel) return;
+    const pts = imoveisMapa
+      .map(im => [Number(im.latitude), Number(im.longitude)])
+      .filter(([la, ln]) => isFinite(la) && isFinite(ln) && la !== 0 && ln !== 0);
 
-      // PRIORIDADE DE CENTRALIZAÇÃO (o mapa deve sempre "acompanhar" o filtro):
-      // 1) Raio ligado  -> centra no centro do raio com zoom proporcional ao raio.
-      // 2) Há pins       -> ENQUADRA todos os pins do filtro (fitBounds). É isto que
-      //    faz o mapa dar zoom na cidade/área filtrada ao voltar para a Busca.
-      // 3) Sem pins mas com centro conhecido -> setView no centro.
-      // 4) Sem pins e sem centro, mas com cidade no filtro -> Nominatim (aproximado).
+    const aplicar = () => {
+      const map = leafletRef.current;
+      if (!map) return;
+      try { map.invalidateSize(); } catch {}
       if (raioAtivo && centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
-        const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
-        try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], zoom); } catch {}
-      } else if (bounds.length > 0) {
-        // Sem raio: enquadra os pins do filtro (auto-zoom na cidade filtrada).
-        // Ignora OUTLIERS de coordenada (imóveis com a cidade certa mas lat/lng
-        // geocodificada errada, ex.: "Praia Grande" caindo perto de Ubatuba):
-        // eles continuam como pins, mas não esticam o zoom para fora da cidade.
-        let fitPts = bounds;
-        if (bounds.length >= 4) {
-          const lats = bounds.map(b => b[0]).slice().sort((a, b) => a - b);
-          const lngs = bounds.map(b => b[1]).slice().sort((a, b) => a - b);
+        const z = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
+        try { map.setView([centroRaio.lat, centroRaio.lng], z); } catch {}
+        return;
+      }
+      if (pts.length > 0) {
+        // Ignora OUTLIERS de coordenada (cidade certa, lat/lng errada) só no zoom.
+        let fit = pts;
+        if (pts.length >= 4) {
+          const lats = pts.map(p => p[0]).slice().sort((a, b) => a - b);
+          const lngs = pts.map(p => p[1]).slice().sort((a, b) => a - b);
           const mid = arr => arr[Math.floor(arr.length / 2)];
           const cLat = mid(lats), cLng = mid(lngs);
-          const dists = bounds.map(b => haversine(cLat, cLng, b[0], b[1]));
+          const dists = pts.map(p => haversine(cLat, cLng, p[0], p[1]));
           const medDist = dists.slice().sort((a, b) => a - b)[Math.floor(dists.length / 2)];
-          // Mantém o que estiver dentro de max(40km, 4× a distância mediana ao
-          // centro). Cluster compacto (cidade) descarta pins distantes; busca
-          // ampla (estado) tem mediana grande e não descarta nada.
           const thr = Math.max(40, medDist * 4);
-          const inliers = bounds.filter((b, i) => dists[i] <= thr);
-          if (inliers.length >= Math.ceil(bounds.length * 0.6)) fitPts = inliers;
+          const inliers = pts.filter((p, i) => dists[i] <= thr);
+          if (inliers.length >= Math.ceil(pts.length * 0.6)) fit = inliers;
         }
-        try { leafletRef.current.fitBounds(fitPts, { padding: [40, 40], maxZoom: 13 }); } catch {}
-      } else if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
-        try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], 11); } catch {}
-      } else if (filtros?.cidades?.length > 0 && filtros?.estado) {
-        // Sem pins e sem centro: geocodifica a cidade e centraliza (fallback aproximado).
-        const cidade = filtros.cidades[0];
-        const query = `${cidade}, ${filtros.estado}, Brasil`;
-        fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=br`,
-          { headers: { 'User-Agent': 'BidProBrasil/1.0' } }
-        ).then(r => r.json()).then(geo => {
-          if (!geo?.length || !leafletRef.current) return;
-          const lat = parseFloat(geo[0].lat);
-          const lng = parseFloat(geo[0].lon);
-          leafletRef.current.setView([lat, lng], 12);
-          const circle = L.circle([lat, lng], {
-            radius: 3000,
-            color: '#f59e0b',
-            fillColor: '#fef3c7',
-            fillOpacity: 0.25,
-            weight: 2,
-            dashArray: '6 4',
-          });
-          circle.bindPopup(`<div style="font-size:12px"><b>📍 ${cidade}</b><br>Imóveis aguardando geocodificação.<br><span style="color:#92400e">Localização aproximada da cidade.</span></div>`);
-          markersRef.current.addLayer(circle);
-        }).catch(() => {});
+        try { map.fitBounds(fit, { padding: [40, 40], maxZoom: 13 }); } catch {}
+        return;
       }
-    });
-  }, [imoveisMapa, mapReady, centroRaio, raioAtivo, raioKm, visivel]);
+      if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
+        try { map.setView([centroRaio.lat, centroRaio.lng], 11); } catch {}
+      }
+    };
 
-  // Zoom quando o centro do RAIO muda (ex.: cidade selecionada com raio ligado).
-  // Sem raio quem comanda o enquadramento é o fitBounds dos pins acima — não
-  // disparamos flyTo aqui para não sobrescrever o zoom automático da cidade.
-  useEffect(() => {
-    if (!mapReady || !leafletRef.current || !centroRaio || !raioAtivo) return;
-    if (!isFinite(centroRaio.lat) || !isFinite(centroRaio.lng)) return;
-    const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
-    try { leafletRef.current.flyTo([centroRaio.lat, centroRaio.lng], zoom, { duration: 1 }); } catch {}
-  }, [centroRaio, raioAtivo, raioKm, mapReady]);
+    aplicar();
+    const t1 = setTimeout(aplicar, 250);
+    const t2 = setTimeout(aplicar, 700);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [imoveisMapa, mapReady, visivel, centroRaio, raioAtivo, raioKm]);
 
   // Quando o container fica visível novamente, corrige tamanho do mapa
   useEffect(() => {
@@ -586,7 +565,7 @@ export default function Busca() {
     try {
       let q = supabase.from('imoveis_leilao')
         .select('latitude, longitude')
-        .eq('ativo', true).ilike('cidade', cidade)
+        .eq('ativo', true).eq('cidade_norm', normCidade(cidade))
         .not('latitude', 'is', null).neq('latitude', 0).limit(500);
       if (estado) q = q.eq('estado', estado);
       const { data } = await q;
@@ -686,7 +665,7 @@ export default function Busca() {
       // espaço/acento/parênteses (ex.: "Embu-Guaçu") de quebrar o agrupamento.
       const cidadesFiltro = cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null);
       if (cidadesFiltro?.length > 0) {
-        q = q.or(cidadesFiltro.map(c => `cidade.ilike."${c}"`).join(','));
+        q = q.in('cidade_norm', cidadesFiltro.map(normCidade));
       }
       // Pagamento: igualdade exata (.in) nos valores canônicos do banco. Combina
       // várias opções como união (Financiado + Hipotecado) — antes encadeava um 2º
