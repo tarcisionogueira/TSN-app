@@ -9,8 +9,8 @@ import { fetchPlanosComConfig } from '../utils/planosConfig';
 // divergentes). Os labels de preço chegam já formatados.
 const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel }) => [
   { q: 'Posso cancelar o plano a qualquer momento?', r: 'Sim. No plano mensal (sem fidelidade), cancele quando quiser, sem multa. No plano anual, você cancela a renovação automática a qualquer momento — sem novas cobranças e sem estorno do período já contratado, mantendo o acesso até o fim dos 12 meses.' },
-  { q: 'Como funcionam os 10% de honorários?', r: 'Os honorários incidem apenas sobre o valor da arrematação em caso de sucesso. Se não arrematar, não há cobrança alguma.' },
   { q: 'O plano Assessoria cobre quantas arrematações?', r: 'Uma arrematação por contrato. O assessorado tem até 12 meses para realizar a arrematação — buscando oportunidades e também recebendo indicações da nossa equipe —, com acompanhamento completo do início até a imissão de posse.' },
+  // (FAQ de honorários removido da tela comercial — detalhes ficam no checkout/contrato)
   { q: 'O Leilão Club inclui arrematações ilimitadas?', r: 'Sim. Com o Clube você tem acesso a assessoria contínua para todas as arrematações durante a vigência do plano.' },
   { q: 'Posso pagar parcelado no cartão?', r: 'Sim. Aceitamos crédito, débito e PIX. Parcelamento em até 12× disponível — a partir da 4ª parcela os juros são assumidos pelo cliente conforme a operadora.' },
   { q: 'O que é o relatório de viabilidade?', r: 'Nossa IA analisa edital, matrícula e documentos do imóvel e gera um relatório completo com análise mercadológica, financeira e jurídica em menos de 5 minutos.' },
@@ -84,6 +84,39 @@ export default function Planos() {
       <span style={{ fontSize: 13, color: light ? '#e0f2fe' : '#334155', lineHeight: 1.55 }}>{txt}</span>
     </div>
   );
+
+  // Preço comercial: valor À VISTA (PIX/cartão 1×) em DESTAQUE com o % off, e o
+  // valor cheio + parcelas em texto discreto. `mensal` mostra o cheio como /mês
+  // (Leilão Club); senão como 12× (Assessoria). Regra de juros: sem juros até 3×.
+  const PrecoComercial = ({ planoKey, dark, mensal }) => {
+    const p = PLANOS[planoKey] || {};
+    const vistaLabel = p.precoVistaLabel || p.precoLabel || '';
+    const desc = Number(p.desconto_vista_pct) || 0;
+    const cheio = Number(p.preco) || 0;
+    const cheioLabel = p.precoLabel || '';
+    const vistaNum = p.precoVista || cheio;
+    const economia = desc > 0 && cheio && vistaNum ? cheio - vistaNum : 0;
+    const corPrim = dark ? 'white' : '#111';
+    const corSec = dark ? '#c7d2fe' : '#475569';
+    const corDis = dark ? 'rgba(165,180,252,0.85)' : '#94a3b8';
+    const badgeBg = dark ? 'rgba(134,239,172,0.16)' : '#dcfce7';
+    const badgeFg = dark ? '#86efac' : '#15803d';
+    const discreto = mensal
+      ? `ou ${fmtR(cheio / 12)}/mês — total ${cheioLabel} em 12×`
+      : `ou ${cheioLabel} em até 12× de ${fmtR(cheio / 12)}`;
+    return (
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 42, fontWeight: 900, color: corPrim, lineHeight: 1.05 }}>{vistaLabel}</div>
+          {desc > 0 && <span style={{ background: badgeBg, color: badgeFg, fontSize: 12, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>{desc.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% OFF à vista</span>}
+        </div>
+        <div style={{ fontSize: 13, color: corSec, marginTop: 5, fontWeight: 600 }}>
+          à vista no PIX ou cartão{economia ? ` · economize ${fmtR(economia)}` : ''}
+        </div>
+        <div style={{ fontSize: 12, color: corDis, marginTop: 7 }}>{discreto} · sem juros até 3×</div>
+      </div>
+    );
+  };
 
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
@@ -206,13 +239,8 @@ export default function Planos() {
             {ativoPlano('assessorado') && (
             <div style={{ background: 'white', borderRadius: 20, border: atual('assessorado') ? '2px solid #d97706' : '1px solid #fed7aa', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(217,119,6,0.08)' }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#d97706', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Assessoria</div>
-              <div style={{ fontSize: 42, fontWeight: 900, color: '#111', marginBottom: 4 }}>{pLabel('assessorado', 'precoLabel', 'R$ 5.000')}</div>
-              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>por arrematação · pagamento único</div>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 20 }}>Parcelável em até 12× — juros a partir da 4ª parcela</div>
-              <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 10, padding: '10px 14px', marginBottom: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#713f12' }}>+ 10% de honorários sobre o valor arrematado</div>
-                <div style={{ fontSize: 11, color: '#92400e', marginTop: 3 }}>Cobrado apenas em caso de sucesso</div>
-              </div>
+              <PrecoComercial planoKey="assessorado" />
+              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>1 arrematação · pagamento único</div>
               <p style={{ fontSize: 14, color: '#64748b', marginBottom: 20, lineHeight: 1.7 }}>
                 Assessoria completa para 1 arrematação — da análise do imóvel até a imissão de posse. Acesso à plataforma por 12 meses, extensível até a conclusão.
               </p>
@@ -234,16 +262,7 @@ export default function Planos() {
                 Nível máximo
               </div>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Leilão Club</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-                <div style={{ fontSize: 42, fontWeight: 900, color: 'white' }}>{PLANOS.clube?.preco ? fmtR(PLANOS.clube.preco / 12) : 'R$ 5.000'}</div>
-                <div style={{ fontSize: 15, color: '#a5b4fc', fontWeight: 600 }}>/mês</div>
-              </div>
-              <div style={{ fontSize: 13, color: '#818cf8', marginBottom: 6 }}>Total {PLANOS.clube?.preco ? fmtR(PLANOS.clube.preco) : 'R$ 60.000'} em 12 meses</div>
-              <div style={{ fontSize: 12, color: '#a5b4fc', marginBottom: 20, opacity: 0.8 }}>Ou 12× no cartão/PIX — juros a partir da 4ª parcela</div>
-              <div style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.35)', borderRadius: 10, padding: '10px 14px', marginBottom: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#c7d2fe' }}>+ 10% de honorários sobre cada arrematação</div>
-                <div style={{ fontSize: 11, color: '#a5b4fc', marginTop: 3 }}>Cobrado apenas em caso de sucesso</div>
-              </div>
+              <PrecoComercial planoKey="clube" dark mensal />
               <p style={{ fontSize: 14, color: '#c7d2fe', marginBottom: 20, lineHeight: 1.7 }}>
                 Mentoria contínua com assessoria ilimitada para todas as suas arrematações. Acesso total à plataforma e à nossa equipe.
               </p>

@@ -54,7 +54,7 @@ const ROLE_COLORS = {
 };
 
 export default function Perfil() {
-  const { user, role } = useAuth();
+  const { user, role, effectiveRole } = useAuth();
   const isMobile = useIsMobile();
   const nav = useNavigate();
 
@@ -242,7 +242,11 @@ export default function Perfil() {
   };
 
   // Comissões (apenas para papéis elegíveis) — saldo via API unificada /api/saque
-  const temComissao = ROLES_COM_COMISSAO.includes(role);
+  // Comissões/PIX: SÓ para a equipe com repasse (admin/consultor/analista/advogado).
+  // Usa effectiveRole (não `role`) para que, durante o modo suporte/impersonate, os
+  // blocos de comissão/PIX NÃO apareçam na tela de um cliente. Clientes nunca veem.
+  // (Não gatear por comissao_afiliado_pct: a coluna tem DEFAULT 20, valeria p/ todos.)
+  const temComissao = ROLES_COM_COMISSAO.includes(effectiveRole);
   const [saldoSaque, setSaldoSaque] = useState(null);
   const [valorSaque, setValorSaque] = useState('');
   const [showSaqueForm, setShowSaqueForm] = useState(false);

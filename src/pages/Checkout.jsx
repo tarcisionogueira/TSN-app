@@ -102,18 +102,25 @@ export default function Checkout() {
   // Endereço do assinante — obrigatório antes de pagar um produto pago (usado em
   // contratos de assessoria / leilão clube e na pré-filtragem da Busca).
   const [end, setEnd] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
+  const [cpf, setCpf] = useState('');
+  const [nomeFat, setNomeFat] = useState('');
   const [endLoaded, setEndLoaded] = useState(false);
   const [cepLoadingCk, setCepLoadingCk] = useState(false);
   useEffect(() => {
     if (!user?.id) return;
     supabase.from('perfis')
-      .select('endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
+      .select('cpf,nome,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
       .eq('id', user.id).single()
       .then(({ data }) => {
-        if (data) setEnd({
-          cep: data.endereco_cep || '', logradouro: data.endereco_logradouro || '', numero: data.endereco_numero || '',
-          complemento: data.endereco_complemento || '', bairro: data.endereco_bairro || '', cidade: data.endereco_cidade || '', uf: data.endereco_uf || '',
-        });
+        if (data) {
+          setEnd({
+            cep: data.endereco_cep || '', logradouro: data.endereco_logradouro || '', numero: data.endereco_numero || '',
+            complemento: data.endereco_complemento || '', bairro: data.endereco_bairro || '', cidade: data.endereco_cidade || '', uf: data.endereco_uf || '',
+          });
+          // CPF canônico é perfis.cpf; user_metadata pode estar vazio (OAuth).
+          setCpf(data.cpf || user?.user_metadata?.cpf || '');
+          setNomeFat(data.nome || '');
+        }
         setEndLoaded(true);
       });
   }, [user?.id]);
@@ -252,11 +259,15 @@ export default function Checkout() {
     );
   }
 
-  const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
-  const cpfUsuario = user?.user_metadata?.cpf || '';
+  const nomeUsuario = nomeFat || user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
+  const cpfDigits = (cpf || '').replace(/\D/g, '');
+  const cpfUsuario = cpfDigits || user?.user_metadata?.cpf || '';
 
-  // Endereço de cobrança completo? (exigido antes do pagamento)
+  // Dados de faturamento/emissão fiscal completos? (CPF + nome + endereço).
+  // Só quando falta algo é que a coleta aparece antes do pagamento.
   const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
+  const cpfOk = cpfDigits.length === 11;
+  const perfilFaturamentoOk = cpfOk && !!nomeUsuario && enderecoOk;
   const buscarCepCk = async (cepRaw) => {
     const cep = (cepRaw || '').replace(/\D/g, '');
     if (cep.length !== 8) return;
@@ -268,7 +279,7 @@ export default function Checkout() {
     } catch { /* CEP offline — usuário preenche manualmente */ }
     setCepLoadingCk(false);
   };
-  const salvarEnderecoCheckout = async () => {
+  const salvarDadosFaturamento = async () => {
     const enderecoFmt = [
       [end.logradouro, end.numero].filter(Boolean).join(', '),
       end.complemento, end.bairro,
@@ -279,12 +290,15 @@ export default function Checkout() {
       endereco: enderecoFmt || null, endereco_cep: end.cep || null, endereco_logradouro: end.logradouro || null,
       endereco_numero: end.numero || null, endereco_complemento: end.complemento || null, endereco_bairro: end.bairro || null,
       endereco_cidade: end.cidade || null, endereco_uf: end.uf || null,
+      ...(cpfOk ? { cpf: cpfDigits } : {}),
     }).eq('id', user.id);
+    // Replica o CPF no metadata se ainda não havia (usado por gateways/checkout).
+    if (cpfOk && !user?.user_metadata?.cpf) { try { await supabase.auth.updateUser({ data: { cpf: cpfDigits } }); } catch { /* best-effort */ } }
   };
-  // Salva o endereço e então dispara o fluxo de pagamento original.
+  // Salva os dados de faturamento e então dispara o fluxo de pagamento original.
   const iniciarPagamento = async () => {
-    if (!enderecoOk) return;
-    try { await salvarEnderecoCheckout(); } catch { /* não bloqueia o pagamento por falha ao gravar endereço */ }
+    if (!perfilFaturamentoOk) return;
+    try { await salvarDadosFaturamento(); } catch { /* não bloqueia o pagamento por falha ao gravar */ }
     if (ehMudanca) return mudarPlano();
     if (planoKey === 'assessorado') return setShowPagamento(true);
     return gerarLink();
@@ -774,15 +788,21 @@ export default function Checkout() {
             />
           ) : (
             <>
-              {/* Endereço de cobrança — obrigatório antes de pagar */}
-              {!linkPagamento && (
+              {/* Dados de faturamento — aparecem SÓ quando o perfil não está completo
+                  (CPF + endereço). Necessários para faturamento e emissão fiscal. */}
+              {!linkPagamento && endLoaded && !perfilFaturamentoOk && (
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, marginBottom: 14, background: '#f8fafc' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
                     <MapPin size={15} color="#0D63DB" />
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#111' }}>Endereço do assinante</span>
-                    {enderecoOk && <CheckCircle2 size={15} color="#16a34a" style={{ marginLeft: 'auto' }} />}
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#111' }}>Dados de faturamento</span>
                   </div>
-                  <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 10px', lineHeight: 1.5 }}>Necessário para a contratação e para os documentos do serviço.</p>
+                  <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 10px', lineHeight: 1.5 }}>Necessários para faturamento e emissão fiscal da contratação.</p>
+                  {!cpfOk && (
+                    <div style={{ marginBottom: 8 }}>
+                      <input value={cpf} inputMode="numeric" placeholder="CPF (somente números)"
+                        onChange={e => setCpf(e.target.value)} style={{ ...ckInp, width: '100%' }} />
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <div style={{ width: 110 }}>
                       <input value={end.cep} inputMode="numeric" placeholder="CEP"
@@ -822,8 +842,8 @@ export default function Checkout() {
               )}
               <button
                 onClick={iniciarPagamento}
-                disabled={loading || !aceitouTermos || !enderecoOk}
-                style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: (!aceitouTermos || !enderecoOk || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceitouTermos || !enderecoOk) ? 0.6 : 1 }}>
+                disabled={loading || !aceitouTermos || !perfilFaturamentoOk}
+                style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: (!aceitouTermos || !perfilFaturamentoOk || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceitouTermos || !perfilFaturamentoOk) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
