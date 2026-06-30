@@ -18,6 +18,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { alertarErro } from './_error-alert.js';
+import { emitirNFSeServico, nfseAtivo } from './_nfse.js';
 
 export const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -116,6 +117,27 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
       });
     } catch (e) {
       console.error(`[${gateway}] registrar_preco_contratado:`, e.message);
+    }
+  }
+
+  // NFS-e (serviço) — GANCHO preparado; no-op enquanto NFSE_* não configurado.
+  // Quando ativo, emite a nota do tomador (perfil) com o valor pago. Nunca
+  // bloqueia a ativação do plano (try/catch + função que não lança).
+  if (mapeado && Number(valor) > 0 && nfseAtivo()) {
+    try {
+      const { data: tomador } = await supabase.from('perfis')
+        .select('nome, cpf, endereco_cep, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cidade, endereco_uf')
+        .eq('id', cliente.id).single();
+      const r = await emitirNFSeServico({
+        tomador: { ...(tomador || {}), email },
+        valor,
+        descricao: descricao || `Assinatura ${mapeado.plano} — BidPro Brasil`,
+        referencia: gatewayPaymentId,
+      });
+      if (r?.ok) console.log(`[${gateway}] NFS-e emitida (${mapeado.plano})`);
+      else if (!r?.skipped) console.error(`[${gateway}] NFS-e falhou:`, JSON.stringify(r).slice(0, 300));
+    } catch (e) {
+      console.error(`[${gateway}] NFS-e (gancho):`, e.message);
     }
   }
 
