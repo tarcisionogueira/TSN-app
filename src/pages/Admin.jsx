@@ -5462,6 +5462,55 @@ function AnalistaPerf({ analistaId }) {
   );
 }
 
+// Monitor de eficiência do jurídico (ranking de advogados + fila/atrasados).
+// Base para a reatribuição automática por perda de prazo (cron).
+function MonitorJuridico() {
+  const [data, setData] = useState(null);
+  const [erro, setErro] = useState('');
+  useEffect(() => {
+    apiCall('/api/juridico-eficiencia').then(r => r.json()).then(d => {
+      if (d?.error) setErro(d.error); else setData(d);
+    }).catch(() => setErro('falha'));
+  }, []);
+  if (erro) return null; // silencioso (ex.: sem permissão)
+  const ranking = data?.ranking || [];
+  return (
+    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, padding:'18px 20px', marginBottom:24 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10, flexWrap:'wrap', gap:8 }}>
+        <div style={{ fontWeight:800, fontSize:14, color:'#111' }}>⚖️ Eficiência do Jurídico</div>
+        <div style={{ display:'flex', gap:8 }}>
+          <span style={{ fontSize:12, fontWeight:700, color:'#0f766e', background:'#f0fdfa', borderRadius:8, padding:'3px 10px' }}>{data?.pendentes ?? 0} em revisão</span>
+          <span style={{ fontSize:12, fontWeight:700, color:(data?.atrasados? '#b91c1c':'#64748b'), background:(data?.atrasados?'#fef2f2':'#f1f5f9'), borderRadius:8, padding:'3px 10px' }}>{data?.atrasados ?? 0} atrasado(s)</span>
+        </div>
+      </div>
+      {!ranking.length ? (
+        <div style={{ fontSize:12, color:'#94a3b8', lineHeight:1.5 }}>Sem histórico de advogados ainda. O ranking aparece quando houver casos enviados ao jurídico. Lembretes nos dias úteis 2/4/6 e, na perda de prazo (7 dias úteis), a pasta é reatribuída por urgência ao advogado de melhor eficiência.</div>
+      ) : (
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead><tr style={{ color:'#94a3b8', textAlign:'left' }}>
+              {['Advogado','Score','Resp.','No prazo','Tempo médio','Enviados','Pend.'].map(h=><th key={h} style={{ padding:'6px 8px', fontWeight:700, whiteSpace:'nowrap' }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {ranking.map((a,i)=>(
+                <tr key={a.advogado_id||i} style={{ borderTop:'1px solid #f1f5f9' }}>
+                  <td style={{ padding:'7px 8px', fontWeight:700, color:'#111', whiteSpace:'nowrap' }}>{a.nome||'—'}{i===0 && <span style={{ marginLeft:6, fontSize:10, color:'#15803d', fontWeight:800 }}>★ melhor</span>}</td>
+                  <td style={{ padding:'7px 8px' }}><b style={{ color:(a.score>=70?'#15803d':a.score>=40?'#d97706':'#b91c1c') }}>{a.score ?? '—'}</b></td>
+                  <td style={{ padding:'7px 8px' }}>{a.taxa_resposta_pct ?? '—'}%</td>
+                  <td style={{ padding:'7px 8px' }}>{a.taxa_prazo_pct ?? '—'}%</td>
+                  <td style={{ padding:'7px 8px', whiteSpace:'nowrap' }}>{a.tempo_medio_h!=null?`${a.tempo_medio_h}h`:'—'}</td>
+                  <td style={{ padding:'7px 8px' }}>{a.enviados ?? 0}</td>
+                  <td style={{ padding:'7px 8px' }}>{a.pendentes ?? 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EquipeTab() {
   const { user } = useAuth();
 
@@ -5591,6 +5640,9 @@ function EquipeTab() {
           </div>
         ))}
       </div>
+
+      {/* Monitor de eficiência do jurídico */}
+      <MonitorJuridico />
 
       {/* Invite buttons */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
