@@ -63,7 +63,7 @@ function parseJSON(t) {
   try { return JSON.parse(String(t).replace(/```json|```/g, '').trim()); } catch { return null; }
 }
 
-const INSTRUCAO = `Analise o documento (edital ou matrícula de imóvel em leilão) e extraia em JSON:
+const INSTRUCAO = `Analise o documento (edital, regras de venda direta ou matrícula de imóvel em leilão) e extraia em JSON:
 {
   "riscos": ["liste TODOS os gravames, ônus, penhoras, hipotecas, usufrutos, indisponibilidades, alienações fiduciárias e averbações restritivas encontrados no texto"],
   "executado_nome": "nome do executado/proprietário que está perdendo o imóvel, ou null",
@@ -150,7 +150,7 @@ export default async function handler(req, res) {
   // 2. Documentos anexados ao IMÓVEL (matrícula/edital) — imovel_anexos é por
   //    imovel_id (compartilhado entre casos), NÃO por caso_id (coluna inexistente).
   const anexos = caso.imovel_id
-    ? await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&tipo=in.(matricula,edital)&storage_path=not.is.null&select=id,tipo,url,nome`)).json()
+    ? await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&tipo=in.(matricula,edital,regras_venda)&storage_path=not.is.null&select=id,tipo,url,nome`)).json()
     : [];
   if (!Array.isArray(anexos) || anexos.length === 0) {
     return res.status(422).json({ error: 'Anexe a matrícula e/ou o edital ao caso antes de gerar a análise.' });

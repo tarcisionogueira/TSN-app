@@ -26,7 +26,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const BUCKET       = 'documentos';
 const ROLES_STAFF  = ['analista', 'advogado', 'admin'];
-const TIPOS_OK     = ['matricula', 'edital'];
+const TIPOS_OK     = ['matricula', 'edital', 'regras_venda'];
 const MAX_BYTES    = 20 * 1024 * 1024; // 20 MB
 const TIPOS_MIME   = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 
@@ -81,7 +81,7 @@ export default async function handler(req) {
 
   if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'Arquivo obrigatório' }, 400);
   if (!imovel_id) return json({ error: 'imovel_id obrigatório' }, 400);
-  if (!TIPOS_OK.includes(tipo)) return json({ error: "tipo deve ser 'matricula' ou 'edital'" }, 400);
+  if (!TIPOS_OK.includes(tipo)) return json({ error: "tipo deve ser 'matricula', 'edital' ou 'regras_venda'" }, 400);
 
   const contentType = file.type || 'application/octet-stream';
   if (!TIPOS_MIME.includes(contentType)) return json({ error: 'Formato não suportado (use PDF, JPG ou PNG)' }, 415);
