@@ -11,6 +11,10 @@ import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
 // Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
 const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim());
 const ehMatriculaValida = (v) => ehUrl(v) && !/matricula\.asp/i.test(v);
+// "Regras de venda" só é um DOCUMENTO de verdade quando não é a própria página do
+// anúncio no portal (detalhe-imovel.asp da Caixa = mesmo destino do url_lote, já
+// coberto pelo botão "Ver no portal"). Senão o botão abre o site, não um arquivo.
+const ehRegrasDoc = (v, urlLote) => ehUrl(v) && !/detalhe-imovel\.asp/i.test(v) && v.trim() !== (urlLote || '').trim();
 
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
 
@@ -411,8 +415,9 @@ export default function ImovelDetalhe() {
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
   const [anexosDocs, setAnexosDocs] = useState([]);
   const [buscandoDocs, setBuscandoDocs] = useState('');
+  const [filaDocs, setFilaDocs] = useState(null); // status da fila de captura CEF (persiste no F5)
   const [loading, setLoading] = useState(!loc.state?.imovel);
-  const [imgError, setImgError] = useState(false);
+  const [imgIdx, setImgIdx] = useState(0); // índice do candidato de foto atual (fallback em cascata)
 
   const id = loc.state?.imovel?.id || paramId;
 
@@ -425,7 +430,7 @@ export default function ImovelDetalhe() {
     if (jaCarregado) return;
     if (!id) { nav('/buscar'); return; }
     // Navegou para outro imóvel (ex.: card de similares) → recarrega do zero.
-    if (!imovel || imovel.id !== id) { setLoading(true); setImgError(false); setAnexosDocs([]); }
+    if (!imovel || imovel.id !== id) { setLoading(true); setImgIdx(0); setAnexosDocs([]); }
     supabase.from('imoveis_leilao').select('*').eq('id', id).single()
       .then(({ data }) => {
         if (!data) { if (!imovel) nav('/buscar'); return; }
@@ -473,11 +478,22 @@ export default function ImovelDetalhe() {
     return () => { cancel = true; };
   }, [imovel?.id]);
 
+  // Status da fila de captura CEF (staff) — persiste entre F5 para não parecer
+  // que "nada aconteceu" enquanto o lote (cron ~10min) ainda não rodou.
+  useEffect(() => {
+    if (!imovel?.id || !['admin', 'analista'].includes(role) || !/caixa|cef/i.test(imovel.fonte || '')) return;
+    let cancel = false;
+    supabase.from('cef_matricula_fila').select('status,criado_em,processado_em,erro').eq('imovel_id', imovel.id).maybeSingle()
+      .then(({ data }) => { if (!cancel) setFilaDocs(data || null); });
+    return () => { cancel = true; };
+  }, [imovel?.id, role, imovel?.fonte]);
+
   const buscarDocsCaixa = async () => {
     setBuscandoDocs('loading');
     try {
       const r = await apiCall('/api/capturar-matricula-cef', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imovel_id: imovel.id }) });
-      setBuscandoDocs(r.ok ? 'ok' : 'erro');
+      if (r.ok) { setBuscandoDocs('ok'); setFilaDocs({ status: 'pendente', criado_em: new Date().toISOString() }); }
+      else setBuscandoDocs('erro');
     } catch { setBuscandoDocs('erro'); }
   };
 
@@ -503,19 +519,35 @@ export default function ImovelDetalhe() {
     const id = (imovel.fonteId || '').replace(/^(caixa_|cef_)/, '');
     return id ? `https://venda-imoveis.caixa.gov.br/fotos/F${id}21.jpg` : null;
   };
-  const getImgSrc = () => {
+  // Candidatos de foto, em ordem de preferência. O <img> tenta o primeiro e,
+  // no onError, avança para o próximo (imgIdx). A LISTA de similares carrega a
+  // foto por hotlink DIRETO e funciona — então no detalhe priorizamos o mesmo
+  // hotlink direto e só caímos no proxy/padrão-Caixa se ele falhar.
+  const getImgCandidates = () => {
     const foto = imovel.foto;
     const isCef = imovel.fonte === 'CEF' || imovel.fonte === 'caixa';
-    if (!foto) return isCef ? caixaFotoUrl() : null;
-    if (foto.includes('supabase.co') || foto.startsWith('/')) return foto;
-    if (isCef) return caixaFotoUrl() || `/api/img-proxy?url=${encodeURIComponent(foto)}`;
-    return `/api/img-proxy?url=${encodeURIComponent(foto)}`;
+    // Já hospedado por nós (supabase) ou caminho local: usa direto.
+    if (foto && (foto.includes('supabase.co') || foto.startsWith('/'))) return [foto];
+    const cands = [];
+    if (foto && /^https?:\/\//.test(foto)) cands.push(foto);                 // 1) hotlink direto (igual à lista)
+    if (isCef) { const c = caixaFotoUrl(); if (c) cands.push(c); }           // 2) padrão de foto da Caixa por id
+    else if (foto && /^https?:\/\//.test(foto)) cands.push(`/api/img-proxy?url=${encodeURIComponent(foto)}`); // 3) proxy (fontes que bloqueiam hotlink por referer)
+    return cands;
   };
-  const imgDetalheSrc = getImgSrc();
+  const imgCandidates = getImgCandidates();
+  const imgDetalheSrc = imgCandidates[imgIdx] || null;
   const PLANOS_ANALISE = ['admin', 'analista', 'assessorado'];
   const podeFazerAnalise = PLANOS_ANALISE.includes(role);
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
   const precoM2 = imovel.areaM2 > 0 && imovel.valorMinimo ? imovel.valorMinimo / imovel.areaM2 : null;
+
+  // Documentos: só conta o que é arquivo/link de verdade (não a página do portal).
+  const temEditalDoc = ehUrl(imovel.linkEdital);
+  const temMatriculaDoc = ehMatriculaValida(imovel.linkMatricula);
+  const temRegrasDoc = ehRegrasDoc(imovel.linkRegrasVenda, imovel.urlLote);
+  const temNumerosRef = !!(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso);
+  const podeBuscarDocsCaixa = ['admin', 'analista'].includes(role) && /caixa|cef/i.test(imovel.fonte || '') && !anexosDocs.some(a => a.tipo === 'matricula');
+  const temCardDocumentos = anexosDocs.length > 0 || temNumerosRef || temEditalDoc || temMatriculaDoc || temRegrasDoc || podeBuscarDocsCaixa;
 
   // Localização no Google: Street View por coordenadas (quando geocodificado) ou
   // busca pelo endereço. Sem chave de API — usa as URLs públicas do Google Maps.
@@ -561,8 +593,8 @@ export default function ImovelDetalhe() {
 
             {/* Foto + badges */}
             <div style={{ borderRadius: 16, overflow: 'hidden', position: 'relative', background: '#111111', minHeight: 260 }}>
-              {imgDetalheSrc && !imgError ? (
-                <img src={imgDetalheSrc} alt={imovel.titulo} onError={() => setImgError(true)}
+              {imgDetalheSrc ? (
+                <img src={imgDetalheSrc} alt={imovel.titulo} onError={() => setImgIdx(i => i + 1)}
                   style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }} />
               ) : (
                 <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#475569' }}>
@@ -748,24 +780,34 @@ export default function ImovelDetalhe() {
             )}
 
             {/* Documentos */}
-            {(anexosDocs.length > 0 || imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso || imovel.linkEdital || imovel.linkMatricula || imovel.linkRegrasVenda) && (
+            {temCardDocumentos && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#0D63DB" /> Documentos
                 </h2>
 
-                {/* Staff: buscar documentos na Caixa (enfileira captura automática) */}
-                {['admin', 'analista'].includes(role) && /caixa|cef/i.test(imovel.fonte || '') && !anexosDocs.some(a => a.tipo === 'matricula') && (
-                  <div style={{ marginBottom: 14 }}>
-                    <button onClick={buscarDocsCaixa} disabled={buscandoDocs === 'loading' || buscandoDocs === 'ok'}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: buscandoDocs === 'ok' ? '#dcfce7' : '#eef2ff', color: buscandoDocs === 'ok' ? '#15803d' : '#4338ca', border: `1px solid ${buscandoDocs === 'ok' ? '#bbf7d0' : '#c7d2fe'}`, borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: buscandoDocs === 'ok' ? 'default' : 'pointer' }}>
-                      {buscandoDocs === 'ok' ? '✓ Na fila — documentos chegam em alguns minutos'
-                        : buscandoDocs === 'loading' ? 'Enfileirando…'
-                        : buscandoDocs === 'erro' ? 'Erro — tentar de novo'
-                        : '🔎 Buscar documentos na Caixa (automático)'}
-                    </button>
-                  </div>
-                )}
+                {/* Staff: capturar documentos na Caixa (enfileira captura automática).
+                    O status da fila persiste no F5 — a captura roda em lote (cron). */}
+                {podeBuscarDocsCaixa && (() => {
+                  const emFila = buscandoDocs === 'ok' || ['pendente', 'processando'].includes(filaDocs?.status);
+                  return (
+                    <div style={{ marginBottom: 14 }}>
+                      {emFila ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: 10, fontWeight: 700, fontSize: 13 }}>
+                          <Clock size={15} /> Documentos solicitados — captura em lote (pode levar ~10–15 min). Atualize a página em alguns minutos.
+                        </div>
+                      ) : (
+                        <button onClick={buscarDocsCaixa} disabled={buscandoDocs === 'loading'}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: buscandoDocs === 'loading' ? 'default' : 'pointer' }}>
+                          {buscandoDocs === 'loading' ? 'Solicitando…'
+                            : buscandoDocs === 'erro' ? 'Erro — tentar de novo'
+                            : filaDocs?.status === 'erro' ? '↻ Tentar capturar de novo'
+                            : '🔎 Capturar matrícula/edital da Caixa'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Documentos disponíveis para download (capturados/anexados) */}
                 {anexosDocs.length > 0 && (
@@ -806,25 +848,26 @@ export default function ImovelDetalhe() {
                   </div>
                 )}
 
-                {/* Botões de PDF */}
-                {(ehUrl(imovel.linkEdital) || ehMatriculaValida(imovel.linkMatricula) || ehUrl(imovel.linkRegrasVenda)) && (
+                {/* Botões de documento (apenas arquivos/links reais — a página do
+                    portal já está no botão "Ver no portal" da barra lateral) */}
+                {(temEditalDoc || temMatriculaDoc || temRegrasDoc) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {ehUrl(imovel.linkEdital) && (
+                    {temEditalDoc && (
                       <a href={imovel.linkEdital} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, color: '#084BA6', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        📄 Edital
+                        <FileText size={15} /> Edital
                       </a>
                     )}
-                    {ehUrl(imovel.linkRegrasVenda) && (
+                    {temRegrasDoc && (
                       <a href={imovel.linkRegrasVenda} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, color: '#c2410c', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        📋 Regras de Venda Online
+                        <ScrollText size={15} /> Regras de venda
                       </a>
                     )}
-                    {ehMatriculaValida(imovel.linkMatricula) && (
+                    {temMatriculaDoc && (
                       <a href={imovel.linkMatricula} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        📄 Matrícula
+                        <FileText size={15} /> Matrícula
                       </a>
                     )}
                   </div>
