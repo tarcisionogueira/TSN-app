@@ -10,6 +10,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
+const REUSE_DIAS = Number(process.env.ANALISE_REUSE_DIAS || 7); // reaproveita a pesquisa de mercado deste imóvel se feita há < N dias
 
 const brl = (v) => (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -42,6 +43,17 @@ function parseJSON(text) {
   if (obj) { try { return JSON.parse(obj[0]); } catch {} }
   return null;
 }
+// Pesquisa de mercado recente do MESMO imóvel (de qualquer usuário). Reaproveitada
+// para não refazer a busca cara a cada pedido — só a data é renovada. O laudo
+// (parecer) continua sendo gerado por pedido, pois depende do lance/cenário de cada um.
+async function mercadoRecente(imovelId) {
+  const desde = new Date(Date.now() - REUSE_DIAS * 24 * 3600 * 1000).toISOString();
+  const r = await sb(`analises_mercado?imovel_id=eq.${encodeURIComponent(imovelId)}&status=eq.concluida&updated_at=gte.${desde}&select=result,updated_at&order=updated_at.desc&limit=1`);
+  if (!r.ok) return null;
+  const [row] = await r.json().catch(() => []);
+  return row?.result?.mercado ? { mercado: row.result.mercado, em: row.updated_at } : null;
+}
+
 async function anthropic(payload, useSearch) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
@@ -136,20 +148,28 @@ export default async function handler(req, res) {
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
   try {
-    // 1) Mercado (web search)
-    const mData = await anthropic({
-      model: MODEL, max_tokens: 8000,
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
-      system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
-      messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
-    }, true);
-    const mercado = parseJSON(extractText(mData)) || {};
-    mercado.precoMedioM2 = mercado.consolidado?.precoMedioM2 || mercado.nivel2?.precoMedioM2 || 0;
-    mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
-    mercado.yieldBruto = mercado.consolidado?.yieldBruto || 0;
-    mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
-    mercado.vendas = mercado.nivel2?.vendas || [];
-    mercado.locacoes = mercado.nivel2?.locacoes || [];
+    // 1) Mercado — reaproveita pesquisa recente do mesmo imóvel (se houver), senão busca.
+    let mercado, reaproveitado = false;
+    const recente = await mercadoRecente(String(imovelId));
+    if (recente) {
+      mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
+      reaproveitado = true;
+    } else {
+      const mData = await anthropic({
+        model: MODEL, max_tokens: 8000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
+        system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
+        messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
+      }, true);
+      mercado = parseJSON(extractText(mData)) || {};
+      mercado.precoMedioM2 = mercado.consolidado?.precoMedioM2 || mercado.nivel2?.precoMedioM2 || 0;
+      mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
+      mercado.yieldBruto = mercado.consolidado?.yieldBruto || 0;
+      mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
+      mercado.vendas = mercado.nivel2?.vendas || [];
+      mercado.locacoes = mercado.nivel2?.locacoes || [];
+      mercado.pesquisaEm = new Date().toISOString();
+    }
 
     const areaM2 = Number(mercadoInputs.areaM2) || 0;
     const valorMercado = (mercado.precoMedioM2 && areaM2) ? Math.round(mercado.precoMedioM2 * areaM2 * 0.9) : null;
@@ -169,7 +189,7 @@ export default async function handler(req, res) {
       } catch { /* laudo é complementar */ }
     }
 
-    const result = { mercado, parecer, valorMercado, valorLocacao };
+    const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     res.status(200).json({ ok: true, result });
   } catch (e) {

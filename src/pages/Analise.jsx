@@ -1726,13 +1726,13 @@ export default function Analise() {
           {/* Tabela financeira detalhada */}
           <div style={{ borderRadius:12, border:'1px solid #e2e8f0', overflow:'hidden' }}>
             <div style={{ background:'#111111', padding:'12px 18px' }}>
-              <div style={{ fontSize:13, fontWeight:800, color:'white' }}>Detalhamento Financeiro — Lance Base vs Teto</div>
+              <div style={{ fontSize:13, fontWeight:800, color:'white' }}>Detalhamento Financeiro — Lance sem disputa vs com disputa</div>
             </div>
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
                   <tr style={{ background:'#f8fafc' }}>
-                    {['Item','% do Aporte',`Lance Base  R$ ${fmt(d.valorArrematacao)}`,`Teto  R$ ${fmt(teto)}`].map((h,i)=>(
+                    {['Item','% do Aporte',`Lance sem disputa  R$ ${fmt(d.valorArrematacao)}`,`Lance com disputa  R$ ${fmt(teto)}`].map((h,i)=>(
                       <th key={h} style={{ padding:'10px 14px', textAlign:i===0?'left':'right', fontWeight:700, color:'#475569', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>

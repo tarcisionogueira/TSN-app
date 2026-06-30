@@ -1,9 +1,6 @@
 import { fmt, fmtPct } from '../utils/calculos';
 
 export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer }) {
-  const win = window.open('', '_blank');
-  if (!win) { alert('Permita pop-ups para gerar o PDF.'); return; }
-
   const parseSecoes = (txt) => {
     if (!txt) return {};
     const res = {};
@@ -96,7 +93,7 @@ ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</
 <div class="av">
   <h3>A) Capital Mobilizado (Saídas)</h3>
   <table>
-    <tr><th>Item</th><th class="c">% do Aporte</th><th class="r">Lance Base</th><th class="r">Teto (R$ ${fmt(teto)})</th></tr>
+    <tr><th>Item</th><th class="c">% do Aporte</th><th class="r">Lance sem disputa</th><th class="r">Lance com disputa (R$ ${fmt(teto)})</th></tr>
     ${[
       ['Arrematação/Sinal', isAVista?m.vArremate:m.valorSinal, isAVista?mt.vArremate:mt.valorSinal],
       ['Honorários Jurídicos (10%)', m.honorarios, mt.honorarios],
@@ -119,7 +116,7 @@ ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</
 
   <h3>B) Resultado</h3>
   <table>
-    <tr><th>Item</th><th class="r">Lance Base</th><th class="r">Teto</th></tr>
+    <tr><th>Item</th><th class="r">Lance sem disputa</th><th class="r">Lance com disputa</th></tr>
     <tr><td>${isUsoProprio?'Valor de Mercado':'Venda Bruta (90% do mercado)'}</td>
     <td class="r g">R$ ${fmt(m.valorRef)}</td><td class="r">R$ ${fmt(mt.valorRef)}</td></tr>
     ${!isUsoProprio?`<tr><td>(-) Comissão Venda + IR Ganho de Capital</td>
@@ -220,8 +217,30 @@ ${sec.conc?`<div class="av"><h2>Conclusão e Recomendação da Gestão</h2><pre>
 </div>
 </body></html>`;
 
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 700);
+  // Imprime via IFRAME OCULTO (não usa window.open → não é bloqueado por pop-up).
+  // O navegador abre o diálogo de impressão; "Salvar como PDF" gera o arquivo.
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(iframe);
+  const limpar = () => { setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 1000); };
+  try {
+    const doc = iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    const imprimir = () => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch {
+        // Fallback extremo: abre numa nova aba (pode pedir pop-up) e imprime.
+        const win = window.open('', '_blank');
+        if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 600); }
+        else alert('Não foi possível abrir a impressão. Verifique o bloqueador de pop-ups.');
+      } finally { limpar(); }
+    };
+    // Espera o conteúdo/CSS assentar antes de chamar print.
+    setTimeout(imprimir, 500);
+  } catch {
+    limpar();
+    alert('Não foi possível gerar o PDF neste navegador.');
+  }
 }
