@@ -153,6 +153,18 @@ export default async function handler(req, res) {
     ? await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&tipo=in.(matricula,edital,regras_venda)&storage_path=not.is.null&select=id,tipo,url,nome`)).json()
     : [];
   if (!Array.isArray(anexos) || anexos.length === 0) {
+    // Imóvel da Caixa sem documento anexado → enfileira captura automática da
+    // matrícula (GitHub Actions/Puppeteer); a análise é gerada quando ela chegar.
+    const ehCEF = /caixa|cef/i.test(imovel?.fonte || '');
+    const hdniip = (String(imovel?.link_matricula || '').match(/hdniip=(\d+)/) || [])[1] || String(imovel?.fonte_id || '').replace(/\D/g, '');
+    if (ehCEF && hdniip) {
+      await sb('cef_matricula_fila?on_conflict=imovel_id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ imovel_id: imovel.id, hdniip, caso_id, status: 'pendente' }),
+      }).catch(() => {});
+      return res.status(202).json({ error: 'Buscando a matrícula automaticamente na Caixa. Tente gerar a análise novamente em alguns minutos.', captura_enfileirada: true });
+    }
     return res.status(422).json({ error: 'Anexe a matrícula e/ou o edital ao caso antes de gerar a análise.' });
   }
 

@@ -46,3 +46,26 @@ Para o analista/admin, aparece no **Atendimento** (chat interno).
 - `chamados`/`chamados_mensagens`: policies por `app_role()` e segmento.
   - admin: tudo · analista: clientes + `interno` · consultor: não-clientes · advogado: nada (usa e-mail).
 - `juridico_emails` e `juridico_aprendizado`: RLS ligada, sem policies (somente service key).
+
+---
+
+# Captura automática da matrícula CEF
+
+Imóveis da Caixa têm a matrícula atrás da sessão do site (`matricula.asp`), que
+não abre como link direto. Em vez de upload manual:
+
+1. Ao **pedir análise** de um imóvel CEF sem documento anexado, o
+   `processar-analise` **enfileira** a captura em `cef_matricula_fila` (status 202).
+2. O GitHub Actions **`matricula-cef.yml`** (a cada 10 min, ou rodando manualmente
+   em Actions → Run workflow) executa `scripts/captura-matricula-cef.mjs`:
+   abre o imóvel no site da Caixa via Puppeteer (mesma sessão das fotos), captura
+   a matrícula em **PDF**, sobe no Storage (`documentos`) e registra em
+   `imovel_anexos` (tipo `matricula`).
+3. Gerar a análise de novo → a IA processa o PDF automaticamente.
+
+- Secrets do workflow: `VITE_SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (já existem,
+  iguais aos do `fotos-cef.yml`).
+- CPF: o script gera um CPF válido descartável apenas se o site exigir o
+  formulário (o acesso direto ao detalhe normalmente dispensa).
+- ⚠️ Validar com um run real no Actions e ajustar o seletor/cookies se a Caixa
+  mudar o fluxo.
