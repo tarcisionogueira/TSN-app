@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useIsMobile } from '../utils/useIsMobile';
 import {
   Building2, BarChart3, TrendingUp, DollarSign, Plus, Trash2,
@@ -193,11 +193,13 @@ function ControleFinanceiro({ im, onClose, onUpdate }) {
 
 export default function Painel() {
   const nav = useNavigate();
+  const _loc = useLocation();
+  const _abaInicial = _loc.state?.aba || (new URLSearchParams(_loc.search).get('aba')) || 'analise';
   const isMobile = useIsMobile();
   const { user, role } = useAuth();
   const isAnalista = ROLES_ANALISTA.includes(role);
   const [imoveis, setImoveis] = useState([]);
-  const [aba, setAba] = useState('analise');
+  const [aba, setAba] = useState(_abaInicial);
   const [imovelLancamentos, setImovelLancamentos] = useState(null);
   const [controleAberto, setControleAberto] = useState(null);
   const [agendando, setAgendando] = useState(null);
@@ -258,17 +260,26 @@ export default function Painel() {
     saveImoveis(updated);
   };
 
+  // Regra: imóvel NÃO arrematado → apaga a análise/relatórios (servidor) para não
+  // acumular relatório de operação que não aconteceu.
+  const apagarRelatorios = (id) => {
+    if (!id || !user?.id) return;
+    supabase.from('analises_mercado').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(() => {}).catch(() => {});
+  };
+
   const excluir = (id) => {
-    if (!confirm('Remover do portfólio?')) return;
+    if (!confirm('Remover do portfólio? Os relatórios de análise deste imóvel também serão apagados.')) return;
     const updated = imoveis.filter(i=>i.id!==id);
     setImoveis(updated);
     saveImoveis(updated);
+    apagarRelatorios(id); // não arrematado → limpa relatórios
   };
 
   const alterarStatus = (id, status) => {
     const updated = imoveis.map(i=>i.id===id?{...i,status,updatedAt:new Date().toISOString()}:i);
     setImoveis(updated);
     saveImoveis(updated);
+    if (status === 'reprovado') apagarRelatorios(id); // não arrematado → limpa relatórios
   };
 
   const adicionarLancamento = () => {
@@ -488,6 +499,39 @@ export default function Painel() {
               </button>
             </div>
           ) : (
+            <div>
+              {/* Indicadores — média dos RESULTADOS das operações REALIZADAS (vendidas).
+                  Só conta o que tem resultado de fato; projeções não entram. */}
+              {(() => {
+                const realizadas = arrematados.map(calcImovel).filter(c => c.roiReal !== null && c.vendaReal > 0);
+                const n = realizadas.length;
+                const lucroTotal = realizadas.reduce((s,c)=>s+(c.vendaReal - c.totalInvestido), 0);
+                const roiMedio = n ? realizadas.reduce((s,c)=>s+c.roiReal,0)/n : 0;
+                const lucroMedio = n ? lucroTotal/n : 0;
+                const investido = realizadas.reduce((s,c)=>s+c.totalInvestido, 0);
+                if (!n) return (
+                  <div style={{ padding:'14px 18px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', fontSize:12, color:'#64748b' }}>
+                    📊 Os indicadores de resultado aparecem aqui quando você registrar a <strong>venda</strong> de uma operação (em "Lançamentos").
+                  </div>
+                );
+                const cards = [
+                  { l:'Operações realizadas', v:String(n), c:'#0D63DB', bg:'#eff6ff' },
+                  { l:'ROI médio realizado', v:`${roiMedio.toFixed(1)}%`, c: roiMedio>=0?'#059669':'#dc2626', bg: roiMedio>=0?'#f0fdf4':'#fef2f2' },
+                  { l:'Lucro líquido médio', v:`R$ ${fmt(lucroMedio,0)}`, c: lucroMedio>=0?'#059669':'#dc2626', bg: lucroMedio>=0?'#f0fdf4':'#fef2f2' },
+                  { l:'Lucro total realizado', v:`R$ ${fmt(lucroTotal,0)}`, c: lucroTotal>=0?'#059669':'#dc2626', bg:'#f8fafc' },
+                  { l:'Capital investido (realizadas)', v:`R$ ${fmt(investido,0)}`, c:'#7c3aed', bg:'#faf5ff' },
+                ];
+                return (
+                  <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap:10, padding:'16px 18px', borderBottom:'1px solid #e2e8f0' }}>
+                    {cards.map(k => (
+                      <div key={k.l} style={{ background:k.bg, borderRadius:10, padding:'12px 14px' }}>
+                        <div style={{ fontSize:18, fontWeight:900, color:k.c }}>{k.v}</div>
+                        <div style={{ fontSize:10.5, color:'#64748b', marginTop:2, lineHeight:1.3 }}>{k.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
@@ -551,6 +595,7 @@ export default function Painel() {
                   })}
                 </tbody>
               </table>
+            </div>
             </div>
           )}
         </div>
