@@ -106,6 +106,9 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 
   useEffect(() => {
     async function carregar() {
+      // Sem snapshot de filtros ainda (montagem antes da 1ª busca): não carrega
+      // nada — evita puxar pins de todo o Brasil e crash por filtros nulos.
+      if (!filtros) { setImoveisMapa([]); setCarregando(false); return; }
       setCarregando(true);
       setSemCoordenadas(false);
 
@@ -256,8 +259,22 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         bounds.push([im.latitude, im.longitude]);
       });
 
-      // Quando não há pins mas há filtro de cidade: geocodifica a cidade e centraliza
-      if (bounds.length === 0 && filtros.cidades?.length > 0 && filtros.estado) {
+      // PRIORIDADE DE CENTRALIZAÇÃO (o mapa deve sempre "acompanhar" o filtro):
+      // 1) Raio ligado  -> centra no centro do raio com zoom proporcional ao raio.
+      // 2) Há pins       -> ENQUADRA todos os pins do filtro (fitBounds). É isto que
+      //    faz o mapa dar zoom na cidade/área filtrada ao voltar para a Busca.
+      // 3) Sem pins mas com centro conhecido -> setView no centro.
+      // 4) Sem pins e sem centro, mas com cidade no filtro -> Nominatim (aproximado).
+      if (raioAtivo && centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
+        const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
+        try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], zoom); } catch {}
+      } else if (bounds.length > 0) {
+        // Sem raio: enquadra todos os pins do filtro (auto-zoom na cidade filtrada).
+        try { leafletRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 }); } catch {}
+      } else if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
+        try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], 11); } catch {}
+      } else if (filtros?.cidades?.length > 0 && filtros?.estado) {
+        // Sem pins e sem centro: geocodifica a cidade e centraliza (fallback aproximado).
         const cidade = filtros.cidades[0];
         const query = `${cidade}, ${filtros.estado}, Brasil`;
         fetch(
@@ -279,23 +296,17 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           circle.bindPopup(`<div style="font-size:12px"><b>📍 ${cidade}</b><br>Imóveis aguardando geocodificação.<br><span style="color:#92400e">Localização aproximada da cidade.</span></div>`);
           markersRef.current.addLayer(circle);
         }).catch(() => {});
-      } else if (raioAtivo && centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
-        const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
-        try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], zoom); } catch {}
-      } else if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
-        try { leafletRef.current.setView([centroRaio.lat, centroRaio.lng], 11); } catch {}
-      } else if (bounds.length > 0) {
-        // Ajusta para mostrar todos os pins
-        leafletRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
       }
     });
-  }, [imoveisMapa, mapReady]);
+  }, [imoveisMapa, mapReady, centroRaio, raioAtivo, raioKm]);
 
-  // Zoom quando centroRaio muda (ex: cidade selecionada sem busca)
+  // Zoom quando o centro do RAIO muda (ex.: cidade selecionada com raio ligado).
+  // Sem raio quem comanda o enquadramento é o fitBounds dos pins acima — não
+  // disparamos flyTo aqui para não sobrescrever o zoom automático da cidade.
   useEffect(() => {
-    if (!mapReady || !leafletRef.current || !centroRaio) return;
+    if (!mapReady || !leafletRef.current || !centroRaio || !raioAtivo) return;
     if (!isFinite(centroRaio.lat) || !isFinite(centroRaio.lng)) return;
-    const zoom = raioAtivo ? (raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8) : 11;
+    const zoom = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
     try { leafletRef.current.flyTo([centroRaio.lat, centroRaio.lng], zoom, { duration: 1 }); } catch {}
   }, [centroRaio, raioAtivo, raioKm, mapReady]);
 
