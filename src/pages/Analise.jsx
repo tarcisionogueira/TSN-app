@@ -62,9 +62,9 @@ function Field({ label, name, value, onChange, type='text', opts=[], rows=2, ph=
   );
 }
 
-function Section({ step, title, icon: Icon, color='#0D63DB', open, onToggle, badge, children }) {
+function Section({ step, title, icon: Icon, color='#0D63DB', open, onToggle, badge, children, id }) {
   return (
-    <div style={{background:'white',borderRadius:16,border:'1px solid #e2e8f0',overflow:'hidden',boxShadow:'0 1px 4px rgba(0,0,0,0.04)'}}>
+    <div id={id} style={{background:'white',borderRadius:16,border:'1px solid #e2e8f0',overflow:'hidden',boxShadow:'0 1px 4px rgba(0,0,0,0.04)',scrollMarginTop:'80px'}}>
       <button onClick={onToggle} style={{width:'100%',padding:'16px 20px',border:'none',background:'white',cursor:'pointer',display:'flex',alignItems:'center',gap:14,textAlign:'left'}}>
         <div style={{width:36,height:36,borderRadius:10,background:open?color:'#f1f5f9',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'background 0.2s'}}>
           <Icon size={17} color={open?'white':color}/>
@@ -244,6 +244,8 @@ export default function Analise() {
   // Controle de abertura por seção
   const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:false, viabilidade:true, fluxo:false, laudo:false, matricula:false, cnj:false, guia:true, financiamento:true });
   const toggleSec = (k) => setOpenSec(p => ({ ...p, [k]: !p[k] }));
+  // Abre uma seção e rola até ela (usado pela barra lateral)
+  const irPara = (k, id) => { setOpenSec(p => ({ ...p, [k]: true })); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); };
 
   const up = useCallback((name, val) => setD(p => ({ ...p, [name]: val })), []);
   const upN = useCallback((e) => {
@@ -491,7 +493,7 @@ export default function Analise() {
   const descontoArremate = d.valorAvaliacao>0 ? ((1 - d.valorArrematacao/d.valorAvaliacao)*100) : 0;
 
   return (
-    <div style={{ maxWidth: 960, margin:'0 auto', padding: isMobile ? '12px' : '20px', display:'flex', flexDirection:'column', gap:14 }}>
+    <div style={{ maxWidth: 1280, margin:'0 auto', padding: isMobile ? '12px' : '20px', display:'flex', flexDirection:'column', gap:14 }}>
 
       {/* HEADER */}
       <div style={{ background:'#111111', borderRadius:16, padding:'18px 22px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
@@ -548,8 +550,48 @@ export default function Analise() {
         </div>
       )}
 
+      {/* ===== 2 COLUNAS: barra lateral (status/ações) + central (etapas) ===== */}
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr', gap:16, alignItems:'start' }}>
+
+        {/* ── BARRA LATERAL ── */}
+        {!isMobile && (
+        <aside style={{ position:'sticky', top:80, display:'flex', flexDirection:'column', gap:12 }}>
+          {(() => {
+            const itens = [
+              { k:'doc', id:'sec-doc', label:'Edital', ok: !!(textoDoc?.trim() || urlEdital?.trim()) },
+              { k:'matricula', id:'sec-matricula', label:'Matrícula', ok: !!textoMatricula?.trim() },
+              { k:'mercado', id:'sec-mercado', label:'Mercadológico', ok: !!mercado },
+              { k:'viabilidade', id:'sec-viabilidade', label:'Viabilidade', ok: metricas?.isViavel != null },
+              { k:'laudo', id:'sec-laudo', label:'Laudo jurídico', ok: !!parecer },
+            ];
+            return (
+              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:14 }}>
+                <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Documentos e relatórios</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                  {itens.map(it => (
+                    <button key={it.k} onClick={() => irPara(it.k, it.id)}
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', border:'none', background:'none', borderRadius:8, cursor:'pointer', textAlign:'left', fontSize:13, fontWeight:600, color:'#334155' }}
+                      onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                      <span style={{ width:18, height:18, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, background: it.ok ? '#dcfce7' : '#f1f5f9', color: it.ok ? '#15803d' : '#94a3b8' }}>{it.ok ? '✓' : '·'}</span>
+                      {it.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+          <button onClick={() => nav('/chamados')}
+            style={{ width:'100%', padding:'11px', background:'#0D63DB', color:'white', border:'none', borderRadius:12, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+            <Calendar size={15}/> Solicitar reunião com analista
+          </button>
+        </aside>
+        )}
+
+        {/* ── CENTRAL (etapas) ── */}
+        <div style={{ display:'flex', flexDirection:'column', gap:14, minWidth:0 }}>
+
       {/* ── ETAPA 1: DOCUMENTO ── */}
-      <Section step="1" title="Edital" icon={FileText} color="#0D63DB" open={openSec.doc} onToggle={()=>toggleSec('doc')} badge="Upload ou cole o texto">
+      <Section id="sec-doc" step="1" title="Edital" icon={FileText} color="#0D63DB" open={openSec.doc} onToggle={()=>toggleSec('doc')} badge="Upload ou cole o texto">
         <div style={{ display:'flex', flexDirection:'column', gap:12, paddingTop:14 }}>
           <textarea value={textoDoc} onChange={e=>setTextoDoc(e.target.value)} rows={7}
             placeholder="Cole aqui o texto do edital do leilão. A extração irá capturar endereço, valores, área, leiloeiro, riscos jurídicos, ônus, débitos, datas e muito mais..."
@@ -584,7 +626,7 @@ export default function Analise() {
 
       {/* ── ETAPA 1B: MATRÍCULA (Investidor Pro e acima) ── */}
       {['top2','assessorado','clube','analista','advogado','admin'].includes(role) && (
-        <Section step="1B" title="Matrícula do Imóvel" icon={ClipboardList} color="#7c3aed" open={openSec.matricula ?? false} onToggle={()=>toggleSec('matricula')} badge="Incluso no Investidor Pro">
+        <Section id="sec-matricula" step="1B" title="Matrícula do Imóvel" icon={ClipboardList} color="#7c3aed" open={openSec.matricula ?? false} onToggle={()=>toggleSec('matricula')} badge="Incluso no Investidor Pro">
           <div style={{ display:'flex', flexDirection:'column', gap:12, paddingTop:14 }}>
             <div style={{ background:'#ede9fe', border:'1px solid #c4b5fd', borderRadius:10, padding:'10px 14px', fontSize:12, color:'#6d28d9' }}>
               <strong>Investidor Pro:</strong> Cole a matrícula do imóvel junto com o edital. Os dois documentos são extraídos juntos em uma única análise, identificando ônus, usufrutos, hipotecas, alienações e histórico de proprietários.
@@ -1007,7 +1049,7 @@ export default function Analise() {
       </Section>
 
       {/* ── ETAPA 3: AVALIAÇÃO MERCADOLÓGICA ── */}
-      <Section step="3" title="Avaliação Mercadológica" icon={BarChart3} color="#10b981" open={openSec.mercado} onToggle={()=>toggleSec('mercado')}
+      <Section id="sec-mercado" step="3" title="Avaliação Mercadológica" icon={BarChart3} color="#10b981" open={openSec.mercado} onToggle={()=>toggleSec('mercado')}
         badge={mercado ? `Nível 1: ${mercado.nivel1?.totalAmostras||0} amostras · Nível 2: ${mercado.nivel2?.totalAmostras||0} amostras` : 'Comparativos de venda e locação'}>
         <div style={{ display:'flex', flexDirection:'column', gap:16, paddingTop:14 }}>
           <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:12, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
@@ -1160,7 +1202,7 @@ export default function Analise() {
       </Section>
 
       {/* ── ETAPA 4: ANÁLISE DE VIABILIDADE ── */}
-      <Section step="4" title="Análise de Viabilidade" icon={TrendingUp} color="#f59e0b" open={openSec.viabilidade} onToggle={()=>toggleSec('viabilidade')}
+      <Section id="sec-viabilidade" step="4" title="Análise de Viabilidade" icon={TrendingUp} color="#f59e0b" open={openSec.viabilidade} onToggle={()=>toggleSec('viabilidade')}
         badge={d.valorArrematacao>0 ? (isViavel?'✓ Aprovada':'✗ Reprovada') : 'Preencha os valores'}>
         <div style={{ display:'flex', flexDirection:'column', gap:14, paddingTop:14 }}>
 
@@ -1322,7 +1364,7 @@ export default function Analise() {
       </Section>
 
       {/* ── ETAPA 6: LAUDO DE VIABILIDADE ── */}
-      <Section step="6" title="Laudo de Viabilidade e Defesa da Arrematação" icon={Award} color="#111111" open={openSec.laudo} onToggle={()=>toggleSec('laudo')}
+      <Section id="sec-laudo" step="6" title="Laudo de Viabilidade e Defesa da Arrematação" icon={Award} color="#111111" open={openSec.laudo} onToggle={()=>toggleSec('laudo')}
         badge={parecer ? 'Gerado' : 'Gere o parecer executivo'}>
         <div style={{ display:'flex', flexDirection:'column', gap:14, paddingTop:14 }}>
           <div style={{ display:'flex', gap:10, alignItems:'flex-start', background:'#f8fafc', borderRadius:12, padding:'14px 16px' }}>
@@ -1414,6 +1456,9 @@ export default function Analise() {
           </div>
         </>
       )}
+
+        </div>{/* fim central */}
+      </div>{/* fim grid 2 colunas */}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
     </div>
