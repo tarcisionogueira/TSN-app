@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { buscarCidadesEstado, RAIOS_KM } from '../data/cidades';
-import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoBadge } from '../data/pagamento';
+import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadge } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -117,10 +117,16 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         if (filtros.modalidades?.length) q = q.in('modalidade', filtros.modalidades);
         if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
         if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
-        if (filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike.${c}`).join(','));
+        // Cidades: OR entre cidades (único .or da query). Valores entre aspas para
+        // suportar nomes com espaço/acento/parênteses sem quebrar o agrupamento.
+        // No modo raio a cidade vira apenas o CENTRO — a área é definida pelo raio
+        // (haversine abaixo), então não restringimos por cidade (igual à lista).
+        if (!raioAtivo && filtros.cidades?.length) q = q.or(filtros.cidades.map(c => `cidade.ilike."${c}"`).join(','));
+        // Pagamento: igualdade exata (.in) nos valores canônicos. Combina várias
+        // opções como união (Financiado + Hipotecado) sem encadear outro .or.
         if (filtros.pagamento?.length > 0) {
-          const dbVals = filtros.pagamento.flatMap(v => PAGAMENTO_FILTRO_DB[v] || [v]);
-          q = q.or(dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(','));
+          const canon = pagamentoParaCanon(filtros.pagamento);
+          if (canon.length) q = q.in('forma_pagamento', canon);
         }
         return q;
       };
@@ -466,16 +472,20 @@ export default function Busca() {
     return () => clearTimeout(timer);
   }, [filtrosFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Busca reativa com debounce de 600ms quando filtros mudam e estado está preenchido
+  // Busca reativa com debounce de 600ms quando filtros mudam e estado está preenchido.
+  // Inclui raioAtivo/raioKmAtivo: ligar o raio ou mexer no raio re-dispara a busca
+  // (antes só `filtros` disparava → o filtro de raio parecia "não funcionar").
   const buscarDebounceRef = useRef(null);
   useEffect(() => {
     if (!filtros.estado) return;
+    // Raio ligado sem cidade não tem centro — evita busca inválida (a UI já avisa).
+    if (raioAtivo && !filtros.cidades.length) return;
     clearTimeout(buscarDebounceRef.current);
     buscarDebounceRef.current = setTimeout(() => {
       buscar();
     }, 600);
     return () => clearTimeout(buscarDebounceRef.current);
-  }, [filtros]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filtros, raioAtivo, raioKmAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const up = (name, val) => setFiltrosPersist(p => ({ ...p, [name]: val }));
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x=>x!==v) : [...filtros.pagamento, v]);
@@ -582,15 +592,18 @@ export default function Busca() {
       if (filtrosAtivos.modalidades?.length) q = q.in('modalidade', filtrosAtivos.modalidades);
       if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')));
       if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')));
-      // Cidades: OR interno entre cidades, mas ANDado com os demais filtros via filtro separado
+      // Cidades: OR entre cidades (único .or da query). Aspas protegem nomes com
+      // espaço/acento/parênteses (ex.: "Embu-Guaçu") de quebrar o agrupamento.
       const cidadesFiltro = cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null);
       if (cidadesFiltro?.length > 0) {
-        q = q.or(cidadesFiltro.map(c => `cidade.ilike.${c}`).join(','));
+        q = q.or(cidadesFiltro.map(c => `cidade.ilike."${c}"`).join(','));
       }
-      // Pagamento: OR interno entre opções — mantido como filtro separado (ANDado com cidades acima)
+      // Pagamento: igualdade exata (.in) nos valores canônicos do banco. Combina
+      // várias opções como união (Financiado + Hipotecado) — antes encadeava um 2º
+      // .or que, junto com o de cidades, podia quebrar a query (mapa "sumia").
       if (filtrosAtivos.pagamento?.length > 0) {
-        const dbVals = filtrosAtivos.pagamento.flatMap(v => PAGAMENTO_DB[v] || [v]);
-        q = q.or(dbVals.map(v => `forma_pagamento.ilike.%${v}%`).join(','));
+        const canon = pagamentoParaCanon(filtrosAtivos.pagamento);
+        if (canon.length) q = q.in('forma_pagamento', canon);
       }
       return q;
     };
@@ -608,9 +621,12 @@ export default function Busca() {
           lat: centro.lat, lng: centro.lng, raioKm: raioKmBusca,
           pagina: paginaAlvo, porPagina: POR_PAGINA,
           filtros: {
-            tipo: filtrosAtivos.tipos?.[0] || '',
+            // Todos os filtros aplicados no servidor (RPC v2): múltiplos tipos,
+            // modalidades e formas de pagamento — Financiado + Hipotecado juntos.
+            tipos: filtrosAtivos.tipos || [],
             estado: filtrosAtivos.estado || '',
-            modalidade: filtrosAtivos.modalidades?.[0] || '',
+            modalidades: filtrosAtivos.modalidades || [],
+            pagamento: pagamentoParaCanon(filtrosAtivos.pagamento || []),
             valorMin: filtrosAtivos.valorMin ? Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')) : 0,
             valorMax: filtrosAtivos.valorMax ? Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')) : 9999999999,
           },

@@ -25,9 +25,26 @@ export const PAGAMENTO_LABEL = {
   hipotecado: 'Hipotecado',
 };
 
-// ─── Checkboxes do filtro de busca → valores canônicos no banco ───────────────
-// Ao adicionar novo leiloeiro: garanta que normalizarFormaPagamento() mapeia
-// as strings dele para um dos valores canônicos abaixo.
+// ─── Checkbox do filtro → valor canônico ÚNICO no banco ───────────────────────
+// O banco SEMPRE armazena o valor já normalizado (a_vista | financiado | hipotecado).
+// Por isso o filtro usa igualdade exata (.in) em vez de ilike: é mais rápido,
+// confiável e permite combinar várias opções sem quebrar a query (ex.: Financiado +
+// Hipotecado retorna a união). Use este mapa em toda a aplicação.
+export const PAGAMENTO_CANON = {
+  aVista: 'a_vista',
+  financiado: 'financiado',
+  hipotecado: 'hipotecado',
+};
+
+// Converte as chaves selecionadas no filtro (aVista/financiado/hipotecado) nos
+// valores canônicos do banco, removendo duplicatas e inválidos.
+export function pagamentoParaCanon(chaves = []) {
+  return [...new Set(chaves.map(k => PAGAMENTO_CANON[k]).filter(Boolean))];
+}
+
+// ─── Checkboxes do filtro de busca → valores canônicos no banco (LEGADO) ──────
+// Mantido para compatibilidade (ilike). O filtro de busca agora usa PAGAMENTO_CANON
+// com igualdade exata; este mapa permanece como referência de variantes históricas.
 export const PAGAMENTO_FILTRO_DB = {
   aVista: [
     'a_vista', 'avista', 'à vista', 'a vista',
