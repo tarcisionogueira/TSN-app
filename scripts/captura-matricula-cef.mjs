@@ -28,13 +28,25 @@ function gerarCPF() {
 // Navega para uma URL na sessão atual e devolve um PDF (response PDF direto ou página impressa).
 async function capturarUrl(page, url) {
   const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+  const status = resp?.status() || 0;
+  // 1) Resposta PDF direta da Caixa
   const ct = (resp?.headers()?.['content-type'] || '').toLowerCase();
   if (ct.includes('pdf')) {
     const buf = Buffer.from(await resp.buffer());
     if (buf.length > 1000) return buf;
   }
-  const txt = (await page.evaluate(() => document.body?.innerText || '')).toLowerCase();
-  if (/n[aã]o encontrad|indispon[ií]vel|sess[aã]o expirad/.test(txt) && txt.length < 400) return null;
+  // 2) HTTP de erro (ex.: matricula.asp?hdniip= retorna 404 do IIS) → NÃO captura.
+  //    Sem essa guarda, a página de erro 404 era impressa como se fosse a matrícula.
+  if (status >= 400) return null;
+  // 3) Página de erro/indisponível (IIS em inglês, Caixa, sessão) — não vira "documento".
+  //    Detecta por título + corpo, sem limite de tamanho (o erro do IIS é longo).
+  const info = await page.evaluate(() => ({
+    txt: (document.body?.innerText || '').slice(0, 4000),
+    title: document.title || '',
+  }));
+  const hay = `${info.title}\n${info.txt}`.toLowerCase();
+  if (/http error|server error|404\.0|not found|n[aã]o encontrad|indispon[ií]vel|sess[aã]o expirad|p[aá]gina n[aã]o (foi )?encontrad|erro ao/.test(hay)) return null;
+  // 4) Conteúdo aparenta válido → imprime a página como PDF
   const pdf = Buffer.from(await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' } }));
   return pdf.length > 2000 ? pdf : null;
 }
