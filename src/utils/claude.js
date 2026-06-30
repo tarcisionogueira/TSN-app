@@ -335,12 +335,38 @@ Retorne APENAS este JSON (sem markdown):
 export async function gerarParecer(inputs, metricas, mercado) {
   const brl = (v) => (v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const usoProprio = inputs.objetivoCompra === 'uso_proprio';
+  // Débitos/encargos JÁ INFORMADOS que serão assumidos: entram como custo e devem
+  // constar no parecer — citando a documentação se houver, ou as referências de
+  // onde buscar quando não estiverem discriminadas.
+  const blocoDebitos = (() => {
+    const itens = [];
+    if (Number(inputs.debitosAssumidos) > 0) itens.push(`Débitos assumidos (gerais): R$ ${brl(inputs.debitosAssumidos)}`);
+    if (Number(inputs.iptuMensal) > 0) itens.push(`IPTU: R$ ${brl(inputs.iptuMensal)}/mês`);
+    if (Number(inputs.condominioMensal) > 0) itens.push(`Condomínio: R$ ${brl(inputs.condominioMensal)}/mês`);
+    if (Number(inputs.laudemio) > 0) itens.push(`Laudêmio: R$ ${brl(inputs.laudemio)}`);
+    if (Number(inputs.foreiro) > 0) itens.push(`Foreiro/foro: R$ ${brl(inputs.foreiro)}`);
+    if (!itens.length) return '';
+    const temDocs = !!(inputs.linkEdital || inputs.linkMatricula || (Array.isArray(inputs.anexos) && inputs.anexos.length));
+    return `
+DÉBITOS/ENCARGOS A ASSUMIR (informados — JÁ ENTRAM como custo na viabilidade):
+${itens.map(i => '- ' + i).join('\n')}
+${temDocs
+  ? 'Há documentação do lote disponível. CONFIRME se cada débito acima consta nela; cite a fonte quando constar e, quando não constar, indique onde obter (referências abaixo).'
+  : 'Sem documentação detalhada anexada: liste os débitos e oriente ONDE buscar/confirmar cada um (referências abaixo).'}
+REFERÊNCIAS quando não constarem na documentação:
+- IPTU/taxas: certidão de débitos imobiliários na Prefeitura (Secretaria da Fazenda), pela inscrição/IPTU.
+- Condomínio: declaração de débitos com a administradora/síndico.
+- Ônus, hipotecas e débitos propter rem: matrícula atualizada no Cartório de Registro de Imóveis.
+- Responsabilidade por débitos após a arrematação: cláusulas do EDITAL do leilão.
+- Laudêmio/foro (terreno de marinha): SPU ou o ente foreiro.`;
+  })();
   const prompt = `
 Redija um PARECER EXECUTIVO MERCADOLÓGICO E DE VIABILIDADE FINANCEIRA como Gestor Sênior da BidPro Brasil.
 
 ESCOPO ESTRITO: foque EXCLUSIVAMENTE em mercado × valor de aquisição e viabilidade
-financeira. NÃO inclua análise jurídica, CNJ, débitos, ônus, gravames, certidões ou
-checklist de diligências — isso é tratado nos relatórios DOCUMENTAL e JURÍDICO.
+financeira. NÃO faça análise JURÍDICA (CNJ, gravames, validade de penhora, diligências)
+— isso é dos relatórios DOCUMENTAL e JURÍDICO. EXCEÇÃO: os DÉBITOS/ENCARGOS A ASSUMIR
+informados abaixo DEVEM constar (são custo da operação), no aspecto financeiro.
 
 IMÓVEL: ${inputs.tipo || inputs.tipoImovel} — ${inputs.endereco}, ${inputs.cidade || ''}/${inputs.estado || ''}
 OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
@@ -358,6 +384,7 @@ AQUISIÇÃO E RETORNO:
 - Lucro/Economia estimada: R$ ${brl(metricas.lucro)}
 - Retorno (ROI/ROE): ${(metricas.roi||0).toFixed(2)}%
 OBSERVAÇÕES: ${inputs.observacoes || 'Sem observações adicionais'}
+${blocoDebitos}
 
 REGRA DE VIABILIDADE:
 ${usoProprio
@@ -367,7 +394,7 @@ ${usoProprio
 Escreva em português formal, texto simples (sem markdown/asteriscos). Estruture com "§ SEÇÃO:":
 § SEÇÃO: POSICIONAMENTO ESTRATÉGICO (mercado × valor de aquisição; desconto real)
 § SEÇÃO: CENÁRIOS DE LANCE (sem disputa e com disputa; até onde subir mantendo ${usoProprio ? 'a economia' : 'o piso de 30%'})
-§ SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES com pagamento parcelado até a revenda; deixe claro que VENDER ANTES aumenta o lucro; ROI/ROE, locação como alternativa e payback)
+§ SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES com pagamento parcelado até a revenda; deixe claro que VENDER ANTES aumenta o lucro; ROI/ROE, locação como alternativa e payback)${blocoDebitos ? '\n§ SEÇÃO: DÉBITOS E ENCARGOS ASSUMIDOS (liste os débitos informados que entram como custo; diga se constam na documentação; para os que não constarem, aponte as referências de onde obter/confirmar)' : ''}
 § SEÇÃO: DEFESA DA OPERAÇÃO
 § SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO
 

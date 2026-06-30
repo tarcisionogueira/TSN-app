@@ -93,15 +93,44 @@ Retorne APENAS este JSON (sem markdown):
 }`;
 }
 
-function promptParecer(inp, m, mercado) {
+// Bloco de débitos/encargos JÁ INFORMADOS que serão assumidos (entram como CUSTO
+// na viabilidade). Se constam na documentação do lote → o parecer cita; se não
+// constam → cita mesmo assim e aponta ONDE buscar/confirmar (referências).
+function blocoDebitos(inp, docs, brlFn) {
+  const itens = [];
+  if (Number(inp.debitosAssumidos) > 0) itens.push(`Débitos assumidos (gerais): R$ ${brlFn(inp.debitosAssumidos)}`);
+  if (Number(inp.iptuMensal) > 0) itens.push(`IPTU: R$ ${brlFn(inp.iptuMensal)}/mês`);
+  if (Number(inp.condominioMensal) > 0) itens.push(`Condomínio: R$ ${brlFn(inp.condominioMensal)}/mês`);
+  if (Number(inp.laudemio) > 0) itens.push(`Laudêmio: R$ ${brlFn(inp.laudemio)}`);
+  if (Number(inp.foreiro) > 0) itens.push(`Foreiro/foro: R$ ${brlFn(inp.foreiro)}`);
+  if (!itens.length) return '';
+  const temDocs = !!(docs && (docs.edital || docs.matricula || (Array.isArray(docs.anexos) && docs.anexos.length)));
+  return `
+DÉBITOS/ENCARGOS A ASSUMIR (informados — JÁ ENTRAM como custo na viabilidade acima):
+${itens.map(i => '- ' + i).join('\n')}
+${temDocs
+  ? 'A documentação do lote está disponível (edital/matrícula/anexos). Na seção de débitos, CONFIRME se cada débito acima consta na documentação; para os que constarem, cite a fonte; para os que NÃO estiverem discriminados, sinalize e indique onde obter (referências abaixo).'
+  : 'A documentação detalhada do lote NÃO foi anexada. Na seção de débitos, liste-os e — como não há documento discriminando-os — oriente claramente ONDE buscar/confirmar cada um (referências abaixo).'}
+REFERÊNCIAS para confirmar/obter os valores quando não constarem na documentação:
+- IPTU e taxas municipais: certidão de débitos imobiliários na Prefeitura (Secretaria da Fazenda), pelo número de inscrição/IPTU.
+- Condomínio: declaração de débitos condominiais com a administradora ou o síndico.
+- Ônus, hipotecas e débitos propter rem: matrícula atualizada no Cartório de Registro de Imóveis competente.
+- Responsabilidade por débitos após a arrematação (quem paga o quê): cláusulas do EDITAL do leilão.
+- Laudêmio/foro (terreno de marinha): SPU — Secretaria de Patrimônio da União, ou o ente foreiro.`;
+}
+
+function promptParecer(inp, m, mercado, docs) {
   const usoProprio = inp.objetivoCompra === 'uso_proprio';
+  const debitos = blocoDebitos(inp, docs, brl);
   return `
 Redija um PARECER EXECUTIVO MERCADOLÓGICO E DE VIABILIDADE FINANCEIRA como Gestor Sênior da BidPro Brasil.
 
 ESCOPO ESTRITO: foque EXCLUSIVAMENTE em mercado × valor de aquisição e viabilidade
-financeira. NÃO inclua análise jurídica, consulta de processo/CNJ, débitos, ônus,
-gravames, certidões ou checklist de diligências — isso é tratado nos relatórios
-DOCUMENTAL e JURÍDICO. Não cite riscos jurídicos aqui.
+financeira. NÃO faça análise JURÍDICA (consulta de processo/CNJ, validade de penhora,
+gravames, riscos de nulidade, diligências) — isso é dos relatórios DOCUMENTAL e
+JURÍDICO. EXCEÇÃO: os DÉBITOS/ENCARGOS A ASSUMIR informados abaixo DEVEM constar,
+pois são CUSTO da operação e impactam a viabilidade — apenas no aspecto financeiro
+(valor e onde confirmar), sem entrar no mérito jurídico.
 
 IMÓVEL: ${inp.tipo || inp.tipoImovel} — ${inp.endereco}, ${inp.cidade || ''}/${inp.estado || ''}
 OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
@@ -119,6 +148,7 @@ AQUISIÇÃO E RETORNO:
 - Lucro/Economia estimada: R$ ${brl(m.lucro)}
 - Retorno (ROI/ROE): ${(m.roi || 0).toFixed(2)}%
 OBSERVAÇÕES: ${inp.observacoes || 'Sem observações adicionais'}
+${debitos}
 
 REGRA DE VIABILIDADE:
 ${usoProprio
@@ -128,7 +158,7 @@ ${usoProprio
 Escreva em português formal, texto simples (sem markdown/asteriscos). Estruture com "§ SEÇÃO:":
 § SEÇÃO: POSICIONAMENTO ESTRATÉGICO (mercado × valor de aquisição; desconto real frente ao mercado)
 § SEÇÃO: CENÁRIOS DE LANCE (sem disputa e com disputa; até onde dá para subir o lance mantendo ${usoProprio ? 'a economia' : 'o piso de 30%'})
-§ SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES considerando o pagamento em parcelas até a revenda; deixe claro que VENDER ANTES dos 12 meses AUMENTA o lucro; cite ROI/ROE, yield de locação como alternativa e payback)
+§ SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES considerando o pagamento em parcelas até a revenda; deixe claro que VENDER ANTES dos 12 meses AUMENTA o lucro; cite ROI/ROE, yield de locação como alternativa e payback)${debitos ? '\n§ SEÇÃO: DÉBITOS E ENCARGOS ASSUMIDOS (liste os débitos informados que entram como custo; diga se constam na documentação do lote; para os que não constarem, aponte as referências de onde obter/confirmar)' : ''}
 § SEÇÃO: DEFESA DA OPERAÇÃO (argumentos objetivos de por que ${usoProprio ? 'a compra para uso compensa' : 'o investimento compensa'})
 § SEÇÃO: CONCLUSÃO E RECOMENDAÇÃO
 
@@ -181,15 +211,21 @@ export default async function handler(req, res) {
     const valorMercado = (mercado.precoMedioM2 && areaM2) ? Math.round(mercado.precoMedioM2 * areaM2 * 0.9) : null;
     const valorLocacao = mercado.aluguelMedio ? Math.round(mercado.aluguelMedio) : null;
 
-    // 2) Laudo (parecer)
+    // 2) Laudo (parecer). Carrega os docs do lote para o parecer poder dizer se os
+    // débitos informados já constam na documentação (ou apontar onde buscar).
     let parecer = '';
     if (parecerInputs?.d) {
       try {
+        let docs = null;
+        try {
+          const [dRow] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_edital,link_matricula,link_regras_venda,anexos&limit=1`)).json();
+          if (dRow) docs = { edital: dRow.link_edital, matricula: dRow.link_matricula, regras: dRow.link_regras_venda, anexos: dRow.anexos };
+        } catch { /* sem docs → o parecer orienta onde buscar */ }
         const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto };
         const pData = await anthropic({
           model: MODEL, max_tokens: 8000,
-          system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA — nada de análise jurídica, CNJ, débitos ou diligências (isso é de outros relatórios). Preciso e persuasivo. Nunca use markdown nem asteriscos. Apenas texto simples.',
-          messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado) }],
+          system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Apenas texto simples.',
+          messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs) }],
         }, false);
         parecer = extractText(pData);
       } catch { /* laudo é complementar */ }
