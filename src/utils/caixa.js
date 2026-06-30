@@ -13,3 +13,12 @@ export function caixaMatriculaUrl({ fonte, estado, fonteId, numero } = {}) {
   if (!num || uf.length !== 2) return null;
   return `https://venda-imoveis.caixa.gov.br/editais/matricula/${uf}/${num}.pdf`;
 }
+
+// "Regras da Venda Online" — DOCUMENTO PADRÃO da Caixa para venda direta online
+// (o link azul "?" no portal abre este PDF; é o MESMO arquivo para todos os
+// imóveis). Hotlink direto: abre no navegador do usuário (IP de datacenter recebe
+// 403, igual às fotos/matrícula). Não é por imóvel — só depende de ser da Caixa.
+export function caixaRegrasVendaUrl({ fonte } = {}) {
+  if (!ehCaixa(fonte)) return null;
+  return 'https://venda-imoveis.caixa.gov.br/editais/regras-VOL/comocomprar.pdf';
+}

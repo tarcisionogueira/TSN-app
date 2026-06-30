@@ -6,7 +6,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
-import { caixaMatriculaUrl } from '../utils/caixa';
+import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 
 // Botões de documento só aparecem quando o valor é uma URL real — o scraper da
 // Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
@@ -552,11 +552,16 @@ export default function ImovelDetalhe() {
   // página do anúncio no portal (detalhe-imovel.asp = mesmo destino do url_lote),
   // o botão na prática abre o site do leiloeiro → rótulo honesto "Acessar leiloeiro".
   const isVendaDireta = (imovel.modalidade || '') === 'venda_direta';
+  // Venda direta da Caixa: o ARQUIVO de regras é o PDF padrão da Caixa (o link
+  // azul "?" do portal). Preferimos ele — é o documento de fato, não a página.
+  const caixaRegras = isVendaDireta ? caixaRegrasVendaUrl({ fonte: imovel.fonte }) : null;
   const docRegras = isVendaDireta ? imovel.linkRegrasVenda : imovel.linkEdital;
-  const regrasEhDocReal = ehRegrasDoc(docRegras, imovel.urlLote);
-  const regrasEditalUrl = regrasEhDocReal
-    ? docRegras
-    : (ehUrl(docRegras) ? docRegras : (ehUrl(imovel.urlLote) ? imovel.urlLote : null));
+  const regrasEhDocReal = !!caixaRegras || ehRegrasDoc(docRegras, imovel.urlLote);
+  const regrasEditalUrl = caixaRegras
+    ? caixaRegras
+    : regrasEhDocReal
+      ? docRegras
+      : (ehUrl(docRegras) ? docRegras : (ehUrl(imovel.urlLote) ? imovel.urlLote : null));
   const regrasEditalLabel = regrasEhDocReal
     ? (isVendaDireta ? 'Regras de venda online' : 'Edital')
     : 'Acessar leiloeiro';

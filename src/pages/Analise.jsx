@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
-import { caixaMatriculaUrl } from '../utils/caixa';
+import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -792,9 +792,13 @@ export default function Analise() {
                   // imóvel) ao anexo capturado — que às vezes é um "print" de
                   // visualizador, com baixa legibilidade. Anexo só como fallback.
                   url = matriculaCef || anexoUrl || (ehArquivo(imovelInicial?.linkMatricula) ? imovelInicial.linkMatricula : null);
+                } else if (t === 'regras_venda') {
+                  // "Regras da Venda Online": PDF padrão da Caixa (o link azul do
+                  // portal). É o ARQUIVO de regras de fato — preferido ao anexo.
+                  url = (isVendaDireta && caixaRegrasVendaUrl({ fonte: imovelInicial?.fonte }))
+                    || anexoUrl || (ehArquivo(imovelInicial?.linkRegrasVenda) ? imovelInicial.linkRegrasVenda : null);
                 } else {
-                  const fb = t==='edital' ? imovelInicial?.linkEdital : imovelInicial?.linkRegrasVenda;
-                  url = anexoUrl || (ehArquivo(fb) ? fb : null);
+                  url = anexoUrl || (ehArquivo(imovelInicial?.linkEdital) ? imovelInicial.linkEdital : null);
                 }
                 return { t, label: docMap[t], url };
               });
