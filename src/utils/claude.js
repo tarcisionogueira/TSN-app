@@ -252,16 +252,24 @@ export async function analisarMercado(inputs) {
 - Endereço: ${endereco}, ${cidade}/${estado}
 ${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
 
+REGRA OBRIGATÓRIA — MESMO TIPO: considere SOMENTE imóveis do MESMO TIPO (${tipoImovel}).
+Descarte qualquer amostra de tipo diferente (ex.: não misture casa com apartamento,
+nem terreno com comercial). Compare sempre ${tipoImovel} com ${tipoImovel}.
+
+OBJETIVO: reunir o MÁXIMO de amostras possível (quanto mais anúncios reais, melhor a
+avaliação). Faça várias buscas em fontes diferentes até esgotar os resultados úteis.
+
 ═══ NÍVEL 1 — MESMO CONDOMÍNIO / MESMO ENDEREÇO ═══
 Busque o máximo de anúncios de venda E locação DENTRO do mesmo condomínio ou edifício.
 Se não encontrar no condomínio exato, busque na mesma rua ou logradouro.
-Meta: pelo menos 5 amostras de venda e 3 de locação.
+Meta: o máximo possível — idealmente 8+ amostras de venda e 5+ de locação.
 
 ═══ NÍVEL 2 — VIZINHANÇA / BAIRRO ═══
-Busque o máximo de anúncios similares no mesmo bairro e adjacências (raio ~1km).
-Meta: pelo menos 10 amostras de venda e 5 de locação.
+Busque o máximo de anúncios similares (mesmo tipo) no bairro e adjacências (raio ~1km).
+Meta: o máximo possível — idealmente 15+ amostras de venda e 8+ de locação.
 
-FONTES: ZAP Imóveis, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, anúncios diretos.
+FONTES: ZAP Imóveis, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão,
+Net Imóveis, DF Imóveis, anúncios diretos de imobiliárias. Cruze várias fontes.
 
 Retorne APENAS este JSON (sem markdown):
 {
@@ -299,10 +307,10 @@ Retorne APENAS este JSON (sem markdown):
 
   const data = await callAPI({
     model: MODEL,
-    max_tokens: 6000,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+    max_tokens: 8000,
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
     messages: [{ role: 'user', content: prompt }],
-    system: 'Você é um perito avaliador imobiliário sênior. Busque o máximo de amostras possível. Retorne apenas JSON válido.',
+    system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo de imóvel (${tipoImovel}). Faça buscas em várias fontes. Retorne apenas JSON válido.`,
   }, true);
 
   const result = parseJSON(extractText(data));
@@ -321,7 +329,7 @@ Retorne APENAS este JSON (sem markdown):
 // Gera parecer executivo completo
 export async function gerarParecer(inputs, metricas, mercado) {
   const prompt = `
-Redija um PARECER EXECUTIVO de arrematação como Gestor Sênior da TSN Ativos.
+Redija um PARECER EXECUTIVO de arrematação como Gestor Sênior da BidPro Brasil.
 
 IMÓVEL: ${inputs.tipo || inputs.tipoImovel} — ${inputs.endereco}
 OBJETIVO: ${inputs.objetivoCompra === 'uso_proprio' ? 'Uso Próprio' : 'Investimento'}
@@ -374,7 +382,7 @@ Itens obrigatórios do checklist (listar todos, um por linha, com status, nome d
     model: MODEL,
     max_tokens: 4500,
     messages: [{ role: 'user', content: prompt }],
-    system: 'Você é gestor sênior da TSN Ativos. Redija pareceres executivos precisos e persuasivos. Nunca use markdown, asteriscos, cerquilhas ou formatação especial. Use apenas texto simples.',
+    system: 'Você é gestor sênior da BidPro Brasil. Redija pareceres executivos precisos e persuasivos. Nunca use markdown, asteriscos, cerquilhas ou formatação especial. Use apenas texto simples.',
   });
 
   return extractText(data);

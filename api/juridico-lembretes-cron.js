@@ -105,6 +105,15 @@ export default async function handler(req, res) {
 
   const agora = new Date();
   const hojeStr = agora.toISOString().slice(0, 10);
+
+  // E-mail do admin para acompanhamento (alertas de reatribuição entram em cópia).
+  // APP_ADMIN_EMAIL tem prioridade; senão usa o primeiro perfil 'admin'.
+  let adminEmail = process.env.APP_ADMIN_EMAIL || null;
+  if (!adminEmail) {
+    const [adm] = await sbGet(`perfis?role=eq.admin&select=id&limit=1`);
+    if (adm?.id) adminEmail = await emailDoUsuario(adm.id);
+  }
+  adminEmail = adminEmail ? norm(adminEmail) : null;
   const casos = await sbGet(`casos?juridico_status=eq.em_revisao&juridico_enviado_em=not.is.null&select=id,imovel_id,imovel_endereco,tipo_leilao,advogado_id,juridico_enviado_em,prazo_juridico,juridico_token,juridico_lembretes,juridico_ultimo_lembrete,juridico_reatribuicoes`);
   const resumo = { casos: Array.isArray(casos) ? casos.length : 0, lembretes: 0, reatribuicoes: 0, sem_destino: 0, erros: 0 };
 
@@ -140,9 +149,11 @@ export default async function handler(req, res) {
             <tr><td style="padding:3px 10px 3px 0;color:#64748b">Novo prazo</td><td>${novoPrazo.toLocaleDateString('pt-BR')} (7 dias úteis)</td></tr>
           </table>
           <p style="font-weight:700;margin:14px 0 4px">Documentos do imóvel:</p>${listaAnexos}`;
+        // Admin entra em cópia para acompanhar a reatribuição (sem virar destinatário "Para").
+        const ccUrgente = [...new Set([...(novo.dest.cc || []), ...(adminEmail && !novo.dest.to.includes(adminEmail) ? [adminEmail] : [])])];
         const r = await enviarEmail({
           from: 'BidPro Brasil Jurídico <noreply@bidprobrasil.com.br>',
-          to: novo.dest.to, cc: novo.dest.cc,
+          to: novo.dest.to, cc: ccUrgente,
           replyTo: `juridico+${token}@${INBOUND_DOMAIN}`,
           subject: `🔴 URGENTE — Análise jurídica reatribuída — Caso ${refCurto}`,
           html: htmlBase('Análise jurídica — URGENTE (reatribuição)', corpo, refCurto),
@@ -150,7 +161,7 @@ export default async function handler(req, res) {
         });
         if (r.ok) {
           resumo.reatribuicoes++;
-          await sbPost('juridico_emails', { caso_id: caso.id, direcao: 'saida', message_id: r.id, de: 'noreply@bidprobrasil.com.br', para: [...novo.dest.to, ...novo.dest.cc.map(c => `cc:${c}`)].join(', '), assunto: `URGENTE reatribuição — Caso ${refCurto}` });
+          await sbPost('juridico_emails', { caso_id: caso.id, direcao: 'saida', message_id: r.id, de: 'noreply@bidprobrasil.com.br', para: [...novo.dest.to, ...ccUrgente.map(c => `cc:${c}`)].join(', '), assunto: `URGENTE reatribuição — Caso ${refCurto}` });
           await chatInterno(caso, `🔴 Prazo do jurídico vencido. Pasta reatribuída por URGÊNCIA ao advogado de melhor eficiência (${esc(novo.nome || '—')}${novo.score != null ? ` · score ${novo.score}` : ''}). Novo prazo: ${novoPrazo.toLocaleDateString('pt-BR')}.`);
         } else { resumo.erros++; }
         continue;

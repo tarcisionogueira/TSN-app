@@ -297,7 +297,7 @@ export default function Analise() {
 
   const isAVista = cenario === 'aVista' || d.somenteAVista;
   const isUsoProprio = d.objetivoCompra === 'uso_proprio';
-  const META = isUsoProprio ? 0 : 40;
+  const META = isUsoProprio ? 0 : 30;
 
   const metricas = useMemo(() => calcularMetricasCenario(d, d.valorArrematacao||0, isAVista), [d, isAVista]);
   const teto = useMemo(() => calcularTetoLance(d, isAVista, META, d.valorMercado||0), [d, isAVista, META]);
@@ -307,9 +307,9 @@ export default function Analise() {
 
   // ─── Cenários de disputa (relatório mercadológico) ─────────────────────────
   // "Sem disputa": arremata pelo lance base. "Com disputa": pior caso aceitável —
-  // a concorrência empurra o preço até o teto que ainda preserva 40% de lucro
-  // líquido (piso). Tudo calculado na MELHOR condição de pagamento.
-  const PISO_LUCRO = 40;
+  // a concorrência empurra o preço até o teto que ainda preserva o piso de lucro
+  // líquido. Tudo calculado na MELHOR condição de pagamento.
+  const PISO_LUCRO = 30;
   const cenariosDisputa = useMemo(() => {
     const lanceBase = d.valorArrematacao || 0;
     const podeFin = !d.somenteAVista;
@@ -1617,9 +1617,13 @@ export default function Analise() {
           {!isUsoProprio && d.valorArrematacao > 0 && d.valorMercado > 0 && (() => {
             const cd = cenariosDisputa;
             const pisoOk = cd.tetoBest > cd.lanceBase;
+            // Só mostra o cenário "com disputa" quando ele é REAL: o teto que
+            // preserva o piso de lucro precisa estar ACIMA do lance base (mínimo).
+            // Um teto abaixo do lance mínimo é impossível (não se dá lance abaixo
+            // do mínimo) — então não exibimos esse card irreal.
             const cards = [
               { tag:'SEM DISPUTA', cor:'#10b981', bg:'#f0fdf4', lance:cd.lanceBase, m:cd.semDisputa, nota:'Arremata pelo lance base' },
-              { tag:'COM DISPUTA — PIOR CASO', cor:'#f59e0b', bg:'#fef3c7', lance:cd.tetoBest, m:cd.comDisputa, nota:`Piso de ${PISO_LUCRO}% de lucro líquido` },
+              ...(pisoOk ? [{ tag:'COM DISPUTA — PIOR CASO', cor:'#f59e0b', bg:'#fef3c7', lance:cd.tetoBest, m:cd.comDisputa, nota:`Piso de ${PISO_LUCRO}% de lucro líquido` }] : []),
             ];
             return (
               <div style={{ border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
@@ -1627,7 +1631,7 @@ export default function Analise() {
                   <span style={{ fontSize:13, fontWeight:800, color:'white' }}>Cenários de Disputa</span>
                   <span style={{ fontSize:11, fontWeight:700, color:'white', background:'rgba(255,255,255,0.18)', borderRadius:20, padding:'2px 10px' }}>Melhor condição: {cd.condLabel}</span>
                 </div>
-                <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+                <div style={{ padding:14, display:'grid', gridTemplateColumns: (isMobile || cards.length === 1) ? '1fr' : '1fr 1fr', gap:12 }}>
                   {cards.map(c => (
                     <div key={c.tag} style={{ border:`2px solid ${c.cor}`, borderRadius:12, overflow:'hidden' }}>
                       <div style={{ background:c.bg, padding:'8px 14px', fontSize:11, fontWeight:800, color:c.cor, letterSpacing:0.5 }}>{c.tag}</div>
@@ -1675,10 +1679,10 @@ export default function Analise() {
               {isViavel ? <CheckCircle2 size={32} color="#10b981"/> : <XCircle size={32} color="#ef4444"/>}
               <div>
                 <div style={{ fontWeight:900, fontSize:17, color:isViavel?'#065f46':'#b91c1c' }}>
-                  {isViavel ? (isUsoProprio?'Aprovado para Uso Próprio':'Operação Viável — Aprovada pela TSN Ativos') : 'Operação Reprovada — Retorno Insuficiente'}
+                  {isViavel ? (isUsoProprio?'Aprovado para Uso Próprio':'Operação Viável — Aprovada pela BidPro Brasil') : 'Operação Reprovada — Retorno Insuficiente'}
                 </div>
                 <div style={{ fontSize:13, color:isViavel?'#047857':'#dc2626', marginTop:4 }}>
-                  {isUsoProprio ? `Economia de R$ ${fmt(metricas.lucro)} sobre o valor de mercado` : `ROI ${fmtPct(metricas.roi)} · Mínimo exigido: 40% · Teto de lance: R$ ${fmt(teto)}`}
+                  {isUsoProprio ? `Economia de R$ ${fmt(metricas.lucro)} sobre o valor de mercado` : `ROI ${fmtPct(metricas.roi)} · Mínimo exigido: ${META}% · Teto de lance: R$ ${fmt(teto)}`}
                 </div>
               </div>
             </div>
@@ -1814,14 +1818,20 @@ export default function Analise() {
           <div style={{ display:'flex', gap:10, alignItems:'flex-start', background:'#f8fafc', borderRadius:12, padding:'14px 16px' }}>
             <Sparkles size={16} color="#6366f1" style={{flexShrink:0,marginTop:1}}/>
             <div style={{ fontSize:12, color:'#334155', lineHeight:1.7 }}>
-              O laudo é gerado pelo <strong>Claude</strong> com base em todos os dados preenchidos, avaliação de mercado e riscos jurídicos. Inclui <strong>posicionamento estratégico, defesa da arrematação, análise de rentabilidade e conclusão da gestão</strong>. Ideal para apresentação ao cliente ou arquivo interno.
+              O laudo é gerado automaticamente junto com o relatório <strong>Mercadológico + Viabilidade</strong> (lá em cima), com base em todos os dados, avaliação de mercado e riscos jurídicos. Inclui <strong>posicionamento estratégico, defesa da arrematação, análise de rentabilidade e conclusão da gestão</strong>. Para atualizá-lo, regere o relatório Mercadológico.
             </div>
           </div>
 
-          <button onClick={gerarParecerClick} disabled={loadParecer}
-            style={{ width:'100%', padding:'14px', background:loadParecer?'#a5b4fc':'#6366f1', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-            {loadParecer ? <><Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Gerando laudo executivo...</> : <><Sparkles size={16}/> {parecer?'Regerar Laudo':'Gerar Laudo de Viabilidade com IA'}</>}
-          </button>
+          {loadParecer && (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'14px', color:'#6366f1', fontWeight:700, fontSize:13 }}>
+              <Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Gerando laudo executivo...
+            </div>
+          )}
+          {!parecer && !loadParecer && (
+            <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'8px 0' }}>
+              O laudo aparece aqui depois de gerar o relatório Mercadológico + Viabilidade.
+            </div>
+          )}
 
           {parecer && (
             <>
