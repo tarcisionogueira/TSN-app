@@ -76,6 +76,8 @@ export default async function handler(req, res) {
     gatewayCustomerId: payer.id ? String(payer.id) : null,
     gatewayPaymentId: String(pagamento.id),
     metadados: pagamento.metadata || {},
+    // Pagamento avulso de serviço (não-assinatura): o webhook não deve elevar plano.
+    servico: (pagamento.metadata?.tipo === 'servico'),
   };
 
   try {

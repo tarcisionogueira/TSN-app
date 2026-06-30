@@ -37,7 +37,11 @@ export default function ProdutoPublico({ tipo }) {
           setProduto(c);
         }
       } else {
-        const { data: e } = await supabase.from('ebooks_admin').select('*').eq('id', id).single();
+        // Página PÚBLICA: seleciona só metadados — NUNCA arquivo_url/pdf_url (link
+        // do PDF pago). O arquivo é entregue só na leitura, para quem tem acesso.
+        const { data: e } = await supabase.from('ebooks_admin')
+          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo')
+          .eq('id', id).single();
         setProduto(e);
       }
       setLoading(false);

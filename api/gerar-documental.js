@@ -138,6 +138,15 @@ export default async function handler(req, res) {
     add(row?.link_edital || body?.urlEdital, 'Edital');
     add(row?.link_regras_venda, 'Regras de venda');
     for (const a of anexos) { if (urls.length >= 5) break; add(a.url, a.nome || 'Anexo'); }
+    // Também os anexos enviados pela EQUIPE (tabela imovel_anexos) — senão uma
+    // matrícula/edital subida manualmente fica invisível para a IA documental.
+    try {
+      const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,nome,url&limit=10`)).json();
+      for (const a of (Array.isArray(manuais) ? manuais : [])) {
+        if (urls.length >= 7) break;
+        add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'));
+      }
+    } catch { /* sem anexos manuais → segue com os do lote */ }
 
     const blocos = [];
     const lidos = [];

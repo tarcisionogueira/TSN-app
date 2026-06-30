@@ -31,11 +31,12 @@ export default async function handler(req) {
   const rlIp = checkRateLimit(`leiloeiro-feed:ip:${ip}`, 30, 60_000);
   if (!rlIp.ok) return rateLimitedResponse(rlIp.resetAt);
 
-  // Valida token Bearer
+  // Valida token Bearer — formato estrito (evita injeção no filtro PostgREST).
   const auth = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
   if (!auth) return json({ error: 'Token de autenticação obrigatório no header Authorization: Bearer TOKEN' }, 401);
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(auth)) return json({ error: 'Token inválido' }, 401);
 
-  const pr = await sbFetch(`leiloeiros_parceiros?token=eq.${auth}&status=eq.ativo&select=id,nome&limit=1`);
+  const pr = await sbFetch(`leiloeiros_parceiros?token=eq.${encodeURIComponent(auth)}&status=eq.ativo&select=id,nome&limit=1`);
   if (!pr.ok) return json({ error: 'Erro interno' }, 500);
   const lista = await pr.json();
   if (!lista.length) return json({ error: 'Token inválido ou parceiro inativo' }, 401);

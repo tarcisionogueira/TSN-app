@@ -40,7 +40,10 @@ export default async function handler(req, res) {
       description: String(descricao).slice(0, 256),
       payment_method_id: metodoPagamento || 'pix',
       payer: { email: String(email) },
-      metadata: { user_id: user.id, plano_id: planoId || null, origem: 'tsn-app' },
+      // tipo='servico': pagamento avulso (serviço), NÃO é assinatura de plano. O
+      // webhook usa isso para NÃO elevar o plano/role do usuário só porque o valor
+      // do serviço coincide com o preço de um plano.
+      metadata: { user_id: user.id, plano_id: planoId || null, origem: 'tsn-app', tipo: planoId ? 'plano' : 'servico' },
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'BIDPRO BRASIL',
     };

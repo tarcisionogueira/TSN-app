@@ -23,11 +23,21 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'env vars faltando' }), { status: 500 });
   }
 
-  const { ticketId, userId } = await req.json();
-  if (!ticketId || !userId) return new Response(JSON.stringify({ error: 'ticketId e userId obrigatórios' }), { status: 400 });
+  const { ticketId } = await req.json();
+  if (!ticketId) return new Response(JSON.stringify({ error: 'ticketId obrigatório' }), { status: 400 });
+
+  // IDOR-safe: o alvo da memória é SEMPRE o dono do ticket (resolvido no servidor),
+  // nunca um userId vindo do corpo da requisição (antes dava p/ sobrescrever a
+  // memoria_ia de qualquer usuário passando userId arbitrário).
+  const donoRes = await fetch(`${supabaseUrl}/rest/v1/chamados?id=eq.${encodeURIComponent(ticketId)}&select=user_id`, {
+    headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+  });
+  const [dono] = await donoRes.json().catch(() => []);
+  const userId = dono?.user_id;
+  if (!userId) return new Response(JSON.stringify({ error: 'Ticket não encontrado' }), { status: 404 });
 
   // Busca mensagens do ticket
-  const msgsRes = await fetch(`${supabaseUrl}/rest/v1/chamados_mensagens?chamado_id=eq.${ticketId}&order=criado_em.asc&select=autor_tipo,conteudo`, {
+  const msgsRes = await fetch(`${supabaseUrl}/rest/v1/chamados_mensagens?chamado_id=eq.${encodeURIComponent(ticketId)}&order=criado_em.asc&select=autor_tipo,conteudo`, {
     headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
   });
   const msgs = await msgsRes.json();

@@ -96,8 +96,9 @@ export default function FinanciamentoTracker({ imovelId, imovelNome, onSalvo }) 
     setCarregandoIA(true);
     setMsg(null);
     try {
-      const res = await apiCall('/api/financiamento-ia', 'POST', { editalTexto, imovelId });
-      if (res.error) throw new Error(res.error);
+      const resp = await apiCall('/api/financiamento-ia', { method: 'POST', body: JSON.stringify({ editalTexto, imovelId }) });
+      const res = await resp.json().catch(() => ({}));
+      if (!resp.ok || res.error) throw new Error(res.error || 'Falha na extração do edital.');
       setDados(prev => ({
         ...prev,
         valor_imovel:          res.valor_imovel ?? prev.valor_imovel,

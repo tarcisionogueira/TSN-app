@@ -514,7 +514,7 @@ export default function Caso() {
       if (cotaR.data) {
         setCota(cotaR.data);
       } else {
-        setCota({ analises_usadas:0, analises_limite: limites.analises, reunioes_usadas:0, reunioes_limite: limites.reunioes, extras_analista:0 });
+        setCota({ analises_usadas:0, analises_limite: limites.mercado, reunioes_usadas:0, reunioes_limite: limites.reunioes, extras_analista:0 });
       }
 
       // Carrega ou cria chamado vinculado ao caso
@@ -576,7 +576,7 @@ export default function Caso() {
       if (isCliente) {
         const limites = COTAS_PLANO[role] || COTAS_PLANO.explorador;
         const usadas = cota?.analises_usadas || 0;
-        const limite = (cota?.analises_limite || limites.analises) + (cota?.extras_analista || 0);
+        const limite = (cota?.analises_limite || limites.mercado) + (cota?.extras_analista || 0);
         if (usadas >= limite) {
           setMsg('Você atingiu o limite de análises do seu plano neste mês.');
           return;
@@ -607,7 +607,7 @@ export default function Caso() {
           usuario_id: user.id,
           mes_ref: mes,
           analises_usadas: (cota?.analises_usadas || 0) + 1,
-          analises_limite: COTAS_PLANO[role]?.analises || 3,
+          analises_limite: COTAS_PLANO[role]?.mercado || 3,
           reunioes_usadas: cota?.reunioes_usadas || 0,
           reunioes_limite: COTAS_PLANO[role]?.reunioes || 0,
         }, { onConflict: 'usuario_id,mes_ref' });

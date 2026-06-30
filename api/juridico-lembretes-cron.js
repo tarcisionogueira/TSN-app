@@ -126,6 +126,18 @@ export default async function handler(req, res) {
 
       // ── 1) PRAZO PERDIDO → reatribui ao advogado de melhor eficiência ──
       if (venceu) {
+        // Cap de reatribuições: evita o ping-pong A→B→A→… (a cada cron a pasta
+        // pulava de advogado, reabrindo prazo e disparando novo "URGENTE"). Após o
+        // teto, para de reatribuir e só alerta o admin — intervenção manual.
+        const MAX_REATRIB = Number(process.env.JURIDICO_MAX_REATRIB || 3);
+        if ((caso.juridico_reatribuicoes || 0) >= MAX_REATRIB) {
+          if (!caso.juridico_escalado_admin) {
+            await sbPatch(`casos?id=eq.${caso.id}`, { juridico_escalado_admin: true });
+            await chatInterno(caso, `⛔ Jurídico sem solução após ${caso.juridico_reatribuicoes} reatribuições. Escalado para intervenção do ADMIN (sem nova reatribuição automática).`);
+            resumo.sem_destino++;
+          }
+          continue;
+        }
         const novo = await melhorAdvogado(caso.advogado_id);
         if (!novo) { resumo.sem_destino++; continue; } // ninguém para repassar
         const token = (globalThis.crypto?.randomUUID?.() || `${Date.now()}${Math.round(Math.random() * 1e6)}`).replace(/-/g, '').slice(0, 16);

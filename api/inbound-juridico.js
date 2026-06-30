@@ -26,7 +26,9 @@ function sb(path, { method = 'GET', body, prefer } = {}) {
 
 // ---- Verificação de assinatura Svix (Resend) ----
 async function verificarAssinatura(req, raw) {
-  if (!WH_SECRET) return true; // sem segredo configurado: não bloqueia (configurar em produção)
+  // Fail-closed: sem segredo configurado, REJEITA (evita processar e-mails forjados
+  // que sobrescreveriam o parecer jurídico). Em produção, definir INBOUND_WEBHOOK_SECRET.
+  if (!WH_SECRET) return false;
   try {
     const id = req.headers.get('svix-id');
     const ts = req.headers.get('svix-timestamp');

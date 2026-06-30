@@ -64,14 +64,14 @@ function SecaoAtendimentos() {
             style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', border: 'none', background: 'white', cursor: 'pointer' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.imovel || 'Imóvel'} <span style={{ color: '#94a3b8', fontWeight: 400 }}>· {it.tipo_leilao || '—'}</span></div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{it.thread.length} mensagem(ns) na conversa</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{(it.thread || []).length} mensagem(ns) na conversa</div>
             </div>
             <ArrowRight size={16} color="#cbd5e1" style={{ transform: aberto === it.caso_id ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
           </button>
           {aberto === it.caso_id && (
             <div style={{ borderTop: '1px solid #f1f5f9', padding: '14px 18px', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Thread contínuo: demanda enviada + suas devolutivas, em ordem */}
-              {it.thread.map((m, i) => {
+              {(it.thread || []).map((m, i) => {
                 const ehDemanda = m.tipo === 'demanda';
                 return (
                   <div key={i} style={{ alignSelf: ehDemanda ? 'flex-start' : 'flex-end', maxWidth: '88%' }}>

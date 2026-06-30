@@ -19,10 +19,13 @@ export default async function handler(req) {
   const url = new URL(req.url);
   const token = url.searchParams.get('token');
   if (!token) return json({ error: 'Token obrigatório' }, 400);
+  // Formato estrito do token (evita injeção no filtro PostgREST via ?token=).
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(token)) return json({ error: 'Token inválido' }, 400);
+  const tokenEnc = encodeURIComponent(token);
 
   // GET — verifica se token é válido e retorna dados já preenchidos
   if (req.method === 'GET') {
-    const r = await sbFetch(`leiloeiros_parceiros?token=eq.${token}&select=id,nome,nome_fantasia,cnpj,cpf,email,telefone,cep,logradouro,numero,complemento,bairro,municipio,uf,status&limit=1`);
+    const r = await sbFetch(`leiloeiros_parceiros?token=eq.${tokenEnc}&select=id,nome,nome_fantasia,cnpj,cpf,email,telefone,cep,logradouro,numero,complemento,bairro,municipio,uf,status&limit=1`);
     if (!r.ok) return json({ error: 'Erro interno' }, 500);
     const [parc] = await r.json();
     if (!parc) return json({ error: 'Link inválido ou expirado' }, 404);
@@ -35,7 +38,7 @@ export default async function handler(req) {
     let body;
     try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
 
-    const r = await sbFetch(`leiloeiros_parceiros?token=eq.${token}&select=id,status&limit=1`);
+    const r = await sbFetch(`leiloeiros_parceiros?token=eq.${tokenEnc}&select=id,status&limit=1`);
     if (!r.ok) return json({ error: 'Erro interno' }, 500);
     const [parc] = await r.json();
     if (!parc) return json({ error: 'Link inválido' }, 404);

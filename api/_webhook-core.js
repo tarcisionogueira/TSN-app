@@ -82,14 +82,17 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
 }
 
 // ── PAGAMENTO CONFIRMADO ──────────────────────────────────────────────────────
-export async function processarConfirmado({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway }) {
+export async function processarConfirmado({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (!cliente) {
     console.log(`[${gateway}] perfil não encontrado — id=${gatewayCustomerId} email=${email}`);
     return { skipped: 'perfil_nao_encontrado' };
   }
 
-  const mapeado = mapearPlano(valor, descricao);
+  // Pagamento avulso de SERVIÇO (mp-checkout sem planoId): apenas limpa
+  // inadimplência; NUNCA mapeia valor→plano (senão um serviço de R$500/5000/99,90
+  // elevaria o plano do cliente "de graça"). mapeado=null pula toda a elevação.
+  const mapeado = servico ? null : mapearPlano(valor, descricao);
 
   // Atualiza perfil: limpa inadimplência, atualiza plano/role
   const campoId = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';

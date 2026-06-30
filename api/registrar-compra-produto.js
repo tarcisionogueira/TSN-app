@@ -40,10 +40,12 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ ok: true, duplicata: true }), { status: 200, headers });
   }
 
-  // Registra a compra
+  // Registra a compra como PENDENTE — nunca 'ativo' direto a partir do cliente
+  // (senão qualquer usuário logado liberaria conteúdo pago sem pagar). A ativação
+  // (status 'ativo') só pode vir do webhook de pagamento confirmado.
   const ri = await sb('compras_produtos', {
     method: 'POST',
-    body: JSON.stringify({ user_id, produto_tipo, produto_id, valor: Number(valor) || 0, status: 'ativo' }),
+    body: JSON.stringify({ user_id, produto_tipo, produto_id, valor: Number(valor) || 0, status: 'pendente' }),
     headers: { Prefer: 'return=representation' },
   });
   const inserido = await ri.json();

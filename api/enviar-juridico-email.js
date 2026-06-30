@@ -66,7 +66,8 @@ export default async function handler(req) {
   // Advogado responsável (para registro no caso); usado como fallback de destino.
   let advogadoId = caso.advogado_id;
   if (!advogadoId) {
-    const [adv] = await (await sb(`perfis?role=eq.advogado&select=id,nome&limit=1`)).json();
+    // Só advogados ATIVOS podem receber casos (evita atribuir a um ex-advogado).
+    const [adv] = await (await sb(`perfis?role=eq.advogado&ativo=eq.true&select=id,nome&order=criado_em.asc&limit=1`)).json();
     advogadoId = adv?.id;
   }
   const [advPerfil] = advogadoId ? await (await sb(`perfis?id=eq.${advogadoId}&select=nome`)).json() : [null];
