@@ -37,6 +37,7 @@ export default function AnalisesMenu({ mobile, onNavegar }) {
   };
   const irBuscar = () => { setAberto(false); onNavegar?.(); nav('/buscar'); };
   const irArrematados = () => { setAberto(false); onNavegar?.(); nav('/painel', { state: { aba: 'arrematacoes' } }); };
+  const irManual = () => { setAberto(false); onNavegar?.(); nav('/analise', { state: { manual: true } }); };
 
   const statusInfo = (a) => {
     if (a.status === 'gerando') return { Icon: Loader2, cor: '#0d9488', txt: 'Gerando…', spin: true };
@@ -101,6 +102,10 @@ export default function AnalisesMenu({ mobile, onNavegar }) {
             </div>
           )}
           <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 6, paddingTop: 6 }}>
+            <button onClick={irManual} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: 'none', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12.5, color: '#7c3aed', cursor: 'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              ➕ Incluir lote manual (URL/anexos)
+            </button>
             <button onClick={irArrematados} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: 'none', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 12.5, color: '#0D63DB', cursor: 'pointer' }}
               onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
               🏠 Meus arrematados →

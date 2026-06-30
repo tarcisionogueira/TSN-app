@@ -110,6 +110,9 @@ export default function Analise() {
   const isMobile = useIsMobile();
   const { user, role } = useAuth();
   const imovelInicial = location.state?.imovel;
+  // Modo "inclusão manual de lote": entrou na análise sem um imóvel da base
+  // (cola URL e/ou anexa edital/matrícula; a IA extrai e libera os relatórios).
+  const modoManual = location.state?.manual || !imovelInicial;
 
   const temCNJ = ROLES_COM_CNJ.includes(role);
   const semLimite = ROLES_SEM_LIMITE.includes(role);
@@ -684,6 +687,9 @@ export default function Analise() {
             await supabase.from('relatorios').insert(payload);
           }
         }
+        // Sincroniza o flag arrematado na análise gerada (regra de limpeza: o cron
+        // só apaga as NÃO arrematadas 15 dias após o leilão).
+        await supabase.from('analises_mercado').update({ arrematado: isArrematado }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
       } catch { /* portfólio local já foi salvo — erro de rede não bloqueia o usuário */ }
     }
 
@@ -952,16 +958,17 @@ export default function Analise() {
               </div>
               {docMsg && <div style={{ marginTop:14, padding:'10px 14px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e' }}>{docMsg}</div>}
 
-              {/* ── Imóvel de leiloeiro ainda não integrado (visível ao cliente) ── */}
-              {!isStaffAnalise && (
+              {/* ── Inclusão manual / imóvel de outro leiloeiro (URL + anexos) ── */}
+              {(!isStaffAnalise || modoManual) && (
                 <div style={{ marginTop:18, border:'1px dashed #c4b5fd', background:'#faf5ff', borderRadius:14, padding:'16px 18px' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                     <Building2 size={17} color="#7c3aed"/>
-                    <div style={{ fontSize:14, fontWeight:800, color:'#111' }}>Imóvel de outro leiloeiro?</div>
+                    <div style={{ fontSize:14, fontWeight:800, color:'#111' }}>{modoManual ? 'Incluir lote manualmente' : 'Imóvel de outro leiloeiro?'}</div>
                   </div>
                   <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>
-                    Se o imóvel é de um leiloeiro que ainda não está na nossa base, cole o link do lote e/ou anexe o edital/matrícula.
-                    A IA extrai os dados e libera os relatórios acima. <strong>É uma análise fora da base</strong> — os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.
+                    {modoManual
+                      ? <>Cole o <strong>link do lote</strong> e/ou anexe o <strong>edital/matrícula</strong> de um imóvel que não está na nossa base. A IA extrai os dados (endereço, valores, área, leiloeiro, riscos) e libera os relatórios acima para você dar sequência.</>
+                      : <>Se o imóvel é de um leiloeiro que ainda não está na nossa base, cole o link do lote e/ou anexe o edital/matrícula. A IA extrai os dados e libera os relatórios acima. <strong>É uma análise fora da base</strong> — os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.</>}
                   </div>
                   {externoNotificado ? (
                     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:10, fontSize:12, fontWeight:700, color:'#065f46' }}>

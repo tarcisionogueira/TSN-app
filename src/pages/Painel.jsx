@@ -260,26 +260,26 @@ export default function Painel() {
     saveImoveis(updated);
   };
 
-  // Regra: imóvel NÃO arrematado → apaga a análise/relatórios (servidor) para não
-  // acumular relatório de operação que não aconteceu.
-  const apagarRelatorios = (id) => {
-    if (!id || !user?.id) return;
-    supabase.from('analises_mercado').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(() => {}).catch(() => {});
-  };
-
+  // Remoção explícita do portfólio também limpa os relatórios salvos no servidor.
+  // (A regra automática de não-arrematação — 15 dias após o leilão sem arrematar —
+  // fica a cargo do cron limpar-analises-cron.)
   const excluir = (id) => {
     if (!confirm('Remover do portfólio? Os relatórios de análise deste imóvel também serão apagados.')) return;
     const updated = imoveis.filter(i=>i.id!==id);
     setImoveis(updated);
     saveImoveis(updated);
-    apagarRelatorios(id); // não arrematado → limpa relatórios
+    if (id && user?.id) supabase.from('analises_mercado').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
   };
 
   const alterarStatus = (id, status) => {
     const updated = imoveis.map(i=>i.id===id?{...i,status,updatedAt:new Date().toISOString()}:i);
     setImoveis(updated);
     saveImoveis(updated);
-    if (status === 'reprovado') apagarRelatorios(id); // não arrematado → limpa relatórios
+    // Arrematou → marca a análise como arrematada (NUNCA é apagada pelo cron).
+    if (id && user?.id) {
+      const arrematou = ['arrematado','em_reforma','venda','alugado','concluido'].includes(status);
+      if (arrematou) supabase.from('analises_mercado').update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+    }
   };
 
   const adicionarLancamento = () => {

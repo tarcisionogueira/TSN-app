@@ -144,7 +144,10 @@ export default async function handler(req, res) {
   const { imovelId, titulo, cidade, estado, imovel, mercadoInputs, parecerInputs } = body;
   if (!imovelId || !mercadoInputs) { res.status(400).json({ error: 'imovelId e mercadoInputs obrigatórios' }); return; }
 
-  const base = { user_id: user.id, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs } };
+  // Data do leilão (para a regra de limpeza: 15 dias após o leilão sem arrematar).
+  const rawData = imovel?.dataLeilao || parecerInputs?.d?.dataLeilao || null;
+  const dataLeilao = rawData && !isNaN(Date.parse(rawData)) ? new Date(rawData).toISOString() : null;
+  const base = { user_id: user.id, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs }, data_leilao: dataLeilao };
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
   try {
