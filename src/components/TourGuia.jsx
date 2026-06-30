@@ -135,32 +135,9 @@ export default function TourGuia() {
     }
   };
 
-  if (!visivel || etapas.length === 0) {
-    // Botão flutuante para re-abrir o tour
-    if (!user) return null;
-    return (
-      <button
-        onClick={() => setMostrarMenu(m => !m)}
-        title="Tour de funcionalidades"
-        style={{ position: 'fixed', bottom: 80, right: 20, zIndex: 8000, background: '#0D63DB', color: 'white', border: 'none', borderRadius: '50%', width: 44, height: 44, cursor: 'pointer', fontSize: 20, boxShadow: '0 4px 16px rgba(37,99,235,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        ?
-        {mostrarMenu && (
-          <div style={{ position: 'absolute', bottom: 52, right: 0, background: 'white', borderRadius: 12, boxShadow: '0 8px 30px rgba(0,0,0,0.15)', padding: 12, minWidth: 220, textAlign: 'left' }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8, padding: '0 4px' }}>Tour de Funcionalidades</div>
-            <button onClick={verNovamente} style={{ width: '100%', padding: '8px 10px', background: '#eff6ff', border: 'none', borderRadius: 8, fontSize: 13, color: '#084BA6', fontWeight: 600, cursor: 'pointer', textAlign: 'left', marginBottom: 4 }}>
-              ✨ Funcionalidades do mês
-            </button>
-            {versoes.filter(v => v !== VERSAO_ATUAL).map(v => (
-              <button key={v} onClick={() => verVersao(v)} style={{ width: '100%', padding: '7px 10px', background: 'none', border: 'none', borderRadius: 8, fontSize: 13, color: '#374151', cursor: 'pointer', textAlign: 'left', display: 'block' }}>
-                📅 {v}
-              </button>
-            ))}
-          </div>
-        )}
-      </button>
-    );
-  }
+  // Botão flutuante "?" removido a pedido — o tour de boas-vindas ainda abre 1x por
+  // login; dúvidas sobre a plataforma são respondidas pela IA do chat de suporte.
+  if (!visivel || etapas.length === 0) return null;
 
   const etapa = etapas[indice];
   const total = etapas.length;
