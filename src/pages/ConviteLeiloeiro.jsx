@@ -192,7 +192,7 @@ export default function ConviteLeiloeiro() {
 
           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: 16, marginBottom: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>COMO ENVIAR IMÓVEIS</div>
-            <pre style={{ fontSize: 11, color: '#78350f', fontFamily: 'monospace', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{`POST https://tsnativos.com.br/api/leiloeiro-feed
+            <pre style={{ fontSize: 11, color: '#78350f', fontFamily: 'monospace', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{`POST https://bidprobrasil.com.br/api/leiloeiro-feed
 Authorization: Bearer ${token}
 Content-Type: application/json
 

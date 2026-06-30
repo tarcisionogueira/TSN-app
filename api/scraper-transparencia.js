@@ -65,7 +65,7 @@ async function fetchTransparencia(path, params, apiKey) {
   const headers = {
     'chave-api-dados': apiKey,
     Accept: 'application/json',
-    'User-Agent': 'TSN-App/1.0 (contato@tsnativos.com.br)',
+    'User-Agent': 'BidProBrasil/1.0 (contato@bidprobrasil.com.br)',
   };
 
   for (let tentativa = 1; tentativa <= 2; tentativa++) {

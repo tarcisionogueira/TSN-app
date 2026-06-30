@@ -29,7 +29,7 @@ export default async function handler(req) {
 
   try {
     const resp = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TSN-Bot/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBrasil-Bot/1.0)' },
       redirect: 'follow',
     });
 

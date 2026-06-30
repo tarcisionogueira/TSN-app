@@ -47,7 +47,7 @@ async function gerarVapidJwt(audience) {
   const payload = {
     aud: audience,
     exp: Math.floor(Date.now() / 1000) + 12 * 3600,
-    sub: `mailto:alertas@tsnativos.com.br`,
+    sub: `mailto:alertas@bidprobrasil.com.br`,
   };
 
   const enc = new TextEncoder();

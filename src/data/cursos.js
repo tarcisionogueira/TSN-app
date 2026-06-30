@@ -22,7 +22,7 @@ export const CURSOS = [
         titulo: 'Módulo 1 — Sua Jornada Começa Aqui',
         licoes: [
           { id: 'ob-1', titulo: 'Por que leilões imobiliários são a maior oportunidade do Brasil hoje', duracao: '10 min', gratis: true, descricao: 'O mercado de leilões movimenta mais de R$ 30 bilhões por ano. Entenda por que investidores experientes migram para cá e como você pode entrar agora.' },
-          { id: 'ob-2', titulo: 'A metodologia BidPro Brasil — o método dos 40%', duracao: '8 min', gratis: true, descricao: 'Conheça o critério exclusivo da BidPro Brasil: só aprovamos operações com ROI mínimo de 40%. Entenda o porquê e como isso protege seu capital.' },
+          { id: 'ob-2', titulo: 'A metodologia BidPro Brasil — o método dos 30%', duracao: '8 min', gratis: true, descricao: 'Conheça o critério exclusivo da BidPro Brasil: só aprovamos operações com ROI mínimo de 30%. Entenda o porquê e como isso protege seu capital.' },
           { id: 'ob-3', titulo: 'Navegando pela plataforma BidPro Brasil', duracao: '7 min', gratis: true, descricao: 'Tour completo: busca inteligente de leilões, análise de viabilidade, portfólio e controle financeiro. Tudo que você precisa em um só lugar.' },
         ],
       },
@@ -30,7 +30,7 @@ export const CURSOS = [
         titulo: 'Módulo 2 — Seus Primeiros Passos',
         licoes: [
           { id: 'ob-4', titulo: 'Qual é o seu perfil de investidor?', duracao: '8 min', gratis: true, descricao: 'Conservador, Moderado ou Arrojado — descubra seu perfil e como ele define sua estratégia de lances e alocação de capital.' },
-          { id: 'ob-5', titulo: 'Entendendo o teto de lance', duracao: '10 min', gratis: true, descricao: 'O conceito mais importante que você vai aprender: como calcular o lance máximo que preserva sua margem de 40%. Nunca mais pague caro demais.' },
+          { id: 'ob-5', titulo: 'Entendendo o teto de lance', duracao: '10 min', gratis: true, descricao: 'O conceito mais importante que você vai aprender: como calcular o lance máximo que preserva sua margem de 30%. Nunca mais pague caro demais.' },
           { id: 'ob-6', titulo: 'Próximos passos: sua trilha de aprendizado', duracao: '5 min', gratis: true, descricao: 'Roteiro de cursos recomendado para o seu perfil e como aproveitar ao máximo os recursos da BidPro Brasil.' },
         ],
       },

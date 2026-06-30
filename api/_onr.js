@@ -59,7 +59,7 @@ export async function getSession() {
 
   // 1. GET da página de login para obter tokens ASP.NET
   const getRes = await fetch(`${BASE}/FAcesso.aspx`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TSN-App/1.0)' },
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBrasil/1.0)' },
   });
   const html = await getRes.text();
   const initCookie = parseCookies(getRes.headers.get('set-cookie') || '');
@@ -89,7 +89,7 @@ export async function getSession() {
       'Cookie':        serializeCookies(initCookie),
       'Origin':        BASE,
       'Referer':       `${BASE}/FAcesso.aspx`,
-      'User-Agent':    'Mozilla/5.0 (compatible; TSN-App/1.0)',
+      'User-Agent':    'Mozilla/5.0 (compatible; BidProBrasil/1.0)',
     },
     body: body.toString(),
     redirect: 'manual',
@@ -136,7 +136,7 @@ export async function onrAjax(handler, method, payload = {}, requireSession = tr
       'X-Requested-With': 'XMLHttpRequest',
       'Origin': BASE,
       'Referer': `${BASE}/eProtocolo/listagem_contratos.aspx`,
-      'User-Agent': 'Mozilla/5.0 (compatible; TSN-App/1.0)',
+      'User-Agent': 'Mozilla/5.0 (compatible; BidProBrasil/1.0)',
       ...(sessionCookie ? { Cookie: sessionCookie } : {}),
     },
     body: body.toString(),
