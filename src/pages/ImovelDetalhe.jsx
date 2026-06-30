@@ -27,6 +27,52 @@ const STATUS_ARR = {
   cancelado:   { label: 'Cancelado',   bg: '#fee2e2', color: '#991b1b' },
 };
 
+// Imóveis semelhantes e próximos (mesma cidade/tipo, prioriza o mesmo bairro).
+function ImoveisSimilares({ imovel, nav }) {
+  const [itens, setItens] = useState([]);
+  useEffect(() => {
+    if (!imovel?.cidade) return;
+    (async () => {
+      let q = supabase.from('imoveis_leilao')
+        .select('id,titulo,bairro,cidade,estado,valor_minimo,valor_avaliacao,link_foto,tipo,area_m2')
+        .eq('ativo', true).eq('cidade', imovel.cidade).neq('id', imovel.id).limit(12);
+      if (imovel.tipo) q = q.eq('tipo', imovel.tipo);
+      const { data } = await q;
+      let lista = data || [];
+      // mesmo bairro primeiro
+      lista.sort((a, b) => (b.bairro === imovel.bairro) - (a.bairro === imovel.bairro));
+      setItens(lista.slice(0, 6));
+    })();
+  }, [imovel?.id, imovel?.cidade]);
+
+  if (!itens.length) return null;
+  return (
+    <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px', marginTop: 20 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Home size={18} color="#0D63DB" /> Imóveis semelhantes e próximos
+      </h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
+        {itens.map(it => {
+          const desc = it.valor_avaliacao > 0 && it.valor_minimo ? Math.round((1 - it.valor_minimo / it.valor_avaliacao) * 100) : null;
+          return (
+            <button key={it.id} onClick={() => { nav('/imovel/' + it.id); window.scrollTo(0, 0); }}
+              style={{ textAlign: 'left', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: 'white', cursor: 'pointer', padding: 0 }}>
+              <div style={{ height: 110, background: '#f1f5f9', backgroundImage: it.link_foto ? `url(${it.link_foto})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', position: 'relative' }}>
+                {desc > 0 && <span style={{ position: 'absolute', top: 8, right: 8, background: '#16a34a', color: 'white', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 8 }}>-{desc}%</span>}
+              </div>
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#111', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{it.bairro || it.titulo}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 6px' }}>{it.cidade}/{it.estado}{it.area_m2 ? ` · ${it.area_m2} m²` : ''}</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#0D63DB' }}>{fmtBRL(it.valor_minimo)}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SecaoArrematacao({ imovelId, imovelTitulo }) {
   const { user, role } = useAuth();
   const nav = useNavigate();
@@ -539,6 +585,43 @@ export default function ImovelDetalhe() {
               )}
             </div>
 
+            {/* Simulação rápida — estimativa pela avaliação do leilão (NÃO é a mercadológica) */}
+            {imovel.valorMinimo > 0 && imovel.valorAvaliacao > 0 && (() => {
+              const lance = imovel.valorMinimo;
+              const custosAquisicao = lance * 0.095; // ITBI ~3% + registro ~1,5% + comissão leiloeiro 5%
+              const revendaRef = imovel.valorAvaliacao;
+              const comissaoVenda = revendaRef * 0.05;
+              const lucro = revendaRef - lance - custosAquisicao - comissaoVenda;
+              const margem = (lance + custosAquisicao) > 0 ? (lucro / (lance + custosAquisicao)) * 100 : 0;
+              const linha = (rot, val, cor) => (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderBottom: '1px dashed #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>{rot}</span><span style={{ fontWeight: 700, color: cor || '#111' }}>{val}</span>
+                </div>
+              );
+              return (
+                <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <BarChart2 size={18} color="#0D63DB" /> Simulação rápida
+                  </h2>
+                  <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 14px', lineHeight: 1.5 }}>
+                    Estimativa com base no <strong>valor de avaliação do leilão</strong> e custos médios. A <strong>avaliação mercadológica real</strong> e a viabilidade financeira completa são feitas no <strong>relatório</strong>.
+                  </p>
+                  {linha('Lance mínimo', fmtBRL(lance))}
+                  {linha('Custos de aquisição (est. ~9,5%)', '− ' + fmtBRL(custosAquisicao), '#b45309')}
+                  {linha('Revenda de referência (avaliação)', fmtBRL(revendaRef))}
+                  {linha('Comissão de venda (5%)', '− ' + fmtBRL(comissaoVenda), '#b45309')}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontSize: 15 }}>
+                    <span style={{ fontWeight: 800, color: '#111' }}>Lucro estimado</span>
+                    <span style={{ fontWeight: 900, color: lucro >= 0 ? '#15803d' : '#dc2626' }}>{fmtBRL(lucro)} <span style={{ fontSize: 12, fontWeight: 700 }}>({margem.toFixed(2)}%)</span></span>
+                  </div>
+                  <button onClick={() => nav('/calculadora', { state: { imovel } })}
+                    style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                    <BarChart2 size={14} /> Simular na Calculadora
+                  </button>
+                </div>
+              );
+            })()}
+
             {/* Data do leilão */}
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
               <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -628,6 +711,9 @@ export default function ImovelDetalhe() {
                 <strong>Atenção:</strong> Antes de arrematar, verifique o edital, a matrícula do imóvel e possíveis ônus ou ocupantes. Recomendamos solicitar uma análise completa com nossa equipe.
               </p>
             </div>
+
+            {/* Imóveis semelhantes e próximos */}
+            <ImoveisSimilares imovel={imovel} nav={nav} />
 
           </div>
 
