@@ -853,9 +853,9 @@ export default function Busca() {
         {analisesBonus > 0 ? `🎁 ${analisesBonus} análise${analisesBonus !== 1 ? 's' : ''} bônus disponível${analisesBonus !== 1 ? 'is' : ''}` : '🔒 Análises bônus esgotadas'}
       </div>
     )}
-    <div style={{ maxWidth:1280, margin:'0 auto', padding: isMobile ? '16px 12px' : '24px 20px', display:'grid', gridTemplateColumns: isMobile ? '1fr' : (showFiltros ? '280px 1fr' : 'auto 1fr'), gap:20, alignItems:'start' }}>
+    <div style={{ maxWidth:1480, margin:'0 auto', padding: isMobile ? '16px 12px' : '20px', display:'flex', flexDirection:'column', gap:16 }}>
 
-      {/* SIDEBAR */}
+      {/* FILTROS (dropdown no topo — libera a largura toda para lista/mapa) */}
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
 
         {/* Filtros */}
@@ -866,7 +866,7 @@ export default function Busca() {
             {showFiltros ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
           </button>
           {showFiltros && (
-            <div style={{ padding:14, display:'flex', flexDirection:'column', gap:12 }}>
+            <div style={{ padding:14, display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:16, alignItems:'start' }}>
               <div>
                 <label style={lbl}>Tipo de Imóvel</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
