@@ -311,8 +311,11 @@ async function scraperCEFcsv(uf) {
 
       const numeroLimpo = m.id.replace(/\s/g, '');
       const linkDetalhe = m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroLimpo}`;
-      // Matrícula e edital têm URL determinística no portal da Caixa (a partir do nº do imóvel)
-      const linkMatricula = `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${numeroLimpo}`;
+      // Matrícula: PDF estático em /editais/matricula/<UF>/<numero>.pdf. O antigo
+      // matricula.asp?hdniip= foi REMOVIDO pela Caixa (HTTP 404).
+      const linkMatricula = (uf && numeroLimpo)
+        ? `https://venda-imoveis.caixa.gov.br/editais/matricula/${String(uf).toUpperCase()}/${numeroLimpo}.pdf`
+        : null;
       // CEF não fornece URL de foto no CSV — construir a partir do número do imóvel
       const fotoUrl = `https://venda-imoveis.caixa.gov.br/fotos/F${numeroLimpo}.jpg`;
       // Extrai dados do texto: CEP no endereço, matrícula e área na descrição

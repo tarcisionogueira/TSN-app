@@ -64,12 +64,17 @@ async function salvarAnexo(imovelId, buffer, tipo, nome) {
 }
 
 async function processar(page, item) {
-  const { data: imovel } = await supabase.from('imoveis_leilao').select('link_edital, link_regras_venda').eq('id', item.imovel_id).single();
+  const { data: imovel } = await supabase.from('imoveis_leilao').select('link_edital, link_regras_venda, estado').eq('id', item.imovel_id).single();
   const capturados = [];
 
-  // 1) Matrícula (sempre): matricula.asp na sessão do detalhe
-  await page.goto(`https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${item.hdniip}`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-  const matri = await capturarUrl(page, `https://venda-imoveis.caixa.gov.br/sistema/matricula.asp?hdniip=${item.hdniip}`);
+  // 1) Matrícula (sempre): PDF estático em /editais/matricula/<UF>/<numero>.pdf.
+  //    O matricula.asp?hdniip= foi REMOVIDO pela Caixa (HTTP 404). O número do imóvel
+  //    é o hdniip da fila; a UF vem do imóvel.
+  const uf = String(imovel?.estado || '').trim().toUpperCase();
+  const num = String(item.hdniip || '').replace(/\D/g, '');
+  const matri = (uf.length === 2 && num)
+    ? await capturarUrl(page, `https://venda-imoveis.caixa.gov.br/editais/matricula/${uf}/${num}.pdf`).catch(() => null)
+    : null;
   if (matri) { await salvarAnexo(item.imovel_id, matri, 'matricula', 'Matrícula (CEF, automática).pdf'); capturados.push('matricula'); }
 
   // 2) Edital (se houver link real)

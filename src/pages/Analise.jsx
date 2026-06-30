@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
+import { caixaMatriculaUrl } from '../utils/caixa';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -780,10 +781,12 @@ export default function Analise() {
               // Links válidos: matricula.asp e detalhe-imovel.asp são páginas do
               // portal (dão 404 / não são arquivo) — não viram link de documento.
               const ehArquivo = (v) => /^https?:\/\//i.test(v||'') && !/matricula\.asp|detalhe-imovel\.asp/i.test(v);
+              // Matrícula CEF: PDF estático em /editais/matricula/<UF>/<num>.pdf.
+              const matriculaCef = caixaMatriculaUrl({ fonte: imovelInicial?.fonte, estado: imovelInicial?.estado, fonteId: imovelInicial?.fonteId });
               const docsView = topicos.map(t => {
                 const a = docsLeiloeiro.find(x => x.tipo === t);
                 const fb = t==='edital' ? imovelInicial?.linkEdital
-                  : t==='matricula' ? imovelInicial?.linkMatricula
+                  : t==='matricula' ? (matriculaCef || imovelInicial?.linkMatricula)
                   : imovelInicial?.linkRegrasVenda;
                 const url = (a?.url && /^https?:\/\//.test(a.url)) ? a.url : (ehArquivo(fb) ? fb : null);
                 return { t, label: docMap[t], url };

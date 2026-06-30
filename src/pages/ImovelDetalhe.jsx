@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
+import { caixaMatriculaUrl } from '../utils/caixa';
 
 // Botões de documento só aparecem quando o valor é uma URL real — o scraper da
 // Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
@@ -568,7 +569,11 @@ export default function ImovelDetalhe() {
 
   // Documentos: só conta o que é arquivo/link de verdade (não a página do portal).
   const temEditalDoc = ehUrl(imovel.linkEdital);
-  const temMatriculaDoc = ehMatriculaValida(imovel.linkMatricula);
+  // Matrícula CEF: PDF estático em /editais/matricula/<UF>/<num>.pdf (o matricula.asp
+  // dá 404). Hotlink direto funciona no navegador do usuário.
+  const matriculaUrl = caixaMatriculaUrl({ fonte: imovel.fonte, estado: imovel.estado, fonteId: imovel.fonteId })
+    || (ehMatriculaValida(imovel.linkMatricula) ? imovel.linkMatricula : null);
+  const temMatriculaDoc = !!matriculaUrl;
   const temRegrasDoc = ehRegrasDoc(imovel.linkRegrasVenda, imovel.urlLote);
   const temNumerosRef = !!(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso);
   const podeBuscarDocsCaixa = ['admin', 'analista'].includes(role) && /caixa|cef/i.test(imovel.fonte || '') && !anexosDocs.some(a => a.tipo === 'matricula');
@@ -890,7 +895,7 @@ export default function ImovelDetalhe() {
                       </a>
                     )}
                     {temMatriculaDoc && (
-                      <a href={imovel.linkMatricula} target="_blank" rel="noopener noreferrer"
+                      <a href={matriculaUrl} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
                         <FileText size={15} /> Matrícula
                       </a>
