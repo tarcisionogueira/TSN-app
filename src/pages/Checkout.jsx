@@ -848,8 +848,12 @@ export default function Checkout() {
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
               </button>
-              {!enderecoOk && aceitouTermos && (
-                <p style={{ fontSize: 11, color: '#b45309', textAlign: 'center', marginTop: 8 }}>Preencha o endereço acima para continuar.</p>
+              {!perfilFaturamentoOk && aceitouTermos && endLoaded && (
+                <p style={{ fontSize: 11, color: '#b45309', textAlign: 'center', marginTop: 8 }}>
+                  {!cpfOk && !enderecoOk ? 'Preencha o CPF e o endereço acima para continuar.'
+                    : !cpfOk ? 'Preencha o CPF acima para continuar.'
+                    : 'Preencha o endereço acima para continuar.'}
+                </p>
               )}
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
                 {planoKey === 'assessorado'
