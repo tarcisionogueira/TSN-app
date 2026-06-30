@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
+import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlanos } from '../contexts/PlanosContext';
 import { supabase } from '../utils/supabase';
@@ -256,6 +257,8 @@ export default function Header() {
             </button>
           ))}
 
+          {!loading && user && <AnalisesMenu />}
+
           {effectiveRole === 'leiloeiro' && (
             <button onClick={() => nav('/leiloeiro')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/leiloeiro') ? '#b45309' : '#b4530922', color: '#fcd34d', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -364,6 +367,7 @@ export default function Header() {
               <l.icon size={16} /> {l.label}
             </button>
           ))}
+          {!loading && user && <AnalisesMenu mobile onNavegar={() => setOpen(false)} />}
           {effectiveRole === 'leiloeiro' && (
             <button onClick={() => { nav('/leiloeiro'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#fcd34d', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>

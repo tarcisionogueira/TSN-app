@@ -13,6 +13,7 @@ import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice,
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
+import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import RiscoJuridico from '../components/RiscoJuridico';
@@ -266,7 +267,13 @@ export default function Analise() {
   //   'mercado' → Relatório Mercadológico + Viabilidade Financeira
   //   'documental' → Relatório de Análise Documental + Processo
   const [relSel, setRelSel] = useState(null);
-  const [gerandoMercado, setGerandoMercado] = useState(false);
+  // Análise mercadológica roda em SEGUNDO PLANO no AnalisesContext: o usuário pode
+  // sair desta tela e navegar/buscar imóveis enquanto gera. "Gerando" deriva do
+  // contexto; o resultado é aplicado de volta quando concluído (efeito abaixo).
+  const { iniciar: iniciarAnalise, getAnalise } = useAnalises();
+  const analiseImovelId = imovelInicial?.id || d.id;
+  const analiseEntry = getAnalise(analiseImovelId);
+  const gerandoMercado = analiseEntry?.status === 'gerando';
   const [gerandoDocumental, setGerandoDocumental] = useState(false);
   const [relMercadoGerado, setRelMercadoGerado] = useState(false);
   const [relDocumentalGerado, setRelDocumentalGerado] = useState(false);
@@ -526,36 +533,61 @@ export default function Analise() {
 
   // ─── Relatório 1: Mercadológico + Viabilidade Financeira ───────────────────
   // Gera tudo automaticamente a partir dos dados do imóvel (sem formulário).
-  const gerarRelMercado = async () => {
+  const gerarRelMercado = () => {
     if (analisesBloqueado) { showMsg('Limite de análises atingido.', 'error'); return; }
     if (!d.endereco && !d.cidade) { showMsg('Imóvel sem endereço/cidade para avaliar o mercado.', 'error'); return; }
-    setGerandoMercado(true);
-    try {
-      // 1) Avaliação mercadológica (IA)
-      const res = await analisarMercado({
-        endereco: d.endereco || d.cidade, tipoImovel: d.tipo,
-        areaM2: d.areaM2, cidade: d.cidade, estado: d.estado,
-        nomeCondominio: d.nomeCondominio || '',
-      });
-      setMercado(res);
-      const dProMercado = { ...d };
-      if (res?.precoMedioM2 && d.areaM2) { dProMercado.valorMercado = Math.round(res.precoMedioM2 * d.areaM2 * 0.9); up('valorMercado', dProMercado.valorMercado); }
-      if (res?.aluguelMedio) { up('valorLocacao', Math.round(res.aluguelMedio)); }
-      // 2) Laudo executivo de viabilidade (IA) — narrativa do relatório
-      try {
-        const txt = await gerarParecer({ ...dProMercado, _cenario: isAVista ? 'À Vista' : 'Alavancado', _teto: teto }, metricas, res);
-        setParecer(txt);
-        setD(p => ({ ...p, parecer: txt }));
-      } catch { /* laudo é complementar — métricas já garantem o relatório */ }
-      setRelMercadoGerado(true);
-      setRelSel('mercado');
-      showMsg('Relatório Mercadológico + Viabilidade Financeira gerado!');
-    } catch {
-      showMsg('Erro ao gerar o relatório mercadológico.', 'error');
-    } finally {
-      setGerandoMercado(false);
-    }
+    if (gerandoMercado) return;
+    // Snapshots dos dados no momento do clique — a geração roda no provider e
+    // não depende mais desta tela ficar montada.
+    const dSnap = { ...d };
+    const metricasSnap = metricas;
+    const tetoSnap = teto;
+    const cenarioSnap = isAVista ? 'À Vista' : 'Alavancado';
+    showMsg('Geração iniciada — pode navegar pelo sistema; acompanhe em "Análises" no topo.');
+    iniciarAnalise(
+      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null },
+      async () => {
+        // 1) Avaliação mercadológica (IA, web search)
+        const res = await analisarMercado({
+          endereco: dSnap.endereco || dSnap.cidade, tipoImovel: dSnap.tipo,
+          areaM2: dSnap.areaM2, cidade: dSnap.cidade, estado: dSnap.estado,
+          nomeCondominio: dSnap.nomeCondominio || '',
+        });
+        let valorMercado = null, valorLocacao = null;
+        if (res?.precoMedioM2 && dSnap.areaM2) valorMercado = Math.round(res.precoMedioM2 * dSnap.areaM2 * 0.9);
+        if (res?.aluguelMedio) valorLocacao = Math.round(res.aluguelMedio);
+        // 2) Laudo executivo de viabilidade (IA)
+        let parecerTxt = '';
+        try {
+          parecerTxt = await gerarParecer({ ...dSnap, valorMercado: valorMercado || dSnap.valorMercado, _cenario: cenarioSnap, _teto: tetoSnap }, metricasSnap, res);
+        } catch { /* laudo é complementar */ }
+        return { mercado: res, parecer: parecerTxt, valorMercado, valorLocacao };
+      }
+    );
   };
+
+  // Aplica o resultado da geração (que rodou em segundo plano) ao reabrir/voltar
+  // à tela: mercado, valores e laudo. Roda uma vez por conclusão.
+  const aplicadoRef = React.useRef(null);
+  useEffect(() => {
+    const entry = getAnalise(analiseImovelId);
+    if (entry?.status === 'gerando') return;
+    if (entry?.status === 'erro' && aplicadoRef.current !== entry.updatedAt) {
+      aplicadoRef.current = entry.updatedAt;
+      showMsg(entry.erro || 'Erro ao gerar o relatório mercadológico.', 'error');
+      return;
+    }
+    if (entry?.status !== 'concluida' || !entry.result) return;
+    if (aplicadoRef.current === entry.updatedAt) return;
+    aplicadoRef.current = entry.updatedAt;
+    const r = entry.result;
+    if (r.mercado) setMercado(r.mercado);
+    if (r.valorMercado) up('valorMercado', r.valorMercado);
+    if (r.valorLocacao) up('valorLocacao', r.valorLocacao);
+    if (r.parecer) { setParecer(r.parecer); setD(p => ({ ...p, parecer: r.parecer })); }
+    setRelMercadoGerado(true);
+    showMsg('Relatório Mercadológico + Viabilidade pronto!');
+  }, [analiseEntry?.status, analiseEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Relatório 2: Análise Documental + Processo ────────────────────────────
   // Lê os documentos do leiloeiro (edital/matrícula) e consulta o processo (CNJ).

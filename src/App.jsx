@@ -4,6 +4,7 @@ import { trackPageView } from './utils/gtag';
 import { supabase } from './utils/supabase';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
 import { PlanosProvider } from './contexts/PlanosContext';
+import { AnalisesProvider } from './contexts/AnalisesContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import TourGuia from './components/TourGuia';
@@ -234,6 +235,7 @@ export default function App() {
       <HashRouter>
         <RouteTracker />
         <PlanosProvider>
+        <AnalisesProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/redefinir-senha" element={<RedefinirSenha />} />
@@ -251,6 +253,7 @@ export default function App() {
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />
           <Route path="*" element={<MainLayout />} />
         </Routes>
+        </AnalisesProvider>
         </PlanosProvider>
       </HashRouter>
     </AuthProvider>
