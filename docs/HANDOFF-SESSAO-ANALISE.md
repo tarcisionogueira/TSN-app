@@ -62,7 +62,15 @@ Hoje: **CNJ DataJud** (processos/movimentações) + **Receita Federal** (situaç
 
 ## 3. Pendências / decisões para a próxima sessão
 
-### 3.0 ⭐ PRIORIDADE — Habilitação manual de leiloeiro pelo cliente (pedido 30/06, fim do dia)
+### 3.0 ⭐ Habilitação manual de leiloeiro pelo cliente — ✅ FEITO (sessão 2026-06-30b)
+Entregue no branch `claude/bidpro-brasil-handoff-dsxm1t`:
+- Card **"Imóvel de outro leiloeiro?"** no launcher de `/analise`, visível ao cliente (`!isStaffAnalise`): cola o link do lote e/ou anexa edital/matrícula → a IA extrai os dados (reaproveita `extrairDadosDocumentoUrl`/`handleFileUpload`, antes restritos à equipe) → libera a geração dos relatórios. UX deixa claro que é análise **"fora da base"** (sem curadoria BidPro).
+- **Notificação à equipe**: insere `solicitacoes` tipo **`leiloeiro_sugerido`** (com link + domínio extraído) — aparece na fila do analista em `/painel` ("Avaliações em andamento") com label amigável.
+- **Migração aplicada**: `supabase/migrations/solicitacoes_tipo_leiloeiro_sugerido.sql` estendeu `solicitacoes_tipo_check`. **Bug latente corrigido de quebra**: a constraint só aceitava `mercadologica|edital|processual`, então os inserts `consulta` (revisão do analista) e `juridico` (encaminhamento) do workflow de `/analise` **vinham sendo rejeitados em silêncio** (try/catch) — agora são tipos válidos.
+- _Pendente (evolução):_ agregação por domínio numa tela dedicada do Admin para priorizar integração por volume (hoje cada sugestão é uma `solicitacao` avulsa). Avaliar tabela `leiloeiros_sugeridos` se o volume justificar.
+
+<details><summary>Spec original (mantida para referência)</summary>
+
 Hoje a tela de análise é **automática** (usa só imóveis já scrapeados/integrados). Falta um caminho para o cliente analisar um imóvel de um **leiloeiro ainda não integrado**.
 
 Especificação:
@@ -73,6 +81,8 @@ Especificação:
   - Surfacing no Admin: lista "Leiloeiros sugeridos pelos clientes" com contagem por domínio.
 - UX: deixar claro que é uma análise "fora da base" — os dados dependem do que o cliente forneceu (sem garantia da curadoria BidPro).
 - Observação: as caixas de colar edital/matrícula já existem em `Analise.jsx` (hoje sob `isStaffAnalise`); parte do trabalho é **expor uma versão ao cliente** + a notificação ao admin.
+
+</details>
 
 ### 3.x Outras pendências
 - [ ] **Persistência do workflow** (`/analise`): hoje "relatório gerado / reunião realizada / jurídico enviado" vivem na **sessão** (recarregar zera). Para valer entre sessões e entre usuários (analista abrindo depois), ligar ao banco — provavelmente convergir com o fluxo `/caso` (que já tem `casos`, `reunioes`, `analise_juridica` e o envio jurídico por e-mail pronto).
