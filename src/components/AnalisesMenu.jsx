@@ -1,7 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Clock } from 'lucide-react';
+import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Clock, Building2 } from 'lucide-react';
 import { useAnalises } from '../contexts/AnalisesContext';
+
+// Miniatura do imóvel (CEF tem hotlink direto; demais usam o proxy de imagem).
+function fotoImovel(im) {
+  if (!im) return null;
+  const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
+  const id = (im.fonteId || im.fonte_id || '').replace(/^(caixa_|cef_)/, '');
+  if (isCef && id) return `https://venda-imoveis.caixa.gov.br/fotos/F${id}21.jpg`;
+  const f = im.foto || im.link_foto;
+  if (!f) return null;
+  return (f.includes('supabase.co') || f.startsWith('/')) ? f : `/api/img-proxy?url=${encodeURIComponent(f)}`;
+}
 
 // Menu "Análises" do topo: mostra as análises em andamento/recentes (a geração
 // roda em segundo plano no AnalisesProvider, então o usuário pode navegar livre).
@@ -61,14 +72,23 @@ export default function AnalisesMenu({ mobile, onNavegar }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 6 }}>
               {analises.map(a => {
                 const s = statusInfo(a);
+                const foto = fotoImovel(a.imovel);
                 return (
                   <div key={a.imovelId} onClick={() => abrir(a)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 9, cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, cursor: 'pointer' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <s.Icon size={16} color={s.cor} style={s.spin ? { animation: 'spin 1s linear infinite', flexShrink: 0 } : { flexShrink: 0 }} />
+                    <div style={{ width: 46, height: 46, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {foto
+                        ? <img src={foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
+                        : <Building2 size={18} color="#cbd5e1" />}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Imóvel'}</div>
-                      <div style={{ fontSize: 11, color: '#94a3b8' }}>{[a.cidade, a.estado].filter(Boolean).join(' — ')} · <span style={{ color: s.cor, fontWeight: 700 }}>{s.txt}</span></div>
+                      <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[a.cidade, a.estado].filter(Boolean).join(' — ')}</div>
+                      <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                        <s.Icon size={11} color={s.cor} style={s.spin ? { animation: 'spin 1s linear infinite' } : undefined} />
+                        <span style={{ color: s.cor, fontWeight: 700 }}>{s.txt}</span>
+                      </div>
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0 }}>×</button>
                   </div>
