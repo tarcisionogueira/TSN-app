@@ -165,7 +165,9 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       // Cluster agrupa os marcadores (evita travar com milhares de pins).
       // Os círculos de raio aproximado ficam numa camada própria, pois o
       // markerClusterGroup só agrupa marcadores.
-      markersRef.current = L.markerClusterGroup({ maxClusterRadius: 60, showCoverageOnHover: false, chunkedLoading: true }).addTo(leafletRef.current);
+      // disableClusteringAtZoom: ao aproximar (zoom ≥ 16) mostra cada imóvel no seu
+      // ponto; spiderfyOnMaxZoom separa os que caíram em coordenadas idênticas.
+      markersRef.current = L.markerClusterGroup({ maxClusterRadius: 55, showCoverageOnHover: false, chunkedLoading: true, disableClusteringAtZoom: 16, spiderfyOnMaxZoom: true, zoomToBoundsOnClick: true }).addTo(leafletRef.current);
       circlesRef.current = L.layerGroup().addTo(leafletRef.current);
       // Corrige tiles incompletos quando o container foi montado enquanto estava oculto
       setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 50);
@@ -400,6 +402,7 @@ export default function Busca() {
   const [centroRaio, setCentroRaio] = useState(null);
   const [distancias, setDistancias] = useState({});
   const [vista, setVista] = useState('lista');
+  const [listaSobreMapa, setListaSobreMapa] = useState(true); // painel lista recolhível na vista Mapa (estilo Google)
 
   // Snapshot dos filtros/raio no momento do último clique em Buscar
   // MapaEmbutido usa este snapshot para garantir consistência com a lista
@@ -1284,7 +1287,42 @@ export default function Busca() {
                 </div>
               </div>
             ) : (
-              <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} totalLista={totalResultados} visivel={vista === 'mapa'} />
+              /* Vista Mapa estilo Google: mapa grande + lista lateral recolhível sobreposta */
+              <div style={{ position:'relative', height:'calc(100vh - 210px)', minHeight:460 }}>
+                <MapaEmbutido filtros={filtrosBusca} resultados={resultadosFiltrados} nav={nav} centroRaio={centroBusca} raioKm={raioKmBusca} raioAtivo={raioAtivoBusca} totalLista={totalResultados} visivel={vista === 'mapa'} height="100%" />
+                {!isMobile && listaSobreMapa && (
+                  <div style={{ position:'absolute', top:12, left:12, bottom:12, width:340, background:'white', borderRadius:14, boxShadow:'0 6px 24px rgba(0,0,0,0.18)', zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                    <div style={{ padding:'10px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <span style={{ fontSize:13, fontWeight:800, color:'#111' }}>{totalResultados} imóvel(is)</span>
+                      <button onClick={()=>setListaSobreMapa(false)} title="Recolher lista"
+                        style={{ background:'#f1f5f9', border:'none', borderRadius:8, padding:'4px 10px', fontSize:12, fontWeight:700, color:'#64748b', cursor:'pointer' }}>‹ Recolher</button>
+                    </div>
+                    <div style={{ flex:1, overflowY:'auto', padding:'10px', display:'flex', flexDirection:'column', gap:8 }}>
+                      {resultadosFiltrados.slice(0, 60).map((im) => {
+                        const desc = desconto(im);
+                        return (
+                          <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state:{ imovel: im } })}
+                            style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', padding:'9px 11px', cursor:'pointer', flexShrink:0 }}
+                            onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{ fontSize:12, fontWeight:700, color:'#111', lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{im.titulo || 'Imóvel'}</div>
+                            <div style={{ fontSize:10, color:'#64748b', margin:'2px 0 4px' }}>📍 {im.cidade} — {im.estado}</div>
+                            <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
+                              <span style={{ fontSize:13, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
+                              {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {!isMobile && !listaSobreMapa && (
+                  <button onClick={()=>setListaSobreMapa(true)}
+                    style={{ position:'absolute', top:12, left:12, zIndex:1000, background:'white', border:'none', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,0.18)', padding:'9px 14px', fontSize:13, fontWeight:700, color:'#111', cursor:'pointer' }}>
+                    ☰ Ver lista ({totalResultados})
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
