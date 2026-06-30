@@ -176,7 +176,7 @@ export default function ConviteLeiloeiro() {
           <CheckCircle2 size={52} color="#10b981" style={{ marginBottom: 16 }} />
           <h1 style={{ fontSize: 24, fontWeight: 900, color: '#111111', marginBottom: 8 }}>Cadastro concluído!</h1>
           <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
-            Sua conta de parceiro foi configurada. Use o token abaixo para enviar imóveis à plataforma TSN via API.
+            Sua conta de parceiro foi configurada. Use o token abaixo para enviar imóveis à plataforma BidPro Brasil via API.
           </p>
 
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 20 }}>
@@ -241,7 +241,7 @@ Content-Type: application/json
           </div>
           <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111111', margin: '0 0 8px' }}>Complete seu cadastro</h1>
           <p style={{ color: '#64748b', fontSize: 14, margin: 0 }}>
-            Preencha os dados abaixo para ativar sua integração com a plataforma TSN Ativos.
+            Preencha os dados abaixo para ativar sua integração com a plataforma BidPro Brasil.
           </p>
         </div>
 

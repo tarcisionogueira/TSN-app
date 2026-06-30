@@ -124,7 +124,7 @@ export default function Consultor() {
     return (
       <div style={{ maxWidth:520, margin:'80px auto', textAlign:'center', padding:'0 20px' }}>
         <h2 style={{ color:'#111111' }}>Programa de Consultores</h2>
-        <p style={{ color:'#64748b' }}>Esta área é exclusiva para consultores parceiros da TSN. Fale com a equipe para se tornar um consultor e ganhar comissões recorrentes indicando clientes.</p>
+        <p style={{ color:'#64748b' }}>Esta área é exclusiva para consultores parceiros da BidPro Brasil. Fale com a equipe para se tornar um consultor e ganhar comissões recorrentes indicando clientes.</p>
         <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))} style={{ display:'inline-block', marginTop:8, padding:'10px 20px', background:'#0D63DB', color:'white', borderRadius:10, fontWeight:700, border:'none', cursor:'pointer' }}>Quero ser consultor</button>
       </div>
     );
@@ -766,7 +766,7 @@ export default function Consultor() {
                   </div>
                   <div style={{ marginTop:8, display:'flex', gap:8 }}>
                     {reuniaoModal.email && (
-                      <button onClick={()=>{ setReuniaoModal(null); setReuniaoInfo(null); setMsgModal({ nome:reuniaoModal.nome, email:reuniaoModal.email }); setMsgForm({ assunto:'Convite para reunião TSN', conteudo:`Olá ${reuniaoModal.nome}! Segue o link para nossa reunião:\n\n${reuniaoInfo.link}\n\nData: ${reuniaoForm.data} às ${reuniaoForm.hora}\n\nAté lá!` }); }}
+                      <button onClick={()=>{ setReuniaoModal(null); setReuniaoInfo(null); setMsgModal({ nome:reuniaoModal.nome, email:reuniaoModal.email }); setMsgForm({ assunto:'Convite para reunião BidPro Brasil', conteudo:`Olá ${reuniaoModal.nome}! Segue o link para nossa reunião:\n\n${reuniaoInfo.link}\n\nData: ${reuniaoForm.data} às ${reuniaoForm.hora}\n\nAté lá!` }); }}
                         style={{ flex:1, padding:'8px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', textAlign:'center' }}>
                         ✉ Enviar por mensagem
                       </button>

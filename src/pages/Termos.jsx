@@ -17,7 +17,7 @@ export default function Termos() {
         <p style={{ color: '#94a3b8', fontSize: 13 }}>Última atualização: junho de 2026</p>
 
         <h2 style={h2}>1. Sobre a plataforma</h2>
-        <p>A TSN Ativos é uma plataforma de análise de imóveis em leilão, operada por Nogueira Empreendimentos LTDA (CNPJ 02.311.492/0001-61). Os relatórios, análises de viabilidade e pareceres têm caráter informativo e de apoio à decisão, não constituindo garantia de resultado, recomendação de investimento ou parecer jurídico definitivo.</p>
+        <p>A BidPro Brasil é uma plataforma de análise de imóveis em leilão, operada por Nogueira Empreendimentos LTDA (CNPJ 02.311.492/0001-61). Os relatórios, análises de viabilidade e pareceres têm caráter informativo e de apoio à decisão, não constituindo garantia de resultado, recomendação de investimento ou parecer jurídico definitivo.</p>
 
         <h2 style={h2}>2. Cadastro e conta</h2>
         <p>É permitido apenas um cadastro por pessoa, identificado por e-mail e CPF únicos. O usuário é responsável pela veracidade dos dados informados e pela guarda de suas credenciais de acesso. A assinatura é pessoal e intransferível.</p>
@@ -26,7 +26,7 @@ export default function Termos() {
         <p>Os planos pagos são cobrados de forma recorrente via Asaas (PIX, boleto ou cartão). O usuário pode solicitar upgrade (cobrança proporcional da diferença) ou downgrade (ajuste de valor na próxima cobrança, mantendo os benefícios até lá) a qualquer momento. Planos com fidelidade têm o prazo mínimo informado no momento da contratação.</p>
 
         <h2 style={h2}>4. Responsabilidades</h2>
-        <p>As decisões de arrematação são de exclusiva responsabilidade do usuário. A TSN não se responsabiliza por prejuízos decorrentes de informações de terceiros (editais, leiloeiros, órgãos públicos) ou por alterações nas condições do bem após a análise.</p>
+        <p>As decisões de arrematação são de exclusiva responsabilidade do usuário. A BidPro Brasil não se responsabiliza por prejuízos decorrentes de informações de terceiros (editais, leiloeiros, órgãos públicos) ou por alterações nas condições do bem após a análise.</p>
 
         <h2 style={h2}>5. Cancelamento</h2>
         <p>O usuário pode cancelar a assinatura a qualquer momento, respeitada eventual fidelidade contratada. O acesso permanece ativo até o fim do ciclo já pago.</p>

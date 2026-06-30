@@ -67,7 +67,7 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
     <div style="font-size:9px;color:#64748b;">Cenário: ${isAVista?'À VISTA':'ALAVANCADO (SAC/PRICE)'}</div>
     <div style="font-size:9px;color:#64748b;">Objetivo: ${isUsoProprio?'USO PRÓPRIO':'INVESTIMENTO'}</div>
     <div style="font-size:9px;color:#64748b;">Área: ${d.areaM2||0}m² (priv.) / ${d.areaTerrenoM2||0}m² (terreno)</div>
-    <div style="font-size:9px;color:#64748b;margin-top:3px;">Honorários Jurídicos TSN: 10%</div>
+    <div style="font-size:9px;color:#64748b;margin-top:3px;">Honorários Jurídicos: 10%</div>
   </div>
 </div>
 
@@ -99,7 +99,7 @@ ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</
     <tr><th>Item</th><th class="c">% do Aporte</th><th class="r">Lance Base</th><th class="r">Teto (R$ ${fmt(teto)})</th></tr>
     ${[
       ['Arrematação/Sinal', isAVista?m.vArremate:m.valorSinal, isAVista?mt.vArremate:mt.valorSinal],
-      ['Honorários Jurídicos TSN (10%)', m.honorarios, mt.honorarios],
+      ['Honorários Jurídicos (10%)', m.honorarios, mt.honorarios],
       [`Taxa Leiloeiro (${fmtPct(d.taxaLeiloeiroPercentual)})`, m.taxaLeiloeiro, mt.taxaLeiloeiro],
       [`ITBI + Registro (${fmtPct(d.itbiPercentual)})`, m.itbiRegistro, mt.itbiRegistro],
       ...(d.laudemio>0?[['Laudêmio', m.laudemio, mt.laudemio]]:[]),

@@ -42,7 +42,7 @@ export default async function handler(req, res) {
       payer: { email: String(email) },
       metadata: { user_id: user.id, plano_id: planoId || null, origem: 'tsn-app' },
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
-      statement_descriptor: 'TSN BIDPRO',
+      statement_descriptor: 'BIDPRO BRASIL',
     };
 
     // Cartão de crédito: requer token gerado pelo SDK MP no frontend

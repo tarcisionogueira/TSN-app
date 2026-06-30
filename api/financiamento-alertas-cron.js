@@ -82,7 +82,7 @@ export default async function handler(req, res) {
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
   <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:22px 28px;text-align:center;">
-    <div style="font-size:20px;font-weight:800;color:#fff;">TSN Ativos</div>
+    <div style="font-size:20px;font-weight:800;color:#fff;">BidPro Brasil</div>
     <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Lembrete de vencimento</div>
   </div>
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
@@ -96,7 +96,7 @@ export default async function handler(req, res) {
       </a>
     </div>
     <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:20px;">
-      TSN Ativos · Este lembrete foi configurado por você na plataforma.
+      BidPro Brasil · Este lembrete foi configurado por você na plataforma.
     </p>
   </div>
 </div>

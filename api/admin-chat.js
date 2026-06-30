@@ -63,7 +63,7 @@ export default async function handler(req) {
 
   const contextoStr = contextoBlocos.join('\n\n');
 
-  const system = `Você é o assistente de inteligência administrativa da TSN Ativos, plataforma de análise de imóveis em leilão.
+  const system = `Você é o assistente de inteligência administrativa da BidPro Brasil, plataforma de análise de imóveis em leilão.
 
 Você tem acesso privilegiado a:
 - Processos judiciais consultados no CNJ DataJud

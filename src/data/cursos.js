@@ -6,7 +6,7 @@ export const CURSOS = [
     titulo: 'Destravando Leilões',
     subtitulo: 'Seu ponto de partida — do zero ao primeiro lance',
     tagline: 'Gratuito para sempre',
-    descricao: 'Entenda como funciona o universo dos leilões imobiliários, conheça a metodologia TSN Ativos e descubra como a plataforma vai te ajudar a encontrar, analisar e arrematar imóveis com segurança e rentabilidade.',
+    descricao: 'Entenda como funciona o universo dos leilões imobiliários, conheça a metodologia BidPro Brasil e descubra como a plataforma vai te ajudar a encontrar, analisar e arrematar imóveis com segurança e rentabilidade.',
     emoji: '🚀',
     cor: '#0D63DB',
     bg: '#dbeafe',
@@ -22,8 +22,8 @@ export const CURSOS = [
         titulo: 'Módulo 1 — Sua Jornada Começa Aqui',
         licoes: [
           { id: 'ob-1', titulo: 'Por que leilões imobiliários são a maior oportunidade do Brasil hoje', duracao: '10 min', gratis: true, descricao: 'O mercado de leilões movimenta mais de R$ 30 bilhões por ano. Entenda por que investidores experientes migram para cá e como você pode entrar agora.' },
-          { id: 'ob-2', titulo: 'A metodologia TSN — o método dos 40%', duracao: '8 min', gratis: true, descricao: 'Conheça o critério exclusivo da TSN Ativos: só aprovamos operações com ROI mínimo de 40%. Entenda o porquê e como isso protege seu capital.' },
-          { id: 'ob-3', titulo: 'Navegando pela plataforma TSN', duracao: '7 min', gratis: true, descricao: 'Tour completo: busca inteligente de leilões, análise de viabilidade, portfólio e controle financeiro. Tudo que você precisa em um só lugar.' },
+          { id: 'ob-2', titulo: 'A metodologia BidPro Brasil — o método dos 40%', duracao: '8 min', gratis: true, descricao: 'Conheça o critério exclusivo da BidPro Brasil: só aprovamos operações com ROI mínimo de 40%. Entenda o porquê e como isso protege seu capital.' },
+          { id: 'ob-3', titulo: 'Navegando pela plataforma BidPro Brasil', duracao: '7 min', gratis: true, descricao: 'Tour completo: busca inteligente de leilões, análise de viabilidade, portfólio e controle financeiro. Tudo que você precisa em um só lugar.' },
         ],
       },
       {
@@ -31,7 +31,7 @@ export const CURSOS = [
         licoes: [
           { id: 'ob-4', titulo: 'Qual é o seu perfil de investidor?', duracao: '8 min', gratis: true, descricao: 'Conservador, Moderado ou Arrojado — descubra seu perfil e como ele define sua estratégia de lances e alocação de capital.' },
           { id: 'ob-5', titulo: 'Entendendo o teto de lance', duracao: '10 min', gratis: true, descricao: 'O conceito mais importante que você vai aprender: como calcular o lance máximo que preserva sua margem de 40%. Nunca mais pague caro demais.' },
-          { id: 'ob-6', titulo: 'Próximos passos: sua trilha de aprendizado', duracao: '5 min', gratis: true, descricao: 'Roteiro de cursos recomendado para o seu perfil e como aproveitar ao máximo os recursos da TSN Ativos.' },
+          { id: 'ob-6', titulo: 'Próximos passos: sua trilha de aprendizado', duracao: '5 min', gratis: true, descricao: 'Roteiro de cursos recomendado para o seu perfil e como aproveitar ao máximo os recursos da BidPro Brasil.' },
         ],
       },
     ],
@@ -67,9 +67,9 @@ export const CURSOS = [
         licoes: [
           { id: 'seg-4', titulo: 'A lei que protege o arrematante (CPC Art. 879)', duracao: '10 min', gratis: true, descricao: 'O Código de Processo Civil garante seus direitos. Entenda as principais proteções e o que o vendedor NÃO pode fazer após a arrematação.' },
           { id: 'seg-5', titulo: 'Como o leiloeiro credenciado garante a lisura', duracao: '8 min', gratis: true, descricao: 'O papel das Juntas Comerciais no credenciamento, responsabilidades do leiloeiro e como verificar se ele é idôneo.' },
-          { id: 'seg-6', titulo: 'O que pode dar errado — e como evitar', duracao: '10 min', gratis: true, descricao: 'Os 5 erros mais comuns dos arrematantes iniciantes e como a metodologia TSN elimina cada um deles sistematicamente.' },
+          { id: 'seg-6', titulo: 'O que pode dar errado — e como evitar', duracao: '10 min', gratis: true, descricao: 'Os 5 erros mais comuns dos arrematantes iniciantes e como a metodologia BidPro Brasil elimina cada um deles sistematicamente.' },
           { id: 'seg-7', titulo: 'Imissão na posse — tomando o imóvel de forma legal', duracao: '8 min', gratis: true, descricao: 'Como funciona o processo de imissão, prazo, casos de ocupação pelo antigo dono e como agir em cada situação.' },
-          { id: 'seg-8', titulo: 'Casos reais: 3 operações TSN bem-sucedidas', duracao: '10 min', gratis: true, descricao: 'Três estudos de caso reais: apartamento judicial SP, casa CEF RJ e terreno comercial MG. Números, timeline e lições aprendidas.' },
+          { id: 'seg-8', titulo: 'Casos reais: 3 operações BidPro Brasil bem-sucedidas', duracao: '10 min', gratis: true, descricao: 'Três estudos de caso reais: apartamento judicial SP, casa CEF RJ e terreno comercial MG. Números, timeline e lições aprendidas.' },
         ],
       },
     ],
@@ -95,7 +95,7 @@ export const CURSOS = [
       {
         titulo: 'Módulo 1 — A Pesquisa Profissional',
         licoes: [
-          { id: 'merc-1', titulo: 'Os dois níveis de pesquisa que ninguém te ensina', duracao: '12 min', gratis: true, descricao: 'Nível 1: mesmo condomínio/endereço. Nível 2: bairro/vizinhança. A metodologia TSN de dois níveis e por que ela é mais precisa que qualquer outra.' },
+          { id: 'merc-1', titulo: 'Os dois níveis de pesquisa que ninguém te ensina', duracao: '12 min', gratis: true, descricao: 'Nível 1: mesmo condomínio/endereço. Nível 2: bairro/vizinhança. A metodologia BidPro Brasil de dois níveis e por que ela é mais precisa que qualquer outra.' },
           { id: 'merc-2', titulo: 'Fontes de dados — onde encontrar amostras reais', duracao: '14 min', gratis: false, descricao: 'ZAP Imóveis, VivaReal, OLX, Quinto Andar, Loft, IBGE — como usar cada fonte, coletar o máximo de amostras e identificar dados distorcidos.' },
           { id: 'merc-3', titulo: 'Como tratar e homogeneizar amostras', duracao: '12 min', gratis: false, descricao: 'Padronizar área, padrão construtivo, andar, vagas e estado de conservação. O processo que transforma dados brutos em avaliação defensável.' },
         ],
@@ -109,9 +109,9 @@ export const CURSOS = [
         ],
       },
       {
-        titulo: 'Módulo 3 — Usando a IA da TSN',
+        titulo: 'Módulo 3 — Usando a IA da BidPro Brasil',
         licoes: [
-          { id: 'merc-7', titulo: 'Avaliação automática com IA em 2 minutos', duracao: '14 min', gratis: false, descricao: 'Como usar a função de Avaliação Mercadológica da plataforma TSN para gerar comparativos automáticos com dezenas de amostras.' },
+          { id: 'merc-7', titulo: 'Avaliação automática com IA em 2 minutos', duracao: '14 min', gratis: false, descricao: 'Como usar a função de Avaliação Mercadológica da plataforma BidPro Brasil para gerar comparativos automáticos com dezenas de amostras.' },
           { id: 'merc-8', titulo: 'Interpretando os resultados da IA', duracao: '12 min', gratis: false, descricao: 'Como ler o relatório de dois níveis, identificar distorções, ajustar manualmente e chegar ao preço de mercado final.' },
           { id: 'merc-9', titulo: 'Estudo de caso: avaliando um apartamento em SP', duracao: '18 min', gratis: false, descricao: 'Ao vivo na plataforma: avaliação mercadológica completa de um apartamento em São Paulo do zero até o número final defendido.' },
         ],
@@ -156,8 +156,8 @@ export const CURSOS = [
       {
         titulo: 'Módulo 3 — Usando a IA para Pré-Avaliação',
         licoes: [
-          { id: 'rad-8', titulo: 'Extraindo dados do edital com IA em segundos', duracao: '14 min', gratis: false, descricao: 'Como usar a função de upload da plataforma TSN para extrair automaticamente todos os dados do edital e matrícula com IA.' },
-          { id: 'rad-9', titulo: 'Interpretando os alertas de risco da plataforma', duracao: '10 min', gratis: false, descricao: 'Os três níveis de risco TSN: bloqueante (para a operação), alerta (analise com cuidado) e informativo. Como agir em cada caso.' },
+          { id: 'rad-8', titulo: 'Extraindo dados do edital com IA em segundos', duracao: '14 min', gratis: false, descricao: 'Como usar a função de upload da plataforma BidPro Brasil para extrair automaticamente todos os dados do edital e matrícula com IA.' },
+          { id: 'rad-9', titulo: 'Interpretando os alertas de risco da plataforma', duracao: '10 min', gratis: false, descricao: 'Os três níveis de risco BidPro Brasil: bloqueante (para a operação), alerta (analise com cuidado) e informativo. Como agir em cada caso.' },
           { id: 'rad-10', titulo: 'Estudo de caso: radiografia de uma matrícula real', duracao: '18 min', gratis: false, descricao: 'Ao vivo: análise completa de uma matrícula real com ônus, penhora e usufruto. Decisão final: aprovar ou reprovar a operação.' },
         ],
       },
@@ -230,14 +230,14 @@ export const CURSOS = [
         licoes: [
           { id: 'port-1', titulo: 'DRE do imóvel — a conta real que todo investidor ignora', duracao: '16 min', gratis: true, descricao: 'A diferença entre ROI estimado e ROI real. Como registrar cada despesa e receita para saber exatamente quanto você ganhou.' },
           { id: 'port-2', titulo: 'Reforma e retrofit — planeja antes de bater o martelo', duracao: '14 min', gratis: false, descricao: 'Orçamento realista de reforma, cronograma, contratação de fornecedores, controle de obra e como evitar o estouro de custo mais comum.' },
-          { id: 'port-3', titulo: 'KPIs do portfólio — os números que importam', duracao: '12 min', gratis: false, descricao: 'TIR, VPL, payback, múltiplo de capital — os indicadores que investidores profissionais usam e como calcular cada um com a plataforma TSN.' },
-          { id: 'port-4', titulo: 'Usando o controle financeiro da TSN', duracao: '10 min', gratis: false, descricao: 'Como registrar lançamentos de entrada e saída por imóvel na plataforma, acompanhar o saldo em tempo real e exportar relatórios.' },
+          { id: 'port-3', titulo: 'KPIs do portfólio — os números que importam', duracao: '12 min', gratis: false, descricao: 'TIR, VPL, payback, múltiplo de capital — os indicadores que investidores profissionais usam e como calcular cada um com a plataforma BidPro Brasil.' },
+          { id: 'port-4', titulo: 'Usando o controle financeiro da BidPro Brasil', duracao: '10 min', gratis: false, descricao: 'Como registrar lançamentos de entrada e saída por imóvel na plataforma, acompanhar o saldo em tempo real e exportar relatórios.' },
         ],
       },
       {
         titulo: 'Módulo 2 — Estratégias de Saída',
         licoes: [
-          { id: 'port-5', titulo: 'Vender ou alugar? — o modelo de decisão TSN', duracao: '14 min', gratis: false, descricao: 'Quando o yield de locação compensa segurar o imóvel vs quando vender e reinvestir. O modelo de decisão em 4 critérios.' },
+          { id: 'port-5', titulo: 'Vender ou alugar? — o modelo de decisão BidPro Brasil', duracao: '14 min', gratis: false, descricao: 'Quando o yield de locação compensa segurar o imóvel vs quando vender e reinvestir. O modelo de decisão em 4 critérios.' },
           { id: 'port-6', titulo: 'Precificação para vender em 90 dias', duracao: '12 min', gratis: false, descricao: 'Como precificar para girar rápido sem queimar margem. Posicionamento de preço, marketing, fotos e home staging básico que funciona.' },
           { id: 'port-7', titulo: 'Gestão de locatários — do contrato ao reajuste', duracao: '10 min', gratis: false, descricao: 'Contrato de locação, garantias (fiança, seguro fiança, depósito), inadimplência e despejo amigável. Como evitar dores de cabeça.' },
         ],
@@ -248,7 +248,7 @@ export const CURSOS = [
           { id: 'port-8', titulo: 'PF vs PJ — quando criar sua holding imobiliária', duracao: '14 min', gratis: false, descricao: 'Vantagens tributárias da pessoa jurídica, IR sobre ganho de capital, distribuição de lucros e quando a holding começa a fazer sentido.' },
           { id: 'port-9', titulo: 'Captando sócios — como estruturar uma SPE', duracao: '12 min', gratis: false, descricao: 'Como criar uma Sociedade de Propósito Específico para um único imóvel, como apresentar a oportunidade e dividir resultados.' },
           { id: 'port-10', titulo: 'Alavancagem responsável — até onde ir com financiamento', duracao: '12 min', gratis: false, descricao: 'A teoria do ROE na prática: quando financiar aumenta seu retorno e quando te coloca em risco. Os limites seguros de alavancagem.' },
-          { id: 'port-11', titulo: 'Construindo o pipeline — nunca fique sem operação', duracao: '12 min', gratis: false, descricao: 'Como ter sempre 3-5 imóveis em análise simultânea, o sistema de funil TSN e como escalar de 1 para 10 imóveis no portfólio.' },
+          { id: 'port-11', titulo: 'Construindo o pipeline — nunca fique sem operação', duracao: '12 min', gratis: false, descricao: 'Como ter sempre 3-5 imóveis em análise simultânea, o sistema de funil BidPro Brasil e como escalar de 1 para 10 imóveis no portfólio.' },
         ],
       },
     ],
@@ -258,7 +258,7 @@ export const CURSOS = [
 // ─── PACOTE COMPLETO ─────────────────────────────────────────────────────────
 export const PACOTE = {
   id: 'pacote-completo',
-  titulo: 'Método TSN Completo',
+  titulo: 'Método BidPro Brasil Completo',
   descricao: 'Acesso vitalício a todos os 6 cursos pagos + material de apoio exclusivo + acesso prioritário a novos conteúdos.',
   preco: 497,
   precoOriginal: 838,
@@ -362,14 +362,14 @@ export const PLANOS = {
     pagamento_tipo: 'unico',
     acesso_meses: 12,
     vinculado_arrematacao: true,
-    descricao: 'Assessoria completa da equipe TSN para realizar 1 arrematação. Acesso de 12 meses, extensível até a imissão de posse. Parcelamento em até 12× (juros do cliente a partir da 4ª parcela).',
+    descricao: 'Assessoria completa da equipe BidPro Brasil para realizar 1 arrematação. Acesso de 12 meses, extensível até a imissão de posse. Parcelamento em até 12× (juros do cliente a partir da 4ª parcela).',
     recursos: [
       '✅ Tudo do plano Investidor Pro',
       '✅ Cursos gravados e eBooks inclusos',
       '✅ Assessoria completa para 1 arrematação',
       '✅ Acesso de 12 meses (extensível até a posse)',
       '✅ Relatórios mercadológico e jurídico elaborados pela equipe',
-      '✅ Acompanhamento do processo de leilão pela equipe TSN',
+      '✅ Acompanhamento do processo de leilão pela equipe BidPro Brasil',
       '✅ Análise jurídica pelo escritório parceiro',
       '✅ Orientação pós-arrematação + registro ONR Digital',
       '✅ + 10% de honorários sobre o valor arrematado',
@@ -400,7 +400,7 @@ export const PLANOS = {
     descricao: 'Mentoria contínua, assessoria e arrematações ilimitadas. R$ 5.000/mês ou 12× no cartão/PIX. Fidelidade de 12 meses; após isso cancele a qualquer momento.',
     recursos: [
       '✅ Tudo dos planos anteriores',
-      '✅ Encontros regulares com Tarcísio (sócio TSN)',
+      '✅ Encontros regulares com Tarcísio (sócio BidPro Brasil)',
       '✅ Oportunidades de leilões judiciais e extrajudiciais',
       '✅ Arrematações ilimitadas com assessoria completa',
       '✅ Fidelidade 12 meses (R$ 60.000 total)',

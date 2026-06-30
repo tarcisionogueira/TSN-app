@@ -29,7 +29,7 @@ export function alertarErro({ rota, erro, extra }) {
 
   const html = `
     <div style="font-family:monospace;padding:16px;">
-      <h3 style="color:#dc2626;">⚠️ Erro em produção — TSN App</h3>
+      <h3 style="color:#dc2626;">⚠️ Erro em produção — BidPro Brasil</h3>
       <p><strong>Rota:</strong> ${rota}</p>
       <p><strong>Erro:</strong> ${erro}</p>
       <p><strong>Hora:</strong> ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p>
@@ -43,7 +43,7 @@ export function alertarErro({ rota, erro, extra }) {
     body: JSON.stringify({
       from: FROM,
       to: ADMIN_EMAIL,
-      subject: `[TSN] Erro em ${rota}`,
+      subject: `[BidPro] Erro em ${rota}`,
       html,
     }),
   }).catch(() => {});

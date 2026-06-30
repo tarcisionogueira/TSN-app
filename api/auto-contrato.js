@@ -55,7 +55,7 @@ CONTRATADO:
 _______________________________________
 Assinatura`;
 
-const TEMPLATE_CLUBE = `CONTRATO DE ADESÃO AO CLUBE DE NEGÓCIOS TSN ATIVOS
+const TEMPLATE_CLUBE = `CONTRATO DE ADESÃO AO CLUBE DE NEGÓCIOS BIDPRO BRASIL
 
 CONTRATANTE: NOGUEIRA EMPREENDIMENTOS LTDA, pessoa jurídica de direito privado, inscrita no CNPJ nº 02.311.492/0001-61, com sede na cidade de Feira de Santana, Estado da Bahia, doravante denominada simplesmente CONTRATANTE.
 
@@ -64,10 +64,10 @@ MEMBRO: [NOME DO SIGNATÁRIO], inscrito no CPF nº [CPF/CNPJ DO SIGNATÁRIO], re
 As partes têm entre si justo e contratado:
 
 CLÁUSULA 1ª — DO OBJETO
-O presente instrumento tem por objeto a adesão do MEMBRO ao Clube de Negócios TSN Ativos, programa de mentoria e investimento coletivo em leilões imobiliários operado pela CONTRATANTE.
+O presente instrumento tem por objeto a adesão do MEMBRO ao Clube de Negócios BidPro Brasil, programa de mentoria e investimento coletivo em leilões imobiliários operado pela CONTRATANTE.
 
 CLÁUSULA 2ª — DOS BENEFÍCIOS DO CLUBE
-A adesão confere ao MEMBRO: (a) participação em sessões mensais de mentoria em grupo; (b) análises prioritárias de imóveis em leilão; (c) acesso à plataforma TSN Ativos com recursos exclusivos; (d) networking com demais membros do clube; (e) relatórios mensais de oportunidades de leilão.
+A adesão confere ao MEMBRO: (a) participação em sessões mensais de mentoria em grupo; (b) análises prioritárias de imóveis em leilão; (c) acesso à plataforma BidPro Brasil com recursos exclusivos; (d) networking com demais membros do clube; (e) relatórios mensais de oportunidades de leilão.
 
 CLÁUSULA 3ª — DO VALOR E FORMA DE PAGAMENTO
 A adesão ao Clube é remunerada conforme modalidade escolhida pelo MEMBRO no ato da contratação: (a) R$ 5.000,00 (cinco mil reais) mensais, devidos até o dia 10 de cada mês, totalizando R$ 60.000,00 (sessenta mil reais) ao longo dos 12 (doze) meses de fidelidade — modalidade sujeita a renovação automática após o período de fidelidade, salvo aviso de cancelamento; ou (b) R$ 48.000,00 (quarenta e oito mil reais) em pagamento único à vista via PIX ou cartão de crédito, com desconto de 20% (vinte por cento) sobre o total parcelado — modalidade que NÃO configura renovação automática, encerrando-se o vínculo ao término dos 12 (doze) meses sem qualquer cobrança adicional. O não pagamento de parcela mensal por mais de 30 (trinta) dias corridos ensejará a suspensão automática do acesso até a regularização.
@@ -140,7 +140,7 @@ export default async function handler(req, res) {
 
   const titulo = planoKey === 'assessorado'
     ? 'Contrato de Assessoria para Aquisição de Imóvel em Leilão'
-    : 'Contrato de Adesão ao Clube de Negócios TSN Ativos';
+    : 'Contrato de Adesão ao Clube de Negócios BidPro Brasil';
 
   const conteudo = (planoKey === 'assessorado' ? TEMPLATE_ASSESSORADO : TEMPLATE_CLUBE)
     .replace(/\[NOME DO SIGNATÁRIO\]/gi, nomeContrato)

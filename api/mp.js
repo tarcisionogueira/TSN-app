@@ -121,7 +121,7 @@ async function criarPreferenciaSimples({ titulo, valor, email, nome, cpf, userId
     },
     auto_return:        'approved',
     notification_url:   WEBHOOK,
-    statement_descriptor: 'TSN LEILOES',
+    statement_descriptor: 'BIDPRO BRASIL',
     external_reference: `${userId}|${planoKey}${splitIndex ? `|split${splitIndex}of${splitTotal}` : ''}`,
     expires:            false,
     payment_methods: {

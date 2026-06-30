@@ -102,7 +102,7 @@ export default function LeiloeiroPortal() {
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '28px 28px', marginBottom: 24, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
         <h2 style={{ fontSize: 17, fontWeight: 800, color: '#111', margin: '0 0 6px' }}>Integração via Webhook</h2>
         <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7, margin: '0 0 24px' }}>
-          Configure o seu sistema para enviar imóveis automaticamente para a plataforma TSN. Cada lote publicado no seu site pode aparecer aqui em tempo real para milhares de investidores.
+          Configure o seu sistema para enviar imóveis automaticamente para a plataforma BidPro Brasil. Cada lote publicado no seu site pode aparecer aqui em tempo real para milhares de investidores.
         </p>
 
         {!webhookKey ? (

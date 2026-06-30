@@ -149,7 +149,7 @@ export default function Membros() {
             Sua trilha de conhecimento<br/>em leilões imobiliários
           </h1>
           <p style={{ margin:'0 0 24px', fontSize:15, color:'#94a3b8', maxWidth:500, lineHeight:1.7 }}>
-            Do zero ao portfólio profissional. {cursos.length} cursos, {totalAulas} aulas com metodologia exclusiva TSN Ativos.
+            Do zero ao portfólio profissional. {cursos.length} cursos, {totalAulas} aulas com metodologia exclusiva BidPro Brasil.
           </p>
           <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>

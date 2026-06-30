@@ -30,14 +30,14 @@ const calcParcelaMaisJuros = (valor, n) => {
 const PARCELAS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 // ── Gera payload PIX BR Code (EMV) localmente — zero taxa ──────────────────
-function gerarPixBRCode({ chave, nome, cidade, valor, txid = 'TSNPAG' }) {
+function gerarPixBRCode({ chave, nome, cidade, valor, txid = 'BIDPRO' }) {
   const fmt = (id, val) => {
     const v = String(val);
     return `${id}${String(v.length).padStart(2, '0')}${v}`;
   };
   const merchantAccount = fmt('00', 'BR.GOV.BCB.PIX') + fmt('01', chave);
   const valorStr = Number(valor).toFixed(2);
-  const addData = fmt('05', txid.replace(/[^A-Z0-9]/gi, '').slice(0, 25).toUpperCase() || 'TSN');
+  const addData = fmt('05', txid.replace(/[^A-Z0-9]/gi, '').slice(0, 25).toUpperCase() || 'BIDPRO');
 
   let payload =
     fmt('00', '01') +
@@ -145,7 +145,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
   const tentRef = useRef(0);
 
   const PIX_KEY     = import.meta.env.VITE_MP_PIX_KEY     || '';
-  const PIX_TITULAR = import.meta.env.VITE_MP_PIX_TITULAR || 'TSN Ativos';
+  const PIX_TITULAR = import.meta.env.VITE_MP_PIX_TITULAR || 'BidPro Brasil';
   const PIX_CIDADE  = import.meta.env.VITE_MP_PIX_CIDADE  || 'SAO PAULO';
 
   // Gera BR Code localmente — zero taxa, zero API
@@ -156,7 +156,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
       nome: PIX_TITULAR,
       cidade: PIX_CIDADE,
       valor: servico.valor,
-      txid: `TSN${servico.id || 'PAG'}`.replace(/[^A-Z0-9]/gi, '').slice(0, 25),
+      txid: `BIDPRO${servico.id || 'PAG'}`.replace(/[^A-Z0-9]/gi, '').slice(0, 25),
     });
   }, [PIX_KEY, PIX_TITULAR, PIX_CIDADE, servico.valor, servico.id]);
 

@@ -16,7 +16,7 @@ export default function Privacidade() {
         <h1 style={{ fontSize: 32, fontWeight: 900, color: '#111111', margin: '0 0 6px' }}>Política de Privacidade (LGPD)</h1>
         <p style={{ color: '#94a3b8', fontSize: 13 }}>Última atualização: junho de 2026</p>
 
-        <p style={{ marginTop: 20 }}>Esta política descreve como a TSN Ativos (Nogueira Empreendimentos LTDA) coleta, usa e protege os dados pessoais dos seus usuários, em conformidade com a Lei nº 13.709/2018 (LGPD).</p>
+        <p style={{ marginTop: 20 }}>Esta política descreve como a BidPro Brasil (Nogueira Empreendimentos LTDA) coleta, usa e protege os dados pessoais dos seus usuários, em conformidade com a Lei nº 13.709/2018 (LGPD).</p>
 
         <h2 style={h2}>1. Dados que coletamos</h2>
         <p>Nome, e-mail, CPF, telefone e endereço informados no cadastro; dados de uso da plataforma; e informações dos imóveis que você analisa. Não coletamos dados sensíveis.</p>

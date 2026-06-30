@@ -1,5 +1,5 @@
 /**
- * Templates de contratos operacionais da TSN Ativos.
+ * Templates de contratos operacionais da BidPro Brasil.
  * Cada role tem seu template com:
  * - Objeto do serviço específico
  * - Cláusula de Retenção de Valores e SCP (Arts. 991–996 CC)
@@ -67,7 +67,7 @@ CLÁUSULA 4ª — RETENÇÃO DE VALORES, SOCIEDADE EM CONTA DE PARTICIPAÇÃO (S
 // ─── TEMPLATE: CONSULTOR ────────────────────────────────────────────────────
 
 export function templateConsultor() {
-  return `CONTRATO DE CONSULTORIA E AFILIAÇÃO — PLATAFORMA TSN ATIVOS
+  return `CONTRATO DE CONSULTORIA E AFILIAÇÃO — PLATAFORMA BIDPRO BRASIL
 Modalidade: Consultor Parceiro / Afiliado
 
 PARTES
@@ -79,7 +79,7 @@ CONTRATADO(A): [NOME_SIGNATÁRIO], portador(a) do CPF nº [CPF_SIGNATÁRIO] e RG
 Têm entre si justo e contratado o seguinte:
 
 CLÁUSULA 1ª — OBJETO
-1.1. O presente instrumento tem por objeto a prestação de serviços de consultoria comercial, captação de clientes investidores e divulgação da plataforma TSN BidPro de análise de imóveis em leilão, desenvolvida pela CONTRATANTE.
+1.1. O presente instrumento tem por objeto a prestação de serviços de consultoria comercial, captação de clientes investidores e divulgação da plataforma BidPro Brasil de análise de imóveis em leilão, desenvolvida pela CONTRATANTE.
 1.2. O CONTRATADO atuará como Consultor Parceiro (Afiliado), sem exclusividade territorial, identificando potenciais investidores interessados nos serviços e planos da plataforma, encaminhando-os ao funil de vendas da CONTRATANTE por meio de link de afiliado rastreável.
 
 CLÁUSULA 2ª — OBRIGAÇÕES DO CONTRATADO
@@ -103,7 +103,7 @@ ${CLAUSULAS_COMUNS}`;
 // ─── TEMPLATE: ANALISTA ─────────────────────────────────────────────────────
 
 export function templateAnalista() {
-  return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ANÁLISE — PLATAFORMA TSN ATIVOS
+  return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ANÁLISE — PLATAFORMA BIDPRO BRASIL
 Modalidade: Analista de Imóveis Parceiro
 
 PARTES
@@ -115,12 +115,12 @@ CONTRATADO(A): [NOME_SIGNATÁRIO], portador(a) do CPF nº [CPF_SIGNATÁRIO] e RG
 Têm entre si justo e contratado o seguinte:
 
 CLÁUSULA 1ª — OBJETO
-1.1. O presente instrumento tem por objeto a prestação de serviços especializados de análise de viabilidade de imóveis em leilão, elaboração de laudos técnicos de arrematação e avaliação mercadológica, no âmbito da plataforma TSN BidPro.
+1.1. O presente instrumento tem por objeto a prestação de serviços especializados de análise de viabilidade de imóveis em leilão, elaboração de laudos técnicos de arrematação e avaliação mercadológica, no âmbito da plataforma BidPro Brasil.
 1.2. Os serviços serão prestados de forma remota, mediante demanda encaminhada pela CONTRATANTE, com prazo de entrega definido em cada solicitação.
 
 CLÁUSULA 2ª — OBRIGAÇÕES DO CONTRATADO
 2.1. Elaborar laudos técnicos com precisão, imparcialidade e embasamento em dados de mercado verificáveis.
-2.2. Utilizar exclusivamente os dados e metodologias disponibilizados pela plataforma TSN BidPro para composição dos laudos.
+2.2. Utilizar exclusivamente os dados e metodologias disponibilizados pela plataforma BidPro Brasil para composição dos laudos.
 2.3. Manter sigilo absoluto sobre as informações dos clientes e imóveis analisados.
 2.4. Não emitir laudos com garantias de resultado financeiro ou rentabilidade presumida.
 2.5. Informar à CONTRATANTE qualquer conflito de interesse identificado nos imóveis a analisar.
@@ -140,7 +140,7 @@ ${CLAUSULAS_COMUNS}`;
 // ─── TEMPLATE: ADVOGADO ─────────────────────────────────────────────────────
 
 export function templateAdvogado() {
-  return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS JURÍDICOS — PLATAFORMA TSN ATIVOS
+  return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS JURÍDICOS — PLATAFORMA BIDPRO BRASIL
 Modalidade: Advogado Parceiro
 
 PARTES
@@ -152,7 +152,7 @@ CONTRATADO(A): [NOME_SIGNATÁRIO], advogado(a) inscrito(a) na OAB sob nº [OAB_S
 Têm entre si justo e contratado o seguinte:
 
 CLÁUSULA 1ª — OBJETO
-1.1. O presente instrumento tem por objeto a prestação de serviços jurídicos especializados em Direito Imobiliário, Direito Civil e Execuções Judiciais, com ênfase em análise de editais de leilão, matrículas de imóveis, processos judiciais e riscos à arrematação, no âmbito da plataforma TSN BidPro.
+1.1. O presente instrumento tem por objeto a prestação de serviços jurídicos especializados em Direito Imobiliário, Direito Civil e Execuções Judiciais, com ênfase em análise de editais de leilão, matrículas de imóveis, processos judiciais e riscos à arrematação, no âmbito da plataforma BidPro Brasil.
 1.2. Os serviços abrangem: (i) análise jurídica de editais e matrículas; (ii) consulta ao sistema CNJ DataJud sobre processos vinculados a imóveis; (iii) elaboração de pareceres sobre riscos à arrematação; (iv) orientação pós-arrematação sobre regularização cartorária e imissão de posse.
 1.3. Este contrato é firmado nos termos dos Arts. 593 a 609 do Código Civil, observado o Estatuto da OAB (Lei nº 8.906/1994) e o Código de Ética e Disciplina da OAB.
 
@@ -176,7 +176,7 @@ ${CLAUSULAS_COMUNS}`;
 }
 
 export const TEMPLATES = {
-  consultor: { gerar: templateConsultor, titulo: 'Contrato de Consultoria e Afiliação — TSN Ativos', tipo: 'servico' },
-  analista:  { gerar: templateAnalista,  titulo: 'Contrato de Análise de Imóveis — TSN Ativos',       tipo: 'servico' },
-  advogado:  { gerar: templateAdvogado,  titulo: 'Contrato de Serviços Jurídicos — TSN Ativos',        tipo: 'servico' },
+  consultor: { gerar: templateConsultor, titulo: 'Contrato de Consultoria e Afiliação — BidPro Brasil', tipo: 'servico' },
+  analista:  { gerar: templateAnalista,  titulo: 'Contrato de Análise de Imóveis — BidPro Brasil',       tipo: 'servico' },
+  advogado:  { gerar: templateAdvogado,  titulo: 'Contrato de Serviços Jurídicos — BidPro Brasil',        tipo: 'servico' },
 };

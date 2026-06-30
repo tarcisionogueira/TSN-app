@@ -31,7 +31,7 @@ const ROLE_CONFIG = {
     cor: '#059669',
     descricao: 'Você foi selecionado como Consultor Parceiro — responsável pela captação e relacionamento com clientes investidores.',
     passos_extras: [
-      { key: 'como_conheceu', label: 'Como conheceu a TSN Ativos?', tipo: 'select', opts: ['Indicação de parceiro','Redes sociais','Evento','Outro'] },
+      { key: 'como_conheceu', label: 'Como conheceu a BidPro Brasil?', tipo: 'select', opts: ['Indicação de parceiro','Redes sociais','Evento','Outro'] },
       { key: 'carteira', label: 'Possui carteira de clientes investidores?', tipo: 'select', opts: ['Sim, ativa','Em construção','Não ainda'] },
     ],
   },
@@ -39,7 +39,7 @@ const ROLE_CONFIG = {
     emoji: '🔨',
     label: 'Leiloeiro Oficial',
     cor: '#ea580c',
-    descricao: 'Você foi convidado como Leiloeiro Parceiro da plataforma TSN. Conecte seus imóveis e amplie o alcance dos seus leilões para toda a nossa base de investidores.',
+    descricao: 'Você foi convidado como Leiloeiro Parceiro da plataforma BidPro Brasil. Conecte seus imóveis e amplie o alcance dos seus leilões para toda a nossa base de investidores.',
     passos_extras: [
       { key: 'junta', label: 'Qual é a sua Junta Comercial de credenciamento?', tipo: 'select', opts: ['JUCESP (SP)','JUCERJ (RJ)','JUCEMG (MG)','JUCESE (SE)','JUCEMA (MA)','JUCEPA (PA)','JUCEBA (BA)','JUCEPE (PE)','JUCEAM (AM)','JUCEGO (GO)','Outra'] },
       { key: 'matricula', label: 'Número da matrícula de leiloeiro oficial', tipo: 'text', placeholder: 'Ex: 0123-SP' },
@@ -50,7 +50,7 @@ const ROLE_CONFIG = {
     emoji: '🛡️',
     label: 'Administrador',
     cor: '#111111',
-    descricao: 'Você foi convidado como Administrador da plataforma TSN Ativos.',
+    descricao: 'Você foi convidado como Administrador da plataforma BidPro Brasil.',
     passos_extras: [],
   },
 };
@@ -469,7 +469,7 @@ export default function ConviteEquipe() {
         <CheckCircle2 size={64} color="#10b981" style={{ margin: '0 auto 20px' }} />
         <h1 style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: '0 0 12px' }}>Cadastro concluído!</h1>
         <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.7, marginBottom: 32 }}>
-          Bem-vindo à equipe TSN Ativos como <strong style={{ color: 'white' }}>{cfg.label}</strong>.<br />
+          Bem-vindo à equipe BidPro Brasil como <strong style={{ color: 'white' }}>{cfg.label}</strong>.<br />
           Seu cadastro foi concluído. Faça login para acessar a plataforma.
           {precisaConfirmarEmail && (
             <><br /><span style={{ fontSize: 13, color: '#94a3b8' }}>Verifique também seu e-mail para confirmar o acesso.</span></>

@@ -68,7 +68,7 @@ export default function ProdutoPublico({ tipo }) {
       <div style={{ borderBottom: '1px solid #111111', padding: '16px 32px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ background: '#0D63DB', borderRadius: 10, padding: 8, fontSize: 18 }}>🏢</div>
         <div>
-          <div style={{ fontWeight: 900, fontSize: 14, color: 'white', letterSpacing: 1 }}>TSN ATIVOS</div>
+          <div style={{ fontWeight: 900, fontSize: 14, color: 'white', letterSpacing: 1 }}>BIDPRO BRASIL</div>
           <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
         </div>
       </div>

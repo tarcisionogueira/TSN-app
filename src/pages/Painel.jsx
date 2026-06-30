@@ -59,7 +59,7 @@ const STATUS_CONFIG = {
 };
 
 const CAT_LANC = [
-  'Arrematação','Honorários TSN','Taxa Leiloeiro','ITBI / Registro',
+  'Arrematação','Honorários','Taxa Leiloeiro','ITBI / Registro',
   'Reforma / Retrofit','Parcela Banco','IPTU','Condomínio','Laudêmio',
   'Foreiro','Débitos','Venda','Locação','Outros',
 ];

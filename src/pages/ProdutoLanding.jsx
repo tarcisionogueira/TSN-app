@@ -43,7 +43,7 @@ const PLANOS_INFO = {
     precoLabel: 'R$ 5.000/mês',
     features: [
       'Tudo do plano Assessorado',
-      'Encontros presenciais mensais com a equipe TSN',
+      'Encontros presenciais mensais com a equipe BidPro Brasil',
       'Clube exclusivo de deals e oportunidades',
       'Cocredenciamento em oportunidades selecionadas',
       'Acesso direto à carteira de parceiros (advogados, leiloeiros)',
@@ -113,7 +113,7 @@ function CapturaLanding({ id }) {
 
   const Header = () => (
     <div style={{ borderBottom: '1px solid #111111', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div style={{ fontWeight: 900, fontSize: 18, color: 'white', letterSpacing: 1 }}>TSN <span style={{ color: '#f59e0b' }}>ATIVOS</span></div>
+      <div style={{ fontWeight: 900, fontSize: 18, color: 'white', letterSpacing: 1 }}>BidPro <span style={{ color: '#f59e0b' }}>Brasil</span></div>
       <a href="/" style={{ fontSize: 13, color: '#94a3b8', textDecoration: 'none' }}>← Voltar ao site</a>
     </div>
   );
@@ -433,7 +433,7 @@ export default function ProdutoLanding() {
       {/* Header */}
       <div style={{ borderBottom:'1px solid #111111', padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div style={{ fontWeight:900, fontSize:18, color:'white', letterSpacing:1 }}>
-          TSN <span style={{ color:'#f59e0b' }}>ATIVOS</span>
+          BidPro <span style={{ color:'#f59e0b' }}>Brasil</span>
         </div>
         <a href="/" style={{ fontSize:13, color:'#94a3b8', textDecoration:'none' }}>← Voltar ao site</a>
       </div>

@@ -51,7 +51,7 @@ export default async function handler(req) {
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:580px;margin:0 auto;padding:24px 16px;">
     <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:28px 32px;text-align:center;">
-      <div style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-0.02em;">TSN Ativos</div>
+      <div style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-0.02em;">BidPro Brasil</div>
       <div style="font-size:13px;color:#94a3b8;margin-top:4px;">Assessoria em Imóveis de Leilão</div>
     </div>
     <div style="background:#fff;padding:32px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
@@ -82,7 +82,7 @@ export default async function handler(req) {
       </div>
 
       <p style="margin:24px 0 0;font-size:13px;color:#94a3b8;text-align:center;">
-        TSN Ativos · Assessoria em Imóveis de Leilão · Brasil
+        BidPro Brasil · Assessoria em Imóveis de Leilão · Brasil
       </p>
     </div>
   </div>

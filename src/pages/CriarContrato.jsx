@@ -300,7 +300,7 @@ export default function CriarContrato() {
                 <div>
                   <label style={S.label}>Dados das partes (opcional)</label>
                   <textarea style={{ ...S.input, minHeight: 60 }} value={partesInfo} onChange={e => setPartesInfo(e.target.value)}
-                    placeholder="Ex: Contratante: João Silva, CPF 123.456.789-00 / Contratada: TSN BidPro LTDA, CNPJ 00.000.000/0001-00" />
+                    placeholder="Ex: Contratante: João Silva, CPF 123.456.789-00 / Contratada: BidPro Brasil LTDA, CNPJ 00.000.000/0001-00" />
                 </div>
               </>
             )}

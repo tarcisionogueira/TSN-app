@@ -12,7 +12,7 @@ export async function enviarAlertaOnr({ tipo, detalhe, ultimoSucesso }) {
     return;
   }
 
-  const FROM = process.env.APP_FROM_EMAIL || 'TSN App <alertas@bidprobrasil.com.br>';
+  const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <alertas@bidprobrasil.com.br>';
   const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const ultimoOk = ultimoSucesso
     ? new Date(ultimoSucesso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
@@ -55,7 +55,7 @@ export async function enviarAlertaOnr({ tipo, detalhe, ultimoSucesso }) {
   <div class="row"><span class="label">Detalhe:</span> ${detalhe || '—'}</div>
   <div class="row"><span class="label">Último sucesso:</span> ${ultimoOk}</div>
   <div class="dica"><strong>O que fazer:</strong><br>${dica}</div>
-  <div class="footer">TSN App · Integração ONR Digital · ridigital.org.br</div>
+  <div class="footer">BidPro Brasil · Integração ONR Digital · ridigital.org.br</div>
 </div>
 </body>
 </html>`;

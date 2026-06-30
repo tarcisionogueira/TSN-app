@@ -726,12 +726,12 @@ function UsuariosTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 const DESCRICOES_PADRAO = {
   assessorado: 'Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.',
-  clube: 'Adesão ao Clube de Negócios TSN Ativos: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.',
-  consultor: 'Contratação de consultor/afiliado para divulgação dos serviços TSN Ativos e captação de novos clientes. Remuneração por comissão conforme acordo. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.',
+  clube: 'Adesão ao Clube de Negócios BidPro Brasil: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.',
+  consultor: 'Contratação de consultor/afiliado para divulgação dos serviços BidPro Brasil e captação de novos clientes. Remuneração por comissão conforme acordo. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.',
   analista: 'Contratação de analista para elaboração de relatórios de viabilidade econômico-financeira e análise de editais. Remuneração por laudo emitido, a combinar. Sigilo total. Prazo indeterminado, rescisão com aviso de 30 dias.',
   advogado: 'Parceria jurídica para análise de matrícula, edital, processo e certidões. Remuneração por parecer emitido, a combinar. Total sigilo. Prazo indeterminado, rescisão com aviso de 30 dias.',
-  top1: 'Assinatura Investidor Pro — acesso à plataforma TSN Ativos, cursos e ebooks incluídos. Valor: R$49,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
-  top2: 'Assinatura Investidor Pro — acesso à plataforma TSN Ativos, cursos e ebooks incluídos. Valor: R$99,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
+  top1: 'Assinatura Investidor Pro — acesso à plataforma BidPro Brasil, cursos e ebooks incluídos. Valor: R$49,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
+  top2: 'Assinatura Investidor Pro — acesso à plataforma BidPro Brasil, cursos e ebooks incluídos. Valor: R$99,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
 };
 
 function ContratoModal({ chave, planos, onClose }) {
@@ -744,7 +744,7 @@ function ContratoModal({ chave, planos, onClose }) {
     ? `${partes[0] === 'curso' ? 'Curso' : 'eBook'} — ${produtoTitulo}`
     : planoObj?.nome || chave;
   const descPadrao = isProduto
-    ? `Contrato de aquisição: ${nomeContrato}. Produto digital disponível na plataforma TSN Ativos. Acesso individual e intransferível. Valor conforme acordado.`
+    ? `Contrato de aquisição: ${nomeContrato}. Produto digital disponível na plataforma BidPro Brasil. Acesso individual e intransferível. Valor conforme acordado.`
     : (DESCRICOES_PADRAO[chave] || '');
 
   // Etapas: 'dados' | 'gerando' | 'revisar' | 'aprovado'
@@ -1895,9 +1895,9 @@ function ContratosTab() {
       setTipo('servico');
       setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses para conclusão da arrematação. Não inclui mentoria. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.');
     } else if (key === 'clube') {
-      setTitulo('Contrato de Adesão ao Clube de Negócios TSN Ativos');
+      setTitulo('Contrato de Adesão ao Clube de Negócios BidPro Brasil');
       setTipo('servico');
-      setDescricao('Adesão ao Clube de Negócios TSN Ativos: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.');
+      setDescricao('Adesão ao Clube de Negócios BidPro Brasil: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.');
     } else if (key === 'analista') {
       setTitulo('Contrato de Prestação de Serviços de Análise de Imóveis em Leilão');
       setTipo('servico');
@@ -1907,9 +1907,9 @@ function ContratosTab() {
       setTipo('servico');
       setDescricao('Parceria com advogado para análise jurídica de matrícula, edital, processo e certidões de imóveis em leilão, emissão de parecer jurídico por operação. Remuneração por parecer emitido, a combinar. Total sigilo sobre dados dos clientes. Prazo indeterminado, rescisão com aviso de 30 dias. Escritório parceiro independente.');
     } else if (key === 'consultor') {
-      setTitulo('Contrato de Consultoria e Afiliação TSN Ativos');
+      setTitulo('Contrato de Consultoria e Afiliação BidPro Brasil');
       setTipo('servico');
-      setDescricao('Contratação de consultor/afiliado para divulgação dos serviços TSN Ativos e captação de novos clientes. Remuneração por comissão sobre cada cliente ativo indicado, a combinar. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.');
+      setDescricao('Contratação de consultor/afiliado para divulgação dos serviços BidPro Brasil e captação de novos clientes. Remuneração por comissão sobre cada cliente ativo indicado, a combinar. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.');
     } else if (key === 'nda') {
       setTitulo('Acordo de Confidencialidade e Não Divulgação');
       setTipo('nda');
@@ -2464,7 +2464,7 @@ function PromoTab() {
         <div style={S.card}>
           <div style={{ fontWeight: 800, color: '#111111', marginBottom: 16 }}>{editId ? 'Editar link' : 'Novo link promocional'}</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            <input value={form.codigo} onChange={e => up('codigo', e.target.value.toUpperCase())} placeholder="CÓDIGO (ex: TSN30)" style={{ ...S.input, flex: 1, fontFamily: 'monospace', fontWeight: 700 }} maxLength={12} />
+            <input value={form.codigo} onChange={e => up('codigo', e.target.value.toUpperCase())} placeholder="CÓDIGO (ex: BIDPRO30)" style={{ ...S.input, flex: 1, fontFamily: 'monospace', fontWeight: 700 }} maxLength={12} />
             <button onClick={gerarCodigo} style={{ padding: '0 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}>Gerar</button>
           </div>
           <select value={form.produto} onChange={e => up('produto', e.target.value)} style={{ ...S.input, marginBottom: 14 }}>
@@ -3528,7 +3528,7 @@ function DashboardTab() {
             atingiuGatilho: dados.mrr >= 5000,
             alternativa: {
               nome: 'Pagar.me (Stone Group) — Marketplace nativo',
-              motivo: 'Líder BR para modelo marketplace com split. Cada consultor ganha uma subconta automática; o split por venda (% TSN + % consultor) é configurado por transação. Suporta recorrência (planos) e avulso (cursos, ebooks, assessoria) no mesmo contrato. PIX ~0,99%, cartão ~2,99%, BRL nativo, sem dólar. API REST moderna com webhooks e relatório de repasses por recebedor. — Cielo: válida para grandes varejistas com POS físico e faturamento >R$500k/mês (taxas negociadas), mas foco enterprise com API mais antiga e complexidade extra sem ganho para SaaS online. — EFÍ: menor taxa PIX (0,3%) mas split menos maduro para marketplace multi-produto. — Stripe: descartado (PIX a 2,9% + USD).',
+              motivo: 'Líder BR para modelo marketplace com split. Cada consultor ganha uma subconta automática; o split por venda (% BidPro Brasil + % consultor) é configurado por transação. Suporta recorrência (planos) e avulso (cursos, ebooks, assessoria) no mesmo contrato. PIX ~0,99%, cartão ~2,99%, BRL nativo, sem dólar. API REST moderna com webhooks e relatório de repasses por recebedor. — Cielo: válida para grandes varejistas com POS físico e faturamento >R$500k/mês (taxas negociadas), mas foco enterprise com API mais antiga e complexidade extra sem ganho para SaaS online. — EFÍ: menor taxa PIX (0,3%) mas split menos maduro para marketplace multi-produto. — Stripe: descartado (PIX a 2,9% + USD).',
               custo: '0,99% PIX · 2,99% cartão · BRL',
               url: 'pagar.me',
             },
@@ -3695,7 +3695,7 @@ function SystemStatusCard() {
   const DOMINIO_PENDENTE = [
     { label: 'Definir nome e domínio da plataforma', desc: 'Necessário para email remetente e URL pública.' },
     { label: 'Verificar domínio no Resend', desc: 'Adicionar registros DNS após definir o domínio.' },
-    { label: 'APP_FROM_EMAIL no Vercel', desc: 'Ex: "TSN Ativos <alertas@seudominio.com.br>"' },
+    { label: 'APP_FROM_EMAIL no Vercel', desc: 'Ex: "BidPro Brasil <alertas@seudominio.com.br>"' },
     { label: 'APP_BASE_URL no Vercel', desc: 'Ex: "https://seudominio.com.br"' },
   ];
   const totalOk = status ? Object.values(status).filter(v => v.ok).length : 0;
@@ -4995,7 +4995,7 @@ function SdrTab() {
             {/* Descrição */}
             <div style={{ marginBottom: 14 }}><label style={S.label}>Descrição (aparece na landing)</label><textarea style={{ ...S.input, height: 64, resize: 'vertical' }} value={modalProduto.descricao || ''} onChange={e => setModalProduto(m => ({ ...m, descricao: e.target.value }))} /></div>
             {/* Mensagem de boas-vindas */}
-            <div style={{ marginBottom: 14 }}><label style={S.label}>Mensagem de boas-vindas (após cadastro)</label><textarea style={{ ...S.input, height: 56, resize: 'vertical' }} value={modalProduto.mensagem_boas_vindas || ''} onChange={e => setModalProduto(m => ({ ...m, mensagem_boas_vindas: e.target.value }))} placeholder="Ex: Seu acesso foi liberado! Todo o conteúdo está dentro da plataforma TSN Ativos." /></div>
+            <div style={{ marginBottom: 14 }}><label style={S.label}>Mensagem de boas-vindas (após cadastro)</label><textarea style={{ ...S.input, height: 56, resize: 'vertical' }} value={modalProduto.mensagem_boas_vindas || ''} onChange={e => setModalProduto(m => ({ ...m, mensagem_boas_vindas: e.target.value }))} placeholder="Ex: Seu acesso foi liberado! Todo o conteúdo está dentro da plataforma BidPro Brasil." /></div>
             {/* Conteúdo + Plano + Imagem */}
             <div style={S.row}>
               <div style={S.col}><label style={S.label}>Link do Conteúdo</label><input style={S.input} value={modalProduto.conteudo_url || ''} onChange={e => setModalProduto(m => ({ ...m, conteudo_url: e.target.value }))} placeholder="https://..." /></div>
@@ -5132,8 +5132,8 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
   const analista = membros.find(m => m.id === sol.analista_id);
 
   function buildMeetCreateUrl() {
-    let url = `https://calendar.google.com/calendar/r/eventedit?text=${encodeURIComponent('Reunião TSN Ativos — ' + (sol.imovel_nome || 'Imóvel'))}`;
-    url += `&details=${encodeURIComponent('Análise de imóvel em leilão — TSN Ativos')}`;
+    let url = `https://calendar.google.com/calendar/r/eventedit?text=${encodeURIComponent('Reunião BidPro Brasil — ' + (sol.imovel_nome || 'Imóvel'))}`;
+    url += `&details=${encodeURIComponent('Análise de imóvel em leilão — BidPro Brasil')}`;
     if (clienteEmail) url += `&add=${encodeURIComponent(clienteEmail)}`;
     if (reuniaoEm) {
       const start = new Date(reuniaoEm);
@@ -5301,7 +5301,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
               {clienteEmail && (
-                <a href={`mailto:${clienteEmail}?subject=Reunião TSN Ativos — ${sol.imovel_nome || 'Imóvel'}`}
+                <a href={`mailto:${clienteEmail}?subject=Reunião BidPro Brasil — ${sol.imovel_nome || 'Imóvel'}`}
                   style={{ padding: '8px 14px', background: '#eff6ff', color: '#084BA6', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   ✉️ E-mail direto
                 </a>
@@ -6297,7 +6297,7 @@ function MarketingTab() {
   function exportarCSV() {
     const d = new Date().toLocaleDateString('pt-BR');
     const linhas = [
-      `Relatório de Marketing TSN Ativos - ${d}`, '',
+      `Relatório de Marketing BidPro Brasil - ${d}`, '',
       '=== BUSCAS ===', 'Cidade,Total Buscas',
       ...buscas.cidades.map(([c, n]) => `${c},${n}`), '',
       'Estado,Total Buscas',
@@ -7243,7 +7243,7 @@ export default function Admin() {
   return (
     <div style={S.page}>
       <div style={S.header}>
-        <span style={S.headerTitle}>TSN — Painel Administrativo</span>
+        <span style={S.headerTitle}>BidPro Brasil — Painel Administrativo</span>
         <button style={{ ...S.btn('outline'), background: 'transparent', color: '#94a3b8', border: '1px solid #334155', fontSize: 13 }} onClick={() => navigate('/buscar')}>
           ← Voltar ao app
         </button>

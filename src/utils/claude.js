@@ -271,12 +271,17 @@ Meta: o máximo possível — idealmente 15+ amostras de venda e 8+ de locação
 FONTES: ZAP Imóveis, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão,
 Net Imóveis, DF Imóveis, anúncios diretos de imobiliárias. Cruze várias fontes.
 
+DATA DO ANÚNCIO: para CADA amostra, capture a data do anúncio no campo "data"
+(formato "AAAA-MM"; se a fonte só indicar o mês/ano, use-o; se não houver data,
+estime "recente"). O preço de imóvel varia com o tempo — a data é importante para
+ponderar as amostras (priorize as mais recentes na média).
+
 Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": {
     "descricao": "Ex: Residencial Torre Norte, Rua das Flores 100",
-    "vendas": [{"descricao":"Apt 2/4 andar 8","valor":320000,"m2":72,"valorM2":4444,"fonte":"ZAP"}],
-    "locacoes": [{"descricao":"Apt 2/4","valorMensal":2200,"fonte":"QuintoAndar"}],
+    "vendas": [{"descricao":"Apt 2/4 andar 8","valor":320000,"m2":72,"valorM2":4444,"fonte":"ZAP","data":"2025-11"}],
+    "locacoes": [{"descricao":"Apt 2/4","valorMensal":2200,"fonte":"QuintoAndar","data":"2025-10"}],
     "precoMedioM2": número,
     "precoMinM2": número,
     "precoMaxM2": número,
@@ -286,8 +291,8 @@ Retorne APENAS este JSON (sem markdown):
   },
   "nivel2": {
     "descricao": "Ex: Bairro Vila Mariana, raio 1km",
-    "vendas": [{"descricao":"...","valor":número,"m2":número,"valorM2":número,"fonte":""}],
-    "locacoes": [{"descricao":"...","valorMensal":número,"fonte":""}],
+    "vendas": [{"descricao":"...","valor":número,"m2":número,"valorM2":número,"fonte":"","data":"AAAA-MM"}],
+    "locacoes": [{"descricao":"...","valorMensal":número,"fonte":"","data":"AAAA-MM"}],
     "precoMedioM2": número,
     "precoMinM2": número,
     "precoMaxM2": número,

@@ -310,6 +310,14 @@ export default function Analise() {
   // a concorrência empurra o preço até o teto que ainda preserva o piso de lucro
   // líquido. Tudo calculado na MELHOR condição de pagamento.
   const PISO_LUCRO = 30;
+  // Data do anúncio ("2025-11" → "nov/25"). Preço varia no tempo — mostramos a data.
+  const fmtDataAnuncio = (s) => {
+    if (!s) return '';
+    const m = String(s).match(/^(\d{4})-(\d{2})$/);
+    if (!m) return String(s);
+    const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    return `${meses[(+m[2]) - 1] || m[2]}/${m[1].slice(2)}`;
+  };
   const cenariosDisputa = useMemo(() => {
     const lanceBase = d.valorArrematacao || 0;
     const podeFin = !d.somenteAVista;
@@ -1377,7 +1385,7 @@ export default function Analise() {
               <Field label="Taxa Leiloeiro (%)" name="taxaLeiloeiroPercentual" value={d.taxaLeiloeiroPercentual||5} onChange={upN} type="number"/>
               <Field label="ITBI + Registro (%)" name="itbiPercentual" value={d.itbiPercentual||3} onChange={upN} type="number"/>
               <div style={{ background:'#f0fdf4', borderRadius:10, padding:'10px 12px' }}>
-                <div style={{ fontSize:10, color:'#16a34a', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Honorários TSN (fixo 10%)</div>
+                <div style={{ fontSize:10, color:'#16a34a', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Honorários (fixo 10%)</div>
                 <div style={{ fontSize:20, fontWeight:900, color:'#15803d' }}>R$ {fmt((d.valorArrematacao||0)*0.10)}</div>
               </div>
               <Field label="IPTU Mensal (R$)" name="iptuMensal" value={d.iptuMensal||0} onChange={upN} type="number"/>
@@ -1502,7 +1510,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel1.vendas.map((v,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte})</span></span>
+                            <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte}{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#0D63DB', flexShrink:0 }}>R$ {fmt(v.valor)} · {fmt(v.valorM2)}/m²</span>
                           </div>
                         ))}
@@ -1519,7 +1527,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel1.locacoes.map((l,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>({l.fonte})</span></span>
+                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>({l.fonte}{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#8b5cf6' }}>R$ {fmt(l.valorMensal)}/mês</span>
                           </div>
                         ))}
@@ -1559,7 +1567,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel2.vendas.slice(0,8).map((v,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte})</span></span>
+                            <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte}{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#10b981', flexShrink:0 }}>R$ {fmt(v.valor)} · {fmt(v.valorM2)}/m²</span>
                           </div>
                         ))}
@@ -1576,7 +1584,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel2.locacoes.map((l,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>({l.fonte})</span></span>
+                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>({l.fonte}{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#8b5cf6' }}>R$ {fmt(l.valorMensal)}/mês</span>
                           </div>
                         ))}

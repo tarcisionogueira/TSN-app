@@ -81,7 +81,7 @@ export default function MeusChamados() {
       if (resposta) {
         await supabase.from('chamados_mensagens').insert({
           chamado_id: chamadoAtivo.id, autor_tipo: 'ia',
-          autor_nome: 'TSN Assistente', conteudo: resposta, anexos: [],
+          autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
         });
       }
     } catch (_) {}
@@ -142,7 +142,7 @@ export default function MeusChamados() {
                     </div>
                   )}
                   <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                    {m.autor_tipo === 'ia' ? 'TSN Assistente' : m.autor_tipo === 'atendente' ? (m.autor_nome || 'Equipe TSN') : 'Você'} · {fmtHora(m.criado_em)}
+                    {m.autor_tipo === 'ia' ? 'BidPro Assistente' : m.autor_tipo === 'atendente' ? (m.autor_nome || 'Equipe BidPro Brasil') : 'Você'} · {fmtHora(m.criado_em)}
                   </span>
                 </div>
                 <div style={{

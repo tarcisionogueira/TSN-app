@@ -208,18 +208,18 @@ export default function Checkout() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
               <div style={{ background: '#0D63DB', borderRadius: 12, padding: 10, fontSize: 20 }}>🏢</div>
               <div>
-                <div style={{ fontWeight: 900, fontSize: 16, letterSpacing: 1 }}>TSN ATIVOS</div>
+                <div style={{ fontWeight: 900, fontSize: 16, letterSpacing: 1 }}>BIDPRO BRASIL</div>
                 <div style={{ fontSize: 11, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
               </div>
             </div>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Plano Explorador — Gratuito</div>
             <h1 style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.2, margin: '0 0 16px' }}>Comece a explorar leilões imobiliários sem pagar nada.</h1>
             <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.8, marginBottom: 28 }}>
-              Crie sua conta gratuitamente e tenha acesso à plataforma TSN Ativos — sem cartão de crédito, sem compromisso.
+              Crie sua conta gratuitamente e tenha acesso à plataforma BidPro Brasil — sem cartão de crédito, sem compromisso.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                'Acesso à plataforma TSN Ativos',
+                'Acesso à plataforma BidPro Brasil',
                 'Calculadora de lances gratuita',
                 'Visualização de leilões disponíveis',
                 'Perfil de investidor ativo',
@@ -545,14 +545,14 @@ export default function Checkout() {
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) minmax(280px, 460px)', gap: 24, maxWidth: 880, width: '100%', alignItems: 'stretch' }} className="checkout-grid">
 
-        {/* Coluna esquerda — conteúdo TSN sobre o produto */}
+        {/* Coluna esquerda — conteúdo BidPro Brasil sobre o produto */}
         <div style={{ color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8px 4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
             <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
               <Briefcase size={20} color="white" />
             </div>
             <div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>TSN ATIVOS</div>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>BIDPRO BRASIL</div>
               <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
             </div>
           </div>
@@ -560,7 +560,7 @@ export default function Checkout() {
             Arremate imóveis com segurança e inteligência de dados.
           </h2>
           <p style={{ color: '#cbd5e1', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
-            A TSN une análise mercadológica, viabilidade financeira e leitura jurídica para você investir em leilões com confiança — do primeiro lance à arrematação.
+            A BidPro Brasil une análise mercadológica, viabilidade financeira e leitura jurídica para você investir em leilões com confiança — do primeiro lance à arrematação.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {[

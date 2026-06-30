@@ -55,7 +55,7 @@ export default async function handler(req) {
         advanced_chat: false,
         // Tela de entrada com aviso legal de transcrição (Lei 9.296/1996 Art. 10 + LGPD Art. 7º, I)
         enable_prejoin_ui: true,
-        prejoin_ui_title: 'Reunião TSN Ativos',
+        prejoin_ui_title: 'Reunião BidPro Brasil',
         prejoin_ui_description: '⚠️ Esta reunião é automaticamente transcrita para fins de qualidade e auditoria interna. Ao entrar, você declara ciência da transcrição, conforme Lei 9.296/1996, Art. 10 e LGPD (Lei 13.709/2018), Art. 7º, I.',
       },
     }),
