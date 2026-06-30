@@ -1,3 +1,6 @@
+// Siglas das 27 UFs — fonte única reusada pela Busca e pelo Perfil.
+export const ESTADOS_UF = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
+
 export const RAIOS_KM = [
   { label: 'Cidade exata', value: 0 },
   { label: '+ 10 km', value: 10 },

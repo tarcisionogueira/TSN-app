@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { trackCheckoutIniciado } from '../utils/gtag';
-import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
 import { TERMOS_VERSAO } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
+import { ESTADOS_UF } from '../data/cidades';
+
+const ckInp = { padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, color: '#111', background: 'white', outline: 'none', boxSizing: 'border-box' };
 
 const PLANOS_PAGOS = ['top2', 'clube', 'assessorado'];
 
@@ -95,6 +98,25 @@ export default function Checkout() {
   const [showPagamento, setShowPagamento] = useState(false); // PagamentoServico inline (assessorado)
   const pollingRef = React.useRef(null);
   const jaConfirmouRef = React.useRef(false);
+
+  // Endereço do assinante — obrigatório antes de pagar um produto pago (usado em
+  // contratos de assessoria / leilão clube e na pré-filtragem da Busca).
+  const [end, setEnd] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
+  const [endLoaded, setEndLoaded] = useState(false);
+  const [cepLoadingCk, setCepLoadingCk] = useState(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('perfis')
+      .select('endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
+      .eq('id', user.id).single()
+      .then(({ data }) => {
+        if (data) setEnd({
+          cep: data.endereco_cep || '', logradouro: data.endereco_logradouro || '', numero: data.endereco_numero || '',
+          complemento: data.endereco_complemento || '', bairro: data.endereco_bairro || '', cidade: data.endereco_cidade || '', uf: data.endereco_uf || '',
+        });
+        setEndLoaded(true);
+      });
+  }, [user?.id]);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
   const temToggleAnual = planoKey === 'top2'; // top1 removido do produto
@@ -232,6 +254,41 @@ export default function Checkout() {
 
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
   const cpfUsuario = user?.user_metadata?.cpf || '';
+
+  // Endereço de cobrança completo? (exigido antes do pagamento)
+  const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
+  const buscarCepCk = async (cepRaw) => {
+    const cep = (cepRaw || '').replace(/\D/g, '');
+    if (cep.length !== 8) return;
+    setCepLoadingCk(true);
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json();
+      if (!j.erro) setEnd(p => ({ ...p, cep, logradouro: j.logradouro || p.logradouro, bairro: j.bairro || p.bairro, cidade: j.localidade || p.cidade, uf: j.uf || p.uf }));
+    } catch { /* CEP offline — usuário preenche manualmente */ }
+    setCepLoadingCk(false);
+  };
+  const salvarEnderecoCheckout = async () => {
+    const enderecoFmt = [
+      [end.logradouro, end.numero].filter(Boolean).join(', '),
+      end.complemento, end.bairro,
+      [end.cidade, end.uf].filter(Boolean).join(' - '),
+      end.cep ? `CEP ${end.cep}` : '',
+    ].filter(Boolean).join(' · ');
+    await supabase.from('perfis').update({
+      endereco: enderecoFmt || null, endereco_cep: end.cep || null, endereco_logradouro: end.logradouro || null,
+      endereco_numero: end.numero || null, endereco_complemento: end.complemento || null, endereco_bairro: end.bairro || null,
+      endereco_cidade: end.cidade || null, endereco_uf: end.uf || null,
+    }).eq('id', user.id);
+  };
+  // Salva o endereço e então dispara o fluxo de pagamento original.
+  const iniciarPagamento = async () => {
+    if (!enderecoOk) return;
+    try { await salvarEnderecoCheckout(); } catch { /* não bloqueia o pagamento por falha ao gravar endereço */ }
+    if (ehMudanca) return mudarPlano();
+    if (planoKey === 'assessorado') return setShowPagamento(true);
+    return gerarLink();
+  };
 
   // Mudança de plano: já assina um plano pago e escolheu outro plano recorrente
   const planoAtual = PLANOS[role];
@@ -717,6 +774,38 @@ export default function Checkout() {
             />
           ) : (
             <>
+              {/* Endereço de cobrança — obrigatório antes de pagar */}
+              {!linkPagamento && (
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, marginBottom: 14, background: '#f8fafc' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                    <MapPin size={15} color="#0D63DB" />
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#111' }}>Endereço do assinante</span>
+                    {enderecoOk && <CheckCircle2 size={15} color="#16a34a" style={{ marginLeft: 'auto' }} />}
+                  </div>
+                  <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 10px', lineHeight: 1.5 }}>Necessário para a contratação e para os documentos do serviço.</p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ width: 110 }}>
+                      <input value={end.cep} inputMode="numeric" placeholder="CEP"
+                        onChange={e => setEnd(p => ({ ...p, cep: e.target.value }))} onBlur={e => buscarCepCk(e.target.value)}
+                        style={ckInp} />
+                    </div>
+                    <input value={end.logradouro} placeholder="Logradouro" onChange={e => setEnd(p => ({ ...p, logradouro: e.target.value }))} style={{ ...ckInp, flex: 1, minWidth: 150 }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    <input value={end.numero} placeholder="Nº" onChange={e => setEnd(p => ({ ...p, numero: e.target.value }))} style={{ ...ckInp, width: 80 }} />
+                    <input value={end.bairro} placeholder="Bairro" onChange={e => setEnd(p => ({ ...p, bairro: e.target.value }))} style={{ ...ckInp, flex: 1, minWidth: 120 }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    <input value={end.cidade} placeholder="Cidade" onChange={e => setEnd(p => ({ ...p, cidade: e.target.value }))} style={{ ...ckInp, flex: 1, minWidth: 140 }} />
+                    <select value={end.uf} onChange={e => setEnd(p => ({ ...p, uf: e.target.value }))} style={{ ...ckInp, width: 90 }}>
+                      <option value="">UF</option>
+                      {ESTADOS_UF.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                    </select>
+                  </div>
+                  {cepLoadingCk && <div style={{ fontSize: 11, color: '#0D63DB', marginTop: 6 }}>Buscando endereço…</div>}
+                </div>
+              )}
+
               {/* Aceite dos termos — prova de consentimento */}
               {!linkPagamento && (
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
@@ -732,13 +821,16 @@ export default function Checkout() {
                 </label>
               )}
               <button
-                onClick={ehMudanca ? mudarPlano : planoKey === 'assessorado' ? () => setShowPagamento(true) : gerarLink}
-                disabled={loading || !aceitouTermos}
-                style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: (!aceitouTermos || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceitouTermos) ? 0.6 : 1 }}>
+                onClick={iniciarPagamento}
+                disabled={loading || !aceitouTermos || !enderecoOk}
+                style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: (!aceitouTermos || !enderecoOk || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceitouTermos || !enderecoOk) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
               </button>
+              {!enderecoOk && aceitouTermos && (
+                <p style={{ fontSize: 11, color: '#b45309', textAlign: 'center', marginTop: 8 }}>Preencha o endereço acima para continuar.</p>
+              )}
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
                 {planoKey === 'assessorado'
                   ? 'Pague via PIX (sem taxa) ou cartão de crédito em até 12×'

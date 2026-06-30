@@ -384,6 +384,31 @@ export default function Busca() {
     try { sessionStorage.setItem('busca_filtros', JSON.stringify(next)); } catch {}
     return next;
   });
+
+  // Preset por residência: na PRIMEIRA visita (sem deep-link e sem filtros salvos
+  // na sessão), pré-seleciona a cidade/UF do endereço do assinante. Depois disso
+  // os filtros ficam por conta do usuário (não sobrescrevemos o que ele mexeu).
+  const presetTentado = useRef(false);
+  useEffect(() => {
+    if (presetTentado.current || filtrosFromUrl) { presetTentado.current = true; return; }
+    let temSessao = false;
+    try { temSessao = !!sessionStorage.getItem('busca_filtros'); } catch {}
+    if (temSessao) { presetTentado.current = true; return; }
+    if (!user?.id) return; // aguarda o usuário carregar
+    presetTentado.current = true;
+    supabase.from('perfis').select('endereco_uf,endereco_cidade').eq('id', user.id).single()
+      .then(({ data }) => {
+        const uf = (data?.endereco_uf || '').toUpperCase();
+        const cidade = data?.endereco_cidade || '';
+        if (!uf && !cidade) return;
+        setFiltrosPersist(prev => {
+          const jaTem = prev.estado || prev.cidades?.length || prev.tipos?.length || prev.modalidades?.length || prev.pagamento?.length || prev.valorMin || prev.valorMax;
+          if (jaTem) return prev; // usuário já interagiu — não mexe
+          return { ...prev, estado: uf || prev.estado, cidades: cidade ? [cidade] : prev.cidades };
+        });
+      });
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [filtrosSalvos, setFiltrosSalvos] = useState([]);
   const [nomeFiltro, setNomeFiltro] = useState('');
   const [showSalvarModal, setShowSalvarModal] = useState(false);

@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
-import { BarChart2, FileText, Clock, CheckCircle, AlertTriangle, XCircle, Bell, BellOff, Camera, ShieldCheck } from 'lucide-react';
+import { BarChart2, FileText, Clock, CheckCircle, AlertTriangle, XCircle, Bell, BellOff, Camera, ShieldCheck, MapPin } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscriptionAtiva } from '../utils/push';
+import { ESTADOS_UF } from '../data/cidades';
 
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -58,7 +59,12 @@ export default function Perfil() {
   const nav = useNavigate();
 
   const [nome, setNome] = useState(user?.user_metadata?.nome || '');
+  const [cpf, setCpf] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [chavePix, setChavePix] = useState('');
+  const [end, setEnd] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
+  const [original, setOriginal] = useState(null); // snapshot dos campos editáveis (dirty + cancelar)
+  const [cepLoading, setCepLoading] = useState(false);
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -165,12 +171,75 @@ export default function Perfil() {
       .catch(() => setLoadRelatorios(false));
   }, [user?.id]);
 
-  // Carrega chave PIX salva
+  // Carrega dados cadastrais (nome/cpf fixos + telefone/endereço/pix editáveis)
   useEffect(() => {
     if (!user?.id) return;
-    supabase.from('perfis').select('chave_pix').eq('id', user.id).single()
-      .then(({ data }) => { if (data?.chave_pix) setChavePix(data.chave_pix); });
+    supabase.from('perfis')
+      .select('nome,cpf,telefone,chave_pix,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
+      .eq('id', user.id).single()
+      .then(({ data }) => {
+        if (!data) return;
+        const snap = {
+          telefone: data.telefone || '',
+          chavePix: data.chave_pix || '',
+          end: {
+            cep: data.endereco_cep || '', logradouro: data.endereco_logradouro || '',
+            numero: data.endereco_numero || '', complemento: data.endereco_complemento || '',
+            bairro: data.endereco_bairro || '', cidade: data.endereco_cidade || '', uf: data.endereco_uf || '',
+          },
+        };
+        if (data.nome) setNome(data.nome);
+        setCpf(data.cpf || '');
+        setTelefone(snap.telefone);
+        setChavePix(snap.chavePix);
+        setEnd(snap.end);
+        setOriginal(snap);
+      });
   }, [user?.id]);
+
+  // Há alterações não salvas? (compara com o snapshot original)
+  const dirty = !!original && (
+    telefone !== original.telefone ||
+    chavePix !== original.chavePix ||
+    JSON.stringify(end) !== JSON.stringify(original.end) ||
+    !!novaSenha || !!confirmarSenha
+  );
+
+  // Avisa antes de fechar/recarregar a aba com alterações pendentes.
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [dirty]);
+
+  // Navegação interna (botões desta tela) pede confirmação se houver alteração.
+  const navGuard = (to) => {
+    if (dirty && !window.confirm('Você tem alterações não salvas. Sair sem salvar?')) return;
+    nav(to);
+  };
+
+  // CEP → preenche logradouro/bairro/cidade/UF (ViaCEP; falha silenciosa).
+  const buscarCep = async (cepRaw) => {
+    const cep = (cepRaw || '').replace(/\D/g, '');
+    if (cep.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json();
+      if (!j.erro) setEnd(p => ({ ...p, cep, logradouro: j.logradouro || p.logradouro, bairro: j.bairro || p.bairro, cidade: j.localidade || p.cidade, uf: j.uf || p.uf }));
+    } catch { /* CEP offline — usuário preenche manualmente */ }
+    setCepLoading(false);
+  };
+
+  const cancelar = () => {
+    if (!original) return;
+    setTelefone(original.telefone);
+    setChavePix(original.chavePix);
+    setEnd({ ...original.end });
+    setNovaSenha(''); setConfirmarSenha('');
+    setMensagem(null);
+  };
 
   // Comissões (apenas para papéis elegíveis) — saldo via API unificada /api/saque
   const temComissao = ROLES_COM_COMISSAO.includes(role);
@@ -217,7 +286,7 @@ export default function Perfil() {
   }
 
   async function salvar(e) {
-    e.preventDefault();
+    e?.preventDefault();
     setMensagem(null);
 
     if (novaSenha && novaSenha !== confirmarSenha) {
@@ -231,19 +300,39 @@ export default function Perfil() {
 
     setSalvando(true);
     try {
-      const updates = { data: { nome } };
-      if (novaSenha) updates.password = novaSenha;
+      if (novaSenha) {
+        const { error } = await supabase.auth.updateUser({ password: novaSenha });
+        if (error) throw error;
+      }
 
-      const { error } = await supabase.auth.updateUser(updates);
-      if (error) throw error;
+      // Endereço formatado (campo legado, usado em export/contratos que leem `endereco`).
+      const enderecoFmt = [
+        [end.logradouro, end.numero].filter(Boolean).join(', '),
+        end.complemento, end.bairro,
+        [end.cidade, end.uf].filter(Boolean).join(' - '),
+        end.cep ? `CEP ${end.cep}` : '',
+      ].filter(Boolean).join(' · ');
 
-      const perfilUpdate = { nome_completo: nome };
+      const perfilUpdate = {
+        telefone: telefone || null,
+        endereco: enderecoFmt || null,
+        endereco_cep: end.cep || null,
+        endereco_logradouro: end.logradouro || null,
+        endereco_numero: end.numero || null,
+        endereco_complemento: end.complemento || null,
+        endereco_bairro: end.bairro || null,
+        endereco_cidade: end.cidade || null,
+        endereco_uf: end.uf || null,
+      };
       if (temComissao) perfilUpdate.chave_pix = chavePix || null;
-      await supabase.from('perfis').update(perfilUpdate).eq('id', user.id);
+
+      const { error: e2 } = await supabase.from('perfis').update(perfilUpdate).eq('id', user.id);
+      if (e2) throw e2;
 
       setNovaSenha('');
       setConfirmarSenha('');
-      setMensagem({ tipo: 'sucesso', texto: 'Perfil atualizado com sucesso!' });
+      setOriginal({ telefone, chavePix, end: { ...end } });
+      setMensagem({ tipo: 'sucesso', texto: 'Dados atualizados com sucesso!' });
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message || 'Erro ao salvar alterações.' });
     } finally {
@@ -335,7 +424,7 @@ export default function Perfil() {
             }}>{roleLabel}</span>
           </div>
           <button
-            onClick={() => nav('/planos')}
+            onClick={() => navGuard('/planos')}
             style={{ padding: '8px 16px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Fazer upgrade
           </button>
@@ -382,7 +471,7 @@ export default function Perfil() {
                 <BarChart2 size={18} color="#0D63DB" />
                 <span style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>Minhas Análises</span>
               </div>
-              <button onClick={() => nav('/analise')}
+              <button onClick={() => navGuard('/analise')}
                 style={{ padding: '6px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 + Nova análise
               </button>
@@ -403,7 +492,7 @@ export default function Perfil() {
                   const diasRestantes = r.expira_em ? Math.ceil((new Date(r.expira_em) - new Date()) / (1000*60*60*24)) : null;
                   return (
                     <div key={r.id}
-                      onClick={() => nav('/analise')}
+                      onClick={() => navGuard('/analise')}
                       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', cursor: 'pointer', background: '#f8fafc', transition: 'background 0.15s' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
                       onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
@@ -460,7 +549,7 @@ export default function Perfil() {
                 style={{ flex: 1, padding: '9px', background: saldoSaque > 0 ? '#0D63DB' : '#e2e8f0', color: saldoSaque > 0 ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: saldoSaque > 0 ? 'pointer' : 'default' }}>
                 Solicitar saque
               </button>
-              <button onClick={() => nav('/comissoes')}
+              <button onClick={() => navGuard('/comissoes')}
                 style={{ flex: 1, padding: '9px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                 Ver extrato →
               </button>
@@ -491,44 +580,106 @@ export default function Perfil() {
           </div>
         )}
 
-        {/* Formulário */}
+        {/* Dados cadastrais + endereço */}
         <div style={{ background: 'white', borderRadius: 14, padding: isMobile ? '20px 16px' : '28px 28px', border: '1px solid #e2e8f0' }}>
           <form onSubmit={salvar}>
-            {/* Nome */}
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 16 }}>Dados cadastrais</div>
+
+            {/* Nome (fixo) */}
             <div style={fieldStyle}>
               <label style={labelStyle}>Nome</label>
-              <input
-                type="text"
-                value={nome}
-                onChange={e => setNome(e.target.value)}
-                placeholder="Seu nome"
-                style={inputStyle}
-              />
+              <input type="text" value={nome} readOnly
+                style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }} />
             </div>
 
-            {/* Email (somente leitura) */}
+            {/* Linha: E-mail + CPF (fixos) */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ ...fieldStyle, flex: 1, minWidth: 200 }}>
+                <label style={labelStyle}>E-mail</label>
+                <input type="email" value={user?.email || ''} readOnly
+                  style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }} />
+              </div>
+              <div style={{ ...fieldStyle, flex: 1, minWidth: 160 }}>
+                <label style={labelStyle}>CPF</label>
+                <input type="text" value={cpf || '—'} readOnly
+                  style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }} />
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -12, marginBottom: 20 }}>Nome, e-mail e CPF não podem ser alterados aqui. Para corrigir, fale com o atendimento.</div>
+
+            {/* Telefone (editável) */}
             <div style={fieldStyle}>
-              <label style={labelStyle}>E-mail</label>
-              <input
-                type="email"
-                value={user?.email || ''}
-                readOnly
-                style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }}
-              />
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>O e-mail não pode ser alterado</div>
+              <label style={labelStyle}>Telefone</label>
+              <input type="tel" value={telefone} onChange={e => setTelefone(e.target.value)}
+                placeholder="(11) 90000-0000" style={inputStyle} />
+            </div>
+
+            {/* Endereço (editável) */}
+            <div style={{ height: 1, background: '#f1f5f9', margin: '8px 0 18px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+              <MapPin size={16} color="#0D63DB" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>Endereço do assinante</span>
+            </div>
+            <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 16px', lineHeight: 1.5 }}>
+              Usado para pré-filtrar a Busca pela sua cidade e nos contratos de assessoria / leilão clube, caso venham a ser gerados.
+            </p>
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ ...fieldStyle, width: 160 }}>
+                <label style={labelStyle}>CEP</label>
+                <input type="text" value={end.cep} inputMode="numeric"
+                  onChange={e => setEnd(p => ({ ...p, cep: e.target.value }))}
+                  onBlur={e => buscarCep(e.target.value)}
+                  placeholder="00000-000" style={inputStyle} />
+                {cepLoading && <div style={{ fontSize: 11, color: '#0D63DB', marginTop: 4 }}>Buscando endereço…</div>}
+              </div>
+              <div style={{ ...fieldStyle, flex: 1, minWidth: 200 }}>
+                <label style={labelStyle}>Logradouro</label>
+                <input type="text" value={end.logradouro} onChange={e => setEnd(p => ({ ...p, logradouro: e.target.value }))}
+                  placeholder="Rua / Avenida" style={inputStyle} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ ...fieldStyle, width: 120 }}>
+                <label style={labelStyle}>Número</label>
+                <input type="text" value={end.numero} onChange={e => setEnd(p => ({ ...p, numero: e.target.value }))}
+                  placeholder="123" style={inputStyle} />
+              </div>
+              <div style={{ ...fieldStyle, flex: 1, minWidth: 180 }}>
+                <label style={labelStyle}>Complemento</label>
+                <input type="text" value={end.complemento} onChange={e => setEnd(p => ({ ...p, complemento: e.target.value }))}
+                  placeholder="Apto, bloco… (opcional)" style={inputStyle} />
+              </div>
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Bairro</label>
+              <input type="text" value={end.bairro} onChange={e => setEnd(p => ({ ...p, bairro: e.target.value }))}
+                placeholder="Bairro" style={inputStyle} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ ...fieldStyle, flex: 1, minWidth: 200 }}>
+                <label style={labelStyle}>Cidade</label>
+                <input type="text" value={end.cidade} onChange={e => setEnd(p => ({ ...p, cidade: e.target.value }))}
+                  placeholder="Cidade" style={inputStyle} />
+              </div>
+              <div style={{ ...fieldStyle, width: 110 }}>
+                <label style={labelStyle}>UF</label>
+                <select value={end.uf} onChange={e => setEnd(p => ({ ...p, uf: e.target.value }))} style={inputStyle}>
+                  <option value="">—</option>
+                  {ESTADOS_UF.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                </select>
+              </div>
             </div>
 
             {/* Chave PIX (apenas profissionais com comissão) */}
             {temComissao && (
               <div style={fieldStyle}>
                 <label style={labelStyle}>Chave PIX para recebimento</label>
-                <input
-                  type="text"
-                  value={chavePix}
-                  onChange={e => setChavePix(e.target.value)}
-                  placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
-                  style={inputStyle}
-                />
+                <input type="text" value={chavePix} onChange={e => setChavePix(e.target.value)}
+                  placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" style={inputStyle} />
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Usada para transferência de comissões e saques</div>
               </div>
             )}
@@ -537,38 +688,21 @@ export default function Perfil() {
             <div style={{ height: 1, background: '#f1f5f9', margin: '8px 0 20px' }} />
             <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 16 }}>Alterar senha (opcional)</div>
 
-            {/* Nova senha */}
             <div style={fieldStyle}>
               <label style={labelStyle}>Nova senha</label>
-              <input
-                type="password"
-                value={novaSenha}
-                onChange={e => setNovaSenha(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
-                style={inputStyle}
-              />
+              <input type="password" value={novaSenha} onChange={e => setNovaSenha(e.target.value)}
+                placeholder="Mínimo 6 caracteres" style={inputStyle} />
             </div>
-
-            {/* Confirmar senha */}
             <div style={fieldStyle}>
               <label style={labelStyle}>Confirmar nova senha</label>
-              <input
-                type="password"
-                value={confirmarSenha}
-                onChange={e => setConfirmarSenha(e.target.value)}
-                placeholder="Repita a nova senha"
-                style={inputStyle}
-              />
+              <input type="password" value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)}
+                placeholder="Repita a nova senha" style={inputStyle} />
             </div>
 
             {/* Feedback */}
             {mensagem && (
               <div style={{
-                padding: '10px 14px',
-                borderRadius: 8,
-                marginBottom: 16,
-                fontSize: 13,
-                fontWeight: 600,
+                padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13, fontWeight: 600,
                 background: mensagem.tipo === 'sucesso' ? '#f0fdf4' : '#fef2f2',
                 color: mensagem.tipo === 'sucesso' ? '#16a34a' : '#dc2626',
                 border: `1px solid ${mensagem.tipo === 'sucesso' ? '#bbf7d0' : '#fecaca'}`,
@@ -577,23 +711,22 @@ export default function Perfil() {
               </div>
             )}
 
-            {/* Botão salvar */}
-            <button
-              type="submit"
-              disabled={salvando}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: salvando ? '#94a3b8' : '#111111',
-                color: 'white',
-                border: 'none',
-                borderRadius: 10,
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: salvando ? 'not-allowed' : 'pointer',
-              }}>
-              {salvando ? 'Salvando...' : 'Salvar alterações'}
-            </button>
+            {/* Salvar / Cancelar */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="submit" disabled={salvando || !dirty}
+                style={{
+                  flex: 1, padding: '12px', background: (salvando || !dirty) ? '#94a3b8' : '#111111', color: 'white',
+                  border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: (salvando || !dirty) ? 'not-allowed' : 'pointer',
+                }}>
+                {salvando ? 'Salvando...' : dirty ? 'Salvar alterações' : 'Tudo salvo'}
+              </button>
+              {dirty && (
+                <button type="button" onClick={cancelar} disabled={salvando}
+                  style={{ padding: '12px 20px', background: 'white', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+              )}
+            </div>
           </form>
         </div>
 
@@ -709,6 +842,23 @@ export default function Perfil() {
           )}
         </div>
       </div>
+
+      {/* Barra fixa: alterações não salvas */}
+      {dirty && (
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, background: '#111111', color: 'white', padding: isMobile ? '12px 16px' : '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, flexWrap: 'wrap', boxShadow: '0 -4px 16px rgba(0,0,0,0.18)' }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>Você tem alterações não salvas.</span>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={salvar} disabled={salvando}
+              style={{ padding: '8px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: salvando ? 'not-allowed' : 'pointer' }}>
+              {salvando ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button onClick={cancelar} disabled={salvando}
+              style={{ padding: '8px 18px', background: 'transparent', color: 'white', border: '1px solid #475569', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
