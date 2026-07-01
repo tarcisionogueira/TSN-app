@@ -31,6 +31,18 @@ async function db(path, opts = {}) {
   return { ok: res.ok, status: res.status, data };
 }
 
+// Chama uma função RPC do Postgres (service_role).
+async function rpc(fn, args) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args || {}),
+  });
+  const text = await res.text();
+  let data; try { data = JSON.parse(text); } catch { data = text; }
+  return { ok: res.ok, status: res.status, data };
+}
+
 const roleFor = async (id) => (await db(`perfis?id=eq.${id}&select=role`)).data?.[0]?.role || null;
 const saldoDe = async (id) => Number((await db(`saldo_usuarios?user_id=eq.${id}&select=saldo_disponivel`)).data?.[0]?.saldo_disponivel || 0);
 // Sexta-feira no fuso America/Bahia
@@ -66,22 +78,13 @@ export default async function handler(req) {
     const valor = Math.round(Number(body.valor) * 100) / 100;
     if (!valor || valor <= 0) return json({ error: 'Valor inválido' }, 400);
 
-    // Precisa de chave PIX cadastrada
-    const perfil = (await db(`perfis?id=eq.${user.id}&select=chave_pix`)).data?.[0];
-    if (!perfil?.chave_pix) return json({ error: 'Cadastre sua chave PIX no perfil antes de solicitar saque.' }, 400);
-
-    const saldo = await saldoDe(user.id);
-    if (valor > saldo) return json({ error: `Saldo insuficiente. Disponível: R$ ${saldo.toFixed(2)}` }, 400);
-
-    const r = await db('saldo_lancamentos', {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: user.id, tipo: 'saque', valor: -valor,
-        descricao: `Solicitação de saque para PIX ${perfil.chave_pix}`, status: 'solicitado',
-      }),
-    });
+    // Checagem de saldo/PIX + inserção do lançamento é ATÔMICA no banco
+    // (serializada por usuário) — elimina a corrida read-then-write que
+    // permitia dois saques simultâneos zerarem o mesmo saldo.
+    const r = await rpc('solicitar_saque', { p_user_id: user.id, p_valor: valor });
     if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
-    return json({ ok: true, saldo_restante: +(saldo - valor).toFixed(2) }, 201);
+    if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque' }, 400);
+    return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
   }
 
   // ── PATCH: admin paga (só sexta) ou recusa ───────────────────────────────

@@ -25,6 +25,23 @@ export const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY,
 );
 
+// ── Idempotência ──────────────────────────────────────────────────────────────
+// Registra (gateway, payment_id, evento) e retorna true se JÁ havia sido
+// processado. O próprio INSERT é a trava (PK única → 23505 em duplicata),
+// então é atômico mesmo com dois disparos simultâneos do gateway.
+// Sem payment_id não há como deduplicar → processa (fail-open).
+export async function eventoJaProcessado({ gateway, gatewayPaymentId, evento }) {
+  if (!gatewayPaymentId || !evento) return false;
+  const { error } = await supabase
+    .from('webhook_eventos_processados')
+    .insert({ gateway, gateway_payment_id: String(gatewayPaymentId), evento });
+  if (!error) return false;                 // inseriu agora → primeira vez
+  if (error.code === '23505') return true;  // PK duplicada → já processado
+  // Erro inesperado: não bloqueia o pagamento (melhor reprocessar do que perder).
+  console.error(`[${gateway}] idempotência:`, error.message);
+  return false;
+}
+
 // ── Mapeamento valor → plano ──────────────────────────────────────────────────
 // Atualizar aqui quando mudar preços. Tolerância de ±1% ou ±R$1 (o que for maior).
 function dentroFaixa(valor, alvo, tol = 1) {

@@ -7,7 +7,7 @@
  *   MP_WEBHOOK_SECRET     — secret configurado no painel MP (X-Signature header)
  */
 import crypto from 'crypto';
-import { processarConfirmado, processarVencido, processarRecusado, processarChargeback } from './_webhook-core.js';
+import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, eventoJaProcessado } from './_webhook-core.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
@@ -67,6 +67,13 @@ export default async function handler(req, res) {
   }
 
   const status = pagamento.status;
+
+  // Idempotência: o MP reenvia a mesma notificação. Se já tratamos este
+  // (pagamento, status), responde OK sem reprocessar.
+  if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status })) {
+    return res.status(200).json({ ok: true, duplicado: true });
+  }
+
   const payer = pagamento.payer || {};
   const contexto = {
     gateway: 'mercadopago',

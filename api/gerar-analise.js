@@ -182,6 +182,29 @@ export default async function handler(req, res) {
   const rawData = imovel?.dataLeilao || parecerInputs?.d?.dataLeilao || null;
   const dataLeilao = rawData && !isNaN(Date.parse(rawData)) ? new Date(rawData).toISOString() : null;
   const base = { user_id: user.id, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs }, data_leilao: dataLeilao };
+
+  // ── Cota NO SERVIDOR (anti-abuso do custo de IA) ────────────────────────────
+  // A cota é consumida aqui (onde o custo ocorre), não mais só no cliente — que
+  // podia ser burlado chamando esta API direto. Cobra apenas em análise NOVA
+  // deste imóvel para este usuário; re-gerar/atualizar o mesmo imóvel não recobra
+  // (espelha o "isNovo" do cliente). Falha na checagem não trava quem tem direito.
+  let cota = null;
+  try {
+    const jaConcluida = await (await sb(`analises_mercado?user_id=eq.${user.id}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
+    const isNovo = !(Array.isArray(jaConcluida) && jaConcluida.length);
+    if (isNovo) {
+      const rc = await sb('rpc/consumir_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
+      cota = await rc.json().catch(() => null);
+      if (cota && cota.ok === false) {
+        const msg = cota.erro === 'limite_mensal' ? 'Limite mensal de análises atingido para o seu plano.'
+          : cota.erro === 'sem_credito' ? 'Você não tem créditos de análise disponíveis.'
+          : 'Cota de análises indisponível.';
+        res.status(402).json({ error: msg, cota });
+        return;
+      }
+    }
+  } catch { /* checagem de cota nunca bloqueia quem tem direito */ }
+
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
   try {
@@ -234,7 +257,7 @@ export default async function handler(req, res) {
 
     const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
-    res.status(200).json({ ok: true, result });
+    res.status(200).json({ ok: true, result, cota });
   } catch (e) {
     await upsertAnalise({ ...base, status: 'erro', erro: String(e?.message || e) });
     res.status(500).json({ error: 'Falha ao gerar a análise', detalhe: String(e?.message || e) });

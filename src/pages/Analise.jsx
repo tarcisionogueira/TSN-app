@@ -122,32 +122,29 @@ export default function Analise() {
   const [analisesBonus, setAnalisesBonus] = useState(0);
   const limiteRole = LIMITE_POR_ROLE[role] || 0;
 
-  useEffect(() => {
+  // Lê os contadores de cota do perfil (fonte da verdade). O CONSUMO da cota
+  // passou a ser server-side (/api/gerar-analise → consumir_analise_por); aqui só
+  // LEMOS para pintar o estado da tela — chamamos no mount e após cada geração.
+  const carregarCota = React.useCallback(async () => {
     if (!user || semLimite) return;
     const col = role === 'explorador'
       ? 'analises_mes, analises_count, bonus_mercado'
       : 'analises_mes, analises_count';
-    supabase.from('perfis').select(col).eq('id', user.id).single()
-      .then(({ data, error }) => {
-        if (error || !data) return;
-        if (role === 'explorador') {
-          const bonus = data.bonus_mercado || 0;
-          setAnalisesBonus(bonus);
-          setAnalisesUsadas(0);
-          setAnalisesBloqueado(bonus <= 0);
-        } else {
-          const count = data.analises_count || 0;
-          if (data.analises_mes === mesAtual()) {
-            setAnalisesUsadas(count);
-            setAnalisesBloqueado(count >= limiteRole);
-          } else {
-            // Mês virou: a contagem é zerada server-side no próximo consumo (consumir_analise).
-            setAnalisesUsadas(0);
-            setAnalisesBloqueado(false);
-          }
-        }
-      });
+    const { data, error } = await supabase.from('perfis').select(col).eq('id', user.id).single();
+    if (error || !data) return;
+    if (role === 'explorador') {
+      const bonus = data.bonus_mercado || 0;
+      setAnalisesBonus(bonus);
+      setAnalisesUsadas(0);
+      setAnalisesBloqueado(bonus <= 0);
+    } else {
+      const count = data.analises_mes === mesAtual() ? (data.analises_count || 0) : 0;
+      setAnalisesUsadas(count);
+      setAnalisesBloqueado(count >= limiteRole);
+    }
   }, [role, user, semLimite, limiteRole]);
+
+  useEffect(() => { carregarCota(); }, [carregarCota]);
 
   const [d, setD] = useState(() => {
     if (imovelInicial) return {
@@ -569,6 +566,7 @@ export default function Analise() {
     if (entry?.status === 'erro' && aplicadoRef.current !== entry.updatedAt) {
       aplicadoRef.current = entry.updatedAt;
       showMsg(entry.erro || 'Erro ao gerar o relatório mercadológico.', 'error');
+      carregarCota(); // ex.: bloqueio por limite/sem-crédito veio do servidor
       return;
     }
     if (entry?.status !== 'concluida' || !entry.result) return;
@@ -580,6 +578,7 @@ export default function Analise() {
     if (r.valorLocacao) up('valorLocacao', r.valorLocacao);
     if (r.parecer) { setParecer(r.parecer); setD(p => ({ ...p, parecer: r.parecer })); }
     setRelMercadoGerado(true);
+    carregarCota(); // a geração consumiu cota no servidor — atualiza os contadores
     showMsg('Relatório Mercadológico + Viabilidade pronto!');
   }, [analiseEntry?.status, analiseEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -717,18 +716,10 @@ export default function Analise() {
       } catch { /* portfólio local já foi salvo — erro de rede não bloqueia o usuário */ }
     }
 
-    // Contabiliza a análise SERVER-SIDE (cota protegida contra adulteração no cliente).
-    // A função consumir_analise() usa auth.uid() e aplica os limites por plano.
-    if (user && isNovo && !semLimite) {
-      const { data: cota } = await supabase.rpc('consumir_analise');
-      if (cota?.tipo === 'bonus') {
-        setAnalisesBonus(cota.restante);
-        if (cota.restante <= 0) setAnalisesBloqueado(true);
-      } else if (cota?.tipo === 'mensal') {
-        setAnalisesUsadas(cota.usadas);
-        if (cota.usadas >= cota.limite) setAnalisesBloqueado(true);
-      }
-    }
+    // A cota NÃO é mais consumida aqui: o consumo passou para o servidor, na
+    // geração (/api/gerar-analise → consumir_analise_por), à prova de burla.
+    // Aqui apenas relemos os contadores para manter a tela em dia.
+    carregarCota();
   };
 
   const imprimirPDF = () => gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer });

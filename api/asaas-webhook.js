@@ -8,6 +8,7 @@ import {
   processarVencido,
   processarRecusado,
   processarChargeback,
+  eventoJaProcessado,
 } from './_webhook-core.js';
 
 const EVENTOS_CHARGEBACK = [
@@ -45,6 +46,12 @@ export default async function handler(req, res) {
   const pag       = event.payment;
   const valor = Number(pag?.value);
   if (!valor || valor <= 0) return res.status(400).json({ error: 'Valor de pagamento inválido' });
+
+  // Idempotência: o Asaas reenvia eventos. Se já tratamos este (pagamento,
+  // evento), responde OK sem reprocessar.
+  if (await eventoJaProcessado({ gateway: 'asaas', gatewayPaymentId: pag?.id, evento: tipo })) {
+    return res.status(200).json({ ok: true, duplicado: true });
+  }
 
   const contexto  = {
     gateway:           'asaas',
