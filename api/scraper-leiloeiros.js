@@ -246,6 +246,39 @@ async function coletarMega(ufs, deadline) {
   return { rows: out, via, diag };
 }
 
+// ─── MGL / CCJ (Cloudflare → Bright Data) — RECON ─────────────────────────────
+// Ambos barram no Cloudflare via fetch comum; o Bright Data (Web Unlocker) fura.
+// 1ª fase: baixa páginas candidatas e grava HTML + diagnóstico estrutural em
+// debug_fetch, para escrever os parsers definitivos a partir do conteúdo REAL.
+async function reconAlvo(fonte, urls, deadline) {
+  const diag = [];
+  for (const url of urls) {
+    if (Date.now() > deadline) break;
+    const r = await fetchVia(url);
+    await gravarDebug(fonte, url, r.status, r.contentType, r.via, r.text);
+    diag.push({ url: url.replace(/^https?:\/\/(www\.)?/, ''), http: r.status, via: r.via, ...htmlDiag(r.text) });
+  }
+  return { rows: [], via: diag[0]?.via || '-', diag };
+}
+
+// MGL Leilões (MG · SP · ES; judicial + extrajudicial Banco do Brasil)
+async function coletarMGL(deadline) {
+  return reconAlvo('MGL', [
+    'https://www.mgl.com.br/',
+    'https://www.mgl.com.br/categoria/imoveis',
+    'https://www.mgl.com.br/lotes/imoveis',
+  ], deadline);
+}
+
+// CCJ Leilões (bens em todos os estados; padrão /leilao/{id}/lotes)
+async function coletarCCJ(deadline) {
+  return reconAlvo('CCJ', [
+    'https://www.ccjleiloes.com.br/',
+    'https://www.ccjleiloes.com.br/lotes',
+    'https://www.ccjleiloes.com.br/leilao/110/lotes',
+  ], deadline);
+}
+
 async function upsert(rows) {
   let n = 0;
   for (let i = 0; i < rows.length; i += 100) {
@@ -290,6 +323,8 @@ export default async function handler(req, res) {
     if (f === 'sold') r = await coletarSold(soldPaginas, deadline);
     else if (f === 'superbid') r = await coletarSuperbid(sbidPaginas, deadline);
     else if (f === 'mega') r = await coletarMega(megaUfs, deadline);
+    else if (f === 'mgl') r = await coletarMGL(deadline);
+    else if (f === 'ccj') r = await coletarCCJ(deadline);
     else continue;
 
     const up = r.rows.length ? await upsert(r.rows) : 0;
