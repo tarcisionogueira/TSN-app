@@ -82,7 +82,7 @@ ${d.observacoes?`<div class="obs av"><b style="font-size:9px;text-transform:uppe
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;" class="av">
   ${[['Capital Aportado',`R$ ${fmt(m.capitalMobilizado)}`,'#dc2626'],
      [isUsoProprio?'Economia Real':'Lucro Líquido',`R$ ${fmt(m.lucro)}`,(m.lucro>=0?'#059669':'#dc2626')],
-     ['Yield Locação',`${fmtPct(m.yieldMensal)}/mês`,'#7c3aed'],
+     ['Rentab. Aluguel',`${fmtPct(m.yieldMensal)}/mês`,'#7c3aed'],
      ['Teto Disputa',`R$ ${fmt(teto)}`,'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
@@ -135,7 +135,7 @@ ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</
     <td>RETORNO TOTAL (${isAVista?'ROI':'ROE'})</td>
     <td class="r bl" style="font-size:14px;">${fmtPct(m.roi)}</td>
     <td class="r am" style="font-size:14px;">${fmtPct(mt.roi)}</td></tr>
-    ${d.valorLocacao>0?`<tr><td>Yield de Locação (Ref.)</td>
+    ${d.valorLocacao>0?`<tr><td>Rentabilidade do Aluguel (Ref.)</td>
     <td class="r" style="color:#7c3aed;font-weight:700;">${fmtPct(m.yieldMensal)}/mês · ${fmtPct(m.yieldAnual)}/ano</td><td></td></tr>`:''}
   </table>
 </div>
@@ -147,8 +147,8 @@ ${mercado?`<div class="av">
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
   ${[['Preço Médio/m²',`R$ ${fmt(mercado.precoMedioM2||0)}`,'#0D63DB'],
      ['Aluguel Médio',`R$ ${fmt(mercado.aluguelMedio||0)}/mês`,'#7c3aed'],
-     ['Yield Bruto',fmtPct(mercado.yieldBruto||0),'#059669'],
-     ['Yield Líquido',fmtPct(mercado.yieldLiquido||0),'#d97706']].map(([l,v,c])=>`
+     ['Rentab. Bruta',fmtPct(mercado.yieldBruto||0),'#059669'],
+     ['Rentab. Líquida',fmtPct(mercado.yieldLiquido||0),'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
 ${mercado.comentario?`<p style="font-size:10px;color:#475569;margin:0 0 10px;background:#f8fafc;padding:8px;border-radius:4px;">${mercado.comentario}</p>`:''}

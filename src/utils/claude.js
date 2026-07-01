@@ -256,6 +256,15 @@ REGRA OBRIGATÓRIA — MESMO TIPO: considere SOMENTE imóveis do MESMO TIPO (${t
 Descarte qualquer amostra de tipo diferente (ex.: não misture casa com apartamento,
 nem terreno com comercial). Compare sempre ${tipoImovel} com ${tipoImovel}.
 
+REGRA OBRIGATÓRIA — NADA DE LEILÃO NA AMOSTRA: descarte QUALQUER anúncio que seja de
+leilão, praça, hasta pública, venda direta bancária/Caixa, "oportunidade de leilão",
+alienação fiduciária, extrajudicial/judicial ou imóvel retomado/repossuído. Esses
+preços são artificialmente baixos (30–60% abaixo do mercado) e CONTAMINAM a média e,
+principalmente, o mínimo (R$/m²) — o objetivo é comparar com o MERCADO LIVRE de venda
+normal. Se o título/descrição/fonte indicar leilão de qualquer forma, NÃO inclua a
+amostra. Preço muito abaixo dos demais (outlier para baixo) sem justificativa também
+deve ser descartado como provável leilão disfarçado.
+
 OBJETIVO: reunir o MÁXIMO de amostras possível (quanto mais anúncios reais, melhor a
 avaliação). Faça várias buscas em fontes diferentes até esgotar os resultados úteis.
 

@@ -370,7 +370,10 @@ export default function Analise() {
       if (!isAVista && i<=(d.prazoMeses||0)) { saida += metricas.parcelaMedia; parts.push('Parcela'); }
       if (i===1 && d.debitosAssumidos>0) { saida += d.debitosAssumidos; parts.push('Débitos'); }
       if (i<=pRef && parcelaRef>0) { saida += parcelaRef; parts.push('Reforma'); }
-      const entrada = i===pVenda ? metricas.receitaLiquida : (d.valorLocacao>0 && !isUsoProprio ? d.valorLocacao : 0);
+      // Operação de revenda (flip): a única entrada é a VENDA no mês-alvo (pVenda).
+      // Não há renda de aluguel mês a mês — o imóvel é comprado para revender, não
+      // para locar. Os meses anteriores só têm saídas (carrego/parcela/reforma).
+      const entrada = i===pVenda ? metricas.receitaLiquida : 0;
       saldo += entrada - saida;
       totalSaidas += saida;
       linhas.push({ mes:i, entrada, saida, descricao: parts.join('+')||'Manutenção', saldo });
@@ -764,10 +767,6 @@ export default function Analise() {
             limpo eram redundantes). */}
         {(relMercadoGerado || relDocumentalGerado) && (
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          <select name="status" value={d.status||'analise'} onChange={upN}
-            style={{ fontSize:12, fontWeight:700, border:'1px solid #334155', borderRadius:8, padding:'7px 10px', background:'#111111', color:'white' }}>
-            {STATUS_OPTS.map(([v,l])=><option key={v} value={v}>{l}</option>)}
-          </select>
           <button onClick={salvar} style={{ padding:'8px 16px', background:saved?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, transition:'background 0.2s' }}>
             {saved ? <><CheckCircle2 size={14}/> Salvo!</> : <><Save size={14}/> Salvar</>}
           </button>
@@ -944,9 +943,9 @@ export default function Analise() {
 
           {/* Barra de voltar (quando um relatório está aberto no centro) */}
           {relSel !== null && (
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
-              <button onClick={() => setRelSel(null)} style={{ display:'flex', alignItems:'center', gap:6, background:'white', border:'1px solid #e2e8f0', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, color:'#334155', cursor:'pointer' }}>← Relatórios</button>
-              <button onClick={imprimirPDF} style={{ display:'flex', alignItems:'center', gap:6, background:'#0D63DB', border:'none', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, color:'white', cursor:'pointer' }}><Printer size={14}/> PDF</button>
+            <div style={{ position:'sticky', top:0, zIndex:20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, background:'#f8fafc', padding:'10px 0', marginBottom:2 }}>
+              <button onClick={() => setRelSel(null)} style={{ display:'flex', alignItems:'center', gap:6, background:'white', border:'1px solid #cbd5e1', borderRadius:10, padding:'9px 15px', fontSize:13, fontWeight:800, color:'#0D63DB', cursor:'pointer', boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }}>← Voltar / gerar outro relatório</button>
+              <button onClick={imprimirPDF} style={{ display:'flex', alignItems:'center', gap:6, background:'#0D63DB', border:'none', borderRadius:10, padding:'9px 15px', fontSize:13, fontWeight:700, color:'white', cursor:'pointer' }}><Printer size={14}/> PDF</button>
             </div>
           )}
 
@@ -1493,10 +1492,13 @@ export default function Analise() {
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3,1fr)', gap:12 }}>
               <Field label="Taxa Leiloeiro (%)" name="taxaLeiloeiroPercentual" value={d.taxaLeiloeiroPercentual||5} onChange={upN} type="number"/>
               <Field label="ITBI + Registro (%)" name="itbiPercentual" value={d.itbiPercentual||3} onChange={upN} type="number"/>
-              <div style={{ background:'#f0fdf4', borderRadius:10, padding:'10px 12px' }}>
-                <div style={{ fontSize:10, color:'#16a34a', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Honorários (fixo 10%)</div>
-                <div style={{ fontSize:20, fontWeight:900, color:'#15803d' }}>R$ {fmt((d.valorArrematacao||0)*0.10)}</div>
-              </div>
+              {/* Honorários advocatícios: só em leilão JUDICIAL (sucumbência ~10%).
+                  No extrajudicial/Caixa não se aplicam (default 0). Editável para o
+                  cliente incluir custo próprio de assessoria/advogado se quiser —
+                  quando > 0, entra nos aportes e no cálculo de viabilidade. */}
+              <Field label="Honorários Jurídicos (%)" name="honorariosPercentual"
+                value={d.honorariosPercentual != null ? d.honorariosPercentual : (d.origem==='judicial'?10:0)}
+                onChange={upN} type="number"/>
               <Field label="IPTU Mensal (R$)" name="iptuMensal" value={d.iptuMensal||0} onChange={upN} type="number"/>
               <Field label="Condomínio (R$)" name="condominioMensal" value={d.condominioMensal||0} onChange={upN} type="number"/>
               <Field label="Débitos Assumidos (R$)" name="debitosAssumidos" value={d.debitosAssumidos||0} onChange={upN} type="number"/>
@@ -1585,8 +1587,8 @@ export default function Analise() {
                 {[
                   ['Preço Médio/m²', `R$ ${fmt(mercado.precoMedioM2||0)}`, '#0D63DB','#eff6ff'],
                   ['Aluguel Médio', `R$ ${fmt(mercado.aluguelMedio||0)}/mês`, '#8b5cf6','#ede9fe'],
-                  ['Yield Bruto', fmtPct(mercado.yieldBruto||0)+' a.a.', '#10b981','#f0fdf4'],
-                  ['Yield Líquido', fmtPct(mercado.yieldLiquido||0)+' a.a.', '#f59e0b','#fef3c7'],
+                  ['Rentabilidade Bruta (aluguel)', fmtPct(mercado.yieldBruto||0)+' a.a.', '#10b981','#f0fdf4'],
+                  ['Rentabilidade Líquida (aluguel)', fmtPct(mercado.yieldLiquido||0)+' a.a.', '#f59e0b','#fef3c7'],
                 ].map(([l,v,c,bg])=>(
                   <div key={l} style={{background:bg,borderRadius:12,padding:'14px 16px',textAlign:'center',border:`1px solid ${c}30`}}>
                     <div style={{fontSize:9,color:c,fontWeight:800,textTransform:'uppercase',marginBottom:6,letterSpacing:0.5}}>{l}</div>
@@ -1599,11 +1601,14 @@ export default function Analise() {
               <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
                 <div style={{ background:'#0D63DB', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
                   <Building2 size={15} color="white"/>
-                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Nível 1 — {mercado.nivel1?.descricao||'Mesmo Condomínio / Endereço'}</span>
-                  <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white' }}>
+                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Nível 1 — Mesmo condomínio / endereço</span>
+                  <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white', whiteSpace:'nowrap' }}>
                     {mercado.nivel1?.totalAmostras||0} amostras
                   </span>
                 </div>
+                {mercado.nivel1?.descricao && (
+                  <div style={{ padding:'11px 16px', background:'#eff6ff', borderBottom:'1px solid #dbeafe', fontSize:12, color:'#334155', lineHeight:1.65 }}>{mercado.nivel1.descricao}</div>
+                )}
                 <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
                   {mercado.nivel1?.vendas?.length > 0 && (
                     <div>
@@ -1656,11 +1661,14 @@ export default function Analise() {
               <div style={{ borderRadius:12, border:'2px solid #10b981', overflow:'hidden' }}>
                 <div style={{ background:'#10b981', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
                   <MapPin size={15} color="white"/>
-                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Nível 2 — {mercado.nivel2?.descricao||'Vizinhança / Bairro'}</span>
-                  <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white' }}>
+                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Nível 2 — Vizinhança / bairro</span>
+                  <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white', whiteSpace:'nowrap' }}>
                     {mercado.nivel2?.totalAmostras||0} amostras
                   </span>
                 </div>
+                {mercado.nivel2?.descricao && (
+                  <div style={{ padding:'11px 16px', background:'#f0fdf4', borderBottom:'1px solid #bbf7d0', fontSize:12, color:'#334155', lineHeight:1.65 }}>{mercado.nivel2.descricao}</div>
+                )}
                 <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
                   {mercado.nivel2?.vendas?.length > 0 && (
                     <div>
@@ -1786,7 +1794,7 @@ export default function Analise() {
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:12 }}>
             <KpiCard large label="Capital Aportado" value={`R$ ${fmt(metricas.capitalMobilizado)}`} sub="Total mobilizado" color="#ef4444" bg="#fef2f2" icon={DollarSign}/>
             <KpiCard large label={isUsoProprio?'Economia Real':'Lucro Líquido'} value={`R$ ${fmt(metricas.lucro)}`} sub={`${fmtPct(metricas.roi)} ${isAVista?'ROI':'ROE'}`} color={metricas.roi>=META?'#10b981':'#ef4444'} bg={metricas.roi>=META?'#d1fae5':'#fef2f2'} icon={TrendingUp}/>
-            <KpiCard large label="Yield Locação" value={fmtPct(metricas.yieldMensal)+'/mês'} sub={fmtPct(metricas.yieldAnual)+' a.a.'} color="#8b5cf6" bg="#ede9fe" icon={BarChart3}/>
+            <KpiCard large label="Rentabilidade do Aluguel" value={fmtPct(metricas.yieldMensal)+'/mês'} sub={fmtPct(metricas.yieldAnual)+' a.a.'} color="#8b5cf6" bg="#ede9fe" icon={BarChart3}/>
             <KpiCard large label="Teto de Disputa" value={`R$ ${fmt(teto)}`} sub={`Margem de ${META}%`} color="#f59e0b" bg="#fef3c7" icon={Gavel}/>
           </div>
 

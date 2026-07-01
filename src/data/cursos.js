@@ -80,7 +80,7 @@ export const CURSOS = [
     titulo: 'O Olho do Perito',
     subtitulo: 'Avaliação mercadológica que nenhum comprador comum faz',
     tagline: 'Acesso vitalício por R$ 97',
-    descricao: 'Aprenda a pesquisar e analisar o mercado imobiliário como um perito avaliador: comparativos no mesmo condomínio, na vizinhança, cálculo de valor de venda e locação, yield de locação e como defender um preço justo em qualquer bairro do Brasil.',
+    descricao: 'Aprenda a pesquisar e analisar o mercado imobiliário como um perito avaliador: comparativos no mesmo condomínio, na vizinhança, cálculo de valor de venda e locação, rentabilidade do aluguel e como defender um preço justo em qualquer bairro do Brasil.',
     emoji: '🔍',
     cor: '#0891b2',
     bg: '#cffafe',
@@ -104,7 +104,7 @@ export const CURSOS = [
         titulo: 'Módulo 2 — Calculando o Valor Real',
         licoes: [
           { id: 'merc-4', titulo: 'R$/m² — calculando o preço médio ponderado', duracao: '14 min', gratis: false, descricao: 'Como calcular o preço médio, eliminar outliers e chegar ao VGV (valor geral de vendas) que você consegue defender para qualquer imóvel.' },
-          { id: 'merc-5', titulo: 'Yield de locação — quanto o imóvel vai gerar de renda', duracao: '14 min', gratis: false, descricao: 'Pesquisa de aluguel, cálculo de yield bruto e líquido, comparativo com CDI e FIIs. Como saber se o imóvel paga conta como investimento de renda.' },
+          { id: 'merc-5', titulo: 'Rentabilidade do aluguel (yield) — quanto o imóvel vai gerar de renda', duracao: '14 min', gratis: false, descricao: 'Pesquisa de aluguel, cálculo da rentabilidade bruta e líquida (yield), comparativo com CDI e FIIs. Como saber se o imóvel paga conta como investimento de renda.' },
           { id: 'merc-6', titulo: 'Tendências de bairro — onde o dinheiro está indo', duracao: '10 min', gratis: false, descricao: 'Como identificar bairros em valorização, detectar especulação imobiliária, onde evitar e onde concentrar suas buscas.' },
         ],
       },
@@ -237,7 +237,7 @@ export const CURSOS = [
       {
         titulo: 'Módulo 2 — Estratégias de Saída',
         licoes: [
-          { id: 'port-5', titulo: 'Vender ou alugar? — o modelo de decisão BidPro Brasil', duracao: '14 min', gratis: false, descricao: 'Quando o yield de locação compensa segurar o imóvel vs quando vender e reinvestir. O modelo de decisão em 4 critérios.' },
+          { id: 'port-5', titulo: 'Vender ou alugar? — o modelo de decisão BidPro Brasil', duracao: '14 min', gratis: false, descricao: 'Quando a rentabilidade do aluguel compensa segurar o imóvel vs quando vender e reinvestir. O modelo de decisão em 4 critérios.' },
           { id: 'port-6', titulo: 'Precificação para vender em 90 dias', duracao: '12 min', gratis: false, descricao: 'Como precificar para girar rápido sem queimar margem. Posicionamento de preço, marketing, fotos e home staging básico que funciona.' },
           { id: 'port-7', titulo: 'Gestão de locatários — do contrato ao reajuste', duracao: '10 min', gratis: false, descricao: 'Contrato de locação, garantias (fiança, seguro fiança, depósito), inadimplência e despejo amigável. Como evitar dores de cabeça.' },
         ],

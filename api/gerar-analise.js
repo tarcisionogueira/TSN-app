@@ -70,6 +70,12 @@ ${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
 REGRA OBRIGATÓRIA — MESMO TIPO: considere SOMENTE imóveis do MESMO TIPO (${tipoImovel}).
 Descarte qualquer amostra de tipo diferente. Compare sempre ${tipoImovel} com ${tipoImovel}.
 
+REGRA OBRIGATÓRIA — NADA DE LEILÃO NA AMOSTRA: descarte QUALQUER anúncio de leilão, praça,
+hasta pública, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou
+imóvel retomado. Esses preços ficam 30–60% abaixo do mercado e CONTAMINAM a média e o mínimo
+(R$/m²). Compare só com o MERCADO LIVRE de venda normal. Outlier muito abaixo dos demais, sem
+justificativa, também deve ser descartado como provável leilão disfarçado.
+
 OBJETIVO: reunir o MÁXIMO de amostras possível. Faça várias buscas em fontes diferentes.
 
 ═══ NÍVEL 1 — MESMO CONDOMÍNIO / MESMO ENDEREÇO ═══

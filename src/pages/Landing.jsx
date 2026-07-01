@@ -39,7 +39,7 @@ const PASSOS = [
 
 const RECURSOS = [
   { icon: Zap,         titulo: 'IA que lê editais',          desc: 'Extração automática de dados do edital e da matrícula. Sem digitar nada manualmente.' },
-  { icon: TrendingUp,  titulo: 'Projeções financeiras',       desc: 'Cenários SAC e Price, yield de locação, ROI esperado e teto máximo de lance calculados na hora.' },
+  { icon: TrendingUp,  titulo: 'Projeções financeiras',       desc: 'Cenários SAC e Price, rentabilidade do aluguel, ROI esperado e teto máximo de lance calculados na hora.' },
   { icon: ShieldCheck, titulo: 'Análise jurídica completa',   desc: 'Gravames, ônus reais, processos judiciais e risco de perda do imóvel identificados antes da arrematação.' },
   { icon: BarChart3,   titulo: 'Comparativos de mercado',     desc: 'Imóveis similares na mesma rua ou condomínio para defender o valor da oferta com dados reais.' },
   { icon: FileText,    titulo: 'Relatório executivo PDF',     desc: 'Documento profissional para apresentar ao cliente, ao sócio ou à família antes de arrematar.' },
@@ -56,8 +56,8 @@ const PARA_QUEM = [
   {
     emoji: '📈',
     titulo: 'Quero investir em leilões',
-    desc: 'Monte um portfólio estruturado com análise de ROI, yield e comparativos de mercado. Escale com método, não com sorte.',
-    items: ['Relatório de viabilidade com IA', 'Projeções SAC e Price', 'Yield de locação mensal/anual', 'Cota mensal de análises por IA'],
+    desc: 'Monte um portfólio estruturado com análise de ROI, rentabilidade do aluguel e comparativos de mercado. Escale com método, não com sorte.',
+    items: ['Relatório de viabilidade com IA', 'Projeções SAC e Price', 'Rentabilidade do aluguel (mensal/anual)', 'Cota mensal de análises por IA'],
     destaque: true,
   },
   {
@@ -307,7 +307,7 @@ export default function Landing() {
                   { l: 'Riscos jurídicos', v: '0 identificados', c: '#10b981', bg: '#f0fdf4' },
                   { l: 'Ônus na matrícula', v: 'Penhora baixada', c: '#f59e0b', bg: '#fffbeb' },
                   { l: 'Tempo de análise', v: '4 min 12 seg', c: '#0D63DB', bg: '#eff6ff' },
-                  { l: 'Yield mensal', v: '0,8% a.m.', c: '#8b5cf6', bg: '#f5f3ff' },
+                  { l: 'Rentab. aluguel', v: '0,8% a.m.', c: '#8b5cf6', bg: '#f5f3ff' },
                 ].map(({ l, v, c, bg }) => (
                   <div key={l} style={{ background: bg, borderRadius: 14, padding: '16px 14px', border: `1px solid ${c}20` }}>
                     <div style={{ fontSize: 15, fontWeight: 900, color: c }}>{v}</div>

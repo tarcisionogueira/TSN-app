@@ -197,7 +197,7 @@ export default function Planos() {
                 'Análise de edital, matrícula e processo',
                 'Comparativos de mercado (condomínio/rua)',
                 'Projeções financeiras SAC e Price',
-                'Yield de locação mensal e anual',
+                'Rentabilidade do aluguel (mensal e anual)',
                 'Análise processual do imóvel',
                 'Alertas de risco (penhora, ônus reais)',
                 '15 relatórios mercadológicos/mês',
