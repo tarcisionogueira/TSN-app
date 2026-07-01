@@ -24,6 +24,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { buscarProcessosCNJ } from './_cnj.js';
+import { consultarComunicaDJEN, consultarCNDT, consultarProtestos } from './_laudo-fontes.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -244,6 +245,27 @@ export default async function handler(req, res) {
     tem_suspensiva: p.tem_suspensiva, tem_bloqueante: p.tem_bloqueante,
   }));
 
+  // 4c. Fontes públicas complementares (gratuitas). Instabilidade → fila 48h
+  //     (analise_pendencias), reprocessada pelo /api/laudo-retry-cron.
+  const enfileirar48h = async (secao, alvo, erro) => {
+    try {
+      await sb('analise_pendencias?on_conflict=caso_id,secao', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ caso_id, imovel_id: imovel?.id || null, secao, alvo, status: 'pendente', ultimo_erro: erro || null, atualizado_em: new Date().toISOString() }),
+      });
+    } catch { /* não bloqueia o laudo */ }
+  };
+  let djen = null, cndt = null, protestos = null;
+  const [rDjen, rCndt, rProt] = await Promise.all([
+    numeroProcesso ? consultarComunicaDJEN(numeroProcesso).catch(() => ({ instavel: true, erro: 'exceção' })) : Promise.resolve(null),
+    executadoDoc ? consultarCNDT(executadoDoc).catch(() => ({ instavel: true, erro: 'exceção' })) : Promise.resolve(null),
+    executadoDoc ? consultarProtestos(executadoDoc).catch(() => ({ instavel: true, erro: 'exceção' })) : Promise.resolve(null),
+  ]);
+  if (rDjen?.ok) djen = rDjen.dados; else if (rDjen?.instavel) { secoesFaltando.push('djen'); await enfileirar48h('djen', { numero_processo: numeroProcesso }, rDjen.erro); }
+  if (rCndt?.ok) cndt = rCndt.dados; else if (rCndt?.instavel) { secoesFaltando.push('cndt'); await enfileirar48h('cndt', { doc: executadoDoc }, rCndt.erro); }
+  if (rProt?.ok) protestos = rProt.dados; else if (rProt?.instavel) { secoesFaltando.push('protestos'); await enfileirar48h('protestos', { doc: executadoDoc }, rProt.erro); }
+
   // 5. Scores
   const scoreJuridico = calcularScoreJuridico({ riscos, sancoes, temProcesso: !!numeroProcesso, processosCNJ });
   const scoreFinanceiro = calcularScoreFinanceiro(imovel);
@@ -262,6 +284,10 @@ export default async function handler(req, res) {
     processos_cnj: processosResumo,
     risco_suspensao: riscoSuspensao,
     parecer_cnj: parecerCNJ,
+    cndt_trabalhista: cndt,       // débito trabalhista do executado (TST/BNDT)
+    protestos,                    // protestos em cartório (CENPROT)
+    djen_comunicacoes: djen,      // intimações/andamentos nacionais (DJEN/CNJ)
+    secoes_em_confirmacao: secoesFaltando.filter(s => ['cndt', 'protestos', 'djen'].includes(s)),
     score_juridico: scoreJuridico, score_financeiro: scoreFinanceiro,
   };
 
@@ -272,6 +298,7 @@ export default async function handler(req, res) {
       max_tokens: 3000,
       system: `Você é um analista jurídico de leilões de imóveis no Brasil. Gere um parecer claro e objetivo em MARKDOWN (pt-BR) com as seções: ## Resumo, ## Análise Documental (averbações/ônus da matrícula e do edital), ## Análise Judicial (executado, processo, sanções CEIS/CNEP), ## Situação do Devedor e Risco de Suspensão, ## Recomendação.
 Na seção "Situação do Devedor e Risco de Suspensão" use o campo processos_cnj: liste ações em nome do devedor que possam SUSPENDER, ANULAR ou ATRASAR o leilão (ex.: ação anulatória/revisional, embargos à arrematação, tutela de urgência/liminar, consignação em pagamento, discussão de nulidade do leilão). Se modalidade='extrajudicial', dê ênfase especial a esse risco (no extrajudicial o edital não traz processo, mas o devedor fiduciante pode estar litigando). Se risco_suspensao=true, destaque como ALERTA ALTO. Se não houver processos, diga que não foram localizadas ações suspensivas nos tribunais consultados e recomende confirmação manual.
+Na "Análise Judicial" incorpore também: cndt_trabalhista (débito trabalhista do executado — se positiva, é ALERTA de possível penhora trabalhista), protestos (protestos em cartório do vendedor) e djen_comunicacoes (intimações/andamentos recentes do processo no DJEN — use para indicar a fase atual e datas). Se o campo secoes_em_confirmacao listar alguma fonte (cndt/protestos/djen), diga explicitamente que ESSA seção está "em confirmação (conclui em até 48h)" por instabilidade momentânea da fonte, sem tratar como ausência de risco.
 Seja direto, prático e prudente. Não invente dados que não estejam no JSON.`,
       messages: [{ role: 'user', content: `Dados coletados (JSON):\n\n${JSON.stringify(dados, null, 2)}\n\nObservações extraídas dos documentos:\n${obs.join('\n') || '—'}` }],
     });
