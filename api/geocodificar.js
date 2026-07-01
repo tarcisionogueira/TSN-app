@@ -1,4 +1,7 @@
-export const maxDuration = 300;
+// Runtime NODE (batch longo até ~240s). Antes o handler devolvia `new Response()`,
+// que no Node é IGNORADO → a função pendurava e estourava em 504 a cada execução
+// do cron (geocodificação automática não rodava). Agora responde via res.*.
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { geocodificarCascata } from './_geo.js';
 
@@ -112,16 +115,16 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
   return res;
 }
 
-export default async function handler(req) {
+export default async function handler(req, resp) {
   if (req.method !== 'POST' && req.method !== 'GET') {
-    return new Response('Method not allowed', { status: 405 });
+    return resp.status(405).send('Method not allowed');
   }
 
   // Protege contra chamadas externas não autorizadas — falha fechado se CRON_SECRET não configurado
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     console.error('[geocodificar] CRON_SECRET não configurado — acesso bloqueado');
-    return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 403 });
+    return resp.status(403).json({ error: 'Não autorizado' });
   }
   const _url = new URL(req.url, 'http://localhost');
   // Vercel cron envia: Authorization: Bearer <CRON_SECRET>
@@ -130,10 +133,10 @@ export default async function handler(req) {
   const sent = (req.headers.get ? req.headers.get('x-cron-secret') : req.headers['x-cron-secret'])
     || _url.searchParams.get('secret')
     || authHeader.replace(/^Bearer\s+/i, '');
-  if (sent !== cronSecret) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
+  if (sent !== cronSecret) return resp.status(401).json({ error: 'Não autorizado' });
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    return new Response(JSON.stringify({ error: 'Supabase env vars not configured' }), { status: 500 });
+    return resp.status(500).json({ error: 'Supabase env vars not configured' });
   }
 
   // GET sem ?estados= → cron */10 3,4,5,6,7 * * * — deriva estado pelo horário UTC
@@ -160,7 +163,7 @@ export default async function handler(req) {
     estados = null;
   } else if (req.method === 'POST') {
     try {
-      const body = await req.json();
+      const body = typeof req.body === 'object' && req.body ? req.body : JSON.parse(req.body || '{}');
       if (Array.isArray(body.estados) && body.estados.length > 0) estados = body.estados;
     } catch {}
     modoManual = true;
@@ -174,9 +177,9 @@ export default async function handler(req) {
   // Modo manual (POST): processa 1 lote de 50 e retorna (para o admin monitorar em tempo real)
   if (modoManual) {
     const res = await processarLote(estadosFilter, 50, Date.now() + 240_000);
-    if (!res) return new Response(JSON.stringify({ error: 'Supabase error' }), { status: 500 });
-    if (!res.processados) return new Response(JSON.stringify({ processados: 0, msg: 'Nenhum imóvel pendente' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+    if (!res) return resp.status(500).json({ error: 'Supabase error' });
+    if (!res.processados) return resp.status(200).json({ processados: 0, msg: 'Nenhum imóvel pendente' });
+    return resp.status(200).json(res);
   }
 
   // Modo cron: loop interno — processa tudo que couber em ~270s (margem de 30s antes do timeout)
@@ -201,8 +204,5 @@ export default async function handler(req) {
     if (res.processados < 50) break; // último lote (menos de 50 pendentes)
   }
 
-  return new Response(JSON.stringify(total), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-  });
+  return resp.status(200).json(total);
 }

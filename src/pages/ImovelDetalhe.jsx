@@ -51,7 +51,7 @@ const fmtDist = m => m >= 1000 ? `${(m / 1000).toLocaleString('pt-BR', { minimum
 function MiniMapa({ lat, lng, pontos }) {
   const ref = useRef(null);
   const mapRef = useRef(null);
-  // Enquadra o imóvel + pontos próximos (usado na carga e no botão "centralizar").
+  // Enquadra o imóvel + pontos próximos — usado só na CARGA inicial.
   const enquadrar = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -65,6 +65,14 @@ function MiniMapa({ lat, lng, pontos }) {
       else map.setView([lat, lng], 15);
     } catch (_) { /* mapa ainda sem tamanho válido */ }
   }, [lat, lng, pontos]);
+
+  // Botão "centralizar": leva o imóvel ao centro MANTENDO o zoom atual do usuário
+  // (ele deu zoom para ver as ruas; não queremos reiniciar o enquadramento).
+  const centralizarNoImovel = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    try { map.setView([lat, lng], map.getZoom(), { animate: true }); } catch (_) { /* */ }
+  }, [lat, lng]);
 
   useEffect(() => {
     let cancel = false;
@@ -92,7 +100,7 @@ function MiniMapa({ lat, lng, pontos }) {
     <div style={{ position: 'relative' }}>
       <div ref={ref} style={{ height: 260, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }} />
       {/* Botão para reenquadrar no imóvel quando o usuário se perde ao dar zoom */}
-      <button type="button" onClick={enquadrar} title="Centralizar no imóvel"
+      <button type="button" onClick={centralizarNoImovel} title="Centralizar no imóvel (mantém o zoom)"
         style={{ position: 'absolute', right: 10, bottom: 10, zIndex: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
           background: 'white', border: '1px solid #e2e8f0', borderRadius: 9, boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
           padding: '7px 11px', fontSize: 12, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}>
@@ -652,11 +660,13 @@ export default function ImovelDetalhe() {
   // (que costuma cair no centro do bairro/cidade). Quando há endereço, priorizamos.
   const temEnderecoPreciso = !!(imovel.endereco && /\d/.test(imovel.endereco));
   const qEndereco = encodeURIComponent(enderecoCompleto);
-  const streetViewUrl = temEnderecoPreciso
-    ? `https://www.google.com/maps/search/?api=1&query=${qEndereco}`
-    : temCoord
-      ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${_lat},${_lng}`
-      : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
+  // STREET VIEW abre o panorama de verdade — exige o map_action=pano com viewpoint
+  // (lat,lng); a URL de "search?query=" abre o MAPA/lugar, não o Street View (era o
+  // bug: com endereço preciso caía no search e a cliente via o mapa). Quando há
+  // coordenada (imóvel geocodificado) usamos pano; sem coordenada, resta a busca.
+  const streetViewUrl = temCoord
+    ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${_lat},${_lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
   const mapaUrl = temEnderecoPreciso
     ? `https://www.google.com/maps/search/?api=1&query=${qEndereco}`
     : temCoord

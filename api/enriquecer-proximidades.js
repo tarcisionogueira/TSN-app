@@ -5,7 +5,10 @@
  * (praia, transporte, mercado, farmácia, saúde, escola, shopping) com a distância.
  * Processa em lotes pequenos (Overpass é lento/rate-limited).
  */
-export const config = { runtime: 'edge', maxDuration: 300 };
+// Runtime NODE: as consultas ao Overpass são LENTAS e o lote estourava o limite de
+// 25s de RESPOSTA INICIAL do edge → "did not return an initial response within 25s"
+// (504 a cada ciclo). No Node a função tem os 300s inteiros para o lote.
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { consultarProximidades } from './_proximidades.js';
@@ -21,8 +24,8 @@ function sb(path, opts = {}) {
   });
 }
 
-export default async function handler(req) {
-  if (!isCronAuthorized(req)) return new Response('Unauthorized', { status: 401 });
+export default async function handler(req, res) {
+  if (!isCronAuthorized(req)) return res.status(401).send('Unauthorized');
 
   const fila = await (await sb(`imoveis_leilao?select=id,latitude,longitude&proximidades_em=is.null&latitude=not.is.null&latitude=neq.0&ativo=eq.true&order=atualizado_em.desc&limit=${LOTE}`)).json();
   let ok = 0, falhas = 0;
@@ -39,5 +42,5 @@ export default async function handler(req) {
       falhas++;
     }
   }
-  return new Response(JSON.stringify({ ok, falhas, lote: LOTE }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  return res.status(200).json({ ok, falhas, lote: LOTE });
 }

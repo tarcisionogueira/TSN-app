@@ -3,7 +3,10 @@
  * Gera slots de 30 min para os próximos N dias com base na disponibilidade_analista.
  * Chamado pelo cron diário ou manualmente pelo admin.
  */
-export const runtime = 'edge';
+// `export const runtime = 'edge'` (convenção Next) NÃO é reconhecida nestas
+// funções /api → rodava no Node e o `new Response()` era ignorado (504). O correto
+// aqui é o config.runtime edge — o trabalho é leve (bem abaixo dos 25s do edge).
+export const config = { runtime: 'edge' };
 
 import { isCronAuthorized, getAuthUser, getUserRoleById } from './_auth.js';
 
