@@ -162,9 +162,9 @@ export default function Planos() {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
               {['Busca de leilões em todo o Brasil', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos', 'Acesso ao site do leiloeiro'].map(t => <CheckItem key={t} txt={t} />)}
             </div>
-            <button onClick={() => nav('/plano/explorador')} disabled={atual('explorador')}
+            <button onClick={() => nav('/checkout?plano=explorador')} disabled={atual('explorador')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('explorador') ? '#f1f5f9' : '#111', color: atual('explorador') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('explorador') ? 'default' : 'pointer' }}>
-              {atual('explorador') ? 'Seu plano atual' : 'Conhecer o plano →'}
+              {atual('explorador') ? 'Seu plano atual' : 'Começar grátis →'}
             </button>
           </div>
 
@@ -204,7 +204,7 @@ export default function Planos() {
                 '15 relatórios documentais e jurídicos/mês',
               ].map(t => <CheckItem key={t} txt={t} light />)}
             </div>
-            <button onClick={() => nav('/plano/top2')} disabled={atual('top2')}
+            <button onClick={() => nav('/checkout?plano=top2')} disabled={atual('top2')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('top2') ? 'rgba(255,255,255,0.15)' : 'white', color: atual('top2') ? '#93c5fd' : '#084BA6', fontWeight: 800, fontSize: 15, cursor: atual('top2') ? 'default' : 'pointer', boxShadow: atual('top2') ? 'none' : '0 4px 16px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               {atual('top2') ? 'Seu plano atual' : <><span>Assinar Investidor Pro</span> <ArrowRight size={16} /></>}
             </button>

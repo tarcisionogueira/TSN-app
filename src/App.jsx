@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { trackPageView } from './utils/gtag';
 import { supabase } from './utils/supabase';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
@@ -25,7 +25,6 @@ import Calculadora from './pages/Calculadora';
 import Membros from './pages/Membros';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
-import PlanoDetalhe from './pages/PlanoDetalhe';
 import AdminChargebacks from './pages/AdminChargebacks';
 import Login from './pages/Login';
 import CompletarCadastro from './pages/CompletarCadastro';
@@ -141,6 +140,16 @@ function PopupInadimplente({ dias }) {
   );
 }
 
+// A antiga página de detalhe do plano (/plano/:key) foi absorvida pelo Checkout,
+// que já mostra apresentação, toggle de período, benefícios e o cadastro/pagamento.
+// Mantemos a rota como redirect para não quebrar links antigos e preservar ?promo=.
+function RedirectPlano() {
+  const { key } = useParams();
+  const { search } = useLocation();
+  const extra = search && search.length > 1 ? '&' + search.slice(1) : '';
+  return <Navigate to={`/checkout?plano=${key || 'top2'}${extra}`} replace />;
+}
+
 // Redireciona não-logados para /login preservando o destino
 function PrivateRoute({ children, roles }) {
   const { isLoggedIn, role, loading, ativo, cadastroIncompleto } = useAuth();
@@ -198,7 +207,7 @@ function MainLayout() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/planos" element={<Planos />} />
-          <Route path="/plano/:key" element={<PlanoDetalhe />} />
+          <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<PrivateRoute><ImovelDetalhe /></PrivateRoute>} />

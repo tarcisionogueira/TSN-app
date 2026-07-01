@@ -645,6 +645,11 @@ export default function Checkout() {
             </div>
           )}
 
+          {planoKey === 'top2' && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 800, padding: '4px 12px', borderRadius: 20, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              ★ Mais popular
+            </div>
+          )}
           <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>
             Plano {plano.nome}
           </h2>

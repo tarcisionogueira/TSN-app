@@ -425,8 +425,8 @@ export default function Calculadora() {
         if (isPago) return null;
 
         const isExplorador = user && r === 'explorador';
-        // Leva à página interna do plano (vende o valor; o preço fica lá)
-        const irAssinar = () => nav('/plano/top2');
+        // Vai direto ao checkout do Investidor Pro (a apresentação e o preço estão lá)
+        const irAssinar = () => nav('/checkout?plano=top2');
 
         return (
           <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#084BA6 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
@@ -456,7 +456,7 @@ export default function Calculadora() {
                 </p>
                 <button onClick={irAssinar}
                   style={{ padding: '12px 24px', background: 'white', color: '#084BA6', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
-                  Conhecer o Investidor Pro →
+                  Assinar Investidor Pro →
                 </button>
               </div>
 
