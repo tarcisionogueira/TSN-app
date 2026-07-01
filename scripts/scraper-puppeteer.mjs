@@ -1061,67 +1061,49 @@ async function scraperFrazao(browser) {
 // leiloesjudiciais.com.br é um PORTAL que agrega centenas de leiloeiros oficiais
 // (cada lote traz nm_leiloeiro/nm_url_leiloeiro da origem). API pública Nuxt:
 //   GET api.leiloesjudiciais.com.br/core/api/get-bens-por-estados?tipo=3&pg=N...
-// Dá 405 em navegação direta; via fetch no contexto da página (Origin/Referer
-// corretos) retorna 200. tipo=3 = Imóveis. Servidor força 12 itens/página →
-// iteramos as páginas. Campos: lote_id, nm_titulo_lote, vl_lanceminimo,
+// Dá 405 em navegação direta e CORS no navegador; por isso usamos fetch do NODE
+// (sem CORS) com Origin/Referer do site → 200. tipo=3 = Imóveis. Servidor força
+// 12 itens/página → iteramos as páginas. Campos: lote_id, nm_titulo_lote, vl_lanceminimo,
 // nm_cidade/nm_estado, nm_subcategoria, fotos[].nm_path_completo (196x146 →
 // troca p/ 640x480), nm_url_leiloeiro (site de origem = edital/matrícula/anexos).
-async function scraperLeiloesJudiciais(browser) {
+async function scraperLeiloesJudiciais() {
   console.log('  Leilões Judiciais — portal nacional (agrega centenas de leiloeiros)...');
-  const page = await browser.newPage();
-  await page.setUserAgent(USER_AGENT);
-  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   const bensMap = new Map();
   const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
   const qs = 'tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+  // fetch do Node NÃO tem CORS (isso é só do navegador). Basta enviar
+  // Origin/Referer do site (a API dá 405 sem eles / em navegação direta).
+  const headers = {
+    Accept: '*/*',
+    'User-Agent': USER_AGENT,
+    'Accept-Language': 'pt-BR,pt;q=0.9',
+    Origin: 'https://www.leiloesjudiciais.com.br',
+    Referer: 'https://www.leiloesjudiciais.com.br/',
+  };
 
   try {
-    // A API dá CORS "Failed to fetch" no JS, mas o listener de rede do Puppeteer
-    // (CDP) lê o corpo ANTES do CORS. Então disparamos o fetch fire-and-forget
-    // (a requisição sai na rede, o servidor responde 200) e colhemos a resposta
-    // pelo listener. Só aceita qtd_por_pagina=12. Coletamos a resposta por página.
-    let totalPages = 100; // ajustado na 1ª resposta
-    let totalItems = 0;
-    const statusVistos = {};
-    page.on('response', async (resp) => {
-      try {
-        if (!/get-bens-por-estados/.test(resp.url())) return;
-        statusVistos[resp.status()] = (statusVistos[resp.status()] || 0) + 1;
-        const txt = await resp.text();
-        const j = JSON.parse(txt);
-        if (Array.isArray(j?.items)) {
-          if (j.totalPages) totalPages = Math.min(150, Number(j.totalPages) || totalPages);
-          if (j.totalItems) totalItems = Number(j.totalItems) || totalItems;
-          for (const it of j.items) {
-            const id = String(it.lote_id || it.imovel_id || '');
-            if (id && !bensMap.has(id)) bensMap.set(id, it);
-          }
-        }
-      } catch { /* resposta não-JSON / parcial */ }
-    });
-
-    try {
-      // Estabelece contexto de visitante real (Origin/Referer do site) e já
-      // dispara a página 1 naturalmente (revela totalPages/totalItems).
-      await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
-      await new Promise(r => setTimeout(r, 2500));
-    } catch (e) { console.log(`    LJUD: goto home falhou: ${e.message.slice(0, 60)}`); }
-    console.log(`    LJUD: ${totalItems || '?'} imóveis em ${totalPages} páginas (colhendo via listener)`);
-
-    // Dispara cada página AGUARDANDO a resposta chegar (o erro de CORS ocorre só
-    // ao ler no JS — aguardar garante que a resposta trafegou e o listener CDP a
-    // capturou). Sem await, as requisições não completam a tempo.
+    let totalPages = 100; // ajustado na 1ª resposta (servidor força 12/página)
+    let vistos200 = 0;
     for (let pg = 1; pg <= totalPages; pg++) {
+      let j = null;
       try {
-        await page.evaluate(async (url) => {
-          try { await fetch(url, { headers: { Accept: '*/*' } }); } catch {}
-        }, `${API}?pg=${pg}&qtd_por_pagina=12&${qs}`);
-      } catch { /* segue */ }
-      await new Promise(r => setTimeout(r, 200));
+        const r = await fetch(`${API}?pg=${pg}&qtd_por_pagina=12&${qs}`, { headers });
+        if (r.ok) { vistos200++; j = await r.json(); }
+        else if (pg === 1) { console.log(`    LJUD: página 1 retornou ${r.status}`); break; }
+      } catch (e) { if (pg === 1) { console.log(`    LJUD: fetch falhou: ${String(e.message).slice(0, 80)}`); break; } }
+      const items = j?.items || [];
+      if (!items.length) break;
+      if (pg === 1) {
+        totalPages = Math.min(150, Number(j.totalPages) || 100);
+        console.log(`    LJUD: ${j.totalItems} imóveis em ${totalPages} páginas`);
+      }
+      for (const it of items) {
+        const id = String(it.lote_id || it.imovel_id || '');
+        if (id && !bensMap.has(id)) bensMap.set(id, it);
+      }
+      await new Promise(r => setTimeout(r, 150));
     }
-    // Janela final para o listener drenar as últimas respostas.
-    await new Promise(r => setTimeout(r, 2000));
-    console.log(`    LJUD: ${bensMap.size} bens colhidos (status HTTP vistos: ${JSON.stringify(statusVistos)})`);
+    console.log(`    LJUD: ${bensMap.size} bens colhidos (${vistos200} páginas 200)`);
 
     const imoveis = [...bensMap.values()].map(it => {
       if (Number(it.statuslote_id) !== 1) return null; // só "Aberto para Lance"
@@ -1165,8 +1147,6 @@ async function scraperLeiloesJudiciais(browser) {
   } catch (err) {
     console.log(`  Erro Leilões Judiciais: ${err.message.slice(0, 100)}`);
     return [];
-  } finally {
-    await page.close();
   }
 }
 
@@ -1261,7 +1241,7 @@ async function main() {
     console.log('\n📋 Leilões Judiciais (portal nacional)...');
     {
       const r = await coletarComEsteira('LJUD', [
-        { nome: 'listener', fn: () => scraperLeiloesJudiciais(browser) },
+        { nome: 'node-fetch', fn: () => scraperLeiloesJudiciais() },
       ]);
       total += await salvarEFinalizar(r.imoveis, 'LJUD');
       await registrarSaude('LJUD', r.imoveis, r.estrategia, r.validacao);
