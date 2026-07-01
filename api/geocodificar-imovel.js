@@ -18,23 +18,32 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-// Extrai o CEP do documento/página do imóvel (edital/matrícula). Prioriza um CEP
-// ROTULADO ("CEP: 01234-567") — o do imóvel — sobre um CEP solto (rodapé do
-// leiloeiro). fetch direto primeiro; se bloquear (Cloudflare), Bright Data.
-async function cepDoDocumento(url) {
+// Localiza no documento/página do imóvel (edital/matrícula) QUALQUER informação
+// que ajude a geolocalizar: logradouro + número (leva a nível 'endereço', o mais
+// preciso), bairro e CEP. fetch direto primeiro; se bloquear (Cloudflare), BD.
+async function infoDoDocumento(url) {
   if (!url || !/^https?:\/\//.test(url)) return null;
   let txt = '';
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
     if (r.ok) txt = await r.text().catch(() => '');
   } catch { /* segue p/ Bright Data */ }
-  if (!txt || !/\d{5}-?\d{3}/.test(txt)) {
+  if (!txt || txt.length < 200) {
     try { const bd = await fetchViaBrightData(url); if (bd) txt = await bd.text().catch(() => '') || txt; } catch { /* */ }
   }
   if (!txt) return null;
-  const rot = txt.match(/cep[:\s]*?(\d{5})-?(\d{3})/i);      // "CEP: 01234-567"
-  const m = rot || txt.match(/\b(\d{5})-?(\d{3})\b/);         // fallback: 1º CEP
-  return m ? `${m[1]}${m[2]}` : null;
+  // Texto limpo (sem tags/scripts) para os padrões de endereço.
+  const plano = txt
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/\s+/g, ' ');
+  // Logradouro + número: "Rua X, nº 123" / "Avenida Y, 456"
+  const mVia = plano.match(/((?:rua|avenida|av\.?|travessa|tv\.?|alameda|al\.?|estrada|estr\.?|rodovia|rod\.?|pra[çc]a|largo|viela|quadra|rma)\s+[^,;.:()\d]{3,60}?)[,\s]+(?:n[º°.]?\s*|num(?:ero)?\.?\s*)?(\d{1,6})\b/i);
+  const bairroM = plano.match(/bairro[:\s]+([^,;.:()\n]{3,40})/i);
+  const cepM = plano.match(/cep[:\s]*?(\d{5})-?(\d{3})/i) || plano.match(/\b(\d{5})-?(\d{3})\b/);
+  const endereco = mVia ? `${mVia[1].replace(/\s+/g, ' ').trim()}, ${mVia[2]}` : null;
+  const bairro = bairroM ? bairroM[1].trim() : null;
+  const cep = cepM ? `${cepM[1]}${cepM[2]}` : null;
+  return (endereco || cep || bairro) ? { endereco, bairro, cep } : null;
 }
 
 function sb(path, opts = {}) {
@@ -86,16 +95,32 @@ export default async function handler(req, res) {
   // melhorar a coordenada — assim não repete a busca do documento nas próximas
   // aberturas (o guard !im.cep passa a barrar).
   const melhorAtual = coords && rankNivel(coords.nivel) > rankNivel(nivelAtual) ? coords.nivel : nivelAtual;
-  if (rankNivel(melhorAtual) < rankNivel('rua') && !im.cep && im.link_edital) {
-    let cepDoc = null;
-    try { cepDoc = await cepDoDocumento(im.link_edital); } catch { /* */ }
-    if (cepDoc) {
+  const semEndPreciso = !(im.endereco && /\d/.test(im.endereco));
+  if (rankNivel(melhorAtual) < rankNivel('rua') && !im.cep && semEndPreciso && im.link_edital) {
+    let info = null;
+    try { info = await infoDoDocumento(im.link_edital); } catch { /* */ }
+    if (info && (info.endereco || info.cep)) {
+      // Re-geocodifica com o que o documento revelou (endereço completo > CEP > bairro).
+      const imEnriquecido = {
+        ...im,
+        endereco: info.endereco || im.endereco,
+        bairro: im.bairro || info.bairro || '',
+        cep: info.cep || im.cep,
+      };
       let coords2 = null;
-      try { coords2 = await geocodificarCascata({ ...im, cep: cepDoc }, { sleepMs: 0, deadline: Date.now() + 12000 }); } catch { /* */ }
+      try { coords2 = await geocodificarCascata(imEnriquecido, { sleepMs: 0, deadline: Date.now() + 12000 }); } catch { /* */ }
       const melhora = coords2 && rankNivel(coords2.nivel) > rankNivel(melhorAtual) && coordValida(coords2.lat, coords2.lng, im.estado, im.cidade);
-      const body = { cep: cepDoc, ...(melhora ? { latitude: coords2.lat, longitude: coords2.lng, geocod_nivel: coords2.nivel, pontos_proximos: null, proximidades_em: null } : {}) };
-      const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(body) });
-      if (melhora) { res.status(200).json({ ok: up.ok, nivel: coords2.nivel, anterior: nivelAtual, alterado: up.ok, lat: coords2.lat, lng: coords2.lng, via: 'documento' }); return; }
+      // Grava o que achou (endereço/CEP) mesmo sem melhorar a coord — enriquece o
+      // registro e evita repetir a busca do documento nas próximas aberturas.
+      const body = {
+        ...(info.cep ? { cep: info.cep } : {}),
+        ...(info.endereco && semEndPreciso ? { endereco: info.endereco } : {}),
+        ...(melhora ? { latitude: coords2.lat, longitude: coords2.lng, geocod_nivel: coords2.nivel, pontos_proximos: null, proximidades_em: null } : {}),
+      };
+      if (Object.keys(body).length) {
+        const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(body) });
+        if (melhora) { res.status(200).json({ ok: up.ok, nivel: coords2.nivel, anterior: nivelAtual, alterado: up.ok, lat: coords2.lat, lng: coords2.lng, via: 'documento' }); return; }
+      }
     }
   }
 
