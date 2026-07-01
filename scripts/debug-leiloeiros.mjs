@@ -16,13 +16,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  { fonte: 'ZUK',           url: 'https://www.portalzuk.com.br/leilao-de-imoveis' },
-  { fonte: 'FREITAS',       url: 'https://www.freitasleiloeiro.com.br/' },
-  { fonte: 'SODRE',         url: 'https://www.sodresantoro.com.br/imoveis' },
-  // Frazão Leilões — capturar home + listagem de imóveis para achar a URL/estrutura
-  // reais e escrever o parser (como foi feito para ZUK/SODRE).
-  { fonte: 'FRAZAO',        url: 'https://www.frazaoleiloes.com.br/' },
-  { fonte: 'FRAZAO-IMOVEIS', url: 'https://www.frazaoleiloes.com.br/imoveis' },
+  // Recon dirigido: aprofundar SODRE (catálogo por leilão) e SOLD (API própria).
+  { fonte: 'SODRE-LOTES',   url: 'https://www.sodresantoro.com.br/imoveis/lotes' },      // listagem flat de lotes (XHR = endpoint real)
+  { fonte: 'SODRE-AUCTION', url: 'https://www.sodresantoro.com.br/leilao/28622' },        // detalhe de leilão → lotes-por-leilão
+  { fonte: 'SODRE-AUCAPI',  url: 'https://prd-api.sodresantoro.com.br/api/v1/auctions?segmentName=imoveis&limit=100&page=1' },
+  { fonte: 'SOLD-API',      url: 'https://www.sold.com.br/api/v1/lots?category_ids=1&status=open&page=1&per_page=100' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
