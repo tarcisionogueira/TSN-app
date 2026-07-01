@@ -1082,9 +1082,11 @@ async function scraperLeiloesJudiciais(browser) {
     // pelo listener. Só aceita qtd_por_pagina=12. Coletamos a resposta por página.
     let totalPages = 100; // ajustado na 1ª resposta
     let totalItems = 0;
+    const statusVistos = {};
     page.on('response', async (resp) => {
       try {
         if (!/get-bens-por-estados/.test(resp.url())) return;
+        statusVistos[resp.status()] = (statusVistos[resp.status()] || 0) + 1;
         const txt = await resp.text();
         const j = JSON.parse(txt);
         if (Array.isArray(j?.items)) {
@@ -1106,17 +1108,20 @@ async function scraperLeiloesJudiciais(browser) {
     } catch (e) { console.log(`    LJUD: goto home falhou: ${e.message.slice(0, 60)}`); }
     console.log(`    LJUD: ${totalItems || '?'} imóveis em ${totalPages} páginas (colhendo via listener)`);
 
-    // Dispara cada página (ignora o erro CORS no JS — o listener capta o corpo).
+    // Dispara cada página AGUARDANDO a resposta chegar (o erro de CORS ocorre só
+    // ao ler no JS — aguardar garante que a resposta trafegou e o listener CDP a
+    // capturou). Sem await, as requisições não completam a tempo.
     for (let pg = 1; pg <= totalPages; pg++) {
       try {
-        await page.evaluate((url) => { fetch(url, { headers: { Accept: '*/*' } }).catch(() => {}); },
-          `${API}?pg=${pg}&qtd_por_pagina=12&${qs}`);
+        await page.evaluate(async (url) => {
+          try { await fetch(url, { headers: { Accept: '*/*' } }); } catch {}
+        }, `${API}?pg=${pg}&qtd_por_pagina=12&${qs}`);
       } catch { /* segue */ }
-      await new Promise(r => setTimeout(r, 260));
+      await new Promise(r => setTimeout(r, 200));
     }
     // Janela final para o listener drenar as últimas respostas.
-    await new Promise(r => setTimeout(r, 1500));
-    console.log(`    LJUD: ${bensMap.size} bens colhidos pelo listener`);
+    await new Promise(r => setTimeout(r, 2000));
+    console.log(`    LJUD: ${bensMap.size} bens colhidos (status HTTP vistos: ${JSON.stringify(statusVistos)})`);
 
     const imoveis = [...bensMap.values()].map(it => {
       if (Number(it.statuslote_id) !== 1) return null; // só "Aberto para Lance"
