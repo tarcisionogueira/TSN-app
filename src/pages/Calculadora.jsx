@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { calcularMetricasCenario, calcularTetoLance, fmt, fmtPct } from '../utils/calculos';
 
-const ROLES_COM_ACESSO = ['top1', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
+const ROLES_COM_ACESSO = ['top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
 
 // ITBI + registro: fixo no pior cenário (média 5-6%; usamos 5% conservador)
 const ITBI_FIXO = 5;

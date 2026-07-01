@@ -45,7 +45,7 @@ export default function Consultor() {
   const [planosConfig, setPlanosConfig] = useState([]);
   const [sdrProdutos, setSdrProdutos] = useState([]);
   const [linksPromo, setLinksPromo] = useState([]);
-  const [novoPromo, setNovoPromo] = useState({ produto: 'top1', desconto_pct: '', descricao_condicoes: '' });
+  const [novoPromo, setNovoPromo] = useState({ produto: 'top2', desconto_pct: '', descricao_condicoes: '' });
   const [salvandoPromo, setSalvandoPromo] = useState(false);
   const [linksConvite, setLinksConvite] = useState([]);
   const [copiandoConvite, setCopiandoConvite] = useState('');

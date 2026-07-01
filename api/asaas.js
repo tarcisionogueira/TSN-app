@@ -11,8 +11,7 @@ const API_KEY = (process.env.ASAAS_API_KEY || '').trim();
 
 // Fallback hardcoded caso o Supabase não retorne
 const PLANOS_FALLBACK = {
-  top1:              { nome: 'Investidor',                  valor: 49.90,    ciclo: 'MONTHLY', maxPayments: undefined },
-  top2:              { nome: 'Investidor Pro',              valor: 99.90,    ciclo: 'MONTHLY', maxPayments: undefined },
+  top2:              { nome: 'Investidor Pro',              valor: 49.90,    ciclo: 'MONTHLY', maxPayments: undefined },
   clube:             { nome: 'Clube de Negócios (Mensal)',  valor: 5000.00,  ciclo: 'MONTHLY', maxPayments: undefined },
   clube_vista:       { nome: 'Clube de Negócios (À Vista)', valor: 48000.00, avulso: true },
   assessorado:       { nome: 'Assessorado (12× R$ 500)',   valor: 500.00,   ciclo: 'MONTHLY', maxPayments: 12 },

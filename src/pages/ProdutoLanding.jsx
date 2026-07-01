@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
 const PLANOS_INFO = {
-  top1: {
+  top2: {
     tagline: 'Acesse leilões, análises e cursos com o melhor custo-benefício',
     precoLabel: 'R$ 49,90/mês',
     features: [
@@ -369,7 +369,7 @@ export default function ProdutoLanding() {
         if (info) {
           const { data } = await supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,ativo').eq('plano_key', id).single();
           let precoLabel = info.precoLabel;
-          let nome = id === 'top1' ? 'Investidor' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
+          let nome = id === 'top2' ? 'Investidor Pro' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
           if (data) {
             nome = data.nome || nome;
             const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;

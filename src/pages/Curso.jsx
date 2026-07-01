@@ -19,7 +19,7 @@ function salvarProgressoLocal(id, feito) {
 }
 function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explorador'; }
 
-const PLANOS_PAGOS = ['top1','top2','assessorado','clube','analista','consultor','advogado','admin'];
+const PLANOS_PAGOS = ['top2','assessorado','clube','analista','consultor','advogado','admin'];
 
 function podeAssistir(licao, plano, comprouAvulso = false) {
   if (licao.gratis) return true;

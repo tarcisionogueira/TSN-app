@@ -365,7 +365,6 @@ export default function Checkout() {
       setGatewayUsado('asaas');
       const link = data.linkPagamento;
       setLinkPagamento(link);
-      await logAceite(planoApiKey, plano.preco, data, 'asaas');
       // Abre o pagamento em NOVA ABA (não substitui a tela do BidPro — antes o
       // window.location.href levava a cliente embora "sozinha"). A tela de
       // "aguardando confirmação" fica aberta e o plano ativa quando o pagamento cai.
@@ -408,7 +407,6 @@ export default function Checkout() {
         const link = data.initPoint || data.init_point;
         setGatewayUsado('mp');
         setLinkPagamento(link);
-        await logAceite(planoApiKey, plano.preco, { mp_preference_id: data.preferenceId || data.assinaturaId }, 'mp');
         // Abre o pagamento em NOVA ABA (não substitui a tela do BidPro — antes o
       // window.location.href levava a cliente embora "sozinha"). A tela de
       // "aguardando confirmação" fica aberta e o plano ativa quando o pagamento cai.
@@ -457,6 +455,10 @@ export default function Checkout() {
 
   const confirmarPagamento = async () => {
     setPago(true);
+    // Registra o aceite dos termos SOMENTE quando o pagamento é efetivado — antes
+    // era gravado a cada clique em "Ir para Pagamento" (mesmo em checkout abandonado),
+    // gerando aceites sem transação. O aceite agora é prova do pagamento concluído.
+    try { await logAceite(planoApiKey, plano?.preco, {}, gatewayUsado || (mpStatus ? 'mp' : null)); } catch (_) {}
     if (planoKey === 'assessorado' || planoKey === 'clube') {
       try {
         const res = await apiCall('/api/auto-contrato', {

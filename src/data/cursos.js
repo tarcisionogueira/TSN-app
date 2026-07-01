@@ -293,26 +293,6 @@ export const PLANOS = {
     relatorio: false,
     portfolio: false,
   },
-  top1: {
-    id: 'top1',
-    nome: 'Investidor Pro',
-    preco: 49.90,
-    precoLabel: 'R$ 49,90',
-    precoAnual: 449.90,
-    precoAnualLabel: 'R$ 449,90',
-    precoMensalAnual: 37.49,
-    precoMensalAnualLabel: 'R$ 37,49',
-    periodicidade: '/mês',
-    cor: '#0D63DB',
-    bg: '#dbeafe',
-    homepage: false,
-    destaque: false,
-    descricao: 'Plano de assinatura mensal para investidores ativos em leilões imobiliários.',
-    recursos: [],
-    limite_analises: -1,
-    relatorio: true,
-    portfolio: false,
-  },
   top2: {
     id: 'top2',
     nome: 'Investidor Pro',
@@ -416,12 +396,11 @@ export const PLANOS = {
 };
 
 // ─── PAPÉIS / PERMISSÕES ──────────────────────────────────────────────────────
-// Planos compráveis: explorador, top1, top2, assessorado, clube (campo `role` = plano)
+// Planos compráveis: explorador, top2, assessorado, clube (campo `role` = plano)
 // Papéis operacionais (atribuídos pelo admin, não comprados):
 export const ROLES = {
   admin:       { nome: 'Administrador', tipo: 'operacional', descricao: 'Acesso total ao sistema e configurações' },
   explorador:  { nome: 'Explorador (Aluno)', tipo: 'plano', descricao: 'Busca gratuita de imóveis' },
-  top1:        { nome: 'Investidor', tipo: 'plano', descricao: 'Relatório de viabilidade do imóvel — até 10 análises/mês' },
   top2:        { nome: 'Investidor Pro', tipo: 'plano', descricao: 'Relatório + análise jurídica documental inclusa' },
   assessorado: { nome: 'Assessorado', tipo: 'plano', descricao: 'Assessoria para 1 arrematação' },
   clube:       { nome: 'Leilão Club', tipo: 'plano', descricao: 'Mentoria contínua e arrematações ilimitadas' },

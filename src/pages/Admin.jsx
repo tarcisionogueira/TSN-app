@@ -8,8 +8,10 @@ import { apiCall } from '../utils/apiCall';
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
 
+// Papéis REAIS do sistema (planos_config + papéis de equipe/leiloeiro).
+// 'top1' foi removido (Investidor Pro é 'top2'); 'leiloeiro' incluído (portal do parceiro).
 const ROLES_DISPONIVEIS = [
-  'admin','explorador','top1','top2','assessorado','clube','consultor','analista','advogado',
+  'admin','explorador','top2','assessorado','clube','consultor','analista','advogado','leiloeiro',
 ];
 
 // ─── styles ──────────────────────────────────────────────────────────────────
@@ -521,7 +523,7 @@ function UsuariosTab() {
     return (u.nome || '').toLowerCase().includes(q) || (u.cpf || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
   });
 
-  const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top1: '#0D63DB', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626', leiloeiro: '#ea580c' };
+  const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626', leiloeiro: '#ea580c' };
   const fmtData = v => v ? new Date(v).toLocaleDateString('pt-BR') : '—';
 
   return (
@@ -730,8 +732,7 @@ const DESCRICOES_PADRAO = {
   consultor: 'Contratação de consultor/afiliado para divulgação dos serviços BidPro Brasil e captação de novos clientes. Remuneração por comissão conforme acordo. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.',
   analista: 'Contratação de analista para elaboração de relatórios de viabilidade econômico-financeira e análise de editais. Remuneração por laudo emitido, a combinar. Sigilo total. Prazo indeterminado, rescisão com aviso de 30 dias.',
   advogado: 'Parceria jurídica para análise de matrícula, edital, processo e certidões. Remuneração por parecer emitido, a combinar. Total sigilo. Prazo indeterminado, rescisão com aviso de 30 dias.',
-  top1: 'Assinatura Investidor Pro — acesso à plataforma BidPro Brasil, cursos e ebooks incluídos. Valor: R$49,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
-  top2: 'Assinatura Investidor Pro — acesso à plataforma BidPro Brasil, cursos e ebooks incluídos. Valor: R$99,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
+  top2: 'Assinatura Investidor Pro — acesso à plataforma BidPro Brasil, cursos e ebooks incluídos. Valor: R$49,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
 };
 
 function ContratoModal({ chave, planos, onClose }) {
@@ -2381,7 +2382,7 @@ const defaultPromo = () => ({ codigo: '', produto: 'top2', descricao_condicoes: 
 function buildProdutosPromo(planos) {
   const fmt = (v, d = 2) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })}`;
   if (!planos) return [
-    { key: 'top2', label: 'Investidor Pro — R$ 99,90/mês' },
+    { key: 'top2', label: 'Investidor Pro — R$ 49,90/mês' },
     { key: 'assessorado', label: 'Assessoria — R$ 500/mês × 12' },
     { key: 'assessorado_vista', label: 'Assessoria À Vista' },
     { key: 'clube', label: 'Leilão Club — R$ 5.000/mês × 12' },
@@ -2693,11 +2694,11 @@ function UsuariosPlanoDetalhe({ planoKey }) {
   const pNome = (key) => planosCtx?.[key]?.nome || key;
   const LABEL = {
     explorador: 'Explorador (Grátis)',
-    top2: `${pNome('top2')} (R$${planosCtx?.top2?.preco?.toFixed(2) || '99,90'}/mês)`,
+    top2: `${pNome('top2')} (R$${planosCtx?.top2?.preco?.toFixed(2) || '49,90'}/mês)`,
     assessorado: `${pNome('assessorado')} (R$${planosCtx?.assessorado?.preco?.toFixed(2) || '500'}/mês)`,
     clube: `${pNome('clube')} (R$${planosCtx?.clube?.preco ? (planosCtx.clube.preco/1000).toFixed(0)+'k' : '5k'}/mês)`,
   };
-  const PRECO = { explorador: 0, top2: planosCtx?.top2?.preco || 99.90, assessorado: planosCtx?.assessorado?.preco || 500, clube: planosCtx?.clube?.preco || 5000 };
+  const PRECO = { explorador: 0, top2: planosCtx?.top2?.preco || 49.90, assessorado: planosCtx?.assessorado?.preco || 500, clube: planosCtx?.clube?.preco || 5000 };
   const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   React.useEffect(() => {
@@ -2842,10 +2843,10 @@ function DashboardTab() {
         supabase.rpc('get_db_size_mb'),
       ]);
 
-      const contagem = { admin: 0, explorador: 0, top1: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
+      const contagem = { admin: 0, explorador: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
       (perfis || []).forEach(p => { if (p.role in contagem) contagem[p.role]++; });
 
-      const mrr = (contagem.top1 * 49.90) + (contagem.top2 * 99.90) + (contagem.assessorado * 500) + (contagem.clube * 5000);
+      const mrr = (contagem.top2 * 49.90) + (contagem.assessorado * 500) + (contagem.clube * 5000);
       const taxaPix = mrr * 0.01;
       const liquido = mrr - taxaPix;
 
@@ -5002,7 +5003,6 @@ function SdrTab() {
               <div style={{ width: 160 }}><label style={S.label}>Plano Liberado</label>
                 <select style={S.input} value={modalProduto.plano_liberado || 'explorador'} onChange={e => setModalProduto(m => ({ ...m, plano_liberado: e.target.value }))}>
                   <option value="explorador">Explorador (Grátis)</option>
-                  <option value="top1">Investidor</option>
                   <option value="top2">Investidor Pro</option>
                   <option value="assessorado">Assessorado</option>
                   <option value="clube">Clube de Negócios</option>

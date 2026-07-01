@@ -30,7 +30,7 @@ export default function EbookPage() {
       .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
   }, [user, id, ebook]);
 
-  const temPlano = user && ['top1','top2','assessorado','clube','consultor','analista','advogado','admin'].includes(role);
+  const temPlano = user && ['top2','assessorado','clube','consultor','analista','advogado','admin'].includes(role);
   const ehGratuito = ebook && Number(ebook.preco || 0) === 0;
   const podeAcessar = user && (temPlano || ehGratuito || comprouAvulso);
 

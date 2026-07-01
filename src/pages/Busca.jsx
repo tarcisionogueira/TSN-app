@@ -28,8 +28,8 @@ const ESTADOS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT
 const inp = { width:'100%', padding:'9px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, background:'white', color:'#111111', boxSizing:'border-box' };
 const lbl = { fontSize:10, fontWeight:700, color:'#475569', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
 
-const ROLES_SITE   = ['explorador','top1','top2','assessorado','clube','consultor','analista','advogado','admin'];
-const ROLES_ANALISE = ['top1','top2','assessorado','clube','analista','advogado','admin'];
+const ROLES_SITE   = ['explorador','top2','assessorado','clube','consultor','analista','advogado','admin'];
+const ROLES_ANALISE = ['top2','assessorado','clube','analista','advogado','admin'];
 
 function fmtData(d, modalidade) {
   if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : 'Sem data';
@@ -81,7 +81,7 @@ function LazyImage({ src, alt, style }) {
 
 
 const PLANO_LABELS = {
-  explorador: 'Explorador', top1: 'Investidor', top2: 'Investidor Pro',
+  explorador: 'Explorador', top2: 'Investidor Pro',
   assessorado: 'Assessorado', clube: 'Clube de Negócios',
 };
 

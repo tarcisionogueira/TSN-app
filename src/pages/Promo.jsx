@@ -6,7 +6,7 @@ import { PLANOS } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 
 // Ícones decorativos por plano
-const ICONE_PLANO = { top1: '📊', top2: '⚖️', assessorado: '🤝', clube: '👑' };
+const ICONE_PLANO = { top2: '⚖️', assessorado: '🤝', clube: '👑' };
 
 function fmtPreco(v) {
   return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

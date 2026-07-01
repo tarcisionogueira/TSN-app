@@ -35,8 +35,7 @@ const ROLE_LABELS = {
   consultor: 'Consultor',
   advogado: 'Advogado',
   explorador: 'Explorador',
-  top1: 'Top 1',
-  top2: 'Top 2',
+  top2: 'Investidor Pro',
   assessorado: 'Assessorado',
   clube: 'Clube',
 };
@@ -47,7 +46,6 @@ const ROLE_COLORS = {
   consultor: '#0891b2',
   advogado: '#7c3aed',
   explorador: '#64748b',
-  top1: '#d97706',
   top2: '#d97706',
   assessorado: '#16a34a',
   clube: '#dc2626',
@@ -468,7 +466,7 @@ export default function Perfil() {
         )}
 
         {/* Minhas Análises */}
-        {['top1','top2','assessorado','clube','analista','advogado','admin'].includes(role) && (
+        {['top2','assessorado','clube','analista','advogado','admin'].includes(role) && (
           <div style={{ background: 'white', borderRadius: 14, padding: isMobile ? '16px' : '24px', border: '1px solid #e2e8f0', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

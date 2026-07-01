@@ -52,7 +52,7 @@ export default function ProdutoPublico({ tipo }) {
   if (loading) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Carregando…</div>;
   if (!produto) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Produto não encontrado.</div>;
 
-  const temPlano = user && ['top1','top2','assessorado','clube','analista','advogado','admin'].includes(role);
+  const temPlano = user && ['top2','assessorado','clube','analista','advogado','admin'].includes(role);
   const temAcesso = temPlano || comprouAvulso;
   const isPago = Number(produto.preco) > 0;
   const cor = produto.cor || '#0D63DB';
@@ -150,11 +150,11 @@ export default function ProdutoPublico({ tipo }) {
                     ? '📦 Adquira o acesso a este conteúdo'
                     : '⭐ Disponível para assinantes Investidor Pro'}
                 </div>
-                <button onClick={() => nav(`/login?modo=cadastro&produto=${tipo}:${id}${isPago ? '' : `&plano=top1`}${ref ? `&ref=${ref}` : ''}`)}
+                <button onClick={() => nav(`/login?modo=cadastro&produto=${tipo}:${id}${isPago ? '' : `&plano=top2`}${ref ? `&ref=${ref}` : ''}`)}
                   style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
                   {isPago ? 'Comprar agora →' : 'Criar conta e acessar →'}
                 </button>
-                <button onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top1`}${ref ? `&ref=${ref}` : ''}`)}
+                <button onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top2`}${ref ? `&ref=${ref}` : ''}`)}
                   style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
                   Já tenho conta — Entrar
                 </button>

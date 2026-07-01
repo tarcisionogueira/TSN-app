@@ -12,7 +12,7 @@ const FECHAR_MS = 30 * 60 * 1000;
 // Mapeia o role/plano do cliente para o segmento carimbado no chamado.
 function segmentoDoRole(r) {
   if (r === 'explorador') return 'explorador';
-  if (r === 'top1' || r === 'top2') return 'investidor';
+  if (r === 'top2') return 'investidor';
   if (r === 'assessorado') return 'assessorado';
   if (r === 'clube') return 'clube';
   return 'outro';

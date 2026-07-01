@@ -3,7 +3,7 @@ export const config = { runtime: 'edge' };
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
 
-const PLANOS_COM_CONTEUDO = ['top1', 'top2', 'assessorado', 'clube', 'analista', 'advogado', 'admin'];
+const PLANOS_COM_CONTEUDO = ['top2', 'assessorado', 'clube', 'analista', 'advogado', 'admin'];
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -77,7 +77,7 @@ export default async function handler(req) {
 
   // ── Verifica se é produto de plano (assinatura) ──
   if (produto.tipo === 'plano') {
-    const hierarquia = ['explorador', 'top1', 'top2', 'assessorado', 'clube'];
+    const hierarquia = ['explorador', 'top2', 'assessorado', 'clube'];
     const nivelAtual = hierarquia.indexOf(role);
     const nivelDesejado = hierarquia.indexOf(produto.planoKey);
     const temAcesso = nivelAtual >= nivelDesejado && nivelDesejado >= 0;
