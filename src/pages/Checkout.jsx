@@ -143,7 +143,7 @@ export default function Checkout() {
           setNomeFat(data.nome || '');
         }
         setEndLoaded(true);
-      });
+      }, () => setEndLoaded(true)); // erro no perfil não pode travar o checkout
   }, [user?.id]);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
@@ -1118,7 +1118,7 @@ export default function Checkout() {
             <>
               {/* Dados de faturamento — aparecem SÓ quando o perfil não está completo
                   (CPF + endereço). Necessários para faturamento e emissão fiscal. */}
-              {!linkPagamento && endLoaded && !perfilFaturamentoOk && (
+              {!linkPagamento && !perfilFaturamentoOk && (
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, marginBottom: 14, background: '#f8fafc' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
                     <MapPin size={15} color="#0D63DB" />
@@ -1176,7 +1176,7 @@ export default function Checkout() {
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
               </button>
-              {!perfilFaturamentoOk && aceitouTermos && endLoaded && (
+              {!perfilFaturamentoOk && aceitouTermos && (
                 <p style={{ fontSize: 11, color: '#b45309', textAlign: 'center', marginTop: 8 }}>
                   {!cpfOk && !enderecoOk ? 'Preencha o CPF e o endereço acima para continuar.'
                     : !cpfOk ? 'Preencha o CPF acima para continuar.'
