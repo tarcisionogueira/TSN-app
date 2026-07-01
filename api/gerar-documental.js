@@ -52,6 +52,24 @@ async function anthropic(payload) {
   return r.json();
 }
 
+// Documentos ESTÁTICOS da Caixa (venda-imoveis.caixa.gov.br). O portal grava no
+// banco links de página (matricula.asp / detalhe-imovel.asp) que NÃO são o arquivo
+// — a matrícula e as regras reais são PDFs estáticos. Sem isto, imóvel da Caixa
+// chegava à IA sem NENHUM documento legível → laudo bloqueado. O IP de datacenter
+// recebe 403 nesses PDFs, mas o lerDoc cai no Bright Data (IP residencial) e lê.
+const ehCaixa = (fonte) => /caixa|cef/i.test(fonte || '');
+function caixaMatriculaUrl({ fonte, estado, fonteId } = {}) {
+  if (!ehCaixa(fonte)) return null;
+  const num = String(fonteId || '').replace(/\D/g, '');
+  const uf = String(estado || '').trim().toUpperCase();
+  if (!num || uf.length !== 2) return null;
+  return `https://venda-imoveis.caixa.gov.br/editais/matricula/${uf}/${num}.pdf`;
+}
+function caixaRegrasVendaUrl({ fonte } = {}) {
+  if (!ehCaixa(fonte)) return null;
+  return 'https://venda-imoveis.caixa.gov.br/editais/regras-VOL/comocomprar.pdf';
+}
+
 // Lê um documento do lote: PDF → base64 (bloco document); HTML/texto → texto
 // limpo. Tenta fetch direto e cai no Bright Data quando o host bloqueia o servidor.
 async function lerDoc(url, deadline) {
@@ -111,7 +129,7 @@ export default async function handler(req, res) {
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
   try {
-    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,link_edital,link_matricula,link_regras_venda,anexos,numero_processo&limit=1`)).json();
+    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,link_edital,link_matricula,link_regras_venda,anexos,numero_processo&limit=1`)).json();
     row = r || null;
   } catch { /* segue com o que veio no body */ }
 
@@ -133,9 +151,18 @@ export default async function handler(req, res) {
     // 1) Reúne os documentos: edital, matrícula e até 2 anexos relevantes.
     const anexos = Array.isArray(row?.anexos) ? row.anexos : [];
     const urls = [];
-    const add = (u, rotulo) => { if (u && /^https?:\/\//.test(u) && !urls.find(x => x.url === u)) urls.push({ url: u, rotulo }); };
+    // Links de PÁGINA do portal (não são o arquivo) — descarta para não gastar leitura.
+    const ehPagina = (u) => /matricula\.asp|detalhe-imovel\.asp/i.test(u || '');
+    const add = (u, rotulo) => { if (u && /^https?:\/\//.test(u) && !ehPagina(u) && !urls.find(x => x.url === u)) urls.push({ url: u, rotulo }); };
+    // 1º os PDFs estáticos da Caixa (a fonte real da matrícula/regras) — o link do
+    // banco costuma ser a página .asp, que não serve. Depois os links do lote.
+    const cxFonte = { fonte: row?.fonte, estado: row?.estado || estado, fonteId: row?.fonte_id };
+    add(body?.urlMatricula, 'Matrícula');
+    add(caixaMatriculaUrl(cxFonte), 'Matrícula (Caixa)');
     add(row?.link_matricula, 'Matrícula');
     add(row?.link_edital || body?.urlEdital, 'Edital');
+    add(body?.urlRegras, 'Regras de venda');
+    add(caixaRegrasVendaUrl(cxFonte), 'Regras de venda (Caixa)');
     add(row?.link_regras_venda, 'Regras de venda');
     for (const a of anexos) { if (urls.length >= 5) break; add(a.url, a.nome || 'Anexo'); }
     // Também os anexos enviados pela EQUIPE (tabela imovel_anexos) — senão uma

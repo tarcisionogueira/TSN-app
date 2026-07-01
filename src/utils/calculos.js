@@ -56,11 +56,11 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
   const tabelaAmort = inputs.tabelaAmortizacao || 'sac';
 
   const taxaLeiloeiro = vArremate * (taxaLeiloeiroPct / 100);
-  // Honorários advocatícios (sucumbência) só existem em leilão JUDICIAL.
-  // No extrajudicial (Caixa) não se aplicam. Pode ser sobrescrito por inputs.honorariosPercentual.
+  // Honorários jurídicos: padrão 10% (regra de negócio BidPro), sobrescrevível por
+  // inputs.honorariosPercentual (ex.: 0 quando o cliente não quiser incluí-los).
   const honorariosPct = inputs.honorariosPercentual != null
     ? Number(inputs.honorariosPercentual)
-    : (inputs.origem === 'judicial' ? 10 : 0);
+    : 10;
   const honorarios = vArremate * (honorariosPct / 100);
   const itbiRegistro = vArremate * (itbiPct / 100);
   const custosExtra = taxaLeiloeiro + honorarios + itbiRegistro + debitos + manutencao + laudemio + foreiro;

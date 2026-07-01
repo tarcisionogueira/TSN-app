@@ -27,10 +27,10 @@ const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
   nomeCondominio: '', objetivoCompra: 'investimento', status: 'analise', origem: 'extrajudicial',
   somenteAVista: false, tabelaAmortizacao: 'sac', leiloeiro: '', dataLeilao: '',
-  taxaLeiloeiroPercentual: 5, valorAvaliacao: 0, valorArrematacao: 0,
+  taxaLeiloeiroPercentual: 5, honorariosPercentual: 10, valorAvaliacao: 0, valorArrematacao: 0,
   areaM2: 0, areaTerrenoM2: 0, valorMercado: 0, valorLocacao: 0,
   manutencaoEstimada: 0, prazoReformaMeses: 3, debitosAssumidos: 0,
-  iptuMensal: 0, condominioMensal: 0, itbiPercentual: 3,
+  iptuMensal: 0, condominioMensal: 0, itbiPercentual: 5,
   laudemio: 0, foreiro: 0, sinalPercentual: 5, prazoMeses: 360,
   cetAnual: 12, prazoVendaMeses: 12, observacoes: '', riscos: [], lancamentos: [],
 };
@@ -158,6 +158,9 @@ export default function Analise() {
       areaM2: imovelInicial.areaM2||0, leiloeiro: imovelInicial.leiloeiro||'',
       dataLeilao: imovelInicial.dataLeilao||'', origem: imovelInicial.modalidade||'extrajudicial',
       somenteAVista: !imovelInicial.pagamento?.includes('financiado'),
+      // Venda direta (Caixa) normalmente NÃO tem leiloeiro → sem taxa. Demais
+      // modalidades: 5% (editável). Confirmar nas Regras da Venda Online.
+      taxaLeiloeiroPercentual: /venda[_ ]?direta/i.test(imovelInicial.modalidade||'') ? 0 : 5,
     };
     return { ...VAZIO, id: generateId() };
   });
@@ -596,8 +599,19 @@ export default function Analise() {
   const gerarRelDocumental = () => {
     if (gerandoDocumental) return;
     setDocMsg('');
+    // Resolve as URLs REAIS dos documentos (mesma lógica da barra lateral): para a
+    // Caixa, o PDF estático da matrícula/regras — não a página .asp do banco. Sem
+    // isto o servidor chegava sem documento legível e o laudo saía bloqueado.
+    const ehArq = (v) => /^https?:\/\//i.test(v||'') && !/matricula\.asp|detalhe-imovel\.asp/i.test(v);
+    const anexoMat = docsLeiloeiro.find(x => x.tipo === 'matricula')?.url;
+    const urlMatricula = caixaMatriculaUrl({ fonte: imovelInicial?.fonte, estado: imovelInicial?.estado, fonteId: imovelInicial?.fonteId })
+      || (ehArq(anexoMat) ? anexoMat : null) || (ehArq(imovelInicial?.linkMatricula) ? imovelInicial.linkMatricula : null) || undefined;
+    const urlRegras = caixaRegrasVendaUrl({ fonte: imovelInicial?.fonte })
+      || (ehArq(imovelInicial?.linkRegrasVenda) ? imovelInicial.linkRegrasVenda : null) || undefined;
     const payload = {
-      urlEdital: (imovelInicial?.linkEdital || urlEdital || '').trim() || undefined,
+      urlEdital: (ehArq(imovelInicial?.linkEdital) ? imovelInicial.linkEdital : (urlEdital || '')).trim() || undefined,
+      urlMatricula,
+      urlRegras,
       textoEdital: textoDoc.trim() || undefined,
       textoMatricula: textoMatricula.trim() || undefined,
       processoNumero: cnjNumero.trim() || undefined,
@@ -1049,6 +1063,16 @@ export default function Analise() {
             </div>
           )}
 
+          {/* Enquanto a IA gera (cliente): estado de carregamento no lugar da antiga
+              tela de formulários — a análise roda inteira no servidor. */}
+          {relSel === 'documental' && !parecerDocumental && (gerandoDocumental || docEntry?.status === 'gerando') && (
+            <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'28px 22px', display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center' }}>
+              <Loader2 size={28} color="#1e3a8a" style={{ animation:'spin 1s linear infinite' }}/>
+              <div style={{ fontSize:15, fontWeight:800, color:'#111' }}>Gerando a análise documental e jurídica…</div>
+              <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6, maxWidth:460 }}>A IA está lendo o edital/matrícula e as regras da venda, consultando o processo no CNJ e as certidões fiscais. Leva alguns instantes — você pode fechar a aba; continua no servidor e aparece aqui quando pronto.</div>
+            </div>
+          )}
+
           {/* Parecer documental gerado NO SERVIDOR (lê edital/matrícula/anexos + CNJ) */}
           {relSel === 'documental' && parecerDocumental && (
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'20px 22px', display:'flex', flexDirection:'column', gap:14 }}>
@@ -1150,7 +1174,10 @@ export default function Analise() {
       )}
 
       </>)}
-      {relSel === 'documental' && (<>
+      {/* Formulários manuais (CNJ, certidões, dados/custos editáveis) são ferramenta
+          da EQUIPE. O cliente clica "Gerar" e recebe o PARECER pronto (a IA já faz a
+          consulta CNJ e as certidões no servidor) — sem tela intermediária. */}
+      {relSel === 'documental' && isStaffAnalise && (<>
 
       {/* ── ETAPA 1C: CONSULTA JURÍDICA CNJ — apenas roles com CNJ ── */}
       {!temCNJ && (
@@ -1492,12 +1519,10 @@ export default function Analise() {
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3,1fr)', gap:12 }}>
               <Field label="Taxa Leiloeiro (%)" name="taxaLeiloeiroPercentual" value={d.taxaLeiloeiroPercentual||5} onChange={upN} type="number"/>
               <Field label="ITBI + Registro (%)" name="itbiPercentual" value={d.itbiPercentual||3} onChange={upN} type="number"/>
-              {/* Honorários advocatícios: só em leilão JUDICIAL (sucumbência ~10%).
-                  No extrajudicial/Caixa não se aplicam (default 0). Editável para o
-                  cliente incluir custo próprio de assessoria/advogado se quiser —
-                  quando > 0, entra nos aportes e no cálculo de viabilidade. */}
+              {/* Honorários jurídicos: padrão 10% (editável). Entram nos aportes e
+                  no cálculo de viabilidade. */}
               <Field label="Honorários Jurídicos (%)" name="honorariosPercentual"
-                value={d.honorariosPercentual != null ? d.honorariosPercentual : (d.origem==='judicial'?10:0)}
+                value={d.honorariosPercentual != null ? d.honorariosPercentual : 10}
                 onChange={upN} type="number"/>
               <Field label="IPTU Mensal (R$)" name="iptuMensal" value={d.iptuMensal||0} onChange={upN} type="number"/>
               <Field label="Condomínio (R$)" name="condominioMensal" value={d.condominioMensal||0} onChange={upN} type="number"/>
