@@ -661,11 +661,19 @@ async function scraperPortalZuk(browser) {
     await page.goto('https://www.portalzuk.com.br/leilao-de-imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
     try { await page.waitForSelector('.card-property', { timeout: 10000 }); } catch {}
 
-    // Rola até parar de carregar novos cards (cap de segurança)
+    // A listagem tem um botão "Carregar mais" (#btn_carregarMais) que dispara o
+    // POST leilao-de-imoveis/mais (rota Ziggy carrega.mais) e faz o append dos
+    // próximos cards. O scroll puro NÃO aciona o botão — por isso parávamos em 30.
+    // Clicamos o botão repetidamente (com scroll como fallback) até parar de crescer.
     let prev = 0, estavel = 0;
-    for (let i = 0; i < 250 && estavel < 4; i++) {
-      const n = await page.evaluate(() => { window.scrollTo(0, document.body.scrollHeight); return document.querySelectorAll('.card-property').length; });
-      await new Promise(r => setTimeout(r, 1400));
+    for (let i = 0; i < 400 && estavel < 3; i++) {
+      const n = await page.evaluate(() => {
+        const btn = document.querySelector('#btn_carregarMais');
+        if (btn && btn.offsetParent !== null) { btn.scrollIntoView({ block: 'center' }); btn.click(); }
+        else { window.scrollTo(0, document.body.scrollHeight); }
+        return document.querySelectorAll('.card-property').length;
+      });
+      await new Promise(r => setTimeout(r, 1600));
       if (n <= prev) estavel++; else { estavel = 0; prev = n; }
     }
 
@@ -766,49 +774,36 @@ async function scraperSodre(browser) {
     await page.goto('https://www.sodresantoro.com.br/imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(r => setTimeout(r, 3500));
 
-    // Replica o POST search-lots paginando (incrementa page/offset/from no corpo)
-    const setPagina = (obj, p) => {
-      if (!obj || typeof obj !== 'object') return false;
-      for (const k of ['page', 'pageNumber', 'pagina', 'currentPage', 'pageIndex']) if (k in obj) { obj[k] = p; return true; }
-      if ('offset' in obj && ('limit' in obj || 'size' in obj)) { obj.offset = (p - 1) * (Number(obj.limit || obj.size) || 20); return true; }
-      if ('from' in obj && 'size' in obj) { obj.from = (p - 1) * (Number(obj.size) || 20); return true; }
-      if (obj.pagination && setPagina(obj.pagination, p)) return true;
-      if (obj.filters && setPagina(obj.filters, p)) return true;
-      return false;
-    };
-    let baseBody = null;
-    try { baseBody = JSON.parse(reqInfo?.body || 'null'); } catch {}
-    const temPaginacao = baseBody && setPagina(JSON.parse(JSON.stringify(baseBody)), 2);
-    if (temPaginacao) {
+    // A resposta do search-lots é { results:[], total, page, perPage }. Paginamos
+    // por page/perPage EXPLICITAMENTE (o body interceptado nem sempre traz essas
+    // chaves — eram defaults do servidor — por isso a versão anterior parava em 20).
+    // Reaproveitamos o body interceptado (preserva filtros/segmento) e só
+    // sobrescrevemos page/perPage; paramos ao atingir o total ou página vazia.
+    if (reqInfo?.url) {
+      let baseBody = {};
+      try { baseBody = JSON.parse(reqInfo?.body || '{}') || {}; } catch {}
       const hdrs = { ...(reqInfo.headers || {}) };
       ['host', 'content-length', 'accept-encoding', 'connection'].forEach(h => delete hdrs[h]);
       hdrs['content-type'] = hdrs['content-type'] || 'application/json';
-      for (let p = 1; p <= 100; p++) {
-        const b = JSON.parse(JSON.stringify(baseBody));
-        setPagina(b, p);
-        let arr = [];
+      const perPage = 100;
+      for (let p = 1; p <= 60; p++) {
+        const body = { ...baseBody, page: p, perPage };
+        let res = null;
         try {
-          arr = await page.evaluate(async (url, headers, body) => {
-            const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), credentials: 'include' });
-            if (!r.ok) return [];
-            const j = await r.json();
-            return j?.results || [];
-          }, reqInfo.url, hdrs, b);
-        } catch { arr = []; }
+          res = await page.evaluate(async (url, headers, b) => {
+            const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(b), credentials: 'include' });
+            if (!r.ok) return null;
+            return await r.json();
+          }, reqInfo.url, hdrs, body);
+        } catch { res = null; }
+        const arr = res?.results || [];
         if (!arr.length) break;
         let novos = 0;
         arr.forEach(r => { const id = String(r.lot_id || r.id || ''); if (id && !lotesMap.has(id)) { lotesMap.set(id, r); novos++; } });
+        const total = Number(res?.total || 0);
         if (novos === 0) break;
-        await new Promise(r => setTimeout(r, 400));
-      }
-    } else {
-      // Sem campo de paginação detectado — tenta o scroll como fallback
-      let prev = 0, estavel = 0;
-      for (let i = 0; i < 60 && estavel < 4; i++) {
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-        await new Promise(r => setTimeout(r, 1500));
-        const n = lotesMap.size;
-        if (n <= prev) estavel++; else { estavel = 0; prev = n; }
+        if (total && lotesMap.size >= total) break;
+        await new Promise(r => setTimeout(r, 350));
       }
     }
 

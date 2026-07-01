@@ -9,9 +9,9 @@ _Última atualização: 2026-06-29 (sessão BidPro)._
 | **SUPERBID** | ~1.472 | ✅ Completo (API offers, portal 2, paginação cheia). |
 | **MEGA** | ~637 | ✅ Completo (HTML server-rendered, `?pagina=N`, só `card open`). |
 | **SOLD** | ~98 | ✅ OK (mesma rede Superbid, portal 15). |
-| **ZUK** (PortalZuk/Zukerman) | ~30 | ⚠️ PARCIAL — só a 1ª leva. |
-| **SODRE** (Sodré Santoro) | ~20 | ⚠️ PARCIAL — só a 1ª página. |
-| **FREITAS** | 0 | ❌ URL de listagem errada. |
+| **ZUK** (PortalZuk/Zukerman) | ~30 | 🔧 CORRIGIDO (aguarda validação no workflow) — ver abaixo. |
+| **SODRE** (Sodré Santoro) | ~20 | 🔧 CORRIGIDO (aguarda validação no workflow) — ver abaixo. |
+| **FREITAS** | 0 | ❌ URL de listagem errada — ainda pendente. |
 | **BB** | — | Descartado (não expôs dados); substituído por Freitas/Sodré. |
 
 Coletores: `scripts/scraper-puppeteer.mjs` (workflow `leiloeiros-puppeteer.yml`, diário 10h UTC).
@@ -19,19 +19,37 @@ Capturas de estrutura: tabela `debug_fetch` (fontes `ZUK-*`, `SODRE-*`, `FREITAS
 
 ## Pendentes — diagnóstico e próximo passo
 
-### PortalZuk (ZUK) — parar em 30
-- Listagem **server-rendered** (`.card-property`), mas usa **scroll infinito / "carregar mais"** que **não dispara em headless** (scroll de window e clique genérico em botões não funcionaram).
-- Card decifrado: `a[href*="/imovel/uf/cidade/..."]`, `title` rico (tipo/endereço/cidade-UF/comitente), `.card-property-price-lote` (tipo), `.card-property-address`, `.card-property-news` (ocupação), R$ no corpo (praças), `img`.
-- **Próximo:** capturar o **request AJAX** que o site faz ao rolar (provável endpoint de "mais imóveis" com `?page=`/offset) via `page.on('request')` e replicar; ou achar a URL paginada real.
+### PortalZuk (ZUK) — 🔧 CORRIGIDO (validar no workflow)
+- **Causa raiz achada** (via captura `ZUK-render` em `debug_fetch`): a listagem tem um
+  botão **"Carregar mais"** `#btn_carregarMais` que dispara a rota Ziggy
+  **`carrega.mais` → `POST leilao-de-imoveis/mais`**. O `scrollTo` puro NÃO aciona
+  esse botão — por isso parávamos em 30.
+- **Fix aplicado** (`scraperPortalZuk`): clicar `#btn_carregarMais` em loop (o próprio
+  JS do site faz o POST + CSRF + append), com `scrollTo` como fallback, até parar de
+  crescer. Parser dos cards inalterado (já mapeava corretamente).
+- **Validar:** rodar `leiloeiros-puppeteer.yml` e conferir se ZUK sobe bem acima de 30.
 
-### Sodré (SODRE) — parar em 20
-- **Nuxt SPA**. Lotes vêm de **POST `https://www.sodresantoro.com.br/api/search-lots`** (JSON rico: `lot_title`, `lot_category`, `lot_description`, `bid_initial`, `lot_city/state`, `auction_status`, `lot_is_judicial`, datas).
-- Interceptação pega só a **1ª página (20)**. O replay do POST incrementando `page/offset/from` **não destravou** (o campo de paginação do body não foi detectado).
-- **Próximo:** salvar o **postData real** do `search-lots` em `debug_fetch` e inspecionar o **schema do body** para achar o campo de paginação; ou usar `prd-api.sodresantoro.com.br/api/v1/auctions?segmentName=imoveis&limit=...&page=...`.
+### Sodré (SODRE) — 🔧 CORRIGIDO (validar no workflow)
+- **Causa raiz achada** (via `SODRE-xhr-1` em `debug_fetch`): a resposta do
+  **POST `/api/search-lots`** é `{ results:[], total, page, perPage }`. A versão
+  anterior tentava incrementar `page` DENTRO do body interceptado, mas essas chaves
+  não vinham no body (eram defaults do servidor) → `setPagina` retornava false e não
+  paginava (parava em 20).
+- **Fix aplicado** (`scraperSodre`): reaproveita o body interceptado (preserva
+  filtros/segmento) e sobrescreve `page`/`perPage` (100) EXPLICITAMENTE; loopa até
+  atingir `total` ou página vazia.
+- OBS: no snapshot de captura o `total` de imóveis ativos era ~24 (condiz com "~20").
+  O ganho é pequeno mas a coleta fica correta/completa.
+- **Validar:** rodar o workflow e conferir se SODRE chega ao `total` (ex.: 24).
 
-### Freitas (FREITAS) — 0
-- `/lotes/imoveis` retorna **404** ("Ops! Página não encontrada"). Domínio certo: `freitasleiloeiro.com.br`.
-- **Próximo:** capturar a **home** e seguir o link real de "imóveis"; testar `/busca`, `/imoveis`, `/Site/Busca`, etc. Depois mapear cards/API.
+### Freitas (FREITAS) — 0 — AINDA PENDENTE
+- `/lotes/imoveis` retorna **404**. A captura em `debug_fetch` (`FREITAS-render`) é só a
+  página de erro (1126 bytes) — não há HTML útil para achar a URL real, e os sites dos
+  leiloeiros estão **bloqueados pela política de rede** do ambiente de dev (não dá para
+  sondar daqui).
+- **Próximo (precisa de acesso ao site ou um debug run):** capturar a **home**
+  `freitasleiloeiro.com.br` e seguir o link real de "imóveis"; testar `/busca`,
+  `/imoveis`, `/Site/Busca`. Depois mapear cards/API e escrever o parser.
 
 ## Observações
 - O agendador (cron) **não persiste de forma confiável** neste ambiente; o avanço foi manual (disparos de `leiloeiros-puppeteer.yml`).
