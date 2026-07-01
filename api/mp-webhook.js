@@ -12,15 +12,21 @@ import { enviarEmail } from './_email.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
+// Retorna:
+//   'ok'         → assinatura válida (secret configurado e HMAC confere)
+//   'sem_secret' → MP_WEBHOOK_SECRET não configurado (não bloqueia: cada evento é
+//                  reconferido na API do MP com o nosso token, então não há como
+//                  forjar ativação — só destrava enquanto o secret não é setado)
+//   'invalida'   → secret configurado mas HMAC não confere → BLOQUEAR
 function verificarAssinatura(req) {
   const secret = process.env.MP_WEBHOOK_SECRET;
-  if (!secret) return false;
+  if (!secret) return 'sem_secret';
 
   // MP envia x-signature: ts=<timestamp>,v1=<hmac>
   const xSig = req.headers['x-signature'] || '';
   const xReqId = req.headers['x-request-id'] || '';
   const match = xSig.match(/ts=(\d+),v1=([a-f0-9]+)/);
-  if (!match) return false;
+  if (!match) return 'invalida';
 
   const [, ts, v1] = match;
   const dataId = req.body?.data?.id || '';
@@ -30,17 +36,24 @@ function verificarAssinatura(req) {
   try {
     const eBuf = Buffer.from(expected);
     const vBuf = Buffer.from(v1);
-    if (eBuf.length !== vBuf.length) return false;
-    return crypto.timingSafeEqual(eBuf, vBuf);
-  } catch { return false; }
+    if (eBuf.length !== vBuf.length) return 'invalida';
+    return crypto.timingSafeEqual(eBuf, vBuf) ? 'ok' : 'invalida';
+  } catch { return 'invalida'; }
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  if (!verificarAssinatura(req)) {
+  const sig = verificarAssinatura(req);
+  if (sig === 'invalida') {
     console.warn('[mp-webhook] assinatura inválida');
     return res.status(401).json({ error: 'Não autorizado' });
+  }
+  if (sig === 'sem_secret') {
+    // Sem MP_WEBHOOK_SECRET ainda: não bloqueia. Cada evento é reconferido na API
+    // do MP com o nosso token (busca preapproval/payment por id), então não há como
+    // um terceiro forjar ativação. Configure o secret p/ verificação criptográfica.
+    console.warn('[mp-webhook] MP_WEBHOOK_SECRET ausente — processando com verificação via API do MP');
   }
 
   const tipo = req.body?.type || req.body?.action || '';
