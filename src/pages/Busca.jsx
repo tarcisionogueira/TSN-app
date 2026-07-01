@@ -450,12 +450,21 @@ export default function Busca() {
     if (!user?.id) return; // aguarda o usuário carregar
     presetTentado.current = true;
     (async () => {
-      // 1) Residência (prioridade)
+      // 1) Residência (prioridade). Usa os campos estruturados quando existem e,
+      // como FALLBACK, o campo livre `endereco` — que no cadastro é preenchido pelo
+      // autocomplete no formato "Cidade - UF" (ex.: "Santana de Parnaíba - SP").
+      // Sem esse fallback, quem se cadastra não tem endereco_cidade/uf preenchidos
+      // e o filtro não vinha na cidade da pessoa.
       let uf = '', cidade = '';
       try {
-        const { data } = await supabase.from('perfis').select('endereco_uf,endereco_cidade').eq('id', user.id).single();
+        const { data } = await supabase.from('perfis').select('endereco_uf,endereco_cidade,endereco').eq('id', user.id).single();
         uf = (data?.endereco_uf || '').toUpperCase();
         cidade = data?.endereco_cidade || '';
+        if (!uf && !cidade && data?.endereco) {
+          const m = String(data.endereco).match(/^\s*(.+?)\s*[-–/]\s*([A-Za-z]{2})\s*$/);
+          if (m) { cidade = m[1].trim(); uf = m[2].toUpperCase(); }
+          else cidade = String(data.endereco).trim(); // só cidade, sem UF
+        }
       } catch {}
       // 2) Fallback: último alerta salvo (só quando não há endereço de residência)
       let alerta = null;
