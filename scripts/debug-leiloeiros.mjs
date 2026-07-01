@@ -43,7 +43,9 @@ async function capturar(browser, { fonte, url, inPageApi }) {
       if (!/json/i.test(ct)) return;
       const text = await resp.text();
       if (text.length < 80) return;
-      xhrs.push({ url: resp.url(), ct, status: resp.status(), text });
+      let reqHeaders = {};
+      try { reqHeaders = resp.request().headers(); } catch {}
+      xhrs.push({ url: resp.url(), ct, status: resp.status(), text, reqHeaders });
     } catch {}
   });
 
@@ -91,6 +93,7 @@ async function capturar(browser, { fonte, url, inPageApi }) {
     if (INTERESSE.test(x.url) && m < 4) {
       m++;
       await gravarDebug(`${fonte}-match-${m}`, x.url, x.status, x.ct, x.text);
+      await gravarDebug(`${fonte}-match-${m}-reqhdr`, x.url, x.status, 'application/json', JSON.stringify(x.reqHeaders || {}, null, 2));
       console.log(`  match ${m}: ${x.text.length}b ${x.url.slice(0, 120)}`);
     }
   }
