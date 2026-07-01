@@ -16,19 +16,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Fila nacional — Top 3 multi-estado + agregador (descoberta) ===
-  // MGL Leilões (MG · SP · ES; judicial + extrajudicial Banco do Brasil)
-  { fonte: 'MGL-HOME',  url: 'https://www.mgl.com.br/' },
-  { fonte: 'MGL-IMOV',  url: 'https://www.mgl.com.br/categoria/imoveis' },
-  // CCJ Leilões (bens em todos os estados)
-  { fonte: 'CCJ-HOME',  url: 'https://www.ccjleiloes.com.br/' },
-  { fonte: 'CCJ-IMOV',  url: 'https://www.ccjleiloes.com.br/lotes/categoria/imoveis' },
-  // Leilões Judiciais (rede judicial 15+ estados)
-  { fonte: 'LJUD-HOME', url: 'https://www.leiloesjudiciais.com.br/' },
-  { fonte: 'LJUD-IMOV', url: 'https://www.leiloesjudiciais.com.br/lotes?categoria=imoveis' },
-  // Núcleo Leilões (agregador grátis — 900+ leiloeiros, mapa nacional de descoberta)
-  { fonte: 'NUCLEO-HOME', url: 'https://www.nucleoleiloes.com.br/' },
-  { fonte: 'NUCLEO-BUSCA', url: 'https://www.nucleoleiloes.com.br/imoveis' },
+  // === Round 2 — capturar estrutura por-bem e páginas reais de listagem ===
+  // LJUD: API pública por-bem (tipo=3 = imóveis). Peça que faltava no round 1.
+  { fonte: 'LJUD-BENS', url: 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados?pg=1&qtd_por_pagina=60&tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null' },
+  // LJUD: detalhe de um bem (para achar matrícula/edital/anexos/fotos)
+  { fonte: 'LJUD-LEILAO', url: 'https://api.leiloesjudiciais.com.br/core/api/get-leiloes?pg=1&ativo=1&ordenacao=crescente' },
+  // CCJ: listagem de lotes server-side (padrão /leilao/{id}/lotes)
+  { fonte: 'CCJ-LOTES', url: 'https://www.ccjleiloes.com.br/leilao/110/lotes' },
+  // MGL: tentativas de página real de listagem (CMS renderizado no servidor)
+  { fonte: 'MGL-LEILOES', url: 'https://www.mgl.com.br/leiloes' },
+  { fonte: 'MGL-BUSCA', url: 'https://www.mgl.com.br/busca' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
