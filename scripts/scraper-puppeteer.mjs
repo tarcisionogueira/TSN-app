@@ -852,6 +852,108 @@ async function scraperSodre(browser) {
   }
 }
 
+// ─── FRAZÃO LEILÕES ───────────────────────────────────────────────────────────
+// ASP.NET MVC server-rendered. Organiza por LEILÃO (/leilao/{id}/{slug}); cada
+// leilão de imóveis lista os lotes. Card: a.visualizar_lote[data-lote-id]
+// [data-tipo][data-addr] + img (cdn) + .lot-info (.lot-title-cap b[title="...,
+// Cidade, UF"], .price-line "R$ x", .inf-leilao-calendar "Leilão: DD/MM/AAAA").
+// (/imoveis dá 404 — não existe controller; os lotes vêm pelos leilões.)
+async function scraperFrazao(browser) {
+  console.log('  Frazão Leilões — coletando leilões de imóveis...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const imoveisMap = new Map();
+
+  const parseCards = () => page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('a.visualizar_lote[data-lote-id]').forEach(a => {
+      const id = a.getAttribute('data-lote-id');
+      if (!id) return;
+      let card = a;
+      for (let i = 0; i < 4 && card && !(card.querySelector && card.querySelector('.lot-info')); i++) card = card.parentElement;
+      card = card || a.parentElement;
+      const b = card.querySelector('.lot-title-cap b, .lot-title-cap');
+      const titulo = ((b && (b.getAttribute('title') || b.textContent)) || '').replace(/\s+/g, ' ').trim();
+      const priceLine = (card.querySelector('.price-line') || {}).textContent || '';
+      const cal = (card.querySelector('.inf-leilao-calendar') || {}).textContent || '';
+      out.push({
+        id,
+        tipo: a.getAttribute('data-tipo') || '',
+        addr: a.getAttribute('data-addr') || '',
+        titulo, priceLine, cal,
+        href: (a.getAttribute('href') || '').split('?')[0],
+        img: (a.querySelector('img') || {}).getAttribute ? a.querySelector('img').getAttribute('src') : '',
+      });
+    });
+    return out;
+  });
+
+  try {
+    await page.goto('https://www.frazaoleiloes.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
+    // Links de leilão de imóveis (/leilao/{id}/...imoveis...)
+    const auctions = await page.evaluate(() => {
+      const set = new Set();
+      document.querySelectorAll('a[href^="/leilao/"]').forEach(a => {
+        const h = (a.getAttribute('href') || '').split('?')[0];
+        if (/\/leilao\/\d+\//.test(h) && /imove/i.test(h)) set.add(h);
+      });
+      return [...set];
+    });
+    console.log(`    Frazão: ${auctions.length} leilões de imóveis`);
+
+    // A home já traz lotes; visita cada leilão para pegar todos (cap de segurança).
+    const urls = ['/', ...auctions].slice(0, 60);
+    for (const u of urls) {
+      try {
+        if (u !== '/') await page.goto(`https://www.frazaoleiloes.com.br${u}`, { waitUntil: 'networkidle2', timeout: 45000 });
+        const cards = await parseCards();
+        for (const c of cards) if (c.id && !imoveisMap.has(c.id)) imoveisMap.set(c.id, c);
+        await new Promise(r => setTimeout(r, 300));
+      } catch { /* pula leilão que falhar */ }
+    }
+
+    const imoveis = [...imoveisMap.values()].map(c => {
+      const valMin = parseBRL(c.priceLine);
+      if (!valMin) return null;
+      // título "Tipo na Bairro, Cidade, UF" → UF/cidade nos 2 últimos campos
+      const parts = c.titulo.split(',').map(s => s.trim()).filter(Boolean);
+      const uf = parts.length && /^[A-Za-z]{2}$/.test(parts[parts.length - 1]) ? parts[parts.length - 1].toUpperCase() : '';
+      const cidade = uf && parts.length >= 2 ? parts[parts.length - 2] : '';
+      const dm = c.cal.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      const data_leilao = dm ? `${dm[3]}-${dm[2]}-${dm[1]}T00:00:00-03:00` : null;
+      const href = c.href.startsWith('http') ? c.href : `https://www.frazaoleiloes.com.br${c.href}`;
+      return {
+        fonte: 'FRAZAO',
+        fonte_id: `frazao_${c.id}`,
+        titulo: (c.titulo || `Imóvel Frazão ${c.id}`).slice(0, 180),
+        tipo: normalizarTipo(c.tipo || c.titulo),
+        modalidade: /judicial/i.test(c.titulo) ? 'judicial' : 'extrajudicial',
+        estado: uf,
+        cidade: toTitleCase(cidade),
+        bairro: '',
+        endereco: c.addr || '',
+        valor_avaliacao: 0,
+        valor_minimo: valMin,
+        area_m2: 0,
+        descricao: [c.titulo, c.addr].filter(Boolean).join(' — ').slice(0, 500),
+        link_edital: href,
+        link_foto: c.img || null,
+        leiloeiro: 'Frazão Leilões',
+        data_leilao,
+        forma_pagamento: 'a_vista',
+      };
+    }).filter(Boolean);
+    console.log(`    Frazão: ${imoveis.length} imóveis mapeados`);
+    return imoveis;
+  } catch (err) {
+    console.log(`  Erro Frazão: ${err.message.slice(0, 100)}`);
+    return [];
+  } finally {
+    await page.close();
+  }
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -928,6 +1030,10 @@ async function main() {
     // 5. Sodré Santoro — API search-lots interceptada, somente ativos
     console.log('\n📋 Sodré Santoro...');
     total += await salvarEFinalizar(await scraperSodre(browser), 'SODRE');
+
+    // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis
+    console.log('\n📋 Frazão Leilões...');
+    total += await salvarEFinalizar(await scraperFrazao(browser), 'FRAZAO');
 
   } finally {
     await browser.close();
