@@ -17,7 +17,7 @@ const STATS = [
 // As 5 perguntas que travam todo mundo (insight de posicionamento) — e como a Bid Pro responde.
 const PERGUNTAS = [
   { q: 'Esse imóvel é seguro?',            r: 'A análise jurídica e o Bid Score mapeiam ônus, processos e sanções do executado antes do lance.', icon: ShieldCheck },
-  { q: 'Tem alguma bomba escondida?',      r: 'A IA lê o edital e a matrícula e destaca penhoras, usufruto, indisponibilidade e risco de evicção.', icon: FileText },
+  { q: 'Tem alguma bomba escondida?',      r: 'A IA lê o edital e a matrícula e destaca penhoras, usufruto, indisponibilidade e risco de perda do imóvel.', icon: FileText },
   { q: 'Quanto realmente vale?',           r: 'Comparativos de mercado e a viabilidade calculam o valor real e o desconto efetivo da oportunidade.', icon: BarChart3 },
   { q: 'Quanto vou gastar depois?',        r: 'O relatório lista débitos, IPTU, condomínio e custos de regularização a confirmar antes de arrematar.', icon: TrendingUp },
   { q: 'Vale a pena entrar nesse leilão?', r: 'O Bid Score traduz tudo numa nota de 0 a 100 e numa recomendação clara: arrematar ou passar.', icon: Gavel },
@@ -40,7 +40,7 @@ const PASSOS = [
 const RECURSOS = [
   { icon: Zap,         titulo: 'IA que lê editais',          desc: 'Extração automática de dados do edital e da matrícula. Sem digitar nada manualmente.' },
   { icon: TrendingUp,  titulo: 'Projeções financeiras',       desc: 'Cenários SAC e Price, yield de locação, ROI esperado e teto máximo de lance calculados na hora.' },
-  { icon: ShieldCheck, titulo: 'Análise jurídica completa',   desc: 'Gravames, ônus reais, processos judiciais e riscos de evicção identificados antes da arrematação.' },
+  { icon: ShieldCheck, titulo: 'Análise jurídica completa',   desc: 'Gravames, ônus reais, processos judiciais e risco de perda do imóvel identificados antes da arrematação.' },
   { icon: BarChart3,   titulo: 'Comparativos de mercado',     desc: 'Imóveis similares na mesma rua ou condomínio para defender o valor da oferta com dados reais.' },
   { icon: FileText,    titulo: 'Relatório executivo PDF',     desc: 'Documento profissional para apresentar ao cliente, ao sócio ou à família antes de arrematar.' },
   { icon: MapPin,      titulo: 'Atuação em todo o Brasil',    desc: 'O leilão segue a legislação federal — você pode arrematar em qualquer estado. Já temos operações realizadas em 11 estados e crescendo.' },
