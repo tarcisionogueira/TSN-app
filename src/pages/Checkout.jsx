@@ -400,8 +400,6 @@ export default function Checkout() {
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setSuErro('E-mail inválido.'); return; }
     if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
-    if (!cpfOk) { setSuErro('Informe um CPF válido (11 dígitos).'); return; }
-    if (!enderecoOk) { setSuErro('Preencha o endereço completo para a emissão fiscal.'); return; }
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
     setEtapa('pgto');
   };
@@ -413,9 +411,9 @@ export default function Checkout() {
   const assinarComCadastro = async () => {
     setSuErro('');
     const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
-    if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); setEtapa('ident'); return; }
-    if (!cpfOk || !enderecoOk) { setSuErro('Complete os dados de identificação.'); setEtapa('ident'); return; }
-    if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); setEtapa('ident'); return; }
+    if (!nome || !email || !senha || !su.aceite) { setSuErro('Complete seus dados no passo 1.'); setEtapa('ident'); return; }
+    if (!cpfOk) { setSuErro('Informe um CPF válido (11 dígitos).'); return; }
+    if (!enderecoOk) { setSuErro('Preencha o endereço completo para a nota fiscal.'); return; }
     if (!card.numero || !card.nome || !card.validade || !card.cvv) { setSuErro('Preencha todos os dados do cartão.'); return; }
     const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY;
     if (!MP_PUBLIC_KEY) { setSuErro('Pagamento indisponível no momento. Tente mais tarde.'); return; }
@@ -944,6 +942,32 @@ export default function Checkout() {
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>{plano.nome} · {plano.precoLabel || 'R$ 49,90'}/mês</div>
                     <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Como {su.email} · Cancele quando quiser</div>
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Dados para a nota fiscal</div>
+                    <input value={cpf} inputMode="numeric" placeholder="CPF"
+                      onChange={e => setCpf(e.target.value)} style={{ ...ckInp, width: '100%' }} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input value={end.cep} inputMode="numeric" placeholder="CEP"
+                        onChange={e => setEnd(p => ({ ...p, cep: e.target.value }))} onBlur={e => buscarCepCk(e.target.value)} style={{ ...ckInp, width: 120 }} />
+                      <input value={end.logradouro} placeholder="Logradouro"
+                        onChange={e => setEnd(p => ({ ...p, logradouro: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input value={end.numero} placeholder="Nº"
+                        onChange={e => setEnd(p => ({ ...p, numero: e.target.value }))} style={{ ...ckInp, width: 80 }} />
+                      <input value={end.bairro} placeholder="Bairro"
+                        onChange={e => setEnd(p => ({ ...p, bairro: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input value={end.cidade} placeholder="Cidade"
+                        onChange={e => setEnd(p => ({ ...p, cidade: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
+                      <select value={end.uf} onChange={e => setEnd(p => ({ ...p, uf: e.target.value }))} style={{ ...ckInp, width: 90 }}>
+                        <option value="">UF</option>
+                        {ESTADOS_UF.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                      </select>
+                    </div>
+                    {cepLoadingCk && <div style={{ fontSize: 11, color: '#0D63DB' }}>Buscando endereço…</div>}
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Dados do cartão</div>
                     <input value={card.numero} inputMode="numeric" placeholder="Número do cartão"
@@ -994,34 +1018,6 @@ export default function Checkout() {
                       ))}
                     </div>
                   </div>
-                  {planoKey === 'top2' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Dados para a nota fiscal</div>
-                      <input value={cpf} inputMode="numeric" placeholder="CPF"
-                        onChange={e => setCpf(e.target.value)} style={{ ...ckInp, width: '100%' }} />
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <input value={end.cep} inputMode="numeric" placeholder="CEP"
-                          onChange={e => setEnd(p => ({ ...p, cep: e.target.value }))} onBlur={e => buscarCepCk(e.target.value)} style={{ ...ckInp, width: 120 }} />
-                        <input value={end.logradouro} placeholder="Logradouro"
-                          onChange={e => setEnd(p => ({ ...p, logradouro: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
-                      </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <input value={end.numero} placeholder="Nº"
-                          onChange={e => setEnd(p => ({ ...p, numero: e.target.value }))} style={{ ...ckInp, width: 80 }} />
-                        <input value={end.bairro} placeholder="Bairro"
-                          onChange={e => setEnd(p => ({ ...p, bairro: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
-                      </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <input value={end.cidade} placeholder="Cidade"
-                          onChange={e => setEnd(p => ({ ...p, cidade: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
-                        <select value={end.uf} onChange={e => setEnd(p => ({ ...p, uf: e.target.value }))} style={{ ...ckInp, width: 90 }}>
-                          <option value="">UF</option>
-                          {ESTADOS_UF.map(uf => <option key={uf} value={uf}>{uf}</option>)}
-                        </select>
-                      </div>
-                      {cepLoadingCk && <div style={{ fontSize: 11, color: '#0D63DB' }}>Buscando endereço…</div>}
-                    </div>
-                  )}
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
                     <input type="checkbox" checked={su.aceite} onChange={e => setSu(p => ({ ...p, aceite: e.target.checked }))} style={{ marginTop: 2, flexShrink: 0 }} />
                     <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
