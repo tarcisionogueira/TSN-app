@@ -1066,23 +1066,30 @@ async function scraperFrazao(browser) {
 // 12 itens/página → iteramos as páginas. Campos: lote_id, nm_titulo_lote, vl_lanceminimo,
 // nm_cidade/nm_estado, nm_subcategoria, fotos[].nm_path_completo (196x146 →
 // troca p/ 640x480), nm_url_leiloeiro (site de origem = edital/matrícula/anexos).
-async function scraperLeiloesJudiciais() {
-  console.log('  Leilões Judiciais — portal nacional (agrega centenas de leiloeiros)...');
+async function scraperLeiloesJudiciais(browser) {
+  console.log('  Leilões Judiciais — portal nacional (cookie via navegador + Node fetch)...');
   const bensMap = new Map();
   const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
   const qs = 'tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
-  // fetch do Node NÃO tem CORS (isso é só do navegador). A API só devolve dados
-  // se enviarmos Origin/Referer do site E o COOKIE de sessão que a home seta
-  // (sem cookie ela responde 200 com items vazio).
-  const baseHeaders = { 'User-Agent': USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9' };
+  // A API só devolve dados com o COOKIE de sessão — que o site seta via JS (o
+  // fetch de Node não recebe). Solução: um NAVEGADOR real carrega a home (o JS
+  // roda e seta o cookie), extraímos os cookies e paginamos com Node fetch (que
+  // não tem CORS). Junta o melhor dos dois mundos.
   let cookie = '';
+  const page = await browser.newPage();
   try {
-    const home = await fetch('https://www.leiloesjudiciais.com.br/', { headers: baseHeaders });
-    const sc = typeof home.headers.getSetCookie === 'function' ? home.headers.getSetCookie() : [];
-    cookie = sc.map(c => c.split(';')[0]).join('; ');
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+    await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
+    await new Promise(r => setTimeout(r, 2500));
+    const cookies = await page.cookies();
+    cookie = cookies.map(c => `${c.name}=${c.value}`).join('; ');
   } catch (e) { console.log(`    LJUD: home falhou: ${String(e.message).slice(0, 60)}`); }
+  finally { try { await page.close(); } catch {} }
+  console.log(`    LJUD: cookie ${cookie ? `obtido (${cookie.length} chars)` : 'NÃO obtido'}`);
   const headers = {
-    ...baseHeaders,
+    'User-Agent': USER_AGENT,
+    'Accept-Language': 'pt-BR,pt;q=0.9',
     Accept: '*/*',
     Origin: 'https://www.leiloesjudiciais.com.br',
     Referer: 'https://www.leiloesjudiciais.com.br/',
@@ -1246,18 +1253,16 @@ async function main() {
     await coletarFonte('FRAZAO', () => scraperFrazao(browser));
 
     // 7. Leilões Judiciais — portal nacional (agrega centenas de leiloeiros).
-    // PARQUEADO: a API exige sessão de navegador (cookie/token via JS) — Node
-    // fetch, fetch no navegador (CORS) e listener não autenticam. Requer navegador
-    // real dirigindo a paginação do próprio site OU Bright Data. Reabilitar quando
-    // essa estratégia estiver pronta (a função scraperLeiloesJudiciais fica pronta).
-    // console.log('\n📋 Leilões Judiciais (portal nacional)...');
-    // {
-    //   const r = await coletarComEsteira('LJUD', [
-    //     { nome: 'node-fetch', fn: () => scraperLeiloesJudiciais() },
-    //   ]);
-    //   total += await salvarEFinalizar(r.imoveis, 'LJUD');
-    //   await registrarSaude('LJUD', r.imoveis, r.estrategia, r.validacao);
-    // }
+    // Estratégia: navegador real estabelece o cookie de sessão; a paginação vai
+    // por Node fetch (sem CORS) reusando esse cookie.
+    console.log('\n📋 Leilões Judiciais (portal nacional)...');
+    {
+      const r = await coletarComEsteira('LJUD', [
+        { nome: 'browser-cookie', fn: () => scraperLeiloesJudiciais(browser) },
+      ]);
+      total += await salvarEFinalizar(r.imoveis, 'LJUD');
+      await registrarSaude('LJUD', r.imoveis, r.estrategia, r.validacao);
+    }
 
   } finally {
     await browser.close();
