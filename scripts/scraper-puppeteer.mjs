@@ -771,7 +771,8 @@ async function scraperSodre(browser) {
     } catch {}
   });
   try {
-    await page.goto('https://www.sodresantoro.com.br/imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
+    // /imoveis/lotes = view flat de lotes (search-lots com corpo mais amplo).
+    await page.goto('https://www.sodresantoro.com.br/imoveis/lotes', { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(r => setTimeout(r, 3500));
 
     // A resposta do search-lots é { results:[], total, page, perPage }. Paginamos
@@ -806,6 +807,28 @@ async function scraperSodre(browser) {
         await new Promise(r => setTimeout(r, 350));
       }
     }
+
+    // Aprofunda POR LEILÃO: o view global mostra ~25, mas cada leilão tem seus
+    // próprios lotes (o search-lots é escopado ao leilão na página /leilao/{id}).
+    // Iteramos os leilões de imóveis ativos e visitamos cada um — o listener de
+    // resposta acima coleta automaticamente os lotes de cada leilão.
+    try {
+      const aucs = await page.evaluate(async () => {
+        try {
+          const r = await fetch('https://prd-api.sodresantoro.com.br/api/v1/auctions?segmentName=imoveis&limit=100&page=1', { headers: { Accept: 'application/json' } });
+          if (!r.ok) return [];
+          const j = await r.json();
+          return (j?.data || []).filter(a => String(a.status || '').toUpperCase() === 'A').map(a => a.id).filter(Boolean);
+        } catch { return []; }
+      });
+      console.log(`    Sodré: ${aucs.length} leilões de imóveis para aprofundar`);
+      for (const aid of aucs.slice(0, 50)) {
+        try {
+          await page.goto(`https://www.sodresantoro.com.br/leilao/${aid}`, { waitUntil: 'networkidle2', timeout: 40000 });
+          await new Promise(r => setTimeout(r, 1400));
+        } catch { /* pula leilão que falhar */ }
+      }
+    } catch { /* segue com o que já coletou */ }
 
     const parseData = (s) => {
       const m = (s || '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
