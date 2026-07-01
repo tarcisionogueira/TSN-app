@@ -94,6 +94,86 @@ async function salvarEFinalizar(imoveis, fonte) {
   return imoveis.length;
 }
 
+// ─── ESTEIRA + VALIDAÇÃO + SAÚDE ──────────────────────────────────────────────
+// Critérios mínimos de qualidade por fonte. A coleta só é considerada "válida"
+// se atinge o volume mínimo E os percentuais de campos essenciais (valor, UF,
+// link do edital). Serve tanto para a esteira (tentar próxima estratégia se a
+// atual reprovar) quanto para o monitor de regressão.
+const CRITERIOS = {
+  MEGA:     { min: 80,  valor: 0.85, uf: 0.55, link: 0.9 },
+  SUPERBID: { min: 300, valor: 0.80, uf: 0.45, link: 0.9 },
+  SOLD:     { min: 20,  valor: 0.80, uf: 0.45, link: 0.9 },
+  ZUK:      { min: 150, valor: 0.85, uf: 0.55, link: 0.9 },
+  SODRE:    { min: 10,  valor: 0.80, uf: 0.40, link: 0.9 },
+  FRAZAO:   { min: 40,  valor: 0.85, uf: 0.55, link: 0.9 },
+  LJUD:     { min: 200, valor: 0.85, uf: 0.55, link: 0.9 },
+  _default: { min: 10,  valor: 0.70, uf: 0.40, link: 0.8 },
+};
+
+function metricasColeta(imoveis) {
+  const n = imoveis.length || 0;
+  const p = (x) => (n ? Number((x / n).toFixed(3)) : 0);
+  const uf    = imoveis.filter(i => /^[A-Z]{2}$/.test(i.estado || '')).length;
+  const valor = imoveis.filter(i => Number(i.valor_minimo) > 0).length;
+  const link  = imoveis.filter(i => /^https?:\/\//.test(i.link_edital || '')).length;
+  const foto  = imoveis.filter(i => i.link_foto).length;
+  return { n, uf_pct: p(uf), valor_pct: p(valor), link_pct: p(link), foto_pct: p(foto) };
+}
+
+// Portão de qualidade: confirma que a coleta dá acesso real aos lotes com os
+// campos que importam (valor/UF/edital). Retorna {ok, metricas, motivo}.
+function validarColeta(imoveis, fonte) {
+  const c = CRITERIOS[fonte] || CRITERIOS._default;
+  const m = metricasColeta(imoveis);
+  const falhas = [];
+  if (m.n < c.min)              falhas.push(`total ${m.n}<${c.min}`);
+  if (m.valor_pct < c.valor)    falhas.push(`valor ${m.valor_pct}<${c.valor}`);
+  if (m.uf_pct < c.uf)          falhas.push(`uf ${m.uf_pct}<${c.uf}`);
+  if (m.link_pct < c.link)      falhas.push(`link ${m.link_pct}<${c.link}`);
+  return { ok: falhas.length === 0, metricas: m, motivo: falhas.join('; ') };
+}
+
+// Esteira: tenta cada estratégia na ordem; a 1ª que PASSA na validação vence.
+// Se nenhuma passar, retorna a de maior volume (melhor esforço, degradado).
+async function coletarComEsteira(fonte, estrategias) {
+  let melhor = { imoveis: [], estrategia: null, validacao: validarColeta([], fonte) };
+  for (const { nome, fn } of estrategias) {
+    let imoveis = [];
+    try { imoveis = (await fn()) || []; }
+    catch (e) { console.log(`  [${fonte}] estratégia "${nome}" erro: ${String(e.message).slice(0, 90)}`); }
+    const validacao = validarColeta(imoveis, fonte);
+    console.log(`  [${fonte}] "${nome}": ${imoveis.length} imóveis — ${validacao.ok ? 'VÁLIDO ✅' : 'reprovado (' + validacao.motivo + ')'}`);
+    if (imoveis.length > melhor.imoveis.length) melhor = { imoveis, estrategia: nome, validacao };
+    if (validacao.ok) return { imoveis, estrategia: nome, validacao };
+  }
+  return melhor;
+}
+
+// Registra a saúde da coleta (1 linha por fonte por execução) e compara com a
+// execução anterior para detectar regressão (queda >50% ou zeragem). O alerta
+// por e-mail é disparado pelo cron /api/monitor-fontes-cron, que lê esta tabela.
+async function registrarSaude(fonte, imoveis, estrategia, validacao) {
+  const m = validacao?.metricas || metricasColeta(imoveis);
+  let status = 'ok', motivo = validacao?.motivo || '';
+  if (!m.n) status = 'falhou';
+  else if (!validacao?.ok) status = 'degradado';
+  try {
+    const { data: ant } = await supabase.from('fonte_saude')
+      .select('total').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
+    if (ant && ant.total > 0 && m.n < ant.total * 0.5) {
+      if (status === 'ok') status = 'degradado';
+      motivo = [motivo, `queda vs anterior (${m.n}<${ant.total})`].filter(Boolean).join('; ');
+      console.log(`  ⚠️ [${fonte}] REGRESSÃO: caiu de ${ant.total} para ${m.n}`);
+    }
+    await supabase.from('fonte_saude').insert({
+      fonte, total: m.n, estrategia: estrategia || null,
+      uf_pct: m.uf_pct, valor_pct: m.valor_pct, link_pct: m.link_pct, foto_pct: m.foto_pct,
+      status, motivo: motivo || null,
+    });
+  } catch (e) { console.log(`  [${fonte}] registrarSaude erro: ${String(e.message).slice(0, 80)}`); }
+  return { status, motivo, metricas: m };
+}
+
 // ─── INTERCEPTADOR DE REDE ────────────────────────────────────────────────────
 
 async function capturarRespostasJSON(page, urlAlvo, { waitSelector, timeout = 20000 } = {}) {
@@ -996,45 +1076,47 @@ async function scraperLeiloesJudiciais(browser) {
   const qs = 'tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
 
   try {
-    // Estabelece contexto de visitante real (a API só responde 200 p/ requests
-    // com Origin/Referer do site — o fetch abaixo roda no contexto da página).
-    await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
-    await new Promise(r => setTimeout(r, 2000));
-
-    // A API só aceita qtd_por_pagina=12 (valores maiores retornam vazio); o
-    // fetch roda no contexto da página → Origin/Referer/cookies corretos.
+    // A API dá CORS "Failed to fetch" no JS, mas o listener de rede do Puppeteer
+    // (CDP) lê o corpo ANTES do CORS. Então disparamos o fetch fire-and-forget
+    // (a requisição sai na rede, o servidor responde 200) e colhemos a resposta
+    // pelo listener. Só aceita qtd_por_pagina=12. Coletamos a resposta por página.
     let totalPages = 100; // ajustado na 1ª resposta
-    for (let pg = 1; pg <= totalPages; pg++) {
-      let res = null;
-      let diag = null;
+    let totalItems = 0;
+    page.on('response', async (resp) => {
       try {
-        const out = await page.evaluate(async (url) => {
-          try {
-            const r = await fetch(url, { headers: { Accept: '*/*' }, credentials: 'include' });
-            const txt = await r.text();
-            let json = null;
-            try { json = JSON.parse(txt); } catch {}
-            return { status: r.status, ok: r.ok, len: txt.length, sample: txt.slice(0, 160), json };
-          } catch (e) { return { err: String(e).slice(0, 160) }; }
-        }, `${API}?pg=${pg}&qtd_por_pagina=12&${qs}`);
-        res = out?.json || null;
-        diag = out;
-      } catch (e) { diag = { evalErr: String(e).slice(0, 160) }; }
-      if (pg === 1) console.log(`    LJUD diag p1: ${JSON.stringify({ status: diag?.status, ok: diag?.ok, len: diag?.len, err: diag?.err, sample: diag?.sample })}`);
-      const items = res?.items || [];
-      if (!items.length) break;
-      if (pg === 1 && res?.totalPages) {
-        totalPages = Math.min(120, Number(res.totalPages) || 100);
-        console.log(`    LJUD: ${res.totalItems} imóveis em ${totalPages} páginas`);
-      }
-      let novos = 0;
-      for (const it of items) {
-        const id = String(it.lote_id || it.imovel_id || '');
-        if (id && !bensMap.has(id)) { bensMap.set(id, it); novos++; }
-      }
-      if (novos === 0 && pg > 2) break;
-      await new Promise(r => setTimeout(r, 300));
+        if (!/get-bens-por-estados/.test(resp.url())) return;
+        const txt = await resp.text();
+        const j = JSON.parse(txt);
+        if (Array.isArray(j?.items)) {
+          if (j.totalPages) totalPages = Math.min(150, Number(j.totalPages) || totalPages);
+          if (j.totalItems) totalItems = Number(j.totalItems) || totalItems;
+          for (const it of j.items) {
+            const id = String(it.lote_id || it.imovel_id || '');
+            if (id && !bensMap.has(id)) bensMap.set(id, it);
+          }
+        }
+      } catch { /* resposta não-JSON / parcial */ }
+    });
+
+    try {
+      // Estabelece contexto de visitante real (Origin/Referer do site) e já
+      // dispara a página 1 naturalmente (revela totalPages/totalItems).
+      await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
+      await new Promise(r => setTimeout(r, 2500));
+    } catch (e) { console.log(`    LJUD: goto home falhou: ${e.message.slice(0, 60)}`); }
+    console.log(`    LJUD: ${totalItems || '?'} imóveis em ${totalPages} páginas (colhendo via listener)`);
+
+    // Dispara cada página (ignora o erro CORS no JS — o listener capta o corpo).
+    for (let pg = 1; pg <= totalPages; pg++) {
+      try {
+        await page.evaluate((url) => { fetch(url, { headers: { Accept: '*/*' } }).catch(() => {}); },
+          `${API}?pg=${pg}&qtd_por_pagina=12&${qs}`);
+      } catch { /* segue */ }
+      await new Promise(r => setTimeout(r, 260));
     }
+    // Janela final para o listener drenar as últimas respostas.
+    await new Promise(r => setTimeout(r, 1500));
+    console.log(`    LJUD: ${bensMap.size} bens colhidos pelo listener`);
 
     const imoveis = [...bensMap.values()].map(it => {
       if (Number(it.statuslote_id) !== 1) return null; // só "Aberto para Lance"
@@ -1138,35 +1220,47 @@ async function main() {
       } else {
         console.log('  ⚠️ Mega coletou ≤50 — pulando desativação por segurança');
       }
+      await registrarSaude('MEGA', imoveis, 'principal', validarColeta(imoveis, 'MEGA'));
     }
+
+    // Coleta + salva + registra saúde de uma fonte (validação de qualidade).
+    const coletarFonte = async (fonte, fn) => {
+      const imoveis = (await fn()) || [];
+      total += await salvarEFinalizar(imoveis, fonte);
+      await registrarSaude(fonte, imoveis, 'principal', validarColeta(imoveis, fonte));
+    };
 
     // 2. Superbid (portal 2) — API offers, todas as páginas, somente abertos
     console.log('\n📋 Superbid...');
-    total += await salvarEFinalizar(
-      await scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }),
-      'SUPERBID');
+    await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }));
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos
     console.log('\n📋 Sold Leilões...');
-    total += await salvarEFinalizar(
-      await scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }),
-      'SOLD');
+    await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }));
 
     // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos
     console.log('\n📋 PortalZuk (Zukerman)...');
-    total += await salvarEFinalizar(await scraperPortalZuk(browser), 'ZUK');
+    await coletarFonte('ZUK', () => scraperPortalZuk(browser));
 
     // 5. Sodré Santoro — API search-lots interceptada, somente ativos
     console.log('\n📋 Sodré Santoro...');
-    total += await salvarEFinalizar(await scraperSodre(browser), 'SODRE');
+    await coletarFonte('SODRE', () => scraperSodre(browser));
 
     // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis
     console.log('\n📋 Frazão Leilões...');
-    total += await salvarEFinalizar(await scraperFrazao(browser), 'FRAZAO');
+    await coletarFonte('FRAZAO', () => scraperFrazao(browser));
 
     // 7. Leilões Judiciais — portal nacional (agrega centenas de leiloeiros)
+    // Esteira: tenta o método listener; se reprovar, cai para a próxima
+    // estratégia (Bright Data fica preparado para quando for necessário).
     console.log('\n📋 Leilões Judiciais (portal nacional)...');
-    total += await salvarEFinalizar(await scraperLeiloesJudiciais(browser), 'LJUD');
+    {
+      const r = await coletarComEsteira('LJUD', [
+        { nome: 'listener', fn: () => scraperLeiloesJudiciais(browser) },
+      ]);
+      total += await salvarEFinalizar(r.imoveis, 'LJUD');
+      await registrarSaude('LJUD', r.imoveis, r.estrategia, r.validacao);
+    }
 
   } finally {
     await browser.close();
