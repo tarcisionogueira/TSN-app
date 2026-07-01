@@ -7,6 +7,7 @@ import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
+import { formatarDescricaoImovel } from '../utils/descricao';
 
 // Botões de documento só aparecem quando o valor é uma URL real — o scraper da
 // Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
@@ -83,7 +84,7 @@ function ImoveisSimilares({ imovel, nav }) {
     if (!imovel?.cidade) return;
     (async () => {
       let q = supabase.from('imoveis_leilao')
-        .select('id,titulo,bairro,cidade,estado,valor_minimo,valor_avaliacao,link_foto,tipo,area_m2')
+        .select('id,titulo,bairro,cidade,estado,valor_minimo,valor_avaliacao,link_foto,tipo,area_m2,fonte,fonte_id')
         .eq('ativo', true).eq('cidade', imovel.cidade).neq('id', imovel.id).limit(12);
       if (imovel.tipo) q = q.eq('tipo', imovel.tipo);
       const { data } = await q;
@@ -103,12 +104,29 @@ function ImoveisSimilares({ imovel, nav }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
         {itens.map(it => {
           const desc = it.valor_avaliacao > 0 && it.valor_minimo ? Math.round((1 - it.valor_minimo / it.valor_avaliacao) * 100) : null;
+          // Foto: CEF hotlinka pelo id (link_foto vem vazio no banco); demais fontes
+          // usam o link direto. Por isso os cards de similares ficavam cinza p/ Caixa.
+          const isCef = it.fonte === 'CEF' || it.fonte === 'caixa';
+          const cid = (it.fonte_id || '').replace(/^(caixa_|cef_)/, '');
+          const fotoUrl = isCef && cid
+            ? `https://venda-imoveis.caixa.gov.br/fotos/F${cid}21.jpg`
+            : (it.link_foto && /^https?:\/\//.test(it.link_foto)) ? it.link_foto
+            : (it.link_foto || null);
           return (
             <button key={it.id} onClick={() => { nav('/imovel/' + it.id); window.scrollTo(0, 0); }}
               style={{ textAlign: 'left', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: 'white', cursor: 'pointer', padding: 0 }}>
-              <div style={{ height: 110, background: '#f1f5f9', backgroundImage: it.link_foto ? `url(${it.link_foto})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {!it.link_foto && <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Sem foto</span>}
-                {desc > 0 && <span style={{ position: 'absolute', top: 8, right: 8, background: '#16a34a', color: 'white', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 8 }}>-{desc}%</span>}
+              <div style={{ height: 110, background: '#f1f5f9', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Sem foto</span>
+                {fotoUrl && (
+                  <img src={fotoUrl} alt="" loading="lazy"
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => {
+                      const el = e.currentTarget;
+                      if (!el.dataset.p && !isCef && it.link_foto) { el.dataset.p = '1'; el.src = `/api/img-proxy?url=${encodeURIComponent(it.link_foto)}`; }
+                      else { el.style.display = 'none'; }
+                    }} />
+                )}
+                {desc > 0 && <span style={{ position: 'absolute', top: 8, right: 8, background: '#16a34a', color: 'white', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 8, zIndex: 1 }}>-{desc}%</span>}
               </div>
               <div style={{ padding: '10px 12px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#111', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{it.bairro || it.titulo}</div>
@@ -821,9 +839,7 @@ export default function ImovelDetalhe() {
                   <FileText size={18} color="#0D63DB" /> Descrição
                 </h2>
                 <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {(imovel.descricao || '')
-                    .replace(/0[.,]00\s+de\s+área\s+(total|do\s+terreno)[,;]?\s*/gi, '')
-                    .replace(/,\s*,/g, ',').replace(/\s+,/g, ',').replace(/,\s*\./g, '.').replace(/\s{2,}/g, ' ').trim()}
+                  {formatarDescricaoImovel(imovel.descricao)}
                 </p>
               </div>
             )}

@@ -72,10 +72,15 @@ export default function Checkout() {
   const refCode = params.get('ref') || '';
   const mpStatus = params.get('status'); // 'approved' | 'rejected' | 'pending' — vindo do redirect MP
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
-  const plano = PLANOS[planoKey];
+  // À prova de falha: nunca indexa um PLANOS indefinido e sempre cai no estático.
+  const plano = (PLANOS && PLANOS[planoKey]) || PLANOS_STATIC[planoKey] || null;
 
   useEffect(() => {
-    fetchPlanosComConfig().then(setPLANOS);
+    // Só troca o catálogo se veio um objeto válido — senão mantém o estático
+    // (evita quebrar o checkout se a config do banco falhar/vier vazia).
+    fetchPlanosComConfig()
+      .then(p => { if (p && typeof p === 'object') setPLANOS(p); })
+      .catch(() => {});
   }, []);
 
   // Persiste o código de referência do consultor

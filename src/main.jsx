@@ -15,6 +15,22 @@ if (import.meta.env.PROD) {
 class RootErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(e) { return { error: e }; }
+  componentDidCatch(error, info) {
+    // Registra o erro no servidor (Runtime Logs da Vercel) p/ diagnóstico — em
+    // produção o boundary não mostra o stack ao usuário, então sem isso ficamos cegos.
+    try {
+      fetch('/api/log-erro-cliente', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          msg: String(error?.message || error),
+          stack: `${error?.stack || ''}\n--- componentStack ---${info?.componentStack || ''}`,
+          url: typeof location !== 'undefined' ? location.href : '',
+          ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch { /* ignore */ }
+  }
   render() {
     if (this.state.error) {
       const dev = import.meta.env.DEV;
