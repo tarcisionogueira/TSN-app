@@ -62,8 +62,8 @@ const PLANOS_CONFIG = {
   assessorado_vista: { nome: 'Assessoria (À Vista)',         valor: 5000.00, recorrente: false },
   clube:             { nome: 'Leilão Club — Mensal',         valor: 5000.00, recorrente: true  },
   clube_vista:       { nome: 'Leilão Club (12× Anual)',      valor: 5000.00, recorrente: false },
-  top2:              { nome: 'Investidor Pro',               valor: 99.90,  recorrente: true  },
-  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 797.00, recorrente: false },
+  top2:              { nome: 'Investidor Pro',               valor: 49.90,  recorrente: true  },
+  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 449.90, recorrente: false },
 };
 
 // ─── Handlers ────────────────────────────────────────────────────────────────

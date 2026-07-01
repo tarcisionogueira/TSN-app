@@ -366,7 +366,10 @@ export default function Checkout() {
       const link = data.linkPagamento;
       setLinkPagamento(link);
       await logAceite(planoApiKey, plano.preco, data, 'asaas');
-      if (link) window.location.href = link;
+      // Abre o pagamento em NOVA ABA (não substitui a tela do BidPro — antes o
+      // window.location.href levava a cliente embora "sozinha"). A tela de
+      // "aguardando confirmação" fica aberta e o plano ativa quando o pagamento cai.
+      if (link) window.open(link, '_blank', 'noopener');
       const ids = { subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null };
       setAsaasIds(ids);
       if (data.customerId && user?.id) {
@@ -406,7 +409,10 @@ export default function Checkout() {
         setGatewayUsado('mp');
         setLinkPagamento(link);
         await logAceite(planoApiKey, plano.preco, { mp_preference_id: data.preferenceId || data.assinaturaId }, 'mp');
-        if (link) window.location.href = link;
+        // Abre o pagamento em NOVA ABA (não substitui a tela do BidPro — antes o
+      // window.location.href levava a cliente embora "sozinha"). A tela de
+      // "aguardando confirmação" fica aberta e o plano ativa quando o pagamento cai.
+      if (link) window.open(link, '_blank', 'noopener');
         setLoading(false);
         return;
       } catch (mpErr) {
@@ -438,7 +444,7 @@ export default function Checkout() {
       setResultadoMudanca(data);
       if (data.linkPagamento) {
         setLinkPagamento(data.linkPagamento);
-        window.location.href = data.linkPagamento;
+        window.open(data.linkPagamento, '_blank', 'noopener');
       } else {
         // Mudança sem link (downgrade): mostra sucesso e redireciona
         setTimeout(() => nav('/'), 3000);

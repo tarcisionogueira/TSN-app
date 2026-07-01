@@ -35,9 +35,11 @@ export function mapearPlano(valor, descricao = '') {
   const v = Number(valor) || 0;
   const desc = descricao.toLowerCase();
 
-  // Investidor Pro — mensal ou anual parcelado
-  if (dentroFaixa(v, 99.9))  return { plano: 'top2', role: 'top2' }; // Investidor Pro mensal
-  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // Investidor Pro anual (12×)
+  // Investidor Pro — mensal (49,90) ou anual (449,90). 99,90 mantido por
+  // compatibilidade com assinaturas legadas no preço antigo.
+  if (dentroFaixa(v, 49.9))  return { plano: 'top2', role: 'top2' }; // Investidor Pro mensal
+  if (dentroFaixa(v, 99.9))  return { plano: 'top2', role: 'top2' }; // legado (preço antigo)
+  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // Investidor Pro anual
 
   // Leilão Club — verificar ANTES de assessorado pois ambos têm opção de R$5.000
   if (dentroFaixa(v, 5000) && desc.includes('clube')) return { plano: 'clube', role: 'clube' };
