@@ -860,10 +860,11 @@ export default function Checkout() {
               {modalidade === 'mensal' ? (
                 <>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                    <strong style={{ color: '#111111', fontSize: 32 }}>12× {plano.precoLabel}</strong>
+                    <strong style={{ color: '#111111', fontSize: 32 }}>{plano.precoLabel}</strong>
+                    <span style={{ color: '#64748b', fontSize: 15, fontWeight: 600 }}>/mês</span>
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-                    Cobrança recorrente mensal de <strong>R$ 49,90</strong>. Cancele a qualquer momento pela plataforma. Sem multa ou fidelidade.
+                    Assinatura recorrente — cobrado <strong>{plano.precoLabel}</strong> todo mês no cartão. Cancele a qualquer momento pela plataforma. Sem multa ou fidelidade.
                   </div>
                 </>
               ) : (
