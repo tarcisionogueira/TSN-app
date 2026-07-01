@@ -76,8 +76,11 @@ function cacheKey(im) {
 async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
   // Pendentes = sem coordenada (latitude NULL) ou sentinela 0 ainda NÃO marcada como
   // 'falhou'. Itens marcados 'falhou' saem da fila (não são re-tentados todo ciclo).
+  // Pendentes de coordenada OU aproximados (bairro/cidade) marcados para
+  // reprocessamento (geocod_nivel='refazer') — a cascata melhorada (CEP) pode
+  // agora alcançar nível rua/endereço onde antes caía no bairro.
   const r = await sb(
-    `imoveis_leilao?select=id,cidade,estado,endereco,bairro&or=(latitude.is.null,and(latitude.eq.0,geocod_nivel.is.null))&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
+    `imoveis_leilao?select=id,cidade,estado,endereco,bairro,cep&or=(latitude.is.null,and(latitude.eq.0,geocod_nivel.is.null),geocod_nivel.eq.refazer)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
   );
   if (!r.ok) return null;
   const imoveis = await r.json();

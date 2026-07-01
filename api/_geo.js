@@ -129,6 +129,7 @@ export async function nominatimEstruturado(params) {
   if (params.street) qs.set('street', params.street);
   if (params.city) qs.set('city', params.city);
   if (params.state) qs.set('state', params.state);
+  if (params.postalcode) qs.set('postalcode', params.postalcode);
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`, {
       headers: { 'User-Agent': NOMINATIM_UA },
@@ -150,7 +151,7 @@ export async function nominatimEstruturado(params) {
  * ou null. `sleepMs`=0 desliga as pausas (uso on-demand de 1 imóvel).
  */
 export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1100 } = {}) {
-  const { endereco, bairro, cidade, estado } = im;
+  const { endereco, bairro, cidade, estado, cep } = im;
   const ufNome = UFS[String(estado || '').trim().toUpperCase()]?.nome || estado;
   const aceita = (c) => (c && coordValida(c.lat, c.lng, estado, cidade) ? c : null);
   const pausa = () => (sleepMs > 0 ? sleep(sleepMs) : Promise.resolve());
@@ -173,6 +174,28 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
         if (c2) return { ...c2, nivel: numero ? 'endereco' : 'rua', cep: cepEnc };
         await pausa();
       }
+    }
+  }
+
+  // Nível 1.5 — CEP (do imóvel ou recuperado no ViaCEP acima). O CEP brasileiro
+  // é granular (rua/quadra), então geocodificar por postalcode alcança nível
+  // 'rua' mesmo quando o Nominatim não encontra o NOME da rua (comum na Caixa).
+  const cepLimpo = String(cep || cepEnc || '').replace(/\D/g, '');
+  if (cepLimpo.length === 8 && Date.now() < deadline) {
+    const c = aceita(await nominatimEstruturado({ postalcode: cepLimpo, city: cidade, state: ufNome }));
+    if (c) return { ...c, nivel: 'rua', cep: cepLimpo };
+    await pausa();
+  }
+
+  // Nível 1.6 — sem CEP conhecido, mas com bairro: tenta o ViaCEP pelo BAIRRO
+  // para descobrir um CEP da região (melhor que o centróide do bairro inteiro).
+  if (!cepLimpo && bairro && bairro.trim() && cidade && Date.now() < deadline) {
+    const viaB = await viacepCanonico(estado, cidade, bairro);
+    const cepB = String(viaB?.cep || '').replace(/\D/g, '');
+    if (cepB.length === 8 && Date.now() < deadline) {
+      const c = aceita(await nominatimEstruturado({ postalcode: cepB, city: cidade, state: ufNome }));
+      if (c) return { ...c, nivel: 'bairro', cep: cepB };
+      await pausa();
     }
   }
 
