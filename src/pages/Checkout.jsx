@@ -103,6 +103,7 @@ export default function Checkout() {
   const [showPagamento, setShowPagamento] = useState(false); // PagamentoServico inline (assessorado)
   // Cadastro inline do visitante não-logado (cria a conta no próprio checkout)
   const [su, setSu] = useState({ nome: '', email: '', senha: '', aceite: false });
+  const [card, setCard] = useState({ numero: '', nome: '', validade: '', cvv: '' });
   const [suErro, setSuErro] = useState('');
   const [suLoading, setSuLoading] = useState(false);
   const [contaCriada, setContaCriada] = useState(false);
@@ -207,6 +208,28 @@ export default function Checkout() {
 
   if (!plano && planoKey !== 'explorador') return null;
 
+  // Explorador (grátis): mesma lógica do fluxo pago, sem a etapa de pagamento —
+  // cria a conta já confirmada e libera o acesso direto.
+  const criarContaGratis = async () => {
+    setSuErro('');
+    const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
+    if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
+    if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
+    setSuLoading(true);
+    try {
+      const res = await apiCall('/api/criar-conta-checkout', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, email, senha, ...(refCode ? { ref_codigo: refCode } : {}) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível criar a conta.');
+      try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* loga manual se falhar */ }
+      nav('/membros');
+    } catch (e) { setSuErro(e.message || 'Erro ao criar a conta.'); }
+    setSuLoading(false);
+  };
+
   // Página de apresentação do plano Explorador (gratuito)
   if (planoKey === 'explorador') {
     const planoExp = PLANOS['explorador'];
@@ -244,24 +267,48 @@ export default function Checkout() {
               ))}
             </div>
           </div>
-          {/* Coluna direita — CTA */}
-          <div style={{ background: 'white', borderRadius: 20, padding: '36px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontSize: 32, fontWeight: 900, color: '#111111', marginBottom: 4 }}>Grátis</div>
-            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>Sem cartão de crédito · Cancele quando quiser</div>
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px', marginBottom: 24, fontSize: 13, color: '#166534', fontWeight: 600 }}>
-              ✅ Acesso imediato após o cadastro
-            </div>
-            <button onClick={() => nav(`/login?modo=cadastro${refCode ? `&ref=${refCode}` : ''}`)}
-              style={{ width: '100%', padding: '15px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', marginBottom: 12 }}>
-              Criar conta grátis →
-            </button>
-            <button onClick={() => nav('/planos')}
-              style={{ width: '100%', padding: '12px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 16 }}>
-              Ver todos os planos
-            </button>
-            <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-              Já tem conta? <button onClick={() => nav('/login')} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 11 }}>Entrar</button>
-            </p>
+          {/* Coluna direita — cadastro grátis inline (mesma lógica, sem pagamento) */}
+          <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#111111', marginBottom: 2 }}>Grátis</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18 }}>Sem cartão de crédito · Acesso imediato</div>
+            {user ? (
+              <>
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px', marginBottom: 16, fontSize: 13, color: '#166534', fontWeight: 600 }}>Você já tem uma conta ativa.</div>
+                <button onClick={() => nav('/membros')} style={{ width: '100%', padding: '15px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer' }}>Ir para a plataforma →</button>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
+                  <input value={su.nome} placeholder="Nome completo" autoComplete="name" onChange={e => setSu(p => ({ ...p, nome: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                  <input value={su.email} type="email" placeholder="E-mail" autoComplete="email" onChange={e => setSu(p => ({ ...p, email: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                  <input value={su.senha} type="password" placeholder="Crie uma senha" autoComplete="new-password" onChange={e => setSu(p => ({ ...p, senha: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '0 2px 10px' }}>
+                  {[
+                    { ok: su.senha.length >= 8, txt: 'Mínimo 8 caracteres' },
+                    { ok: /[A-Z]/.test(su.senha), txt: 'Uma letra maiúscula' },
+                    { ok: /[a-z]/.test(su.senha), txt: 'Uma letra minúscula' },
+                    { ok: /\d/.test(su.senha), txt: 'Um número' },
+                    { ok: /[^A-Za-z0-9]/.test(su.senha), txt: 'Um caractere especial' },
+                  ].map(rr => (
+                    <div key={rr.txt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: rr.ok ? '#059669' : '#94a3b8', fontWeight: rr.ok ? 600 : 400 }}>
+                      <span style={{ fontSize: 12, width: 12, display: 'inline-block' }}>{rr.ok ? '✓' : '○'}</span> {rr.txt}
+                    </div>
+                  ))}
+                </div>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10 }}>
+                  <input type="checkbox" checked={su.aceite} onChange={e => setSu(p => ({ ...p, aceite: e.target.checked }))} style={{ marginTop: 2, flexShrink: 0 }} />
+                  <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
+                </label>
+                {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 10 }}>{suErro}</div>}
+                <button onClick={criarContaGratis} disabled={suLoading} style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta…</> : 'Criar conta grátis →'}
+                </button>
+                <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
+                  Já tem conta? <button onClick={() => nav('/login')} style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, cursor: 'pointer', fontSize: 11 }}>Entrar</button>
+                </p>
+              </>
+            )}
           </div>
         </div>
         <style>{`@media (max-width: 760px) { .checkout-grid { grid-template-columns: 1fr !important; } }`}</style>
@@ -337,6 +384,46 @@ export default function Checkout() {
       setSuErro(/already|registered|exists/i.test(m)
         ? 'Este e-mail já tem conta. Clique em "Já tenho conta — Entrar".'
         : (m || 'Erro ao criar a conta.'));
+    }
+    setSuLoading(false);
+  };
+
+  const fmtCardNum = v => v.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
+  const fmtCardVal = v => v.replace(/\D/g, '').replace(/^(\d{2})/, '$1/').slice(0, 5);
+
+  // Visitante assina o Investidor Pro em UM passo (pay-first): cria a conta +
+  // paga de forma ATÔMICA no servidor. Se o pagamento não autoriza, nada é
+  // gravado (a conta é apagada) e o cliente refaz. Autorizado → acesso direto.
+  const assinarComCadastro = async () => {
+    setSuErro('');
+    const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
+    if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
+    if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
+    if (!card.numero || !card.nome || !card.validade || !card.cvv) { setSuErro('Preencha todos os dados do cartão.'); return; }
+    const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY;
+    if (!MP_PUBLIC_KEY) { setSuErro('Pagamento indisponível no momento. Tente mais tarde.'); return; }
+    setSuLoading(true);
+    try {
+      if (!window.MercadoPago) {
+        await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = 'https://sdk.mercadopago.com/js/v2'; s.onload = resolve; s.onerror = reject; document.head.appendChild(s); });
+      }
+      const mp = new window.MercadoPago(MP_PUBLIC_KEY);
+      const [mes, ano] = card.validade.split('/');
+      const token = await mp.createCardToken({ cardNumber: card.numero.replace(/\s/g, ''), cardholderName: card.nome, cardExpirationMonth: mes, cardExpirationYear: `20${ano}`, securityCode: card.cvv });
+      if (!token?.id) throw new Error('Não foi possível validar o cartão. Confira os dados.');
+      const res = await apiCall('/api/assinar-com-cadastro', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, email, senha, cardTokenId: token.id, plano: 'top2' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível concluir a assinatura.');
+      // Conta criada + pagamento aprovado + já confirmada → loga e libera o acesso.
+      try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* se falhar, o cliente loga manualmente */ }
+      setPago(true);
+      setTimeout(() => nav('/membros'), 3000);
+    } catch (e) {
+      setSuErro(e.message || 'Erro ao processar a assinatura.');
     }
     setSuLoading(false);
   };
@@ -843,10 +930,37 @@ export default function Checkout() {
                   onChange={e => setSu(p => ({ ...p, email: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
                 <input value={su.senha} type="password" placeholder="Crie uma senha" autoComplete="new-password"
                   onChange={e => setSu(p => ({ ...p, senha: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
-                <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 2px' }}>
-                  Mínimo 8 caracteres, com maiúscula, minúscula, número e caractere especial.
-                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '2px 2px 0' }}>
+                  {[
+                    { ok: su.senha.length >= 8, txt: 'Mínimo 8 caracteres' },
+                    { ok: /[A-Z]/.test(su.senha), txt: 'Uma letra maiúscula' },
+                    { ok: /[a-z]/.test(su.senha), txt: 'Uma letra minúscula' },
+                    { ok: /\d/.test(su.senha), txt: 'Um número' },
+                    { ok: /[^A-Za-z0-9]/.test(su.senha), txt: 'Um caractere especial' },
+                  ].map(r => (
+                    <div key={r.txt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: r.ok ? '#059669' : '#94a3b8', fontWeight: r.ok ? 600 : 400 }}>
+                      <span style={{ fontSize: 12, width: 12, display: 'inline-block' }}>{r.ok ? '✓' : '○'}</span> {r.txt}
+                    </div>
+                  ))}
+                </div>
               </div>
+              {planoKey === 'top2' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
+                    Dados do cartão · cobrança mensal de {plano.precoLabel || 'R$ 49,90'}
+                  </div>
+                  <input value={card.numero} inputMode="numeric" placeholder="Número do cartão"
+                    onChange={e => setCard(p => ({ ...p, numero: fmtCardNum(e.target.value) }))} style={{ ...ckInp, width: '100%' }} />
+                  <input value={card.nome} placeholder="Nome impresso no cartão"
+                    onChange={e => setCard(p => ({ ...p, nome: e.target.value.toUpperCase() }))} style={{ ...ckInp, width: '100%' }} />
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <input value={card.validade} inputMode="numeric" placeholder="MM/AA"
+                      onChange={e => setCard(p => ({ ...p, validade: fmtCardVal(e.target.value) }))} style={{ ...ckInp, flex: 1 }} />
+                    <input value={card.cvv} inputMode="numeric" placeholder="CVV" maxLength={4}
+                      onChange={e => setCard(p => ({ ...p, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))} style={{ ...ckInp, flex: 1 }} />
+                  </div>
+                </div>
+              )}
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
                 <input type="checkbox" checked={su.aceite} onChange={e => setSu(p => ({ ...p, aceite: e.target.checked }))} style={{ marginTop: 2, flexShrink: 0 }} />
                 <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
@@ -854,9 +968,11 @@ export default function Checkout() {
               {suErro && (
                 <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>
               )}
-              <button onClick={criarContaInline} disabled={suLoading}
+              <button onClick={planoKey === 'top2' ? assinarComCadastro : criarContaInline} disabled={suLoading}
                 style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta…</> : 'Criar conta e continuar →'}
+                {suLoading
+                  ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</>
+                  : (planoKey === 'top2' ? `Assinar e pagar ${plano.precoLabel || 'R$ 49,90'}` : 'Criar conta e continuar →')}
               </button>
               <button onClick={() => nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
                 style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 12 }}>
