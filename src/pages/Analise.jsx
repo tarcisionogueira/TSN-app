@@ -110,9 +110,12 @@ export default function Analise() {
   const isMobile = useIsMobile();
   const { user, role } = useAuth();
   const imovelInicial = location.state?.imovel;
-  // Modo "inclusão manual de lote": entrou na análise sem um imóvel da base
-  // (cola URL e/ou anexa edital/matrícula; a IA extrai e libera os relatórios).
-  const modoManual = location.state?.manual || !imovelInicial;
+  // Modo "inclusão manual de lote": cola URL e/ou anexa edital/matrícula; a IA
+  // extrai e libera os relatórios. Vira um botão de opção no menu — ao ativar, a
+  // inclusão manual sobe pro topo do centro e a geração de relatórios fica abaixo.
+  // Sem imóvel da base (entrada 100% manual) já começa ligado e não desliga.
+  const semImovelBase = !imovelInicial;
+  const [modoManual, setModoManual] = useState(location.state?.manual || semImovelBase);
 
   const temCNJ = ROLES_COM_CNJ.includes(role);
   const semLimite = ROLES_SEM_LIMITE.includes(role);
@@ -816,6 +819,20 @@ export default function Analise() {
         {!isMobile && (
         <aside style={{ position:'sticky', top:80, display:'flex', flexDirection:'column', gap:12 }}>
 
+          {/* Opção de menu: inclusão manual (URL/arquivos). Ao ativar, o centro
+              mostra a inclusão manual em cima e a geração de relatórios embaixo.
+              Some quando a entrada já é 100% manual (não há o que alternar). */}
+          {!semImovelBase && (
+            <button onClick={() => setModoManual(m => !m)}
+              style={{ display:'flex', alignItems:'center', gap:9, width:'100%', padding:'12px 14px', border:`1px solid ${modoManual?'#7c3aed':'#e2e8f0'}`, background: modoManual?'#faf5ff':'white', borderRadius:14, cursor:'pointer', fontSize:13, fontWeight:800, color: modoManual?'#7c3aed':'#334155', textAlign:'left' }}>
+              <Building2 size={17} color={modoManual?'#7c3aed':'#94a3b8'}/>
+              <span style={{ flex:1 }}>{modoManual ? 'Inclusão manual ativa' : 'Incluir URL / arquivos'}</span>
+              <span style={{ width:34, height:18, borderRadius:20, background: modoManual?'#7c3aed':'#e2e8f0', position:'relative', flexShrink:0, transition:'background .15s' }}>
+                <span style={{ position:'absolute', top:2, left: modoManual?18:2, width:14, height:14, borderRadius:'50%', background:'white', transition:'left .15s' }}/>
+              </span>
+            </button>
+          )}
+
           {/* Documentos do leiloeiro */}
           <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Documentos do leiloeiro</div>
@@ -933,8 +950,56 @@ export default function Analise() {
             </div>
           )}
 
-          {/* LAUNCHER — somente os botões de gerar cada relatório */}
+          {/* LAUNCHER — inclusão manual (topo, quando ativa) + botões de gerar */}
           {relSel === null && (
+          <>
+            {/* Opção de menu no mobile (a barra lateral fica oculta em telas pequenas) */}
+            {isMobile && !semImovelBase && (
+              <button onClick={() => setModoManual(m => !m)}
+                style={{ display:'flex', alignItems:'center', gap:9, width:'100%', padding:'12px 14px', border:`1px solid ${modoManual?'#7c3aed':'#e2e8f0'}`, background: modoManual?'#faf5ff':'white', borderRadius:14, cursor:'pointer', fontSize:13, fontWeight:800, color: modoManual?'#7c3aed':'#334155', textAlign:'left' }}>
+                <Building2 size={17} color={modoManual?'#7c3aed':'#94a3b8'}/>
+                <span style={{ flex:1 }}>{modoManual ? 'Inclusão manual ativa' : 'Incluir URL / arquivos'}</span>
+                <span style={{ width:34, height:18, borderRadius:20, background: modoManual?'#7c3aed':'#e2e8f0', position:'relative', flexShrink:0 }}>
+                  <span style={{ position:'absolute', top:2, left: modoManual?18:2, width:14, height:14, borderRadius:'50%', background:'white' }}/>
+                </span>
+              </button>
+            )}
+
+            {/* ── Inclusão manual / imóvel de outro leiloeiro (URL + anexos) ──
+                Sobe pro topo do centro quando o modo manual está ativo. */}
+            {modoManual && (
+              <div style={{ border:'1px dashed #c4b5fd', background:'#faf5ff', borderRadius:16, padding: isMobile?'16px 18px':'20px 22px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                  <Building2 size={17} color="#7c3aed"/>
+                  <div style={{ fontSize:15, fontWeight:900, color:'#111' }}>{semImovelBase ? 'Incluir lote manualmente' : 'Imóvel de outro leiloeiro'}</div>
+                </div>
+                <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>
+                  Cole o <strong>link do lote</strong> e/ou anexe o <strong>edital/matrícula</strong> de um imóvel que não está na nossa base. A IA extrai os dados (endereço, valores, área, leiloeiro, riscos) e libera os relatórios abaixo. <strong>É uma análise fora da base</strong> — os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.
+                </div>
+                {externoNotificado ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:10, fontSize:12, fontWeight:700, color:'#065f46' }}>
+                    <CheckCircle2 size={15}/> Análise liberada — gere os relatórios abaixo. Equipe avisada.
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    <input value={externoLink} onChange={e=>setExternoLink(e.target.value)} placeholder="Link do lote / página do leiloeiro (https://...)"
+                      style={{ width:'100%', padding:'10px 12px', border:'1px solid #ddd6fe', borderRadius:9, fontSize:13, color:'#111', boxSizing:'border-box' }}
+                      onKeyDown={e=>{ if(e.key==='Enter' && !externoEnviando) analisarLeiloeiroExterno(); }}/>
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                      <label style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 14px', border:'2px dashed #ddd6fe', borderRadius:10, color:'#7c3aed', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                        <UploadCloud size={15}/> {textoDoc.trim() ? 'Edital anexado ✓' : 'Anexar edital/matrícula (PDF/TXT)'}
+                        <input type="file" accept=".pdf,.txt" onChange={handleFileUpload} style={{display:'none'}}/>
+                      </label>
+                      <button onClick={analisarLeiloeiroExterno} disabled={externoEnviando || analisesBloqueado}
+                        style={{ flex:1, minWidth:180, padding:'10px 16px', background:(externoEnviando||analisesBloqueado)?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:(externoEnviando||analisesBloqueado)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                        {externoEnviando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Liberando...</> : analisesBloqueado ? <><Lock size={14}/> Limite atingido</> : <><Sparkles size={15}/> Liberar análise deste imóvel</>}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding: isMobile?'18px':'26px' }}>
               <div style={{ fontSize:16, fontWeight:900, color:'#111', marginBottom:4 }}>Gerar relatórios de análise</div>
               <div style={{ fontSize:13, color:'#64748b', marginBottom:18, lineHeight:1.6 }}>A IA usa automaticamente os dados e documentos deste imóvel. Gere cada relatório — eles vão para a barra lateral e abrem aqui. Com os dois prontos, libera a reunião com o analista.</div>
@@ -972,43 +1037,8 @@ export default function Analise() {
                 );})}
               </div>
               {docMsg && <div style={{ marginTop:14, padding:'10px 14px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e' }}>{docMsg}</div>}
-
-              {/* ── Inclusão manual / imóvel de outro leiloeiro (URL + anexos) ── */}
-              {(!isStaffAnalise || modoManual) && (
-                <div style={{ marginTop:18, border:'1px dashed #c4b5fd', background:'#faf5ff', borderRadius:14, padding:'16px 18px' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                    <Building2 size={17} color="#7c3aed"/>
-                    <div style={{ fontSize:14, fontWeight:800, color:'#111' }}>{modoManual ? 'Incluir lote manualmente' : 'Imóvel de outro leiloeiro?'}</div>
-                  </div>
-                  <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>
-                    {modoManual
-                      ? <>Cole o <strong>link do lote</strong> e/ou anexe o <strong>edital/matrícula</strong> de um imóvel que não está na nossa base. A IA extrai os dados (endereço, valores, área, leiloeiro, riscos) e libera os relatórios acima para você dar sequência.</>
-                      : <>Se o imóvel é de um leiloeiro que ainda não está na nossa base, cole o link do lote e/ou anexe o edital/matrícula. A IA extrai os dados e libera os relatórios acima. <strong>É uma análise fora da base</strong> — os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.</>}
-                  </div>
-                  {externoNotificado ? (
-                    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:10, fontSize:12, fontWeight:700, color:'#065f46' }}>
-                      <CheckCircle2 size={15}/> Análise liberada — gere os relatórios acima. Equipe avisada.
-                    </div>
-                  ) : (
-                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                      <input value={externoLink} onChange={e=>setExternoLink(e.target.value)} placeholder="Link do lote / página do leiloeiro (https://...)"
-                        style={{ width:'100%', padding:'10px 12px', border:'1px solid #ddd6fe', borderRadius:9, fontSize:13, color:'#111', boxSizing:'border-box' }}
-                        onKeyDown={e=>{ if(e.key==='Enter' && !externoEnviando) analisarLeiloeiroExterno(); }}/>
-                      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                        <label style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 14px', border:'2px dashed #ddd6fe', borderRadius:10, color:'#7c3aed', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                          <UploadCloud size={15}/> {textoDoc.trim() ? 'Edital anexado ✓' : 'Anexar edital/matrícula (PDF/TXT)'}
-                          <input type="file" accept=".pdf,.txt" onChange={handleFileUpload} style={{display:'none'}}/>
-                        </label>
-                        <button onClick={analisarLeiloeiroExterno} disabled={externoEnviando || analisesBloqueado}
-                          style={{ flex:1, minWidth:180, padding:'10px 16px', background:(externoEnviando||analisesBloqueado)?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:(externoEnviando||analisesBloqueado)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-                          {externoEnviando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Liberando...</> : analisesBloqueado ? <><Lock size={14}/> Limite atingido</> : <><Sparkles size={15}/> Liberar análise deste imóvel</>}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
+          </>
           )}
 
           {/* ===== RELATÓRIO: ANÁLISE DOCUMENTAL + PROCESSO ===== */}
