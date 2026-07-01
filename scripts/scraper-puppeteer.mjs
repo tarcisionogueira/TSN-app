@@ -1071,32 +1071,42 @@ async function scraperLeiloesJudiciais() {
   const bensMap = new Map();
   const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
   const qs = 'tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
-  // fetch do Node NÃO tem CORS (isso é só do navegador). Basta enviar
-  // Origin/Referer do site (a API dá 405 sem eles / em navegação direta).
+  // fetch do Node NÃO tem CORS (isso é só do navegador). A API só devolve dados
+  // se enviarmos Origin/Referer do site E o COOKIE de sessão que a home seta
+  // (sem cookie ela responde 200 com items vazio).
+  const baseHeaders = { 'User-Agent': USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9' };
+  let cookie = '';
+  try {
+    const home = await fetch('https://www.leiloesjudiciais.com.br/', { headers: baseHeaders });
+    const sc = typeof home.headers.getSetCookie === 'function' ? home.headers.getSetCookie() : [];
+    cookie = sc.map(c => c.split(';')[0]).join('; ');
+  } catch (e) { console.log(`    LJUD: home falhou: ${String(e.message).slice(0, 60)}`); }
   const headers = {
+    ...baseHeaders,
     Accept: '*/*',
-    'User-Agent': USER_AGENT,
-    'Accept-Language': 'pt-BR,pt;q=0.9',
     Origin: 'https://www.leiloesjudiciais.com.br',
     Referer: 'https://www.leiloesjudiciais.com.br/',
+    ...(cookie ? { Cookie: cookie } : {}),
   };
 
   try {
     let totalPages = 100; // ajustado na 1ª resposta (servidor força 12/página)
     let vistos200 = 0;
     for (let pg = 1; pg <= totalPages; pg++) {
-      let j = null;
+      let j = null, status = 0;
       try {
         const r = await fetch(`${API}?pg=${pg}&qtd_por_pagina=12&${qs}`, { headers });
+        status = r.status;
         if (r.ok) { vistos200++; j = await r.json(); }
-        else if (pg === 1) { console.log(`    LJUD: página 1 retornou ${r.status}`); break; }
       } catch (e) { if (pg === 1) { console.log(`    LJUD: fetch falhou: ${String(e.message).slice(0, 80)}`); break; } }
       const items = j?.items || [];
-      if (!items.length) break;
       if (pg === 1) {
+        console.log(`    LJUD diag p1: status=${status} cookie=${cookie ? 'sim' : 'não'} totalItems=${j?.totalItems ?? '?'} items=${items.length}`);
+        if (!items.length) break;
         totalPages = Math.min(150, Number(j.totalPages) || 100);
         console.log(`    LJUD: ${j.totalItems} imóveis em ${totalPages} páginas`);
       }
+      if (!items.length) break;
       for (const it of items) {
         const id = String(it.lote_id || it.imovel_id || '');
         if (id && !bensMap.has(id)) bensMap.set(id, it);
