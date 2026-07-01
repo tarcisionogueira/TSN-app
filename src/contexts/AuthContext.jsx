@@ -181,6 +181,20 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // Reavaliação manual do perfil (usado logo após um pagamento: o role já foi
+  // ativado no servidor de forma síncrona, mas o contexto ainda tem o valor antigo
+  // até um foco/reload — chamar isto libera o acesso na hora, sem re-login).
+  const refreshPerfil = async () => {
+    const { data } = await supabase.auth.getSession();
+    const uid = data.session?.user?.id;
+    if (!uid) return;
+    const p = await fetchPerfil(uid);
+    setRole(p.role);
+    setAtivo(p.ativo);
+    setInad(p.inadimplenteDias);
+    setCadastroIncompleto(p.cadastroIncompleto ?? false);
+  };
+
   // Inicia o modo suporte. Os dados continuam protegidos por RLS: admin/analista
   // só conseguem ler o que as policies de equipe permitem.
   const iniciarSuporte = (alvo) => {
@@ -209,7 +223,7 @@ export function AuthProvider({ children }) {
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,
       effectiveUserId, effectiveRole,
-      roleSimulado, simularRole,
+      roleSimulado, simularRole, refreshPerfil,
     }}>
       {children}
     </AuthContext.Provider>

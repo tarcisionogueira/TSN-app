@@ -66,7 +66,7 @@ function mapearErro(msg = '') {
 export default function Checkout() {
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const { user, role } = useAuth();
+  const { user, role, refreshPerfil } = useAuth();
   const planoKey = params.get('plano');
   const promoCode = params.get('promo')?.toUpperCase() || '';
   const refCode = params.get('ref') || '';
@@ -626,6 +626,9 @@ export default function Checkout() {
     // era gravado a cada clique em "Ir para Pagamento" (mesmo em checkout abandonado),
     // gerando aceites sem transação. O aceite agora é prova do pagamento concluído.
     try { await logAceite(planoApiKey, plano?.preco, {}, gatewayUsado || (mpStatus ? 'mp' : null)); } catch (_) {}
+    // O plano já foi ativado no servidor de forma síncrona (assinatura transparente).
+    // Reavalia o perfil AGORA para o novo role valer sem precisar de re-login/reload.
+    try { await refreshPerfil?.(); } catch (_) {}
     if (planoKey === 'assessorado' || planoKey === 'clube') {
       try {
         const res = await apiCall('/api/auto-contrato', {
