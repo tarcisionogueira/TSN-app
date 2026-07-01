@@ -874,7 +874,7 @@ export default function Checkout() {
                     <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% off</span>
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-                    Total de <strong>{plano?.precoAnualLabel || 'R$ 449,90'}/ano</strong>. Pague em até 12× no cartão ou à vista. Contratação anual — não é renovação automática mensal.
+                    Total de <strong>{plano?.precoAnualLabel || 'R$ 449,90'}/ano</strong>, em até 12× no cartão ou à vista. Renova automaticamente a cada 12 meses pelo valor vigente. Você pode <strong>cancelar a renovação quando quiser</strong> — o acesso continua até o fim do período já pago.
                   </div>
                 </>
               )}
