@@ -76,8 +76,18 @@ const S = {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CURSOS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
+// Planos que podem receber ACESSO GRÁTIS a um curso/ebook (quem não estiver
+// marcado paga o preço). Chaves batem com o role/plano do perfil.
+const PLANOS_ACESSO = [
+  { key: 'explorador',  label: 'Explorador (grátis)' },
+  { key: 'top2',        label: 'Investidor Pro (mensal)' },
+  { key: 'top2_anual',  label: 'Investidor Pro (anual)' },
+  { key: 'assessorado', label: 'Assessoria' },
+  { key: 'clube',       label: 'Leilão Club' },
+];
+
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', emoji: '📚', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', emoji: '📚', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false }; }
@@ -132,7 +142,7 @@ function CursosTab() {
     setSaving(true);
     try {
       const { modulos, _aulaCount, ...rest } = form;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, ativo: rest.ativo !== false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: rest.ativo !== false };
 
       let cursoId;
       if (modal === 'new') {
@@ -267,6 +277,11 @@ function CursosTab() {
                 <input type="checkbox" checked={form.destaque || false} onChange={e => setForm({ ...form, destaque: e.target.checked })} /> Destaque
               </label>
             </div>
+            {!form.gratuito && (
+              <div style={{ marginBottom: 14 }}>
+                <PlanosGratisSelector valor={form.planos_gratis} onChange={v => setForm({ ...form, planos_gratis: v })} />
+              </div>
+            )}
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>
               💡 Preço e comissão são configurados na aba <strong>Configurações</strong>.
             </div>
@@ -320,7 +335,32 @@ function CursosTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // EBOOKS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '' }; }
+function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', planos_gratis: [] }; }
+
+// Seletor reutilizável de "planos com acesso grátis" (chips clicáveis).
+function PlanosGratisSelector({ valor, onChange }) {
+  const sel = Array.isArray(valor) ? valor : [];
+  const toggle = (k) => onChange(sel.includes(k) ? sel.filter(x => x !== k) : [...sel, k]);
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+        Planos com acesso grátis <span style={{ color: '#94a3b8', fontWeight: 400 }}>— quem não estiver marcado paga o preço</span>
+      </label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {PLANOS_ACESSO.map(p => {
+          const on = sel.includes(p.key);
+          return (
+            <button key={p.key} type="button" onClick={() => toggle(p.key)}
+              style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                border: `1px solid ${on ? '#10b981' : '#e2e8f0'}`, background: on ? '#ecfdf5' : '#fff', color: on ? '#047857' : '#64748b' }}>
+              {on ? '✓ ' : ''}{p.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function EbooksTab() {
   const [ebooks, setEbooks] = useState([]);
@@ -356,7 +396,7 @@ function EbooksTab() {
     if (!form.titulo.trim()) return alert('Informe o título.');
     setSaving(true);
     try {
-      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, ativo: form.ativo !== false };
+      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], ativo: form.ativo !== false };
       if (modal === 'new') {
         const { error } = await supabase.from('ebooks_admin').insert(payload);
         if (error) throw error;
@@ -429,6 +469,9 @@ function EbooksTab() {
             <div style={{ marginBottom: 14 }}>
               <label style={S.label}>URL do arquivo (PDF) — abre no leitor estilo Kindle</label>
               <input style={S.input} value={form.arquivo_url || ''} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} placeholder="https://... (link do PDF no Drive)" />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <PlanosGratisSelector valor={form.planos_gratis} onChange={v => setForm({ ...form, planos_gratis: v })} />
             </div>
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:20 }}>
               💡 Preço é configurado na aba <strong>Configurações</strong>.
