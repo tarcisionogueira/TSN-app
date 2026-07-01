@@ -16,16 +16,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 2 — capturar estrutura por-bem e páginas reais de listagem ===
-  // LJUD: API pública por-bem (tipo=3 = imóveis). Peça que faltava no round 1.
-  { fonte: 'LJUD-BENS', url: 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados?pg=1&qtd_por_pagina=60&tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null' },
-  // LJUD: detalhe de um bem (para achar matrícula/edital/anexos/fotos)
-  { fonte: 'LJUD-LEILAO', url: 'https://api.leiloesjudiciais.com.br/core/api/get-leiloes?pg=1&ativo=1&ordenacao=crescente' },
-  // CCJ: listagem de lotes server-side (padrão /leilao/{id}/lotes)
-  { fonte: 'CCJ-LOTES', url: 'https://www.ccjleiloes.com.br/leilao/110/lotes' },
-  // MGL: tentativas de página real de listagem (CMS renderizado no servidor)
-  { fonte: 'MGL-LEILOES', url: 'https://www.mgl.com.br/leiloes' },
-  { fonte: 'MGL-BUSCA', url: 'https://www.mgl.com.br/busca' },
+  // === Round 3 — capturar estrutura por-bem do LJUD via fetch no contexto da página ===
+  // (a API dá 405 em navegação direta; via fetch da própria origem retorna 200)
+  { fonte: 'LJUD', url: 'https://www.leiloesjudiciais.com.br/',
+    inPageApi: 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados?pg=1&qtd_por_pagina=48&tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
@@ -37,7 +31,7 @@ async function gravarDebug(fonte, url, status, contentType, conteudo) {
   else console.log(`  gravado ${fonte} (${txt.length} chars)`);
 }
 
-async function capturar(browser, { fonte, url }) {
+async function capturar(browser, { fonte, url, inPageApi }) {
   console.log(`\n=== ${fonte} → ${url}`);
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
@@ -59,6 +53,19 @@ async function capturar(browser, { fonte, url }) {
     console.log(`  goto falhou: ${e.message.slice(0, 80)}`);
   }
   await new Promise(r => setTimeout(r, 6000));
+
+  // Fetch de API dentro do contexto da página (carrega Origin/Referer corretos —
+  // vários endpoints retornam 405 se acessados por navegação direta).
+  if (inPageApi) {
+    try {
+      const apiTxt = await page.evaluate(async (u) => {
+        const r = await fetch(u, { headers: { 'Accept': 'application/json' }, credentials: 'include' });
+        return await r.text();
+      }, inPageApi);
+      await gravarDebug(`${fonte}-api`, inPageApi, 200, 'application/json', apiTxt);
+      console.log(`  inPageApi ${fonte}: ${String(apiTxt).length} chars`);
+    } catch (e) { console.log(`  inPageApi falhou: ${e.message.slice(0, 80)}`); }
+  }
 
   // DOM renderizado
   let html = '';
