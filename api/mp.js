@@ -55,6 +55,42 @@ async function mpPut(path, body) {
   return data;
 }
 
+// ─── Ativação inline (Edge) ─────────────────────────────────────────────────────
+// O webhook do MP nem sempre dispara/chega a tempo (config do painel, latência).
+// No fluxo transparente o cliente fica autenticado aqui, então ativamos o role na
+// hora via PostgREST — mesma semântica de ativarPlanoDireto (_webhook-core.js), mas
+// sem arrastar deps Node (_nfse) para o bundle Edge. O TIER mora em `role`; NÃO
+// gravar em `plano` (check constraint gratuito|analista|gestor). Idempotente.
+const SB_URL = (process.env.VITE_SUPABASE_URL || '').trim();
+const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
+
+async function ativarRoleInline(userId, planoKey) {
+  if (!SB_URL || !SB_KEY || !userId || !planoKey) return { skipped: true };
+  const res = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}`, {
+    method: 'PATCH',
+    headers: {
+      apikey:          SB_KEY,
+      Authorization:   `Bearer ${SB_KEY}`,
+      'Content-Type':  'application/json',
+      Prefer:          'return=minimal',
+    },
+    body: JSON.stringify({ role: planoKey, inadimplente_desde: null, role_anterior: null }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`ativarRoleInline falhou (${res.status}): ${txt}`);
+  }
+  // Registra o preço contratado (para a renovação cobrar o valor vigente).
+  try {
+    await fetch(`${SB_URL}/rest/v1/rpc/registrar_preco_contratado`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_user_id: userId, p_plano_key: planoKey }),
+    });
+  } catch (_) { /* preço é best-effort; não bloqueia a ativação */ }
+  return { ok: true };
+}
+
 // ─── Configurações de plano ───────────────────────────────────────────────────
 
 const PLANOS_CONFIG = {
@@ -207,7 +243,16 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
   };
 
   const sub = await mpPost('/preapproval', body);
-  return { assinaturaId: sub.id, status: sub.status };
+
+  // MP autorizou/cobrou já (status 'authorized') → ativa o plano AGORA, sem
+  // depender do webhook. Se a ativação falhar, não derruba o pagamento (o
+  // webhook/reconciliação recupera): loga e segue.
+  let ativado = false;
+  if (sub.status === 'authorized') {
+    try { await ativarRoleInline(userId, planoKey); ativado = true; }
+    catch (e) { console.error('[mp] ativação inline falhou:', e.message); }
+  }
+  return { assinaturaId: sub.id, status: sub.status, ativado };
 }
 
 async function verificar({ paymentId, assinaturaId }) {

@@ -625,7 +625,9 @@ export default function ImovelDetalhe() {
   };
   const imgCandidates = getImgCandidates();
   const imgDetalheSrc = imgCandidates[imgIdx] || null;
-  const PLANOS_ANALISE = ['admin', 'analista', 'assessorado'];
+  // Quem pode SOLICITAR análise. Investidor Pro (top2/top2_anual) e Leilão Club
+  // pagam por análises (a cota mensal — ex.: 15/mês — é aplicada no servidor).
+  const PLANOS_ANALISE = ['admin', 'analista', 'assessorado', 'clube', 'top2', 'top2_anual'];
   const podeFazerAnalise = PLANOS_ANALISE.includes(role);
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
   const precoM2 = imovel.areaM2 > 0 && imovel.valorMinimo ? imovel.valorMinimo / imovel.areaM2 : null;

@@ -105,10 +105,12 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
 // (`userId|planoKey`), então ativamos direto — sem adivinhar o plano pelo valor.
 export async function ativarPlanoDireto({ userId, planoKey, gateway }) {
   if (!userId || !planoKey) return { skipped: 'sem_referencia' };
+  // O TIER fica no `role` (top2/clube/…). NÃO gravar em `plano`: essa coluna tem
+  // check constraint (gratuito|analista|gestor) e planoKey='top2' a VIOLAVA →
+  // toda ativação de plano pago falhava (webhook e reconciliação). role é a fonte.
   const { error } = await supabase.from('perfis').update({
     inadimplente_desde: null,
     role_anterior:      null,
-    plano:              planoKey,
     role:               planoKey, // top2 → role top2, clube → role clube
   }).eq('id', userId);
   if (error) throw new Error(error.message);
