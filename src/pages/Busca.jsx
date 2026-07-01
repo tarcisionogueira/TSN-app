@@ -390,7 +390,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 export default function Busca() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { role, user } = useAuth();
+  const { role, user, effectiveRole, effectiveUserId } = useAuth();
   // Lê filtros pré-ativados via URL (usados no deep-link do email de alerta)
   const loc = typeof window !== 'undefined' ? window.location.hash : '';
   const _urlParams = React.useMemo(() => {
@@ -403,12 +403,22 @@ export default function Busca() {
   const canSite    = user && ROLES_SITE.includes(role);
   const canAnalise = user && ROLES_ANALISE.includes(role);
   const [analisesBonus, setAnalisesBonus] = useState(null);
+  const [analisesUsadas, setAnalisesUsadas] = useState(0);
+  // Limite mensal de relatórios por plano (para o selo de disponibilidade na busca).
+  const LIMITE_ANALISES = { explorador: 5, top2: 15, top2_anual: 15 };
+  const limiteAnalises = LIMITE_ANALISES[effectiveRole];
 
   useEffect(() => {
-    if (role !== 'explorador' || !user?.id) return;
-    supabase.from('perfis').select('bonus_mercado').eq('id', user.id).single()
-      .then(({ data }) => { if (data) setAnalisesBonus(data.bonus_mercado || 0); });
-  }, [role, user?.id]);
+    if (!effectiveUserId || limiteAnalises == null) { setAnalisesBonus(null); return; }
+    const mes = new Date().toISOString().slice(0, 7);
+    supabase.from('perfis').select('bonus_mercado, analises_mes, analises_count').eq('id', effectiveUserId).single()
+      .then(({ data }) => {
+        if (!data) return;
+        setAnalisesBonus(data.bonus_mercado || 0);
+        setAnalisesUsadas(data.analises_mes === mes ? (data.analises_count || 0) : 0);
+      });
+  }, [effectiveUserId, limiteAnalises]);
+  const analisesRestantes = limiteAnalises != null ? Math.max(0, limiteAnalises - analisesUsadas) : null;
   const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[] };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
@@ -985,12 +995,17 @@ export default function Busca() {
 
   return (
     <div style={{ position:'relative' }}>
-    {/* Badge fixo de análises bônus para explorador */}
-    {role === 'explorador' && analisesBonus !== null && (
-      <div style={{ position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)', zIndex:1000, background: analisesBonus > 0 ? '#0D63DB' : '#dc2626', color:'white', borderRadius:999, padding:'8px 20px', fontSize:13, fontWeight:700, boxShadow:'0 4px 20px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap' }}>
-        {analisesBonus > 0 ? `🎁 ${analisesBonus} análise${analisesBonus !== 1 ? 's' : ''} bônus disponível${analisesBonus !== 1 ? 'is' : ''}` : '🔒 Análises bônus esgotadas'}
-      </div>
-    )}
+    {/* Selo fixo de análises disponíveis (explorador 5/mês, Investidor Pro 15/mês) */}
+    {analisesRestantes !== null && (() => {
+      const totalDisp = analisesRestantes + (effectiveRole === 'explorador' ? (analisesBonus || 0) : 0);
+      return (
+        <div style={{ position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)', zIndex:1000, background: totalDisp > 0 ? '#0D63DB' : '#dc2626', color:'white', borderRadius:999, padding:'8px 20px', fontSize:13, fontWeight:700, boxShadow:'0 4px 20px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap' }}>
+          {totalDisp > 0
+            ? `📊 ${analisesRestantes}/${limiteAnalises} análises este mês${effectiveRole === 'explorador' && analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
+            : '🔒 Análises do mês esgotadas — faça upgrade'}
+        </div>
+      );
+    })()}
     <div style={{ maxWidth:1480, margin:'0 auto', padding: isMobile ? '16px 12px' : '20px', display:'flex', flexDirection:'column', gap:16 }}>
 
       {/* FILTROS (dropdown no topo — libera a largura toda para lista/mapa) */}

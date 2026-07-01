@@ -23,7 +23,10 @@ const rowToEntry = (r) => ({
 });
 
 export function AnalisesProvider({ children }) {
-  const { user } = useAuth();
+  // No modo suporte (admin visualizando a conta de um cliente), lê/gera pelo
+  // usuário efetivo (o cliente), não pelo admin logado — senão a lista vem vazia.
+  const { user, effectiveUserId } = useAuth();
+  const uid = effectiveUserId || user?.id || null;
   const [analises, setAnalises] = useState(() => loadCache(LS_KEY));
   const [documentais, setDocumentais] = useState(() => loadCache(LS_KEY_DOC));
 
@@ -42,25 +45,25 @@ export function AnalisesProvider({ children }) {
   const mergeDocRows = useCallback((rows) => mergeInto(setDocumentais)(rows), [mergeInto]);
 
   const recarregar = useCallback(async () => {
-    if (!user?.id) return;
+    if (!uid) return;
     const [{ data: m }, { data: d }] = await Promise.all([
-      supabase.from('analises_mercado').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(MAX),
-      supabase.from('analises_documental').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(MAX),
+      supabase.from('analises_mercado').select('*').eq('user_id', uid).order('updated_at', { ascending: false }).limit(MAX),
+      supabase.from('analises_documental').select('*').eq('user_id', uid).order('updated_at', { ascending: false }).limit(MAX),
     ]);
     if (Array.isArray(m)) mergeRows(m);
     if (Array.isArray(d)) mergeDocRows(d);
-  }, [user?.id, mergeRows, mergeDocRows]);
+  }, [uid, mergeRows, mergeDocRows]);
 
-  // Ao logar, carrega do banco (pega o que concluiu com a aba fechada / em outro device).
-  useEffect(() => { if (user?.id) recarregar(); }, [user?.id, recarregar]);
+  // Ao logar (ou trocar o usuário efetivo no suporte), carrega do banco.
+  useEffect(() => { setAnalises([]); setDocumentais([]); if (uid) recarregar(); }, [uid, recarregar]);
 
   // Enquanto houver geração em andamento (de qualquer tipo), faz polling.
   const temGerando = analises.some(a => a.status === 'gerando') || documentais.some(a => a.status === 'gerando');
   useEffect(() => {
-    if (!user?.id || !temGerando) return;
+    if (!uid || !temGerando) return;
     const t = setInterval(recarregar, 12000);
     return () => clearInterval(t);
-  }, [user?.id, temGerando, recarregar]);
+  }, [uid, temGerando, recarregar]);
 
   const upsertInto = useCallback((setter) => (entry) => {
     setter(prev => {
@@ -109,11 +112,11 @@ export function AnalisesProvider({ children }) {
   const remover = useCallback(async (imovelId) => {
     setAnalises(prev => prev.filter(a => a.imovelId !== imovelId));
     setDocumentais(prev => prev.filter(a => a.imovelId !== imovelId));
-    if (user?.id) {
-      try { await supabase.from('analises_mercado').delete().eq('user_id', user.id).eq('imovel_id', imovelId); } catch {}
-      try { await supabase.from('analises_documental').delete().eq('user_id', user.id).eq('imovel_id', imovelId); } catch {}
+    if (uid) {
+      try { await supabase.from('analises_mercado').delete().eq('user_id', uid).eq('imovel_id', imovelId); } catch {}
+      try { await supabase.from('analises_documental').delete().eq('user_id', uid).eq('imovel_id', imovelId); } catch {}
     }
-  }, [user?.id]);
+  }, [uid]);
 
   const emAndamento = analises.filter(a => a.status === 'gerando').length + documentais.filter(a => a.status === 'gerando').length;
 

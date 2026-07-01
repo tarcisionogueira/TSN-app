@@ -504,7 +504,7 @@ function UsuariosTab() {
 
   const verComo = (u) => {
     iniciarSuporte({ id: u.id, nome: u.nome || u.cpf, role: u.role || 'explorador' });
-    navSup('/painel');
+    navSup('/'); // entra na Home por plano do cliente (não mais no Portfólio antigo)
   };
 
   const loadUsers = useCallback(async () => {

@@ -19,6 +19,7 @@ import Busca from './pages/Busca';
 import ImovelDetalhe from './pages/ImovelDetalhe';
 import Analise from './pages/Analise';
 import MinhasAnalises from './pages/MinhasAnalises';
+import HomeCliente from './pages/HomeCliente';
 import Painel from './pages/Painel';
 import Consultor from './pages/Consultor';
 import Contratos from './pages/Contratos';
@@ -206,7 +207,8 @@ function MainLayout() {
       <ChatSuporte />
       <main style={{ flex: 1 }}>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          {/* Visitante vê a Landing de marketing; cliente logado vê a Home por plano. */}
+          <Route path="/" element={isLoggedIn ? <HomeCliente /> : <Landing />} />
           <Route path="/planos" element={<Planos />} />
           <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
