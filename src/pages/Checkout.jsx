@@ -739,8 +739,8 @@ export default function Checkout() {
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) minmax(280px, 460px)', gap: 24, maxWidth: 880, width: '100%', alignItems: 'stretch' }} className="checkout-grid">
 
-        {/* Coluna esquerda — conteúdo BidPro Brasil sobre o produto */}
-        <div style={{ color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8px 4px' }}>
+        {/* Coluna esquerda — conteúdo BidPro Brasil sobre o produto (alinhado ao topo) */}
+        <div style={{ color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', padding: '4px 4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
             <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
               <Briefcase size={20} color="white" />
@@ -760,6 +760,7 @@ export default function Checkout() {
             {[
               [TrendingUp, 'Viabilidade real', 'Relatórios de mercado e fluxo de caixa antes de dar o lance.'],
               [ShieldCheck, 'Risco jurídico mapeado', 'Análise de edital, matrícula e processo para evitar surpresas.'],
+              [MapPin, 'Imóveis no Brasil inteiro', 'Milhares de oportunidades da Caixa e dos maiores leiloeiros, num só lugar.'],
               [Headphones, 'Suporte da equipe', 'Assessoria humana quando você precisar avançar na arrematação.'],
             ].map(([Icon, t, d]) => (
               <div key={t} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -771,6 +772,14 @@ export default function Checkout() {
               </div>
             ))}
           </div>
+          {/* Selo de confiança */}
+          <div style={{ marginTop: 22, display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 12, padding: '12px 14px' }}>
+            <CheckCircle2 size={18} color="#34d399" style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: 12.5, color: '#a7f3d0', lineHeight: 1.5 }}>
+              <strong style={{ color: '#fff' }}>Método dos 30%:</strong> só recomendamos operações com margem de segurança — você dá o lance certo, no valor certo.
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: '#64748b', marginTop: 16 }}>Cancele quando quiser · Sem fidelidade · Pagamento seguro</p>
         </div>
 
         {/* Coluna direita — card de checkout */}

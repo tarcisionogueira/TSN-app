@@ -17,6 +17,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import MUNICIPIOS from './_municipios.js';
+import { assinarUnsub } from './cancelar-alertas.js';
 
 const norm = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 function centroide(cidade, uf) {
@@ -104,7 +105,7 @@ export default async function handler(req) {
       if (!top.length) continue;
 
       const local = [cidade, uf].filter(Boolean).join(' — ') || 'Brasil';
-      const unsubUrl = `${BASE}/#/cancelar-alertas?token=${Buffer.from(`${perfil.id}:unsubscribe`).toString('base64')}`;
+      const unsubUrl = `${BASE}/api/cancelar-alertas?token=${assinarUnsub(perfil.id)}`; // one-click LGPD (sem login)
 
       const cards = top.map(im => {
         const url = `${BASE}/#/imovel/${im.id}`;
