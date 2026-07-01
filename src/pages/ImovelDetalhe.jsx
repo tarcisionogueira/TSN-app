@@ -48,9 +48,15 @@ const CATS_PROX = {
 const fmtDist = m => m >= 1000 ? `${(m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km` : `${m} m`;
 
 // Mapa embutido (Leaflet/OpenStreetMap) com o imóvel + pontos de interesse próximos.
-function MiniMapa({ lat, lng, pontos }) {
+// `nivel` (geocod_nivel) define a PRECISÃO: endereco/rua = pino exato; bairro/cidade
+// = círculo de área aproximada (o dado não permite apontar o lote exato, então não
+// fingimos precisão — evita a "localização errada" que na verdade é imprecisão).
+function MiniMapa({ lat, lng, pontos, nivel }) {
   const ref = useRef(null);
   const mapRef = useRef(null);
+  const aproximado = nivel === 'bairro' || nivel === 'cidade';
+  const raioM = nivel === 'cidade' ? 6000 : nivel === 'bairro' ? 1200 : 0;
+  const zoomBase = nivel === 'cidade' ? 11 : nivel === 'bairro' ? 14 : 16;
   // Enquadra o imóvel + pontos próximos — usado só na CARGA inicial.
   const enquadrar = useCallback(() => {
     const map = mapRef.current;
@@ -61,10 +67,10 @@ function MiniMapa({ lat, lng, pontos }) {
       grupo.push([p.lat, p.lng]);
     }
     try {
-      if (grupo.length > 1) map.fitBounds(grupo, { padding: [30, 30], maxZoom: 16 });
-      else map.setView([lat, lng], 15);
+      if (grupo.length > 1) map.fitBounds(grupo, { padding: [30, 30], maxZoom: aproximado ? zoomBase : 16 });
+      else map.setView([lat, lng], zoomBase);
     } catch (_) { /* mapa ainda sem tamanho válido */ }
-  }, [lat, lng, pontos]);
+  }, [lat, lng, pontos, aproximado, zoomBase]);
 
   // Botão "centralizar": leva o imóvel ao centro MANTENDO o zoom atual do usuário
   // (ele deu zoom para ver as ruas; não queremos reiniciar o enquadramento).
@@ -78,10 +84,17 @@ function MiniMapa({ lat, lng, pontos }) {
     let cancel = false;
     import('leaflet').then(({ default: L }) => {
       if (cancel || !ref.current || mapRef.current) return;
-      const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], 15);
+      const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], zoomBase);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      // Imóvel (marcador principal)
-      L.circleMarker([lat, lng], { radius: 10, color: '#fff', weight: 3, fillColor: '#0D63DB', fillOpacity: 1 }).addTo(map).bindTooltip('Imóvel');
+      // Imóvel: pino exato (endereço/rua) OU círculo de área aproximada (bairro/cidade)
+      if (aproximado && raioM) {
+        L.circle([lat, lng], { radius: raioM, color: '#0D63DB', weight: 1, fillColor: '#0D63DB', fillOpacity: 0.12 })
+          .addTo(map).bindTooltip(`Área aproximada (${nivel})`);
+        L.circleMarker([lat, lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#0D63DB', fillOpacity: 0.6, dashArray: '2' })
+          .addTo(map).bindTooltip('Centro aproximado');
+      } else {
+        L.circleMarker([lat, lng], { radius: 10, color: '#fff', weight: 3, fillColor: '#0D63DB', fillOpacity: 1 }).addTo(map).bindTooltip('Imóvel');
+      }
       // Pontos próximos
       for (const [key, p] of Object.entries(pontos || {})) {
         if (!p?.lat || !p?.lng) continue;
@@ -660,18 +673,22 @@ export default function ImovelDetalhe() {
   // (que costuma cair no centro do bairro/cidade). Quando há endereço, priorizamos.
   const temEnderecoPreciso = !!(imovel.endereco && /\d/.test(imovel.endereco));
   const qEndereco = encodeURIComponent(enderecoCompleto);
-  // STREET VIEW abre o panorama de verdade — exige o map_action=pano com viewpoint
-  // (lat,lng); a URL de "search?query=" abre o MAPA/lugar, não o Street View (era o
-  // bug: com endereço preciso caía no search e a cliente via o mapa). Quando há
-  // coordenada (imóvel geocodificado) usamos pano; sem coordenada, resta a busca.
-  const streetViewUrl = temCoord
+  // PRECISÃO da localização: coordenada exata (endereço/rua) vs aproximada
+  // (bairro/cidade = centro da região). 95% do acervo é aproximado — não podemos
+  // apontar Street View no lote, então nesse caso caímos na BUSCA por endereço.
+  const nivelGeo = imovel.geocodNivel || imovel.geocod_nivel;
+  const localPrecisa = temEnderecoPreciso || nivelGeo === 'endereco' || nivelGeo === 'rua';
+  const nivelTxt = { endereco: 'endereço exato', rua: 'rua', bairro: 'bairro', cidade: 'cidade/município' }[nivelGeo];
+  // STREET VIEW só faz sentido com coordenada PRECISA; no aproximado o pano cairia
+  // numa rua qualquer do bairro → usamos a busca pelo endereço (mais honesto).
+  const streetViewUrl = (temCoord && localPrecisa)
     ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${_lat},${_lng}`
     : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
-  const mapaUrl = temEnderecoPreciso
-    ? `https://www.google.com/maps/search/?api=1&query=${qEndereco}`
-    : temCoord
-      ? `https://www.google.com/maps/search/?api=1&query=${_lat},${_lng}`
-      : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
+  // Google Maps: coordenada só quando precisa; caso contrário busca pelo texto do
+  // endereço (o Google mostra a região sem fingir um pino exato no lugar errado).
+  const mapaUrl = (temCoord && localPrecisa)
+    ? `https://www.google.com/maps/search/?api=1&query=${_lat},${_lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
 
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: 80 }}>
@@ -741,7 +758,17 @@ export default function ImovelDetalhe() {
               {/* Localização: mapa embutido + botões para abrir no Google */}
               {temLocal && (
                 <div style={{ marginTop: 16 }}>
-                  {temCoord && <MiniMapa key={imovel.pontosProximos ? 'm-com-pontos' : 'm-so-imovel'} lat={Number(_lat)} lng={Number(_lng)} pontos={imovel.pontosProximos} />}
+                  {temCoord && <MiniMapa key={imovel.pontosProximos ? 'm-com-pontos' : 'm-so-imovel'} lat={Number(_lat)} lng={Number(_lng)} pontos={imovel.pontosProximos} nivel={nivelGeo} />}
+                  {/* Selo de precisão — honesto sobre coordenada exata vs aproximada */}
+                  {temCoord && (
+                    <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 8,
+                      background: localPrecisa ? '#f0fdf4' : '#fffbeb', color: localPrecisa ? '#15803d' : '#b45309', border: `1px solid ${localPrecisa ? '#bbf7d0' : '#fde68a'}` }}>
+                      <MapPin size={12} />
+                      {localPrecisa
+                        ? 'Localização exata (endereço)'
+                        : `Localização aproximada${nivelTxt ? ` — nível ${nivelTxt}` : ''}: o círculo mostra a região, não o lote exato`}
+                    </div>
+                  )}
                   {/* Legenda dos pontos próximos (atratividade) */}
                   {temCoord && imovel.pontosProximos && Object.keys(imovel.pontosProximos).length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
