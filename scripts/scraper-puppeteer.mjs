@@ -1001,15 +1001,17 @@ async function scraperLeiloesJudiciais(browser) {
     await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(r => setTimeout(r, 2000));
 
+    // A API só aceita qtd_por_pagina=12 (valores maiores retornam vazio); o
+    // fetch roda no contexto da página → Origin/Referer corretos (senão dá 405).
     let totalPages = 100; // ajustado na 1ª resposta
     for (let pg = 1; pg <= totalPages; pg++) {
       let res = null;
       try {
         res = await page.evaluate(async (url) => {
-          const r = await fetch(url, { headers: { Accept: 'application/json' } });
+          const r = await fetch(url, { headers: { Accept: '*/*' } });
           if (!r.ok) return null;
           return await r.json();
-        }, `${API}?pg=${pg}&qtd_por_pagina=48&${qs}`);
+        }, `${API}?pg=${pg}&qtd_por_pagina=12&${qs}`);
       } catch { res = null; }
       const items = res?.items || [];
       if (!items.length) break;
