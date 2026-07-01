@@ -16,11 +16,19 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Recon dirigido: aprofundar SODRE (catálogo por leilão) e SOLD (API própria).
-  { fonte: 'SODRE-LOTES',   url: 'https://www.sodresantoro.com.br/imoveis/lotes' },      // listagem flat de lotes (XHR = endpoint real)
-  { fonte: 'SODRE-AUCTION', url: 'https://www.sodresantoro.com.br/leilao/28622' },        // detalhe de leilão → lotes-por-leilão
-  { fonte: 'SODRE-AUCAPI',  url: 'https://prd-api.sodresantoro.com.br/api/v1/auctions?segmentName=imoveis&limit=100&page=1' },
-  { fonte: 'SOLD-API',      url: 'https://www.sold.com.br/api/v1/lots?category_ids=1&status=open&page=1&per_page=100' },
+  // === Fila nacional — Top 3 multi-estado + agregador (descoberta) ===
+  // MGL Leilões (MG · SP · ES; judicial + extrajudicial Banco do Brasil)
+  { fonte: 'MGL-HOME',  url: 'https://www.mgl.com.br/' },
+  { fonte: 'MGL-IMOV',  url: 'https://www.mgl.com.br/categoria/imoveis' },
+  // CCJ Leilões (bens em todos os estados)
+  { fonte: 'CCJ-HOME',  url: 'https://www.ccjleiloes.com.br/' },
+  { fonte: 'CCJ-IMOV',  url: 'https://www.ccjleiloes.com.br/lotes/categoria/imoveis' },
+  // Leilões Judiciais (rede judicial 15+ estados)
+  { fonte: 'LJUD-HOME', url: 'https://www.leiloesjudiciais.com.br/' },
+  { fonte: 'LJUD-IMOV', url: 'https://www.leiloesjudiciais.com.br/lotes?categoria=imoveis' },
+  // Núcleo Leilões (agregador grátis — 900+ leiloeiros, mapa nacional de descoberta)
+  { fonte: 'NUCLEO-HOME', url: 'https://www.nucleoleiloes.com.br/' },
+  { fonte: 'NUCLEO-BUSCA', url: 'https://www.nucleoleiloes.com.br/imoveis' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
