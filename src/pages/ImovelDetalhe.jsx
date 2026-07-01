@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -51,6 +51,21 @@ const fmtDist = m => m >= 1000 ? `${(m / 1000).toLocaleString('pt-BR', { minimum
 function MiniMapa({ lat, lng, pontos }) {
   const ref = useRef(null);
   const mapRef = useRef(null);
+  // Enquadra o imóvel + pontos próximos (usado na carga e no botão "centralizar").
+  const enquadrar = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const grupo = [[lat, lng]];
+    for (const [key, p] of Object.entries(pontos || {})) {
+      if (!p?.lat || !p?.lng || !CATS_PROX[key]) continue;
+      grupo.push([p.lat, p.lng]);
+    }
+    try {
+      if (grupo.length > 1) map.fitBounds(grupo, { padding: [30, 30], maxZoom: 16 });
+      else map.setView([lat, lng], 15);
+    } catch (_) { /* mapa ainda sem tamanho válido */ }
+  }, [lat, lng, pontos]);
+
   useEffect(() => {
     let cancel = false;
     import('leaflet').then(({ default: L }) => {
@@ -60,21 +75,31 @@ function MiniMapa({ lat, lng, pontos }) {
       // Imóvel (marcador principal)
       L.circleMarker([lat, lng], { radius: 10, color: '#fff', weight: 3, fillColor: '#0D63DB', fillOpacity: 1 }).addTo(map).bindTooltip('Imóvel');
       // Pontos próximos
-      const grupo = [[lat, lng]];
       for (const [key, p] of Object.entries(pontos || {})) {
         if (!p?.lat || !p?.lng) continue;
         const c = CATS_PROX[key]; if (!c) continue;
         L.circleMarker([p.lat, p.lng], { radius: 7, color: '#fff', weight: 2, fillColor: c.cor, fillOpacity: 0.95 })
           .addTo(map).bindTooltip(`${c.emoji} ${c.label}${p.nome ? ' · ' + p.nome : ''} (${fmtDist(p.dist_m)})`);
-        grupo.push([p.lat, p.lng]);
       }
-      if (grupo.length > 1) { try { map.fitBounds(grupo, { padding: [30, 30], maxZoom: 16 }); } catch (_) {} }
       mapRef.current = map;
-      setTimeout(() => map.invalidateSize(), 120);
+      enquadrar();
+      setTimeout(() => { map.invalidateSize(); enquadrar(); }, 120);
     });
     return () => { cancel = true; if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
-  }, [lat, lng]);
-  return <div ref={ref} style={{ height: 260, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }} />;
+  }, [lat, lng]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={ref} style={{ height: 260, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }} />
+      {/* Botão para reenquadrar no imóvel quando o usuário se perde ao dar zoom */}
+      <button type="button" onClick={enquadrar} title="Centralizar no imóvel"
+        style={{ position: 'absolute', right: 10, bottom: 10, zIndex: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: 'white', border: '1px solid #e2e8f0', borderRadius: 9, boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          padding: '7px 11px', fontSize: 12, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}>
+        <MapPin size={14} /> Centralizar no imóvel
+      </button>
+    </div>
+  );
 }
 
 // Imóveis semelhantes e próximos (mesma cidade/tipo, prioriza o mesmo bairro).
