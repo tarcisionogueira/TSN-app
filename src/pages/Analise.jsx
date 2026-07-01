@@ -99,8 +99,9 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
   );
 }
 
-// Limite de relatórios mercadológicos+viabilidade por plano/mês (0 = usa bônus para explorador)
-const LIMITE_POR_ROLE = { explorador: 0, top2: 15 };
+// Limite de relatórios mercadológicos+viabilidade por plano/mês.
+// Explorador: 5/mês (fixo do plano) — sem análise documental/jurídica.
+const LIMITE_POR_ROLE = { explorador: 5, top2: 15, top2_anual: 15 };
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 const ROLES_SEM_LIMITE = ['assessorado','clube','analista','advogado','admin'];
 const ROLES_COM_CNJ   = ['top2','assessorado','clube','analista','advogado','admin'];
@@ -136,14 +137,14 @@ export default function Analise() {
       : 'analises_mes, analises_count';
     const { data, error } = await supabase.from('perfis').select(col).eq('id', user.id).single();
     if (error || !data) return;
+    const count = data.analises_mes === mesAtual() ? (data.analises_count || 0) : 0;
+    setAnalisesUsadas(count);
     if (role === 'explorador') {
+      // 5/mês (fixo do plano) + bônus concedido pelo admin como extra.
       const bonus = data.bonus_mercado || 0;
       setAnalisesBonus(bonus);
-      setAnalisesUsadas(0);
-      setAnalisesBloqueado(bonus <= 0);
+      setAnalisesBloqueado(count >= limiteRole && bonus <= 0);
     } else {
-      const count = data.analises_mes === mesAtual() ? (data.analises_count || 0) : 0;
-      setAnalisesUsadas(count);
       setAnalisesBloqueado(count >= limiteRole);
     }
   }, [role, user, semLimite, limiteRole]);
@@ -812,10 +813,10 @@ export default function Analise() {
         <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : role === 'explorador' ? '#eff6ff' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : role === 'explorador' ? '#084BA6' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <span>{analisesBloqueado
             ? (role === 'explorador'
-                ? '🔒 Suas análises bônus foram utilizadas. Faça upgrade para continuar.'
+                ? '🔒 Você usou suas 5 análises do mês. Faça upgrade para continuar.'
                 : `🔒 Limite de ${limiteRole} análises mensais atingido.`)
             : role === 'explorador'
-              ? `🎁 Análises bônus disponíveis: ${analisesBonus}`
+              ? `📊 Análises mercadológicas este mês: ${analisesUsadas}/${limiteRole}${analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
               : `📊 Análises este mês: ${analisesUsadas}/${limiteRole}`
           }</span>
           {analisesBloqueado && (
@@ -1033,9 +1034,9 @@ export default function Analise() {
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
-                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, ordem:2 },
+                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, planoBloqueado: role === 'explorador', ordem:2 },
                 ].map(c => {
-                  const travado = c.gerando || c.block || c.seqBloqueado;
+                  const travado = c.gerando || c.block || c.seqBloqueado || c.planoBloqueado;
                   return (
                   <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white', opacity: c.seqBloqueado?0.7:1 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -1044,13 +1045,20 @@ export default function Analise() {
                     </div>
                     <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, flex:1 }}>{c.desc}</div>
                     <div style={{ display:'flex', gap:8 }}>
-                      <button onClick={c.fn} disabled={travado}
-                        style={{ flex:1, padding:'10px', background: travado?'#cbd5e1':c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: travado?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-                        {c.gerando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando...</>
-                          : c.block ? <><Lock size={14}/> Limite atingido</>
-                          : c.seqBloqueado ? <><Lock size={14}/> Gere o 1º antes</>
-                          : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}
-                      </button>
+                      {c.planoBloqueado ? (
+                        <button onClick={()=>nav('/planos')}
+                          style={{ flex:1, padding:'10px', background:c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                          <Lock size={14}/> Disponível no Investidor Pro
+                        </button>
+                      ) : (
+                        <button onClick={c.fn} disabled={travado}
+                          style={{ flex:1, padding:'10px', background: travado?'#cbd5e1':c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: travado?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                          {c.gerando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando...</>
+                            : c.block ? <><Lock size={14}/> Limite atingido</>
+                            : c.seqBloqueado ? <><Lock size={14}/> Gere o 1º antes</>
+                            : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}
+                        </button>
+                      )}
                       {c.ok && <button onClick={()=>setRelSel(c.k)} style={{ padding:'10px 14px', background:'white', color:c.cor, border:`1px solid ${c.cor}`, borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer' }}>Abrir</button>}
                     </div>
                     {c.gerando && (
@@ -1121,6 +1129,25 @@ export default function Analise() {
                   </ul>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* PRÓXIMO PASSO — destaque ao fim do Documental: reunião com o analista */}
+          {relSel === 'documental' && parecerDocumental && !isStaffAnalise && (
+            <div style={{ background:'#faf5ff', border:'2px solid #c4b5fd', borderRadius:16, padding:'18px 20px', display:'flex', gap:14, alignItems:'flex-start' }}>
+              <ShieldAlert size={22} color="#7c3aed" style={{ flexShrink:0, marginTop:2 }}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:14, fontWeight:900, color:'#5b21b6', marginBottom:4 }}>Antes de dar o lance, valide com um especialista</div>
+                <div style={{ fontSize:12.5, color:'#4c1d95', lineHeight:1.7, marginBottom:12 }}>
+                  Arrematar é uma <strong>operação de risco</strong> e deve ser conduzida profissionalmente. Com os dois relatórios prontos, <strong>agende uma reunião com um analista BidPro</strong> para revisar a operação, tirar dúvidas e decidir com segurança.
+                </div>
+                <button onClick={solicitarReuniao} disabled={!ambosRelatorios || reuniaoSolicitada}
+                  title={!ambosRelatorios ? 'Gere também o relatório Mercadológico para liberar' : ''}
+                  style={{ padding:'11px 18px', background: (!ambosRelatorios||reuniaoSolicitada)?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:(!ambosRelatorios||reuniaoSolicitada)?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+                  {reuniaoSolicitada ? <><CheckCircle2 size={15}/> Reunião solicitada</> : <><Calendar size={15}/> Agendar reunião com analista</>}
+                </button>
+                {!ambosRelatorios && <div style={{ fontSize:11, color:'#7c3aed', marginTop:8 }}>Gere também o relatório Mercadológico + Viabilidade para liberar o agendamento.</div>}
+              </div>
             </div>
           )}
 
@@ -2037,6 +2064,27 @@ export default function Analise() {
           )}
         </div>
       </Section>
+
+      {/* PRÓXIMO PASSO — destaque ao fim do Mercadológico: seguir para o Documental */}
+      <div style={{ background:'#fff7ed', border:'2px solid #fdba74', borderRadius:16, padding:'18px 20px', display:'flex', gap:14, alignItems:'flex-start' }}>
+        <ShieldAlert size={22} color="#ea580c" style={{ flexShrink:0, marginTop:2 }}/>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:14, fontWeight:900, color:'#9a3412', marginBottom:4 }}>Próximo passo para uma decisão segura</div>
+          <div style={{ fontSize:12.5, color:'#7c2d12', lineHeight:1.7, marginBottom:12 }}>
+            Arrematar em leilão é uma <strong>operação de risco</strong> e deve ser conduzida de forma profissional. A viabilidade financeira sozinha não basta: gere também a <strong>Análise Documental + Jurídica</strong> (ônus, gravames, ocupação e processo) antes de dar o lance.
+          </div>
+          {role === 'explorador' ? (
+            <button onClick={()=>nav('/planos')} style={{ padding:'11px 18px', background:'#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+              <Lock size={15}/> Análise Documental — disponível no Investidor Pro
+            </button>
+          ) : (
+            <button onClick={()=> relDocumentalGerado ? setRelSel('documental') : gerarRelDocumental()} disabled={gerandoDocumental}
+              style={{ padding:'11px 18px', background: gerandoDocumental?'#cbd5e1':'#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: gerandoDocumental?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+              {gerandoDocumental ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando…</> : <><Scale size={15}/> {relDocumentalGerado ? 'Abrir Análise Documental + Jurídica' : 'Gerar Análise Documental + Jurídica'}</>}
+            </button>
+          )}
+        </div>
+      </div>
 
       </>)}
 

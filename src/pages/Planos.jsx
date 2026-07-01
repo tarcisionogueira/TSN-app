@@ -76,12 +76,12 @@ export default function Planos() {
 
   const atual = (key) => user && (key === role || `${key}_anual` === role);
 
-  const CheckItem = ({ txt, light }) => (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-      <div style={{ width: 18, height: 18, borderRadius: '50%', background: light ? 'rgba(134,239,172,0.2)' : '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-        <Check size={10} color={light ? '#86efac' : '#16a34a'} strokeWidth={3} />
+  const CheckItem = ({ txt, light, off }) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, opacity: off ? 0.65 : 1 }}>
+      <div style={{ width: 18, height: 18, borderRadius: '50%', background: off ? '#f1f5f9' : light ? 'rgba(134,239,172,0.2)' : '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+        {off ? <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 800, lineHeight: 1 }}>×</span> : <Check size={10} color={light ? '#86efac' : '#16a34a'} strokeWidth={3} />}
       </div>
-      <span style={{ fontSize: 13, color: light ? '#e0f2fe' : '#334155', lineHeight: 1.55 }}>{txt}</span>
+      <span style={{ fontSize: 13, color: off ? '#94a3b8' : light ? '#e0f2fe' : '#334155', lineHeight: 1.55 }}>{txt}</span>
     </div>
   );
 
@@ -160,7 +160,8 @@ export default function Planos() {
               Explore leilões em todo o Brasil, acesse cursos e use a calculadora de arrematação sem pagar nada.
             </p>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-              {['Busca de leilões em todo o Brasil', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos', 'Acesso ao site do leiloeiro'].map(t => <CheckItem key={t} txt={t} />)}
+              {['Busca de leilões em todo o Brasil', '5 relatórios Mercadológicos + Viabilidade/mês', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos', 'Acesso ao site do leiloeiro'].map(t => <CheckItem key={t} txt={t} />)}
+              <CheckItem txt="Análise Documental e Jurídica (Investidor Pro)" off />
             </div>
             <button onClick={() => nav('/checkout?plano=explorador')} disabled={atual('explorador')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('explorador') ? '#f1f5f9' : '#111', color: atual('explorador') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('explorador') ? 'default' : 'pointer' }}>

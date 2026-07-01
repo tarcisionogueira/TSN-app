@@ -93,13 +93,13 @@ function PopupBonusAnalises({ userId, onFechar }) {
       <div style={{ background: 'white', borderRadius: 20, padding: 36, maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', position: 'relative' }}>
         <button onClick={fechar} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
         <div style={{ fontSize: 56, marginBottom: 12 }}>🎁</div>
-        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 10px' }}>Bônus de boas-vindas!</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 10px' }}>Bem-vindo ao BidPro Brasil!</h2>
         <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.6, margin: '0 0 24px' }}>
-          Você ganhou <strong style={{ color: '#0D63DB' }}>5 análises gratuitas</strong> para explorar a plataforma e conhecer o potencial de imóveis em leilão.
+          Seu plano <strong style={{ color: '#0D63DB' }}>Explorador</strong> inclui <strong style={{ color: '#0D63DB' }}>5 análises Mercadológicas + Viabilidade por mês</strong>, de graça, para você avaliar imóveis em leilão.
         </p>
         <div style={{ background: '#eff6ff', borderRadius: 12, padding: '14px 20px', marginBottom: 24 }}>
           <div style={{ fontSize: 36, fontWeight: 900, color: '#0D63DB' }}>5</div>
-          <div style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>análises disponíveis</div>
+          <div style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>análises por mês</div>
         </div>
         <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 20px' }}>Faça upgrade para o plano Investidor Pro e ganhe 20 análises mensais com relatório jurídico completo.</p>
         <button onClick={fechar} style={{ width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>

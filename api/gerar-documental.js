@@ -133,6 +133,15 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
+  // Análise documental e jurídica NÃO pertence ao Explorador (só a partir do
+  // Investidor Pro). Bloqueia no servidor — à prova de burla pela API.
+  try {
+    const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
+    if (!perfil || perfil.role === 'explorador' || perfil.role == null) {
+      res.status(402).json({ error: 'A análise documental e jurídica está disponível a partir do plano Investidor Pro.', upgrade: true });
+      return;
+    }
+  } catch { /* se a checagem falhar, não trava quem tem direito */ }
   if (!CLAUDE_KEY) { res.status(500).json({ error: 'CLAUDE_KEY ausente' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 
