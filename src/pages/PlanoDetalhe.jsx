@@ -83,10 +83,12 @@ export default function PlanoDetalhe() {
   }
 
   const assinar = () => {
-    if (gratis) { nav(user ? '/membros' : '/login'); return; }
+    if (gratis) { nav(user ? '/membros' : `/checkout?plano=${key}`); return; }
     if (!aceito) return;
     const aKey = periodo === 'anual' ? `${key}_anual` : key;
-    nav(user ? `/checkout?plano=${aKey}` : `/login?next=${encodeURIComponent(`/checkout?plano=${aKey}`)}`);
+    // O checkout lida com o visitante não-logado (cria a conta ali mesmo); não
+    // desviamos mais para a tela de login antes do pagamento.
+    nav(`/checkout?plano=${aKey}`);
   };
 
   return (

@@ -101,6 +101,11 @@ export default function Checkout() {
   const [gatewayUsado, setGatewayUsado] = useState(null); // 'mp' | 'asaas'
   const [ofertandoFallback, setOfertandoFallback] = useState(false); // cliente recusado no MP, oferece Asaas
   const [showPagamento, setShowPagamento] = useState(false); // PagamentoServico inline (assessorado)
+  // Cadastro inline do visitante não-logado (cria a conta no próprio checkout)
+  const [su, setSu] = useState({ nome: '', email: '', senha: '', aceite: false });
+  const [suErro, setSuErro] = useState('');
+  const [suLoading, setSuLoading] = useState(false);
+  const [contaCriada, setContaCriada] = useState(false);
   const pollingRef = React.useRef(null);
   const jaConfirmouRef = React.useRef(false);
 
@@ -301,6 +306,41 @@ export default function Checkout() {
     if (cpfOk && !user?.user_metadata?.cpf) { try { await supabase.auth.updateUser({ data: { cpf: cpfDigits } }); } catch { /* best-effort */ } }
   };
   // Salva os dados de faturamento e então dispara o fluxo de pagamento original.
+  // Visitante não-logado: cria a conta no checkout (cadastro normal, com
+  // confirmação de e-mail). O plano fica guardado para, após o login, voltar ao
+  // checkout e concluir o pagamento (Explorador não tem pagamento). O pagamento
+  // exige login por segurança (a assinatura é sempre da conta autenticada).
+  const criarContaInline = async () => {
+    setSuErro('');
+    const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
+    if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) {
+      setSuErro('A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.'); return;
+    }
+    if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
+    setSuLoading(true);
+    try {
+      const { error } = await supabase.auth.signUp({
+        email, password: senha,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: { nome, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString(), ...(promoCode ? { ref_codigo: promoCode } : {}) },
+        },
+      });
+      if (error) throw error;
+      // Guarda o plano p/ o Login redirecionar de volta ao checkout após o login
+      // (Explorador não tem pagamento → não guarda, cai direto na plataforma).
+      if (planoKey !== 'explorador') { try { sessionStorage.setItem('tsn_plano_pendente', planoApiKey); } catch { /* ok */ } }
+      setContaCriada(true);
+    } catch (e) {
+      const m = String(e?.message || '');
+      setSuErro(/already|registered|exists/i.test(m)
+        ? 'Este e-mail já tem conta. Clique em "Já tenho conta — Entrar".'
+        : (m || 'Erro ao criar a conta.'));
+    }
+    setSuLoading(false);
+  };
+
   const iniciarPagamento = async () => {
     if (!perfilFaturamentoOk) return;
     try { await salvarDadosFaturamento(); } catch { /* não bloqueia o pagamento por falha ao gravar */ }
@@ -772,22 +812,56 @@ export default function Checkout() {
               </p>
             </div>
           ) : !user ? (
-            /* Usuário não logado — CTA para criar conta ou entrar */
+            /* Visitante não-logado — cria a conta AQUI (confirma e-mail e depois loga) */
             <>
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginBottom: 20, fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
-                ✅ Plano <strong>{plano.nome}</strong> selecionado — crie sua conta ou entre para continuar
+              {contaCriada ? (
+                <div style={{ textAlign: 'center', padding: '10px 0' }}>
+                  <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 14px' }} />
+                  <h3 style={{ margin: '0 0 8px', fontWeight: 900, color: '#111' }}>Cadastro criado!</h3>
+                  <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+                    Enviamos um e-mail de confirmação para <strong>{su.email}</strong>. Confirme (verifique também o spam) e faça login{planoKey !== 'explorador' ? ` para concluir a assinatura do ${plano.nome}.` : ' para acessar a plataforma.'}
+                  </p>
+                  <button onClick={() => nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
+                    style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
+                    Ir para o login →
+                  </button>
+                </div>
+              ) : (
+              <>
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginBottom: 18, fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
+                ✅ Plano <strong>{plano.nome}</strong> selecionado — crie sua conta para continuar
               </div>
-              <button onClick={() => nav(`/login?modo=cadastro&plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
-                style={{ width: '100%', padding: '15px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
-                Criar conta e assinar →
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                <input value={su.nome} placeholder="Nome completo" autoComplete="name"
+                  onChange={e => setSu(p => ({ ...p, nome: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                <input value={su.email} type="email" placeholder="E-mail" autoComplete="email"
+                  onChange={e => setSu(p => ({ ...p, email: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                <input value={su.senha} type="password" placeholder="Crie uma senha" autoComplete="new-password"
+                  onChange={e => setSu(p => ({ ...p, senha: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 2px' }}>
+                  Mínimo 8 caracteres, com maiúscula, minúscula, número e caractere especial.
+                </p>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
+                <input type="checkbox" checked={su.aceite} onChange={e => setSu(p => ({ ...p, aceite: e.target.checked }))} style={{ marginTop: 2, flexShrink: 0 }} />
+                <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
+              </label>
+              {suErro && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>
+              )}
+              <button onClick={criarContaInline} disabled={suLoading}
+                style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta…</> : 'Criar conta e continuar →'}
               </button>
               <button onClick={() => nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
-                style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
+                style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 12 }}>
                 Já tenho conta — Entrar
               </button>
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-                Pague via PIX ou cartão de crédito · Cancele quando quiser
+                {planoKey === 'top2' ? 'Cartão de crédito · Cancele quando quiser' : 'Pague via PIX ou cartão de crédito · Cancele quando quiser'}
               </p>
+              </>
+              )}
             </>
           ) : showPagamento && planoKey === 'assessorado' ? (
             /* ── Assessoria: pagamento inline PIX + cartão ── */
