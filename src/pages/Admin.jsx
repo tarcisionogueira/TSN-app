@@ -6019,7 +6019,9 @@ function FinanceiroTab() {
         {mpLoading ? (
           <div style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</div>
         ) : mpSaldo?.error ? (
-          <div style={{ color: '#dc2626', fontSize: 13 }}>⚠️ {mpSaldo.error} — configure MP_ACCESS_TOKEN no Vercel</div>
+          <div style={{ color: mpSaldo.indisponivel ? '#64748b' : '#dc2626', fontSize: 13, lineHeight: 1.6 }}>
+            {mpSaldo.indisponivel ? 'ℹ️ ' : '⚠️ '}{mpSaldo.error}
+          </div>
         ) : mpSaldo ? (
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {[
@@ -6769,6 +6771,17 @@ function MarketingTab() {
 
 const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Prestação de contas', 'Configurações'];
 
+// Menus agrupados por área — navegação mais fácil que a lista corrida de abas.
+const GRUPOS_ADMIN = [
+  { nome: 'Início',              tabs: ['Dashboard'] },
+  { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'SDR / Leads', 'Contratos'] },
+  { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
+  { nome: 'Equipe',              tabs: ['Equipe', 'Agenda'] },
+  { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ'] },
+  { nome: 'Financeiro',          tabs: ['Financeiro', 'Prestação de contas'] },
+  { nome: 'Sistema',             tabs: ['Configurações'] },
+];
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // AGENDA TAB — Disponibilidade dos analistas e geração de slots
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -7350,13 +7363,15 @@ export default function Admin() {
       </div>
 
       <div style={S.body}>
-        <div style={S.tabs}>
-          {TABS.map(t => (
-            <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{t}</button>
+        <div style={{ ...S.tabs, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}>
+          {GRUPOS_ADMIN.map(g => (
+            <div key={g.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, width: 130, flexShrink: 0 }}>{g.nome}</span>
+              {g.tabs.map(t => (
+                <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{t}</button>
+              ))}
+            </div>
           ))}
-          {role === 'admin' && (
-            <button style={S.tab(tab === 'Marketing')} onClick={() => mudarTab('Marketing')}>Marketing</button>
-          )}
         </div>
 
         {tab === 'Dashboard'      && <DashboardTab />}

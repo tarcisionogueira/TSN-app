@@ -45,9 +45,23 @@ export default async function handler(req) {
 
   try {
     if (body.action === 'saldo') {
-      // GET /v1/account/balance
-      const data = await mpGet('/v1/account/balance');
-      return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      // O MP NÃO tem /v1/account/balance (retorna a página genérica de devs em
+      // espanhol). O saldo vem de /users/{id}/mercadopago_account/balance.
+      try {
+        const me = await mpGet('/users/me');
+        const bal = await mpGet(`/users/${me.id}/mercadopago_account/balance`);
+        return new Response(JSON.stringify({
+          available_balance:   Number(bal.available_balance ?? bal.available ?? 0),
+          unavailable_balance: Number(bal.unavailable_balance ?? bal.unavailable ?? 0),
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      } catch (e) {
+        // Algumas contas MP não expõem saldo pela API. Mensagem limpa (não o texto
+        // cru do MP) para o painel não assustar com erro em espanhol.
+        return new Response(JSON.stringify({
+          indisponivel: true,
+          error: 'O Mercado Pago não expõe o saldo desta conta pela API. Consulte o saldo direto no painel do Mercado Pago.',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
     }
 
     if (body.action === 'pagamentos') {
