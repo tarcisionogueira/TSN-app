@@ -7,7 +7,8 @@
  *   2. cria a assinatura transparente no Mercado Pago (preapproval por card_token)
  *   3. se a assinatura NÃO for autorizada → APAGA a conta (rollback): nada fica
  *      gravado, o cliente refaz o cadastro/compra
- *   4. se autorizada → ativa o plano e manda e-mail de boas-vindas (best-effort)
+ *   4. se autorizada → grava o perfil (com CPF/endereço p/ NFS-e), ativa o plano,
+ *      registra o preço travado e manda e-mail de boas-vindas (best-effort)
  *
  * Segurança: preço SEMPRE do servidor; role só é elevado após o pagamento
  * autorizado; rate limit por IP; senha forte.
@@ -15,7 +16,6 @@
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { checkRateLimit } from './_rate-limit.js';
-import { ativarPlanoDireto } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -26,10 +26,16 @@ const BASE_URL = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
 // Planos recorrentes (preço SEMPRE do servidor — nunca do cliente).
 const PLANOS_RECORRENTES = {
-  top2:  { nome: 'Investidor Pro',    valor: 49.90 },
+  top2:  { nome: 'Investidor Pro',       valor: 49.90 },
   clube: { nome: 'Leilão Club — Mensal', valor: 5000.00 },
 };
 
+function sb(path, opts = {}) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...opts,
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+}
 function adminAuth(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/auth/v1/admin/${path}`, {
     ...opts,
@@ -61,6 +67,7 @@ export default async function handler(req, res) {
   const cpf   = String(b.cpf || '').replace(/\D/g, '');
   const cardTokenId = String(b.cardTokenId || '');
   const plano = String(b.plano || '');
+  const end   = (b.endereco && typeof b.endereco === 'object') ? b.endereco : {};
 
   const cfg = PLANOS_RECORRENTES[plano];
   if (!cfg) return res.status(400).json({ error: 'Plano inválido.' });
@@ -69,6 +76,8 @@ export default async function handler(req, res) {
   if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) {
     return res.status(400).json({ error: 'A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.' });
   }
+  if (cpf.length !== 11) return res.status(400).json({ error: 'CPF inválido (11 dígitos).' });
+  if (!end.logradouro || !end.numero || !end.cidade || !end.uf) return res.status(400).json({ error: 'Endereço incompleto para emissão fiscal.' });
   if (!cardTokenId) return res.status(400).json({ error: 'Dados do cartão ausentes.' });
 
   // 1) Cria a conta (já confirmada — o cliente vai pagar em seguida). role explorador.
@@ -114,14 +123,29 @@ export default async function handler(req, res) {
     return res.status(402).json({ error: subErro || 'Pagamento não autorizado. Verifique os dados do cartão e refaça a assinatura.', status: sub?.status || null });
   }
 
-  // 4) Autorizada → ativa o plano (o webhook confirma/renova nas próximas cobranças).
+  // 4) Autorizada → grava o perfil (fiscal + plano). Upsert garante a linha mesmo
+  //    sem trigger de criação; role só sobe AQUI (após o pagamento autorizado).
   try {
-    await ativarPlanoDireto({ userId, planoKey: plano, gateway: 'mercadopago' });
-  } catch (e) {
-    // A cobrança já foi autorizada; não desfazemos por falha de ativação. O webhook
-    // subscription_preapproval reprocessa e ativa. Apenas registra.
-    console.error('[assinar-com-cadastro] ativarPlanoDireto:', e.message);
-  }
+    await sb('perfis?on_conflict=id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({
+        id: userId, nome, cpf, role: plano, plano, inadimplente_desde: null,
+        endereco_cep: end.cep || null, endereco_logradouro: end.logradouro || null,
+        endereco_numero: end.numero || null, endereco_complemento: end.complemento || null,
+        endereco_bairro: end.bairro || null, endereco_cidade: end.cidade || null, endereco_uf: end.uf || null,
+        lgpd_aceito: true, lgpd_data: meta.lgpd_data,
+      }),
+    });
+  } catch (e) { console.error('[assinar-com-cadastro] perfil:', e?.message || e); }
+
+  // Preço travado (trava de 12 meses para recorrência) — best-effort.
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/registrar_preco_contratado`, {
+      method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_user_id: userId, p_plano_key: plano }),
+    });
+  } catch { /* não bloqueia */ }
 
   // E-mail de boas-vindas (best-effort — não bloqueia).
   try {

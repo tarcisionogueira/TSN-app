@@ -104,6 +104,7 @@ export default function Checkout() {
   // Cadastro inline do visitante não-logado (cria a conta no próprio checkout)
   const [su, setSu] = useState({ nome: '', email: '', senha: '', aceite: false });
   const [card, setCard] = useState({ numero: '', nome: '', validade: '', cvv: '' });
+  const [etapa, setEtapa] = useState('ident'); // 'ident' (dados) | 'pgto' (cartão) — só top2 não-logado
   const [suErro, setSuErro] = useState('');
   const [suLoading, setSuLoading] = useState(false);
   const [contaCriada, setContaCriada] = useState(false);
@@ -391,15 +392,30 @@ export default function Checkout() {
   const fmtCardNum = v => v.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
   const fmtCardVal = v => v.replace(/\D/g, '').replace(/^(\d{2})/, '$1/').slice(0, 5);
 
-  // Visitante assina o Investidor Pro em UM passo (pay-first): cria a conta +
-  // paga de forma ATÔMICA no servidor. Se o pagamento não autoriza, nada é
-  // gravado (a conta é apagada) e o cliente refaz. Autorizado → acesso direto.
+  // Etapa 1 → 2: valida os dados de identificação (incl. CPF/endereço p/ fiscal)
+  // antes de mostrar o cartão. Mesma validação que o servidor refaz.
+  const irParaPagamento = () => {
+    setSuErro('');
+    const nome = su.nome.trim(), email = su.email.trim(), senha = su.senha;
+    if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setSuErro('E-mail inválido.'); return; }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
+    if (!cpfOk) { setSuErro('Informe um CPF válido (11 dígitos).'); return; }
+    if (!enderecoOk) { setSuErro('Preencha o endereço completo para a emissão fiscal.'); return; }
+    if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
+    setEtapa('pgto');
+  };
+
+  // Visitante assina o Investidor Pro (pay-first): cria a conta + paga de forma
+  // ATÔMICA no servidor. Se o pagamento não autoriza, nada é gravado (a conta é
+  // apagada) e o cliente refaz. Autorizado → acesso direto. CPF/endereço vão junto
+  // e ficam salvos no perfil para os próximos pagamentos e a emissão fiscal.
   const assinarComCadastro = async () => {
     setSuErro('');
     const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
-    if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
-    if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
+    if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); setEtapa('ident'); return; }
+    if (!cpfOk || !enderecoOk) { setSuErro('Complete os dados de identificação.'); setEtapa('ident'); return; }
+    if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); setEtapa('ident'); return; }
     if (!card.numero || !card.nome || !card.validade || !card.cvv) { setSuErro('Preencha todos os dados do cartão.'); return; }
     const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY;
     if (!MP_PUBLIC_KEY) { setSuErro('Pagamento indisponível no momento. Tente mais tarde.'); return; }
@@ -414,7 +430,7 @@ export default function Checkout() {
       if (!token?.id) throw new Error('Não foi possível validar o cartão. Confira os dados.');
       const res = await apiCall('/api/assinar-com-cadastro', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, senha, cardTokenId: token.id, plano: 'top2' }),
+        body: JSON.stringify({ nome, email, senha, cpf: cpfDigits, endereco: end, cardTokenId: token.id, plano: 'top2' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Não foi possível concluir a assinatura.');
@@ -920,67 +936,111 @@ export default function Checkout() {
                 </div>
               ) : (
               <>
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginBottom: 18, fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
-                ✅ Plano <strong>{plano.nome}</strong> selecionado — crie sua conta para continuar
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-                <input value={su.nome} placeholder="Nome completo" autoComplete="name"
-                  onChange={e => setSu(p => ({ ...p, nome: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
-                <input value={su.email} type="email" placeholder="E-mail" autoComplete="email"
-                  onChange={e => setSu(p => ({ ...p, email: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
-                <input value={su.senha} type="password" placeholder="Crie uma senha" autoComplete="new-password"
-                  onChange={e => setSu(p => ({ ...p, senha: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '2px 2px 0' }}>
-                  {[
-                    { ok: su.senha.length >= 8, txt: 'Mínimo 8 caracteres' },
-                    { ok: /[A-Z]/.test(su.senha), txt: 'Uma letra maiúscula' },
-                    { ok: /[a-z]/.test(su.senha), txt: 'Uma letra minúscula' },
-                    { ok: /\d/.test(su.senha), txt: 'Um número' },
-                    { ok: /[^A-Za-z0-9]/.test(su.senha), txt: 'Um caractere especial' },
-                  ].map(r => (
-                    <div key={r.txt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: r.ok ? '#059669' : '#94a3b8', fontWeight: r.ok ? 600 : 400 }}>
-                      <span style={{ fontSize: 12, width: 12, display: 'inline-block' }}>{r.ok ? '✓' : '○'}</span> {r.txt}
+              {planoKey === 'top2' && etapa === 'pgto' ? (
+                /* ── Etapa 2: Pagamento (cartão) ── */
+                <>
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>Você está assinando</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>{plano.nome} · {plano.precoLabel || 'R$ 49,90'}/mês</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Como {su.email} · Cancele quando quiser</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Dados do cartão</div>
+                    <input value={card.numero} inputMode="numeric" placeholder="Número do cartão"
+                      onChange={e => setCard(p => ({ ...p, numero: fmtCardNum(e.target.value) }))} style={{ ...ckInp, width: '100%' }} />
+                    <input value={card.nome} placeholder="Nome impresso no cartão"
+                      onChange={e => setCard(p => ({ ...p, nome: e.target.value.toUpperCase() }))} style={{ ...ckInp, width: '100%' }} />
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <input value={card.validade} inputMode="numeric" placeholder="MM/AA"
+                        onChange={e => setCard(p => ({ ...p, validade: fmtCardVal(e.target.value) }))} style={{ ...ckInp, flex: 1 }} />
+                      <input value={card.cvv} inputMode="numeric" placeholder="CVV" maxLength={4}
+                        onChange={e => setCard(p => ({ ...p, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))} style={{ ...ckInp, flex: 1 }} />
                     </div>
-                  ))}
-                </div>
-              </div>
-              {planoKey === 'top2' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
-                    Dados do cartão · cobrança mensal de {plano.precoLabel || 'R$ 49,90'}
                   </div>
-                  <input value={card.numero} inputMode="numeric" placeholder="Número do cartão"
-                    onChange={e => setCard(p => ({ ...p, numero: fmtCardNum(e.target.value) }))} style={{ ...ckInp, width: '100%' }} />
-                  <input value={card.nome} placeholder="Nome impresso no cartão"
-                    onChange={e => setCard(p => ({ ...p, nome: e.target.value.toUpperCase() }))} style={{ ...ckInp, width: '100%' }} />
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <input value={card.validade} inputMode="numeric" placeholder="MM/AA"
-                      onChange={e => setCard(p => ({ ...p, validade: fmtCardVal(e.target.value) }))} style={{ ...ckInp, flex: 1 }} />
-                    <input value={card.cvv} inputMode="numeric" placeholder="CVV" maxLength={4}
-                      onChange={e => setCard(p => ({ ...p, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))} style={{ ...ckInp, flex: 1 }} />
+                  {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>}
+                  <button onClick={assinarComCadastro} disabled={suLoading}
+                    style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</> : `Assinar e pagar ${plano.precoLabel || 'R$ 49,90'}`}
+                  </button>
+                  <button onClick={() => { setSuErro(''); setEtapa('ident'); }} disabled={suLoading}
+                    style={{ width: '100%', padding: '10px', background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: suLoading ? 'default' : 'pointer' }}>
+                    ← Voltar aos dados
+                  </button>
+                </>
+              ) : (
+                /* ── Etapa 1: Identificação (top2) ou cadastro simples (demais) ── */
+                <>
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', marginBottom: 18, fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
+                    ✅ Plano <strong>{plano.nome}</strong> selecionado{planoKey === 'top2' ? ' — seus dados (passo 1 de 2)' : ' — crie sua conta'}
                   </div>
-                </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                    <input value={su.nome} placeholder="Nome completo" autoComplete="name"
+                      onChange={e => setSu(p => ({ ...p, nome: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                    <input value={su.email} type="email" placeholder="E-mail" autoComplete="email"
+                      onChange={e => setSu(p => ({ ...p, email: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                    <input value={su.senha} type="password" placeholder="Crie uma senha" autoComplete="new-password"
+                      onChange={e => setSu(p => ({ ...p, senha: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '2px 2px 0' }}>
+                      {[
+                        { ok: su.senha.length >= 8, txt: 'Mínimo 8 caracteres' },
+                        { ok: /[A-Z]/.test(su.senha), txt: 'Uma letra maiúscula' },
+                        { ok: /[a-z]/.test(su.senha), txt: 'Uma letra minúscula' },
+                        { ok: /\d/.test(su.senha), txt: 'Um número' },
+                        { ok: /[^A-Za-z0-9]/.test(su.senha), txt: 'Um caractere especial' },
+                      ].map(r => (
+                        <div key={r.txt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: r.ok ? '#059669' : '#94a3b8', fontWeight: r.ok ? 600 : 400 }}>
+                          <span style={{ fontSize: 12, width: 12, display: 'inline-block' }}>{r.ok ? '✓' : '○'}</span> {r.txt}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {planoKey === 'top2' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Dados para a nota fiscal</div>
+                      <input value={cpf} inputMode="numeric" placeholder="CPF"
+                        onChange={e => setCpf(e.target.value)} style={{ ...ckInp, width: '100%' }} />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input value={end.cep} inputMode="numeric" placeholder="CEP"
+                          onChange={e => setEnd(p => ({ ...p, cep: e.target.value }))} onBlur={e => buscarCepCk(e.target.value)} style={{ ...ckInp, width: 120 }} />
+                        <input value={end.logradouro} placeholder="Logradouro"
+                          onChange={e => setEnd(p => ({ ...p, logradouro: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input value={end.numero} placeholder="Nº"
+                          onChange={e => setEnd(p => ({ ...p, numero: e.target.value }))} style={{ ...ckInp, width: 80 }} />
+                        <input value={end.bairro} placeholder="Bairro"
+                          onChange={e => setEnd(p => ({ ...p, bairro: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input value={end.cidade} placeholder="Cidade"
+                          onChange={e => setEnd(p => ({ ...p, cidade: e.target.value }))} style={{ ...ckInp, flex: 1 }} />
+                        <select value={end.uf} onChange={e => setEnd(p => ({ ...p, uf: e.target.value }))} style={{ ...ckInp, width: 90 }}>
+                          <option value="">UF</option>
+                          {ESTADOS_UF.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                        </select>
+                      </div>
+                      {cepLoadingCk && <div style={{ fontSize: 11, color: '#0D63DB' }}>Buscando endereço…</div>}
+                    </div>
+                  )}
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
+                    <input type="checkbox" checked={su.aceite} onChange={e => setSu(p => ({ ...p, aceite: e.target.checked }))} style={{ marginTop: 2, flexShrink: 0 }} />
+                    <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
+                  </label>
+                  {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>}
+                  <button onClick={planoKey === 'top2' ? irParaPagamento : criarContaInline} disabled={suLoading}
+                    style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</>
+                      : (planoKey === 'top2' ? 'Continuar para pagamento →' : 'Criar conta e continuar →')}
+                  </button>
+                  <button onClick={() => nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
+                    style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 12 }}>
+                    Já tenho conta — Entrar
+                  </button>
+                  <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
+                    {planoKey === 'top2' ? 'Cartão de crédito · Cancele quando quiser' : 'Pague via PIX ou cartão de crédito · Cancele quando quiser'}
+                  </p>
+                </>
               )}
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
-                <input type="checkbox" checked={su.aceite} onChange={e => setSu(p => ({ ...p, aceite: e.target.checked }))} style={{ marginTop: 2, flexShrink: 0 }} />
-                <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
-              </label>
-              {suErro && (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>
-              )}
-              <button onClick={planoKey === 'top2' ? assinarComCadastro : criarContaInline} disabled={suLoading}
-                style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                {suLoading
-                  ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</>
-                  : (planoKey === 'top2' ? `Assinar e pagar ${plano.precoLabel || 'R$ 49,90'}` : 'Criar conta e continuar →')}
-              </button>
-              <button onClick={() => nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
-                style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 12 }}>
-                Já tenho conta — Entrar
-              </button>
-              <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-                {planoKey === 'top2' ? 'Cartão de crédito · Cancele quando quiser' : 'Pague via PIX ou cartão de crédito · Cancele quando quiser'}
-              </p>
               </>
               )}
             </>
