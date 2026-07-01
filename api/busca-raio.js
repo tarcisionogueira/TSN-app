@@ -6,6 +6,10 @@
  * Body: { lat, lng, raioKm, pagina, porPagina, filtros: { tipos[], estado, modalidades[], pagamento[], valorMin, valorMax } }
  * pagamento usa valores canônicos do banco (a_vista | financiado | hipotecado).
  */
+// Runtime EDGE: o handler usa a Web Request/Response (req.json() e `new Response`).
+// SEM esta linha a função rodava no Node, onde o `return new Response()` é IGNORADO
+// → a requisição pendurava e a busca por raio ficava em "Buscando..." pra sempre.
+export const config = { runtime: 'edge' };
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
