@@ -94,6 +94,7 @@ export default function Checkout() {
   const [resultadoMudanca, setResultadoMudanca] = useState(null);
   const [erro, setErro] = useState('');
   const [pago, setPago] = useState(false); // tela de aprovado
+  const [pagoPendente, setPagoPendente] = useState(false); // assinatura em análise (3DS/antifraude)
   const [modalidade, setModalidade] = useState('mensal'); // 'mensal' | 'vista'
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [asaasIds, setAsaasIds] = useState(null); // { subscriptionId, paymentId }
@@ -110,6 +111,14 @@ export default function Checkout() {
   const [contaCriada, setContaCriada] = useState(false);
   const pollingRef = React.useRef(null);
   const jaConfirmouRef = React.useRef(false);
+  const assinandoRef = React.useRef(false); // trava anti-duplo-clique na assinatura
+
+  // Limpa o formulário inline ao trocar de plano (evita dados do plano anterior).
+  useEffect(() => {
+    setSu({ nome: '', email: '', senha: '', aceite: false });
+    setCard({ numero: '', nome: '', validade: '', cvv: '' });
+    setEtapa('ident'); setSuErro('');
+  }, [planoKey]);
 
   // Endereço do assinante — obrigatório antes de pagar um produto pago (usado em
   // contratos de assessoria / leilão clube e na pré-filtragem da Busca).
@@ -415,8 +424,11 @@ export default function Checkout() {
     if (!cpfOk) { setSuErro('Informe um CPF válido (11 dígitos).'); return; }
     if (!enderecoOk) { setSuErro('Preencha o endereço completo para a nota fiscal.'); return; }
     if (!card.numero || !card.nome || !card.validade || !card.cvv) { setSuErro('Preencha todos os dados do cartão.'); return; }
+    if (!/^\d{2}\/\d{2}$/.test(card.validade)) { setSuErro('Validade no formato MM/AA.'); return; }
     const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY;
     if (!MP_PUBLIC_KEY) { setSuErro('Pagamento indisponível no momento. Tente mais tarde.'); return; }
+    if (assinandoRef.current) return; // evita duplo-clique/duplo-envio
+    assinandoRef.current = true;
     setSuLoading(true);
     try {
       if (!window.MercadoPago) {
@@ -431,15 +443,26 @@ export default function Checkout() {
         body: JSON.stringify({ nome, email, senha, cpf: cpfDigits, endereco: end, cardTokenId: token.id, plano: 'top2' }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Não foi possível concluir a assinatura.');
-      // Conta criada + pagamento aprovado + já confirmada → loga e libera o acesso.
-      try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* se falhar, o cliente loga manualmente */ }
-      setPago(true);
-      setTimeout(() => nav('/membros'), 3000);
+      if (!res.ok) {
+        if (res.status === 409) { setSuErro('Este e-mail já tem conta. Clique em "Já tenho conta — Entrar".'); setEtapa('ident'); return; }
+        throw new Error(data.error || 'Não foi possível concluir a assinatura.');
+      }
+      // Conta criada + já confirmada → loga. 'pending' = análise antifraude: o
+      // plano é liberado pelo webhook ao aprovar (ele entra como Explorador por ora).
+      try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* loga manual se falhar */ }
+      if (data.status === 'pending') {
+        setPagoPendente(true);
+        setTimeout(() => nav('/membros'), 3500);
+      } else {
+        setPago(true);
+        setTimeout(() => nav('/membros'), 3000);
+      }
     } catch (e) {
       setSuErro(e.message || 'Erro ao processar a assinatura.');
+    } finally {
+      assinandoRef.current = false;
+      setSuLoading(false);
     }
-    setSuLoading(false);
   };
 
   const iniciarPagamento = async () => {
@@ -627,6 +650,20 @@ export default function Checkout() {
 
   // Tela de aprovado — cobre tudo, redireciona para home (ou contrato)
   const ehContratoPlano = planoKey === 'assessorado' || planoKey === 'clube';
+  if (pagoPendente) return (
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' }}>
+      <div style={{ fontSize: 64, marginBottom: 20 }}>⏳</div>
+      <h1 style={{ color: 'white', fontWeight: 900, fontSize: 28, margin: '0 0 12px' }}>Pagamento em análise</h1>
+      <p style={{ color: '#cbd5e1', fontSize: 15, margin: '0 0 24px', lineHeight: 1.6, maxWidth: 440 }}>
+        Seu banco está confirmando a assinatura (costuma levar alguns minutos). Assim que aprovado, o plano <strong style={{ color: 'white' }}>{plano?.nome}</strong> é liberado automaticamente. Você já pode entrar na plataforma.
+      </p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#93c5fd', fontSize: 14 }}>
+        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Entrando…
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
   if (pago) return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' }}>
       <div style={{ fontSize: 72, marginBottom: 24, animation: 'pop 0.4s ease' }}>✅</div>

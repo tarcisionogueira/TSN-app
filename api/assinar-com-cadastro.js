@@ -94,7 +94,12 @@ export default async function handler(req, res) {
   const userId = cData?.id || cData?.user?.id;
   if (!userId) return res.status(500).json({ error: 'Falha ao criar a conta.' });
 
-  const rollback = async () => { try { await adminAuth(`users/${userId}`, { method: 'DELETE' }); } catch { /* órfão raro; melhor que cobrar sem conta */ } };
+  const rollback = async () => {
+    try {
+      const d = await adminAuth(`users/${userId}`, { method: 'DELETE' });
+      if (!d.ok) console.error(`[assinar-com-cadastro] ROLLBACK falhou user=${userId} status=${d.status} email=${email}`);
+    } catch (e) { console.error(`[assinar-com-cadastro] ROLLBACK erro user=${userId}:`, e?.message || e); }
+  };
 
   // 2) Cria a assinatura transparente no MP (preapproval por card_token).
   let sub, subErro = '';
@@ -117,20 +122,26 @@ export default async function handler(req, res) {
     if (!r.ok) subErro = sub?.message || sub?.cause?.[0]?.description || 'Falha no pagamento';
   } catch (e) { subErro = String(e?.message || e); }
 
-  // 3) Não autorizada → rollback (nada fica gravado).
-  if (subErro || sub?.status !== 'authorized') {
+  // 3) Recusada de fato → rollback (nada fica gravado). 'pending' NÃO é recusa
+  //    (análise antifraude / 3D Secure): mantém a conta; o webhook ativa o plano
+  //    quando a assinatura passar a 'authorized'.
+  const aprovado = sub?.status === 'authorized';
+  const pendente = sub?.status === 'pending';
+  if (subErro || (!aprovado && !pendente)) {
     await rollback();
     return res.status(402).json({ error: subErro || 'Pagamento não autorizado. Verifique os dados do cartão e refaça a assinatura.', status: sub?.status || null });
   }
 
-  // 4) Autorizada → grava o perfil (fiscal + plano). Upsert garante a linha mesmo
-  //    sem trigger de criação; role só sobe AQUI (após o pagamento autorizado).
+  // 4) Grava o perfil (dados fiscais SEMPRE; role/plano só quando APROVADO — se
+  //    'pending', o webhook sobe o role ao confirmar). Upsert garante a linha
+  //    mesmo sem trigger de criação de perfil.
   try {
     await sb('perfis?on_conflict=id', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({
-        id: userId, nome, cpf, role: plano, plano, inadimplente_desde: null,
+        id: userId, nome, cpf,
+        ...(aprovado ? { role: plano, plano, inadimplente_desde: null } : {}),
         endereco_cep: end.cep || null, endereco_logradouro: end.logradouro || null,
         endereco_numero: end.numero || null, endereco_complemento: end.complemento || null,
         endereco_bairro: end.bairro || null, endereco_cidade: end.cidade || null, endereco_uf: end.uf || null,
@@ -139,23 +150,24 @@ export default async function handler(req, res) {
     });
   } catch (e) { console.error('[assinar-com-cadastro] perfil:', e?.message || e); }
 
-  // Preço travado (trava de 12 meses para recorrência) — best-effort.
-  try {
-    await fetch(`${SUPABASE_URL}/rest/v1/rpc/registrar_preco_contratado`, {
-      method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_user_id: userId, p_plano_key: plano }),
-    });
-  } catch { /* não bloqueia */ }
+  if (aprovado) {
+    // Preço travado (trava de 12 meses para recorrência) — best-effort.
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/registrar_preco_contratado`, {
+        method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_user_id: userId, p_plano_key: plano }),
+      });
+    } catch { /* não bloqueia */ }
+    // E-mail de boas-vindas (best-effort — não bloqueia).
+    try {
+      await enviarEmail({
+        from: process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>',
+        to: email,
+        subject: `Bem-vindo ao ${cfg.nome} — BidPro Brasil`,
+        html: `<p>Olá, ${nome.split(' ')[0] || ''}!</p><p>Sua assinatura do <strong>${cfg.nome}</strong> foi confirmada. Já pode entrar na plataforma com o seu e-mail e senha.</p><p>Bons arremates!<br/>BidPro Brasil</p>`,
+      });
+    } catch { /* não bloqueia */ }
+  }
 
-  // E-mail de boas-vindas (best-effort — não bloqueia).
-  try {
-    await enviarEmail({
-      from: process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>',
-      to: email,
-      subject: `Bem-vindo ao ${cfg.nome} — BidPro Brasil`,
-      html: `<p>Olá, ${nome.split(' ')[0] || ''}!</p><p>Sua assinatura do <strong>${cfg.nome}</strong> foi confirmada. Já pode entrar na plataforma com o seu e-mail e senha.</p><p>Bons arremates!<br/>BidPro Brasil</p>`,
-    });
-  } catch { /* não bloqueia */ }
-
-  return res.status(200).json({ ok: true, status: 'authorized', plano });
+  return res.status(200).json({ ok: true, status: sub.status, plano });
 }
