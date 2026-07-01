@@ -21,7 +21,8 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
 const APP_URL     = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
 // Fontes que o scraper Puppeteer deve reportar a cada execução.
-const FONTES_ESPERADAS = ['MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRAZAO', 'LJUD'];
+// LJUD fora por ora (parqueado — exige navegador real; ver scraper-puppeteer.mjs).
+const FONTES_ESPERADAS = ['MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRAZAO'];
 const MAX_IDADE_H = 36; // sem coleta há mais que isso = alerta
 
 export default async function handler(req) {

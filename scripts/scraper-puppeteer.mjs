@@ -1245,17 +1245,19 @@ async function main() {
     console.log('\n📋 Frazão Leilões...');
     await coletarFonte('FRAZAO', () => scraperFrazao(browser));
 
-    // 7. Leilões Judiciais — portal nacional (agrega centenas de leiloeiros)
-    // Esteira: tenta o método listener; se reprovar, cai para a próxima
-    // estratégia (Bright Data fica preparado para quando for necessário).
-    console.log('\n📋 Leilões Judiciais (portal nacional)...');
-    {
-      const r = await coletarComEsteira('LJUD', [
-        { nome: 'node-fetch', fn: () => scraperLeiloesJudiciais() },
-      ]);
-      total += await salvarEFinalizar(r.imoveis, 'LJUD');
-      await registrarSaude('LJUD', r.imoveis, r.estrategia, r.validacao);
-    }
+    // 7. Leilões Judiciais — portal nacional (agrega centenas de leiloeiros).
+    // PARQUEADO: a API exige sessão de navegador (cookie/token via JS) — Node
+    // fetch, fetch no navegador (CORS) e listener não autenticam. Requer navegador
+    // real dirigindo a paginação do próprio site OU Bright Data. Reabilitar quando
+    // essa estratégia estiver pronta (a função scraperLeiloesJudiciais fica pronta).
+    // console.log('\n📋 Leilões Judiciais (portal nacional)...');
+    // {
+    //   const r = await coletarComEsteira('LJUD', [
+    //     { nome: 'node-fetch', fn: () => scraperLeiloesJudiciais() },
+    //   ]);
+    //   total += await salvarEFinalizar(r.imoveis, 'LJUD');
+    //   await registrarSaude('LJUD', r.imoveis, r.estrategia, r.validacao);
+    // }
 
   } finally {
     await browser.close();
