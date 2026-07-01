@@ -7,7 +7,8 @@
  *   MP_WEBHOOK_SECRET     — secret configurado no painel MP (X-Signature header)
  */
 import crypto from 'crypto';
-import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, eventoJaProcessado, ativarPlanoDireto } from './_webhook-core.js';
+import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, eventoJaProcessado, ativarPlanoDireto, suspenderPlanoDireto } from './_webhook-core.js';
+import { enviarEmail } from './_email.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
@@ -62,16 +63,40 @@ export default async function handler(req, res) {
     }
     try {
       let preapproval = null;
+      let cobrancaRecusada = false;
       if (tipo === 'subscription_preapproval') {
         preapproval = await mpGet(`/preapproval/${dataId}`);
       } else {
+        // Cobrança recorrente: 'processed' = paga; 'rejected' = falhou.
         const ap = await mpGet(`/authorized_payments/${dataId}`);
-        if (ap?.status !== 'processed') return res.status(200).json({ ok: true, status: ap?.status || null });
+        const st = ap?.status;
+        if (st !== 'processed' && st !== 'rejected') return res.status(200).json({ ok: true, status: st || null });
+        cobrancaRecusada = (st === 'rejected');
         if (ap?.preapproval_id) preapproval = await mpGet(`/preapproval/${ap.preapproval_id}`);
       }
       if (!preapproval) return res.status(200).json({ ok: true, erro: 'preapproval não encontrado' });
       const [userId, planoKey] = String(preapproval.external_reference || '').split('|');
-      if (preapproval.status === 'authorized' && userId && planoKey) {
+      if (!userId) return res.status(200).json({ ok: true, status: preapproval.status });
+
+      // FALHA: cobrança recusada, ou assinatura pausada/cancelada no MP → rebaixa + avisa.
+      const assinaturaMorta = preapproval.status === 'paused' || preapproval.status === 'cancelled';
+      if (cobrancaRecusada || assinaturaMorta) {
+        const result = await suspenderPlanoDireto({ userId, gateway: 'mercadopago' });
+        if (result?.suspenso && preapproval.payer_email) {
+          try {
+            await enviarEmail({
+              from: process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>',
+              to: preapproval.payer_email,
+              subject: 'Falha no pagamento da sua assinatura — BidPro Brasil',
+              html: `<p>Olá!</p><p>Não conseguimos processar a cobrança da sua assinatura <strong>${preapproval.reason || 'BidPro Brasil'}</strong>. Seu acesso foi temporariamente reduzido ao plano Explorador.</p><p>Para reativar, atualize os dados do cartão na plataforma (Perfil → Assinatura). Assim que o pagamento for aprovado, seu plano volta automaticamente.</p><p>BidPro Brasil</p>`,
+            });
+          } catch { /* não bloqueia */ }
+        }
+        return res.status(200).json(result);
+      }
+
+      // SUCESSO: assinatura autorizada ou cobrança recorrente aprovada → ativa/renova.
+      if (preapproval.status === 'authorized' && planoKey) {
         const result = await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago' });
         return res.status(200).json(result);
       }

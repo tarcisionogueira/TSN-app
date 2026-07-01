@@ -120,6 +120,26 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway }) {
   return { ok: true, plano: planoKey };
 }
 
+// ── SUSPENSÃO DIRETA POR REFERÊNCIA (falha de recorrência) ────────────────────
+// Cobrança recorrente recusada / assinatura pausada ou cancelada no MP → rebaixa
+// o cliente para 'explorador' e marca inadimplência (dispara o aviso in-app).
+// Idempotente: se já está inadimplente, não repete. Guarda role_anterior para
+// reativar quando o pagamento voltar.
+export async function suspenderPlanoDireto({ userId, gateway }) {
+  if (!userId) return { skipped: 'sem_referencia' };
+  const { data: cliente } = await supabase
+    .from('perfis').select('role, inadimplente_desde').eq('id', userId).maybeSingle();
+  if (!cliente) return { skipped: 'perfil_nao_encontrado' };
+  if (cliente.inadimplente_desde) return { ok: true, ja_inadimplente: true };
+  const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+  const update = { inadimplente_desde: new Date().toISOString().slice(0, 10) };
+  if (ROLES_PAGANTES.includes(cliente.role)) { update.role_anterior = cliente.role; update.role = 'explorador'; }
+  const { error } = await supabase.from('perfis').update(update).eq('id', userId);
+  if (error) throw new Error(error.message);
+  console.log(`[${gateway}] assinatura: cliente ${userId} rebaixado por falha de pagamento`);
+  return { ok: true, suspenso: true };
+}
+
 // ── PAGAMENTO CONFIRMADO ──────────────────────────────────────────────────────
 export async function processarConfirmado({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
