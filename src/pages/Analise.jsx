@@ -27,7 +27,8 @@ const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
   nomeCondominio: '', objetivoCompra: 'investimento', status: 'analise', origem: 'extrajudicial',
   somenteAVista: false, tabelaAmortizacao: 'sac', leiloeiro: '', dataLeilao: '',
-  taxaLeiloeiroPercentual: 5, honorariosPercentual: 10, valorAvaliacao: 0, valorArrematacao: 0,
+  taxaLeiloeiroPercentual: 5, honorariosPercentual: 10, taxaAdministrativaPercentual: 0, despesasAdministrativas: 0,
+  valorAvaliacao: 0, valorArrematacao: 0,
   areaM2: 0, areaTerrenoM2: 0, valorMercado: 0, valorLocacao: 0,
   manutencaoEstimada: 0, prazoReformaMeses: 3, debitosAssumidos: 0,
   iptuMensal: 0, condominioMensal: 0, itbiPercentual: 5,
@@ -648,6 +649,19 @@ export default function Analise() {
         texto: x.constaNaDoc === false ? `${x.descricao || x.categoria} (não consta na documentação — confirmar)` : (x.descricao || x.categoria),
         tipo: x.severidade === 'bloqueante' ? 'bloqueante' : 'alerta',
       })) }));
+    }
+    // Custos do edital que a IA extraiu (taxa administrativa/despesas) → alimenta a
+    // projeção financeira. Só sobrescreve quando a IA trouxe um valor > 0.
+    if (r.extracao) {
+      const ex = r.extracao;
+      const taxaAdm = Number(ex.taxaAdministrativaPercentual) || 0;
+      const despAdm = Number(ex.despesasAdministrativas) || 0;
+      if (taxaAdm > 0 || despAdm > 0) {
+        setD(p => ({ ...p,
+          ...(taxaAdm > 0 ? { taxaAdministrativaPercentual: taxaAdm } : {}),
+          ...(despAdm > 0 ? { despesasAdministrativas: despAdm } : {}),
+        }));
+      }
     }
     // Espelha a consulta CNJ que rodou no servidor, no console de CNJ da tela.
     if (r.cnj) setCnjResultados({ processos: r.cnj.processos || [], total: r.cnj.total || 0, tribunais_consultados: r.cnj.tribunais || [], parecer: r.cnj.parecer });
@@ -1524,6 +1538,10 @@ export default function Analise() {
               <Field label="Honorários Jurídicos (%)" name="honorariosPercentual"
                 value={d.honorariosPercentual != null ? d.honorariosPercentual : 10}
                 onChange={upN} type="number"/>
+              {/* Taxa administrativa do leilão (% além do leiloeiro — comum na Superbid)
+                  e despesas administrativas (valor fixo, raras). Constam no EDITAL. */}
+              <Field label="Taxa Administrativa (%)" name="taxaAdministrativaPercentual" value={d.taxaAdministrativaPercentual||0} onChange={upN} type="number"/>
+              <Field label="Despesas Administrativas (R$)" name="despesasAdministrativas" value={d.despesasAdministrativas||0} onChange={upN} type="number"/>
               <Field label="IPTU Mensal (R$)" name="iptuMensal" value={d.iptuMensal||0} onChange={upN} type="number"/>
               <Field label="Condomínio (R$)" name="condominioMensal" value={d.condominioMensal||0} onChange={upN} type="number"/>
               <Field label="Débitos Assumidos (R$)" name="debitosAssumidos" value={d.debitosAssumidos||0} onChange={upN} type="number"/>
@@ -1865,6 +1883,8 @@ export default function Analise() {
                     ['Arrematação/Sinal', isAVista?metricas.vArremate:metricas.valorSinal, isAVista?metricasTeto.vArremate:metricasTeto.valorSinal],
                     ['Honorários Jurídicos (10%)', metricas.honorarios, metricasTeto.honorarios],
                     ['Taxa Leiloeiro', metricas.taxaLeiloeiro, metricasTeto.taxaLeiloeiro],
+                    d.taxaAdministrativaPercentual>0 && ['Taxa Administrativa', metricas.taxaAdministrativa, metricasTeto.taxaAdministrativa],
+                    d.despesasAdministrativas>0 && ['Despesas Administrativas', metricas.despesasAdm, metricasTeto.despesasAdm],
                     ['ITBI + Registro', metricas.itbiRegistro, metricasTeto.itbiRegistro],
                     d.laudemio>0 && ['Laudêmio', metricas.laudemio, metricasTeto.laudemio],
                     d.foreiro>0 && ['Foreiro', metricas.foreiro, metricasTeto.foreiro],

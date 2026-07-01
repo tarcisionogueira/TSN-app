@@ -75,10 +75,18 @@ function caixaRegrasVendaUrl({ fonte } = {}) {
 async function lerDoc(url, deadline) {
   if (!url || !/^https?:\/\//.test(url) || Date.now() > deadline) return null;
   const h = { 'User-Agent': UA, Accept: '*/*', 'Accept-Language': 'pt-BR,pt;q=0.9' };
-  let resp = null;
-  try { resp = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(12000) }); } catch { resp = null; }
+  const ehPdfUrl = /\.pdf(\?|#|$)/i.test(url);
+  // Hosts que barram o IP de datacenter e DEVOLVEM 200 com HTML de negação/redirect
+  // (não um 403 limpo). O fetch direto "funciona" mas traz LIXO — o navegador do
+  // usuário (IP residencial) abre o PDF, o servidor não. Vai direto ao Bright Data.
+  const bloqueiaServidor = /venda-imoveis\.caixa\.gov\.br/i.test(url);
   let buf = null, ct = '';
-  if (resp && resp.ok) { ct = resp.headers.get('content-type') || ''; buf = Buffer.from(await resp.arrayBuffer().catch(() => new ArrayBuffer(0))); }
+  if (!bloqueiaServidor) {
+    let resp = null;
+    try { resp = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(12000) }); } catch { resp = null; }
+    if (resp && resp.ok) { ct = resp.headers.get('content-type') || ''; buf = Buffer.from(await resp.arrayBuffer().catch(() => new ArrayBuffer(0))); }
+  }
+  // Fallback (ou 1ª opção nos hosts bloqueados): Bright Data com IP residencial.
   if (!buf || !buf.length) {
     const bd = await fetchViaBrightData(url);
     if (bd && bd.ok) { ct = bd.headers.get('content-type') || ''; buf = Buffer.from(await bd.arrayBuffer().catch(() => new ArrayBuffer(0))); }
@@ -90,7 +98,11 @@ async function lerDoc(url, deadline) {
     if (buf.length > 6_500_000) return null;
     return { kind: 'pdf', base64: buf.toString('base64'), url };
   }
-  // HTML/texto: remove tags e compacta.
+  // A URL era .pdf mas NÃO veio um PDF → foi bloqueio/HTML de negação. NÃO transformar
+  // esse lixo em "texto do documento" (poluiria o laudo e faria a IA dizer que não
+  // conseguiu ler). Trata como falha de leitura desta fonte.
+  if (ehPdfUrl) return null;
+  // HTML/texto legítimo: remove tags e compacta.
   const txt = buf.toString('utf8').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   if (txt.length < 80) return null;
   return { kind: 'text', text: txt.slice(0, 12000), url };
@@ -104,11 +116,13 @@ ESCOPO: leitura dos documentos e situação processual. NÃO faça análise de m
 
 Avalie e descreva: ônus reais, gravames, hipotecas, penhoras, arrestos, indisponibilidades, usufruto, alienação fiduciária; ocupação (ocupado/desocupado/posseiro/locado) e quem responde pela desocupação; débitos discriminados (IPTU, condomínio, taxas) e DE QUEM é a responsabilidade após a arrematação (conforme o edital); condições do edital (forma de pagamento, prazos, comissão, AJG); restrições registrárias; e a situação do(s) processo(s).
 
+CUSTOS DO EDITAL (importantes p/ a projeção financeira): capture a comissão do leiloeiro e, SE HOUVER, a TAXA ADMINISTRATIVA do leilão/portal (percentual sobre a arrematação, ALÉM da comissão do leiloeiro — comum na Superbid) em "taxaAdministrativaPercentual", e eventuais DESPESAS ADMINISTRATIVAS de valor fixo em "despesasAdministrativas". Se o edital não mencionar, deixe 0.
+
 REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver discriminado nos documentos disponíveis, NÃO invente — sinalize como "não consta na documentação analisada" e indique ONDE confirmar (certidão de débitos na Prefeitura; declaração de débitos com a administradora/síndico; matrícula atualizada no Cartório de Registro de Imóveis; cláusulas do edital; SPU para laudêmio/foro).
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "extracao": { "numeroMatricula": "", "numeroEdital": "", "numeroProcesso": "", "origem": "judicial|extrajudicial", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "" },
+  "extracao": { "numeroMatricula": "", "numeroEdital": "", "numeroProcesso": "", "origem": "judicial|extrajudicial", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "nivelRisco": "verde|amarelo|vermelho",

@@ -63,7 +63,13 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
     : 10;
   const honorarios = vArremate * (honorariosPct / 100);
   const itbiRegistro = vArremate * (itbiPct / 100);
-  const custosExtra = taxaLeiloeiro + honorarios + itbiRegistro + debitos + manutencao + laudemio + foreiro;
+  // Taxa administrativa do leilão (% sobre a arrematação, ALÉM do leiloeiro — comum
+  // na Superbid) + despesas administrativas (valor fixo, raras). Ambas vêm do EDITAL
+  // e impactam a projeção — por isso entram nos aportes.
+  const taxaAdmPct = Number(inputs.taxaAdministrativaPercentual) || 0;
+  const taxaAdministrativa = vArremate * (taxaAdmPct / 100);
+  const despesasAdm = Number(inputs.despesasAdministrativas) || 0;
+  const custosExtra = taxaLeiloeiro + honorarios + itbiRegistro + taxaAdministrativa + despesasAdm + debitos + manutencao + laudemio + foreiro;
   const custoCarrrego = (iptu + cond) * pVenda;
 
   if (isAVista) {
@@ -77,7 +83,7 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
     const roi = capitalMobilizado > 0 ? (lucro / capitalMobilizado) * 100 : 0;
     const yieldAnual = capitalMobilizado > 0 ? (vLocacao * 12 / capitalMobilizado) * 100 : 0;
     return {
-      vArremate, taxaLeiloeiro, honorarios, itbiRegistro, laudemio, foreiro, debitos, manutencao,
+      vArremate, taxaLeiloeiro, honorarios, itbiRegistro, taxaAdministrativa, despesasAdm, laudemio, foreiro, debitos, manutencao,
       custoCarrrego, capitalMobilizado, valorRef, comissao, ir, receitaLiquida, lucro, roi,
       valorSinal: vArremate, parcelasPagas: 0, saldoDevedor: 0, parcelaMedia: 0,
       yieldMensal: capitalMobilizado > 0 ? (vLocacao / capitalMobilizado) * 100 : 0, yieldAnual
@@ -102,7 +108,7 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
     const roe = capitalMobilizado > 0 ? (lucro / capitalMobilizado) * 100 : 0;
     const yieldAnual = capitalMobilizado > 0 ? (vLocacao * 12 / capitalMobilizado) * 100 : 0;
     return {
-      vArremate, taxaLeiloeiro, honorarios, itbiRegistro, laudemio, foreiro, debitos, manutencao,
+      vArremate, taxaLeiloeiro, honorarios, itbiRegistro, taxaAdministrativa, despesasAdm, laudemio, foreiro, debitos, manutencao,
       custoCarrrego, capitalMobilizado, valorRef, comissao, ir, receitaLiquida, lucro, roi: roe,
       valorSinal, parcelasPagas, saldoDevedor, parcelaMedia, tabela,
       yieldMensal: capitalMobilizado > 0 ? (vLocacao / capitalMobilizado) * 100 : 0, yieldAnual
