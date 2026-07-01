@@ -2619,6 +2619,20 @@ const FONTES_SCRAPER = [
   { key: 'sicoob',     label: 'Sicoob',            cor: '#0891b2' },
 ];
 
+// Fonte ÚNICA de verdade dos leiloeiros (o `fonte` casa com imoveis_leilao e
+// fonte_saude, em MAIÚSCULAS). Alimenta a contagem E os cards do painel — assim
+// a lista nunca mais fica desatualizada ao adicionar um leiloeiro novo.
+const FONTES_LEILAO = [
+  { fonte: 'MEGA',     nome: 'Mega Leilões',      cor: '#0D63DB', desc: 'Residenciais e comerciais' },
+  { fonte: 'SUPERBID', nome: 'Superbid',          cor: '#059669', desc: 'Maior marketplace do Brasil' },
+  { fonte: 'ZUK',      nome: 'Portal Zuk',        cor: '#0ea5e9', desc: 'Zukerman · bancos e judicial' },
+  { fonte: 'SOLD',     nome: 'Sold Leilões',      cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros' },
+  { fonte: 'FRAZAO',   nome: 'Frazão Leilões',    cor: '#db2777', desc: 'Judicial e extrajudicial · SP' },
+  { fonte: 'SODRE',    nome: 'Sodré Santoro',     cor: '#ca8a04', desc: 'Judicial e bancário' },
+  { fonte: 'LJUD',     nome: 'Leilões Judiciais', cor: '#0d9488', desc: 'Portal nacional · centenas de leiloeiros' },
+  { fonte: 'BB',       nome: 'Banco do Brasil',   cor: '#d97706', desc: 'Carteira imobiliária do BB' },
+];
+
 function ScrapersMonitor() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4076,6 +4090,7 @@ function ScrapersTab() {
   const [estadosExpandidos, setEstadosExpandidos] = useState({ caixa: false, geocod: false });
   const toggleExpandir = (aba) => setEstadosExpandidos(e => ({ ...e, [aba]: !e[aba] }));
   const [leiloeiroContagem, setLeiloeiroContagem] = useState({}); // fonte → total imóveis no banco
+  const [fonteSaude, setFonteSaude] = useState({}); // fonte → última linha de fonte_saude (qualidade)
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
   const [geocPendentes, setGeocPendentes] = useState({});
   const [geocUltimoRefresh, setGeocUltimoRefresh] = useState(null);
@@ -4111,22 +4126,28 @@ function ScrapersTab() {
     // o Supabase JS não suporta is.null dentro do .or()
     // O banco grava fonte em MAIÚSCULAS (CEF/MEGA/SOLD/SUPERBID/BB). Conta também
     // 'caixa' (legado) e NULL para a Caixa, por compatibilidade.
+    const fontes = FONTES_LEILAO.map(f => f.fonte);
     Promise.all([
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', 'CEF'),
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', 'caixa'),
       supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('fonte', null),
-      ...['MEGA','SOLD','SUPERBID','BB'].map(f =>
+      ...fontes.map(f =>
         supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', f)
       ),
-    ]).then(([cef, caixaLegado, caixaNull, mega, sold, superbid, bb]) => {
-      setLeiloeiroContagem({
-        caixa:    (cef.count || 0) + (caixaLegado.count || 0) + (caixaNull.count || 0),
-        mega:     mega.count     || 0,
-        sold:     sold.count     || 0,
-        superbid: superbid.count || 0,
-        bb:       bb.count       || 0,
-      });
+    ]).then(([cef, caixaLegado, caixaNull, ...rest]) => {
+      const contagem = { caixa: (cef.count || 0) + (caixaLegado.count || 0) + (caixaNull.count || 0) };
+      fontes.forEach((f, i) => { contagem[f] = rest[i]?.count || 0; });
+      setLeiloeiroContagem(contagem);
     });
+    // Saúde/qualidade: última execução por fonte (monitor de regressão)
+    supabase.from('fonte_saude')
+      .select('fonte,total,status,valor_pct,uf_pct,link_pct,foto_pct,estrategia,executado_em')
+      .order('executado_em', { ascending: false }).limit(80)
+      .then(({ data }) => {
+        const ult = {};
+        (data || []).forEach(l => { if (!ult[l.fonte]) ult[l.fonte] = l; });
+        setFonteSaude(ult);
+      });
   }, []);
 
   useEffect(() => {
@@ -4407,12 +4428,12 @@ function ScrapersTab() {
     }
   }
 
-  // Scrapers planejados
+  // Scrapers planejados (fila nacional — Zuk/Sodré/Frazão/LJUD já integrados)
   const scrapersPlanjados = [
+    { nome: 'MGL Leilões (MG/SP/ES)', volume: '~800-1.5k', status: 'planejado' },
+    { nome: 'CCJ Leilões (nacional)', volume: '~1-2k', status: 'planejado' },
     { nome: 'Santander', volume: '~8-15k', status: 'planejado' },
     { nome: 'Biassi', volume: '~3-5k', status: 'planejado' },
-    { nome: 'Zuk', volume: '~1.5-3k', status: 'planejado' },
-    { nome: 'MGL Leilões', volume: '~800-1.5k', status: 'planejado' },
     { nome: 'HastaPública', volume: '~2-4k', status: 'planejado' },
     { nome: 'TopLeilões', volume: '~1-2k', status: 'planejado' },
     { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
@@ -4421,10 +4442,10 @@ function ScrapersTab() {
   const geoPct = geoStats.total > 0 ? Math.round((geoStats.com / geoStats.total) * 100) : 0;
 
   const ABAS = [
-    { key: 'fontes',    label: '🏛️ Fontes',         desc: 'Caixa · Mega · Sold · Superbid · BB' },
+    { key: 'fontes',    label: '🏛️ Fontes',         desc: `Caixa + ${FONTES_LEILAO.length} leiloeiros` },
     { key: 'geocod',    label: '📍 Geocodificação',  desc: `${geoStats.com.toLocaleString('pt-BR')} / ${geoStats.total.toLocaleString('pt-BR')} imóveis` },
     { key: 'parceiros', label: '🤝 Parceiros',       desc: `${parceiros.length} leiloeiros` },
-    { key: 'roadmap',   label: '🚀 Roadmap',         desc: '7 fontes planejadas' },
+    { key: 'roadmap',   label: '🚀 Roadmap',         desc: `${scrapersPlanjados.length} fontes planejadas` },
   ];
 
   return (
@@ -4594,10 +4615,7 @@ function ScrapersTab() {
 
             {/* ── Leiloeiros (Puppeteer + Parceiros API) ── */}
             {[
-              { fonte: 'mega',     nome: 'Mega Leilões',    cor: '#0D63DB', desc: 'Residenciais e comerciais',   tipo: 'scraper' },
-              { fonte: 'sold',     nome: 'Sold Leilões',    cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros', tipo: 'scraper' },
-              { fonte: 'superbid', nome: 'Superbid',        cor: '#059669', desc: 'Maior marketplace do Brasil', tipo: 'scraper' },
-              { fonte: 'bb',       nome: 'Banco do Brasil', cor: '#d97706', desc: 'Carteira imobiliária do BB',  tipo: 'scraper' },
+              ...FONTES_LEILAO.map(f => ({ ...f, tipo: 'scraper' })),
               // Parceiros via API aparecem aqui conforme se conectam
               ...parceiros.filter(p => p.status === 'ativo').map(p => ({
                 fonte: `parceiro_${p.id}`,
@@ -4611,21 +4629,39 @@ function ScrapersTab() {
               const total = leiloeiroContagem[s.fonte] ?? 0;
               const temDados = total > 0;
               const debugKey = `leiloeiro_${s.fonte}`;
+              const sa = fonteSaude[s.fonte]; // saúde da última coleta
+              // status visual: saúde da coleta tem prioridade sobre "tem dados"
+              const saude = sa?.status; // 'ok' | 'degradado' | 'falhou'
+              const badge = saude === 'falhou' ? { txt: '✕ Falhou', bg: '#fef2f2', cor: '#dc2626' }
+                : saude === 'degradado' ? { txt: '⚠ Degradado', bg: '#fffbeb', cor: '#b45309' }
+                : temDados ? { txt: '● Ativo', bg: `${s.cor}22`, cor: s.cor }
+                : s.tipo === 'parceiro' ? { txt: '● Conectado', bg: `${s.cor}22`, cor: s.cor }
+                : { txt: '○ Sem dados', bg: '#f1f5f9', cor: '#94a3b8' };
+              const pct = (v) => `${Math.round((v || 0) * 100)}%`;
+              const quando = sa?.executado_em ? new Date(sa.executado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null;
               return (
-                <div key={s.fonte} style={{ background: `${s.cor}08`, borderRadius: 12, border: `1px solid ${s.cor}22`, padding: '14px 16px' }}>
+                <div key={s.fonte} style={{ background: `${s.cor}08`, borderRadius: 12, border: `1px solid ${saude === 'falhou' ? '#fecaca' : saude === 'degradado' ? '#fde68a' : `${s.cor}22`}`, padding: '14px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div>
                       <div style={{ fontWeight: 800, fontSize: 13, color: '#111' }}>{s.nome}</div>
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{s.desc}</div>
                     </div>
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: temDados ? `${s.cor}22` : '#f1f5f9', color: temDados ? s.cor : '#94a3b8', whiteSpace: 'nowrap' }}>
-                      {temDados ? '● Ativo' : s.tipo === 'parceiro' ? '● Conectado' : '○ Sem dados'}
+                    <span title={sa?.motivo || ''} style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: badge.bg, color: badge.cor, whiteSpace: 'nowrap' }}>
+                      {badge.txt}
                     </span>
                   </div>
                   <div style={{ fontSize: 24, fontWeight: 900, color: temDados ? s.cor : '#94a3b8', lineHeight: 1 }}>
                     {total.toLocaleString('pt-BR')}
                   </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, marginBottom: 10 }}>imóveis no banco</div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, marginBottom: sa ? 6 : 10 }}>imóveis no banco</div>
+                  {sa && (
+                    <div style={{ fontSize: 9.5, color: '#64748b', marginBottom: 10, lineHeight: 1.5 }}>
+                      <span title="% dos lotes com valor / UF / link do edital / foto">
+                        valor {pct(sa.valor_pct)} · UF {pct(sa.uf_pct)} · edital {pct(sa.link_pct)} · foto {pct(sa.foto_pct)}
+                      </span>
+                      {quando && <div style={{ color: '#94a3b8' }}>última coleta {quando}{sa.estrategia ? ` · ${sa.estrategia}` : ''}</div>}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => rodarSysDebug(debugKey)} disabled={sysDebugRodando[debugKey]}
                       style={{ padding: '4px 10px', borderRadius: 6, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
