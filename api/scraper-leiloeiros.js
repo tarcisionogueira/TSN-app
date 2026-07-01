@@ -279,6 +279,24 @@ async function coletarCCJ(deadline) {
   ], deadline);
 }
 
+// Biasi Leilões
+async function coletarBiasi(deadline) {
+  return reconAlvo('BIASI', [
+    'https://www.biasileiloes.com.br/',
+    'https://www.biasileiloes.com.br/imoveis',
+    'https://www.biasileiloes.com.br/busca?categoria=imoveis',
+  ], deadline);
+}
+
+// Destak Leilões (padrão /proximos_leiloes/pagina/tipo)
+async function coletarDestak(deadline) {
+  return reconAlvo('DESTAK', [
+    'https://www.destakleiloes.com.br/',
+    'https://www.destakleiloes.com.br/proximos_leiloes/1/1/',
+    'https://www.destakleiloes.com.br/lotes',
+  ], deadline);
+}
+
 // ─── LEILÕES JUDICIAIS (API só p/ fingerprint de navegador → Bright Data) ──────
 // A API get-bens-por-estados entrega dados só ao fingerprint TLS de um Chrome
 // real (Node fetch recebe 200 vazio). O Bright Data (Web Unlocker) tem esse
@@ -375,6 +393,8 @@ export default async function handler(req, res) {
     else if (f === 'mega') r = await coletarMega(megaUfs, deadline);
     else if (f === 'mgl') r = await coletarMGL(deadline);
     else if (f === 'ccj') r = await coletarCCJ(deadline);
+    else if (f === 'biasi') r = await coletarBiasi(deadline);
+    else if (f === 'destak') r = await coletarDestak(deadline);
     else if (f === 'ljud') r = await coletarLJUD(parseInt(q.ljud_paginas || '90', 10), deadline);
     else continue;
 

@@ -4475,8 +4475,9 @@ function ScrapersTab() {
   const scrapersPlanjados = [
     { nome: 'MGL Leilões (MG/SP/ES)', volume: '~800-1.5k', status: 'planejado' },
     { nome: 'CCJ Leilões (nacional)', volume: '~1-2k', status: 'planejado' },
+    { nome: 'Biasi Leilões', volume: '~3-5k', status: 'planejado' },
+    { nome: 'Destak Leilões', volume: '~500-1k', status: 'planejado' },
     { nome: 'Santander', volume: '~8-15k', status: 'planejado' },
-    { nome: 'Biassi', volume: '~3-5k', status: 'planejado' },
     { nome: 'HastaPública', volume: '~2-4k', status: 'planejado' },
     { nome: 'TopLeilões', volume: '~1-2k', status: 'planejado' },
     { nome: 'eLeilões', volume: '~500-1k', status: 'planejado' },
