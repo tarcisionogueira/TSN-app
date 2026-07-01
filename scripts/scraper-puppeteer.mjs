@@ -1252,17 +1252,11 @@ async function main() {
     console.log('\n📋 Frazão Leilões...');
     await coletarFonte('FRAZAO', () => scraperFrazao(browser));
 
-    // 7. Leilões Judiciais — portal nacional (agrega centenas de leiloeiros).
-    // Estratégia: navegador real estabelece o cookie de sessão; a paginação vai
-    // por Node fetch (sem CORS) reusando esse cookie.
-    console.log('\n📋 Leilões Judiciais (portal nacional)...');
-    {
-      const r = await coletarComEsteira('LJUD', [
-        { nome: 'browser-cookie', fn: () => scraperLeiloesJudiciais(browser) },
-      ]);
-      total += await salvarEFinalizar(r.imoveis, 'LJUD');
-      await registrarSaude('LJUD', r.imoveis, r.estrategia, r.validacao);
-    }
+    // 7. Leilões Judiciais — PARQUEADO no Puppeteer. Diagnóstico: a API não usa
+    // cookie; entrega dados só ao FINGERPRINT de navegador real (Node fetch é
+    // detectado e recebe 200 vazio). Movido para o scraper Bright Data
+    // (api/scraper-leiloeiros.js → coletarLJUD), que usa fingerprint de navegador.
+    // console.log('\n📋 Leilões Judiciais (portal nacional)...');
 
   } finally {
     await browser.close();

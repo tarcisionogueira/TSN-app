@@ -44,15 +44,20 @@ async function consumirCota() {
  * com o corpo bruto da fonte, ou null se: BD não configurado, teto atingido, ou erro.
  * O chamador usa resp.ok / resp.arrayBuffer() / resp.text() normalmente.
  */
-export async function fetchViaBrightData(url, { method = 'GET' } = {}) {
+export async function fetchViaBrightData(url, { method = 'GET', headers = null } = {}) {
   if (!brightDataDisponivel()) return null;
   const liberado = await consumirCota();
   if (!liberado) return null; // teto semanal atingido → não chama (fail-safe de custo)
   try {
+    // headers: array [{name,value}] p/ a Web Unlocker (ex.: Origin/Referer de XHR,
+    // necessários em APIs que só respondem a chamadas com fingerprint de navegador).
+    const bdHeaders = headers
+      ? Object.entries(headers).map(([name, value]) => ({ name, value }))
+      : undefined;
     const resp = await fetch('https://api.brightdata.com/request', {
       method: 'POST',
       headers: { Authorization: `Bearer ${BD_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw' }),
+      body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw', ...(bdHeaders ? { headers: bdHeaders } : {}) }),
       signal: AbortSignal.timeout(45000),
     });
     return resp;

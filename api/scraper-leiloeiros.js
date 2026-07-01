@@ -279,6 +279,56 @@ async function coletarCCJ(deadline) {
   ], deadline);
 }
 
+// ─── LEILÕES JUDICIAIS (API só p/ fingerprint de navegador → Bright Data) ──────
+// A API get-bens-por-estados entrega dados só ao fingerprint TLS de um Chrome
+// real (Node fetch recebe 200 vazio). O Bright Data (Web Unlocker) tem esse
+// fingerprint; enviamos os headers de XHR (Origin/Referer) que a API exige.
+// É um PORTAL que agrega centenas de leiloeiros (cada lote traz o de origem).
+async function coletarLJUD(paginas, deadline) {
+  const out = []; let via = '-', diag = null;
+  const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
+  const base = 'tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+  const hdrs = { Accept: '*/*', Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/' };
+  let totalPages = paginas;
+  for (let p = 1; p <= Math.min(totalPages, paginas); p++) {
+    if (Date.now() > deadline) break;
+    const url = `${API}?pg=${p}&qtd_por_pagina=12&${base}`;
+    const bd = await fetchViaBrightData(url, { headers: hdrs });
+    via = bd ? 'brightdata' : 'indisponivel';
+    let data = null; try { data = JSON.parse(await bd.text()); } catch { /* */ }
+    const items = data?.items || [];
+    if (!items.length) {
+      if (p === 1) { diag = { via, status: bd?.status || 0, totalItems: data?.totalItems ?? null }; await gravarDebug('LJUD', url, bd?.status || 0, 'application/json', via, JSON.stringify(data || {}).slice(0, 4000)); }
+      break;
+    }
+    if (p === 1 && data.totalPages) totalPages = Math.min(paginas, Number(data.totalPages) || paginas);
+    for (const it of items) {
+      if (Number(it.statuslote_id) !== 1) continue;
+      const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').replace(/\s+/g, ' ').trim();
+      const cidade = String(it.nm_cidade || '').trim();
+      if (/simula|teste/i.test(titulo) || /teste/i.test(cidade)) continue;
+      const vmin = parseNum(it.vl_lanceminimo || it.vl_ordenacao);
+      if (!vmin) continue;
+      const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : null;
+      const urlLeil = String(it.nm_url_leiloeiro || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+      out.push({
+        fonte: 'LJUD', fonte_id: `ljud_${it.lote_id}`,
+        titulo: (titulo || `Imóvel ${it.lote_id}`).slice(0, 180),
+        tipo: normalizarTipo(it.nm_subcategoria || titulo),
+        modalidade: /extrajudicial/i.test(it.nm_titulo_leilao || '') ? 'extrajudicial' : 'judicial',
+        estado: String(it.nm_estado || '').toUpperCase().slice(0, 2), cidade,
+        bairro: '', endereco: '', valor_avaliacao: 0, valor_minimo: vmin,
+        area_m2: parseNum((titulo.match(/([\d.,]+)\s*m²/) || [])[1]),
+        descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500) || null,
+        link_edital: urlLeil ? `https://${urlLeil}` : 'https://www.leiloesjudiciais.com.br',
+        link_foto: foto, leiloeiro: String(it.nm_leiloeiro || 'Leilões Judiciais').slice(0, 120),
+        data_leilao: null, forma_pagamento: null,
+      });
+    }
+  }
+  return { rows: out, via, diag };
+}
+
 async function upsert(rows) {
   let n = 0;
   for (let i = 0; i < rows.length; i += 100) {
@@ -325,6 +375,7 @@ export default async function handler(req, res) {
     else if (f === 'mega') r = await coletarMega(megaUfs, deadline);
     else if (f === 'mgl') r = await coletarMGL(deadline);
     else if (f === 'ccj') r = await coletarCCJ(deadline);
+    else if (f === 'ljud') r = await coletarLJUD(parseInt(q.ljud_paginas || '90', 10), deadline);
     else continue;
 
     const up = r.rows.length ? await upsert(r.rows) : 0;
