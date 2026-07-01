@@ -29,7 +29,12 @@ const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor
 
 export default async function handler(req) {
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('ok', { status: 200 });
-  if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
+  // Modo de teste: ?email=voce@x.com&secret=<CRON_SECRET> envia só para esse e-mail
+  // (ignora a trava de 1x/semana e o opt-out) — prático para validar no navegador.
+  const qs = new URL(req.url, 'http://localhost').searchParams;
+  const testeEmail = (qs.get('email') || '').trim().toLowerCase();
+  const secretOk = qs.get('secret') && process.env.CRON_SECRET && qs.get('secret') === process.env.CRON_SECRET;
+  if (!isCronAuthorized(req) && !secretOk) return new Response('unauthorized', { status: 401 });
 
   const URL_ = process.env.VITE_SUPABASE_URL;
   const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -45,7 +50,8 @@ export default async function handler(req) {
   const ROLES = 'explorador,top2,top2_anual,assessorado,clube';
 
   // Destinatários: clientes com e-mail (batch). opt-out/último-envio via alertas_email.
-  const perfis = await sbGet(`perfis?select=id,nome,email,endereco_cidade,endereco_uf&email=not.is.null&role=in.(${ROLES})&limit=1000`);
+  const filtroTeste = testeEmail ? `&email=eq.${encodeURIComponent(testeEmail)}` : '';
+  const perfis = await sbGet(`perfis?select=id,nome,email,endereco_cidade,endereco_uf&email=not.is.null&role=in.(${ROLES})${filtroTeste}&limit=1000`);
   if (!Array.isArray(perfis) || !perfis.length) return new Response(JSON.stringify({ ok: true, enviados: 0, total: 0 }), { headers: { 'Content-Type': 'application/json' } });
   const ids = perfis.map(p => p.id);
   const inList = `(${ids.join(',')})`;
@@ -75,8 +81,8 @@ export default async function handler(req) {
     try {
       const email = perfil.email; if (!email || !RESEND_KEY) continue;
       const a = alertaMap[perfil.id];
-      if (a && a.ativo === false) continue;                          // descadastrado
-      if (a && a.ultimo_envio && a.ultimo_envio > seteDias) continue; // já enviado esta semana
+      if (!testeEmail && a && a.ativo === false) continue;                          // descadastrado
+      if (!testeEmail && a && a.ultimo_envio && a.ultimo_envio > seteDias) continue; // já enviado esta semana
 
       const filtros = filtroMap[perfil.id] || a?.filtros || {};
       const cidade = (filtros.cidades && filtros.cidades[0]) || perfil.endereco_cidade || '';
