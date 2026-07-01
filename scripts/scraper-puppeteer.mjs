@@ -977,6 +977,102 @@ async function scraperFrazao(browser) {
   }
 }
 
+// ─── LEILÕES JUDICIAIS (portal nacional) ──────────────────────────────────────
+// leiloesjudiciais.com.br é um PORTAL que agrega centenas de leiloeiros oficiais
+// (cada lote traz nm_leiloeiro/nm_url_leiloeiro da origem). API pública Nuxt:
+//   GET api.leiloesjudiciais.com.br/core/api/get-bens-por-estados?tipo=3&pg=N...
+// Dá 405 em navegação direta; via fetch no contexto da página (Origin/Referer
+// corretos) retorna 200. tipo=3 = Imóveis. Servidor força 12 itens/página →
+// iteramos as páginas. Campos: lote_id, nm_titulo_lote, vl_lanceminimo,
+// nm_cidade/nm_estado, nm_subcategoria, fotos[].nm_path_completo (196x146 →
+// troca p/ 640x480), nm_url_leiloeiro (site de origem = edital/matrícula/anexos).
+async function scraperLeiloesJudiciais(browser) {
+  console.log('  Leilões Judiciais — portal nacional (agrega centenas de leiloeiros)...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const bensMap = new Map();
+  const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
+  const qs = 'tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+
+  try {
+    // Estabelece contexto de visitante real (a API só responde 200 p/ requests
+    // com Origin/Referer do site — o fetch abaixo roda no contexto da página).
+    await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
+    await new Promise(r => setTimeout(r, 2000));
+
+    let totalPages = 100; // ajustado na 1ª resposta
+    for (let pg = 1; pg <= totalPages; pg++) {
+      let res = null;
+      try {
+        res = await page.evaluate(async (url) => {
+          const r = await fetch(url, { headers: { Accept: 'application/json' } });
+          if (!r.ok) return null;
+          return await r.json();
+        }, `${API}?pg=${pg}&qtd_por_pagina=48&${qs}`);
+      } catch { res = null; }
+      const items = res?.items || [];
+      if (!items.length) break;
+      if (pg === 1 && res?.totalPages) {
+        totalPages = Math.min(120, Number(res.totalPages) || 100);
+        console.log(`    LJUD: ${res.totalItems} imóveis em ${totalPages} páginas`);
+      }
+      let novos = 0;
+      for (const it of items) {
+        const id = String(it.lote_id || it.imovel_id || '');
+        if (id && !bensMap.has(id)) { bensMap.set(id, it); novos++; }
+      }
+      if (novos === 0 && pg > 2) break;
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    const imoveis = [...bensMap.values()].map(it => {
+      if (Number(it.statuslote_id) !== 1) return null; // só "Aberto para Lance"
+      const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').replace(/\s+/g, ' ').trim();
+      const cidade = String(it.nm_cidade || '').trim();
+      // descarta lotes de teste/simulação do portal
+      if (/simula|teste/i.test(titulo) || /teste/i.test(cidade)) return null;
+      const valMin = parseFloat(it.vl_lanceminimo || it.vl_ordenacao || 0) || 0;
+      if (!valMin) return null;
+      const uf = String(it.nm_estado || '').toUpperCase().slice(0, 2);
+      const areaM = (titulo.match(/([\d.,]+)\s*m²/) || [])[1];
+      const area = areaM ? parseBRL(areaM) : 0;
+      const leiloeiroTit = String(it.nm_titulo_leilao || '');
+      const foto = (it.fotos && it.fotos[0] && it.fotos[0].nm_path_completo)
+        ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/')
+        : null;
+      const urlLeiloeiro = String(it.nm_url_leiloeiro || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+      return {
+        fonte: 'LJUD',
+        fonte_id: `ljud_${it.lote_id}`,
+        titulo: (titulo || `Imóvel ${it.lote_id}`).slice(0, 180),
+        tipo: normalizarTipo(it.nm_subcategoria || titulo),
+        modalidade: /extrajudicial/i.test(leiloeiroTit) ? 'extrajudicial' : 'judicial',
+        estado: uf,
+        cidade: toTitleCase(cidade),
+        bairro: '',
+        endereco: '',
+        valor_avaliacao: 0,
+        valor_minimo: valMin,
+        area_m2: area,
+        descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500),
+        link_edital: urlLeiloeiro ? `https://${urlLeiloeiro}` : 'https://www.leiloesjudiciais.com.br',
+        link_foto: foto,
+        leiloeiro: String(it.nm_leiloeiro || 'Leilões Judiciais').slice(0, 120),
+        data_leilao: null,
+        forma_pagamento: 'a_vista',
+      };
+    }).filter(Boolean);
+    console.log(`    LJUD: ${imoveis.length} imóveis mapeados`);
+    return imoveis;
+  } catch (err) {
+    console.log(`  Erro Leilões Judiciais: ${err.message.slice(0, 100)}`);
+    return [];
+  } finally {
+    await page.close();
+  }
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -1057,6 +1153,10 @@ async function main() {
     // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis
     console.log('\n📋 Frazão Leilões...');
     total += await salvarEFinalizar(await scraperFrazao(browser), 'FRAZAO');
+
+    // 7. Leilões Judiciais — portal nacional (agrega centenas de leiloeiros)
+    console.log('\n📋 Leilões Judiciais (portal nacional)...');
+    total += await salvarEFinalizar(await scraperLeiloesJudiciais(browser), 'LJUD');
 
   } finally {
     await browser.close();
