@@ -306,6 +306,9 @@ export default function Checkout() {
     try { await salvarDadosFaturamento(); } catch { /* não bloqueia o pagamento por falha ao gravar */ }
     if (ehMudanca) return mudarPlano();
     if (planoKey === 'assessorado') return setShowPagamento(true);
+    // Investidor Pro mensal (recorrente): checkout transparente inline (cartão
+    // coletado no BidPro). O anual (valor único) segue pelo fluxo de link.
+    if (planoKey === 'top2' && modalidade !== 'anual') return setShowPagamento(true);
     return gerarLink();
   };
 
@@ -796,6 +799,20 @@ export default function Checkout() {
                 descricao: plano.nome,
               }}
               assinatura={false}
+              onPago={() => confirmarPagamento()}
+              onCancelar={() => setShowPagamento(false)}
+            />
+          ) : showPagamento && planoKey === 'top2' && modalidade !== 'anual' ? (
+            /* ── Investidor Pro mensal: assinatura transparente inline (cartão no BidPro) ── */
+            <PagamentoServico
+              servico={{
+                id: 'top2',
+                plano: 'top2',
+                nome: plano.nome,
+                valor: plano.preco,
+                descricao: plano.nome,
+              }}
+              assinatura
               onPago={() => confirmarPagamento()}
               onCancelar={() => setShowPagamento(false)}
             />

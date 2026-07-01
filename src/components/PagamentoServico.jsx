@@ -329,7 +329,10 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
 }
 
 /* ── Tela: Cartão ── */
-function PagamentoCartao({ servico, onConfirmado, onVoltar }) {
+// assinatura=true → cria uma assinatura recorrente TRANSPARENTE (preapproval do MP)
+// via /api/mp; sem parcelas (cobrança mensal do valor cheio). Caso contrário, é o
+// pagamento único via /api/mp-checkout (parcelável).
+function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }) {
   const { user } = useAuth();
   const [parcelas, setParcelas] = useState(1);
   const [form, setForm] = useState({ numero: '', nome: '', validade: '', cvv: '' });
@@ -337,8 +340,8 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar }) {
   const [erro, setErro] = useState('');
   const pollingRef = useRef(null);
 
-  const parcelaValor = calcParcelaMaisJuros(servico.valor, parcelas);
-  const totalFinal = parcelaValor * parcelas;
+  const parcelaValor = assinatura ? servico.valor : calcParcelaMaisJuros(servico.valor, parcelas);
+  const totalFinal = assinatura ? servico.valor : parcelaValor * parcelas;
 
   const upd = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
   const fmtNum = v => v.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
@@ -374,6 +377,28 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar }) {
         securityCode: form.cvv,
       });
       if (!token?.id) throw new Error('Não foi possível tokenizar o cartão.');
+
+      // ── Assinatura recorrente transparente (preapproval) ──────────────────
+      if (assinatura) {
+        const planoKey = servico.plano || servico.id;
+        const res = await apiCall('/api/mp', {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'criar_assinatura_transparente',
+            plano: planoKey,
+            email: user?.email,
+            cardTokenId: token.id,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Falha ao criar a assinatura.');
+        if (data.status === 'authorized') { onConfirmado(data.assinaturaId); return; }
+        if (data.status === 'pending') {
+          setErro('Assinatura em processamento. Assim que o banco confirmar, seu plano é liberado automaticamente.');
+          return;
+        }
+        throw new Error('Não foi possível autorizar a assinatura. Verifique os dados do cartão ou tente outro.');
+      }
 
       const bin = form.numero.replace(/\s/g, '').slice(0, 6);
       const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bin=${bin}&public_key=${MP_PUBLIC_KEY}`);
@@ -425,25 +450,32 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar }) {
         <ChevronLeft size={16} /> Voltar
       </button>
 
-      <div>
-        <label style={lbl}>Parcelas</label>
-        <select value={parcelas} onChange={e => setParcelas(Number(e.target.value))} style={inp}>
-          {PARCELAS.map(n => {
-            const pv = calcParcelaMaisJuros(servico.valor, n);
-            const total = pv * n;
-            return (
-              <option key={n} value={n}>
-                {n}× de {fmtBRL(pv)}{n <= 3 ? ' — sem juros' : ` (total ${fmtBRL(total)})`}
-              </option>
-            );
-          })}
-        </select>
-        {parcelas > 3 && (
-          <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
-            ⚠️ Taxas de {((parcelaValor * parcelas / servico.valor - 1) * 100).toFixed(2)}% assumidas pelo cliente.
-          </div>
-        )}
-      </div>
+      {assinatura ? (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: '#1e40af' }}>
+          Assinatura mensal de <strong>{fmtBRL(servico.valor)}</strong> — cobrança recorrente
+          automática no cartão. Cancele quando quiser pela plataforma.
+        </div>
+      ) : (
+        <div>
+          <label style={lbl}>Parcelas</label>
+          <select value={parcelas} onChange={e => setParcelas(Number(e.target.value))} style={inp}>
+            {PARCELAS.map(n => {
+              const pv = calcParcelaMaisJuros(servico.valor, n);
+              const total = pv * n;
+              return (
+                <option key={n} value={n}>
+                  {n}× de {fmtBRL(pv)}{n <= 3 ? ' — sem juros' : ` (total ${fmtBRL(total)})`}
+                </option>
+              );
+            })}
+          </select>
+          {parcelas > 3 && (
+            <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
+              ⚠️ Taxas de {((parcelaValor * parcelas / servico.valor - 1) * 100).toFixed(2)}% assumidas pelo cliente.
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <label style={lbl}>Número do cartão</label>
@@ -525,6 +557,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
       {metodo === 'cartao' && (
         <PagamentoCartao
           servico={servico}
+          assinatura={assinatura}
           onConfirmado={onPago}
           onVoltar={assinatura ? onCancelar : () => setMetodo(null)}
         />

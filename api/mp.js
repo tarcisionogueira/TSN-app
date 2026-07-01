@@ -177,6 +177,39 @@ async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
   };
 }
 
+/**
+ * Cria assinatura recorrente TRANSPARENTE (sem redirect): recebe o card_token_id
+ * tokenizado no browser (SDK do MP) e cria o preapproval já autorizado. O cliente
+ * nunca sai do BidPro. Preço SEMPRE do servidor (PLANOS_CONFIG), nunca do cliente.
+ */
+async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId, userId }) {
+  const cfg = PLANOS_CONFIG[planoKey];
+  if (!cfg || !cfg.recorrente) throw new Error(`Plano ${planoKey} não é recorrente`);
+  if (!cardTokenId) throw new Error('Token do cartão ausente');
+  if (!email) throw new Error('E-mail do pagador ausente');
+
+  const body = {
+    reason:             cfg.nome,
+    external_reference: `${userId}|${planoKey}`,
+    payer_email:        email,
+    card_token_id:      cardTokenId,
+    // 'authorized' + card_token_id = autoriza e cobra JÁ pelo cartão tokenizado
+    // (fluxo transparente, sem init_point/redirect).
+    status:             'authorized',
+    back_url:           `${BASE_URL}/#/checkout?plano=${planoKey}&status=assinatura`,
+    notification_url:   WEBHOOK,
+    auto_recurring: {
+      frequency:          1,
+      frequency_type:     'months',
+      transaction_amount: Number(cfg.valor), // servidor manda no preço
+      currency_id:        'BRL',
+    },
+  };
+
+  const sub = await mpPost('/preapproval', body);
+  return { assinaturaId: sub.id, status: sub.status };
+}
+
 async function verificar({ paymentId, assinaturaId }) {
   if (assinaturaId) {
     const s = await mpGet(`/preapproval/${assinaturaId}`);
@@ -232,6 +265,7 @@ export default async function handler(req) {
     switch (action) {
       case 'criar_preferencia':  result = await criarPreferencia(params);   break;
       case 'criar_assinatura':   result = await criarAssinatura(params);    break;
+      case 'criar_assinatura_transparente': result = await criarAssinaturaTransparente(params); break;
       case 'verificar':          result = await verificar(params);           break;
       case 'cancelar_assinatura': result = await cancelarAssinatura(params); break;
       default:

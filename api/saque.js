@@ -81,7 +81,7 @@ export default async function handler(req) {
     // Checagem de saldo/PIX + inserção do lançamento é ATÔMICA no banco
     // (serializada por usuário) — elimina a corrida read-then-write que
     // permitia dois saques simultâneos zerarem o mesmo saldo.
-    const r = await rpc('solicitar_saque', { p_user_id: user.id, p_valor: valor });
+    const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
     if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
     if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque' }, 400);
     return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);

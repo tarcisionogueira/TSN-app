@@ -7,7 +7,7 @@
  *   MP_WEBHOOK_SECRET     — secret configurado no painel MP (X-Signature header)
  */
 import crypto from 'crypto';
-import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, eventoJaProcessado } from './_webhook-core.js';
+import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, eventoJaProcessado, ativarPlanoDireto } from './_webhook-core.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
@@ -44,6 +44,43 @@ export default async function handler(req, res) {
 
   const tipo = req.body?.type || req.body?.action || '';
   const dataId = req.body?.data?.id;
+  const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
+  const mpGet = async (path) => {
+    const r = await fetch(`${MP_BASE}${path}`, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
+    return r.ok ? r.json() : null;
+  };
+
+  // ── Assinaturas (checkout transparente / recorrência) ──────────────────────
+  // subscription_preapproval: assinatura criada/ativada → ativa o plano.
+  // subscription_authorized_payment: cobrança recorrente → mantém/renova o plano.
+  // Mapeia pelo external_reference (userId|planoKey), não pelo valor.
+  if (tipo === 'subscription_preapproval' || tipo === 'subscription_authorized_payment') {
+    if (!dataId) return res.status(200).json({ ok: true, ignored: 'sem id' });
+    if (!ACCESS_TOKEN) return res.status(500).json({ error: 'MP_ACCESS_TOKEN não configurado' });
+    if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: dataId, evento: tipo })) {
+      return res.status(200).json({ ok: true, duplicado: true });
+    }
+    try {
+      let preapproval = null;
+      if (tipo === 'subscription_preapproval') {
+        preapproval = await mpGet(`/preapproval/${dataId}`);
+      } else {
+        const ap = await mpGet(`/authorized_payments/${dataId}`);
+        if (ap?.status !== 'processed') return res.status(200).json({ ok: true, status: ap?.status || null });
+        if (ap?.preapproval_id) preapproval = await mpGet(`/preapproval/${ap.preapproval_id}`);
+      }
+      if (!preapproval) return res.status(200).json({ ok: true, erro: 'preapproval não encontrado' });
+      const [userId, planoKey] = String(preapproval.external_reference || '').split('|');
+      if (preapproval.status === 'authorized' && userId && planoKey) {
+        const result = await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago' });
+        return res.status(200).json(result);
+      }
+      return res.status(200).json({ ok: true, status: preapproval.status });
+    } catch (e) {
+      console.error('[mp-webhook] assinatura:', e.message);
+      return res.status(500).json({ error: 'Erro interno' });
+    }
+  }
 
   // Apenas processar notificações de pagamento
   if (tipo !== 'payment' || !dataId) {
@@ -51,7 +88,6 @@ export default async function handler(req, res) {
   }
 
   // Busca detalhes completos do pagamento na API MP
-  const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
   if (!ACCESS_TOKEN) return res.status(500).json({ error: 'MP_ACCESS_TOKEN não configurado' });
 
   let pagamento;

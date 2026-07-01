@@ -16,9 +16,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  { fonte: 'ZUK',     url: 'https://www.portalzuk.com.br/leilao-de-imoveis' },
-  { fonte: 'FREITAS', url: 'https://www.freitasleiloeiro.com.br/lotes/imoveis' },
-  { fonte: 'SODRE',   url: 'https://www.sodresantoro.com.br/imoveis' },
+  { fonte: 'ZUK',           url: 'https://www.portalzuk.com.br/leilao-de-imoveis' },
+  { fonte: 'FREITAS',       url: 'https://www.freitasleiloeiro.com.br/' },
+  { fonte: 'SODRE',         url: 'https://www.sodresantoro.com.br/imoveis' },
+  // Frazão Leilões — capturar home + listagem de imóveis para achar a URL/estrutura
+  // reais e escrever o parser (como foi feito para ZUK/SODRE).
+  { fonte: 'FRAZAO',        url: 'https://www.frazaoleiloes.com.br/' },
+  { fonte: 'FRAZAO-IMOVEIS', url: 'https://www.frazaoleiloes.com.br/imoveis' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {

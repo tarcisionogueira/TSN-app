@@ -11,7 +11,7 @@
 -- (service_role) passando o user_id já autenticado no edge (getAuthUser).
 -- ════════════════════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE FUNCTION public.solicitar_saque(p_user_id uuid, p_valor numeric)
+CREATE OR REPLACE FUNCTION public.solicitar_saque_ledger(p_user_id uuid, p_valor numeric)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -59,5 +59,5 @@ END;
 $$;
 
 -- Só o servidor (service_role) chama; nunca exposto ao cliente autenticado/anon.
-REVOKE ALL ON FUNCTION public.solicitar_saque(uuid, numeric) FROM public, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.solicitar_saque(uuid, numeric) TO service_role;
+REVOKE ALL ON FUNCTION public.solicitar_saque_ledger(uuid, numeric) FROM public, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.solicitar_saque_ledger(uuid, numeric) TO service_role;

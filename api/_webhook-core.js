@@ -100,6 +100,26 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
   return null;
 }
 
+// ── ATIVAÇÃO DIRETA POR REFERÊNCIA (assinaturas transparentes) ────────────────
+// As assinaturas (preapproval) informam o plano no external_reference
+// (`userId|planoKey`), então ativamos direto — sem adivinhar o plano pelo valor.
+export async function ativarPlanoDireto({ userId, planoKey, gateway }) {
+  if (!userId || !planoKey) return { skipped: 'sem_referencia' };
+  const { error } = await supabase.from('perfis').update({
+    inadimplente_desde: null,
+    role_anterior:      null,
+    plano:              planoKey,
+    role:               planoKey, // top2 → role top2, clube → role clube
+  }).eq('id', userId);
+  if (error) throw new Error(error.message);
+  try {
+    await supabase.rpc('registrar_preco_contratado', { p_user_id: userId, p_plano_key: planoKey });
+  } catch (e) {
+    console.error(`[${gateway}] registrar_preco_contratado:`, e.message);
+  }
+  return { ok: true, plano: planoKey };
+}
+
 // ── PAGAMENTO CONFIRMADO ──────────────────────────────────────────────────────
 export async function processarConfirmado({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
