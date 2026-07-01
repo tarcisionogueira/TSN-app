@@ -158,6 +158,13 @@ function PrivateRoute({ children, roles }) {
 function RouteTracker() {
   const loc = useLocation();
   useEffect(() => { trackPageView(loc.pathname); }, [loc.pathname]);
+  // Toda troca de rota começa no TOPO da página. Sem isso, o React Router mantém a
+  // rolagem da tela anterior e a nova página abre "no meio". Cobre TODAS as telas.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    // alguns containers têm rolagem própria; garante o topo após o paint
+    requestAnimationFrame(() => window.scrollTo(0, 0));
+  }, [loc.pathname, loc.search]);
   return null;
 }
 
