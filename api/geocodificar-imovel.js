@@ -12,9 +12,30 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
+import { fetchViaBrightData } from './_brightdata.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+// Extrai o CEP do documento/página do imóvel (edital/matrícula). Prioriza um CEP
+// ROTULADO ("CEP: 01234-567") — o do imóvel — sobre um CEP solto (rodapé do
+// leiloeiro). fetch direto primeiro; se bloquear (Cloudflare), Bright Data.
+async function cepDoDocumento(url) {
+  if (!url || !/^https?:\/\//.test(url)) return null;
+  let txt = '';
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    if (r.ok) txt = await r.text().catch(() => '');
+  } catch { /* segue p/ Bright Data */ }
+  if (!txt || !/\d{5}-?\d{3}/.test(txt)) {
+    try { const bd = await fetchViaBrightData(url); if (bd) txt = await bd.text().catch(() => '') || txt; } catch { /* */ }
+  }
+  if (!txt) return null;
+  const rot = txt.match(/cep[:\s]*?(\d{5})-?(\d{3})/i);      // "CEP: 01234-567"
+  const m = rot || txt.match(/\b(\d{5})-?(\d{3})\b/);         // fallback: 1º CEP
+  return m ? `${m[1]}${m[2]}` : null;
+}
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -30,7 +51,7 @@ export default async function handler(req, res) {
   const id = new URL(req.url, 'http://localhost').searchParams.get('imovel_id');
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel&limit=1`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep,link_edital&limit=1`)).json();
   if (!im) { res.status(404).json({ error: 'Imóvel não encontrado' }); return; }
 
   const nivelAtual = im.geocod_nivel || (im.latitude ? 'cidade' : null);
@@ -57,6 +78,25 @@ export default async function handler(req, res) {
     const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(body) });
     res.status(200).json({ ok: up.ok, nivel: coords.nivel, anterior: nivelAtual, alterado: up.ok, lat: coords.lat, lng: coords.lng });
     return;
+  }
+
+  // ── Fallback DOCUMENTO (on-demand, one-shot) ──────────────────────────────
+  // Ainda impreciso (bairro/cidade) e sem CEP conhecido: tenta extrair o CEP do
+  // edital/matrícula e re-geocodificar por CEP. Grava o CEP achado mesmo sem
+  // melhorar a coordenada — assim não repete a busca do documento nas próximas
+  // aberturas (o guard !im.cep passa a barrar).
+  const melhorAtual = coords && rankNivel(coords.nivel) > rankNivel(nivelAtual) ? coords.nivel : nivelAtual;
+  if (rankNivel(melhorAtual) < rankNivel('rua') && !im.cep && im.link_edital) {
+    let cepDoc = null;
+    try { cepDoc = await cepDoDocumento(im.link_edital); } catch { /* */ }
+    if (cepDoc) {
+      let coords2 = null;
+      try { coords2 = await geocodificarCascata({ ...im, cep: cepDoc }, { sleepMs: 0, deadline: Date.now() + 12000 }); } catch { /* */ }
+      const melhora = coords2 && rankNivel(coords2.nivel) > rankNivel(melhorAtual) && coordValida(coords2.lat, coords2.lng, im.estado, im.cidade);
+      const body = { cep: cepDoc, ...(melhora ? { latitude: coords2.lat, longitude: coords2.lng, geocod_nivel: coords2.nivel, pontos_proximos: null, proximidades_em: null } : {}) };
+      const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(body) });
+      if (melhora) { res.status(200).json({ ok: up.ok, nivel: coords2.nivel, anterior: nivelAtual, alterado: up.ok, lat: coords2.lat, lng: coords2.lng, via: 'documento' }); return; }
+    }
   }
 
   res.status(200).json({ ok: true, nivel: nivelAtual, alterado: false });
