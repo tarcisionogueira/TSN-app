@@ -84,6 +84,17 @@ async function capturar(browser, { fonte, url, inPageApi }) {
     await gravarDebug(`${fonte}-xhr-${i + 1}`, xhrs[i].url, xhrs[i].status, xhrs[i].ct, xhrs[i].text);
   }
 
+  // XHRs de interesse (independem do tamanho): endpoints por-bem/imóvel/lote
+  const INTERESSE = /get-bens|get-imovel|get-lote|\/imovel|\/bens|\/lotes|por-estado/i;
+  let m = 0;
+  for (const x of xhrs) {
+    if (INTERESSE.test(x.url) && m < 4) {
+      m++;
+      await gravarDebug(`${fonte}-match-${m}`, x.url, x.status, x.ct, x.text);
+      console.log(`  match ${m}: ${x.text.length}b ${x.url.slice(0, 120)}`);
+    }
+  }
+
   // Estatísticas de seletores no DOM + 1º card de exemplo
   try {
     const dom = await page.evaluate(() => {
