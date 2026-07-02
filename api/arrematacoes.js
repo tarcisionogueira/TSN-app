@@ -46,14 +46,33 @@ async function equipeDoCaso(imovel_id, cliente_id) {
 }
 
 // Distribui o honorário de êxito (10% do valor) no ledger. Idempotente.
+// Envolvidos = os DESIGNADOS no fluxo daquele cliente: advogado/analista por sorteio
+// no caso; consultor = quem CAPTOU (indicado_por). O ADMIN é BACKUP — absorve a fatia
+// de cada papel SEM pessoa designada. Se o admin editou o split da operação
+// (arr.honorarios_split), esse override vale sobre config/designação — só para ela.
 async function distribuirHonorarios(arr) {
   if (!arr || arr.honorarios_status === 'distribuido') return null;
   const valor = Number(arr.valor_arrematado || 0);
   if (valor <= 0) return null;
 
-  const cfg = (await dbFetch('config_honorarios?id=eq.1&select=admin_pct,advogado_pct,analista_pct')).data?.[0]
-            || { admin_pct: 4.5, advogado_pct: 5, analista_pct: 0.5 };
+  const split = arr.honorarios_split && typeof arr.honorarios_split === 'object' ? arr.honorarios_split : null;
+  const cfg = split
+    || (await dbFetch('config_honorarios?id=eq.1&select=admin_pct,advogado_pct,analista_pct,consultor_pct')).data?.[0]
+    || { admin_pct: 4.5, advogado_pct: 5, analista_pct: 0.5, consultor_pct: 0 };
   const adminRow = (await dbFetch('perfis?role=eq.admin&ativo=eq.true&select=id&order=criado_em.asc&limit=1')).data?.[0];
+
+  // Quem recebe cada papel: do override (se editado), senão os designados no fluxo.
+  const advogadoId  = split?.advogado_id  ?? arr.advogado_id  ?? null;
+  const analistaId  = split?.analista_id  ?? arr.analista_id  ?? null;
+  let   consultorId = split?.consultor_id ?? null;
+  // Consultor não editado = quem captou o cliente (indicado_por), se for consultor ativo.
+  if (consultorId == null && arr.cliente_id) {
+    const cli = (await dbFetch(`perfis?id=eq.${arr.cliente_id}&select=indicado_por`)).data?.[0];
+    if (cli?.indicado_por) {
+      const ind = (await dbFetch(`perfis?id=eq.${cli.indicado_por}&select=id,role,ativo`)).data?.[0];
+      if (ind && ind.role === 'consultor' && ind.ativo !== false) consultorId = ind.id;
+    }
+  }
 
   const lancamentos = [];
   const add = (uid, pct, label) => {
@@ -64,14 +83,15 @@ async function distribuirHonorarios(arr) {
       descricao: `Honorário de êxito (${label} ${Number(pct).toFixed(2)}%) — arremate #${arr.id}`, status: 'disponivel',
     });
   };
-  // Admin sempre participa e ABSORVE a parte de quem ainda não foi sorteado
-  // (sem advogado/analista, o admin recebe esses percentuais — total sempre 10%).
+  // Admin = BACKUP: absorve a fatia de cada papel SEM pessoa designada (total = 10%).
   let adminPct = Number(cfg.admin_pct) || 0;
-  if (!arr.advogado_id) adminPct += Number(cfg.advogado_pct) || 0;
-  if (!arr.analista_id) adminPct += Number(cfg.analista_pct) || 0;
+  if (!advogadoId)  adminPct += Number(cfg.advogado_pct)  || 0;
+  if (!analistaId)  adminPct += Number(cfg.analista_pct)  || 0;
+  if (!consultorId) adminPct += Number(cfg.consultor_pct) || 0;
   add(adminRow?.id, adminPct, 'admin');
-  add(arr.advogado_id, cfg.advogado_pct, 'advogado');
-  add(arr.analista_id, cfg.analista_pct, 'analista');
+  add(advogadoId,  cfg.advogado_pct,  'advogado');
+  add(analistaId,  cfg.analista_pct,  'analista');
+  add(consultorId, cfg.consultor_pct, 'consultor');
 
   if (lancamentos.length) {
     await dbFetch('saldo_lancamentos', { method: 'POST', body: JSON.stringify(lancamentos), headers: { Prefer: 'return=minimal' } });

@@ -501,6 +501,36 @@ function UsuariosTab() {
   const [auditoriaUser, setAuditoriaUser] = useState(null);
   const [auditoriaData, setAuditoriaData] = useState(null);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
+  const [exito, setExito] = useState(null); // editor de distribuição do êxito por operação
+
+  const sfExito = (k, v) => setExito(e => ({ ...e, form: { ...e.form, [k]: v } }));
+  const abrirExito = async (u) => {
+    setExito({ user: u, loading: true });
+    try {
+      const res = await apiCall(`/api/honorarios-split?cliente_id=${u.id}`);
+      const d = await res.json();
+      if (!res.ok) { setExito({ user: u, loading: false, msg: d.error || 'Erro ao carregar.' }); return; }
+      const base = d.split || d.config;
+      setExito({
+        user: u, loading: false, arrematacao: d.arrematacao, envolvidos: d.envolvidos, equipe: d.equipe, config: d.config,
+        form: {
+          total_pct: Number(d.config.total_pct) || 10,
+          admin_pct: Number(base.admin_pct) || 0, advogado_pct: Number(base.advogado_pct) || 0,
+          analista_pct: Number(base.analista_pct) || 0, consultor_pct: Number(base.consultor_pct) || 0,
+          advogado_id: d.envolvidos.advogado.id || '', analista_id: d.envolvidos.analista.id || '', consultor_id: d.envolvidos.consultor.id || '',
+        },
+      });
+    } catch { setExito({ user: u, loading: false, msg: 'Erro ao carregar.' }); }
+  };
+  const salvarExito = async () => {
+    if (!exito?.arrematacao) return;
+    setExito(e => ({ ...e, saving: true, msg: '' }));
+    try {
+      const res = await apiCall('/api/honorarios-split', { method: 'POST', body: JSON.stringify({ arrematacao_id: exito.arrematacao.id, split: exito.form }) });
+      const d = await res.json();
+      setExito(e => ({ ...e, saving: false, msg: res.ok ? 'Distribuição salva para esta operação.' : (d.error || 'Erro ao salvar.') }));
+    } catch { setExito(e => ({ ...e, saving: false, msg: 'Erro ao salvar.' })); }
+  };
 
   const verComo = (u) => {
     iniciarSuporte({ id: u.id, nome: u.nome || u.cpf, role: u.role || 'explorador' });
@@ -634,6 +664,13 @@ function UsuariosTab() {
                                 onClick={() => abrirAuditoria(u)}>
                                 🔍 Auditoria
                               </button>
+                              {['top2','top2_anual','assessorado','assessorado_anual','clube','clube_anual'].includes(u.role) && (
+                                <button
+                                  style={{ padding: '5px 10px', background: '#f0fdf4', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#059669', cursor: 'pointer' }}
+                                  onClick={() => abrirExito(u)} title="Distribuição do êxito (10%) desta operação">
+                                  💰 Êxito
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>
@@ -753,6 +790,61 @@ function UsuariosTab() {
                       </tbody>
                     </table>
                   )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Distribuição do êxito (10%) POR OPERAÇÃO */}
+      {exito && (
+        <div onClick={() => !exito.saving && setExito(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 22, width: '100%', maxWidth: 470, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 2 }}>Distribuição do êxito — {exito.user?.nome || exito.user?.cpf || 'Cliente'}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>Vale só para esta operação. Papel sem pessoa designada → a fatia vai para o Admin (backup). A soma deve fechar no total.</div>
+            {exito.loading ? (
+              <div style={{ color: '#94a3b8', fontSize: 14, padding: 20, textAlign: 'center' }}>Carregando…</div>
+            ) : !exito.arrematacao ? (
+              <div style={{ color: '#64748b', fontSize: 13, padding: 14, background: '#f8fafc', borderRadius: 10 }}>
+                {exito.msg || 'Este cliente não tem arrematação em aberto. O editor aparece quando houver uma arrematação registrada e ainda não distribuída.'}
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 12.5, color: '#334155', marginBottom: 14 }}>Arrematação: <strong>R$ {Number(exito.arrematacao.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> · êxito total {Number(exito.form.total_pct).toFixed(2)}%</div>
+                {[
+                  { label: 'Admin (backup)', pctKey: 'admin_pct', idKey: null, lista: null },
+                  { label: 'Advogado', pctKey: 'advogado_pct', idKey: 'advogado_id', lista: exito.equipe.advogados },
+                  { label: 'Analista', pctKey: 'analista_pct', idKey: 'analista_id', lista: exito.equipe.analistas },
+                  { label: 'Consultor', pctKey: 'consultor_pct', idKey: 'consultor_id', lista: exito.equipe.consultores },
+                ].map(row => (
+                  <div key={row.label} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ width: 74, fontSize: 12, fontWeight: 700, color: '#475569', flexShrink: 0 }}>{row.label}</div>
+                    {row.idKey ? (
+                      <select value={exito.form[row.idKey]} onChange={e => sfExito(row.idKey, e.target.value)}
+                        style={{ flex: 1, minWidth: 0, padding: '7px 9px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12.5 }}>
+                        <option value="">— ninguém (vai p/ Admin) —</option>
+                        {(row.lista || []).map(p => <option key={p.id} value={p.id}>{p.nome || p.id.slice(0, 8)}</option>)}
+                      </select>
+                    ) : (
+                      <div style={{ flex: 1, fontSize: 12, color: '#94a3b8' }}>{exito.envolvidos?.admin?.nome || 'Admin'}</div>
+                    )}
+                    <input type="number" step="0.1" min="0" value={exito.form[row.pctKey]} onChange={e => sfExito(row.pctKey, e.target.value)}
+                      style={{ width: 62, padding: '7px 8px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'right', flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+                  </div>
+                ))}
+                {(() => {
+                  const soma = ['admin_pct', 'advogado_pct', 'analista_pct', 'consultor_pct'].reduce((s, k) => s + (Number(exito.form[k]) || 0), 0);
+                  const total = Number(exito.form.total_pct) || 0;
+                  const ok = Math.abs(soma - total) <= 0.01;
+                  return <div style={{ fontSize: 12, fontWeight: 700, color: ok ? '#16a34a' : '#dc2626', margin: '4px 0 12px' }}>Soma {soma.toFixed(2)}% / {total.toFixed(2)}% {ok ? '✓' : '✗ — precisa fechar no total'}</div>;
+                })()}
+                {exito.msg && <div style={{ fontSize: 12.5, color: exito.msg.includes('salva') ? '#16a34a' : '#dc2626', marginBottom: 10 }}>{exito.msg}</div>}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setExito(null)} disabled={exito.saving} style={{ padding: '8px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
+                  <button onClick={salvarExito} disabled={exito.saving} style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: exito.saving ? 'default' : 'pointer' }}>{exito.saving ? 'Salvando…' : 'Salvar distribuição'}</button>
                 </div>
               </>
             )}
@@ -1149,7 +1241,7 @@ function ConfigTab() {
       admin_pct:     Number(honorarios.admin_pct) || 0,
       advogado_pct:  Number(honorarios.advogado_pct) || 0,
       analista_pct:  Number(honorarios.analista_pct) || 0,
-      consultor_pct: 0, // consultor nunca participa de honorários de êxito
+      consultor_pct: Number(honorarios.consultor_pct) || 0,
       atualizado_em: new Date().toISOString(),
     });
     if (!error) { setHonorariosSaved(true); setTimeout(() => setHonorariosSaved(false), 2500); }
@@ -1548,7 +1640,8 @@ function ConfigTab() {
           {[
             { key: 'admin_pct',    label: 'Admin',    cor: '#7c3aed', desc: 'coordenação (4,5%)' },
             { key: 'advogado_pct', label: 'Advogado', cor: '#0D63DB', desc: 'análise jurídica (5%)' },
-            { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica (0,5%)' },
+            { key: 'analista_pct', label: 'Analista', cor: '#0891b2', desc: 'análise técnica' },
+            { key: 'consultor_pct', label: 'Consultor', cor: '#059669', desc: 'captação do cliente' },
           ].map(({ key, label, cor, desc }) => (
             <div key={key} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 18px', minWidth: 140, border: `1px solid ${cor}22` }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: cor, marginBottom: 6, textTransform: 'uppercase' }}>{label}</div>
@@ -1566,9 +1659,8 @@ function ConfigTab() {
           {/* Totalizador visual */}
           <div style={{ display: 'flex', alignItems: 'center', paddingTop: 28 }}>
             {(() => {
-              const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0);
+              const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0) + (Number(honorarios.consultor_pct) || 0);
               const total = Number(honorarios.total_pct) || 0;
-              // consultor_pct é sempre 0 — não entra na soma
               const ok = Math.abs(soma - total) <= 0.01;
               return (
                 <div style={{ padding: '6px 14px', borderRadius: 20, background: ok ? '#f0fdf4' : '#fef2f2', color: ok ? '#16a34a' : '#ef4444', fontWeight: 700, fontSize: 13 }}>
@@ -6002,8 +6094,6 @@ function PrestacaoContasTab() {
   const [loading, setLoading] = React.useState(true);
   const [processando, setProcessando] = React.useState({});
   const [msg, setMsg] = React.useState(null);
-  const [ajuste, setAjuste] = React.useState(null); // { user_id, nome, valor, motivo }
-  const [ajustando, setAjustando] = React.useState(false);
 
   const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -6038,46 +6128,12 @@ function PrestacaoContasTab() {
     setProcessando(p => ({ ...p, [id]: false }));
   };
 
-  const salvarAjuste = async () => {
-    if (!ajuste) return;
-    const valor = Number(String(ajuste.valor).replace(',', '.'));
-    if (!valor || isNaN(valor)) { setMsg({ tipo: 'erro', txt: 'Informe um valor (negativo para debitar).' }); return; }
-    if (!String(ajuste.motivo || '').trim()) { setMsg({ tipo: 'erro', txt: 'Informe o motivo do ajuste.' }); return; }
-    setAjustando(true);
-    try {
-      const res = await apiCall('/api/ajuste-saldo', { method: 'POST', body: JSON.stringify({ user_id: ajuste.user_id, valor, motivo: ajuste.motivo }) });
-      const data = await res.json();
-      if (res.ok) { setMsg({ tipo: 'ok', txt: `Ajuste de ${fmtBRL(valor)} aplicado a ${ajuste.nome}.` }); setAjuste(null); await carregar(); }
-      else setMsg({ tipo: 'erro', txt: data.error || 'Erro ao ajustar.' });
-    } catch { setMsg({ tipo: 'erro', txt: 'Erro ao ajustar.' }); }
-    setAjustando(false);
-  };
-
   const S2 = {
     card: { background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '20px 24px', marginBottom: 20 },
   };
 
   return (
     <div style={{ maxWidth: 980 }}>
-      {ajuste && (
-        <div onClick={() => !ajustando && setAjuste(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 22, width: '100%', maxWidth: 400 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>Ajustar comissão — {ajuste.nome}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>Valor <strong>positivo credita</strong>, <strong>negativo debita</strong> o saldo do usuário. Fica no extrato dele com o motivo.</div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>Valor (R$)</label>
-            <input value={ajuste.valor} onChange={e => setAjuste(a => ({ ...a, valor: e.target.value }))} placeholder="Ex.: 250 ou -100"
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', margin: '4px 0 12px' }} />
-            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>Motivo</label>
-            <input value={ajuste.motivo} onChange={e => setAjuste(a => ({ ...a, motivo: e.target.value }))} placeholder="Ex.: bônus de campanha / correção"
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', margin: '4px 0 16px' }} />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setAjuste(null)} disabled={ajustando} style={{ padding: '8px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={salvarAjuste} disabled={ajustando} style={{ padding: '8px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: ajustando ? 'default' : 'pointer' }}>{ajustando ? 'Salvando…' : 'Aplicar ajuste'}</button>
-            </div>
-          </div>
-        </div>
-      )}
       {msg && (
         <div style={{ background: msg.tipo === 'ok' ? '#dcfce7' : '#fee2e2', color: msg.tipo === 'ok' ? '#15803d' : '#dc2626', borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
           {msg.txt}
@@ -6128,7 +6184,7 @@ function PrestacaoContasTab() {
             <table style={S.table}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                  {['Nome', 'Papel', 'Disponível', 'Pendente', 'Chave PIX', 'Ajuste'].map(h => (
+                  {['Nome', 'Papel', 'Disponível', 'Pendente', 'Chave PIX'].map(h => (
                     <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: 12 }}>{h}</th>
                   ))}
                 </tr>
@@ -6141,12 +6197,6 @@ function PrestacaoContasTab() {
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: '#059669' }}>{fmtBRL(s.saldo_disponivel)}</td>
                     <td style={{ padding: '8px 10px', color: '#d97706' }}>{fmtBRL(s.saque_pendente)}</td>
                     <td style={{ padding: '8px 10px', color: '#64748b' }}>{s.chave_pix || '—'}</td>
-                    <td style={{ padding: '8px 10px' }}>
-                      <button onClick={() => setAjuste({ user_id: s.user_id, nome: s.nome || '—', valor: '', motivo: '' })}
-                        style={{ padding: '5px 12px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        Ajustar
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
