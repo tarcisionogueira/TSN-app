@@ -108,11 +108,20 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway }) {
   // O TIER fica no `role` (top2/clube/…). NÃO gravar em `plano`: essa coluna tem
   // check constraint (gratuito|analista|gestor) e planoKey='top2' a VIOLAVA →
   // toda ativação de plano pago falhava (webhook e reconciliação). role é a fonte.
-  const { error } = await supabase.from('perfis').update({
+  const upd = {
     inadimplente_desde: null,
     role_anterior:      null,
     role:               planoKey, // top2 → role top2, clube → role clube
-  }).eq('id', userId);
+  };
+  // Garantia de 7 dias: âncora só na 1ª assinatura (role atual não-pagante e sem
+  // âncora). Renovação recorrente NÃO reinicia a janela; resubscrição após cancelar
+  // (que zera plano_pago_em) inicia uma nova.
+  const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+  const { data: atual } = await supabase.from('perfis').select('role, plano_pago_em').eq('id', userId).maybeSingle();
+  if (!atual?.plano_pago_em && !PAGANTES.includes(atual?.role)) {
+    upd.plano_pago_em = new Date().toISOString();
+  }
+  const { error } = await supabase.from('perfis').update(upd).eq('id', userId);
   if (error) throw new Error(error.message);
   try {
     await supabase.rpc('registrar_preco_contratado', { p_user_id: userId, p_plano_key: planoKey });

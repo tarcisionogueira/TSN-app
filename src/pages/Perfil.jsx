@@ -87,6 +87,37 @@ export default function Perfil() {
       });
   }, [user?.id, role]); // eslint-disable-line
 
+  // Assinatura / cancelamento (garantia de 7 dias)
+  const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+  const [planoPagoEm, setPlanoPagoEm] = useState(null);
+  const [cancelModal, setCancelModal] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [cancelMsg, setCancelMsg] = useState(null);
+
+  useEffect(() => {
+    if (!user?.id || !ROLES_PAGANTES.includes(role)) return;
+    supabase.from('perfis').select('plano_pago_em').eq('id', user.id).single()
+      .then(({ data }) => setPlanoPagoEm(data?.plano_pago_em || null));
+  }, [user?.id, role]); // eslint-disable-line
+
+  const dentroGarantia = planoPagoEm && (Date.now() - new Date(planoPagoEm).getTime() <= 7 * 24 * 3600 * 1000);
+  const diasRestantesGarantia = planoPagoEm ? Math.max(0, 7 - Math.floor((Date.now() - new Date(planoPagoEm).getTime()) / 86400000)) : 0;
+
+  async function confirmarCancelamento() {
+    setCancelando(true); setCancelMsg(null);
+    try {
+      const res = await apiCall('/api/garantia-cancelar', { method: 'POST' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Erro ao cancelar.');
+      setCancelMsg({ ok: true, texto: d.msg || 'Solicitação registrada.' });
+      if (d.reembolso) setTimeout(() => window.location.reload(), 2500); // rebaixou o role
+    } catch (e) {
+      setCancelMsg({ ok: false, texto: e.message });
+    } finally {
+      setCancelando(false);
+    }
+  }
+
   const enviarSelfie = async (file) => {
     if (!file) return;
     setSelfieLoading(true); setSelfieMsg(null);
@@ -425,12 +456,62 @@ export default function Perfil() {
               fontWeight: 700,
             }}>{roleLabel}</span>
           </div>
-          <button
-            onClick={() => navGuard('/planos')}
-            style={{ padding: '8px 16px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            Fazer upgrade
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+            <button
+              onClick={() => navGuard('/planos')}
+              style={{ padding: '8px 16px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Fazer upgrade
+            </button>
+            {ROLES_PAGANTES.includes(role) && (
+              <button
+                onClick={() => { setCancelMsg(null); setCancelModal(true); }}
+                style={{ padding: '6px 12px', background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {dentroGarantia ? 'Cancelar e reembolsar' : 'Cancelar assinatura'}
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Modal — cancelamento (garantia de 7 dias × renovação) */}
+        {cancelModal && (
+          <div onClick={() => !cancelando && setCancelModal(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: '#111', marginBottom: 8 }}>
+                {dentroGarantia ? 'Cancelar e receber reembolso' : 'Cancelar assinatura'}
+              </div>
+              {dentroGarantia ? (
+                <p style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.6, marginBottom: 16 }}>
+                  Você está dentro da <strong>garantia de 7 dias</strong> ({diasRestantesGarantia} {diasRestantesGarantia === 1 ? 'dia restante' : 'dias restantes'}).
+                  Ao confirmar, cancelamos sua assinatura e o <strong>reembolso de 100%</strong> do valor pago é processado — sem burocracia.
+                  Seu acesso volta ao plano Explorador.
+                </p>
+              ) : (
+                <p style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.6, marginBottom: 16 }}>
+                  Ao confirmar, cancelamos a <strong>renovação automática</strong> — você não será mais cobrado.
+                  Seu acesso continua até o fim do período já pago. Não há reembolso fora da janela de 7 dias.
+                </p>
+              )}
+              {cancelMsg && (
+                <div style={{ fontSize: 13, fontWeight: 600, color: cancelMsg.ok ? '#16a34a' : '#dc2626', marginBottom: 12 }}>
+                  {cancelMsg.ok ? '✓ ' : '✕ '}{cancelMsg.texto}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => setCancelModal(false)} disabled={cancelando}
+                  style={{ padding: '9px 16px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  {cancelMsg?.ok ? 'Fechar' : 'Voltar'}
+                </button>
+                {!cancelMsg?.ok && (
+                  <button onClick={confirmarCancelamento} disabled={cancelando}
+                    style={{ padding: '9px 16px', background: dentroGarantia ? '#059669' : '#dc2626', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: cancelando ? 'default' : 'pointer' }}>
+                    {cancelando ? 'Processando…' : dentroGarantia ? 'Confirmar e reembolsar' : 'Confirmar cancelamento'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Validação de Identidade — assessorado e clube */}
         {ROLES_SELFIE.includes(role) && (

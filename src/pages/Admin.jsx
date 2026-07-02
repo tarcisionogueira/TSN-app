@@ -6111,8 +6111,21 @@ function PrestacaoContasTab() {
   const [loading, setLoading] = React.useState(true);
   const [processando, setProcessando] = React.useState({});
   const [msg, setMsg] = React.useState(null);
+  const [reembolsos, setReembolsos] = React.useState([]);
 
   const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const carregarReembolsos = React.useCallback(async () => {
+    const { data } = await supabase.from('reembolsos_garantia').select('*').eq('status', 'solicitado').order('solicitado_em', { ascending: true });
+    setReembolsos(Array.isArray(data) ? data : []);
+  }, []);
+
+  const resolverReembolso = async (id, novoStatus) => {
+    setProcessando(p => ({ ...p, [id]: true }));
+    await supabase.from('reembolsos_garantia').update({ status: novoStatus, processado_em: new Date().toISOString() }).eq('id', id);
+    await carregarReembolsos();
+    setProcessando(p => ({ ...p, [id]: false }));
+  };
 
   const carregar = React.useCallback(async () => {
     setLoading(true);
@@ -6122,8 +6135,9 @@ function PrestacaoContasTab() {
       setSaldos(Array.isArray(data.saldos) ? data.saldos : []);
       setPendentes(Array.isArray(data.pendentes) ? data.pendentes : []);
     } catch { setSaldos([]); setPendentes([]); }
+    await carregarReembolsos();
     setLoading(false);
-  }, []);
+  }, [carregarReembolsos]);
 
   React.useEffect(() => { carregar(); }, [carregar]);
 
@@ -6154,6 +6168,35 @@ function PrestacaoContasTab() {
       {msg && (
         <div style={{ background: msg.tipo === 'ok' ? '#dcfce7' : '#fee2e2', color: msg.tipo === 'ok' ? '#15803d' : '#dc2626', borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
           {msg.txt}
+        </div>
+      )}
+
+      {/* Reembolsos — garantia de 7 dias (CDC art. 49) */}
+      {reembolsos.length > 0 && (
+        <div style={{ ...S2.card, border: '1px solid #fecaca' }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>Reembolsos — garantia de 7 dias</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Cliente exerceu o direito de arrependimento. Execute o estorno de 100% no painel do gateway e marque como estornado.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {reembolsos.map(r => (
+              <div key={r.id} style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{r.nome || r.email || '—'} · {r.plano}{r.valor_ref ? ` · ${fmtBRL(r.valor_ref)}` : ''}</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{r.email} · gateway: {r.gateway}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Solicitado em {new Date(r.solicitado_em).toLocaleString('pt-BR')}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => resolverReembolso(r.id, 'estornado')} disabled={processando[r.id]}
+                    style={{ padding: '7px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    Marcar estornado
+                  </button>
+                  <button onClick={() => resolverReembolso(r.id, 'recusado')} disabled={processando[r.id]}
+                    style={{ padding: '7px 12px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    Recusar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
