@@ -6002,6 +6002,8 @@ function PrestacaoContasTab() {
   const [loading, setLoading] = React.useState(true);
   const [processando, setProcessando] = React.useState({});
   const [msg, setMsg] = React.useState(null);
+  const [ajuste, setAjuste] = React.useState(null); // { user_id, nome, valor, motivo }
+  const [ajustando, setAjustando] = React.useState(false);
 
   const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -6036,12 +6038,46 @@ function PrestacaoContasTab() {
     setProcessando(p => ({ ...p, [id]: false }));
   };
 
+  const salvarAjuste = async () => {
+    if (!ajuste) return;
+    const valor = Number(String(ajuste.valor).replace(',', '.'));
+    if (!valor || isNaN(valor)) { setMsg({ tipo: 'erro', txt: 'Informe um valor (negativo para debitar).' }); return; }
+    if (!String(ajuste.motivo || '').trim()) { setMsg({ tipo: 'erro', txt: 'Informe o motivo do ajuste.' }); return; }
+    setAjustando(true);
+    try {
+      const res = await apiCall('/api/ajuste-saldo', { method: 'POST', body: JSON.stringify({ user_id: ajuste.user_id, valor, motivo: ajuste.motivo }) });
+      const data = await res.json();
+      if (res.ok) { setMsg({ tipo: 'ok', txt: `Ajuste de ${fmtBRL(valor)} aplicado a ${ajuste.nome}.` }); setAjuste(null); await carregar(); }
+      else setMsg({ tipo: 'erro', txt: data.error || 'Erro ao ajustar.' });
+    } catch { setMsg({ tipo: 'erro', txt: 'Erro ao ajustar.' }); }
+    setAjustando(false);
+  };
+
   const S2 = {
     card: { background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '20px 24px', marginBottom: 20 },
   };
 
   return (
     <div style={{ maxWidth: 980 }}>
+      {ajuste && (
+        <div onClick={() => !ajustando && setAjuste(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 22, width: '100%', maxWidth: 400 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>Ajustar comissão — {ajuste.nome}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>Valor <strong>positivo credita</strong>, <strong>negativo debita</strong> o saldo do usuário. Fica no extrato dele com o motivo.</div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>Valor (R$)</label>
+            <input value={ajuste.valor} onChange={e => setAjuste(a => ({ ...a, valor: e.target.value }))} placeholder="Ex.: 250 ou -100"
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', margin: '4px 0 12px' }} />
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>Motivo</label>
+            <input value={ajuste.motivo} onChange={e => setAjuste(a => ({ ...a, motivo: e.target.value }))} placeholder="Ex.: bônus de campanha / correção"
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', margin: '4px 0 16px' }} />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setAjuste(null)} disabled={ajustando} style={{ padding: '8px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={salvarAjuste} disabled={ajustando} style={{ padding: '8px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: ajustando ? 'default' : 'pointer' }}>{ajustando ? 'Salvando…' : 'Aplicar ajuste'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {msg && (
         <div style={{ background: msg.tipo === 'ok' ? '#dcfce7' : '#fee2e2', color: msg.tipo === 'ok' ? '#15803d' : '#dc2626', borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
           {msg.txt}
@@ -6092,7 +6128,7 @@ function PrestacaoContasTab() {
             <table style={S.table}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                  {['Nome', 'Papel', 'Disponível', 'Pendente', 'Chave PIX'].map(h => (
+                  {['Nome', 'Papel', 'Disponível', 'Pendente', 'Chave PIX', 'Ajuste'].map(h => (
                     <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: 12 }}>{h}</th>
                   ))}
                 </tr>
@@ -6105,6 +6141,12 @@ function PrestacaoContasTab() {
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: '#059669' }}>{fmtBRL(s.saldo_disponivel)}</td>
                     <td style={{ padding: '8px 10px', color: '#d97706' }}>{fmtBRL(s.saque_pendente)}</td>
                     <td style={{ padding: '8px 10px', color: '#64748b' }}>{s.chave_pix || '—'}</td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <button onClick={() => setAjuste({ user_id: s.user_id, nome: s.nome || '—', valor: '', motivo: '' })}
+                        style={{ padding: '5px 12px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Ajustar
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
