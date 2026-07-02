@@ -46,7 +46,10 @@ export default async function handler(req) {
     if (!key) return json({ error: 'Chave não informada' }, 401);
     const leiloeiro = await resolverLeiloeiro(key);
     if (!leiloeiro) return json({ error: 'Chave inválida ou conta inativa' }, 401);
-    const lotes = await sb('GET', `imoveis_leiloeiro?leiloeiro_id=eq.${leiloeiro.id}&status=eq.ativo&order=data_leilao.asc`);
+    // Lotes ficam no catálogo único imoveis_leilao (fonte=webhook_<id>) para
+    // aparecerem na busca junto com as demais fontes.
+    const fonte = `webhook_${leiloeiro.id}`;
+    const lotes = await sb('GET', `imoveis_leilao?fonte=eq.${encodeURIComponent(fonte)}&ativo=eq.true&order=data_leilao.asc`);
     return json({ lotes: lotes || [] });
   }
 
@@ -68,37 +71,43 @@ export default async function handler(req) {
   if (!lote || typeof lote !== 'object' || Array.isArray(lote)) return json({ error: 'lote deve ser um objeto' }, 400);
 
   try {
+    const fonte = `webhook_${leiloeiro.id}`;
+
     if (action === 'upsert_lote') {
       if (!lote?.id_externo) return json({ error: 'id_externo obrigatório' }, 400);
+      // Grava no catálogo único imoveis_leilao (mesmas colunas dos scrapers/feed),
+      // com fonte=webhook_<id> — assim o lote do parceiro entra na busca pública.
       const row = {
-        leiloeiro_id:    leiloeiro.id,
-        id_externo:      String(lote.id_externo).slice(0, 200),
+        fonte,
+        fonte_id:        `${fonte}_${String(lote.id_externo).slice(0, 200)}`,
+        leiloeiro:       leiloeiro.nome ? String(leiloeiro.nome).slice(0, 200) : null,
         titulo:          lote.titulo ? String(lote.titulo).slice(0, 500) : null,
-        tipo:            lote.tipo ? String(lote.tipo).slice(0, 50) : null,
+        tipo:            lote.tipo ? String(lote.tipo).slice(0, 100) : null,
         endereco:        lote.endereco ? String(lote.endereco).slice(0, 500) : null,
         cidade:          lote.cidade ? String(lote.cidade).slice(0, 100) : null,
         estado:          lote.estado ? String(lote.estado).slice(0, 2).toUpperCase() : null,
         valor_avaliacao: lote.valor_avaliacao ? Number(lote.valor_avaliacao) : null,
         valor_minimo:    lote.valor_minimo    ? Number(lote.valor_minimo)    : null,
         area_m2:         lote.area_m2         ? Number(lote.area_m2)         : null,
-        data_leilao:     lote.data_leilao || null,
-        modalidade:      lote.modalidade ? String(lote.modalidade).slice(0, 50) : null,
+        data_leilao:     lote.data_leilao ? String(lote.data_leilao).slice(0, 40) : null,
+        modalidade:      lote.modalidade ? String(lote.modalidade).slice(0, 100) : null,
         url_lote:        lote.url_lote ? String(lote.url_lote).slice(0, 1000) : null,
         descricao:       lote.descricao ? String(lote.descricao).slice(0, 5000) : null,
-        status:          'ativo',
-        dados_raw:       lote,
+        ativo:           true,
         atualizado_em:   new Date().toISOString(),
       };
-      const result = await sb('POST', 'imoveis_leiloeiro', row);
+      const result = await sb('POST', 'imoveis_leilao?on_conflict=fonte,fonte_id', row);
       return json({ ok: true, id: Array.isArray(result) ? result[0]?.id : result?.id });
     }
 
     if (action === 'fechar_lote') {
       if (!lote?.id_externo) return json({ error: 'id_externo obrigatório' }, 400);
-      await fetch(`${SUPABASE}/rest/v1/imoveis_leiloeiro?leiloeiro_id=eq.${leiloeiro.id}&id_externo=eq.${encodeURIComponent(lote.id_externo)}`, {
+      // Fechar = tirar da busca (ativo=false) no catálogo único.
+      const fonteId = `${fonte}_${String(lote.id_externo).slice(0, 200)}`;
+      await fetch(`${SUPABASE}/rest/v1/imoveis_leilao?fonte=eq.${encodeURIComponent(fonte)}&fonte_id=eq.${encodeURIComponent(fonteId)}`, {
         method: 'PATCH',
         headers: { apikey: SVC_KEY, Authorization: `Bearer ${SVC_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: ['encerrado','vendido','cancelado','suspenso'].includes(lote.motivo) ? lote.motivo : 'encerrado', atualizado_em: new Date().toISOString() }),
+        body: JSON.stringify({ ativo: false, atualizado_em: new Date().toISOString() }),
       });
       return json({ ok: true });
     }

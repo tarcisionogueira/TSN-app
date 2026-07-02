@@ -55,29 +55,36 @@ export default async function handler(req) {
   if (lotes.length > 500) return json({ error: 'Máximo 500 lotes por requisição' }, 400);
 
   const agora = new Date().toISOString();
+  // Mapeia para as colunas REAIS de imoveis_leilao (mesmo catálogo dos scrapers),
+  // para o imóvel do parceiro aparecer na busca. Nomes de coluna conferidos no
+  // schema: tipo, url_lote, link_foto, desconto_percentual (não tipo_imovel/fotos).
   const validos = lotes
     .filter(l => l.id || l.codigo)
-    .map(l => ({
-      fonte,
-      fonte_id: `${fonte}_${l.id || l.codigo}`,
-      titulo: String(l.titulo || l.descricao || '').slice(0, 500),
-      descricao: String(l.descricao || '').slice(0, 5000),
-      tipo_imovel: String(l.tipo || l.tipo_imovel || '').slice(0, 100),
-      endereco: String(l.endereco || '').slice(0, 500),
-      bairro: String(l.bairro || '').slice(0, 200),
-      cidade: String(l.cidade || l.municipio || '').slice(0, 100),
-      estado: String(l.estado || l.uf || '').slice(0, 2).toUpperCase() || null,
-      cep: String(l.cep || '').replace(/\D/g, '').slice(0, 8) || null,
-      valor_avaliacao: Number(l.valor_avaliacao || l.avaliacao || 0) || null,
-      valor_minimo: Number(l.valor_minimo || l.lance_minimo || 0) || null,
-      desconto: Number(l.desconto || 0) || null,
-      modalidade: String(l.modalidade || '').slice(0, 100),
-      data_leilao: l.data_leilao || null,
-      link_externo: String(l.link || l.url || '').slice(0, 500),
-      fotos: Array.isArray(l.fotos) ? l.fotos.slice(0, 20) : [],
-      ativo: l.ativo !== false,
-      atualizado_em: agora,
-    }));
+    .map(l => {
+      const fotos = Array.isArray(l.fotos) ? l.fotos.filter(Boolean) : [];
+      return {
+        fonte,
+        fonte_id: `${fonte}_${l.id || l.codigo}`,
+        leiloeiro: String(parceiro.nome || '').slice(0, 200),
+        titulo: String(l.titulo || l.descricao || '').slice(0, 500),
+        descricao: String(l.descricao || '').slice(0, 5000),
+        tipo: String(l.tipo || l.tipo_imovel || '').slice(0, 100),
+        endereco: String(l.endereco || '').slice(0, 500),
+        bairro: String(l.bairro || '').slice(0, 200),
+        cidade: String(l.cidade || l.municipio || '').slice(0, 100),
+        estado: String(l.estado || l.uf || '').slice(0, 2).toUpperCase() || null,
+        cep: String(l.cep || '').replace(/\D/g, '').slice(0, 8) || null,
+        valor_avaliacao: Number(l.valor_avaliacao || l.avaliacao || 0) || null,
+        valor_minimo: Number(l.valor_minimo || l.lance_minimo || 0) || null,
+        desconto_percentual: Math.round(Number(l.desconto || 0)) || null,
+        modalidade: String(l.modalidade || '').slice(0, 100),
+        data_leilao: l.data_leilao ? String(l.data_leilao).slice(0, 40) : null,
+        url_lote: String(l.link || l.url || '').slice(0, 1000),
+        link_foto: fotos[0] ? String(fotos[0]).slice(0, 1000) : null,
+        ativo: l.ativo !== false,
+        atualizado_em: agora,
+      };
+    });
 
   if (!validos.length) return json({ error: 'Nenhum lote válido — campo "id" ou "codigo" obrigatório em cada item' }, 400);
 

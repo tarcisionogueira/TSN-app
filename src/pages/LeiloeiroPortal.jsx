@@ -26,11 +26,12 @@ export default function LeiloeiroPortal() {
     setPerfil(p);
     setWebhookKey(p?.leiloeiro_webhook_key || '');
 
-    // Estatísticas dos imóveis vinculados
+    // Estatísticas dos imóveis vinculados (catálogo único imoveis_leilao, fonte=webhook_<id>)
     const { count: totalImoveis } = await supabase
-      .from('imoveis_leiloeiro')
+      .from('imoveis_leilao')
       .select('*', { count: 'exact', head: true })
-      .eq('leiloeiro_id', user.id);
+      .eq('fonte', `webhook_${user.id}`)
+      .eq('ativo', true);
 
     setStats({ imoveis: totalImoveis || 0, visualizacoes: 0, interessados: 0 });
     setLoading(false);
