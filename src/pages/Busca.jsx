@@ -411,7 +411,6 @@ export default function Busca() {
     top2: 15, top2_anual: 15,
     assessorado: 15, assessorado_anual: 15,
     clube: 15, clube_anual: 15,
-    analista: 100, advogado: 100,
   };
   const limiteAnalises = LIMITE_ANALISES[effectiveRole];
 

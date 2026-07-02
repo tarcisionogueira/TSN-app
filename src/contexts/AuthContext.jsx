@@ -44,7 +44,10 @@ async function fetchPerfil(userId) {
     return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: (!data?.cpf || !data?.lgpd_aceito) };
   }
 
-  const roleFinal = data?.role || 'explorador';
+  // Normaliza o sufixo _anual: a modalidade anual é forma de PAGAMENTO, não um
+  // papel distinto. O role efetivo é sempre o base (top2/assessorado/clube), para
+  // que todas as listas de permissão funcionem sem precisar duplicar cada '_anual'.
+  const roleFinal = (data?.role || 'explorador').replace(/_anual$/, '');
   const ehCliente = !ROLES_OPERACIONAIS.includes(roleFinal);
   return {
     // Sem perfil carregado → menor privilégio (explorador), nunca um role usável por engano
@@ -213,7 +216,7 @@ export function AuthProvider({ children }) {
 
   // Identidade/role efetivos: simulação > suporte > real
   const effectiveUserId = impersonate?.id || user?.id || null;
-  const effectiveRole   = (role === 'admin' && roleSimulado) ? roleSimulado : (impersonate?.role || role);
+  const effectiveRole   = (((role === 'admin' && roleSimulado) ? roleSimulado : (impersonate?.role || role)) || 'explorador').replace(/_anual$/, '');
   const podeImpersonar  = role === 'admin' || role === 'analista';
 
   return (

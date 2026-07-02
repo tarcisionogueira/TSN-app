@@ -406,8 +406,8 @@ export const ROLES = {
   assessorado: { nome: 'Assessorado', tipo: 'plano', descricao: 'Assessoria para 1 arrematação' },
   clube:       { nome: 'Leilão Club', tipo: 'plano', descricao: 'Mentoria contínua e arrematações ilimitadas' },
   consultor:   { nome: 'Consultor (Afiliado)', tipo: 'operacional', descricao: 'Vende cursos e planos — não assiste o conteúdo' },
-  analista:    { nome: 'Analista', tipo: 'operacional', descricao: 'Gera relatórios, agenda reuniões e envia ao jurídico' },
-  advogado:    { nome: 'Advogado', tipo: 'operacional', descricao: 'Emite parecer jurídico das arrematações' },
+  analista:    { nome: 'Analista', tipo: 'operacional', descricao: 'Recebe e revisa demandas: abre os relatórios do cliente na reunião, agenda reuniões e envia ao jurídico (não gera relatórios)' },
+  advogado:    { nome: 'Advogado', tipo: 'operacional', descricao: 'Recebe as demandas jurídicas e emite o parecer conforme o checklist (não gera relatórios)' },
 };
 
 // ─── EBOOKS / MATERIAIS COMPLEMENTARES ────────────────────────────────────────

@@ -101,13 +101,13 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
 
 // Limite de relatórios mercadológicos+viabilidade por plano/mês (espelha limite_ia
 // no banco). Explorador: 5/mês, sem documental/jurídico. Todos os acessos têm cota;
-// só o admin é ilimitado. Equipe (analista/advogado) com teto alto, ajustável.
+// só o admin é ilimitado. Equipe (analista/advogado) NÃO gera relatórios (só
+// recebe/visualiza demandas) → sem entrada aqui = limite 0.
 const LIMITE_POR_ROLE = {
   explorador: 5, consultor: 5,
   top2: 15, top2_anual: 15,
   assessorado: 15, assessorado_anual: 15,
   clube: 15, clube_anual: 15,
-  analista: 100, advogado: 100,
 };
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 const ROLES_SEM_LIMITE = ['admin'];
