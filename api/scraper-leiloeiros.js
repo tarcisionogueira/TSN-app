@@ -416,3 +416,5 @@ export default async function handler(req, res) {
   console.log('[scraper-leiloeiros]', JSON.stringify({ runStart, total_upsert: totalUpsert }));
   return res.status(200).json(saida);
 }
+
+// CRON_SECRET sincronizado GitHub↔Vercel (2026-07-02) — recon dos leiloeiros habilitado.
