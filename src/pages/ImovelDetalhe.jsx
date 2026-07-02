@@ -562,7 +562,8 @@ export default function ImovelDetalhe() {
     // DATA do leilão/licitação (fica na página do imóvel, não no CSV) quando ainda
     // não temos e não é venda direta. O backend tem throttle de 12h.
     const temDocs = imovel.linkMatricula || imovel.linkRegrasVenda || (imovel.anexos && imovel.anexos.length);
-    const precisa = isCef ? (!imovel.dataLeilao && !isVendaDireta) : !temDocs;
+    const faltaData = !imovel.dataLeilao && !isVendaDireta; // vale p/ CEF e leiloeiro
+    const precisa = isCef ? faltaData : (!temDocs || faltaData);
     if (!precisa) return;
     let cancel = false;
     apiCall(`/api/enriquecer-lote?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {

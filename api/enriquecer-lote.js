@@ -43,18 +43,25 @@ async function fetchLote(url) {
   return { html: '', finalUrl: url, via: 'fail' };
 }
 
-// Extrai a DATA do leilão/licitação da página do imóvel da Caixa. Conservador:
-// só aceita data próxima de "leilão/praça/licitação" e que NÃO seja passada
-// (evita pegar data de cadastro/edital antigo e mostrar um dia errado ao cliente).
-function extrairDataCaixa(html) {
+// Extrai a DATA do próximo leilão/praça da página do lote (Caixa OU leiloeiro).
+// Conservador: ancora em "leilão/praça/encerra/licitação/data", aceita ano com 2 ou
+// 4 dígitos e escolhe a PRÓXIMA data futura — em leilões de 2 praças ignora a 1ª já
+// passada, evitando mostrar um dia errado ao cliente.
+function extrairDataLeilao(html) {
   if (!html) return null;
   const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
-  const m = txt.match(/(?:leil[ãa]o|pra[çc]a|licita[çc][ãa]o)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{4})/i);
-  if (!m) return null;
-  const iso = `${m[3]}-${m[2]}-${m[1]}`;
-  const dt = Date.parse(iso);
-  if (isNaN(dt) || dt < Date.now() - 30 * 86400000) return null; // ignora datas antigas
-  return iso;
+  const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
+  const ontem = Date.now() - 86400000;
+  const limite = Date.now() + 400 * 86400000; // até ~1 ano à frente
+  const futuras = [];
+  let m;
+  while ((m = re.exec(txt))) {
+    const y = m[3].length === 2 ? '20' + m[3] : m[3];
+    const t = Date.parse(`${y}-${m[2]}-${m[1]}`);
+    if (!isNaN(t) && t >= ontem && t < limite) futuras.push(t);
+  }
+  if (!futuras.length) return null;
+  return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
 }
 
 export default async function handler(req, res) {
@@ -81,7 +88,7 @@ export default async function handler(req, res) {
       res.status(200).json({ ok: true, pulado: ehVendaDireta ? 'cef_venda_direta' : im.data_leilao ? 'cef_tem_data' : 'cef_recente', alterado: false }); return;
     }
     const { html } = await fetchLote(im.url_lote || '');
-    const data = html ? extrairDataCaixa(html) : null;
+    const data = html ? extrairDataLeilao(html) : null;
     const patch = { enriquecido_em: new Date().toISOString() };
     if (data) patch.data_leilao = data;
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
@@ -92,9 +99,12 @@ export default async function handler(req, res) {
   // matrícula/edital/regras PARA SEMPRE. Agora: só pula de vez quando já achou algo;
   // se ainda não tem doc, tenta de novo após 12h (throttle p/ não martelar a fonte).
   const temDocs = !!(im.link_matricula || im.link_regras_venda || (Array.isArray(im.anexos) && im.anexos.length));
+  const ehVendaDireta = /venda[_ ]?direta/i.test(im.modalidade || '');
+  const precisaData = !im.data_leilao && !ehVendaDireta; // leilão de leiloeiro sem data → também busca
   const enriqRecente = im.enriquecido_em && (Date.now() - new Date(im.enriquecido_em).getTime() < 12 * 3600 * 1000);
-  if (!forcar && (temDocs || enriqRecente)) {
-    res.status(200).json({ ok: true, pulado: temDocs ? 'ja_tem_docs' : 'tentado_recente', alterado: false, anexos: im.anexos || [] }); return;
+  // Pula só quando já tem tudo (docs E data) ou tentou há pouco (throttle de 12h).
+  if (!forcar && ((temDocs && !precisaData) || enriqRecente)) {
+    res.status(200).json({ ok: true, pulado: (temDocs && !precisaData) ? 'ja_completo' : 'tentado_recente', alterado: false, anexos: im.anexos || [] }); return;
   }
 
   const alvo = im.url_lote || im.link_edital;
@@ -118,6 +128,9 @@ export default async function handler(req, res) {
   if (achado.edital && !im.link_edital) patch.link_edital = achado.edital;
   if (achado.regras && !im.link_regras_venda) patch.link_regras_venda = achado.regras;
   if (achado.foto && !im.link_foto) patch.link_foto = achado.foto;
+  // Data do leilão do leiloeiro (mesma extração da CEF): só quando falta e não é venda direta.
+  const dataLeilao = precisaData ? extrairDataLeilao(html) : null;
+  if (dataLeilao) patch.data_leilao = dataLeilao;
 
   const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
 
@@ -128,6 +141,7 @@ export default async function handler(req, res) {
     edital: patch.link_edital || im.link_edital || null,
     regras: patch.link_regras_venda || im.link_regras_venda || null,
     foto: patch.link_foto || im.link_foto || null,
+    data_leilao: patch.data_leilao || im.data_leilao || null,
     anexos: achado.anexos,
   });
 }
