@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
+import { scoreBidPro, scoreLabel } from '../utils/score';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { formatarDescricaoImovel } from '../utils/descricao';
 
@@ -1029,6 +1030,20 @@ export default function ImovelDetalhe() {
                   {descLabel}% abaixo da avaliação
                 </div>
               )}
+              {/* Score BidPro (0–10): potencial de oportunidade num relance */}
+              {(() => {
+                const sb = scoreBidPro({ desconto: imovel.descontoPercentual, scoreJuridico: imovel.scoreJuridico, scoreFinanceiro: imovel.scoreFinanceiro });
+                if (!sb) return null;
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, marginBottom: 16 }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 10, background: sb.cor, color: 'white', fontWeight: 900, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{sb.nota.toFixed(1)}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: '#111' }}>Score BidPro</div>
+                      <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.3 }}>{scoreLabel(sb.base)}</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Ir ao leiloeiro */}
               {imovel.urlLote && (

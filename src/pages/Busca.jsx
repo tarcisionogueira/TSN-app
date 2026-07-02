@@ -13,6 +13,7 @@ import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
 import ScoreRisco from '../components/ScoreRisco';
+import { scoreBidPro, scoreLabel } from '../utils/score';
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -1487,6 +1488,7 @@ export default function Busca() {
               const desc = desconto(im);
               const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#084BA6' };
               const imgSrc = fotoCandidatos(im);
+              const sb = scoreBidPro({ desconto: desc, scoreJuridico: im.scoreJuridico, scoreFinanceiro: im.scoreFinanceiro });
 
               return (
                 <div key={im.id}
@@ -1509,8 +1511,15 @@ export default function Busca() {
                         -{fmtDesc(desc)}%
                       </div>
                     )}
+                    {/* Score BidPro (0–10): potencial num relance, estilo IPL */}
+                    {sb && (
+                      <div title={`Score BidPro ${sb.nota.toFixed(1)}/10 · ${scoreLabel(sb.base)}`}
+                        style={{ position:'absolute', top:8, left:8, background:sb.cor, color:'white', fontWeight:900, fontSize:13, minWidth:34, textAlign:'center', padding:'3px 7px', borderRadius:8, boxShadow:'0 1px 4px rgba(0,0,0,0.2)' }}>
+                        {sb.nota.toFixed(1)}
+                      </div>
+                    )}
                     {(im.fonte==='CEF' || im.fonte==='caixa') && (
-                      <div style={{ position:'absolute', top:8, left:8, background:'#c2410c', color:'white', fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:8 }}>CAIXA</div>
+                      <div style={{ position:'absolute', bottom:8, left:8, background:'#c2410c', color:'white', fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:8 }}>CAIXA</div>
                     )}
                   </div>
 
