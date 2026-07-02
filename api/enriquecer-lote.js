@@ -43,6 +43,20 @@ async function fetchLote(url) {
   return { html: '', finalUrl: url, via: 'fail' };
 }
 
+// Extrai a DATA do leilão/licitação da página do imóvel da Caixa. Conservador:
+// só aceita data próxima de "leilão/praça/licitação" e que NÃO seja passada
+// (evita pegar data de cadastro/edital antigo e mostrar um dia errado ao cliente).
+function extrairDataCaixa(html) {
+  if (!html) return null;
+  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  const m = txt.match(/(?:leil[ãa]o|pra[çc]a|licita[çc][ãa]o)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{4})/i);
+  if (!m) return null;
+  const iso = `${m[3]}-${m[2]}-${m[1]}`;
+  const dt = Date.parse(iso);
+  if (isNaN(dt) || dt < Date.now() - 30 * 86400000) return null; // ignora datas antigas
+  return iso;
+}
+
 export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
@@ -53,12 +67,25 @@ export default async function handler(req, res) {
   const forcar = params.get('forcar') === '1';
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em&limit=1`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em&limit=1`)).json();
   if (!im) { res.status(404).json({ error: 'Imóvel não encontrado' }); return; }
 
-  // CEF: links determinísticos (caixa.js) — não precisa vasculhar.
+  // CEF: os LINKS de documento são determinísticos (não precisa vasculhar), MAS a
+  // DATA do leilão/licitação fica na PÁGINA do imóvel (não vem no CSV em massa).
+  // Busca a data on-demand p/ o cliente se planejar. Venda direta é contínua (sem
+  // data). Throttle de 12h e nunca sobrescreve data já existente.
   if (im.fonte === 'CEF' || im.fonte === 'caixa') {
-    res.status(200).json({ ok: true, pulado: 'cef', alterado: false }); return;
+    const ehVendaDireta = /venda[_ ]?direta/i.test(im.modalidade || '');
+    const recente = im.enriquecido_em && (Date.now() - new Date(im.enriquecido_em).getTime() < 12 * 3600 * 1000);
+    if (ehVendaDireta || im.data_leilao || (recente && !forcar)) {
+      res.status(200).json({ ok: true, pulado: ehVendaDireta ? 'cef_venda_direta' : im.data_leilao ? 'cef_tem_data' : 'cef_recente', alterado: false }); return;
+    }
+    const { html } = await fetchLote(im.url_lote || '');
+    const data = html ? extrairDataCaixa(html) : null;
+    const patch = { enriquecido_em: new Date().toISOString() };
+    if (data) patch.data_leilao = data;
+    await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
+    res.status(200).json({ ok: !!data, pulado: 'cef', alterado: !!data, data_leilao: data || null }); return;
   }
   // Revisita se o imóvel AINDA não tem documentos. Antes, uma tentativa que falhava
   // (fonte bloqueava o fetch) marcava enriquecido_em e o imóvel ficava travado SEM

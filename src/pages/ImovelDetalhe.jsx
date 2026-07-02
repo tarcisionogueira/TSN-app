@@ -556,17 +556,21 @@ export default function ImovelDetalhe() {
   useEffect(() => {
     if (!imovel?.id) return;
     const isCef = imovel.fonte === 'CEF' || imovel.fonte === 'caixa';
-    // Leiloeiro: enriquece enquanto AINDA não tem documentos. NÃO trava mais por
-    // enriquecidoEm — uma tentativa que falhou não pode esconder os docs para sempre.
-    // O backend tem throttle de 12h para não martelar a fonte.
+    const isVendaDireta = /venda[_ ]?direta/i.test(imovel.modalidade || '');
+    // Leiloeiro: busca DOCUMENTOS enquanto não tiver (não trava por enriquecidoEm —
+    // uma tentativa que falhou não pode esconder os docs para sempre). CEF: busca a
+    // DATA do leilão/licitação (fica na página do imóvel, não no CSV) quando ainda
+    // não temos e não é venda direta. O backend tem throttle de 12h.
     const temDocs = imovel.linkMatricula || imovel.linkRegrasVenda || (imovel.anexos && imovel.anexos.length);
-    if (isCef || temDocs) return;
+    const precisa = isCef ? (!imovel.dataLeilao && !isVendaDireta) : !temDocs;
+    if (!precisa) return;
     let cancel = false;
     apiCall(`/api/enriquecer-lote?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
       if (cancel || !d) return;
       setImovel(prev => prev ? {
         ...prev,
         enriquecidoEm: new Date().toISOString(),
+        dataLeilao: prev.dataLeilao || d.data_leilao || null,
         anexos: (d.anexos && d.anexos.length) ? d.anexos : prev.anexos,
         linkMatricula: prev.linkMatricula || d.matricula || null,
         linkEdital: prev.linkEdital || d.edital || null,
