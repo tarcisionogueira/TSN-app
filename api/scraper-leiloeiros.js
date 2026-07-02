@@ -314,49 +314,97 @@ async function coletarDestak(deadline) {
 // real (Node fetch recebe 200 vazio). O Bright Data (Web Unlocker) tem esse
 // fingerprint; enviamos os headers de XHR (Origin/Referer) que a API exige.
 // É um PORTAL que agrega centenas de leiloeiros (cada lote traz o de origem).
+// Extrai o array de itens da resposta, tentando os nomes de campo mais comuns.
+function ljudItens(data) {
+  return data?.items || data?.itens || data?.data?.items || data?.data || data?.results || data?.bens || data?.lotes || [];
+}
+// Extrai o total de registros (p/ calcular nº de páginas) de vários nomes possíveis.
+function ljudTotal(data) {
+  for (const k of ['totalItems', 'total', 'totalRegistros', 'total_registros', 'qtd_total', 'qtdTotal', 'count', 'recordsTotal'])
+    if (data && data[k] != null && !isNaN(Number(data[k]))) return Number(data[k]);
+  return null;
+}
+function mapLoteLJUD(it) {
+  const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || it.titulo || '').replace(/\s+/g, ' ').trim();
+  const cidade = String(it.nm_cidade || it.cidade || '').trim();
+  const vmin = parseNum(it.vl_lanceminimo || it.vl_ordenacao || it.valor_minimo || it.vl_minimo);
+  const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : (it.nm_foto || it.foto || null);
+  const urlLeil = String(it.nm_url_leiloeiro || it.url_leiloeiro || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  return {
+    fonte: 'LJUD', fonte_id: `ljud_${it.lote_id || it.id}`,
+    titulo: (titulo || `Imóvel ${it.lote_id || it.id}`).slice(0, 180),
+    tipo: normalizarTipo(it.nm_subcategoria || it.nm_categoria || titulo),
+    modalidade: /extrajudicial/i.test(it.nm_titulo_leilao || it.nm_tipo_leilao || '') ? 'extrajudicial' : 'judicial',
+    estado: String(it.nm_estado || it.uf || '').toUpperCase().slice(0, 2), cidade,
+    bairro: '', endereco: '', valor_avaliacao: parseNum(it.vl_avaliacao || 0), valor_minimo: vmin,
+    area_m2: parseNum((titulo.match(/([\d.,]+)\s*m²/) || [])[1]),
+    descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500) || null,
+    link_edital: urlLeil ? `https://${urlLeil}` : 'https://www.leiloesjudiciais.com.br',
+    link_foto: foto, leiloeiro: String(it.nm_leiloeiro || it.leiloeiro || 'Leilões Judiciais').slice(0, 120),
+    data_leilao: null, forma_pagamento: null,
+  };
+}
+
 async function coletarLJUD(paginas, deadline) {
-  const out = []; let via = '-', diag = null;
+  const out = []; let via = '-';
   const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
-  const base = 'tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
-  const hdrs = { Accept: '*/*', Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/' };
-  let totalPages = paginas;
-  for (let p = 1; p <= Math.min(totalPages, paginas); p++) {
+  // categoria=1 costuma ser Imóveis; tipo filtra modalidade. Testamos algumas
+  // variantes na 1ª página p/ ver qual traz mais itens, depois pagina na melhor.
+  const commons = 'estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+  const variantes = [
+    { nome: 'tipo3_cat0', qs: `tipo=3&categoria=0&${commons}` },   // filtro atual (só 10)
+    { nome: 'tipo0_cat1', qs: `tipo=0&categoria=1&${commons}` },   // todos os tipos, categoria imóveis
+    { nome: 'tipo0_cat0', qs: `tipo=0&categoria=0&${commons}` },   // sem filtro nenhum
+    { nome: 'semtipo_cat1', qs: `categoria=1&${commons}` },        // sem o param tipo
+  ];
+  const hdrs = { Accept: 'application/json,*/*', Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/' };
+
+  // 1) Probe: 1ª página de cada variante → diagnóstico p/ escolher a melhor
+  const probes = [];
+  for (const v of variantes) {
     if (Date.now() > deadline) break;
-    const url = `${API}?pg=${p}&qtd_por_pagina=12&${base}`;
+    const url = `${API}?pg=1&qtd_por_pagina=48&${v.qs}`;
     const bd = await fetchViaBrightData(url, { headers: hdrs });
     via = bd ? 'brightdata' : 'indisponivel';
-    let data = null; try { data = JSON.parse(await bd.text()); } catch { /* */ }
-    const items = data?.items || [];
-    if (!items.length) {
-      if (p === 1) { diag = { via, status: bd?.status || 0, totalItems: data?.totalItems ?? null }; await gravarDebug('LJUD', url, bd?.status || 0, 'application/json', via, JSON.stringify(data || {}).slice(0, 4000)); }
-      break;
-    }
-    if (p === 1 && data.totalPages) totalPages = Math.min(paginas, Number(data.totalPages) || paginas);
-    for (const it of items) {
-      if (Number(it.statuslote_id) !== 1) continue;
-      const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').replace(/\s+/g, ' ').trim();
-      const cidade = String(it.nm_cidade || '').trim();
-      if (/simula|teste/i.test(titulo) || /teste/i.test(cidade)) continue;
-      const vmin = parseNum(it.vl_lanceminimo || it.vl_ordenacao);
-      if (!vmin) continue;
-      const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : null;
-      const urlLeil = String(it.nm_url_leiloeiro || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
-      out.push({
-        fonte: 'LJUD', fonte_id: `ljud_${it.lote_id}`,
-        titulo: (titulo || `Imóvel ${it.lote_id}`).slice(0, 180),
-        tipo: normalizarTipo(it.nm_subcategoria || titulo),
-        modalidade: /extrajudicial/i.test(it.nm_titulo_leilao || '') ? 'extrajudicial' : 'judicial',
-        estado: String(it.nm_estado || '').toUpperCase().slice(0, 2), cidade,
-        bairro: '', endereco: '', valor_avaliacao: 0, valor_minimo: vmin,
-        area_m2: parseNum((titulo.match(/([\d.,]+)\s*m²/) || [])[1]),
-        descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500) || null,
-        link_edital: urlLeil ? `https://${urlLeil}` : 'https://www.leiloesjudiciais.com.br',
-        link_foto: foto, leiloeiro: String(it.nm_leiloeiro || 'Leilões Judiciais').slice(0, 120),
-        data_leilao: null, forma_pagamento: null,
-      });
+    const txt = bd ? await bd.text().catch(() => '') : '';
+    let data = null; try { data = JSON.parse(txt); } catch { /* */ }
+    const items = ljudItens(data);
+    const statusDist = {};
+    items.forEach(it => { const s = it.statuslote_id ?? 'null'; statusDist[s] = (statusDist[s] || 0) + 1; });
+    probes.push({
+      variante: v.nome, http: bd?.status || 0, itens: items.length,
+      total: ljudTotal(data), chaves: data && !Array.isArray(data) ? Object.keys(data).slice(0, 12) : (Array.isArray(data) ? ['(array)'] : null),
+      statusDist, amostraItem: items[0] ? Object.keys(items[0]).slice(0, 30) : null,
+    });
+    await gravarDebug('LJUD', url, bd?.status || 0, 'application/json', via, txt);
+  }
+
+  // 2) Escolhe a variante com mais itens e pagina nela
+  const melhor = probes.slice().sort((a, b) => (b.itens || 0) - (a.itens || 0))[0];
+  const vencedora = variantes.find(v => v.nome === melhor?.variante) || variantes[0];
+  const seen = new Set();
+  if (melhor && melhor.itens > 0) {
+    const totalReg = melhor.total || (paginas * 48);
+    const totalPages = Math.min(paginas, Math.ceil(totalReg / 48) || paginas);
+    for (let p = 1; p <= totalPages; p++) {
+      if (Date.now() > deadline) break;
+      const url = `${API}?pg=${p}&qtd_por_pagina=48&${vencedora.qs}`;
+      const bd = await fetchViaBrightData(url, { headers: hdrs });
+      let data = null; try { data = JSON.parse(await bd.text()); } catch { /* */ }
+      const items = ljudItens(data);
+      if (!items.length) break;
+      for (const it of items) {
+        // aceita statuslote 1 (aberto); se o campo não existir, não descarta
+        if (it.statuslote_id != null && Number(it.statuslote_id) !== 1) continue;
+        const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').toLowerCase();
+        if (/simula|teste/.test(titulo)) continue;
+        const row = mapLoteLJUD(it);
+        if (!row.valor_minimo || seen.has(row.fonte_id)) continue;
+        seen.add(row.fonte_id); out.push(row);
+      }
     }
   }
-  return { rows: out, via, diag };
+  return { rows: out, via, diag: { probes, vencedora: vencedora.nome, coletados: out.length } };
 }
 
 async function upsert(rows) {
@@ -431,3 +479,4 @@ export default async function handler(req, res) {
 
 // CRON_SECRET sincronizado GitHub↔Vercel (2026-07-02) — recon dos leiloeiros habilitado.
 // Recon 2ª fase: JS de Ajax (Degrau/MGL/Destak) + crawl de leilões ativos (CCJ) + lote real (Biasi).
+// LJUD: probe multi-variante (tipo/categoria) + paginação robusta p/ destravar o agregador judicial nacional.
