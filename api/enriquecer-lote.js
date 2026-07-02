@@ -60,9 +60,14 @@ export default async function handler(req, res) {
   if (im.fonte === 'CEF' || im.fonte === 'caixa') {
     res.status(200).json({ ok: true, pulado: 'cef', alterado: false }); return;
   }
-  // Já enriquecido e não forçado → não revisita (economiza Bright Data).
-  if (im.enriquecido_em && !forcar) {
-    res.status(200).json({ ok: true, pulado: 'ja_enriquecido', alterado: false, anexos: im.anexos || [] }); return;
+  // Revisita se o imóvel AINDA não tem documentos. Antes, uma tentativa que falhava
+  // (fonte bloqueava o fetch) marcava enriquecido_em e o imóvel ficava travado SEM
+  // matrícula/edital/regras PARA SEMPRE. Agora: só pula de vez quando já achou algo;
+  // se ainda não tem doc, tenta de novo após 12h (throttle p/ não martelar a fonte).
+  const temDocs = !!(im.link_matricula || im.link_regras_venda || (Array.isArray(im.anexos) && im.anexos.length));
+  const enriqRecente = im.enriquecido_em && (Date.now() - new Date(im.enriquecido_em).getTime() < 12 * 3600 * 1000);
+  if (!forcar && (temDocs || enriqRecente)) {
+    res.status(200).json({ ok: true, pulado: temDocs ? 'ja_tem_docs' : 'tentado_recente', alterado: false, anexos: im.anexos || [] }); return;
   }
 
   const alvo = im.url_lote || im.link_edital;

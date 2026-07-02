@@ -556,7 +556,11 @@ export default function ImovelDetalhe() {
   useEffect(() => {
     if (!imovel?.id) return;
     const isCef = imovel.fonte === 'CEF' || imovel.fonte === 'caixa';
-    if (isCef || imovel.enriquecidoEm) return;
+    // Leiloeiro: enriquece enquanto AINDA não tem documentos. NÃO trava mais por
+    // enriquecidoEm — uma tentativa que falhou não pode esconder os docs para sempre.
+    // O backend tem throttle de 12h para não martelar a fonte.
+    const temDocs = imovel.linkMatricula || imovel.linkRegrasVenda || (imovel.anexos && imovel.anexos.length);
+    if (isCef || temDocs) return;
     let cancel = false;
     apiCall(`/api/enriquecer-lote?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
       if (cancel || !d) return;
