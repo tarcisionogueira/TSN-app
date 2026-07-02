@@ -295,6 +295,34 @@ export default async function handler(req, res) {
       if (linhas.length) fontesTxt = `\n\n§ SEÇÃO: CERTIDÕES E FONTES EXTERNAS\n\n${linhas.join('\n')}\n\nConsultas públicas automáticas — confirme em certidão oficial atualizada antes do lance.`;
     } catch { /* fontes externas nunca derrubam o laudo */ }
 
+    // Checklist de evolução: o que já foi consultado e o que ficou PENDENTE (fonte
+    // instável/CAPTCHA) — deixa o relatório transparente e justifica o prazo p/ liberar.
+    const fx = fontesExternas || {};
+    const stItem = (label, fonte, naMsg) => {
+      if (!fonte) return { label, status: 'na', detalhe: naMsg };
+      if (fonte.ok) return { label, status: 'feito', detalhe: fonte.resumo || fonte.situacao || 'Consultado' };
+      if (fonte.instavel) return { label, status: 'pendente', detalhe: 'Fonte instável/CAPTCHA no momento — nova tentativa automática em até 48h; o relatório será complementado.' };
+      return { label, status: 'na', detalhe: fonte.erro || 'Sem apontamento' };
+    };
+    const checklist = [
+      { label: 'Documentos do lote (matrícula/edital/regras)',
+        status: lidos.length ? 'feito' : (urls.length ? 'pendente' : 'na'),
+        detalhe: lidos.length
+          ? `${lidos.length} documento(s) lido(s): ${lidos.map(l => l.rotulo).join(', ')}`
+          : (urls.length ? 'Documentos localizados, mas a fonte não liberou a leitura agora — nova tentativa em breve.' : 'Nenhum documento vinculado ao lote.') },
+      { label: 'Processo judicial (CNJ/DataJud)',
+        status: cnj ? 'feito' : (procFontes ? 'pendente' : 'na'),
+        detalhe: cnj ? `${cnj.total ?? 0} processo(s) · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}` : (procFontes ? 'Aguardando o DataJud (pode ter lag).' : 'Sem nº de processo para consultar.') },
+      stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.'),
+      stItem('Débitos trabalhistas (CNDT/BNDT)', fx.cndt, 'Sem CPF/CNPJ do executado nos documentos.'),
+      stItem('Indisponibilidade de bens (CNIB)', fx.cnib, 'Sem CPF/CNPJ do executado nos documentos.'),
+      stItem('Protestos em cartório (CENPROT)', fx.protestos, 'Sem CPF/CNPJ do executado nos documentos.'),
+      { label: 'Certidões fiscais (Receita/PGFN/FGTS)',
+        status: fx.certidoes?.resumo ? 'feito' : (docOk ? 'pendente' : 'na'),
+        detalhe: fx.certidoes?.resumo || (docOk ? 'Aguardando as fontes fiscais.' : 'Sem CPF/CNPJ do executado nos documentos.') },
+    ];
+    const pendencias = checklist.filter(c => c.status === 'pendente').length;
+
     const result = {
       extracao: parsed.extracao || null,
       riscos: parsed.riscos || [],
@@ -304,6 +332,8 @@ export default async function handler(req, res) {
       cnj: cnj ? { total: cnj.total, parecer: cnj.parecer, processos: cnj.processos?.slice(0, 12) || [], tribunais: cnj.tribunais_consultados } : null,
       fontesExternas,
       documentosLidos: lidos,
+      checklist,
+      pendencias,
       geradoEm: new Date().toISOString(),
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result });

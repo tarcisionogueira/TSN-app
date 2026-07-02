@@ -1120,6 +1120,38 @@ export default function Analise() {
                   ))}
                 </div>
               )}
+              {(parecerDocumental.checklist || []).length > 0 && (
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:'#334155', marginBottom:10, display:'flex', alignItems:'center', gap:7 }}>
+                    📋 Evolução das consultas
+                    {parecerDocumental.pendencias > 0 && (
+                      <span style={{ marginLeft:'auto', fontSize:10.5, fontWeight:800, color:'#92400e', background:'#fef3c7', padding:'2px 8px', borderRadius:20 }}>
+                        {parecerDocumental.pendencias} pendente(s)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {parecerDocumental.checklist.map((c, i) => {
+                      const cor = c.status==='feito' ? '#16a34a' : c.status==='pendente' ? '#d97706' : '#94a3b8';
+                      const ic  = c.status==='feito' ? '✓' : c.status==='pendente' ? '⏳' : '—';
+                      return (
+                        <div key={i} style={{ display:'flex', gap:9, alignItems:'flex-start' }}>
+                          <span style={{ color:cor, fontWeight:900, fontSize:13, lineHeight:1.5, flexShrink:0, width:14, textAlign:'center' }}>{ic}</span>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontSize:12.5, fontWeight:700, color:'#111' }}>{c.label}</div>
+                            <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.5 }}>{c.detalhe}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {parecerDocumental.pendencias > 0 && (
+                    <div style={{ marginTop:10, fontSize:11.5, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 11px', lineHeight:1.5 }}>
+                      Algumas fontes públicas estavam instáveis/em verificação no momento. Liberamos o relatório com o que já temos e ele é <strong>complementado automaticamente em até 48h</strong> — sem custo extra.
+                    </div>
+                  )}
+                </div>
+              )}
               {parecerDocumental.parecer && (
                 <div style={{ fontSize:13.5, color:'#334155', lineHeight:1.75, whiteSpace:'pre-wrap' }}>
                   {parecerDocumental.parecer.replace(/§\s*SEÇÃO:/g, '\n§ ').trim()}
