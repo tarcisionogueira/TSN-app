@@ -4392,10 +4392,10 @@ function ScrapersTab() {
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || `HTTP ${r.status}`);
       const probes = d.recon?.probes || [];
-      const bons = probes.filter(p => !p.erro && ((p.datasBR || []).length || (p.dateKeys || []).length));
+      const bons = probes.filter(p => !p.erro && (p.camposData || []).length);
       const resumo = bons.length
-        ? `✔ Achou datas em: ${bons.map(p => p.url.split('?')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}`
-        : `${probes.length} sondas — todas caem na página de erro (ver debug_fetch=LJUD-RECON)`;
+        ? `✔ Campos de data no get-lotes: ${[...new Set(bons.flatMap(p => (p.camposData || []).map(c => c.split('=')[0])))].join(', ')}`
+        : `${probes.length} sondas — get-lotes sem data legível (ver debug_fetch=LJUD-RECON)`;
       setReconLj({ rodando: false, msg: resumo, erro: '' });
     } catch (e) {
       setReconLj({ rodando: false, msg: '', erro: e.message });

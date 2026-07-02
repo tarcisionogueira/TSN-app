@@ -427,42 +427,32 @@ async function reconLJUD(deadline) {
     .slice(0, 2);
   const amostraKeysItem = items[0] ? Object.keys(items[0]) : [];
 
-  // Candidatos: (a) endpoints de API por leilao_id/lote_id; (b) PÁGINAS HTML de
-  // lote/leilão no próprio portal (a data costuma estar renderizada nelas).
-  const site = 'https://www.leiloesjudiciais.com.br';
-  const candidatos = (it) => [
-    // API — variações de nome mais prováveis para "leilões" (plural) e detalhe
-    { m: 'POST', u: `${base}get-leiloes-por-estados?leilao_id=${it.leilao_id}&${commons.replace('leilao_id=0', '')}` },
-    { m: 'POST', u: `${base}get-leiloes?leilao_id=${it.leilao_id}` },
-    { m: 'POST', u: `${base}get-bens-por-estados?categoria=3&${commons.replace('leilao_id=0', `leilao_id=${it.leilao_id}`).replace('lote_id=0', `lote_id=${it.lote_id}`)}` },
-    { m: 'POST', u: `${base}get-leilao-por-id?id=${it.leilao_id}` },
-    { m: 'POST', u: `${base}get-bem-por-id?id=${it.lote_id}` },
-    { m: 'POST', u: `${base}get-dados-leilao?leilao_id=${it.leilao_id}` },
-    { m: 'GET',  u: `${base}leilao/${it.leilao_id}` },
-    // PÁGINAS HTML do portal (mais promissoras p/ extrair a data com extrairDataLeilao)
-    { m: 'GET',  u: `${site}/lote/${it.lote_id}` },
-    { m: 'GET',  u: `${site}/lote/${it.leilao_id}/${it.lote_id}` },
-    { m: 'GET',  u: `${site}/imovel/${it.lote_id}` },
-    { m: 'GET',  u: `${site}/bem/${it.lote_id}` },
-    { m: 'GET',  u: `${site}/leilao/${it.leilao_id}` },
-    { m: 'GET',  u: `${site}/peca/${it.lote_id}` },
+  // Endpoint REAL descoberto no DevTools do portal: get-lotes (payload rico ~10kB/lote,
+  // provavelmente já com as datas de praça). Testa algumas variações de parâmetro e
+  // DESPEJA a estrutura do 1º item + qualquer campo cujo VALOR pareça data, p/ mapear.
+  const variantesLotes = [
+    `${base}get-lotes?pg=1&qtd_por_pagina=5&tipo=3&estado=0&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null`,
+    `${base}get-lotes?pg=1&qtd_por_pagina=5&tipo=3`,
+    `${base}get-lotes?pg=1&qtd_por_pagina=5&categoria=3`,
   ];
-  const DATE_RE = /"?(dt_[a-z_]*|[a-z_]*data[a-z_]*|[a-z_]*praca[a-z_]*|[a-z_]*encerr[a-z_]*|[a-z_]*abertura[a-z_]*)"?\s*[:=]/gi;
   const ehErro = (t) => /Erro no Sistema|<title>\s*Erro/i.test(t || '');
+  const itensDe = (d) => (Array.isArray(d) ? d : (d?.lotes || d?.itens || d?.items || d?.data || d?.results || d?.bens || [])) || [];
   const probes = [];
-  for (const it of items) {
-    for (const c of candidatos(it)) {
-      if (Date.now() > deadline) break;
-      const r = await fetchViaBrightData(c.u, { method: c.m, headers: hdrs });
+  for (const u of variantesLotes) {
+    if (Date.now() > deadline) break;
+    for (const m of ['POST', 'GET']) { // o site usa fetch; método pode variar
+      const r = await fetchViaBrightData(u, { method: m, headers: hdrs });
       const txt = r ? await r.text().catch(() => '') : '';
       const erro = ehErro(txt);
       let d = null; try { d = JSON.parse(txt); } catch { /* */ }
-      const keys = d && typeof d === 'object' ? Object.keys(Array.isArray(d) ? (d[0] || {}) : d).slice(0, 40) : null;
-      // datas dd/mm/aaaa achadas no texto (indício forte quando NÃO é a página de erro)
-      const datasBR = !erro ? [...new Set((txt.match(/\b\d{2}\/\d{2}\/\d{2,4}\b/g) || []))].slice(0, 8) : [];
-      const dateKeys = !erro ? [...new Set((txt.match(DATE_RE) || []))].slice(0, 25) : [];
-      probes.push({ metodo: c.m, url: c.u.replace(base, '').replace(site, ''), http: r?.status || 0, len: txt.length, erro, keys, datasBR, dateKeys });
-      await gravarDebug('LJUD-RECON', c.u, r?.status || 0, erro ? 'erro' : 'json/html', 'brightdata', txt);
+      const arr = itensDe(d);
+      const it0 = arr[0] || null;
+      const camposData = it0 ? Object.entries(it0)
+        .filter(([, v]) => typeof v === 'string' && /(\d{2}\/\d{2}\/\d{2,4})|(\d{4}-\d{2}-\d{2})/.test(v))
+        .map(([k, v]) => `${k}=${v}`).slice(0, 20) : [];
+      probes.push({ metodo: m, url: u.replace(base, ''), http: r?.status || 0, len: txt.length, erro, itens: arr.length, chavesItem: it0 ? Object.keys(it0) : null, camposData });
+      await gravarDebug('LJUD-RECON', `${m} ${u}`, r?.status || 0, erro ? 'erro' : 'json', 'brightdata', txt);
+      if (arr.length && camposData.length) break; // achou datas → chega
     }
   }
   return { amostraKeysItem, exemplos: items.map(it => ({ lote_id: it.lote_id, leilao_id: it.leilao_id })), probes };
