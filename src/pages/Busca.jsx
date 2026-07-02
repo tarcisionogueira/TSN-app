@@ -1088,8 +1088,9 @@ export default function Busca() {
                   </div>
                 )}
                 {(() => {
+                  const buscaNorm = normCidade(buscaCidade);
                   const cidadesFiltradas = filtros.estado
-                    ? cidadesEstado.filter(c => c.toLowerCase().includes(buscaCidade.toLowerCase()) && !filtros.cidades.includes(c))
+                    ? cidadesEstado.filter(c => normCidade(c).includes(buscaNorm) && !filtros.cidades.includes(c))
                     : [];
                   const handleKeyDown = (e) => {
                     if (!cidadesFiltradas.length) return;
@@ -1231,7 +1232,7 @@ export default function Busca() {
               </div>
               <div>
                 <label style={lbl}>Forma de Pagamento</label>
-                {[['aVista','À Vista'],['financiado','Financiado'],['hipotecado','Hipotecado']].map(([v,l])=>(
+                {[['aVista','À Vista'],['financiado','Financiado']].map(([v,l])=>(
                   <label key={v} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:12, color:'#334155', marginBottom:5 }}>
                     <input type="checkbox" checked={filtros.pagamento.includes(v)} onChange={()=>togglePagamento(v)} style={{ width:14, height:14 }}/>
                     {l}
