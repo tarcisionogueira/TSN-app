@@ -47,17 +47,19 @@ function corpoEmail({ nome, plano, valor, dataFmt }) {
   const saud = nome ? `Olá, ${esc(nome.split(' ')[0])}!` : 'Olá!';
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
     <p style="font-size:15px">${saud}</p>
-    <p style="font-size:14px;line-height:1.7">Passando para avisar que sua assinatura <strong>${esc(plano)}</strong> na BidPro Brasil
-    será <strong>renovada automaticamente</strong>. Você não precisa fazer nada — deixamos tudo transparente:</p>
+    <p style="font-size:14px;line-height:1.7">Sua assinatura <strong>${esc(plano)}</strong> na BidPro Brasil
+    <strong>renova automaticamente em ${esc(dataFmt)}</strong>. <strong>Você não precisa fazer nada para continuar</strong> —
+    é só um aviso de transparência com os detalhes:</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
       <tr><td style="padding:8px 0;color:#64748b">Plano</td><td style="padding:8px 0;text-align:right;font-weight:700">${esc(plano)}</td></tr>
       <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #e2e8f0">Valor</td><td style="padding:8px 0;text-align:right;font-weight:700;border-top:1px solid #e2e8f0">${fmtBRL(valor)}</td></tr>
       <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #e2e8f0">Data da cobrança</td><td style="padding:8px 0;text-align:right;font-weight:700;border-top:1px solid #e2e8f0">${esc(dataFmt)}</td></tr>
       <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #e2e8f0">Forma de pagamento</td><td style="padding:8px 0;text-align:right;font-weight:700;border-top:1px solid #e2e8f0">Cobrança recorrente automática no cartão cadastrado</td></tr>
     </table>
-    <p style="font-size:13px;line-height:1.7;color:#475569">Quer <strong>trocar o cartão</strong> ou <strong>cancelar</strong>? É só acessar
-    <a href="${APP_URL}/#/perfil" style="color:#0D63DB">Perfil → Assinatura</a> na plataforma. O cancelamento é imediato e sem multa.</p>
-    <p style="font-size:12px;color:#94a3b8;margin-top:24px">BidPro Brasil · este é um aviso automático de renovação.</p>
+    <p style="font-size:13px;line-height:1.7;color:#475569">Se você <strong>não quiser renovar</strong>, é só
+    <a href="${APP_URL}/#/perfil" style="color:#0D63DB"><strong>acessar o portal e cancelar a renovação automática</strong></a>
+    até <strong>${esc(dataFmt)}</strong> — imediato, sem multa. Por lá também dá para trocar o cartão. Se estiver tudo certo, não precisa responder.</p>
+    <p style="font-size:12px;color:#94a3b8;margin-top:24px">BidPro Brasil · aviso de renovação (você não precisa confirmar nada para continuar).</p>
   </div>`;
 }
 

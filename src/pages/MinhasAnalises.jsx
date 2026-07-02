@@ -1,8 +1,19 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Building2, Plus, Home } from 'lucide-react';
+import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Building2, Plus, Home, Briefcase } from 'lucide-react';
 import { useAnalises } from '../contexts/AnalisesContext';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
+
+// Etapa do acompanhamento assistido (caso) em rótulo curto para o cliente.
+const ETAPA_CURTA = {
+  analise_solicitada: 'Análise solicitada', analises_prontas: 'Análises prontas',
+  reuniao_agendada: 'Reunião agendada', reuniao_realizada: 'Reunião realizada',
+  juridico_solicitado: 'No jurídico', juridico_concluido: 'Parecer pronto',
+  segunda_reuniao: '2ª reunião', arrematado: 'Arrematado', honorarios_pagos: 'Concluído',
+  procuracao_assinada: 'Procuração assinada', pos_arrematacao: 'Pós-arrematação',
+};
 
 // Miniatura do imóvel (CEF tem hotlink direto; demais usam o proxy de imagem).
 function fotoImovel(im) {
@@ -20,8 +31,22 @@ function fotoImovel(im) {
 // com o analista). Substitui o antigo popup do topo por uma página navegável.
 export default function MinhasAnalises() {
   const { analises, documentais, emAndamento, remover } = useAnalises();
+  const { effectiveUserId } = useAuth();
   const nav = useNavigate();
   const isMobile = useIsMobile();
+
+  // Acompanhamento assistido: se o imóvel analisado já virou um caso (fluxo /caso),
+  // conectamos os dois no mesmo lugar — o cliente pula direto para o acompanhamento.
+  const [casosPorImovel, setCasosPorImovel] = React.useState({});
+  React.useEffect(() => {
+    if (!effectiveUserId) return;
+    supabase.from('casos').select('id, imovel_id, status_etapa').eq('cliente_id', effectiveUserId)
+      .then(({ data }) => {
+        const by = {};
+        (data || []).forEach(c => { if (c.imovel_id) by[String(c.imovel_id)] = c; });
+        setCasosPorImovel(by);
+      });
+  }, [effectiveUserId]);
 
   const itens = React.useMemo(() => {
     const rank = { gerando: 3, erro: 2, concluida: 1 };
@@ -109,6 +134,13 @@ export default function MinhasAnalises() {
                     {tags.length > 0 && <span style={{ color: '#94a3b8', fontWeight: 600 }}>· {tags.map(t => t === 'mercado' ? 'Mercado' : 'Documental').join(' + ')}</span>}
                   </div>
                 </div>
+                {casosPorImovel[String(a.imovelId)] && (
+                  <button onClick={(e) => { e.stopPropagation(); nav('/caso/' + casosPorImovel[String(a.imovelId)].id); }}
+                    title="Abrir acompanhamento com a equipe"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    <Briefcase size={13} /> {ETAPA_CURTA[casosPorImovel[String(a.imovelId)].status_etapa] || 'Acompanhamento'}
+                  </button>
+                )}
                 <button onClick={(e) => { e.stopPropagation(); remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
               </div>
             );
