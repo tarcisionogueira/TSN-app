@@ -43,7 +43,11 @@ async function infoDoDocumento(url) {
   const endereco = mVia ? `${mVia[1].replace(/\s+/g, ' ').trim()}, ${mVia[2]}` : null;
   const bairro = bairroM ? bairroM[1].trim() : null;
   const cep = cepM ? `${cepM[1]}${cepM[2]}` : null;
-  return (endereco || cep || bairro) ? { endereco, bairro, cep } : null;
+  // Data do leilão / prazo de propostas (perto de palavra-chave, p/ não pegar
+  // qualquer data solta do documento). Serve p/ preencher imóveis sem data.
+  const dataM = plano.match(/(?:leil[ãa]o|1[ªa]?\s*pra[çc]a|2[ªa]?\s*pra[çc]a|pra[çc]a|propostas?|encerr\w*|abertura|realizar[- ]?se[- ]?[áa]?)[^\d]{0,40}(\d{2})\/(\d{2})\/(\d{4})/i);
+  const dataLeilao = dataM ? `${dataM[3]}-${dataM[2]}-${dataM[1]}` : null;
+  return (endereco || cep || bairro || dataLeilao) ? { endereco, bairro, cep, dataLeilao } : null;
 }
 
 function sb(path, opts = {}) {
@@ -60,7 +64,7 @@ export default async function handler(req, res) {
   const id = new URL(req.url, 'http://localhost').searchParams.get('imovel_id');
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep,link_edital&limit=1`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep,link_edital,data_leilao&limit=1`)).json();
   if (!im) { res.status(404).json({ error: 'Imóvel não encontrado' }); return; }
 
   const nivelAtual = im.geocod_nivel || (im.latitude ? 'cidade' : null);
@@ -115,6 +119,8 @@ export default async function handler(req, res) {
       const body = {
         ...(info.cep ? { cep: info.cep } : {}),
         ...(info.endereco && semEndPreciso ? { endereco: info.endereco } : {}),
+        // Data do leilão/propostas do edital, se o imóvel estiver sem — mantém fiel à fonte.
+        ...(info.dataLeilao && !im.data_leilao ? { data_leilao: info.dataLeilao } : {}),
         ...(melhora ? { latitude: coords2.lat, longitude: coords2.lng, geocod_nivel: coords2.nivel, pontos_proximos: null, proximidades_em: null } : {}),
       };
       if (Object.keys(body).length) {
