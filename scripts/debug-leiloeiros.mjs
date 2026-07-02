@@ -16,10 +16,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 3 — capturar estrutura por-bem do LJUD via fetch no contexto da página ===
-  // (a API dá 405 em navegação direta; via fetch da própria origem retorna 200)
-  { fonte: 'LJUD', url: 'https://www.leiloesjudiciais.com.br/',
-    inPageApi: 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados?pg=1&qtd_por_pagina=48&tipo=3&categoria=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null' },
+  // === Round 4 — recon dos leiloeiros na fila (MGL, CCJ, Biasi, Destak) ===
+  // Navegador real renderiza o SPA, intercepta as APIs XHR JSON e mede seletores
+  // do DOM — base para escrever os parsers definitivos de cada um.
+  { fonte: 'MGL',    url: 'https://www.mgl.com.br/lotes/imoveis' },
+  { fonte: 'CCJ',    url: 'https://www.ccjleiloes.com.br/lotes' },
+  { fonte: 'BIASI',  url: 'https://www.biasileiloes.com.br/imoveis' },
+  { fonte: 'DESTAK', url: 'https://www.destakleiloes.com.br/proximos_leiloes/1/1/' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
