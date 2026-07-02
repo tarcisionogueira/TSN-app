@@ -27,7 +27,7 @@ function sb(path, opts = {}) {
 }
 
 // fetch direto; se 403/erro → Bright Data (desbloqueia fontes que barram o servidor).
-async function fetchLote(url) {
+export async function fetchLote(url) {
   const h = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'pt-BR,pt;q=0.9' };
   let resp = null;
   try { resp = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(9000) }); } catch { resp = null; }
@@ -47,7 +47,7 @@ async function fetchLote(url) {
 // Conservador: ancora em "leilão/praça/encerra/licitação/data", aceita ano com 2 ou
 // 4 dígitos e escolhe a PRÓXIMA data futura — em leilões de 2 praças ignora a 1ª já
 // passada, evitando mostrar um dia errado ao cliente.
-function extrairDataLeilao(html) {
+export function extrairDataLeilao(html) {
   if (!html) return null;
   const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;

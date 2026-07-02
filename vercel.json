@@ -42,6 +42,7 @@
     { "path": "/api/reconciliar-assinaturas-cron", "schedule": "30 6 * * *"   },
     { "path": "/api/monitor-fontes-cron",         "schedule": "0 11 * * *"   },
     { "path": "/api/laudo-retry-cron",            "schedule": "0 */2 * * *"  },
-    { "path": "/api/monitor-dados-cron",          "schedule": "0 9 * * *"    }
+    { "path": "/api/monitor-dados-cron",          "schedule": "0 9 * * *"    },
+    { "path": "/api/enriquecer-datas-cron",       "schedule": "0 13,20 * * *" }
   ]
 }
