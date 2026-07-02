@@ -47,6 +47,20 @@ const CATS_PROX = {
 };
 const fmtDist = m => m >= 1000 ? `${(m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km` : `${m} m`;
 
+// Distância REAL do pino do imóvel ao ponto (haversine). Recalculada aqui no
+// render para o número SEMPRE bater com o mapa — o dist_m salvo pode ter sido
+// calculado de uma coordenada antiga (antes de o pino ser reposicionado).
+function distHaversine(lat1, lon1, lat2, lon2) {
+  if ([lat1, lon1, lat2, lon2].some(v => v == null || isNaN(Number(v)))) return null;
+  const R = 6371000, toRad = d => Number(d) * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+// Distância do ponto ao imóvel: usa o cálculo vivo (bate com o mapa) e cai no
+// dist_m salvo só se faltar coordenada.
+const distPonto = (imLat, imLng, p) => distHaversine(imLat, imLng, p?.lat, p?.lng) ?? p?.dist_m ?? 0;
+
 // Mapa embutido (Leaflet/OpenStreetMap) com o imóvel + pontos de interesse próximos.
 // `nivel` (geocod_nivel) define a PRECISÃO: endereco/rua = pino exato; bairro/cidade
 // = círculo de área aproximada (o dado não permite apontar o lote exato, então não
@@ -100,7 +114,7 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
         if (!p?.lat || !p?.lng) continue;
         const c = CATS_PROX[key]; if (!c) continue;
         L.circleMarker([p.lat, p.lng], { radius: 7, color: '#fff', weight: 2, fillColor: c.cor, fillOpacity: 0.95 })
-          .addTo(map).bindTooltip(`${c.emoji} ${c.label}${p.nome ? ' · ' + p.nome : ''} (${fmtDist(p.dist_m)})`);
+          .addTo(map).bindTooltip(`${c.emoji} ${c.label}${p.nome ? ' · ' + p.nome : ''} (${fmtDist(distPonto(lat, lng, p))})`);
       }
       mapRef.current = map;
       enquadrar();
@@ -779,7 +793,7 @@ export default function ImovelDetalhe() {
                         return (
                           <span key={k} title={p.nome || c.label}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#334155', background: '#f8fafc', border: `1px solid ${c.cor}33`, borderLeft: `3px solid ${c.cor}`, borderRadius: 8, padding: '4px 10px' }}>
-                            {c.emoji} {c.label} <strong style={{ color: c.cor }}>{fmtDist(p.dist_m)}</strong>
+                            {c.emoji} {c.label} <strong style={{ color: c.cor }}>{fmtDist(distPonto(imovel.latitude, imovel.longitude, p))}</strong>
                           </span>
                         );
                       })}
