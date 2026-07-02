@@ -316,8 +316,14 @@ Retorne APENAS este JSON (sem markdown):
     "valorEstimadoImovel": precoMedioM2 * ${areaM2 || 0},
     "descontoArremate": null
   },
-  "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, tendência do mercado e recomendação de precificação"
-}`;
+  "referenciaFipeZap": { "encontrado": true|false, "precoMedioM2": número, "valorizacao12m": número, "mesReferencia": "AAAA-MM", "localidade": "cidade usada", "fonte": "FipeZAP" },
+  "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a ADERÊNCIA da média dos anúncios ao índice FipeZAP (se divergirem >15%, explique)"
+}
+
+REFERÊNCIA FipeZAP: busque também o Índice FipeZAP mais recente da cidade (preço médio de
+venda por m² residencial e valorização acumulada 12 meses). É referência independente para
+validar a média dos anúncios. Se não encontrar a cidade, use a capital/região mais próxima e
+sinalize em "localidade". Sem dado confiável → "encontrado": false (não invente).`;
 
   const data = await callAPI({
     model: MODEL,

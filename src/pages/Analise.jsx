@@ -1705,6 +1705,30 @@ export default function Analise() {
                 ))}
               </div>
 
+              {/* Validação FipeZAP — média dos anúncios × índice independente */}
+              {mercado.referenciaFipeZap?.encontrado && mercado.referenciaFipeZap.precoMedioM2 > 0 && (() => {
+                const anuncios = mercado.precoMedioM2 || 0;
+                const fipe = mercado.referenciaFipeZap.precoMedioM2 || 0;
+                const div = fipe ? Math.round((anuncios - fipe) / fipe * 100) : 0;
+                const alinhado = Math.abs(div) <= 15;
+                return (
+                  <div style={{ borderRadius:12, border:`1px solid ${alinhado ? '#bbf7d0' : '#fed7aa'}`, background: alinhado ? '#f0fdf4' : '#fff7ed', padding:'12px 16px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+                      <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Validação FipeZAP</span>
+                      <span style={{ fontSize:10.5, color:'#64748b' }}>{mercado.referenciaFipeZap.localidade || ''} · {mercado.referenciaFipeZap.mesReferencia || 'recente'}</span>
+                      <span style={{ marginLeft:'auto', fontSize:11, fontWeight:800, padding:'2px 8px', borderRadius:999, background: alinhado ? '#dcfce7' : '#ffedd5', color: alinhado ? '#166534' : '#9a3412' }}>
+                        {alinhado ? '✓ Média alinhada' : `⚠ ${div > 0 ? '+' : ''}${div}% vs FipeZAP`}
+                      </span>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, fontSize:12 }}>
+                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>ANÚNCIOS R$/m²</div><div style={{ fontWeight:800, color:'#0D63DB' }}>R$ {fmt(anuncios)}</div></div>
+                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>FipeZAP R$/m²</div><div style={{ fontWeight:800, color:'#111' }}>R$ {fmt(fipe)}</div></div>
+                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>VALORIZAÇÃO 12M</div><div style={{ fontWeight:800, color: (mercado.referenciaFipeZap.valorizacao12m||0) >= 0 ? '#059669' : '#dc2626' }}>{fmtPct(mercado.referenciaFipeZap.valorizacao12m||0)}</div></div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Nível 1 — Mesmo Condomínio */}
               <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
                 <div style={{ background:'#0D63DB', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>

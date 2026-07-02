@@ -91,12 +91,20 @@ FONTES: ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão,
 DATA DO ANÚNCIO: para CADA amostra, capture a data no campo "data" (formato "AAAA-MM"; senão "recente").
 O preço varia no tempo — priorize as amostras mais recentes na média.
 
+═══ REFERÊNCIA INDEPENDENTE — ÍNDICE FipeZAP ═══
+Busque o Índice FipeZAP mais recente para ${cidade}/${estado}: preço médio de VENDA por m²
+(residencial), e a VALORIZAÇÃO acumulada em 12 meses da cidade. É uma referência oficial
+independente da média de anúncios — serve para VALIDAR se nossa média está coerente. Se não
+achar a cidade, use a região metropolitana/capital mais próxima e sinalize em "fonte". Se não
+houver dado confiável, marque "encontrado": false (não invente número).
+
 Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
   "nivel2": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "descontoArremate": null },
-  "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis e tendência."
+  "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
+  "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a ADERÊNCIA da média dos anúncios ao FipeZAP (se divergirem >15%, explique por quê)."
 }`;
 }
 
@@ -144,8 +152,9 @@ OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
 ${inp.nomeCondominio ? `CONDOMÍNIO: ${inp.nomeCondominio}` : ''}
 
 MERCADO:
-- Preço médio/m²: R$ ${brl(mercado?.precoMedioM2)}
+- Preço médio/m² (média dos anúncios): R$ ${brl(mercado?.precoMedioM2)}
 - Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
+${mercado?.referenciaFipeZap?.encontrado ? `- Referência FipeZAP (${mercado.referenciaFipeZap.localidade || inp.cidade || ''}, ${mercado.referenciaFipeZap.mesReferencia || 'recente'}): R$ ${brl(mercado.referenciaFipeZap.precoMedioM2)}/m² · valorização 12m: ${(Number(mercado.referenciaFipeZap.valorizacao12m) || 0).toFixed(1)}%. Compare com a média dos anúncios acima: se divergirem muito, comente e use a mais conservadora na defesa.` : ''}
 ${mercado?.comentario ? `- Leitura de mercado: ${mercado.comentario}` : ''}
 
 AQUISIÇÃO E RETORNO:
