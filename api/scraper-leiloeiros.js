@@ -350,12 +350,11 @@ async function coletarLJUD(paginas, deadline) {
   const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
   // categoria=1 costuma ser Imóveis; tipo filtra modalidade. Testamos algumas
   // variantes na 1ª página p/ ver qual traz mais itens, depois pagina na melhor.
-  const commons = 'estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+  // id_categoria 3 = Imóveis (1=Veículos, 1751=Semoventes, 1810=Bens diversos, 1957=Jóias).
+  const commons = 'tipo=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
   const variantes = [
-    { nome: 'tipo3_cat0', qs: `tipo=3&categoria=0&${commons}` },   // filtro atual (só 10)
-    { nome: 'tipo0_cat1', qs: `tipo=0&categoria=1&${commons}` },   // todos os tipos, categoria imóveis
-    { nome: 'tipo0_cat0', qs: `tipo=0&categoria=0&${commons}` },   // sem filtro nenhum
-    { nome: 'semtipo_cat1', qs: `categoria=1&${commons}` },        // sem o param tipo
+    { nome: 'cat3_imoveis', qs: `categoria=3&${commons}` },  // Imóveis (filtro correto)
+    { nome: 'cat0_todos',   qs: `categoria=0&${commons}` },  // fallback: tudo (filtramos imóveis no cliente)
   ];
   const hdrs = { Accept: 'application/json,*/*', Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/' };
 
@@ -394,6 +393,9 @@ async function coletarLJUD(paginas, deadline) {
       const items = ljudItens(data);
       if (!items.length) break;
       for (const it of items) {
+        // só imóveis (id_categoria 3 ou imovel_id preenchido) — a API mistura veículos/jóias/etc.
+        const ehImovel = Number(it.id_categoria) === 3 || it.imovel_id != null || /im[óo]ve/i.test(it.nm_categoria || '');
+        if (!ehImovel) continue;
         // aceita statuslote 1 (aberto); se o campo não existir, não descarta
         if (it.statuslote_id != null && Number(it.statuslote_id) !== 1) continue;
         const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').toLowerCase();
