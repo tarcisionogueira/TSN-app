@@ -22,5 +22,19 @@
 
 ---
 
+## ⏳ Renovação automática do plano ANUAL
+
+**Status:** o aviso de renovação por e-mail (`api/renovacao-avisos-cron.js`) já cobre as
+assinaturas **recorrentes** (preapproval mensal do MP: Investidor Pro mensal / Leilão Club),
+enviando ~3 dias antes da cobrança com plano, valor, data e forma de pagamento.
+
+**O que falta:** o plano **anual** (`top2_anual`) hoje é **pagamento único** (`criarPreferencia`,
+não-recorrente) — não é um preapproval, então **não auto-renova** e não entra no aviso.
+Para "anual parcelado com renovação automática" é preciso um mecanismo de **recobrança anual**
+(ex.: preapproval anual no MP, ou agendar nova cobrança 12 meses depois via cron), e então
+incluir esses assinantes no `renovacao-avisos-cron`. Validar contra o MP real antes de ligar.
+
+---
+
 ## ⏳ (Resolvido) Prevenção de dupla cobrança MP↔Asaas
 Implementado em `src/pages/Checkout.jsx` (`cancelarAssinaturasAnteriores`): antes de criar uma nova assinatura recorrente, cancela as assinaturas ativas do cliente nos dois gateways.
