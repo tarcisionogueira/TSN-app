@@ -33,10 +33,26 @@ const ROLES_SITE   = ['explorador','top2','assessorado','clube','consultor','ana
 const ROLES_ANALISE = ['top2','assessorado','clube','analista','advogado','admin'];
 
 function fmtData(d, modalidade) {
-  if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : 'Sem data';
+  if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : 'A confirmar no edital';
   const dt = new Date(d);
   if (isNaN(dt)) return d;
   return dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
+}
+
+// Contagem regressiva p/ o leilão (estilo Leilão Ninja): ajuda o cliente a se
+// planejar num relance. Só p/ datas futuras; passado/sem data → null.
+function contagemLeilao(d) {
+  if (!d) return null;
+  const dt = new Date(d);
+  if (isNaN(dt)) return null;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const alvo = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const dias = Math.round((alvo - hoje) / 86400000);
+  if (dias < 0) return null;                 // já passou
+  const data = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  const texto = dias === 0 ? `Encerra hoje · ${data}` : dias === 1 ? `Encerra amanhã · ${data}` : `Encerra em ${dias} dias · ${data}`;
+  const cor = dias <= 3 ? { bg: '#fee2e2', fg: '#b91c1c' } : dias <= 10 ? { bg: '#fef3c7', fg: '#92400e' } : { bg: '#eff6ff', fg: '#084BA6' };
+  return { dias, texto, ...cor };
 }
 
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
@@ -731,6 +747,12 @@ export default function Busca() {
 
     const buildQuery = (base) => {
       let q = base.eq('ativo', true);
+      // "Encerra em breve": só leilões com data FUTURA (esconde vencidos e sem data),
+      // senão o topo da lista viria com datas passadas/nulas.
+      if (sortAtivo === 'data_asc') {
+        const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+        q = q.gte('data_leilao', hoje.toISOString().slice(0, 10));
+      }
       if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
       if (filtrosAtivos.tipos?.length) q = q.in('tipo', [...filtrosAtivos.tipos, 'imovel']);
       if (filtrosAtivos.modalidades?.length) q = q.in('modalidade', filtrosAtivos.modalidades);
@@ -1592,7 +1614,12 @@ export default function Busca() {
                         <span style={{ fontSize:9, color:'#94a3b8', fontStyle:'italic' }}>Consultar edital</span>
                       )}
                       {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{im.areaM2}m²</span>}
-                      <span style={{ fontSize:9, color:'#94a3b8' }}>{fmtData(im.dataLeilao, im.modalidade)}</span>
+                      {(() => {
+                        const c = contagemLeilao(im.dataLeilao);
+                        return c
+                          ? <span title="Data do leilão" style={{ fontSize:9, fontWeight:800, background:c.bg, color:c.fg, padding:'1px 6px', borderRadius:8 }}>🗓 {c.texto}</span>
+                          : <span style={{ fontSize:9, color:'#94a3b8' }}>🗓 {fmtData(im.dataLeilao, im.modalidade)}</span>;
+                      })()}
                     </div>
 
                     {(im.scoreFinanceiro !== null || im.scoreJuridico !== null) && (

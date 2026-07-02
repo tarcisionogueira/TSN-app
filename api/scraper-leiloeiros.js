@@ -409,6 +409,54 @@ async function coletarLJUD(paginas, deadline) {
   return { rows: out, via, diag: { probes, vencedora: vencedora.nome, coletados: out.length } };
 }
 
+// ─── RECON: descobre o endpoint de DETALHE da LJUD que traz as DATAS de praça ──
+// A listagem (get-bens-por-estados) não devolve data nem URL do lote — só o domínio
+// do leiloeiro. Aqui pegamos alguns lotes reais (com leilao_id/lote_id) e sondamos
+// endpoints prováveis de detalhe, gravando cada resposta em debug_fetch ('LJUD-RECON')
+// para inspeção. Depois que soubermos o endpoint + o campo de data, implementamos o
+// mapeamento de verdade. Custo pequeno de Bright Data; só roda com ?ljud_recon=1.
+async function reconLJUD(deadline) {
+  const base = 'https://api.leiloesjudiciais.com.br/core/api/';
+  const hdrs = { Accept: 'application/json,*/*', Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/' };
+  const commons = 'tipo=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+  const listUrl = `${base}get-bens-por-estados?pg=1&qtd_por_pagina=48&categoria=3&${commons}`;
+  const lb = await fetchViaBrightData(listUrl, { method: 'POST', headers: hdrs });
+  let ldata = null; try { ldata = JSON.parse(lb ? await lb.text() : ''); } catch { /* */ }
+  const items = ljudItens(ldata)
+    .filter(it => Number(it.id_categoria) === 3 || /im[óo]ve/i.test(it.nm_categoria || ''))
+    .slice(0, 2);
+  const amostraKeysItem = items[0] ? Object.keys(items[0]) : [];
+
+  // Candidatos de endpoint de detalhe (nome do endpoint × chave do id × método).
+  const candidatos = (it) => [
+    { m: 'POST', u: `${base}get-lote-by-id?lote_id=${it.lote_id}` },
+    { m: 'GET',  u: `${base}get-lote-by-id?lote_id=${it.lote_id}` },
+    { m: 'POST', u: `${base}get-bem?lote_id=${it.lote_id}` },
+    { m: 'POST', u: `${base}get-bem-by-id?lote_id=${it.lote_id}` },
+    { m: 'POST', u: `${base}get-detalhe-lote?lote_id=${it.lote_id}` },
+    { m: 'POST', u: `${base}get-lote?lote_id=${it.lote_id}` },
+    { m: 'POST', u: `${base}get-leilao?leilao_id=${it.leilao_id}` },
+    { m: 'POST', u: `${base}get-leilao-by-id?leilao_id=${it.leilao_id}` },
+    { m: 'POST', u: `${base}get-detalhe-leilao?leilao_id=${it.leilao_id}` },
+    { m: 'POST', u: `${base}get-datas-praca?leilao_id=${it.leilao_id}` },
+  ];
+  const DATE_RE = /"(dt_[a-z_]*|[a-z_]*data[a-z_]*|[a-z_]*praca[a-z_]*|[a-z_]*encerr[a-z_]*|[a-z_]*abertura[a-z_]*|[a-z_]*hora[a-z_]*)"/gi;
+  const probes = [];
+  for (const it of items) {
+    for (const c of candidatos(it)) {
+      if (Date.now() > deadline) break;
+      const r = await fetchViaBrightData(c.u, { method: c.m, headers: hdrs });
+      const txt = r ? await r.text().catch(() => '') : '';
+      let d = null; try { d = JSON.parse(txt); } catch { /* */ }
+      const keys = d && typeof d === 'object' ? Object.keys(Array.isArray(d) ? (d[0] || {}) : d).slice(0, 40) : null;
+      const dateKeys = txt ? [...new Set((txt.match(DATE_RE) || []))].slice(0, 25) : [];
+      probes.push({ metodo: c.m, url: c.u.replace(base, ''), http: r?.status || 0, len: txt.length, keys, dateKeys });
+      await gravarDebug('LJUD-RECON', c.u, r?.status || 0, 'application/json', 'brightdata', txt);
+    }
+  }
+  return { amostraKeysItem, exemplos: items.map(it => ({ lote_id: it.lote_id, leilao_id: it.leilao_id })), probes };
+}
+
 async function upsert(rows) {
   let n = 0;
   for (let i = 0; i < rows.length; i += 100) {
@@ -445,6 +493,13 @@ export default async function handler(req, res) {
 
   const runStart = new Date().toISOString();
   const deadline = Date.now() + 240000; // orçamento 240s (< maxDuration 300)
+
+  // Recon de datas da LJUD (sondagem única): descobre o endpoint de detalhe com as
+  // datas de praça. Grava em debug_fetch e devolve o resumo. Não coleta nada.
+  if (String(q.ljud_recon || '') === '1') {
+    const recon = await reconLJUD(deadline);
+    return res.status(200).json({ ok: true, recon });
+  }
   const resultado = [];
   let totalUpsert = 0;
 

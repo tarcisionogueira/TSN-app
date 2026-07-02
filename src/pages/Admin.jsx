@@ -4224,6 +4224,7 @@ function ScrapersTab() {
   // Progresso "executar todos" do Caixa (estado a estado)
   const [caixaTodos, setCaixaTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '' });
   const [leil, setLeil] = useState({ rodando: false, msg: '', erro: '' });
+  const [reconLj, setReconLj] = useState({ rodando: false, msg: '', erro: '' });
   const [geocDebug, setGeocDebug] = useState(null);
   const [geocDebugRodando, setGeocDebugRodando] = useState(false);
   const [sysDebug, setSysDebug] = useState({});
@@ -4345,6 +4346,23 @@ function ScrapersTab() {
       setTimeout(() => apiCall('/api/scraper-status').then(r2 => r2.json()).then(setStatus).catch(() => {}), 3000);
     } catch (e) {
       setLeil({ rodando: false, msg: '', erro: e.message });
+    }
+  }
+
+  // Recon de datas da LJUD: sonda os endpoints de detalhe e loga em debug_fetch.
+  async function triggerReconLjud() {
+    setReconLj({ rodando: true, msg: '', erro: '' });
+    try {
+      const r = await apiCall('/api/scraper-leiloeiros?fontes=ljud&ljud_recon=1', { method: 'POST' });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      const achou = (d.recon?.probes || []).filter(p => (p.dateKeys || []).length && p.http >= 200 && p.http < 300);
+      const resumo = achou.length
+        ? `Endpoint c/ datas: ${achou.map(p => p.url.split('?')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}`
+        : `${(d.recon?.probes || []).length} sondas — nenhuma trouxe data (ver debug_fetch=LJUD-RECON)`;
+      setReconLj({ rodando: false, msg: resumo, erro: '' });
+    } catch (e) {
+      setReconLj({ rodando: false, msg: '', erro: e.message });
     }
   }
 
@@ -4672,12 +4690,22 @@ function ScrapersTab() {
                         style={{ padding: '5px 12px', borderRadius: 7, background: leil.rodando ? '#f1f5f9' : '#4f46e5', color: leil.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: leil.rodando ? 'default' : 'pointer', border: 'none' }}>
                         {leil.rodando ? '⏳ Leiloeiros (BD)…' : '▶ Leiloeiros (BD)'}
                       </button>
+                      <button onClick={triggerReconLjud} disabled={reconLj.rodando}
+                        title="Sonda os endpoints de detalhe da LJUD p/ descobrir as datas de praça (loga em debug_fetch)"
+                        style={{ padding: '5px 12px', borderRadius: 7, background: reconLj.rodando ? '#f1f5f9' : '#0891b2', color: reconLj.rodando ? '#94a3b8' : '#fff', fontWeight: 700, fontSize: 11, cursor: reconLj.rodando ? 'default' : 'pointer', border: 'none' }}>
+                        {reconLj.rodando ? '⏳ Recon LJUD…' : '🔎 Recon datas LJUD'}
+                      </button>
                     </div>
                   </div>
 
                   {(leil.msg || leil.erro) && (
                     <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 600, color: leil.erro ? '#dc2626' : '#16a34a' }}>
                       {leil.erro ? `❌ Leiloeiros (BD): ${leil.erro}` : `✅ Leiloeiros (BD): ${leil.msg}`}
+                    </div>
+                  )}
+                  {(reconLj.msg || reconLj.erro) && (
+                    <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 600, color: reconLj.erro ? '#dc2626' : '#0e7490' }}>
+                      {reconLj.erro ? `❌ Recon LJUD: ${reconLj.erro}` : `🔎 Recon LJUD: ${reconLj.msg}`}
                     </div>
                   )}
 
