@@ -137,6 +137,12 @@ export default function ConviteLeiloeiro() {
     });
   };
 
+  // Comando pronto para o TI testar a conexão em 1 minuto (envia 1 imóvel de teste).
+  const curlExemplo = `curl -X POST https://bidprobrasil.com.br/api/leiloeiro-feed \\
+  -H "Authorization: Bearer ${token}" \\
+  -H "Content-Type: application/json" \\
+  -d '[{"id":"teste-001","titulo":"Imovel de teste","cidade":"Sao Paulo","estado":"SP","valor_avaliacao":300000,"valor_minimo":180000}]'`;
+
   const inp = (extra = {}) => ({
     style: {
       width: '100%', padding: '10px 14px', border: '1.5px solid #e2e8f0',
@@ -190,8 +196,24 @@ export default function ConviteLeiloeiro() {
             </div>
           </div>
 
+          {/* Guia em linguagem simples — para quem NÃO é da área técnica */}
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 18, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#1e3a8a', marginBottom: 10 }}>📋 Como colocar seus imóveis no BidPro — passo a passo</div>
+            <p style={{ fontSize: 12.5, color: '#1e40af', lineHeight: 1.7, margin: '0 0 12px' }}>
+              A integração é simplesmente o <strong>seu sistema enviando a lista de imóveis</strong> para o nosso, de forma
+              automática. Você <strong>não precisa mexer no site do BidPro</strong>. Se você não cuida da parte técnica,
+              <strong> entregue esta página (ou o token acima) ao responsável de TI</strong> do seu site/sistema de leilão —
+              o passo a passo abaixo é suficiente para ele configurar tudo.
+            </p>
+            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: '#1e40af', lineHeight: 1.9 }}>
+              <li><strong>Guarde o token acima.</strong> Ele é a chave de acesso (funciona como uma senha). Não publique em lugar público.</li>
+              <li><strong>Programe o seu sistema para "enviar" (POST) para o endereço</strong> <code style={{ background: '#dbeafe', padding: '1px 5px', borderRadius: 4 }}>/api/leiloeiro-feed</code>, colocando o token no cabeçalho <code style={{ background: '#dbeafe', padding: '1px 5px', borderRadius: 4 }}>Authorization: Bearer SEU_TOKEN</code>.</li>
+              <li><strong>Envie a lista de imóveis</strong> no formato JSON (há um modelo pronto logo abaixo). Repita o envio sempre que houver imóvel novo ou alteração — pode ser um botão manual ou um envio agendado (ex.: 1× por dia).</li>
+            </ol>
+          </div>
+
           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: 16, marginBottom: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>COMO ENVIAR IMÓVEIS</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>MODELO TÉCNICO (para o TI)</div>
             <pre style={{ fontSize: 11, color: '#78350f', fontFamily: 'monospace', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{`POST https://bidprobrasil.com.br/api/leiloeiro-feed
 Authorization: Bearer ${token}
 Content-Type: application/json
@@ -225,6 +247,37 @@ Content-Type: application/json
               <strong>Limite:</strong> 500 lotes por requisição · envios ilimitados
             </div>
           </div>
+
+          {/* Teste rápido — comando pronto para validar a conexão */}
+          <div style={{ background: '#0f172a', borderRadius: 12, padding: 16, marginTop: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>✅ TESTE RÁPIDO (1 minuto)</div>
+              <button onClick={() => copiar(curlExemplo, 'curl')}
+                style={{ padding: '6px 12px', background: copiado === 'curl' ? '#10b981' : '#334155', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                {copiado === 'curl' ? <><Check size={12} /> Copiado</> : <><Copy size={12} /> Copiar</>}
+              </button>
+            </div>
+            <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 10px', lineHeight: 1.5 }}>
+              Cole este comando no terminal para enviar 1 imóvel de teste e confirmar que a conexão está funcionando. Se voltar <code style={{ color: '#86efac' }}>{'{"ok":true}'}</code>, deu certo.
+            </p>
+            <pre style={{ fontSize: 10.5, color: '#e2e8f0', fontFamily: 'monospace', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.6 }}>{curlExemplo}</pre>
+          </div>
+
+          {/* O que acontece depois do envio */}
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 14, marginTop: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#15803d', marginBottom: 6 }}>O QUE ACONTECE DEPOIS</div>
+            <div style={{ fontSize: 11.5, color: '#166534', lineHeight: 1.9 }}>
+              • Os imóveis enviados aparecem na busca do BidPro Brasil automaticamente.<br />
+              • Reenviar um imóvel com o <strong>mesmo <code>id</code></strong> atualiza os dados — <strong>não</strong> duplica.<br />
+              • Para tirar um imóvel do ar, reenvie ele com <code>"ativo": false</code>.<br />
+              • A resposta <code>{'{"ok":true}'}</code> confirma o recebimento.
+            </div>
+          </div>
+
+          <p style={{ textAlign: 'center', marginTop: 18, fontSize: 12.5, color: '#475569', lineHeight: 1.6 }}>
+            Dúvidas na integração? Fale com nossa equipe:<br />
+            <strong style={{ color: '#0D63DB' }}>suporte@bidprobrasil.com.br</strong>
+          </p>
         </div>
       </div>
     </div>

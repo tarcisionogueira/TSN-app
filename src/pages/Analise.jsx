@@ -1808,7 +1808,7 @@ export default function Analise() {
             ))}
           </div>
 
-          {/* Cenários de disputa — Sem disputa vs Com disputa (piso de 40% de lucro) */}
+          {/* Cenários de disputa — Sem disputa vs Com disputa (piso de 30% de lucro) */}
           {!isUsoProprio && d.valorArrematacao > 0 && d.valorMercado > 0 && (() => {
             const cd = cenariosDisputa;
             const pisoOk = cd.tetoBest > cd.lanceBase;
