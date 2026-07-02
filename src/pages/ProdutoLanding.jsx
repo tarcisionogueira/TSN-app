@@ -31,7 +31,7 @@ const PLANOS_INFO = {
   },
   assessorado_vista: {
     tagline: 'Assessoria completa 12 meses — pagamento único com desconto',
-    precoLabel: 'R$ 5.000 à vista',
+    precoLabel: 'R$ 4.800 à vista',
     features: [
       'Tudo do plano Assessorado',
       'Desconto especial no pagamento à vista',
@@ -367,18 +367,24 @@ export default function ProdutoLanding() {
       if (tipo === 'plano') {
         const info = PLANOS_INFO[id];
         if (info) {
-          const { data } = await supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,ativo').eq('plano_key', id).single();
+          // Preço é sempre o do admin (planos_config). As variantes _vista usam a
+          // chave base (o banco guarda preco_vista na linha do plano base).
+          const baseKey = id.replace(/_vista$/, '');
+          const isVista = id !== baseKey;
+          const { data } = await supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,assinatura,ativo').eq('plano_key', baseKey).single();
           let precoLabel = info.precoLabel;
           let nome = id === 'top2' ? 'Investidor Pro' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
           if (data) {
             nome = data.nome || nome;
             const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
-            if (data.preco) {
-              if (data.preco_vista) {
-                precoLabel = `${fmtBRL(data.preco)} em 12× · ${fmtBRL(data.preco_vista)} à vista`;
-              } else {
-                precoLabel = `${fmtBRL(data.preco)} em 12×`;
-              }
+            if (isVista && data.preco_vista) {
+              precoLabel = `${fmtBRL(data.preco_vista)} à vista`;
+            } else if (data.assinatura && data.preco) {
+              precoLabel = `${fmtBRL(data.preco)}/mês`;
+            } else if (data.preco) {
+              precoLabel = data.preco_vista
+                ? `${fmtBRL(data.preco)} em 12× · ${fmtBRL(data.preco_vista)} à vista`
+                : `${fmtBRL(data.preco)} em 12×`;
             }
           }
           setProduto({ tipo: 'plano', key: id, nome, precoLabel, precoVista: data?.preco_vista, tagline: info.tagline, features: info.features });
