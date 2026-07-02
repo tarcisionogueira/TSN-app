@@ -4356,10 +4356,11 @@ function ScrapersTab() {
       const r = await apiCall('/api/scraper-leiloeiros?fontes=ljud&ljud_recon=1', { method: 'POST' });
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || `HTTP ${r.status}`);
-      const achou = (d.recon?.probes || []).filter(p => (p.dateKeys || []).length && p.http >= 200 && p.http < 300);
-      const resumo = achou.length
-        ? `Endpoint c/ datas: ${achou.map(p => p.url.split('?')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}`
-        : `${(d.recon?.probes || []).length} sondas — nenhuma trouxe data (ver debug_fetch=LJUD-RECON)`;
+      const probes = d.recon?.probes || [];
+      const bons = probes.filter(p => !p.erro && ((p.datasBR || []).length || (p.dateKeys || []).length));
+      const resumo = bons.length
+        ? `✔ Achou datas em: ${bons.map(p => p.url.split('?')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}`
+        : `${probes.length} sondas — todas caem na página de erro (ver debug_fetch=LJUD-RECON)`;
       setReconLj({ rodando: false, msg: resumo, erro: '' });
     } catch (e) {
       setReconLj({ rodando: false, msg: '', erro: e.message });
@@ -6172,10 +6173,14 @@ function PrestacaoContasTab() {
       )}
 
       {/* Reembolsos — garantia de 7 dias (CDC art. 49) */}
-      {reembolsos.length > 0 && (
-        <div style={{ ...S2.card, border: '1px solid #fecaca' }}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>Reembolsos — garantia de 7 dias</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Cliente exerceu o direito de arrependimento. Execute o estorno de 100% no painel do gateway e marque como estornado.</div>
+      <div style={{ ...S2.card, border: reembolsos.length ? '1px solid #fecaca' : '1px solid #e2e8f0' }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>
+          Reembolsos — garantia de 7 dias {reembolsos.length > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: '#dc2626', background: '#fef2f2', borderRadius: 999, padding: '1px 8px', marginLeft: 6 }}>{reembolsos.length} pendente{reembolsos.length > 1 ? 's' : ''}</span>}
+        </div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Cliente exerceu o direito de arrependimento. Execute o estorno de 100% no painel do gateway (Mercado Pago/Asaas) e marque como estornado.</div>
+        {reembolsos.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: '14px 0', fontSize: 13 }}>Nenhum reembolso pendente.</div>
+        ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {reembolsos.map(r => (
               <div key={r.id} style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
@@ -6197,8 +6202,8 @@ function PrestacaoContasTab() {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Solicitações pendentes */}
       <div style={S2.card}>
