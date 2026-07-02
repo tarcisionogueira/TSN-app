@@ -164,9 +164,9 @@ export default function Analise() {
       areaM2: imovelInicial.areaM2||0, leiloeiro: imovelInicial.leiloeiro||'',
       dataLeilao: imovelInicial.dataLeilao||'', origem: imovelInicial.modalidade||'extrajudicial',
       somenteAVista: !imovelInicial.pagamento?.includes('financiado'),
-      // Venda direta (Caixa) normalmente NÃO tem leiloeiro → sem taxa. Demais
-      // modalidades: 5% (editável). Confirmar nas Regras da Venda Online.
-      taxaLeiloeiroPercentual: /venda[_ ]?direta/i.test(imovelInicial.modalidade||'') ? 0 : 5,
+      // Venda direta e Licitação (Caixa) normalmente NÃO têm leiloeiro → sem taxa.
+      // Demais: 5% (editável — alguns leiloeiros cobram mais). Confirmar no edital.
+      taxaLeiloeiroPercentual: /venda[_ ]?direta|licitac/i.test(imovelInicial.modalidade||'') ? 0 : 5,
     };
     return { ...VAZIO, id: generateId() };
   });
@@ -1596,9 +1596,11 @@ export default function Analise() {
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3,1fr)', gap:12 }}>
               <Field label="Taxa Leiloeiro (%)" name="taxaLeiloeiroPercentual" value={d.taxaLeiloeiroPercentual||5} onChange={upN} type="number"/>
               <Field label="ITBI + Registro (%)" name="itbiPercentual" value={d.itbiPercentual||3} onChange={upN} type="number"/>
-              {/* Honorários jurídicos: padrão 10% (editável). Entram nos aportes e
-                  no cálculo de viabilidade. */}
-              <Field label="Honorários Jurídicos (%)" name="honorariosPercentual"
+              {/* Honorários BidPro (taxa de ÊXITO do escritório, partilhada com jurídico/
+                  analista quando ativos): 10% por padrão, aplica-se a TODO arremate
+                  (judicial E extrajudicial) — NÃO é sucumbência. Editável; entra nos
+                  aportes e na viabilidade. */}
+              <Field label="Honorários BidPro / êxito (%)" name="honorariosPercentual"
                 value={d.honorariosPercentual != null ? d.honorariosPercentual : 10}
                 onChange={upN} type="number"/>
               {/* Taxa administrativa do leilão (% além do leiloeiro — comum na Superbid)

@@ -9,8 +9,10 @@ const ROLES_COM_ACESSO = ['top2', 'assessorado', 'clube', 'consultor', 'analista
 
 // ITBI + registro: fixo no pior cenário (média 5-6%; usamos 5% conservador)
 const ITBI_FIXO = 5;
-// Honorários advocatícios (sucumbência): só em leilão judicial. No extrajudicial não há.
-const HONORARIOS_PCT = 10; // aplicado pelo motor apenas quando origem === 'judicial'
+// Honorários BidPro: taxa de ÊXITO do escritório sobre o arremate (partilhada com
+// jurídico/analista quando ativos; sem eles, integral ao admin). Aplica-se a TODO
+// arremate — judicial E extrajudicial. NÃO é sucumbência.
+const HONORARIOS_PCT = 10; // o motor aplica 10% por padrão em ambas as origens
 // Taxa do leiloeiro: padrão de mercado
 const TAXA_LEILOEIRO_PADRAO = 5;
 

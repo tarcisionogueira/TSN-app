@@ -56,8 +56,8 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
   const tabelaAmort = inputs.tabelaAmortizacao || 'sac';
 
   const taxaLeiloeiro = vArremate * (taxaLeiloeiroPct / 100);
-  // Honorários jurídicos: padrão 10% (regra de negócio BidPro), sobrescrevível por
-  // inputs.honorariosPercentual (ex.: 0 quando o cliente não quiser incluí-los).
+  // Honorários BidPro (taxa de ÊXITO do escritório): padrão 10% em TODO arremate
+  // (judicial E extrajudicial), sobrescrevível por inputs.honorariosPercentual.
   const honorariosPct = inputs.honorariosPercentual != null
     ? Number(inputs.honorariosPercentual)
     : 10;
