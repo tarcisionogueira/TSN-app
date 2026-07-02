@@ -11,7 +11,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { buscarProcessosCNJ } from './_cnj.js';
-import { consultarComunicaDJEN, consultarCNDT, consultarProtestos } from './_laudo-fontes.js';
+import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -277,16 +277,18 @@ export default async function handler(req, res) {
     const procFontes = procNum || ex.numeroProcesso || null;
     let fontesTxt = '', fontesExternas = null;
     try {
-      const [djen, cndt, prot, cert] = await Promise.all([
+      const [djen, cndt, cnib, prot, cert] = await Promise.all([
         procFontes ? consultarComunicaDJEN(procFontes).catch(() => null) : null,
         docOk ? consultarCNDT(execDoc).catch(() => null) : null,
+        docOk ? consultarCNIB(execDoc).catch(() => null) : null,
         docOk ? consultarProtestos(execDoc).catch(() => null) : null,
         docOk ? consultarCertidoesFiscais(execDoc).catch(() => null) : null,
       ]);
-      fontesExternas = { djen, cndt, protestos: prot, certidoes: cert };
+      fontesExternas = { djen, cndt, cnib, protestos: prot, certidoes: cert };
       const linhas = [];
       if (djen?.ok) linhas.push(`• Andamentos (DJEN/Comunica CNJ): ${djen.resumo}`);
       if (cndt?.ok) linhas.push(`• Débitos trabalhistas (CNDT): ${cndt.resumo}`);
+      if (cnib?.ok) linhas.push(`• Indisponibilidade de bens (CNIB): ${cnib.resumo}`);
       if (prot?.ok) linhas.push(`• Protestos (CENPROT): ${prot.resumo}`);
       if (cert?.resumo) linhas.push(`• Certidões fiscais (Receita/PGFN/FGTS): ${cert.resumo}`);
       if (!docOk && !procFontes) linhas.push('• Não foi possível identificar CPF/CNPJ do executado nem nº do processo nos documentos — consultas externas não realizadas.');

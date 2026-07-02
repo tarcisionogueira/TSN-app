@@ -24,7 +24,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { buscarProcessosCNJ } from './_cnj.js';
-import { consultarComunicaDJEN, consultarCNDT, consultarProtestos } from './_laudo-fontes.js';
+import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -256,14 +256,16 @@ export default async function handler(req, res) {
       });
     } catch { /* não bloqueia o laudo */ }
   };
-  let djen = null, cndt = null, protestos = null;
-  const [rDjen, rCndt, rProt] = await Promise.all([
+  let djen = null, cndt = null, cnib = null, protestos = null;
+  const [rDjen, rCndt, rCnib, rProt] = await Promise.all([
     numeroProcesso ? consultarComunicaDJEN(numeroProcesso).catch(() => ({ instavel: true, erro: 'exceção' })) : Promise.resolve(null),
     executadoDoc ? consultarCNDT(executadoDoc).catch(() => ({ instavel: true, erro: 'exceção' })) : Promise.resolve(null),
+    executadoDoc ? consultarCNIB(executadoDoc).catch(() => ({ instavel: true, erro: 'exceção' })) : Promise.resolve(null),
     executadoDoc ? consultarProtestos(executadoDoc).catch(() => ({ instavel: true, erro: 'exceção' })) : Promise.resolve(null),
   ]);
   if (rDjen?.ok) djen = rDjen.dados; else if (rDjen?.instavel) { secoesFaltando.push('djen'); await enfileirar48h('djen', { numero_processo: numeroProcesso }, rDjen.erro); }
   if (rCndt?.ok) cndt = rCndt.dados; else if (rCndt?.instavel) { secoesFaltando.push('cndt'); await enfileirar48h('cndt', { doc: executadoDoc }, rCndt.erro); }
+  if (rCnib?.ok) cnib = rCnib.dados; else if (rCnib?.instavel) { secoesFaltando.push('cnib'); await enfileirar48h('cnib', { doc: executadoDoc }, rCnib.erro); }
   if (rProt?.ok) protestos = rProt.dados; else if (rProt?.instavel) { secoesFaltando.push('protestos'); await enfileirar48h('protestos', { doc: executadoDoc }, rProt.erro); }
 
   // 5. Scores
@@ -285,9 +287,10 @@ export default async function handler(req, res) {
     risco_suspensao: riscoSuspensao,
     parecer_cnj: parecerCNJ,
     cndt_trabalhista: cndt,       // débito trabalhista do executado (TST/BNDT)
+    cnib_indisponibilidade: cnib, // indisponibilidade de bens do executado (CNIB)
     protestos,                    // protestos em cartório (CENPROT)
     djen_comunicacoes: djen,      // intimações/andamentos nacionais (DJEN/CNJ)
-    secoes_em_confirmacao: secoesFaltando.filter(s => ['cndt', 'protestos', 'djen'].includes(s)),
+    secoes_em_confirmacao: secoesFaltando.filter(s => ['cndt', 'cnib', 'protestos', 'djen'].includes(s)),
     score_juridico: scoreJuridico, score_financeiro: scoreFinanceiro,
   };
 

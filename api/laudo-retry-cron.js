@@ -7,7 +7,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
-import { consultarComunicaDJEN, consultarCNDT, consultarProtestos } from './_laudo-fontes.js';
+import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -19,11 +19,12 @@ function sb(path, opts = {}) {
   });
 }
 
-const CAMPO = { cndt: 'cndt_trabalhista', protestos: 'protestos', djen: 'djen_comunicacoes' };
+const CAMPO = { cndt: 'cndt_trabalhista', cnib: 'cnib_indisponibilidade', protestos: 'protestos', djen: 'djen_comunicacoes' };
 
 async function rodarFonte(secao, alvo) {
   if (secao === 'djen') return consultarComunicaDJEN(alvo?.numero_processo);
   if (secao === 'cndt') return consultarCNDT(alvo?.doc);
+  if (secao === 'cnib') return consultarCNIB(alvo?.doc);
   if (secao === 'protestos') return consultarProtestos(alvo?.doc);
   return { ok: false, instavel: false, erro: 'seção desconhecida' };
 }

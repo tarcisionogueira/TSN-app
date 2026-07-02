@@ -69,6 +69,41 @@ export async function consultarCNDT(doc) {
   }
 }
 
+// ── CNIB — Central Nacional de Indisponibilidade de Bens ───────────────────────
+// Indisponibilidade decretada sobre bens do executado (aparece como AV na
+// matrícula, ex.: AV-9/AV-16). CRÍTICO antes de arrematar — pode bloquear o
+// registro. Portal com captcha → tentativa via Bright Data; resposta não
+// reconhecida vira pendência 48h (NUNCA afirma "livre" no escuro).
+export async function consultarCNIB(doc) {
+  const d = soDigitos(doc);
+  if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };
+  const url = `https://www.indisponibilidade.org.br/consulta?documento=${d}`;
+  try {
+    const bd = await fetchViaBrightData(url, { headers: { 'User-Agent': UA, Accept: 'application/json,text/html', Referer: 'https://www.indisponibilidade.org.br/' } });
+    if (!bd) return { ok: false, instavel: true, erro: 'Bright Data indisponível/teto' };
+    const txt = await bd.text().catch(() => '');
+    if (!txt) return { ok: false, instavel: true, erro: 'sem resposta' };
+    // Tenta JSON (API interna) e, senão, marcadores no HTML.
+    let qtd = null;
+    try { const j = JSON.parse(txt); const arr = j?.ordens || j?.indisponibilidades || j?.registros || j?.data || []; qtd = Array.isArray(arr) ? arr.length : null; } catch { /* HTML */ }
+    if (qtd == null) {
+      if (/nenhuma\s+indisponibilidade|n[ãa]o\s+(constam?|foram\s+encontrad|h[áa])\b.*indisponibil|sem\s+(registro|indisponibil)|nada\s+consta/i.test(txt)) qtd = 0;
+      else if (/ordem\s+de\s+indisponibilidade|indisponibilidade\s+ativa|bens?\s+indispon[íi]ve|constam?\s+indisponibil/i.test(txt)) qtd = 1;
+      else if (/captcha|recaptcha/i.test(txt)) return { ok: false, instavel: true, erro: 'captcha não resolvido' };
+      else return { ok: false, instavel: true, erro: 'resposta não reconhecida' };
+    }
+    return {
+      ok: true, instavel: false,
+      resumo: qtd > 0
+        ? `⚠️ Indisponibilidade de bens ENCONTRADA (${qtd === 1 ? '1 ou mais registros' : qtd + ' registros'}) — bloqueia/atrasa o registro; checar antes de arrematar`
+        : 'Sem indisponibilidade de bens (CNIB)',
+      dados: { total: qtd, tem_indisponibilidade: qtd > 0 },
+    };
+  } catch (e) {
+    return { ok: false, instavel: true, erro: String(e.message).slice(0, 120) };
+  }
+}
+
 // ── CENPROT — Protestos em cartório (nacional) ─────────────────────────────────
 // Protestos no CPF/CNPJ do vendedor → solvência. Portal com captcha/login →
 // tentativa via Bright Data; senão, pendência 48h.
