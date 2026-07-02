@@ -440,7 +440,8 @@ export default async function handler(req, res) {
   const fontes = String(q.fontes || 'sold,mega,superbid').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   const soldPaginas = parseInt(q.sold_paginas || '3', 10);
   const sbidPaginas = parseInt(q.superbid_paginas || '6', 10);
-  const megaUfs = String(q.mega_ufs || 'SP,RJ,MG,BA').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  // Mega é nacional: varrer todas as UFs (senão o sweep por-fonte apaga as UFs não coletadas nesta rodada)
+  const megaUfs = String(q.mega_ufs || 'SP,RJ,MG,BA,ES,PR,SC,RS,GO,DF,PE,CE,PA,MT,MS,MA,PB,RN,PI,AL,SE,TO,RO,AM,AC,AP,RR').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 
   const runStart = new Date().toISOString();
   const deadline = Date.now() + 240000; // orçamento 240s (< maxDuration 300)
