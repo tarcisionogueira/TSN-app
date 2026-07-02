@@ -122,7 +122,7 @@ REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver 
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "extracao": { "numeroMatricula": "", "numeroEdital": "", "numeroProcesso": "", "origem": "judicial|extrajudicial", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "numeroEdital": "", "numeroProcesso": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "nivelRisco": "verde|amarelo|vermelho",
@@ -249,6 +249,22 @@ export default async function handler(req, res) {
       geradoEm: new Date().toISOString(),
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result });
+
+    // Data do leilão/prazo de propostas: a lista em massa da Caixa vem SEM data para
+    // licitação/judicial/venda direta — mas o edital tem. Se a IA extraiu e o imóvel
+    // está sem data, grava no imóvel (mantém a base fiel à fonte, sem sobrescrever).
+    try {
+      const dRaw = String(parsed.extracao?.dataLeilao || '').trim();
+      const mIso = dRaw.match(/(\d{4})-(\d{2})-(\d{2})/);
+      const mBr = dRaw.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      const iso = mIso ? `${mIso[1]}-${mIso[2]}-${mIso[3]}` : mBr ? `${mBr[3]}-${mBr[2]}-${mBr[1]}` : null;
+      if (iso && !row?.data_leilao) {
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ data_leilao: iso }),
+        });
+      }
+    } catch { /* não bloqueia o laudo */ }
+
     res.status(200).json({ ok: true, result });
   } catch (e) {
     await upsertDoc({ ...base, status: 'erro', erro: String(e?.message || e) });
