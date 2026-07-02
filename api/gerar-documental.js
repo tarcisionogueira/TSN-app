@@ -11,6 +11,8 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { buscarProcessosCNJ } from './_cnj.js';
+import { consultarComunicaDJEN, consultarCNDT, consultarProtestos } from './_laudo-fontes.js';
+import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -122,7 +124,7 @@ REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver 
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "extracao": { "numeroMatricula": "", "numeroEdital": "", "numeroProcesso": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/proprietário, se constar)", "executadoDoc": "(CPF ou CNPJ do executado/devedor, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "nivelRisco": "verde|amarelo|vermelho",
@@ -238,13 +240,41 @@ export default async function handler(req, res) {
     });
     const parsed = parseJSON(extractText(data)) || {};
 
+    // ── Fontes externas do laudo (best-effort — NUNCA travam o parecer) ─────────
+    // Com base no processo e no CPF/CNPJ do executado que a IA extraiu: andamentos
+    // (DJEN/Comunica CNJ), débitos trabalhistas (CNDT), protestos (CENPROT) e
+    // certidões fiscais (Receita/PGFN/FGTS). Viram uma seção do laudo do cliente —
+    // o mesmo conjunto que o fluxo de Caso já usava.
+    const ex = parsed.extracao || {};
+    const execDoc = String(ex.executadoDoc || '').replace(/\D/g, '');
+    const docOk = execDoc.length === 11 || execDoc.length === 14;
+    const procFontes = procNum || ex.numeroProcesso || null;
+    let fontesTxt = '', fontesExternas = null;
+    try {
+      const [djen, cndt, prot, cert] = await Promise.all([
+        procFontes ? consultarComunicaDJEN(procFontes).catch(() => null) : null,
+        docOk ? consultarCNDT(execDoc).catch(() => null) : null,
+        docOk ? consultarProtestos(execDoc).catch(() => null) : null,
+        docOk ? consultarCertidoesFiscais(execDoc).catch(() => null) : null,
+      ]);
+      fontesExternas = { djen, cndt, protestos: prot, certidoes: cert };
+      const linhas = [];
+      if (djen?.ok) linhas.push(`• Andamentos (DJEN/Comunica CNJ): ${djen.resumo}`);
+      if (cndt?.ok) linhas.push(`• Débitos trabalhistas (CNDT): ${cndt.resumo}`);
+      if (prot?.ok) linhas.push(`• Protestos (CENPROT): ${prot.resumo}`);
+      if (cert?.resumo) linhas.push(`• Certidões fiscais (Receita/PGFN/FGTS): ${cert.resumo}`);
+      if (!docOk && !procFontes) linhas.push('• Não foi possível identificar CPF/CNPJ do executado nem nº do processo nos documentos — consultas externas não realizadas.');
+      if (linhas.length) fontesTxt = `\n\n§ SEÇÃO: CERTIDÕES E FONTES EXTERNAS\n\n${linhas.join('\n')}\n\nConsultas públicas automáticas — confirme em certidão oficial atualizada antes do lance.`;
+    } catch { /* fontes externas nunca derrubam o laudo */ }
+
     const result = {
       extracao: parsed.extracao || null,
       riscos: parsed.riscos || [],
       lacunas: parsed.lacunas || [],
       nivelRisco: parsed.nivelRisco || (temProc ? cnj.parecer?.nivel : null) || 'amarelo',
-      parecer: parsed.parecer || '',
+      parecer: (parsed.parecer || '') + fontesTxt,
       cnj: cnj ? { total: cnj.total, parecer: cnj.parecer, processos: cnj.processos?.slice(0, 12) || [], tribunais: cnj.tribunais_consultados } : null,
+      fontesExternas,
       documentosLidos: lidos,
       geradoEm: new Date().toISOString(),
     };
