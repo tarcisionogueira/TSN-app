@@ -6834,14 +6834,124 @@ function MarketingTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Prestação de contas', 'Configurações'];
+// ═══════════════════════════════════════════════════════════════════════════════
+// CENTRAL DA EQUIPE — monitoramento do pipeline de clientes (só leitura + direciona).
+// A VERDADE vive na ficha do cliente; aqui a equipe/admin vê a carteira, o
+// responsável, o tempo parado (SLA) e abre a ficha p/ agir. Sem dado próprio.
+// Admin vê todos; analista/advogado veem os casos em que são responsáveis.
+// ═══════════════════════════════════════════════════════════════════════════════
+const ETAPAS_CASO = [
+  { key: 'analise',    label: 'Análise (relatórios)',     cor: '#0D63DB', bg: '#eff6ff' },
+  { key: 'decisao',    label: 'Aguardando reunião/parecer', cor: '#7c3aed', bg: '#f5f3ff' },
+  { key: 'juridico',   label: 'Jurídico',                 cor: '#c2410c', bg: '#fff7ed' },
+  { key: 'arremate',   label: 'Arremate em andamento',    cor: '#059669', bg: '#f0fdf4' },
+  { key: 'concluido',  label: 'Concluído',                cor: '#64748b', bg: '#f8fafc' },
+];
+function etapaDoCaso(c) {
+  if (c.concluido_em) return 'concluido';
+  if (c.arrematado_em) return 'arremate';
+  if (c.juridico_liberado || c.juridico_enviado_em) return 'juridico';
+  if (c.mercadologico_status === 'concluido') return 'decisao';
+  return 'analise';
+}
+function CentralEquipeTab() {
+  const { user, role, iniciarSuporte } = useAuth();
+  const nav = useNavigate();
+  const [casos, setCasos] = React.useState([]);
+  const [nomes, setNomes] = React.useState({});
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    (async () => {
+      setLoading(true);
+      let q = supabase.from('casos').select('*').order('updated_at', { ascending: true });
+      // Admin vê tudo; membro vê só os seus (defensivo — hoje o painel é admin).
+      if (role === 'analista') q = q.eq('analista_id', user.id);
+      else if (role === 'advogado') q = q.eq('advogado_id', user.id);
+      const { data } = await q;
+      const lista = data || [];
+      setCasos(lista);
+      const ids = [...new Set(lista.flatMap(c => [c.cliente_id, c.analista_id, c.advogado_id]).filter(Boolean))];
+      if (ids.length) {
+        const { data: ps } = await supabase.from('perfis').select('id,nome,cpf').in('id', ids);
+        const m = {}; (ps || []).forEach(p => { m[p.id] = p.nome || p.cpf || p.id.slice(0, 8); });
+        setNomes(m);
+      }
+      setLoading(false);
+    })();
+  }, [user?.id, role]);
+
+  const diasDe = (ts) => ts ? Math.floor((Date.now() - new Date(ts).getTime()) / 86400000) : null;
+  const abrirFicha = (c) => {
+    iniciarSuporte({ id: c.cliente_id, nome: nomes[c.cliente_id] || 'Cliente', role: 'assessorado' });
+    nav('/caso/' + c.id);
+  };
+
+  const porEtapa = {};
+  ETAPAS_CASO.forEach(e => { porEtapa[e.key] = []; });
+  casos.forEach(c => { porEtapa[etapaDoCaso(c)].push(c); });
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111', margin: 0 }}>Central da Equipe</h2>
+        <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
+          Pipeline dos clientes por etapa. A ação acontece na ficha do cliente — aqui você monitora e direciona.
+        </p>
+      </div>
+      {loading ? (
+        <p style={{ color: '#94a3b8', textAlign: 'center', padding: 40 }}>Carregando…</p>
+      ) : casos.length === 0 ? (
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
+          Nenhum caso em andamento. Quando um cliente contratar assessoria e iniciar um caso, ele aparece aqui.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12, alignItems: 'start' }}>
+          {ETAPAS_CASO.map(e => (
+            <div key={e.key} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 800, color: e.cor }}>{e.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 800, color: e.cor, background: e.bg, borderRadius: 999, padding: '1px 8px' }}>{porEtapa[e.key].length}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {porEtapa[e.key].map(c => {
+                  const dias = diasDe(c.updated_at);
+                  const parado = e.key !== 'concluido' && dias != null && dias >= 7;
+                  return (
+                    <div key={c.id} onClick={() => abrirFicha(c)}
+                      style={{ background: 'white', border: `1px solid ${parado ? '#fecaca' : '#e2e8f0'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{nomes[c.cliente_id] || 'Cliente'}</div>
+                      <div style={{ fontSize: 11, color: '#64748b', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.imovel_endereco || 'Imóvel —'}</div>
+                      <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
+                        {c.advogado_id ? `Adv: ${nomes[c.advogado_id] || '—'}` : c.analista_id ? `Analista: ${nomes[c.analista_id] || '—'}` : 'Sem responsável'}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: parado ? '#dc2626' : '#94a3b8' }}>
+                          {parado ? `⚠ parado ${dias}d` : dias != null ? `há ${dias}d` : '—'}
+                        </span>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0D63DB' }}>abrir ficha →</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {porEtapa[e.key].length === 0 && <div style={{ fontSize: 11, color: '#cbd5e1', textAlign: 'center', padding: '8px 0' }}>—</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TABS = ['Dashboard', 'Central da Equipe', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Prestação de contas', 'Configurações'];
 
 // Menus agrupados por área — navegação mais fácil que a lista corrida de abas.
 const GRUPOS_ADMIN = [
   { nome: 'Início',              tabs: ['Dashboard'] },
   { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'SDR / Leads', 'Contratos'] },
   { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
-  { nome: 'Equipe',              tabs: ['Equipe', 'Agenda'] },
+  { nome: 'Equipe',              tabs: ['Central da Equipe', 'Equipe', 'Agenda'] },
   { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ'] },
   { nome: 'Financeiro',          tabs: ['Financeiro', 'Prestação de contas'] },
   { nome: 'Sistema',             tabs: ['Configurações'] },
@@ -7455,6 +7565,7 @@ export default function Admin() {
         {tab === 'CNJ'            && <CnjTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Financeiro'     && <FinanceiroTab />}
+        {tab === 'Central da Equipe' && <CentralEquipeTab />}
         {tab === 'Prestação de contas' && <PrestacaoContasTab />}
         {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}
       </div>
