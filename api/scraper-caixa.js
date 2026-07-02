@@ -54,15 +54,24 @@ function extrairFormaPagamentoCaixa(descricao, modalidadeRaw) {
   return null;
 }
 
-function normalizarModalidade(modalidade) {
-  const m = (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Classifica a modalidade da Caixa. USA A DESCRIÇÃO como sinal confiável (a coluna
+// de modalidade do CSV às vezes traz "judicial" para imóveis SFI, ou lixo de JS).
+// IMPORTANTE: a Caixa NÃO faz leilão JUDICIAL neste portal — SFI/Edital Único é
+// EXTRAJUDICIAL. Nunca devolve 'judicial' para a Caixa.
+function normalizarModalidade(modalidade, descricao = '') {
+  const m = `${modalidade || ''} ${descricao || ''}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (m.includes('venda') && m.includes('direta')) return 'venda_direta';
+  if (m.includes('licitacao')) return 'licitacao_aberta';
   if (m.includes('1') && (m.includes('praca') || m.includes('leilao'))) return 'primeiro_leilao';
   if (m.includes('2') && (m.includes('praca') || m.includes('leilao'))) return 'segundo_leilao';
-  if (m.includes('venda') && m.includes('direta')) return 'venda_direta';
-  if (m.includes('licitacao') || m.includes('licitaçao')) return 'licitacao_aberta';
   if (m.includes('primeiro') || m.includes('1a') || m.includes('1ª')) return 'primeiro_leilao';
   if (m.includes('segundo') || m.includes('2a') || m.includes('2ª')) return 'segundo_leilao';
-  return m || null;
+  // Leilão SFI (Edital Único) da Caixa = extrajudicial; e "judicial" na Caixa é erro
+  // da coluna de origem → extrajudicial (SFI é o caso padrão).
+  if (m.includes('sfi') || m.includes('edital unico') || m.includes('judicial')) return 'extrajudicial';
+  // Fallback controlado — evita vazar lixo (ex.: "return _0x...") como modalidade.
+  const limpo = (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z ]/g, '').trim().replace(/\s+/g, '_').slice(0, 30);
+  return limpo || 'extrajudicial';
 }
 
 function parseNumeric(str) {
@@ -189,7 +198,7 @@ function csvToImoveis(csv, uf) {
     const nomeLeiloeiro = cols[12]?.trim() || '';
     const dataLeilaoRaw = cols[13]?.trim() || '';
 
-    const modalidadeNorm = normalizarModalidade(modalidade);
+    const modalidadeNorm = normalizarModalidade(modalidade, descricao);
     const ehVendaDireta = modalidadeNorm === 'venda_direta' ||
       (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('venda');
     const leiloeiro = nomeLeiloeiro || 'Caixa Econômica Federal';
