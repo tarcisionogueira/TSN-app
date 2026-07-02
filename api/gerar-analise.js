@@ -78,11 +78,12 @@ justificativa, também deve ser descartado como provável leilão disfarçado.
 
 OBJETIVO: reunir o MÁXIMO de amostras possível. Faça várias buscas em fontes diferentes.
 
-═══ NÍVEL 1 — MESMO CONDOMÍNIO / MESMO ENDEREÇO ═══
-Busque o máximo de anúncios de venda E locação DENTRO do mesmo condomínio/edifício.
-Se não encontrar no condomínio exato, busque na mesma rua. Meta: 8+ vendas e 5+ locações.
+═══ NÍVEL 1 — COMPARATIVOS DIRETOS (mesmo condomínio/endereço) ═══
+Busque o máximo de anúncios de venda E locação DENTRO do mesmo condomínio/edifício ou
+na mesma rua. Se NÃO encontrar ao menos 5 amostras, EXPANDA o raio para ~250m ao redor
+do endereço para complementar (mantendo o mesmo tipo de imóvel). Meta: 8+ vendas e 5+ locações.
 
-═══ NÍVEL 2 — VIZINHANÇA / BAIRRO ═══
+═══ NÍVEL 2 — VIZINHANÇA (bairro e adjacências, ~1km) ═══
 Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências (~1km). Meta: 15+ vendas e 8+ locações.
 
 FONTES: ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.

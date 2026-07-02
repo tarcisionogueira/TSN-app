@@ -1671,7 +1671,7 @@ export default function Analise() {
               <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
                 <div style={{ background:'#0D63DB', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
                   <Building2 size={15} color="white"/>
-                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Nível 1 — Mesmo condomínio / endereço</span>
+                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Comparativos diretos — mesmo condomínio / endereço (raio ~250 m)</span>
                   <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white', whiteSpace:'nowrap' }}>
                     {mercado.nivel1?.totalAmostras||0} amostras
                   </span>
@@ -1731,7 +1731,7 @@ export default function Analise() {
               <div style={{ borderRadius:12, border:'2px solid #10b981', overflow:'hidden' }}>
                 <div style={{ background:'#10b981', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
                   <MapPin size={15} color="white"/>
-                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Nível 2 — Vizinhança / bairro</span>
+                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Vizinhança — bairro e adjacências (~1 km)</span>
                   <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white', whiteSpace:'nowrap' }}>
                     {mercado.nivel2?.totalAmostras||0} amostras
                   </span>

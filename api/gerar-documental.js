@@ -76,36 +76,36 @@ async function lerDoc(url, deadline) {
   if (!url || !/^https?:\/\//.test(url) || Date.now() > deadline) return null;
   const h = { 'User-Agent': UA, Accept: '*/*', 'Accept-Language': 'pt-BR,pt;q=0.9' };
   const ehPdfUrl = /\.pdf(\?|#|$)/i.test(url);
-  // Hosts que barram o IP de datacenter e DEVOLVEM 200 com HTML de negação/redirect
-  // (não um 403 limpo). O fetch direto "funciona" mas traz LIXO — o navegador do
-  // usuário (IP residencial) abre o PDF, o servidor não. Vai direto ao Bright Data.
-  const bloqueiaServidor = /venda-imoveis\.caixa\.gov\.br/i.test(url);
-  let buf = null, ct = '';
-  if (!bloqueiaServidor) {
-    let resp = null;
-    try { resp = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(12000) }); } catch { resp = null; }
-    if (resp && resp.ok) { ct = resp.headers.get('content-type') || ''; buf = Buffer.from(await resp.arrayBuffer().catch(() => new ArrayBuffer(0))); }
-  }
-  // Fallback (ou 1ª opção nos hosts bloqueados): Bright Data com IP residencial.
-  if (!buf || !buf.length) {
+
+  // Extrai um documento útil de UMA resposta (fetch direto OU Bright Data). Só aceita
+  // PDF de verdade quando a URL é .pdf — assim o HTML de negação da Caixa (200) NÃO
+  // vira "texto lixo" que faz a IA dizer que não leu nada.
+  const extrair = async (resp) => {
+    if (!resp || !resp.ok) return null;
+    const ct = resp.headers.get('content-type') || '';
+    const buf = Buffer.from(await resp.arrayBuffer().catch(() => new ArrayBuffer(0)));
+    if (!buf.length) return null;
+    const ehPdf = /pdf/i.test(ct) || buf.slice(0, 5).toString('latin1') === '%PDF-';
+    if (ehPdf) { if (buf.length > 6_500_000) return null; return { kind: 'pdf', base64: buf.toString('base64'), url }; }
+    if (ehPdfUrl) return null; // .pdf que não veio PDF = bloqueio/HTML → falha desta tentativa
+    const txt = buf.toString('utf8').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (txt.length < 80) return null;
+    return { kind: 'text', text: txt.slice(0, 12000), url };
+  };
+
+  // 1) fetch direto (grátis). 2) Bright Data (IP residencial) — fura o 403 da Caixa
+  // nos PDFs. Aceita o 1º que render um documento válido; para .pdf, o direto que
+  // trouxer HTML de negação é descartado e o Bright Data assume.
+  let doc = null;
+  try { doc = await extrair(await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(12000) })); } catch { doc = null; }
+  if (doc) { console.log(`[lerDoc] direto OK (${doc.kind}) ${url}`); return doc; }
+  if (Date.now() > deadline) return null;
+  try {
     const bd = await fetchViaBrightData(url);
-    if (bd && bd.ok) { ct = bd.headers.get('content-type') || ''; buf = Buffer.from(await bd.arrayBuffer().catch(() => new ArrayBuffer(0))); }
-  }
-  if (!buf || !buf.length) return null;
-  const ehPdf = /pdf/i.test(ct) || buf.slice(0, 5).toString('latin1') === '%PDF-';
-  if (ehPdf) {
-    // PDFs muito grandes estouram o payload — limita a ~9 MB de base64.
-    if (buf.length > 6_500_000) return null;
-    return { kind: 'pdf', base64: buf.toString('base64'), url };
-  }
-  // A URL era .pdf mas NÃO veio um PDF → foi bloqueio/HTML de negação. NÃO transformar
-  // esse lixo em "texto do documento" (poluiria o laudo e faria a IA dizer que não
-  // conseguiu ler). Trata como falha de leitura desta fonte.
-  if (ehPdfUrl) return null;
-  // HTML/texto legítimo: remove tags e compacta.
-  const txt = buf.toString('utf8').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  if (txt.length < 80) return null;
-  return { kind: 'text', text: txt.slice(0, 12000), url };
+    doc = await extrair(bd);
+  } catch { doc = null; }
+  console.log(`[lerDoc] brightdata ${doc ? 'OK ('+doc.kind+')' : 'FALHOU'} ${url}`);
+  return doc;
 }
 
 const promptDocumental = (im, temProc) => `Você é advogado especialista em leilões de imóveis. Analise os DOCUMENTOS anexados (edital, matrícula e demais anexos do lote)${temProc ? ' e os PROCESSOS consultados no CNJ' : ''} e produza uma ANÁLISE DOCUMENTAL E JURÍDICA do imóvel:
