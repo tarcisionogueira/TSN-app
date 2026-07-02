@@ -364,7 +364,7 @@ async function coletarLJUD(paginas, deadline) {
   for (const v of variantes) {
     if (Date.now() > deadline) break;
     const url = `${API}?pg=1&qtd_por_pagina=48&${v.qs}`;
-    const bd = await fetchViaBrightData(url, { headers: hdrs });
+    const bd = await fetchViaBrightData(url, { method: 'POST', headers: hdrs });
     via = bd ? 'brightdata' : 'indisponivel';
     const txt = bd ? await bd.text().catch(() => '') : '';
     let data = null; try { data = JSON.parse(txt); } catch { /* */ }
@@ -389,7 +389,7 @@ async function coletarLJUD(paginas, deadline) {
     for (let p = 1; p <= totalPages; p++) {
       if (Date.now() > deadline) break;
       const url = `${API}?pg=${p}&qtd_por_pagina=48&${vencedora.qs}`;
-      const bd = await fetchViaBrightData(url, { headers: hdrs });
+      const bd = await fetchViaBrightData(url, { method: 'POST', headers: hdrs });
       let data = null; try { data = JSON.parse(await bd.text()); } catch { /* */ }
       const items = ljudItens(data);
       if (!items.length) break;
