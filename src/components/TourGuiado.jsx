@@ -38,7 +38,7 @@ const STEPS = [
     id: 'planos',
     icone: '💎',
     titulo: 'Planos e Upgrade',
-    descricao: 'Conheça os planos disponíveis e faça upgrade para desbloquear análises ilimitadas, relatórios exclusivos e suporte prioritário.',
+    descricao: 'Conheça os planos disponíveis e faça upgrade para desbloquear a análise documental e jurídica, mais relatórios por mês e suporte prioritário.',
   },
 ];
 

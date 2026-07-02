@@ -22,7 +22,7 @@ const PLANOS_INFO = {
     features: [
       'Tudo do plano Investidor',
       'Assessoria individual com especialista por 12 meses',
-      'Análises ilimitadas de imóveis',
+      '15 análises de imóveis por mês (mercadológica + documental/jurídica)',
       'Participação em reuniões mensais ao vivo',
       'Revisão de editais e documentação',
       'Contrato digital de prestação de serviços',

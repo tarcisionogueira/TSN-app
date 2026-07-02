@@ -9,10 +9,10 @@ const PLANO_INFO = {
   explorador:        { nome: 'Explorador',           limite: 5,  cor: '#64748b', indica: false },
   top2:              { nome: 'Investidor Pro',       limite: 15, cor: '#0D63DB', indica: true  },
   top2_anual:        { nome: 'Investidor Pro',       limite: 15, cor: '#0D63DB', indica: true  },
-  assessorado:       { nome: 'Assessorado',          limite: null, cor: '#d97706', indica: false },
-  assessorado_anual: { nome: 'Assessorado',          limite: null, cor: '#d97706', indica: false },
-  clube:             { nome: 'Membro Leilão Club',   limite: null, cor: '#059669', indica: false },
-  clube_anual:       { nome: 'Membro Leilão Club',   limite: null, cor: '#059669', indica: false },
+  assessorado:       { nome: 'Assessorado',          limite: 15, cor: '#d97706', indica: false },
+  assessorado_anual: { nome: 'Assessorado',          limite: 15, cor: '#d97706', indica: false },
+  clube:             { nome: 'Membro Leilão Club',   limite: 15, cor: '#059669', indica: false },
+  clube_anual:       { nome: 'Membro Leilão Club',   limite: 15, cor: '#059669', indica: false },
 };
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);

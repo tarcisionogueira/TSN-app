@@ -99,11 +99,20 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
   );
 }
 
-// Limite de relatórios mercadológicos+viabilidade por plano/mês.
-// Explorador: 5/mês (fixo do plano) — sem análise documental/jurídica.
-const LIMITE_POR_ROLE = { explorador: 5, top2: 15, top2_anual: 15 };
+// Limite de relatórios mercadológicos+viabilidade por plano/mês (espelha limite_ia
+// no banco). Explorador: 5/mês, sem documental/jurídico. Todos os acessos têm cota;
+// só o admin é ilimitado. Equipe (analista/advogado) com teto alto, ajustável.
+const LIMITE_POR_ROLE = {
+  explorador: 5, consultor: 5,
+  top2: 15, top2_anual: 15,
+  assessorado: 15, assessorado_anual: 15,
+  clube: 15, clube_anual: 15,
+  analista: 100, advogado: 100,
+};
 const mesAtual = () => new Date().toISOString().slice(0, 7);
-const ROLES_SEM_LIMITE = ['assessorado','clube','analista','advogado','admin'];
+const ROLES_SEM_LIMITE = ['admin'];
+// Documental/jurídico só a partir do Investidor Pro (explorador/consultor não têm).
+const ROLES_SEM_DOCUMENTAL = ['explorador', 'consultor'];
 const ROLES_COM_CNJ   = ['top2','assessorado','clube','analista','advogado','admin'];
 
 export default function Analise() {
@@ -132,21 +141,16 @@ export default function Analise() {
   // LEMOS para pintar o estado da tela — chamamos no mount e após cada geração.
   const carregarCota = React.useCallback(async () => {
     if (!user || semLimite) return;
-    const col = role === 'explorador'
-      ? 'analises_mes, analises_count, bonus_mercado'
-      : 'analises_mes, analises_count';
-    const { data, error } = await supabase.from('perfis').select(col).eq('id', user.id).single();
+    const { data, error } = await supabase.from('perfis')
+      .select('analises_mes, analises_count, bonus_mercado').eq('id', user.id).single();
     if (error || !data) return;
     const count = data.analises_mes === mesAtual() ? (data.analises_count || 0) : 0;
+    const bonus = data.bonus_mercado || 0;
     setAnalisesUsadas(count);
-    if (role === 'explorador') {
-      // 5/mês (fixo do plano) + bônus concedido pelo admin como extra.
-      const bonus = data.bonus_mercado || 0;
-      setAnalisesBonus(bonus);
-      setAnalisesBloqueado(count >= limiteRole && bonus <= 0);
-    } else {
-      setAnalisesBloqueado(count >= limiteRole);
-    }
+    setAnalisesBonus(bonus);
+    // Bloqueia só quando estourou o limite mensal E não há bônus por cima
+    // (espelha consumir_analise_por: consome o mensal primeiro, bônus como excedente).
+    setAnalisesBloqueado(count >= limiteRole && bonus <= 0);
   }, [role, user, semLimite, limiteRole]);
 
   useEffect(() => { carregarCota(); }, [carregarCota]);
@@ -1034,7 +1038,7 @@ export default function Analise() {
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
-                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, planoBloqueado: role === 'explorador', ordem:2 },
+                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
                 ].map(c => {
                   const travado = c.gerando || c.block || c.seqBloqueado || c.planoBloqueado;
                   return (
@@ -2073,7 +2077,7 @@ export default function Analise() {
           <div style={{ fontSize:12.5, color:'#7c2d12', lineHeight:1.7, marginBottom:12 }}>
             Arrematar em leilão é uma <strong>operação de risco</strong> e deve ser conduzida de forma profissional. A viabilidade financeira sozinha não basta: gere também a <strong>Análise Documental + Jurídica</strong> (ônus, gravames, ocupação e processo) antes de dar o lance.
           </div>
-          {role === 'explorador' ? (
+          {ROLES_SEM_DOCUMENTAL.includes(role) ? (
             <button onClick={()=>nav('/planos')} style={{ padding:'11px 18px', background:'#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
               <Lock size={15}/> Análise Documental — disponível no Investidor Pro
             </button>

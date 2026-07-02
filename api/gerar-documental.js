@@ -157,6 +157,26 @@ export default async function handler(req, res) {
   const { imovelId, titulo, cidade, estado, imovel } = body;
   if (!imovelId) { res.status(400).json({ error: 'imovelId obrigatório' }); return; }
 
+  // ── Cota documental NO SERVIDOR (anti-abuso do custo de IA) ─────────────────
+  // Mesmo padrão do mercadológico (gerar-analise): cobra só em análise NOVA deste
+  // imóvel; re-gerar/atualizar o mesmo não recobra. Explorador já foi barrado
+  // acima; admin é ilimitado na RPC. O limite por plano vem de limite_ia (banco).
+  try {
+    const jaFeita = await (await sb(`analises_documental?user_id=eq.${user.id}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
+    const isNovo = !(Array.isArray(jaFeita) && jaFeita.length);
+    if (isNovo) {
+      const rc = await sb('rpc/consumir_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
+      const cota = await rc.json().catch(() => null);
+      if (cota && cota.ok === false) {
+        const msg = cota.erro === 'limite_mensal' ? 'Limite mensal de análises documentais atingido para o seu plano.'
+          : cota.erro === 'sem_documental' ? 'A análise documental e jurídica não está incluída no seu plano.'
+          : 'Cota de análises documentais indisponível.';
+        res.status(402).json({ error: msg, cota });
+        return;
+      }
+    }
+  } catch { /* checagem de cota nunca bloqueia quem tem direito */ }
+
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
   try {

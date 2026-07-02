@@ -405,7 +405,14 @@ export default function Busca() {
   const [analisesBonus, setAnalisesBonus] = useState(null);
   const [analisesUsadas, setAnalisesUsadas] = useState(0);
   // Limite mensal de relatórios por plano (para o selo de disponibilidade na busca).
-  const LIMITE_ANALISES = { explorador: 5, top2: 15, top2_anual: 15 };
+  // Espelha limite_ia (banco) / LIMITE_POR_ROLE (Analise.jsx). Admin fica de fora (sem selo = ilimitado).
+  const LIMITE_ANALISES = {
+    explorador: 5, consultor: 5,
+    top2: 15, top2_anual: 15,
+    assessorado: 15, assessorado_anual: 15,
+    clube: 15, clube_anual: 15,
+    analista: 100, advogado: 100,
+  };
   const limiteAnalises = LIMITE_ANALISES[effectiveRole];
 
   useEffect(() => {
