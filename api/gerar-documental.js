@@ -122,6 +122,12 @@ CUSTOS DO EDITAL (importantes p/ a projeção financeira): capture a comissão d
 
 REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver discriminado nos documentos disponíveis, NÃO invente — sinalize como "não consta na documentação analisada" e indique ONDE confirmar (certidão de débitos na Prefeitura; declaração de débitos com a administradora/síndico; matrícula atualizada no Cartório de Registro de Imóveis; cláusulas do edital; SPU para laudêmio/foro).
 
+VALORES A LEVANTAR (OBRIGATÓRIO sinalizar como pendência/diligência quando não vierem discriminados em R$ nos documentos):
+- LAUDÊMIO E FORO/PENSÃO: se a matrícula/edital indicar imóvel FOREIRO, AFORADO, terreno de MARINHA ou da UNIÃO/SPU, avise que há laudêmio (≈5%) e foro a pagar e que o VALOR PRECISA SER LEVANTADO na SPU/SPUnet antes do lance.
+- DÉBITOS CONDOMINIAIS: se houver condomínio e o valor do débito não estiver discriminado, avise que o débito condominial precisa ser levantado com a administradora/síndico (pode ser propter rem — acompanha o imóvel).
+- IPTU/TAXAS: se o IPTU/taxas em aberto não estiverem discriminados, avise que precisam ser levantados na Prefeitura.
+Coloque cada um desses como item em "lacunas" e cite na seção DÉBITOS E RESPONSABILIDADES do parecer.
+
 Retorne APENAS este JSON (sem markdown):
 {
   "extracao": { "numeroMatricula": "", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/proprietário, se constar)", "executadoDoc": "(CPF ou CNPJ do executado/devedor, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
