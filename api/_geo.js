@@ -162,8 +162,8 @@ export async function nominatimTextoLivre(q) {
   } catch { return null; }
 }
 
-// GOOGLE GEOCODING — padrão-ouro de precisão no Brasil. Só roda se houver a chave
-// GOOGLE_MAPS_API_KEY (crédito grátis mensal do Google cobre o uso). Devolve o
+// GOOGLE GEOCODING — padrão-ouro de precisão no Brasil. Ativado (GOOGLE_MAPS_API_KEY
+// configurada no Vercel). Só roda se houver a chave; crédito grátis mensal cobre. Devolve o
 // nível conforme a precisão (ROOFTOP/RANGE = endereço exato). É a 1ª opção da
 // cascata; sem a chave, cai no Nominatim normalmente.
 export async function googleGeocode(enderecoCompleto) {
