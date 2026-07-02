@@ -139,6 +139,7 @@ export default function Calculadora() {
   const [cet, setCet] = useState(15);   // 15% padrão, editável
   const [prazoVenda, setPrazoVenda] = useState(12);
   const [metaRoi, setMetaRoi] = useState(30);  // 30% padrão
+  const [incrementoLance, setIncrementoLance] = useState(0); // incremento do edital (informado)
 
   const [copiado, setCopiado] = useState(false);
   const [codigoRef, setCodigoRef] = useState('');
@@ -334,6 +335,35 @@ export default function Calculadora() {
                 : <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>Nenhum lance atinge o ROI de {fmtPct(metaRoi, 2)} com esses custos. Reduza a meta ou revise os parâmetros.</div>
             }
           </div>
+
+          {/* Contador de lances — quantos lances cabem até o teto mantendo a meta.
+              O INCREMENTO vem do edital (informado pelo usuário) — nunca chutamos,
+              para não orientar errado. Só aparece com teto válido acima do lance atual. */}
+          {temDados && teto > 0 && (
+            <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 22 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#111111', marginBottom: 6 }}>
+                <Target size={16} color="#059669" /> Quantos lances posso dar?
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
+                Informe o <strong>incremento mínimo de lance do edital</strong>. Calculamos quantos lances você cobre a partir do lance atual sem passar do teto que mantém ROI de {fmtPct(metaRoi, 2)}.
+              </div>
+              <Campo label="Incremento mínimo do edital" value={incrementoLance} onChange={setIncrementoLance} prefix="R$" />
+              {(() => {
+                const inc = Number(incrementoLance) || 0;
+                if (inc <= 0) return <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 10 }}>Informe o incremento para ver o número de lances.</div>;
+                if (teto <= vArr) return <div style={{ fontSize: 12.5, color: '#dc2626', marginTop: 10, fontWeight: 600 }}>O lance atual já está no teto (ou acima). Não há margem para subir mantendo a meta.</div>;
+                const nLances = Math.floor((teto - vArr) / inc);
+                return (
+                  <div style={{ marginTop: 12, padding: '14px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12 }}>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: '#059669', lineHeight: 1 }}>{nLances} {nLances === 1 ? 'lance' : 'lances'}</div>
+                    <div style={{ fontSize: 12.5, color: '#166534', marginTop: 6, lineHeight: 1.5 }}>
+                      A partir de <strong>R$ {fmt(vArr, 2)}</strong> você pode dar até <strong>{nLances}</strong> {nLances === 1 ? 'lance' : 'lances'} de <strong>R$ {fmt(inc, 2)}</strong> e ainda manter ROI ≥ {fmtPct(metaRoi, 2)}. Acima de <strong>R$ {fmt(teto, 2)}</strong> a margem cai abaixo da meta.
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Cenário atual */}
           {temDados && (
