@@ -2906,6 +2906,7 @@ function DashboardTab() {
   const [usuariosDetalhe, setUsuariosDetalhe] = useState(false);
   const [healthLogs, setHealthLogs] = useState([]);
   const [healthOpen, setHealthOpen] = useState(false);
+  const [consultivoAberto, setConsultivoAberto] = useState(false); // seções consultivas (colapsadas)
   const [equipeDetalhe, setEquipeDetalhe] = useState(null); // key clicked
   const [equipeMembros, setEquipeMembros] = useState([]);
   const [equipeMetrics, setEquipeMetrics] = useState({});
@@ -2973,12 +2974,13 @@ function DashboardTab() {
     if (periodo === 'custom' && (!dataInicio || !dataFim)) return;
     const range = getRange(periodo, dataInicio, dataFim);
     async function load() {
-      const [{ data: perfis }, { count: inadimCount }, { count: novosCount }, { data: dbSizeData }] = await Promise.all([
+      const [{ data: perfis }, { count: inadimCount }, { count: novosCount }, { data: dbSizeData }, { count: reembCount }] = await Promise.all([
         supabase.from('perfis').select('role, plano, inadimplente_desde'),
         supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
         supabase.from('perfis').select('id', { count: 'exact', head: true })
           .gte('created_at', range.inicio).lte('created_at', range.fim),
         supabase.rpc('get_db_size_mb'),
+        supabase.from('reembolsos_garantia').select('id', { count: 'exact', head: true }).eq('status', 'solicitado'),
       ]);
 
       const contagem = { admin: 0, explorador: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
@@ -2995,6 +2997,7 @@ function DashboardTab() {
         taxaPix,
         liquido,
         inadimplentes: inadimCount || 0,
+        reembolsosPendentes: reembCount || 0,
         novosMes: novosCount || 0,
         dbSizeMB: dbSizeData ?? null,
       });
@@ -3250,9 +3253,9 @@ function DashboardTab() {
       {/* Stat cards */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} ${periodo === 'hoje' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : periodo === 'custom' ? 'no período' : 'este mês'}`, '#60a5fa')}
-        {statCard('MRR estimado', `R$ ${fmt(dados.mrr)}`, 'Receita mensal recorrente', '#10b981')}
-        {statCard('Taxas Asaas (est.)', `R$ ${fmt(dados.taxaPix)}`, '~1% PIX sobre MRR', '#f59e0b')}
-        {statCard('Líquido estimado', `R$ ${fmt(dados.liquido)}`, 'MRR − taxas estimadas', '#a78bfa')}
+        {statCard('MRR estimado', `R$ ${fmt(dados.mrr)}`, 'Estimado por plano (receita real: Financeiro)', '#10b981')}
+        {statCard('Inadimplentes', fmtN(dados.inadimplentes || 0), dados.inadimplentes ? 'assinaturas com pagamento em falha' : 'nenhum em atraso', dados.inadimplentes ? '#f59e0b' : '#94a3b8')}
+        {statCard('Reembolsos pendentes', fmtN(dados.reembolsosPendentes || 0), dados.reembolsosPendentes ? 'garantia 7 dias — ação em Prestação de contas' : 'nenhum pendente', dados.reembolsosPendentes ? '#dc2626' : '#94a3b8')}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -3608,6 +3611,15 @@ function DashboardTab() {
         </div>
       </div>
 
+      {/* Estratégia de plataforma & marcos — conteúdo consultivo (recolhido por padrão
+          para não competir com as métricas de negócio/operação do dia a dia). */}
+      <button onClick={() => setConsultivoAberto(o => !o)}
+        style={{ marginTop: 24, width: '100%', textAlign: 'left', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>🧭 Estratégia de plataforma & marcos de eficiência (consultivo)</span>
+        <span style={{ color: '#94a3b8' }}>{consultivoAberto ? '▲ recolher' : '▼ expandir'}</span>
+      </button>
+      {consultivoAberto && (<>
+
       {/* Guia de Decisão de Plataforma */}
       {(() => {
         const dbMB = dados.dbSizeMB ?? 0;
@@ -3813,6 +3825,7 @@ function DashboardTab() {
           ))}
         </div>
       </div>
+      </>)}
       {/* ── Quadro de Configurações & Pendências ─────────────────────────────── */}
       <SystemStatusCard />
     </div>
