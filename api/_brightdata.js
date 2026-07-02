@@ -49,15 +49,14 @@ export async function fetchViaBrightData(url, { method = 'GET', headers = null }
   const liberado = await consumirCota();
   if (!liberado) return null; // teto semanal atingido → não chama (fail-safe de custo)
   try {
-    // headers: array [{name,value}] p/ a Web Unlocker (ex.: Origin/Referer de XHR,
-    // necessários em APIs que só respondem a chamadas com fingerprint de navegador).
-    const bdHeaders = headers
-      ? Object.entries(headers).map(([name, value]) => ({ name, value }))
-      : undefined;
+    // headers: a Web Unlocker API (/request) valida `headers` como OBJETO
+    // { "Accept": "...", "Origin": "..." } — passar array [{name,value}] devolve
+    // HTTP 400 "headers must be of type object". Repassa o objeto como veio.
+    const temHeaders = headers && typeof headers === 'object' && Object.keys(headers).length > 0;
     const resp = await fetch('https://api.brightdata.com/request', {
       method: 'POST',
       headers: { Authorization: `Bearer ${BD_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw', ...(bdHeaders ? { headers: bdHeaders } : {}) }),
+      body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw', ...(temHeaders ? { headers } : {}) }),
       signal: AbortSignal.timeout(45000),
     });
     return resp;
