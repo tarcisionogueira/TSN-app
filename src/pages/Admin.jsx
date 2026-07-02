@@ -2757,64 +2757,55 @@ const FONTES_LEILAO = [
   { fonte: 'BB',       nome: 'Banco do Brasil',   cor: '#d97706', desc: 'Carteira imobiliária do BB' },
 ];
 
+// Monitor de coleta — usa a MESMA fonte de verdade da aba Scrapers (tabela
+// fonte_saude, keyed em MAIÚSCULAS por FONTES_LEILAO). Antes lia scrapers_log com
+// uma lista antiga (Santander/Rodobens/Sicoob) que não batia com as fontes reais.
 function ScrapersMonitor() {
-  const [logs, setLogs] = useState([]);
+  const [saude, setSaude] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase
-      .from('scrapers_log')
-      .select('*')
-      .order('iniciado_em', { ascending: false })
-      .limit(30)
-      .then(({ data }) => { setLogs(data || []); setLoading(false); });
+    supabase.from('fonte_saude').select('fonte,total,status,executado_em')
+      .then(({ data }) => {
+        const m = {};
+        (data || []).forEach(r => { if (!m[r.fonte] || new Date(r.executado_em) > new Date(m[r.fonte].executado_em)) m[r.fonte] = r; });
+        setSaude(m); setLoading(false);
+      });
   }, []);
 
-  // Último log por fonte
-  const ultimoPorFonte = {};
-  FONTES_SCRAPER.forEach(f => {
-    ultimoPorFonte[f.key] = logs.find(l => l.fonte === f.key);
-  });
-
-  const erros = FONTES_SCRAPER.filter(f => ultimoPorFonte[f.key]?.status === 'erro');
-  const semDados = FONTES_SCRAPER.filter(f => ultimoPorFonte[f.key]?.status === 'sem_dados');
+  const estilo = (st) => st === 'ok' ? { cor: '#10b981', bg: '#f0fdf4', icone: '✅' }
+    : st === 'degradado' ? { cor: '#d97706', bg: '#fefce8', icone: '⚠️' }
+    : st === 'falhou' ? { cor: '#dc2626', bg: '#fef2f2', icone: '❌' }
+    : { cor: '#94a3b8', bg: '#f8fafc', icone: '⏸' };
+  const problemas = FONTES_LEILAO.filter(f => ['degradado', 'falhou'].includes(saude[f.fonte]?.status));
 
   return (
     <div style={S.card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>Monitor de Scrapers</div>
-        {erros.length > 0 && (
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>Monitor de coleta</div>
+        {problemas.length > 0 && (
           <span style={{ background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
-            ⚠️ {erros.length} com erro
+            ⚠️ {problemas.length} com atenção
           </span>
         )}
       </div>
       {loading ? <p style={{ fontSize: 13, color: '#94a3b8' }}>Carregando...</p> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {FONTES_SCRAPER.map(f => {
-            const log = ultimoPorFonte[f.key];
-            const ok = log?.status === 'ok';
-            const erro = log?.status === 'erro';
-            const semDado = log?.status === 'sem_dados';
-            const nunca = !log;
-            const cor = ok ? '#10b981' : erro ? '#dc2626' : semDado ? '#d97706' : '#94a3b8';
-            const bg = ok ? '#f0fdf4' : erro ? '#fef2f2' : semDado ? '#fefce8' : '#f8fafc';
-            const icone = ok ? '✅' : erro ? '❌' : semDado ? '⚠️' : '⏸';
+          {FONTES_LEILAO.map(f => {
+            const s = saude[f.fonte];
+            const e = estilo(s?.status);
             return (
-              <div key={f.key} style={{ padding: '10px 12px', background: bg, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div key={f.fonte} style={{ padding: '10px 12px', background: e.bg, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: f.cor, flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{f.label}</div>
-                    {log && <div style={{ fontSize: 11, color: '#64748b' }}>
-                      {log.imoveis_encontrados} imóveis · {new Date(log.iniciado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      {log.duracao_ms && ` · ${(log.duracao_ms / 1000).toFixed(1)}s`}
-                    </div>}
-                    {erro && log.erro_msg && <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{log.erro_msg}</div>}
-                    {nunca && <div style={{ fontSize: 11, color: '#94a3b8' }}>Nunca executado</div>}
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{f.nome}</div>
+                    {s ? <div style={{ fontSize: 11, color: '#64748b' }}>
+                      {Number(s.total || 0).toLocaleString('pt-BR')} imóveis · {new Date(s.executado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </div> : <div style={{ fontSize: 11, color: '#94a3b8' }}>Sem coleta registrada</div>}
                   </div>
                 </div>
-                <span style={{ fontSize: 16 }}>{icone}</span>
+                <span style={{ fontSize: 16 }}>{e.icone}</span>
               </div>
             );
           })}
@@ -2900,6 +2891,7 @@ function DashboardTab() {
   const pNome = (key) => planosCtx?.[key]?.nome || key;
   const [dados, setDados] = useState(null);
   const [asaasDados, setAsaasDados] = useState(null);
+  const [mpSaldo, setMpSaldo] = useState(null); // saldo Mercado Pago (gateway principal)
   const [loading, setLoading] = useState(true);
   const [asaasLoading, setAsaasLoading] = useState(true);
   const [fotoStats, setFotoStats] = useState({ total: 0, noStorage: 0 });
@@ -3023,8 +3015,17 @@ function DashboardTab() {
           .then(({ count: noStorage }) => setFotoStats({ total: total || 0, noStorage: noStorage || 0 }));
       });
 
+    async function loadMp() {
+      try {
+        const res = await apiCall('/api/mp-admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'saldo' }) });
+        const data = await res.json();
+        setMpSaldo(res.ok ? data : { error: data?.error || 'indisponível' });
+      } catch { setMpSaldo({ error: 'Falha de conexão com Mercado Pago' }); }
+    }
+
     load();
     loadAsaas();
+    loadMp();
     loadHealth();
     if (equipeDetalhe) loadEquipeDetalhe(equipeDetalhe, periodo, dataInicio, dataFim);
   }, [periodo, dataInicio, dataFim]);
@@ -3371,7 +3372,28 @@ function DashboardTab() {
         <div>
           {/* Taxas Asaas reais */}
           <div style={S.card}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12 }}>Financeiro Asaas — mês atual</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 12 }}>Financeiro — saldo consolidado</div>
+            {/* Saldo unificado (Asaas + Mercado Pago) — clique para destrinchar */}
+            {(() => {
+              const asaasDisp = Number(asaasDados?.balance?.balance) || 0;
+              const mpDisp = Number(mpSaldo?.available_balance) || 0;
+              const mpIndispon = !!mpSaldo?.error;
+              const total = asaasDisp + (mpIndispon ? 0 : mpDisp);
+              return (
+                <a href="/#/admin/financeiro" style={{ textDecoration: 'none' }}>
+                  <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', borderRadius: 12, padding: '16px 18px', marginBottom: 12, color: 'white', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Saldo disponível (Asaas + Mercado Pago)</span>
+                      <span style={{ fontSize: 11, opacity: 0.85 }}>destrinchar →</span>
+                    </div>
+                    <div style={{ fontSize: 26, fontWeight: 900, margin: '6px 0 4px' }}>R$ {fmt(total)}</div>
+                    <div style={{ fontSize: 11, opacity: 0.9 }}>
+                      Asaas R$ {fmt(asaasDisp)} · Mercado Pago {mpIndispon ? '(consultar no painel MP)' : `R$ ${fmt(mpDisp)}`}
+                    </div>
+                  </div>
+                </a>
+              );
+            })()}
             {asaasLoading ? (
               <p style={{ color: '#94a3b8', fontSize: 13 }}>Carregando dados do Asaas…</p>
             ) : asaasDados?.error ? (
