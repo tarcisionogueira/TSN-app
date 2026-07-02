@@ -261,39 +261,51 @@ async function reconAlvo(fonte, urls, deadline) {
   return { rows: [], via: diag[0]?.via || '-', diag };
 }
 
-// MGL Leilões (MG · SP · ES; judicial + extrajudicial Banco do Brasil)
+// MGL / DESTAK rodam na plataforma "Degrau": lotes carregados via AJAX (templates
+// TrimPath + SignalR; DataLayerLotes nasce vazio e é preenchido no cliente). O HTML
+// estático não traz lote algum. O endpoint que alimenta os templates está definido
+// nos JS de Ajax do Core → o recon baixa esses JS p/ descobrir a rota + o método.
 async function coletarMGL(deadline) {
   return reconAlvo('MGL', [
-    'https://www.mgl.com.br/',
     'https://www.mgl.com.br/categoria/imoveis',
-    'https://www.mgl.com.br/lotes/imoveis',
+    'https://www.mgl.com.br/Core/V1/js/Ajax/Ajax_Leiloes.js',
+    'https://www.mgl.com.br/Core/V1/js/Ajax/Ajax_Leiloes_Callback.js',
+    'https://www.mgl.com.br/Core/V1/js/Ajax/Ajax_Funcoes.js',
   ], deadline);
 }
 
-// CCJ Leilões (bens em todos os estados; padrão /leilao/{id}/lotes)
+// CCJ Leilões (server-rendered): a home lista LEILÕES (eventos); os lotes vivem em
+// /leilao/{id}/lotes de cada leilão ativo e os imóveis em /lotes/imovel. Descobrimos
+// os IDs de leilão ativos na home e reconhecemos os primeiros + a categoria imóveis.
 async function coletarCCJ(deadline) {
-  return reconAlvo('CCJ', [
-    'https://www.ccjleiloes.com.br/',
-    'https://www.ccjleiloes.com.br/lotes',
-    'https://www.ccjleiloes.com.br/leilao/110/lotes',
-  ], deadline);
+  const home = await fetchVia('https://www.ccjleiloes.com.br/');
+  await gravarDebug('CCJ', 'https://www.ccjleiloes.com.br/', home.status, home.contentType, home.via, home.text);
+  const ids = [...new Set([...(home.text || '').matchAll(/\/leilao\/(\d+)\/lotes/g)].map(m => m[1]))].slice(0, 3);
+  const urls = [
+    'https://www.ccjleiloes.com.br/lotes/imovel',
+    ...ids.map(id => `https://www.ccjleiloes.com.br/leilao/${id}/lotes`),
+  ];
+  const r = await reconAlvo('CCJ', urls, deadline);
+  return { ...r, diag: [{ url: 'ccjleiloes.com.br/ (home)', http: home.status, via: home.via, leiloesAtivos: ids, ...htmlDiag(home.text) }, ...r.diag] };
 }
 
-// Biasi Leilões
+// Biasi Leilões (server-rendered): a home lista LEILÕES (/leilao/{id}); os imóveis
+// individuais são /sale/detail?id={id}. As listagens em massa (/imoveis, /busca) vêm
+// vazias via Bright Data (bot-wall) → tentamos direto e reconhecemos um lote real.
 async function coletarBiasi(deadline) {
   return reconAlvo('BIASI', [
-    'https://www.biasileiloes.com.br/',
+    'https://www.biasileiloes.com.br/sale/detail?id=59588',
     'https://www.biasileiloes.com.br/imoveis',
-    'https://www.biasileiloes.com.br/busca?categoria=imoveis',
+    'https://www.biasileiloes.com.br/sales?category=imoveis',
   ], deadline);
 }
 
-// Destak Leilões (padrão /proximos_leiloes/pagina/tipo)
+// Destak Leilões — mesma plataforma "Degrau" do MGL (baixa os JS de Ajax p/ o endpoint)
 async function coletarDestak(deadline) {
   return reconAlvo('DESTAK', [
-    'https://www.destakleiloes.com.br/',
-    'https://www.destakleiloes.com.br/proximos_leiloes/1/1/',
-    'https://www.destakleiloes.com.br/lotes',
+    'https://www.destakleiloes.com.br/categoria/imoveis',
+    'https://www.destakleiloes.com.br/Core/V1/js/Ajax/Ajax_Leiloes.js',
+    'https://www.destakleiloes.com.br/Core/V1/js/Ajax/Ajax_Funcoes.js',
   ], deadline);
 }
 
@@ -418,3 +430,4 @@ export default async function handler(req, res) {
 }
 
 // CRON_SECRET sincronizado GitHub↔Vercel (2026-07-02) — recon dos leiloeiros habilitado.
+// Recon 2ª fase: JS de Ajax (Degrau/MGL/Destak) + crawl de leilões ativos (CCJ) + lote real (Biasi).
