@@ -1,3 +1,9 @@
+-- ⚠️ SUPERSEDED por cotas_ia_por_plano.sql — NÃO RODE ISOLADAMENTE.
+-- Esta versão de consumir_analise_por() usa o MODELO ANTIGO (assessorado/clube
+-- ilimitados, sem variantes _anual, sem limite_ia). A migration cotas_ia_por_plano.sql
+-- redefine a função para o modelo vigente (fonte única limite_ia). Num apply completo,
+-- cotas_ia_por_plano.sql roda depois e prevalece; mas rodar SÓ este arquivo REVERTERIA
+-- a cota. Mantido apenas como registro histórico.
 -- ════════════════════════════════════════════════════════════════════════════
 -- Cota de análises consumida NO SERVIDOR (anti-abuso de custo de IA)
 -- Rodar no SQL Editor do Supabase. Aditivo e idempotente.

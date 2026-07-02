@@ -2,7 +2,7 @@ export const config = { runtime: 'edge' };
 
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
-const SB_URL = process.env.SUPABASE_URL;
+const SB_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 function sbFetch(path, opts = {}) {
@@ -62,6 +62,11 @@ export default async function handler(req) {
     .filter(l => l.id || l.codigo)
     .map(l => {
       const fotos = Array.isArray(l.fotos) ? l.fotos.filter(Boolean) : [];
+      const av = Number(l.valor_avaliacao || l.avaliacao || 0) || null;
+      const mn = Number(l.valor_minimo || l.lance_minimo || 0) || null;
+      // Deriva o desconto de avaliação×mínimo quando o parceiro não envia — senão o
+      // lote afunda na ordenação padrão da busca (por desconto_percentual desc).
+      const desconto = Math.round(Number(l.desconto || 0)) || ((av && mn && mn < av) ? Math.round((1 - mn / av) * 100) : null);
       return {
         fonte,
         fonte_id: `${fonte}_${l.id || l.codigo}`,
@@ -74,9 +79,9 @@ export default async function handler(req) {
         cidade: String(l.cidade || l.municipio || '').slice(0, 100),
         estado: String(l.estado || l.uf || '').slice(0, 2).toUpperCase() || null,
         cep: String(l.cep || '').replace(/\D/g, '').slice(0, 8) || null,
-        valor_avaliacao: Number(l.valor_avaliacao || l.avaliacao || 0) || null,
-        valor_minimo: Number(l.valor_minimo || l.lance_minimo || 0) || null,
-        desconto_percentual: Math.round(Number(l.desconto || 0)) || null,
+        valor_avaliacao: av,
+        valor_minimo: mn,
+        desconto_percentual: desconto,
         modalidade: String(l.modalidade || '').slice(0, 100),
         data_leilao: l.data_leilao ? String(l.data_leilao).slice(0, 40) : null,
         url_lote: String(l.link || l.url || '').slice(0, 1000),

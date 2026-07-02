@@ -9,7 +9,7 @@
 
 export const config = { runtime: 'edge' };
 
-const SUPABASE  = process.env.VITE_SUPABASE_URL;
+const SUPABASE  = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SVC_KEY   = process.env.SUPABASE_SERVICE_KEY;
 
 async function sb(method, path, body) {
@@ -77,6 +77,10 @@ export default async function handler(req) {
       if (!lote?.id_externo) return json({ error: 'id_externo obrigatório' }, 400);
       // Grava no catálogo único imoveis_leilao (mesmas colunas dos scrapers/feed),
       // com fonte=webhook_<id> — assim o lote do parceiro entra na busca pública.
+      const av = lote.valor_avaliacao ? Number(lote.valor_avaliacao) : null;
+      const mn = lote.valor_minimo ? Number(lote.valor_minimo) : null;
+      // Desconto derivado (senão o lote afunda na ordenação por desconto_percentual da busca).
+      const desconto = lote.desconto ? Math.round(Number(lote.desconto)) : ((av && mn && mn < av) ? Math.round((1 - mn / av) * 100) : null);
       const row = {
         fonte,
         fonte_id:        `${fonte}_${String(lote.id_externo).slice(0, 200)}`,
@@ -86,8 +90,9 @@ export default async function handler(req) {
         endereco:        lote.endereco ? String(lote.endereco).slice(0, 500) : null,
         cidade:          lote.cidade ? String(lote.cidade).slice(0, 100) : null,
         estado:          lote.estado ? String(lote.estado).slice(0, 2).toUpperCase() : null,
-        valor_avaliacao: lote.valor_avaliacao ? Number(lote.valor_avaliacao) : null,
-        valor_minimo:    lote.valor_minimo    ? Number(lote.valor_minimo)    : null,
+        valor_avaliacao: av,
+        valor_minimo:    mn,
+        desconto_percentual: desconto,
         area_m2:         lote.area_m2         ? Number(lote.area_m2)         : null,
         data_leilao:     lote.data_leilao ? String(lote.data_leilao).slice(0, 40) : null,
         modalidade:      lote.modalidade ? String(lote.modalidade).slice(0, 100) : null,
