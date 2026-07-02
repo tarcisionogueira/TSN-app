@@ -1,5 +1,6 @@
 import { getAuthUser, unauthorized, forbidden } from './_auth.js';
 import { sanitizeText } from './_sanitize.js';
+import { calcularDistribuicao } from './_honorarios.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -45,53 +46,22 @@ async function equipeDoCaso(imovel_id, cliente_id) {
   return { analista_id: c.analista_id || null, advogado_id: c.advogado_id || null };
 }
 
-// Distribui o honorário de êxito (10% do valor) no ledger. Idempotente.
-// Envolvidos = os DESIGNADOS no fluxo daquele cliente: advogado/analista por sorteio
-// no caso; consultor = quem CAPTOU (indicado_por). O ADMIN é BACKUP — absorve a fatia
-// de cada papel SEM pessoa designada. Se o admin editou o split da operação
-// (arr.honorarios_split), esse override vale sobre config/designação — só para ela.
+// Distribui o honorário de êxito no ledger. Idempotente. Grava um SNAPSHOT do que
+// foi pago em arrematacoes.honorarios_split (registro do que valeu naquela venda).
+// A projeção (quem recebe e quanto) vem de calcularDistribuicao (api/_honorarios.js).
 async function distribuirHonorarios(arr) {
   if (!arr || arr.honorarios_status === 'distribuido') return null;
   const valor = Number(arr.valor_arrematado || 0);
   if (valor <= 0) return null;
 
-  const split = arr.honorarios_split && typeof arr.honorarios_split === 'object' ? arr.honorarios_split : null;
-  const cfg = split
-    || (await dbFetch('config_honorarios?id=eq.1&select=admin_pct,advogado_pct,analista_pct,consultor_pct')).data?.[0]
-    || { admin_pct: 4.5, advogado_pct: 5, analista_pct: 0.5, consultor_pct: 0 };
-  const adminRow = (await dbFetch('perfis?role=eq.admin&ativo=eq.true&select=id&order=criado_em.asc&limit=1')).data?.[0];
-
-  // Quem recebe cada papel: do override (se editado), senão os designados no fluxo.
-  const advogadoId  = split?.advogado_id  ?? arr.advogado_id  ?? null;
-  const analistaId  = split?.analista_id  ?? arr.analista_id  ?? null;
-  let   consultorId = split?.consultor_id ?? null;
-  // Consultor não editado = quem captou o cliente (indicado_por), se for consultor ativo.
-  if (consultorId == null && arr.cliente_id) {
-    const cli = (await dbFetch(`perfis?id=eq.${arr.cliente_id}&select=indicado_por`)).data?.[0];
-    if (cli?.indicado_por) {
-      const ind = (await dbFetch(`perfis?id=eq.${cli.indicado_por}&select=id,role,ativo`)).data?.[0];
-      if (ind && ind.role === 'consultor' && ind.ativo !== false) consultorId = ind.id;
-    }
-  }
-
-  const lancamentos = [];
-  const add = (uid, pct, label) => {
-    if (!uid || !pct) return;
-    lancamentos.push({
-      user_id: uid, tipo: 'honorario_exito', valor: +(valor * pct / 100).toFixed(2),
+  const dist = await calcularDistribuicao(dbFetch, arr);
+  const lancamentos = dist.linhas
+    .filter(l => l.id && l.valor > 0)
+    .map(l => ({
+      user_id: l.id, tipo: 'honorario_exito', valor: l.valor,
       origem_tipo: 'arrematacao', origem_id: String(arr.id),
-      descricao: `Honorário de êxito (${label} ${Number(pct).toFixed(2)}%) — arremate #${arr.id}`, status: 'disponivel',
-    });
-  };
-  // Admin = BACKUP: absorve a fatia de cada papel SEM pessoa designada (total = 10%).
-  let adminPct = Number(cfg.admin_pct) || 0;
-  if (!advogadoId)  adminPct += Number(cfg.advogado_pct)  || 0;
-  if (!analistaId)  adminPct += Number(cfg.analista_pct)  || 0;
-  if (!consultorId) adminPct += Number(cfg.consultor_pct) || 0;
-  add(adminRow?.id, adminPct, 'admin');
-  add(advogadoId,  cfg.advogado_pct,  'advogado');
-  add(analistaId,  cfg.analista_pct,  'analista');
-  add(consultorId, cfg.consultor_pct, 'consultor');
+      descricao: `Honorário de êxito (${l.papel} ${Number(l.pct).toFixed(2)}%) — arremate #${arr.id}`, status: 'disponivel',
+    }));
 
   if (lancamentos.length) {
     await dbFetch('saldo_lancamentos', { method: 'POST', body: JSON.stringify(lancamentos), headers: { Prefer: 'return=minimal' } });
@@ -99,7 +69,11 @@ async function distribuirHonorarios(arr) {
   const total = lancamentos.reduce((s, l) => s + l.valor, 0);
   await dbFetch(`arrematacoes?id=eq.${arr.id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ honorarios_valor: total, honorarios_status: 'distribuido' }),
+    body: JSON.stringify({
+      honorarios_valor: total,
+      honorarios_status: 'distribuido',
+      honorarios_split: { total_pct: dist.total, linhas: dist.linhas }, // snapshot do que foi pago
+    }),
     headers: { Prefer: 'return=minimal' },
   });
   return { total, lancamentos: lancamentos.length };

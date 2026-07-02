@@ -1,13 +1,19 @@
 /**
- * /api/honorarios-split — distribuição do êxito (10%) POR OPERAÇÃO (arrematação).
- * Só admin. A distribuição efetiva (crédito no ledger) roda em api/arrematacoes.js
- * quando o status vira 'finalizado' — usando este override quando existir.
+ * /api/honorarios-split — êxito (honorários) no modelo POR USUÁRIO. Só admin.
  *
- *  GET  ?cliente_id=X          → arrematação em aberto do cliente + envolvidos
- *                                designados (sorteio/indicação) + config + equipe.
- *  POST { arrematacao_id, split } → salva honorarios_split { *_pct, *_id }.
+ * O % de cada membro da equipe é individual (perfis.honorario_exito_pct); o admin
+ * sempre equilibra (admin = total − soma dos envolvidos). A mudança vale só para
+ * vendas finalizadas DEPOIS — nunca retroage (ver api/_honorarios.js). A distribuição
+ * efetiva no ledger roda em api/arrematacoes.js quando a arrematação vira 'finalizado'.
+ *
+ *  GET ?equipe=1              → membros (advogado/analista/consultor) + % individual
+ *                               e o padrão do papel (config_honorarios). Editor de Usuários.
+ *  GET ?arrematacao_id=X      → monitor de UMA venda: envolvidos, %s e R$ a distribuir.
+ *  GET ?cliente_id=X          → idem, achando a arrematação em aberto do cliente.
+ *  POST { user_id, pct }      → define o % individual do membro (pct null → volta ao padrão).
  */
 import { getAuthUser, unauthorized, forbidden } from './_auth.js';
+import { calcularDistribuicao } from './_honorarios.js';
 
 export const config = { runtime: 'edge' };
 
@@ -27,7 +33,21 @@ async function db(path, opts = {}) {
   return { ok: r.ok, status: r.status, data: d };
 }
 const uuid = (v) => /^[0-9a-f-]{36}$/i.test(String(v || ''));
-const nomeDe = async (id) => id ? ((await db(`perfis?id=eq.${id}&select=nome`)).data?.[0]?.nome || null) : null;
+
+// Monta o "monitor" de uma venda a partir da arrematação: se já distribuída,
+// mostra o SNAPSHOT do que foi pago; senão, a projeção atual.
+async function monitorDaArrematacao(arr) {
+  if (!arr) return null;
+  const distribuido = arr.honorarios_status === 'distribuido';
+  const snap = distribuido && arr.honorarios_split && Array.isArray(arr.honorarios_split.linhas) ? arr.honorarios_split : null;
+  const dist = snap
+    ? { total: Number(snap.total_pct) || 10, valor: Number(arr.valor_arrematado || 0), linhas: snap.linhas }
+    : await calcularDistribuicao(db, arr);
+  return {
+    arrematacao: { id: arr.id, valor: Number(arr.valor_arrematado || 0), status: arr.honorarios_status || 'pendente' },
+    distribuido, total_pct: dist.total, linhas: dist.linhas,
+  };
+}
 
 export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -36,67 +56,69 @@ export default async function handler(req) {
   if ((await db(`perfis?id=eq.${user.id}&select=role`)).data?.[0]?.role !== 'admin') return forbidden();
 
   if (req.method === 'GET') {
-    const clienteId = new URL(req.url).searchParams.get('cliente_id');
-    if (!uuid(clienteId)) return json({ error: 'cliente_id inválido' }, 400);
+    const sp = new URL(req.url).searchParams;
 
-    const arr = (await db(`arrematacoes?cliente_id=eq.${clienteId}&honorarios_status=neq.distribuido&select=id,valor_arrematado,honorarios_status,honorarios_split,advogado_id,analista_id&order=criado_em.desc&limit=1`)).data?.[0] || null;
-    const cfg = (await db('config_honorarios?id=eq.1&select=total_pct,admin_pct,advogado_pct,analista_pct,consultor_pct')).data?.[0]
-      || { total_pct: 10, admin_pct: 4.5, advogado_pct: 5, analista_pct: 0.5, consultor_pct: 0 };
-    const adminRow = (await db('perfis?role=eq.admin&ativo=eq.true&select=id,nome&order=criado_em.asc&limit=1')).data?.[0];
-
-    // Consultor designado = quem captou o cliente (indicado_por), se for consultor.
-    let consultorId = null;
-    const cli = (await db(`perfis?id=eq.${clienteId}&select=indicado_por`)).data?.[0];
-    if (cli?.indicado_por) {
-      const ind = (await db(`perfis?id=eq.${cli.indicado_por}&select=id,role`)).data?.[0];
-      if (ind?.role === 'consultor') consultorId = ind.id;
+    // Editor de Usuários: equipe + % individual e padrão do papel.
+    if (sp.get('equipe') === '1') {
+      const cfg = (await db('config_honorarios?id=eq.1&select=total_pct,advogado_pct,analista_pct,consultor_pct')).data?.[0]
+        || { total_pct: 10, advogado_pct: 5, analista_pct: 0.5, consultor_pct: 0 };
+      const padrao = { advogado: Number(cfg.advogado_pct) || 0, analista: Number(cfg.analista_pct) || 0, consultor: Number(cfg.consultor_pct) || 0 };
+      const membros = (await db('perfis?role=in.(advogado,analista,consultor)&ativo=eq.true&select=id,nome,role,honorario_exito_pct&order=role.asc,nome.asc')).data || [];
+      return json({
+        total_pct: Number(cfg.total_pct) || 10,
+        padrao,
+        membros: membros.map(m => ({
+          id: m.id, nome: m.nome, role: m.role,
+          pct_individual: m.honorario_exito_pct == null ? null : Number(m.honorario_exito_pct),
+          pct_efetivo: m.honorario_exito_pct == null ? (padrao[m.role] || 0) : Number(m.honorario_exito_pct),
+        })),
+      });
     }
 
-    const split = arr?.honorarios_split || null;
-    const envolvidos = {
-      admin:     { id: adminRow?.id || null, nome: adminRow?.nome || 'Admin (backup)' },
-      advogado:  { id: split?.advogado_id ?? arr?.advogado_id ?? null, nome: null },
-      analista:  { id: split?.analista_id ?? arr?.analista_id ?? null, nome: null },
-      consultor: { id: split?.consultor_id ?? consultorId, nome: null },
-    };
-    envolvidos.advogado.nome  = await nomeDe(envolvidos.advogado.id);
-    envolvidos.analista.nome  = await nomeDe(envolvidos.analista.id);
-    envolvidos.consultor.nome = await nomeDe(envolvidos.consultor.id);
+    // Monitor por arrematação.
+    const arrId = sp.get('arrematacao_id');
+    if (arrId) {
+      if (!uuid(arrId)) return json({ error: 'arrematacao_id inválido' }, 400);
+      const arr = (await db(`arrematacoes?id=eq.${arrId}&select=id,valor_arrematado,honorarios_status,honorarios_split,advogado_id,analista_id,arrematante_id`)).data?.[0];
+      if (!arr) return json({ error: 'Arrematação não encontrada' }, 404);
+      return json(await monitorDaArrematacao(arr) || {});
+    }
 
-    const equipe = (await db('perfis?role=in.(advogado,analista,consultor)&ativo=eq.true&select=id,nome,role&order=nome.asc')).data || [];
-    return json({
-      arrematacao: arr ? { id: arr.id, valor: Number(arr.valor_arrematado || 0), status: arr.honorarios_status } : null,
-      config: cfg, split, envolvidos,
-      equipe: {
-        advogados:   equipe.filter(e => e.role === 'advogado'),
-        analistas:   equipe.filter(e => e.role === 'analista'),
-        consultores: equipe.filter(e => e.role === 'consultor'),
-      },
-    });
+    // Monitor pela arrematação em aberto do cliente (arrematante).
+    const clienteId = sp.get('cliente_id');
+    if (clienteId) {
+      if (!uuid(clienteId)) return json({ error: 'cliente_id inválido' }, 400);
+      const arr = (await db(`arrematacoes?arrematante_id=eq.${clienteId}&select=id,valor_arrematado,honorarios_status,honorarios_split,advogado_id,analista_id,arrematante_id&order=criado_em.desc&limit=1`)).data?.[0] || null;
+      return json({ monitor: await monitorDaArrematacao(arr) });
+    }
+
+    return json({ error: 'Informe equipe=1, arrematacao_id ou cliente_id' }, 400);
   }
 
   if (req.method === 'POST') {
     let body; try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
-    const { arrematacao_id, split } = body;
-    if (!uuid(arrematacao_id) || !split || typeof split !== 'object') return json({ error: 'arrematacao_id e split obrigatórios' }, 400);
-    const pct = k => Math.max(0, Number(split[k]) || 0);
-    const soma = pct('admin_pct') + pct('advogado_pct') + pct('analista_pct') + pct('consultor_pct');
-    const cfg = (await db('config_honorarios?id=eq.1&select=total_pct')).data?.[0];
-    const total = Number(split.total_pct) || Number(cfg?.total_pct) || 10;
-    if (Math.abs(soma - total) > 0.01) return json({ error: `A soma (${soma.toFixed(2)}%) deve ser igual ao total (${total.toFixed(2)}%).` }, 400);
+    const { user_id } = body;
+    if (!uuid(user_id)) return json({ error: 'user_id inválido' }, 400);
 
-    const clean = {
-      total_pct: total,
-      admin_pct: pct('admin_pct'), advogado_pct: pct('advogado_pct'), analista_pct: pct('analista_pct'), consultor_pct: pct('consultor_pct'),
-      advogado_id: uuid(split.advogado_id) ? split.advogado_id : null,
-      analista_id: uuid(split.analista_id) ? split.analista_id : null,
-      consultor_id: uuid(split.consultor_id) ? split.consultor_id : null,
-    };
-    const r = await db(`arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&honorarios_status=neq.distribuido`, {
-      method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ honorarios_split: clean }),
-    });
+    // Só membros de equipe têm % individual (o admin é sempre o saldo).
+    const alvo = (await db(`perfis?id=eq.${user_id}&select=id,role`)).data?.[0];
+    if (!alvo || !['advogado', 'analista', 'consultor'].includes(alvo.role)) {
+      return json({ error: 'Só advogado, analista ou consultor têm % individual (o admin recebe o saldo).' }, 400);
+    }
+
+    // pct null/'' → limpa (volta ao padrão do papel). Senão 0 ≤ pct ≤ total.
+    let pct = body.pct;
+    if (pct === null || pct === '' || pct === undefined) {
+      pct = null;
+    } else {
+      pct = Number(pct);
+      const total = Number((await db('config_honorarios?id=eq.1&select=total_pct')).data?.[0]?.total_pct) || 10;
+      if (isNaN(pct) || pct < 0 || pct > total) return json({ error: `O % deve ficar entre 0 e ${total}.` }, 400);
+    }
+
+    const r = await db(`perfis?id=eq.${user_id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ honorario_exito_pct: pct }) });
     if (!r.ok) return json({ error: 'Erro ao salvar', detail: r.data }, 500);
-    return json({ ok: true });
+    return json({ ok: true, pct });
   }
 
   return json({ error: 'Método não permitido' }, 405);

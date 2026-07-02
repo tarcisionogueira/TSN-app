@@ -501,34 +501,33 @@ function UsuariosTab() {
   const [auditoriaUser, setAuditoriaUser] = useState(null);
   const [auditoriaData, setAuditoriaData] = useState(null);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
-  const [exito, setExito] = useState(null); // editor de distribuição do êxito por operação
+  const [exito, setExito] = useState(null); // editor do % de êxito INDIVIDUAL do membro da equipe
 
-  const sfExito = (k, v) => setExito(e => ({ ...e, form: { ...e.form, [k]: v } }));
+  // Abre o editor do % de êxito individual deste membro (advogado/analista/consultor).
+  // O admin sempre recebe o saldo (total − soma dos envolvidos), então não tem editor aqui.
   const abrirExito = async (u) => {
     setExito({ user: u, loading: true });
     try {
-      const res = await apiCall(`/api/honorarios-split?cliente_id=${u.id}`);
+      const res = await apiCall('/api/honorarios-split?equipe=1');
       const d = await res.json();
       if (!res.ok) { setExito({ user: u, loading: false, msg: d.error || 'Erro ao carregar.' }); return; }
-      const base = d.split || d.config;
+      const membro = (d.membros || []).find(m => m.id === u.id);
+      const padrao = d.padrao?.[u.role] ?? 0;
       setExito({
-        user: u, loading: false, arrematacao: d.arrematacao, envolvidos: d.envolvidos, equipe: d.equipe, config: d.config,
-        form: {
-          total_pct: Number(d.config.total_pct) || 10,
-          admin_pct: Number(base.admin_pct) || 0, advogado_pct: Number(base.advogado_pct) || 0,
-          analista_pct: Number(base.analista_pct) || 0, consultor_pct: Number(base.consultor_pct) || 0,
-          advogado_id: d.envolvidos.advogado.id || '', analista_id: d.envolvidos.analista.id || '', consultor_id: d.envolvidos.consultor.id || '',
-        },
+        user: u, loading: false, total_pct: d.total_pct, padrao,
+        usarPadrao: membro ? membro.pct_individual == null : true,
+        valor: membro && membro.pct_individual != null ? String(membro.pct_individual) : String(padrao),
       });
     } catch { setExito({ user: u, loading: false, msg: 'Erro ao carregar.' }); }
   };
   const salvarExito = async () => {
-    if (!exito?.arrematacao) return;
+    if (!exito?.user) return;
     setExito(e => ({ ...e, saving: true, msg: '' }));
     try {
-      const res = await apiCall('/api/honorarios-split', { method: 'POST', body: JSON.stringify({ arrematacao_id: exito.arrematacao.id, split: exito.form }) });
+      const pct = exito.usarPadrao ? null : Number(exito.valor);
+      const res = await apiCall('/api/honorarios-split', { method: 'POST', body: JSON.stringify({ user_id: exito.user.id, pct }) });
       const d = await res.json();
-      setExito(e => ({ ...e, saving: false, msg: res.ok ? 'Distribuição salva para esta operação.' : (d.error || 'Erro ao salvar.') }));
+      setExito(e => ({ ...e, saving: false, msg: res.ok ? 'salvo' : (d.error || 'Erro ao salvar.') }));
     } catch { setExito(e => ({ ...e, saving: false, msg: 'Erro ao salvar.' })); }
   };
 
@@ -664,10 +663,10 @@ function UsuariosTab() {
                                 onClick={() => abrirAuditoria(u)}>
                                 🔍 Auditoria
                               </button>
-                              {['top2','top2_anual','assessorado','assessorado_anual','clube','clube_anual'].includes(u.role) && (
+                              {['advogado','analista','consultor'].includes(u.role) && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#f0fdf4', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#059669', cursor: 'pointer' }}
-                                  onClick={() => abrirExito(u)} title="Distribuição do êxito (10%) desta operação">
+                                  onClick={() => abrirExito(u)} title="% de êxito individual deste membro (o admin recebe o saldo)">
                                   💰 Êxito
                                 </button>
                               )}
@@ -797,54 +796,44 @@ function UsuariosTab() {
         </div>
       )}
 
-      {/* Modal — Distribuição do êxito (10%) POR OPERAÇÃO */}
+      {/* Modal — % de êxito INDIVIDUAL do membro (o admin recebe o saldo) */}
       {exito && (
         <div onClick={() => !exito.saving && setExito(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 22, width: '100%', maxWidth: 470, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 2 }}>Distribuição do êxito — {exito.user?.nome || exito.user?.cpf || 'Cliente'}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>Vale só para esta operação. Papel sem pessoa designada → a fatia vai para o Admin (backup). A soma deve fechar no total.</div>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 22, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 2 }}>% de êxito — {exito.user?.nome || exito.user?.cpf || 'Membro'}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
+              Percentual individual deste <strong>{exito.user?.role}</strong> sobre o êxito das arrematações que ele atender.
+              O admin sempre recebe o <strong>saldo</strong> (total − soma dos envolvidos). Vale só para vendas finalizadas
+              <strong> depois</strong> desta configuração — não altera arremates já distribuídos.
+            </div>
             {exito.loading ? (
               <div style={{ color: '#94a3b8', fontSize: 14, padding: 20, textAlign: 'center' }}>Carregando…</div>
-            ) : !exito.arrematacao ? (
-              <div style={{ color: '#64748b', fontSize: 13, padding: 14, background: '#f8fafc', borderRadius: 10 }}>
-                {exito.msg || 'Este cliente não tem arrematação em aberto. O editor aparece quando houver uma arrematação registrada e ainda não distribuída.'}
-              </div>
+            ) : exito.padrao == null && exito.msg && exito.msg !== 'salvo' ? (
+              <div style={{ color: '#dc2626', fontSize: 13, padding: 14, background: '#fef2f2', borderRadius: 10 }}>{exito.msg}</div>
             ) : (
               <>
-                <div style={{ fontSize: 12.5, color: '#334155', marginBottom: 14 }}>Arrematação: <strong>R$ {Number(exito.arrematacao.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> · êxito total {Number(exito.form.total_pct).toFixed(2)}%</div>
-                {[
-                  { label: 'Admin (backup)', pctKey: 'admin_pct', idKey: null, lista: null },
-                  { label: 'Advogado', pctKey: 'advogado_pct', idKey: 'advogado_id', lista: exito.equipe.advogados },
-                  { label: 'Analista', pctKey: 'analista_pct', idKey: 'analista_id', lista: exito.equipe.analistas },
-                  { label: 'Consultor', pctKey: 'consultor_pct', idKey: 'consultor_id', lista: exito.equipe.consultores },
-                ].map(row => (
-                  <div key={row.label} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-                    <div style={{ width: 74, fontSize: 12, fontWeight: 700, color: '#475569', flexShrink: 0 }}>{row.label}</div>
-                    {row.idKey ? (
-                      <select value={exito.form[row.idKey]} onChange={e => sfExito(row.idKey, e.target.value)}
-                        style={{ flex: 1, minWidth: 0, padding: '7px 9px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12.5 }}>
-                        <option value="">— ninguém (vai p/ Admin) —</option>
-                        {(row.lista || []).map(p => <option key={p.id} value={p.id}>{p.nome || p.id.slice(0, 8)}</option>)}
-                      </select>
-                    ) : (
-                      <div style={{ flex: 1, fontSize: 12, color: '#94a3b8' }}>{exito.envolvidos?.admin?.nome || 'Admin'}</div>
-                    )}
-                    <input type="number" step="0.1" min="0" value={exito.form[row.pctKey]} onChange={e => sfExito(row.pctKey, e.target.value)}
-                      style={{ width: 62, padding: '7px 8px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'right', flexShrink: 0 }} />
+                <div style={{ fontSize: 12.5, color: '#334155', marginBottom: 12 }}>
+                  Padrão do papel <strong>{exito.user?.role}</strong>: <strong>{Number(exito.padrao).toFixed(2)}%</strong> · êxito total {Number(exito.total_pct).toFixed(2)}%
+                </div>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#334155', marginBottom: 12, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={exito.usarPadrao} onChange={e => setExito(x => ({ ...x, usarPadrao: e.target.checked, valor: e.target.checked ? String(x.padrao) : x.valor, msg: '' }))} />
+                  Usar o padrão do papel ({Number(exito.padrao).toFixed(2)}%)
+                </label>
+                {!exito.usarPadrao && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>% individual</div>
+                    <input type="number" step="0.1" min="0" max={exito.total_pct} value={exito.valor}
+                      onChange={e => setExito(x => ({ ...x, valor: e.target.value, msg: '' }))}
+                      style={{ width: 80, padding: '7px 8px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'right' }} />
                     <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
                   </div>
-                ))}
-                {(() => {
-                  const soma = ['admin_pct', 'advogado_pct', 'analista_pct', 'consultor_pct'].reduce((s, k) => s + (Number(exito.form[k]) || 0), 0);
-                  const total = Number(exito.form.total_pct) || 0;
-                  const ok = Math.abs(soma - total) <= 0.01;
-                  return <div style={{ fontSize: 12, fontWeight: 700, color: ok ? '#16a34a' : '#dc2626', margin: '4px 0 12px' }}>Soma {soma.toFixed(2)}% / {total.toFixed(2)}% {ok ? '✓' : '✗ — precisa fechar no total'}</div>;
-                })()}
-                {exito.msg && <div style={{ fontSize: 12.5, color: exito.msg.includes('salva') ? '#16a34a' : '#dc2626', marginBottom: 10 }}>{exito.msg}</div>}
+                )}
+                {exito.msg && exito.msg !== 'salvo' && <div style={{ fontSize: 12.5, color: '#dc2626', marginBottom: 10 }}>{exito.msg}</div>}
+                {exito.msg === 'salvo' && <div style={{ fontSize: 12.5, color: '#16a34a', marginBottom: 10 }}>% de êxito salvo. Vale para as próximas arrematações.</div>}
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => setExito(null)} disabled={exito.saving} style={{ padding: '8px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
-                  <button onClick={salvarExito} disabled={exito.saving} style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: exito.saving ? 'default' : 'pointer' }}>{exito.saving ? 'Salvando…' : 'Salvar distribuição'}</button>
+                  <button onClick={salvarExito} disabled={exito.saving} style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: exito.saving ? 'default' : 'pointer' }}>{exito.saving ? 'Salvando…' : 'Salvar'}</button>
                 </div>
               </>
             )}

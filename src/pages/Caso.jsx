@@ -432,6 +432,7 @@ export default function Caso() {
 
   // ─── Honorários ──────────────────────────────────────────────────────────
   const [honorariosConfig, setHonorariosConfig] = useState({ total_pct:10, admin_pct:4.5, advogado_pct:4.5, analista_pct:1 });
+  const [monitorExito, setMonitorExito] = useState(null); // distribuição do êxito (só admin)
 
   // ─── Procuração ──────────────────────────────────────────────────────────
   const [gerandoProc, setGerandoProc] = useState(false);
@@ -441,6 +442,16 @@ export default function Caso() {
   const isStaff    = ['analista','advogado','admin','consultor'].includes(role);
   const isCliente  = !isStaff;
   const podeSolicitarJuridico = PLANOS_JURIDICO.includes(role);
+
+  // Monitor do êxito (quem recebe e quanto): só admin, quando há arrematação.
+  useEffect(() => {
+    if (role !== 'admin' || !arrematacao?.id) { setMonitorExito(null); return; }
+    let cancel = false;
+    apiCall(`/api/honorarios-split?arrematacao_id=${arrematacao.id}`).then(r => r.json()).then(d => {
+      if (!cancel && d && Array.isArray(d.linhas)) setMonitorExito(d);
+    }).catch(() => {});
+    return () => { cancel = true; };
+  }, [role, arrematacao?.id]);
 
   // ─── Carregar caso ────────────────────────────────────────────────────────
   const carregarCaso = useCallback(async () => {
@@ -1219,6 +1230,39 @@ export default function Caso() {
               {!arrematacao.em_nome_proprio && (
                 <div style={{ padding:'10px 12px', background:'#f8fafc', borderRadius:8, fontSize:12, color:'#475569' }}>
                   <strong>Beneficiário:</strong> {arrematacao.beneficiario_nome} (CPF: {arrematacao.beneficiario_cpf})
+                </div>
+              )}
+
+              {/* Monitor da distribuição do êxito (só admin) */}
+              {role === 'admin' && monitorExito && (
+                <div style={{ marginTop:14, padding:'14px', background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                    <div style={{ fontSize:12.5, fontWeight:800, color:'#111' }}>Distribuição do êxito ({Number(monitorExito.total_pct).toFixed(2)}%)</div>
+                    <span style={{ fontSize:10.5, fontWeight:700, padding:'2px 8px', borderRadius:999, background: monitorExito.distribuido ? '#dcfce7' : '#fef3c7', color: monitorExito.distribuido ? '#166534' : '#92400e' }}>
+                      {monitorExito.distribuido ? 'Distribuído' : 'Projeção'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize:11, color:'#64748b', marginBottom:8 }}>
+                    {monitorExito.distribuido ? 'Valores já creditados nesta venda.' : 'Projeção com base nos % vigentes. O admin recebe o saldo. Editável em Usuários → 💰 Êxito.'}
+                  </div>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                    <thead><tr style={{ color:'#94a3b8', textAlign:'left' }}>
+                      <th style={{ padding:'4px 0', fontWeight:700 }}>Envolvido</th>
+                      <th style={{ padding:'4px 0', fontWeight:700 }}>Papel</th>
+                      <th style={{ padding:'4px 0', fontWeight:700, textAlign:'right' }}>%</th>
+                      <th style={{ padding:'4px 0', fontWeight:700, textAlign:'right' }}>Valor</th>
+                    </tr></thead>
+                    <tbody>
+                      {monitorExito.linhas.map((l, i) => (
+                        <tr key={i} style={{ borderTop:'1px solid #e2e8f0' }}>
+                          <td style={{ padding:'6px 0', color:'#334155', fontWeight:600 }}>{l.nome || '—'}</td>
+                          <td style={{ padding:'6px 0', color:'#64748b', textTransform:'capitalize' }}>{l.papel}</td>
+                          <td style={{ padding:'6px 0', textAlign:'right', fontWeight:700, color:'#111' }}>{Number(l.pct).toFixed(2)}%</td>
+                          <td style={{ padding:'6px 0', textAlign:'right', fontWeight:800, color:'#059669' }}>{fmt(l.valor)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
