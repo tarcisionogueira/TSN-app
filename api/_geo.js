@@ -144,6 +144,47 @@ export async function nominatimEstruturado(params) {
   }
 }
 
+// Busca por TEXTO LIVRE (q=). Endereços "sujos" da Caixa (com Lt/Qd/Apto no meio)
+// quebram a busca estruturada, mas o parser de texto livre do Nominatim costuma
+// acertar. Fallback grátis, sem depender de chave.
+export async function nominatimTextoLivre(q) {
+  if (!q || !q.trim()) return null;
+  const qs = new URLSearchParams({ format: 'json', addressdetails: '1', limit: '1', countrycodes: 'br', q });
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`, {
+      headers: { 'User-Agent': NOMINATIM_UA }, signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.length) return null;
+    // class=place/highway/building são coordenadas úteis; evita resultados vagos.
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch { return null; }
+}
+
+// GOOGLE GEOCODING — padrão-ouro de precisão no Brasil. Só roda se houver a chave
+// GOOGLE_MAPS_API_KEY (crédito grátis mensal do Google cobre o uso). Devolve o
+// nível conforme a precisão (ROOFTOP/RANGE = endereço exato). É a 1ª opção da
+// cascata; sem a chave, cai no Nominatim normalmente.
+export async function googleGeocode(enderecoCompleto) {
+  const key = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
+  if (!key || !enderecoCompleto || !enderecoCompleto.trim()) return null;
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(enderecoCompleto)}&region=br&language=pt-BR&key=${key}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status !== 'OK' || !data.results?.length) return null;
+    const r = data.results[0];
+    const loc = r.geometry?.location;
+    if (!loc) return null;
+    const lt = r.geometry.location_type; // ROOFTOP > RANGE_INTERPOLATED > GEOMETRIC_CENTER > APPROXIMATE
+    const nivel = (lt === 'ROOFTOP' || lt === 'RANGE_INTERPOLATED') ? 'endereco'
+      : lt === 'GEOMETRIC_CENTER' ? 'rua' : 'bairro';
+    return { lat: loc.lat, lng: loc.lng, nivel };
+  } catch { return null; }
+}
+
 /**
  * Cascata de geocodificação cruzando IBGE (validação/UF + fallback cidade) e
  * Correios/ViaCEP (limpeza do logradouro + CEP), com o Nominatim como fonte da
@@ -156,8 +197,19 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
   const aceita = (c) => (c && coordValida(c.lat, c.lng, estado, cidade) ? c : null);
   const pausa = () => (sleepMs > 0 ? sleep(sleepMs) : Promise.resolve());
 
-  // Nível 1 — logradouro + número (estruturado + validação IBGE).
+  // Nível 0 — GOOGLE (mais preciso no Brasil). Endereço completo em texto; o Google
+  // lida bem com "Lt/Qd/Apto" e nomes de condomínio. Validado contra o IBGE.
   const { via, numero } = parseLogradouro(endereco);
+  const enderecoGoogle = [
+    [via, numero].filter(Boolean).join(', ') || endereco,
+    bairro, cidade, estado ? `${estado}` : '', cep ? `CEP ${cep}` : '', 'Brasil',
+  ].filter(Boolean).join(', ');
+  if (Date.now() < deadline) {
+    const g = aceita(await googleGeocode(enderecoGoogle));
+    if (g) return { ...g, cep: cep || null };
+  }
+
+  // Nível 1 — logradouro + número (estruturado + validação IBGE).
   let cepEnc = null;
   if (via && Date.now() < deadline) {
     const street = [via, numero].filter(Boolean).join(' ');
@@ -174,6 +226,14 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
         if (c2) return { ...c2, nivel: numero ? 'endereco' : 'rua', cep: cepEnc };
         await pausa();
       }
+    }
+    // Nível 1.2 — TEXTO LIVRE no Nominatim (grátis). A busca estruturada quebra com
+    // endereço sujo ("Lt/Qd/Apto"); o parser de texto livre costuma acertar a rua.
+    if (Date.now() < deadline) {
+      const ql = [[via, numero].filter(Boolean).join(' '), bairro, cidade, ufNome, 'Brasil'].filter(Boolean).join(', ');
+      const cl = aceita(await nominatimTextoLivre(ql));
+      if (cl) return { ...cl, nivel: numero ? 'endereco' : 'rua', cep: cepEnc };
+      await pausa();
     }
   }
 
