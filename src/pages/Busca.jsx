@@ -143,6 +143,28 @@ const fotoCandidatos = (im) => {
   return cands;
 };
 
+// ─── Filtros de imóveis — FONTE ÚNICA (regra absoluta) ────────────────────────
+// REGRA: todo filtro da Busca deve ser aplicado em TODOS os caminhos de consulta,
+// combinados (AND). Esta é a fonte única das consultas Supabase — usada pelo mapa
+// (pins) e pela lista SEM raio. O caminho COM raio passa pela RPC buscar_por_raio_v2
+// (SQL); ao ADICIONAR UM FILTRO NOVO, inclua-o AQUI **e** na RPC + api/busca-raio.js.
+// A cidade é resolvida por quem chama (no modo raio ela é só o CENTRO, não filtra).
+function aplicarFiltrosImoveis(base, f, cidadesFiltro) {
+  let q = base.eq('ativo', true);
+  if (f.estado) q = q.eq('estado', f.estado);
+  if (f.tipos?.length) q = q.in('tipo', [...f.tipos, 'imovel']);
+  if (f.modalidades?.length) q = q.in('modalidade', f.modalidades);
+  if (f.valorMin) q = q.gte('valor_minimo', Number(String(f.valorMin).replace(/\D/g, '')));
+  if (f.valorMax) q = q.lte('valor_minimo', Number(String(f.valorMax).replace(/\D/g, '')));
+  if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
+  if (cidadesFiltro?.length) q = q.in('cidade_norm', cidadesFiltro.map(normCidade));
+  if (f.pagamento?.length > 0) {
+    const canon = pagamentoParaCanon(f.pagamento);
+    if (canon.length) q = q.in('forma_pagamento', canon);
+  }
+  return q;
+}
+
 function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo, totalLista, visivel, height }) {
   const mapContainerRef = useRef(null);
   const leafletRef = useRef(null);
@@ -163,28 +185,10 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       setCarregando(true);
       setSemCoordenadas(false);
 
-      // Query base com todos os filtros — sem restrição de coordenadas
-      const aplicarFiltros = (base) => {
-        let q = base.eq('ativo', true);
-        if (filtros.estado) q = q.eq('estado', filtros.estado);
-        if (filtros.tipos?.length) q = q.in('tipo', [...filtros.tipos, 'imovel']);
-        if (filtros.modalidades?.length) q = q.in('modalidade', filtros.modalidades);
-        if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
-        if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
-        if (filtros.descontoMin) q = q.gte('desconto_percentual', Number(filtros.descontoMin));
-        // Cidades: OR entre cidades (único .or da query). Valores entre aspas para
-        // suportar nomes com espaço/acento/parênteses sem quebrar o agrupamento.
-        // No modo raio a cidade vira apenas o CENTRO — a área é definida pelo raio
-        // (haversine abaixo), então não restringimos por cidade (igual à lista).
-        if (!raioAtivo && filtros.cidades?.length) q = q.in('cidade_norm', filtros.cidades.map(normCidade));
-        // Pagamento: igualdade exata (.in) nos valores canônicos. Combina várias
-        // opções como união (Financiado + Hipotecado) sem encadear outro .or.
-        if (filtros.pagamento?.length > 0) {
-          const canon = pagamentoParaCanon(filtros.pagamento);
-          if (canon.length) q = q.in('forma_pagamento', canon);
-        }
-        return q;
-      };
+      // Fonte única de filtros. No modo raio a cidade é só o CENTRO (a área vem do
+      // haversine abaixo), então não filtra por cidade.
+      const aplicarFiltros = (base) =>
+        aplicarFiltrosImoveis(base, filtros, (!raioAtivo && filtros.cidades?.length) ? filtros.cidades : null);
 
       // Busca só imóveis com coordenadas (aparecem como pins)
       const { data } = await aplicarFiltros(
@@ -747,31 +751,17 @@ export default function Busca() {
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
 
     const buildQuery = (base) => {
-      let q = base.eq('ativo', true);
+      // Fonte única de filtros (mesma do mapa). No modo raio, cidadesRaio é o conjunto
+      // de cidades da área; senão, as cidades escolhidas.
+      let q = aplicarFiltrosImoveis(
+        base, filtrosAtivos,
+        cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null)
+      );
       // "Encerra em breve": só leilões com data FUTURA (esconde vencidos e sem data),
-      // senão o topo da lista viria com datas passadas/nulas.
+      // senão o topo da lista viria com datas passadas/nulas. Específico da ordenação.
       if (sortAtivo === 'data_asc') {
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
         q = q.gte('data_leilao', hoje.toISOString().slice(0, 10));
-      }
-      if (filtrosAtivos.estado) q = q.eq('estado', filtrosAtivos.estado);
-      if (filtrosAtivos.tipos?.length) q = q.in('tipo', [...filtrosAtivos.tipos, 'imovel']);
-      if (filtrosAtivos.modalidades?.length) q = q.in('modalidade', filtrosAtivos.modalidades);
-      if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')));
-      if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')));
-      if (filtrosAtivos.descontoMin) q = q.gte('desconto_percentual', Number(filtrosAtivos.descontoMin));
-      // Cidades: OR entre cidades (único .or da query). Aspas protegem nomes com
-      // espaço/acento/parênteses (ex.: "Embu-Guaçu") de quebrar o agrupamento.
-      const cidadesFiltro = cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null);
-      if (cidadesFiltro?.length > 0) {
-        q = q.in('cidade_norm', cidadesFiltro.map(normCidade));
-      }
-      // Pagamento: igualdade exata (.in) nos valores canônicos do banco. Combina
-      // várias opções como união (Financiado + Hipotecado) — antes encadeava um 2º
-      // .or que, junto com o de cidades, podia quebrar a query (mapa "sumia").
-      if (filtrosAtivos.pagamento?.length > 0) {
-        const canon = pagamentoParaCanon(filtrosAtivos.pagamento);
-        if (canon.length) q = q.in('forma_pagamento', canon);
       }
       return q;
     };

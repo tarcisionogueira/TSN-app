@@ -50,6 +50,10 @@ export default async function handler(req) {
 
   // RPC v2 via POST (JSON lida com arrays nativamente). Faz TODOS os filtros
   // simultâneos no banco e devolve o total na coluna `total`.
+  // REGRA ABSOLUTA: todo filtro da Busca deve valer TAMBÉM aqui (modo raio).
+  // Filtros atuais: tipos, estado, modalidades, pagamento, valor_min/max, desconto_min.
+  // Ao adicionar um filtro novo, inclua-o aqui, na RPC buscar_por_raio_v2 (SQL) e no
+  // helper aplicarFiltrosImoveis do front — os três caminhos precisam ficar em sincronia.
   const rpcRes = await sb('rpc/buscar_por_raio_v2', {
     method: 'POST',
     body: JSON.stringify({
