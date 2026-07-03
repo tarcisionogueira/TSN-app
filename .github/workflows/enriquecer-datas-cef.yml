@@ -2,9 +2,10 @@ name: Enriquecer Datas CEF (runner)
 
 # Rota 2 das datas da Caixa: busca a página de detalhe de cada imóvel CEF sem data
 # (exceto venda direta) pelo runner do GitHub e extrai a data. Grátis, sem Bright Data.
+# Schedule desativado: a data da Caixa é renderizada por JavaScript, então o fetch
+# cru retorna 0 (confirmado: 1000 páginas, 0 datas, sem bloqueio). Vai ser convertido
+# para renderização com navegador (puppeteer). Mantido só em manual por ora.
 on:
-  schedule:
-    - cron: '30 10 * * *'   # 7h30 BRT — após o scraper CEF (9h) e o puppeteer (10h)
   workflow_dispatch:
     inputs:
       limite:

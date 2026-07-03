@@ -1035,12 +1035,26 @@ export default function ImovelDetalhe() {
                 const sb = scoreBidPro({ desconto: imovel.descontoPercentual, scoreJuridico: imovel.scoreJuridico, scoreFinanceiro: imovel.scoreFinanceiro });
                 if (!sb) return null;
                 return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, marginBottom: 16 }}>
-                    <div style={{ width: 42, height: 42, borderRadius: 10, background: sb.cor, color: 'white', fontWeight: 900, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{sb.nota.toFixed(1)}</div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 800, color: '#111' }}>Score BidPro</div>
-                      <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.3 }}>{scoreLabel(sb.base)}</div>
+                  <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 42, height: 42, borderRadius: 10, background: sb.cor, color: 'white', fontWeight: 900, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{sb.nota.toFixed(1)}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: '#111' }}>Score BidPro</div>
+                        <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.3 }}>{scoreLabel(sb.base)}</div>
+                      </div>
                     </div>
+                    <details style={{ marginTop: 10 }}>
+                      <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#0D63DB' }}>Como funciona o Score?</summary>
+                      <div style={{ marginTop: 8, fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
+                        Nota de <strong>0 a 10</strong> que resume, num relance, o potencial de oportunidade do imóvel:
+                        <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
+                          <li><strong>Margem (peso 65%)</strong> — desconto do lance mínimo vs. avaliação. 0% ≈ 2 · 30% ≈ 6 · 55%+ ≈ 10.</li>
+                          <li><strong>Risco (peso 35%)</strong> — entra <strong>só depois</strong> que o imóvel tem análise (score jurídico/financeiro). Antes disso a nota é só de margem e <strong>refina após a análise</strong>.</li>
+                        </ul>
+                        <div style={{ marginTop: 6 }}>Cores: <span style={{ color: '#16a34a', fontWeight: 700 }}>verde ≥ 7</span> · <span style={{ color: '#d97706', fontWeight: 700 }}>âmbar 4–6,9</span> · <span style={{ color: '#dc2626', fontWeight: 700 }}>vermelho &lt; 4</span>.</div>
+                        <div style={{ marginTop: 6, color: '#94a3b8' }}>É um indicador de <strong>triagem</strong> — não substitui a análise completa nem o parecer do analista.</div>
+                      </div>
+                    </details>
                   </div>
                 );
               })()}

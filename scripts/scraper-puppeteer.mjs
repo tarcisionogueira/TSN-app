@@ -747,28 +747,37 @@ function extrairDataLeilaoHTML(html) {
   return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
 }
 
-// Preenche data_leilao dos imóveis ZUK visitando a página de cada lote. Roda no
-// runner do GitHub (fetch direto, SEM Bright Data e sem teto) — por isso resolve
-// os ~600 lotes de graça. Concorrência limitada + best-effort (ignora falhas).
-async function enriquecerDatasZuk(imoveis) {
-  const CONC = 6;
-  let ok = 0;
-  for (let i = 0; i < imoveis.length; i += CONC) {
-    const lote = imoveis.slice(i, i + CONC);
-    await Promise.all(lote.map(async (im) => {
-      if (!im.link_edital) return;
-      try {
-        const r = await fetch(im.link_edital, {
-          headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9' },
-          signal: AbortSignal.timeout(12000),
-        });
-        if (!r.ok) return;
-        const d = extrairDataLeilaoHTML(await r.text());
-        if (d) { im.data_leilao = d; ok++; }
-      } catch { /* best-effort */ }
-    }));
-    await new Promise(r => setTimeout(r, 250)); // gentil com o servidor
+// Preenche data_leilao dos imóveis ZUK visitando a página de cada lote NO NAVEGADOR
+// (a data do PortalZuk é renderizada por JavaScript — um fetch cru não a enxerga).
+// Roda no runner do GitHub, grátis. Best-effort com teto de tempo p/ não estourar
+// o timeout da Action (o scrape continua e salva mesmo se não der tempo de todos).
+async function enriquecerDatasZuk(browser, imoveis) {
+  const DEADLINE = Date.now() + 25 * 60 * 1000; // teto de 25 min
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  // Acelera: não baixa imagem/css/fonte — só precisamos do texto renderizado.
+  try {
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      const t = req.resourceType();
+      if (t === 'image' || t === 'media' || t === 'font' || t === 'stylesheet') req.abort();
+      else req.continue();
+    });
+  } catch { /* segue sem interceptar */ }
+  let ok = 0, feitos = 0;
+  for (const im of imoveis) {
+    if (Date.now() > DEADLINE) { console.log('    PortalZuk: teto de tempo das datas atingido'); break; }
+    if (!im.link_edital) continue;
+    try {
+      await page.goto(im.link_edital, { waitUntil: 'networkidle2', timeout: 20000 });
+      const txt = await page.evaluate(() => document.body?.innerText || '');
+      const d = extrairDataLeilaoHTML(txt);
+      if (d) { im.data_leilao = d; ok++; }
+    } catch { /* best-effort */ }
+    feitos++;
+    if (feitos % 50 === 0) console.log(`    PortalZuk datas: ${feitos}/${imoveis.length} · ${ok} ok`);
   }
+  try { await page.close(); } catch {}
   console.log(`    PortalZuk: datas preenchidas ${ok}/${imoveis.length}`);
   return imoveis;
 }
@@ -859,7 +868,7 @@ async function scraperPortalZuk(browser) {
       };
     }).filter(Boolean);
     console.log(`    PortalZuk: ${imoveis.length} imóveis mapeados`);
-    return await enriquecerDatasZuk(imoveis);
+    return await enriquecerDatasZuk(browser, imoveis);
   } catch (err) {
     console.log(`  Erro PortalZuk: ${err.message.slice(0, 100)}`);
     return [];
