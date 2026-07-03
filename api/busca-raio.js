@@ -63,6 +63,7 @@ export default async function handler(req) {
       pagamentos_filtro: pagamentos,
       valor_min: filtros.valorMin || 0,
       valor_max: filtros.valorMax || 9999999999,
+      desconto_min: filtros.descontoMin || 0,
     }),
   });
 

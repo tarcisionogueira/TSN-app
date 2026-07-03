@@ -797,6 +797,7 @@ export default function Busca() {
             pagamento: pagamentoParaCanon(filtrosAtivos.pagamento || []),
             valorMin: filtrosAtivos.valorMin ? Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')) : 0,
             valorMax: filtrosAtivos.valorMax ? Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')) : 9999999999,
+            descontoMin: filtrosAtivos.descontoMin ? Number(filtrosAtivos.descontoMin) : 0,
           },
         };
         const resp = await fetch('/api/busca-raio', {
