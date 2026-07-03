@@ -14,7 +14,7 @@ const BD_TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const BD_ZONE  = process.env.BRIGHTDATA_ZONE;
 const SB_URL   = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY   = process.env.SUPABASE_SERVICE_KEY;
-const TETO     = parseInt(process.env.BRIGHTDATA_MAX_REQ_SEMANA || '300', 10);
+const TETO     = parseInt(process.env.BRIGHTDATA_MAX_REQ_SEMANA || '450', 10);
 
 /** Bright Data está configurado nesta instância? */
 export function brightDataDisponivel() {

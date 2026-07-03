@@ -727,6 +727,52 @@ async function scraperBancoBrasil(browser, pageNum = 1) {
 
 // ─── RELATÓRIO DE CAPTAÇÃO ────────────────────────────────────────────────────
 
+// Extrai a data do próximo leilão do HTML da página do lote (mesma lógica do
+// api/enriquecer-lote.js): ancora em leilão/praça/encerra/data e pega a próxima
+// data futura. Retorna 'YYYY-MM-DD' ou null.
+function extrairDataLeilaoHTML(html) {
+  if (!html) return null;
+  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
+  const ontem = Date.now() - 86400000;
+  const limite = Date.now() + 400 * 86400000;
+  const futuras = [];
+  let m;
+  while ((m = re.exec(txt))) {
+    const y = m[3].length === 2 ? '20' + m[3] : m[3];
+    const t = Date.parse(`${y}-${m[2]}-${m[1]}`);
+    if (!isNaN(t) && t >= ontem && t < limite) futuras.push(t);
+  }
+  if (!futuras.length) return null;
+  return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
+}
+
+// Preenche data_leilao dos imóveis ZUK visitando a página de cada lote. Roda no
+// runner do GitHub (fetch direto, SEM Bright Data e sem teto) — por isso resolve
+// os ~600 lotes de graça. Concorrência limitada + best-effort (ignora falhas).
+async function enriquecerDatasZuk(imoveis) {
+  const CONC = 6;
+  let ok = 0;
+  for (let i = 0; i < imoveis.length; i += CONC) {
+    const lote = imoveis.slice(i, i + CONC);
+    await Promise.all(lote.map(async (im) => {
+      if (!im.link_edital) return;
+      try {
+        const r = await fetch(im.link_edital, {
+          headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9' },
+          signal: AbortSignal.timeout(12000),
+        });
+        if (!r.ok) return;
+        const d = extrairDataLeilaoHTML(await r.text());
+        if (d) { im.data_leilao = d; ok++; }
+      } catch { /* best-effort */ }
+    }));
+    await new Promise(r => setTimeout(r, 250)); // gentil com o servidor
+  }
+  console.log(`    PortalZuk: datas preenchidas ${ok}/${imoveis.length}`);
+  return imoveis;
+}
+
 // ─── PORTALZUK (ZUKERMAN) ─────────────────────────────────────────────────────
 // Listagem server-rendered com SCROLL INFINITO (sem links de página). Card:
 // .card-property → a[href*="/imovel/uf/cidade/..."] (title rico: tipo, endereço,
@@ -813,7 +859,7 @@ async function scraperPortalZuk(browser) {
       };
     }).filter(Boolean);
     console.log(`    PortalZuk: ${imoveis.length} imóveis mapeados`);
-    return imoveis;
+    return await enriquecerDatasZuk(imoveis);
   } catch (err) {
     console.log(`  Erro PortalZuk: ${err.message.slice(0, 100)}`);
     return [];
