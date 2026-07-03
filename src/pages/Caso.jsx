@@ -437,6 +437,10 @@ export default function Caso() {
   // ─── Procuração ──────────────────────────────────────────────────────────
   const [gerandoProc, setGerandoProc] = useState(false);
 
+  // ─── Reunião: parecer do analista ─────────────────────────────────────────
+  const [marcandoReu, setMarcandoReu] = useState(false);
+  const [obsReu, setObsReu] = useState('');
+
   const isAnalista = ['analista','admin'].includes(role);
   const isAdvogado = ['advogado','admin'].includes(role);
   const isStaff    = ['analista','advogado','admin','consultor'].includes(role);
@@ -665,6 +669,27 @@ export default function Caso() {
       setMsg(`Erro: ${e.message}`);
     } finally {
       setSolicitando(p => ({ ...p, juridico:false }));
+    }
+  };
+
+  // ─── Concluir reunião com parecer (analista) ──────────────────────────────
+  const marcarReuniaoRealizada = async (reuniao, parecer) => {
+    if (!caso || !reuniao) return;
+    setMarcandoReu(true);
+    setMsg('');
+    try {
+      const r = await apiCall('/api/marcar-reuniao', { method:'POST', body: JSON.stringify({ caso_id: caso.id, reuniao_id: reuniao.id, parecer, observacoes: obsReu }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha ao concluir a reunião');
+      setObsReu('');
+      await carregarCaso();
+      setMsg(parecer === 'aprovado'
+        ? '✅ Reunião concluída — aprovada para arrematação. Encaminhamento ao jurídico liberado.'
+        : '⛔ Reunião concluída — reprovada para arrematação. O fluxo não segue para o jurídico.');
+    } catch (e) {
+      setMsg(`Erro: ${e.message}`);
+    } finally {
+      setMarcandoReu(false);
     }
   };
 
@@ -1001,7 +1026,7 @@ export default function Caso() {
           color="#7c3aed"
           open={secOpen.reuniao}
           onToggle={() => toggleSec('reuniao')}
-          badge={reuniao1 ? (reuniao1.status === 'realizada' ? 'Realizada' : `Agendada: ${fmtDate(reuniao1.data_hora)}`) : 'Aguardando relatórios'}
+          badge={reuniao1 ? (reuniao1.status === 'realizada' ? (reuniao1.parecer_arrematacao === 'aprovado' ? 'Realizada · Aprovada' : reuniao1.parecer_arrematacao === 'reprovado' ? 'Realizada · Reprovada' : 'Realizada') : `Agendada: ${fmtDate(reuniao1.data_hora)}`) : 'Aguardando relatórios'}
           disabled={!analisesConcluidas && !reuniao1}
         >
           {reuniao1 ? (
@@ -1019,8 +1044,53 @@ export default function Caso() {
                 <div style={{ marginTop:12, fontSize:12, color:'#475569' }}><strong>Observações:</strong> {reuniao1.observacoes}</div>
               )}
 
-              {/* Encaminhar para jurídico (pós-reunião 1, analista) */}
-              {isAnalista && reuniao1.status === 'realizada' && !juridica && podeSolicitarJuridico && (
+              {/* Parecer do analista (quando já registrado) */}
+              {reuniao1.parecer_arrematacao && (
+                <div style={{ marginTop:12 }}>
+                  <span style={lbl}>Parecer para arrematação</span>
+                  <Badge
+                    label={reuniao1.parecer_arrematacao === 'aprovado' ? '✓ Aprovado para arrematação' : '✕ Reprovado para arrematação'}
+                    color={reuniao1.parecer_arrematacao === 'aprovado' ? '#10b981' : '#ef4444'}
+                    bg={reuniao1.parecer_arrematacao === 'aprovado' ? '#ecfdf5' : '#fef2f2'}
+                  />
+                </div>
+              )}
+
+              {/* Analista conclui a reunião e emite o parecer (marca como realizada) */}
+              {isAnalista && reuniao1.status !== 'cancelada' && !reuniao1.parecer_arrematacao && (
+                <div style={{ marginTop:16, padding:'14px', background:'#f5f3ff', borderRadius:10, border:'1px solid #ddd6fe' }}>
+                  <div style={{ fontWeight:700, fontSize:13, color:'#5b21b6', marginBottom:4 }}>Concluir reunião e emitir parecer</div>
+                  <div style={{ fontSize:11, color:'#6d28d9', marginBottom:10 }}>Registre o resultado da reunião. <strong>Aprovado</strong> libera o encaminhamento ao jurídico; <strong>reprovado</strong> encerra o fluxo de arrematação.</div>
+                  <textarea
+                    value={obsReu}
+                    onChange={e => setObsReu(e.target.value)}
+                    placeholder="Observações da reunião (opcional)"
+                    rows={2}
+                    style={{ ...inp, marginBottom:10, resize:'vertical' }}
+                  />
+                  <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                    <button onClick={() => marcarReuniaoRealizada(reuniao1, 'aprovado')} disabled={marcandoReu} style={{ ...btn('#10b981'), fontSize:12, opacity: marcandoReu?0.6:1 }}>
+                      {marcandoReu
+                        ? <Loader2 size={13} style={{marginRight:6,verticalAlign:'middle',animation:'spin 1s linear infinite'}}/>
+                        : <Check size={13} style={{marginRight:6,verticalAlign:'middle'}}/>}
+                      Aprovar para arrematação
+                    </button>
+                    <button onClick={() => marcarReuniaoRealizada(reuniao1, 'reprovado')} disabled={marcandoReu} style={{ ...btn('#ef4444'), fontSize:12, opacity: marcandoReu?0.6:1 }}>
+                      <AlertTriangle size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Reprovar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Reprovado — estado terminal */}
+              {reuniao1.parecer_arrematacao === 'reprovado' && (
+                <div style={{ marginTop:16, padding:'12px 14px', background:'#fef2f2', borderRadius:10, border:'1px solid #fecaca', fontSize:12, color:'#991b1b' }}>
+                  O analista <strong>não recomendou</strong> este imóvel para arrematação. O fluxo não segue para a análise jurídica.
+                </div>
+              )}
+
+              {/* Encaminhar para jurídico (somente após aprovação do analista) */}
+              {isAnalista && reuniao1.parecer_arrematacao === 'aprovado' && !juridica && podeSolicitarJuridico && (
                 <div style={{ marginTop:16, padding:'14px', background:'#fefce8', borderRadius:10, border:'1px solid #fde68a' }}>
                   <div style={{ fontWeight:700, fontSize:13, color:'#92400e', marginBottom:4 }}>Encaminhar para análise jurídica</div>
                   <div style={{ fontSize:11, color:'#a16207', marginBottom:8 }}>Um clique envia ao advogado, por e-mail, todos os anexos + a avaliação documental. A devolutiva dele volta automaticamente para o Atendimento.</div>
@@ -1031,7 +1101,7 @@ export default function Caso() {
                   </button>
                 </div>
               )}
-              {isCliente && reuniao1.status === 'realizada' && !podeSolicitarJuridico && !juridica && (
+              {isCliente && reuniao1.parecer_arrematacao === 'aprovado' && !podeSolicitarJuridico && !juridica && (
                 <div style={{ marginTop:12, padding:'12px', background:'#fef2f2', borderRadius:8, fontSize:12, color:'#991b1b' }}>
                   A análise jurídica está disponível apenas nos planos Assessorado e Leilão Club.
                   <button onClick={() => nav('/planos')} style={{ marginLeft:8, color:'#0D63DB', background:'none', border:'none', fontWeight:700, cursor:'pointer', fontSize:12 }}>Fazer upgrade</button>
