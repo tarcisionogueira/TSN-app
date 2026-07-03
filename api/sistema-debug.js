@@ -2,6 +2,8 @@
 // Acessível apenas por admin (JWT)
 export const config = { runtime: 'edge' };
 
+import { gcalConfigurado, criarEventoAgenda, cancelarEventoAgenda } from './_gcal.js';
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
@@ -117,6 +119,34 @@ export default async function handler(req) {
     };
     for (const nivel of ['endereco', 'bairro', 'cidade']) {
       resultado.geocodificacao.por_nivel[nivel] = await countHead(`imoveis_leilao?ativo=eq.true&geocod_nivel=eq.${nivel}`);
+    }
+  }
+
+  if (modulo === 'gcal') {
+    // Teste real de ponta a ponta: renova o token, cria um evento e o remove.
+    if (!gcalConfigurado()) {
+      resultado.gcal = { ok: false, configurado: false, erro: 'Credenciais GOOGLE_OAUTH_* ausentes na Vercel' };
+    } else {
+      try {
+        const inicio = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const ev = await criarEventoAgenda({
+          titulo: '🔧 Teste de conexão BidPro (pode ignorar)',
+          descricao: 'Evento de diagnóstico criado pelo painel admin — removido automaticamente.',
+          inicioISO: inicio.toISOString(),
+          duracaoMin: 15,
+          convidados: [],
+        });
+        const removido = ev?.eventId ? await cancelarEventoAgenda(ev.eventId) : false;
+        resultado.gcal = {
+          ok: !!ev?.eventId,
+          configurado: true,
+          evento_criado: !!ev?.eventId,
+          evento_removido: removido,
+          calendario: process.env.GOOGLE_CALENDAR_ID || 'primary',
+        };
+      } catch (e) {
+        resultado.gcal = { ok: false, configurado: true, erro: e.message };
+      }
     }
   }
 

@@ -3857,9 +3857,22 @@ function DashboardTab() {
 function SystemStatusCard() {
   const [status, setStatus] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const [gcalTest, setGcalTest] = React.useState(null);
+  const [gcalTesting, setGcalTesting] = React.useState(false);
   React.useEffect(() => {
     apiCall('/api/system-status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
+  const testarGcal = async () => {
+    setGcalTesting(true); setGcalTest(null);
+    try {
+      const r = await apiCall('/api/sistema-debug?modulo=gcal');
+      const d = await r.json();
+      setGcalTest(d.gcal || { ok: false, erro: 'Sem resposta' });
+    } catch (e) {
+      setGcalTest({ ok: false, erro: e.message });
+    }
+    setGcalTesting(false);
+  };
   const GRUPOS = {
     geral:  { label: 'Geral', items: ['baseUrl', 'cron'] },
     email:  { label: 'Alertas por Email', items: ['email', 'from'] },
@@ -3909,6 +3922,19 @@ function SystemStatusCard() {
               ? 'conectada — convites e lembretes nativos ativos no agendamento.'
               : 'ainda não conectada — defina GOOGLE_OAUTH_CLIENT_ID / _SECRET / _REFRESH_TOKEN na Vercel.'}{' '}
             Hoje via conta @gmail (OAuth). <strong>Ao escalar, migrar para Google Workspace</strong> no domínio próprio dá convites nativos por service account, sem depender de refresh token pessoal.
+            <div style={{ marginTop: 8 }}>
+              <button onClick={testarGcal} disabled={gcalTesting}
+                style={{ padding: '5px 12px', borderRadius: 8, background: 'white', color: '#5b21b6', border: '1px solid #ddd6fe', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+                {gcalTesting ? '⏳ Testando…' : '🔌 Testar conexão'}
+              </button>
+              {gcalTest && (
+                <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 700, color: gcalTest.ok ? '#059669' : '#dc2626' }}>
+                  {gcalTest.ok
+                    ? '✅ Conectado — evento de teste criado e removido.'
+                    : `❌ Falhou: ${gcalTest.erro || 'erro desconhecido'}`}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}
