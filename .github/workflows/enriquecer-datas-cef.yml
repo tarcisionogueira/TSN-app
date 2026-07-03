@@ -1,17 +1,18 @@
-name: Enriquecer Datas CEF (runner)
+name: Enriquecer Datas CEF (navegador)
 
-# Rota 2 das datas da Caixa: busca a página de detalhe de cada imóvel CEF sem data
-# (exceto venda direta) pelo runner do GitHub e extrai a data. Grátis, sem Bright Data.
-# Schedule desativado: a data da Caixa é renderizada por JavaScript, então o fetch
-# cru retorna 0 (confirmado: 1000 páginas, 0 datas, sem bloqueio). Vai ser convertido
-# para renderização com navegador (puppeteer). Mantido só em manual por ora.
+# A data da Caixa é renderizada por JS — visitamos cada página no navegador
+# (puppeteer) e lemos o texto renderizado. Roda no runner do GitHub, grátis.
+# Processa um lote por execução (rotaciona por enriquecido_em); execuções
+# diárias cobrem o acervo. Mesma técnica validada no ZUK (42 → 539).
 on:
+  schedule:
+    - cron: '0 4 * * *'   # 1h BRT (4h UTC) — fora do horário dos outros scrapers
   workflow_dispatch:
     inputs:
       limite:
         description: 'Máx. de imóveis por execução'
         required: false
-        default: '6000'
+        default: '4000'
 
 jobs:
   enriquecer-cef:
@@ -26,9 +27,20 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Enriquecer datas CEF
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Enriquecer datas CEF (navegador)
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          CEF_DATAS_LIMITE: ${{ github.event.inputs.limite || '6000' }}
+          CEF_DATAS_LIMITE: ${{ github.event.inputs.limite || '4000' }}
         run: node scripts/enriquecer-datas-cef.mjs

@@ -2,37 +2,33 @@
 /**
  * Enriquecimento de DATAS da Caixa (CEF) — ROTA 2, no runner do GitHub (grátis).
  *
- * Filosofia de coleta: cada fonte precisa de VÁRIAS ROTAS para a informação não
- * faltar. Para a data da Caixa:
- *   1) CSV em massa (scraper-caixa.js, coluna 13) — a Caixa costuma deixar vazio;
- *   2) ESTA página de detalhe pelo runner do GitHub (o IP da Vercel é bloqueado,
- *      o do runner costuma passar) — cobre o grosso de graça;
- *   3) Bright Data sob demanda (enriquecer-lote.js) — quando o cliente abre.
+ * A data de licitação/leilão da Caixa é renderizada por JavaScript — um fetch cru
+ * pega o HTML "vazio" (confirmado: 1000 páginas, 0 datas). Então visitamos cada
+ * página NO NAVEGADOR (puppeteer) e lemos o texto RENDERIZADO — mesma técnica que
+ * resolveu o ZUK (42 → 539). Venda direta é venda contínua (sem data) e é ignorada.
  *
- * Venda direta é venda contínua (sem data de leilão) e é ignorada de propósito.
+ * Pool de páginas + deadline: processa um lote por execução (rotaciona por
+ * enriquecido_em) para caber no timeout da Action; execuções seguintes cobrem o resto.
  *
- * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcional: CEF_DATAS_LIMITE.
+ * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcional: CEF_DATAS_LIMITE, CEF_DATAS_CONC.
  */
+import puppeteer from 'puppeteer';
+import { createClient } from '@supabase/supabase-js';
+
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
-const LIMITE = parseInt(process.env.CEF_DATAS_LIMITE || '6000', 10);
-const CONC = 8;
-const DEADLINE = Date.now() + 70 * 60 * 1000; // para antes do timeout de 90 min da Action
+const LIMITE = parseInt(process.env.CEF_DATAS_LIMITE || '4000', 10);
+const CONC = parseInt(process.env.CEF_DATAS_CONC || '5', 10);
+const DEADLINE = Date.now() + 75 * 60 * 1000; // para antes do timeout de 90 min
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const BROWSER_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--window-size=1280,900'];
 
 if (!SB || !KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
+const supabase = createClient(SB, KEY);
 
-function sb(path, opts = {}) {
-  return fetch(`${SB}/rest/v1/${path}`, {
-    ...opts,
-    headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
-  });
-}
-
-// Extrai a data do próximo leilão/licitação do HTML (mesma lógica de enriquecer-lote).
-function extrairDataLeilaoHTML(html) {
-  if (!html) return null;
-  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+// Extrai a data do próximo leilão/licitação do TEXTO renderizado (mesma lógica de enriquecer-lote).
+function extrairDataLeilao(txt) {
+  if (!txt) return null;
   const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
   const ontem = Date.now() - 86400000;
   const limite = Date.now() + 400 * 86400000;
@@ -47,41 +43,56 @@ function extrairDataLeilaoHTML(html) {
   return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
 }
 
+async function novaPagina(browser) {
+  const page = await browser.newPage();
+  await page.setUserAgent(UA);
+  try {
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      const t = req.resourceType();
+      if (t === 'image' || t === 'media' || t === 'font' || t === 'stylesheet') req.abort();
+      else req.continue();
+    });
+  } catch { /* segue sem interceptar */ }
+  return page;
+}
+
 async function main() {
-  const filtro = [
-    'fonte=eq.CEF', 'ativo=eq.true', 'data_leilao=is.null',
-    'modalidade=not.ilike.*venda*direta*',
-    'link_edital=not.is.null',
-    'select=id,link_edital,url_lote',
-    'order=enriquecido_em.asc.nullsfirst',
-    `limit=${LIMITE}`,
-  ].join('&');
+  const { data: cands, error } = await supabase.from('imoveis_leilao')
+    .select('id, link_edital, url_lote')
+    .eq('fonte', 'CEF').eq('ativo', true).is('data_leilao', null)
+    .not('modalidade', 'ilike', '%venda%direta%')
+    .not('link_edital', 'is', null)
+    .order('enriquecido_em', { ascending: true, nullsFirst: true })
+    .limit(LIMITE);
+  if (error) { console.error('query erro:', error.message); process.exit(1); }
+  if (!cands?.length) { console.log('CEF: sem candidatos sem data.'); return; }
+  console.log(`CEF sem data (não venda direta): ${cands.length} candidatos · conc ${CONC} · limite ${LIMITE}`);
 
-  const cands = await (await sb(`imoveis_leilao?${filtro}`)).json().catch(() => []);
-  if (!Array.isArray(cands) || !cands.length) { console.log('CEF: sem candidatos sem data.'); return; }
-  console.log(`CEF sem data (não venda direta): ${cands.length} candidatos · limite ${LIMITE}`);
+  const browser = await puppeteer.launch({ headless: true, args: BROWSER_ARGS });
+  let idx = 0, ok = 0, semData = 0, falha = 0, feitos = 0;
 
-  let ok = 0, semData = 0, falha = 0, feitos = 0, bloqueio = 0;
-  for (let i = 0; i < cands.length && Date.now() < DEADLINE; i += CONC) {
-    const lote = cands.slice(i, i + CONC);
-    await Promise.all(lote.map(async (im) => {
+  async function worker() {
+    const page = await novaPagina(browser);
+    while (idx < cands.length && Date.now() < DEADLINE) {
+      const im = cands[idx++];
       const url = im.url_lote || im.link_edital;
       const patch = { enriquecido_em: new Date().toISOString() };
       try {
-        const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(12000) });
-        if (r.ok) {
-          const d = extrairDataLeilaoHTML(await r.text());
-          if (d) { patch.data_leilao = d; ok++; } else semData++;
-        } else { falha++; if (r.status === 403 || r.status === 429) bloqueio++; }
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+        const txt = await page.evaluate(() => document.body?.innerText || '');
+        const d = extrairDataLeilao(txt);
+        if (d) { patch.data_leilao = d; ok++; } else semData++;
       } catch { falha++; }
       feitos++;
-      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(im.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
-    }));
-    if ((i / CONC) % 25 === 0) console.log(`  ${feitos}/${cands.length} · datas ${ok} · sem-data ${semData} · falha ${falha}`);
-    // Se a Caixa estiver bloqueando o runner (muitos 403/429 logo de início), aborta cedo.
-    if (feitos >= 40 && bloqueio / feitos > 0.7) { console.log('⚠️ Caixa parece bloquear o runner (muitos 403/429). Abortando — rota 2 indisponível.'); break; }
-    await new Promise(r => setTimeout(r, 200));
+      await supabase.from('imoveis_leilao').update(patch).eq('id', im.id).then(() => {}, () => {});
+      if (feitos % 100 === 0) console.log(`  ${feitos}/${cands.length} · datas ${ok} · sem-data ${semData} · falha ${falha}`);
+    }
+    try { await page.close(); } catch {}
   }
+
+  await Promise.all(Array.from({ length: CONC }, () => worker()));
+  await browser.close();
   console.log(`FIM CEF datas: preenchidas ${ok} · sem-data-na-pagina ${semData} · falha ${falha} · processados ${feitos}`);
 }
 
