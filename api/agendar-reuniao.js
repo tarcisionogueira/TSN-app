@@ -7,6 +7,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
+import { criarEventoAgenda } from './_gcal.js';
 
 const SUPABASE_URL  = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY;
@@ -151,6 +152,41 @@ export default async function handler(req) {
   const dataFormatada = fmtDataHora(slot.data_hora);
   const tituloReu = reuniao_numero === 1 ? '1ª Reunião de Análise' : '2ª Reunião — Aprovação';
 
+  // 5.5. Cria evento REAL no Google Calendar (convite + lembretes nativos).
+  // Best-effort: se a Google falhar ou não estiver configurada, o agendamento segue.
+  let gcalLink = null;
+  try {
+    const descricaoEvento = [
+      'Reunião de assessoria imobiliária — BidPro Brasil.',
+      caso.imovel_endereco ? `Imóvel: ${caso.imovel_endereco}` : '',
+      meetLink ? `Videochamada: ${meetLink}` : '',
+      `Caso: ${APP_URL}/#/caso/${caso_id}`,
+      '⚠️ A reunião é gravada e transcrita para fins de auditoria interna (LGPD Art. 7º, I).',
+    ].filter(Boolean).join('\n');
+
+    const ev = await criarEventoAgenda({
+      titulo: `🏠 BidPro Brasil — ${tituloReu}`,
+      descricao: descricaoEvento,
+      local: meetLink || caso.imovel_endereco || undefined,
+      inicioISO: slot.data_hora,
+      duracaoMin: slot.duracao_min || 30,
+      convidados: [
+        cliente?.email ? { email: cliente.email, nome: cliente.nome } : null,
+        analista?.email ? { email: analista.email, nome: analista.nome } : null,
+      ].filter(Boolean),
+    });
+    if (ev) {
+      gcalLink = ev.htmlLink;
+      await sb(`reunioes?id=eq.${reuniao?.id}`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ gcal_event_id: ev.eventId, gcal_html_link: ev.htmlLink }),
+      });
+    }
+  } catch (e) {
+    console.error('[agendar-reuniao] Google Calendar falhou:', e?.message || e);
+  }
+
   // 6. Envia email ao cliente
   if (RESEND_KEY && cliente?.email) {
     const calLink = (() => {
@@ -185,7 +221,7 @@ export default async function handler(req) {
               <div><b>Imóvel:</b> ${caso.imovel_endereco || '-'}</div>
             </div>
             ${meetLink ? `<a href="${meetLink}" style="display:inline-block;padding:12px 24px;background:#0D63DB;color:white;border-radius:8px;text-decoration:none;font-weight:700">Acessar videochamada</a>` : ''}
-            <p style="margin-top:20px"><a href="${calLink}" style="color:#0D63DB">📅 Adicionar ao Google Agenda</a></p>
+            <p style="margin-top:20px"><a href="${gcalLink || calLink}" style="color:#0D63DB">📅 ${gcalLink ? 'Ver na sua Google Agenda' : 'Adicionar ao Google Agenda'}</a></p>
             <p style="font-size:12px;color:#94a3b8;margin-top:24px">⚠️ Esta reunião será gravada e transcrita para fins de auditoria interna.</p>
           </div>
         `,
