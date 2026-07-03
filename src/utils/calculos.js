@@ -178,6 +178,76 @@ export const calcularDepositoJudicial = ({
   return { sinal, saldo, parcelas, totalDesembolso, custoCaptacao, depositoJaRealizado: dep };
 };
 
+// ─── Indicadores financeiros (VPL, TIR, payback, múltiplo) ────────────────────
+// TMA = Taxa Mínima de Atratividade: a "régua" de quanto o dinheiro renderia
+// parado. Simples e configurável; padrão 12% ao ano.
+export const TMA_PADRAO = 12;
+
+const mensalDeAnual = (anual) => Math.pow(1 + (Number(anual) || 0) / 100, 1 / 12) - 1;
+
+// VPL de uma série de fluxos mensais (fluxos[0] = mês 0). tmaAnual em % a.a.
+export const calcularVPL = (fluxos, tmaAnual = TMA_PADRAO) => {
+  const i = mensalDeAnual(tmaAnual);
+  return (fluxos || []).reduce((acc, f, t) => acc + (Number(f) || 0) / Math.pow(1 + i, t), 0);
+};
+
+// TIR mensal por bisseção → anualizada (%). Retorna null quando não há inversão
+// de sinal ou não converge (evita exibir um número enganoso).
+export const calcularTIR = (fluxos) => {
+  const f = (fluxos || []).map(x => Number(x) || 0);
+  if (f.length < 2 || !f.some(x => x > 0) || !f.some(x => x < 0)) return null;
+  const vpl = (i) => f.reduce((acc, x, t) => acc + x / Math.pow(1 + i, t), 0);
+  let lo = -0.9, hi = 1.0, flo = vpl(lo);
+  if (flo * vpl(hi) > 0) return null;
+  let mid = 0;
+  for (let k = 0; k < 200; k++) {
+    mid = (lo + hi) / 2;
+    const fm = vpl(mid);
+    if (Math.abs(fm) < 1e-7) break;
+    if (flo * fm < 0) hi = mid; else { lo = mid; flo = fm; }
+  }
+  const anual = (Math.pow(1 + mid, 12) - 1) * 100;
+  return isFinite(anual) ? anual : null;
+};
+
+// Payback em meses, nominal e descontado. null se não recupera no horizonte.
+export const calcularPayback = (fluxos, tmaAnual = TMA_PADRAO) => {
+  const i = mensalDeAnual(tmaAnual);
+  let accNom = 0, accDesc = 0, nom = null, desc = null;
+  (fluxos || []).forEach((f, t) => {
+    const v = Number(f) || 0;
+    accNom += v; accDesc += v / Math.pow(1 + i, t);
+    if (nom === null && t > 0 && accNom >= 0) nom = t;
+    if (desc === null && t > 0 && accDesc >= 0) desc = t;
+  });
+  return { meses: nom, mesesDescontado: desc };
+};
+
+// Múltiplo sobre o capital (MOIC) = total que volta ÷ capital investido.
+export const calcularMultiplo = (capital, retornoTotal) => {
+  const c = Number(capital) || 0;
+  return c > 0 ? (Number(retornoTotal) || 0) / c : null;
+};
+
+// Fluxo mensal do cenário de LOCAÇÃO (hold), em base à vista, para VPL/TIR:
+//   mês 0 = -(capital de aquisição: arremate + custos, sem o carrego do flip)
+//   mês t = + aluguel líquido (aluguel − IPTU − condomínio)
+//   mês H = + venda ao final (valor de referência líquido de comissão/IR)
+// Premissas explícitas (mostradas no relatório): horizonte de saída e venda ao
+// valor de mercado atual; sem financiamento (hold mais limpo de interpretar).
+export const fluxoLocacao = (inputs, horizonteMeses = 60) => {
+  const mAV = calcularMetricasCenario(inputs, Number(inputs.valorArrematacao) || 0, true);
+  const aluguel = Number(inputs.valorLocacao) || 0;
+  const carrego = (Number(inputs.iptuMensal) || 0) + (Number(inputs.condominioMensal) || 0);
+  const aluguelLiquido = aluguel - carrego;
+  const capital = mAV.capitalMobilizado - mAV.custoCarrrego;   // só aquisição
+  const vendaFim = mAV.receitaLiquida;                          // venda líquida ao fim
+  const H = Math.max(1, Math.round(horizonteMeses));
+  const fluxos = [-capital];
+  for (let t = 1; t <= H; t++) fluxos.push(aluguelLiquido + (t === H ? vendaFim : 0));
+  return { fluxos, capital, aluguelLiquido, vendaFim, horizonte: H };
+};
+
 export const fmt = (v, dec = 2) =>
   Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 

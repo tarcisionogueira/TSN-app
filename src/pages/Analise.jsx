@@ -9,7 +9,7 @@ import {
   Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck, CreditCard,
 } from 'lucide-react';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, analisarMercado, gerarParecer } from '../utils/claude';
-import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, fmt, fmtPct } from '../utils/calculos';
+import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
@@ -390,6 +390,22 @@ export default function Analise() {
     return { linhas, totalSaidas, totalEntradas: metricas.receitaLiquida };
   }, [d, metricas, isAVista, isUsoProprio]);
 
+  // ─── Indicadores de retorno (VPL, TIR, payback, múltiplo) ──────────────────
+  // TMA (régua): padrão 12% a.a., ajustável em Premissas (d.tmaAnual).
+  const tma = Number(d.tmaAnual) || TMA_PADRAO;
+  const indicadores = useMemo(() => {
+    const fluxosRevenda = (fluxo.linhas || []).map(l => (l.entrada || 0) - (l.saida || 0));
+    const loc = fluxoLocacao(d, Number(d.horizonteLocacaoMeses) || 60);
+    return {
+      tma,
+      vpl: calcularVPL(fluxosRevenda, tma),
+      tir: calcularTIR(fluxosRevenda),
+      payback: calcularPayback(fluxosRevenda, tma),
+      multiplo: calcularMultiplo(metricas.capitalMobilizado, metricas.receitaLiquida),
+      loc: { ...loc, vpl: calcularVPL(loc.fluxos, tma), tir: calcularTIR(loc.fluxos) },
+    };
+  }, [fluxo, metricas, d, tma]);
+
   const showMsg = (text, type='success') => { setMsg({ text, type }); setTimeout(()=>setMsg({text:'',type:''}), 3500); };
 
   const aplicarExtracao = (ext) => {
@@ -761,7 +777,7 @@ export default function Analise() {
     carregarCota();
   };
 
-  const imprimirPDF = () => gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer });
+  const imprimirPDF = () => gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores });
 
   const solicitarAnalista = async () => {
     if (!user || solicitando || solicitado) return;
@@ -1670,6 +1686,66 @@ export default function Analise() {
         </div>
       )}
       {relSel === 'mercado' && (<>
+
+      <div style={{ display:'flex', flexDirection:'column', gap:14, marginTop:14 }}>
+        {/* ── CAPA / RESUMO PARA LEIGOS: veredito + 3 números + próximo passo ── */}
+        <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
+            {isViavel ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>}
+            <span style={{ fontSize:16, fontWeight:900, color:isViavel?'#065f46':'#b91c1c' }}>
+              {isUsoProprio ? 'Aprovado para uso próprio' : (isViavel ? 'Operação viável — vale avançar' : 'Operação reprovada — retorno insuficiente')}
+            </span>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:10 }}>
+            {[
+              ['Desconto vs. mercado', d.valorMercado>0 ? fmtPct((1-(d.valorArrematacao||0)/d.valorMercado)*100) : '—', '#0D63DB'],
+              [isAVista?'Retorno (ROI)':'Retorno (ROE)', fmtPct(metricas.roi), metricas.roi>=0?'#10b981':'#ef4444'],
+              ['Rentabilidade anual (TIR)', indicadores.tir!=null ? fmtPct(indicadores.tir)+' a.a.' : '—', '#7c3aed'],
+            ].map(([l,v,c])=>(
+              <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', textAlign:'center', border:'1px solid #e2e8f0' }}>
+                <div style={{ fontSize:9, color:'#64748b', fontWeight:800, textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>{l}</div>
+                <div style={{ fontSize:20, fontWeight:900, color:c }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:14, padding:'12px 14px', background:isViavel?'#f0fdf4':'#fef2f2', border:`1px solid ${isViavel?'#bbf7d0':'#fecaca'}`, borderRadius:12, fontSize:13, color:isViavel?'#15803d':'#991b1b', lineHeight:1.6 }}>
+            <strong>Próximo passo:</strong> {isUsoProprio
+              ? 'Imóvel adequado ao uso próprio pelo preço analisado. Confirme os documentos com o time.'
+              : (isViavel
+                ? 'Os números fecham acima da meta. Agende a reunião com o analista para validar e seguir com a documentação.'
+                : 'Pelo lance analisado, o retorno fica abaixo da meta. Reveja o valor do lance (veja o teto adiante) ou avalie outro imóvel.')}
+          </div>
+        </div>
+
+        {/* ── INDICADORES DE RETORNO: VPL / TIR / payback / múltiplo + locação ── */}
+        <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+          <div style={{ fontSize:14, fontWeight:900, color:'#111', marginBottom:4 }}>Indicadores de retorno</div>
+          <div style={{ fontSize:11, color:'#94a3b8', marginBottom:14 }}>Régua (TMA): consideramos que o dinheiro deveria render ao menos <strong>{fmtPct(indicadores.tma,0)} ao ano</strong>. Os números abaixo já descontam essa régua.</div>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr 1fr':'repeat(4,1fr)', gap:10 }}>
+            {[
+              ['VPL (revenda)', `R$ ${fmt(indicadores.vpl,0)}`, indicadores.vpl>=0?'#10b981':'#ef4444', 'Ganho hoje além da régua'],
+              ['TIR (revenda)', indicadores.tir!=null?fmtPct(indicadores.tir)+' a.a.':'—', '#7c3aed', 'Rentabilidade anual'],
+              ['Payback', indicadores.payback.meses!=null?`${indicadores.payback.meses} meses`:'—', '#0D63DB', 'Tempo p/ recuperar'],
+              ['Múltiplo do capital', indicadores.multiplo!=null?`${fmt(indicadores.multiplo)}x`:'—', '#f59e0b', 'Quanto o capital volta'],
+            ].map(([l,v,c,sub])=>(
+              <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', border:'1px solid #e2e8f0' }}>
+                <div style={{ fontSize:9, color:c, fontWeight:800, textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>{l}</div>
+                <div style={{ fontSize:18, fontWeight:900, color:c }}>{v}</div>
+                <div style={{ fontSize:10, color:'#94a3b8', marginTop:3 }}>{sub}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:12, padding:'12px 14px', background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12 }}>
+            <div style={{ fontSize:12, fontWeight:800, color:'#6b21a8', marginBottom:6 }}>Cenário de locação (segurar e alugar por {indicadores.loc.horizonte} meses, venda ao final)</div>
+            <div style={{ display:'flex', gap:18, flexWrap:'wrap', fontSize:13, color:'#4b5563' }}>
+              <div>Aluguel líquido: <strong>R$ {fmt(indicadores.loc.aluguelLiquido)}/mês</strong></div>
+              <div>VPL: <strong style={{ color: indicadores.loc.vpl>=0?'#10b981':'#ef4444' }}>R$ {fmt(indicadores.loc.vpl,0)}</strong></div>
+              <div>TIR: <strong>{indicadores.loc.tir!=null?fmtPct(indicadores.loc.tir)+' a.a.':'—'}</strong></div>
+            </div>
+            <div style={{ fontSize:10, color:'#a78bfa', marginTop:6 }}>Premissa: compra à vista, aluguel líquido de IPTU/condomínio e venda ao valor de mercado atual no fim do período.</div>
+          </div>
+        </div>
+      </div>
 
       {/* ── ETAPA 3: AVALIAÇÃO MERCADOLÓGICA ── */}
       <Section id="sec-mercado" step="3" title="Avaliação Mercadológica" icon={BarChart3} color="#10b981" open={openSec.mercado} onToggle={()=>toggleSec('mercado')}

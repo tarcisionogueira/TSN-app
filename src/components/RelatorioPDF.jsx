@@ -1,6 +1,6 @@
 import { fmt, fmtPct } from '../utils/calculos';
 
-export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer }) {
+export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores: ind }) {
   const parseSecoes = (txt) => {
     if (!txt) return {};
     const res = {};
@@ -86,6 +86,20 @@ ${d.observacoes?`<div class="obs av"><b style="font-size:9px;text-transform:uppe
      ['Teto Disputa',`R$ ${fmt(teto)}`,'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
+
+${ind?`
+<div class="av" style="margin-bottom:14px;">
+  <h2>Indicadores de Retorno</h2>
+  <div style="font-size:9px;color:#64748b;margin-bottom:6px;">Régua (TMA): ${fmtPct(ind.tma,0)} ao ano — já descontada nos números abaixo.</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+    ${[['VPL (revenda)',`R$ ${fmt(ind.vpl,0)}`,(ind.vpl>=0?'#059669':'#dc2626')],
+       ['TIR (revenda)',ind.tir!=null?`${fmtPct(ind.tir)} a.a.`:'—','#7c3aed'],
+       ['Payback',ind.payback?.meses!=null?`${ind.payback.meses} meses`:'—','#0D63DB'],
+       ['Múltiplo do capital',ind.multiplo!=null?`${fmt(ind.multiplo)}x`:'—','#d97706']].map(([l,v,c])=>`
+    <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
+  </div>
+  <div style="font-size:9px;color:#475569;margin-top:6px;">Locação (${ind.loc?.horizonte||60} meses + venda ao final): aluguel líquido R$ ${fmt(ind.loc?.aluguelLiquido||0)}/mês · VPL R$ ${fmt(ind.loc?.vpl||0,0)} · TIR ${ind.loc?.tir!=null?`${fmtPct(ind.loc.tir)} a.a.`:'—'}.</div>
+</div>`:''}
 
 ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</pre></div>`:''}
 
