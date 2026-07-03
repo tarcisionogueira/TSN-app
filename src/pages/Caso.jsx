@@ -204,7 +204,7 @@ function DocUploadRow({ tipo, label, anexo, enviando, onArquivo }) {
   );
 }
 
-function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido }) {
+function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, linkLeilao }) {
   const [anexos, setAnexos] = useState([]);
   const [enviando, setEnviando] = useState(null);   // 'matricula' | 'edital' | null
   const [gerando, setGerando] = useState(false);
@@ -216,15 +216,16 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido }) 
   const carregarAnexos = useCallback(async () => {
     if (!imovelId) return;
     const { data } = await supabase.from('imovel_anexos')
-      .select('id,tipo,nome,criado_em')
+      .select('id,tipo,nome,url,criado_em')
       .eq('imovel_id', imovelId)
-      .in('tipo', ['matricula', 'edital']);
+      .in('tipo', ['matricula', 'edital', 'regras_venda', 'outro']);
     setAnexos(data || []);
   }, [imovelId]);
 
   useEffect(() => { carregarAnexos(); }, [carregarAnexos]);
 
   const anexoDe = (tipo) => anexos.find(a => a.tipo === tipo);
+  const extras = anexos.filter(a => !['matricula', 'edital'].includes(a.tipo));
 
   const enviarArquivo = async (tipo, file) => {
     if (!imovelId) { setErro('Imóvel não vinculado ao caso.'); return; }
@@ -296,8 +297,52 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido }) 
       </div>
 
       <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
+        {/* Acesso ao leiloeiro para baixar os documentos do lote */}
+        {linkLeilao && (
+          <a href={linkLeilao} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, fontSize:12, fontWeight:700, color:'#0D63DB', textDecoration:'none' }}>
+            <ExternalLink size={14}/> Acessar no leiloeiro para baixar edital, matrícula e anexos
+          </a>
+        )}
         <DocUploadRow tipo="matricula" label="Matrícula" anexo={anexoDe('matricula')} enviando={enviando} onArquivo={enviarArquivo}/>
         <DocUploadRow tipo="edital" label="Edital" anexo={anexoDe('edital')} enviando={enviando} onArquivo={enviarArquivo}/>
+
+        {/* Documentos adicionais (múltiplos — laudo, ata, regras de venda, etc.) */}
+        <div style={{ borderTop:'1px dashed #e2e8f0', paddingTop:8 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:6 }}>Outros documentos ({extras.length})</div>
+          {extras.map(a => (
+            <div key={a.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', fontSize:12 }}>
+              <FileText size={13} color="#10b981"/>
+              <a href={a.url} target="_blank" rel="noreferrer" style={{ flex:1, color:'#0D63DB', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.nome}</a>
+            </div>
+          ))}
+          <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:4, padding:'6px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor: enviando?'default':'pointer', opacity: enviando==='outro'?0.6:1 }}>
+            {enviando==='outro' ? <Loader2 size={13} style={{ animation:'spin 1s linear infinite' }}/> : <Upload size={13}/>}
+            Anexar documento
+            <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display:'none' }} disabled={!!enviando}
+              onChange={e => { const f = e.target.files?.[0]; if (f) enviarArquivo('outro', f); e.target.value=''; }}/>
+          </label>
+        </div>
+      </div>
+
+      {/* Checklist de conferência — auditoria do que temos e do que a IA validou */}
+      <div style={{ marginTop:12, padding:'10px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:10 }}>
+        <div style={{ fontSize:11, fontWeight:800, color:'#334155', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Checklist de conferência</div>
+        {[
+          ['Matrícula anexada', temMatricula],
+          ['Edital anexado', temEdital],
+          ['Análise da IA completa', temResultado && !incompleto],
+        ].map(([l, ok]) => (
+          <div key={l} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, padding:'3px 0', color: ok?'#166534':'#92400e' }}>
+            {ok ? <CheckCircle2 size={14} color="#10b981"/> : <AlertTriangle size={14} color="#f59e0b"/>}
+            <span>{l}</span>
+            <span style={{ marginLeft:'auto', fontWeight:700 }}>{ok ? 'OK' : 'pendente'}</span>
+          </div>
+        ))}
+        {(!temMatricula || !temEdital || (temResultado && incompleto)) && (
+          <div style={{ marginTop:8, fontSize:11, color:'#92400e', lineHeight:1.5 }}>
+            ⚠️ Falta documento ou a IA não conseguiu ler tudo — <strong>requer conferência humana</strong>. A IA nunca reprova sozinha por falta de dado.
+          </div>
+        )}
       </div>
 
       {erro && (
@@ -977,6 +1022,7 @@ export default function Caso() {
                 imovelId={caso.imovel_id}
                 relatorioInicial={getRel('juridica_preliminar')}
                 onConcluido={carregarCaso}
+                linkLeilao={imovelExtra?.link_leilao || imovelInit?.url || null}
               />
             )}
             {TIPOS_ANALISE.map(info => (

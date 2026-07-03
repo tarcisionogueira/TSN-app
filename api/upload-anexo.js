@@ -26,7 +26,10 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const BUCKET       = 'documentos';
 const ROLES_STAFF  = ['analista', 'advogado', 'admin'];
-const TIPOS_OK     = ['matricula', 'edital', 'regras_venda'];
+const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', 'outro'];
+// Só matrícula/edital são únicos por imóvel (índice parcial). Os demais tipos
+// aceitam vários arquivos — leilões podem ter anexos extras (laudo, ata, etc.).
+const TIPOS_UNICOS = ['matricula', 'edital'];
 const MAX_BYTES    = 20 * 1024 * 1024; // 20 MB
 const TIPOS_MIME   = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 
@@ -96,12 +99,15 @@ export default async function handler(req) {
   const baseNome = (file.name || `${tipo}.${ext}`).replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `casos/${imovel_id}/${Date.now()}_${baseNome}`;
 
-  // Doc anterior do mesmo (imovel_id, tipo) — para substituir (índice único parcial)
+  // Doc anterior do mesmo (imovel_id, tipo) — para substituir (só tipos únicos).
+  // 'regras_venda'/'outro' aceitam múltiplos arquivos → sempre insere novo.
   let anterior = null;
-  const jaRes = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovel_id)}&tipo=eq.${encodeURIComponent(tipo)}&select=id,storage_path&limit=1`);
-  if (jaRes.ok) {
-    const [e] = await jaRes.json().catch(() => []);
-    if (e) anterior = e;
+  if (TIPOS_UNICOS.includes(tipo)) {
+    const jaRes = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovel_id)}&tipo=eq.${encodeURIComponent(tipo)}&select=id,storage_path&limit=1`);
+    if (jaRes.ok) {
+      const [e] = await jaRes.json().catch(() => []);
+      if (e) anterior = e;
+    }
   }
 
   // Sobe o novo arquivo
