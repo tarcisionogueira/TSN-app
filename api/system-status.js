@@ -22,6 +22,22 @@ export default async function handler(req) {
     gcalConectada:{ ok: !!process.env.GOOGLE_OAUTH_REFRESH_TOKEN, label: 'Agenda Google conectada', grupo: 'agenda' },
   };
 
+  // Consumo Bright Data da semana corrente (para o mostrador do dashboard).
+  try {
+    const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const KEY = process.env.SUPABASE_SERVICE_KEY;
+    const teto = parseInt(process.env.BRIGHTDATA_MAX_REQ_SEMANA || '450', 10);
+    if (SB && KEY) {
+      const r = await fetch(`${SB}/rest/v1/brightdata_uso?select=semana,requests&order=semana.desc&limit=1`, {
+        headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+      });
+      if (r.ok) {
+        const [row] = await r.json();
+        status.brightdata = { usados: row?.requests || 0, teto, semana: row?.semana || null };
+      }
+    }
+  } catch { /* mostrador some se falhar */ }
+
   return new Response(JSON.stringify(status), {
     status: 200,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' },

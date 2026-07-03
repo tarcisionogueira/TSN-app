@@ -1,0 +1,33 @@
+name: Enriquecer Datas CEF (runner)
+
+# Rota 2 das datas da Caixa: busca a página de detalhe de cada imóvel CEF sem data
+# (exceto venda direta) pelo runner do GitHub e extrai a data. Grátis, sem Bright Data.
+on:
+  schedule:
+    - cron: '30 10 * * *'   # 7h30 BRT — após o scraper CEF (9h) e o puppeteer (10h)
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Máx. de imóveis por execução'
+        required: false
+        default: '6000'
+
+jobs:
+  enriquecer-cef:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enriquecer datas CEF
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CEF_DATAS_LIMITE: ${{ github.event.inputs.limite || '6000' }}
+        run: node scripts/enriquecer-datas-cef.mjs

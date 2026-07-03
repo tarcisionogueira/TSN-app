@@ -3886,9 +3886,11 @@ function SystemStatusCard() {
     { label: 'APP_FROM_EMAIL no Vercel', desc: 'Ex: "BidPro Brasil <alertas@seudominio.com.br>"' },
     { label: 'APP_BASE_URL no Vercel', desc: 'Ex: "https://seudominio.com.br"' },
   ];
-  const totalOk = status ? Object.values(status).filter(v => v.ok).length : 0;
-  const total = status ? Object.values(status).length : 0;
+  const envItems = status ? Object.values(status).filter(v => v && typeof v.ok === 'boolean' && v.label) : [];
+  const totalOk = envItems.filter(v => v.ok).length;
+  const total = envItems.length;
   const saude = total > 0 ? Math.round(totalOk / total * 100) : 0;
+  const bd = status?.brightdata;
   return (
     <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -3898,6 +3900,22 @@ function SystemStatusCard() {
         </div>
         {!loading && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 28, fontWeight: 900, color: saude >= 80 ? '#059669' : saude >= 50 ? '#f59e0b' : '#dc2626' }}>{saude}%</div><div style={{ fontSize: 11, color: '#94a3b8' }}>configurado</div></div>}
       </div>
+      {!loading && bd && (() => {
+        const pct = bd.teto > 0 ? Math.min(100, Math.round(bd.usados / bd.teto * 100)) : 0;
+        const cor = pct >= 90 ? '#dc2626' : pct >= 70 ? '#f59e0b' : '#059669';
+        return (
+          <div style={{ marginBottom: 20, padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#334155' }}>Bright Data — consumo da semana</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: cor }}>{bd.usados} / {bd.teto} <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>({pct}%)</span></span>
+            </div>
+            <div style={{ height: 8, background: '#e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 6, transition: 'width .3s' }} />
+            </div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>Teto semanal de requisições ao desbloqueador (fontes que barram o servidor).{bd.semana ? ` Semana de ${bd.semana}.` : ''}</div>
+          </div>
+        );
+      })()}
       {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Verificando…</div> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 20 }}>
           {Object.entries(GRUPOS).map(([key, grupo]) => (
