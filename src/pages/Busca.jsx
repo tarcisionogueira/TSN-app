@@ -171,6 +171,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
         if (filtros.modalidades?.length) q = q.in('modalidade', filtros.modalidades);
         if (filtros.valorMin) q = q.gte('valor_minimo', Number(String(filtros.valorMin).replace(/\D/g, '')));
         if (filtros.valorMax) q = q.lte('valor_minimo', Number(String(filtros.valorMax).replace(/\D/g, '')));
+        if (filtros.descontoMin) q = q.gte('desconto_percentual', Number(filtros.descontoMin));
         // Cidades: OR entre cidades (único .or da query). Valores entre aspas para
         // suportar nomes com espaço/acento/parênteses sem quebrar o agrupamento.
         // No modo raio a cidade vira apenas o CENTRO — a área é definida pelo raio
@@ -442,7 +443,7 @@ export default function Busca() {
       });
   }, [effectiveUserId, limiteAnalises]);
   const analisesRestantes = limiteAnalises != null ? Math.max(0, limiteAnalises - analisesUsadas) : null;
-  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[] };
+  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0 };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
     if (!_urlParams.estado) return null;
@@ -758,6 +759,7 @@ export default function Busca() {
       if (filtrosAtivos.modalidades?.length) q = q.in('modalidade', filtrosAtivos.modalidades);
       if (filtrosAtivos.valorMin) q = q.gte('valor_minimo', Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')));
       if (filtrosAtivos.valorMax) q = q.lte('valor_minimo', Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')));
+      if (filtrosAtivos.descontoMin) q = q.gte('desconto_percentual', Number(filtrosAtivos.descontoMin));
       // Cidades: OR entre cidades (único .or da query). Aspas protegem nomes com
       // espaço/acento/parênteses (ex.: "Embu-Guaçu") de quebrar o agrupamento.
       const cidadesFiltro = cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null);
@@ -1258,6 +1260,33 @@ export default function Busca() {
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:'#94a3b8' }}>
                   <span>R$ 0</span><span>R$ 1M</span><span>R$ 2,5M</span><span>R$ 5M+</span>
                 </div>
+              </div>
+              <div>
+                <label style={lbl}>Desconto mínimo (avaliação × lance)</label>
+                <div style={{ fontSize:11, color:'#475569', fontWeight:700, marginBottom:8 }}>
+                  {filtros.descontoMin ? `A partir de ${filtros.descontoMin}%` : 'Qualquer desconto'}
+                </div>
+                <input type="range" min={0} max={90} step={5}
+                  value={Number(filtros.descontoMin) || 0}
+                  onChange={e => up('descontoMin', Number(e.target.value) || 0)}
+                  style={{ width:'100%', height:4, accentColor:'#10b981' }}
+                />
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:10 }}>
+                  {[0,20,30,40,50].map(p => {
+                    const ativo = (Number(filtros.descontoMin)||0) === p;
+                    return (
+                      <button key={p} onClick={() => up('descontoMin', p)}
+                        style={{ padding:'4px 10px', borderRadius:20, border:`1px solid ${ativo ? '#10b981' : '#e2e8f0'}`, background: ativo ? '#ecfdf5' : 'white', color: ativo ? '#059669' : '#64748b', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                        {p===0 ? 'Todos' : `${p}%+`}
+                      </button>
+                    );
+                  })}
+                </div>
+                {filtros.descontoMin > 0 && (
+                  <div style={{ fontSize:9, color:'#94a3b8', marginTop:6, lineHeight:1.4 }}>
+                    Imóveis sem avaliação cadastrada (sem desconto calculado) são omitidos.
+                  </div>
+                )}
               </div>
               <div>
                 <label style={lbl}>Forma de Pagamento</label>
