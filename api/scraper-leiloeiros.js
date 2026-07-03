@@ -324,6 +324,18 @@ function ljudTotal(data) {
     if (data && data[k] != null && !isNaN(Number(data[k]))) return Number(data[k]);
   return null;
 }
+// dt_fechamento vem como "2026-12-18 14:00:00-03" (offset sem ':') → normaliza p/ ISO
+// no mesmo formato das outras fontes ("...-03:00"). Ignora datas-fantasma (ex.: 2040),
+// usadas pelo portal quando não há praça marcada.
+function parseDataLJUD(s) {
+  if (!s || typeof s !== 'string') return null;
+  const iso = s.trim().replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00');
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const ano = d.getUTCFullYear();
+  if (ano < 2020 || ano > 2035) return null;
+  return iso;
+}
 function mapLoteLJUD(it) {
   const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || it.titulo || '').replace(/\s+/g, ' ').trim();
   const cidade = String(it.nm_cidade || it.cidade || '').trim();
@@ -341,20 +353,20 @@ function mapLoteLJUD(it) {
     descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500) || null,
     link_edital: urlLeil ? `https://${urlLeil}` : 'https://www.leiloesjudiciais.com.br',
     link_foto: foto, leiloeiro: String(it.nm_leiloeiro || it.leiloeiro || 'Leilões Judiciais').slice(0, 120),
-    data_leilao: null, forma_pagamento: null,
+    data_leilao: parseDataLJUD(it.dt_fechamento), forma_pagamento: null,
   };
 }
 
 async function coletarLJUD(paginas, deadline) {
   const out = []; let via = '-';
-  const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
-  // categoria=1 costuma ser Imóveis; tipo filtra modalidade. Testamos algumas
-  // variantes na 1ª página p/ ver qual traz mais itens, depois pagina na melhor.
-  // id_categoria 3 = Imóveis (1=Veículos, 1751=Semoventes, 1810=Bens diversos, 1957=Jóias).
-  const commons = 'tipo=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+  // get-lotes = endpoint REAL do portal (payload rico, já com dt_fechamento). tipo=3 =
+  // Imóveis (confirmado no recon: id_categoria 3, statuslote 1 = "Aberto para Lance").
+  // Mantemos o filtro de imóvel no cliente por segurança.
+  const API = 'https://api.leiloesjudiciais.com.br/core/api/get-lotes';
+  const commons = 'estado=0&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
   const variantes = [
-    { nome: 'cat3_imoveis', qs: `categoria=3&${commons}` },  // Imóveis (filtro correto)
-    { nome: 'cat0_todos',   qs: `categoria=0&${commons}` },  // fallback: tudo (filtramos imóveis no cliente)
+    { nome: 'tipo3_imoveis', qs: `tipo=3&${commons}` },      // Imóveis (filtro correto)
+    { nome: 'cat3_imoveis',  qs: `categoria=3&${commons}` }, // fallback equivalente
   ];
   const hdrs = { Accept: 'application/json,*/*', Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/' };
 
