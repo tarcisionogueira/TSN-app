@@ -1,87 +1,50 @@
 /**
  * Google Calendar — criação de eventos reais para as reuniões (agendamento híbrido).
  *
- * Autentica via Service Account (JWT RS256, assinado com Web Crypto → compatível
- * com o Edge Runtime) e cria o evento com convidados + lembretes nativos da Google.
+ * Autentica via OAuth 2.0 (refresh token de um usuário Google real). Como o evento
+ * é criado "como o usuário", é possível CONVIDAR participantes (cliente + analista)
+ * e disparar os convites/lembretes nativos da Google — inclusive em conta @gmail,
+ * sem Google Workspace.
  *
  * Variáveis de ambiente (Vercel):
- *   GOOGLE_SERVICE_ACCOUNT_JSON  → JSON completo da service account (client_email + private_key)
+ *   GOOGLE_OAUTH_CLIENT_ID       → Client ID do OAuth 2.0
+ *   GOOGLE_OAUTH_CLIENT_SECRET   → Client secret do OAuth 2.0
+ *   GOOGLE_OAUTH_REFRESH_TOKEN   → refresh token do usuário dono da agenda
  *   GOOGLE_CALENDAR_ID           → calendário de destino (default: 'primary')
- *   GOOGLE_IMPERSONATE_SUBJECT   → (opcional) usuário Workspace a impersonar (Domain-Wide
- *                                  Delegation). Necessário para CONVIDAR participantes e
- *                                  disparar os e-mails/lembretes da Google.
  *
- * Se as credenciais não estiverem configuradas, `gcalConfigurado()` retorna false e o
- * chamador segue o fluxo normal (Daily + e-mail) sem quebrar.
+ * Se não estiver configurado, `gcalConfigurado()` retorna false e o chamador segue
+ * o fluxo normal (Daily + e-mail) sem quebrar.
+ *
+ * Nota de escala: em conta @gmail o refresh token exige que a tela de consentimento
+ * OAuth esteja "Em produção" (senão expira em 7 dias). Ao escalar, migrar o e-mail
+ * para Google Workspace no domínio próprio dá convites nativos com service account
+ * + Domain-Wide Delegation, sem depender de refresh token pessoal.
  */
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const SCOPE = 'https://www.googleapis.com/auth/calendar';
 
-function lerServiceAccount() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) return null;
-  try {
-    const sa = JSON.parse(raw);
-    if (!sa.client_email || !sa.private_key) return null;
-    // A private key costuma vir com \n escapados quando colada em env var.
-    sa.private_key = String(sa.private_key).replace(/\\n/g, '\n');
-    return sa;
-  } catch {
-    return null;
-  }
+function creds() {
+  const client_id = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const client_secret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const refresh_token = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+  if (!client_id || !client_secret || !refresh_token) return null;
+  return { client_id, client_secret, refresh_token };
 }
 
 export function gcalConfigurado() {
-  return !!lerServiceAccount();
+  return !!creds();
 }
 
-// ─── base64url helpers ──────────────────────────────────────────────────────
-function b64urlFromString(str) {
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-function b64urlFromBytes(bytes) {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-function pemParaDer(pem) {
-  const b64 = pem.replace(/-----BEGIN [^-]+-----/, '').replace(/-----END [^-]+-----/, '').replace(/\s+/g, '');
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
-
-async function obterAccessToken(sa) {
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const claim = {
-    iss: sa.client_email,
-    scope: SCOPE,
-    aud: TOKEN_URL,
-    iat: now,
-    exp: now + 3600,
-  };
-  const subject = process.env.GOOGLE_IMPERSONATE_SUBJECT;
-  if (subject) claim.sub = subject;
-
-  const signingInput = `${b64urlFromString(JSON.stringify(header))}.${b64urlFromString(JSON.stringify(claim))}`;
-
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    pemParaDer(sa.private_key),
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(signingInput)));
-  const assertion = `${signingInput}.${b64urlFromBytes(sig)}`;
-
+async function obterAccessToken(c) {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),
+    body: new URLSearchParams({
+      client_id: c.client_id,
+      client_secret: c.client_secret,
+      refresh_token: c.refresh_token,
+      grant_type: 'refresh_token',
+    }),
   });
   const data = await res.json();
   if (!res.ok || !data.access_token) {
@@ -91,7 +54,7 @@ async function obterAccessToken(sa) {
 }
 
 /**
- * Cria um evento no Google Calendar.
+ * Cria um evento no Google Calendar com convidados + lembretes nativos.
  * @returns {Promise<{ eventId: string, htmlLink: string } | null>} null se não configurado.
  * Lança erro em falha real (o chamador deve tratar sem abortar o agendamento).
  */
@@ -104,20 +67,16 @@ export async function criarEventoAgenda({
   convidados = [],   // [{ email, nome }]
   timeZone = 'America/Sao_Paulo',
 }) {
-  const sa = lerServiceAccount();
-  if (!sa) return null;
+  const c = creds();
+  if (!c) return null;
 
-  const token = await obterAccessToken(sa);
+  const token = await obterAccessToken(c);
   const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
 
   const inicio = new Date(inicioISO);
   const fim = new Date(inicio.getTime() + duracaoMin * 60000);
 
-  // attendees só surtem efeito (convite/lembrete) com Domain-Wide Delegation.
-  const podeConvidar = !!process.env.GOOGLE_IMPERSONATE_SUBJECT;
-  const attendees = podeConvidar
-    ? convidados.filter(c => c.email).map(c => ({ email: c.email, displayName: c.nome || undefined }))
-    : undefined;
+  const attendees = convidados.filter(g => g.email).map(g => ({ email: g.email, displayName: g.nome || undefined }));
 
   const body = {
     summary: titulo,
@@ -125,7 +84,7 @@ export async function criarEventoAgenda({
     location: local || undefined,
     start: { dateTime: inicio.toISOString(), timeZone },
     end: { dateTime: fim.toISOString(), timeZone },
-    ...(attendees ? { attendees } : {}),
+    ...(attendees.length ? { attendees } : {}),
     reminders: {
       useDefault: false,
       overrides: [
@@ -136,7 +95,7 @@ export async function criarEventoAgenda({
     },
   };
 
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all&conferenceDataVersion=0`;
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -153,10 +112,10 @@ export async function criarEventoAgenda({
  * Cancela um evento previamente criado (best-effort). Silencioso se não configurado.
  */
 export async function cancelarEventoAgenda(eventId) {
-  const sa = lerServiceAccount();
-  if (!sa || !eventId) return false;
+  const c = creds();
+  if (!c || !eventId) return false;
   try {
-    const token = await obterAccessToken(sa);
+    const token = await obterAccessToken(c);
     const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
     const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=all`;
     const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });

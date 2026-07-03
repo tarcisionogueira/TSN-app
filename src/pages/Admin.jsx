@@ -3865,6 +3865,7 @@ function SystemStatusCard() {
     email:  { label: 'Alertas por Email', items: ['email', 'from'] },
     banco:  { label: 'Banco de Dados', items: ['svcKey'] },
     ads:    { label: 'Anúncios', items: ['googleAds', 'meta'] },
+    agenda: { label: 'Agenda Google', items: ['gcalClient', 'gcalConectada'] },
   };
   const DOMINIO_PENDENTE = [
     { label: 'Definir nome e domínio da plataforma', desc: 'Necessário para email remetente e URL pública.' },
@@ -3898,6 +3899,17 @@ function SystemStatusCard() {
               ); })}
             </div>
           ))}
+        </div>
+      )}
+      {!loading && (
+        <div style={{ display: 'flex', gap: 10, padding: '10px 12px', background: status?.gcalConectada?.ok ? '#ecfdf5' : '#f5f3ff', borderRadius: 10, border: `1px solid ${status?.gcalConectada?.ok ? '#a7f3d0' : '#ddd6fe'}`, marginBottom: 16, fontSize: 12, color: status?.gcalConectada?.ok ? '#065f46' : '#5b21b6' }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>📅</span>
+          <div style={{ lineHeight: 1.5 }}>
+            <strong>Agenda Google (OAuth):</strong> {status?.gcalConectada?.ok
+              ? 'conectada — convites e lembretes nativos ativos no agendamento.'
+              : 'ainda não conectada — defina GOOGLE_OAUTH_CLIENT_ID / _SECRET / _REFRESH_TOKEN na Vercel.'}{' '}
+            Hoje via conta @gmail (OAuth). <strong>Ao escalar, migrar para Google Workspace</strong> no domínio próprio dá convites nativos por service account, sem depender de refresh token pessoal.
+          </div>
         </div>
       )}
       <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginBottom: 16 }}>

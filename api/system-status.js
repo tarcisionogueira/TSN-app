@@ -18,6 +18,8 @@ export default async function handler(req) {
     svcKey:   { ok: !!process.env.SUPABASE_SERVICE_KEY,     label: 'Supabase Service Key',   grupo: 'banco'  },
     googleAds:{ ok: !!process.env.GOOGLE_ADS_DEVELOPER_TOKEN, label: 'Google Ads API',       grupo: 'ads'   },
     meta:     { ok: !!process.env.META_ACCESS_TOKEN,        label: 'Meta Ads API',           grupo: 'ads'   },
+    gcalClient:  { ok: !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET), label: 'Google OAuth (client)', grupo: 'agenda' },
+    gcalConectada:{ ok: !!process.env.GOOGLE_OAUTH_REFRESH_TOKEN, label: 'Agenda Google conectada', grupo: 'agenda' },
   };
 
   return new Response(JSON.stringify(status), {
