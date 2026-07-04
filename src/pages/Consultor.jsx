@@ -72,7 +72,7 @@ export default function Consultor() {
     async function load() {
       const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: eb }, { data: lp }, { data: lc }, { data: pc }, { data: sdrProd }] = await Promise.all([
         supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', user.id).single(),
-        supabase.from('perfis').select('id, nome, email, whatsapp, telefone, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
+        supabase.from('perfis').select('id, nome, telefone, role, plano, created_at').eq('indicado_por', user.id).order('created_at', { ascending: false }),
         supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
         supabase.from('cursos_admin').select('id, titulo, subtitulo, preco, emoji, cor, comissao_pct').eq('ativo', true).order('ordem'),
         supabase.from('ebooks_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('criado_em', { ascending: false }),

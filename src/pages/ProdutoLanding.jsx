@@ -266,32 +266,29 @@ function CapturaLanding({ id }) {
     if (form.senha.length < 6) return setErro('A senha deve ter pelo menos 6 caracteres.');
     setEnviando(true);
     try {
-      // Create Supabase auth account
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: form.email.trim(),
-        password: form.senha,
-        options: { data: { nome: form.nome.trim(), whatsapp: wa } },
+      // Todo o trabalho sensível roda no backend (sorteio do consultor, vínculo
+      // na carteira, criação da conta já confirmada e concessão do acesso).
+      const r = await fetch('/api/sdr-capturar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          produtoId: produto.id,
+          nome: form.nome.trim(),
+          email: form.email.trim(),
+          senha: form.senha,
+          whatsapp: wa,
+          respostas,
+          origem: window.location.href,
+        }),
       });
-      if (authErr) {
-        if (authErr.message?.includes('already registered')) {
-          setErro('Esse e-mail já tem uma conta. Acesse a plataforma normalmente.');
-        } else {
-          setErro(authErr.message || 'Erro ao criar conta. Tente novamente.');
-        }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErro(d.error || 'Erro ao criar conta. Tente novamente.');
         setEnviando(false);
         return;
       }
-      const userId = authData?.user?.id;
-      // Insert lead
-      await supabase.from('sdr_leads').insert({
-        produto_id: produto.id,
-        nome: form.nome.trim(),
-        whatsapp: wa,
-        email: form.email.trim(),
-        origem: window.location.href,
-        respostas: respostas,
-        user_id: userId || null,
-      });
+      // Já loga o visitante (conta confirmada) para acesso imediato — best-effort.
+      try { await supabase.auth.signInWithPassword({ email: form.email.trim(), password: form.senha }); } catch (_) {}
       setStep('sucesso');
     } catch (_) {
       setErro('Erro inesperado. Tente novamente.');
