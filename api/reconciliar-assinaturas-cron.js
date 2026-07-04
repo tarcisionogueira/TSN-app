@@ -12,7 +12,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { isCronAuthorized } from './_auth.js';
-import { ativarPlanoDireto } from './_webhook-core.js';
+import { ativarPlanoDireto, suspenderPlanoDireto } from './_webhook-core.js';
 import { createClient } from '@supabase/supabase-js';
 
 const MP_TOKEN = (process.env.MP_ACCESS_TOKEN || '').trim();
@@ -25,8 +25,13 @@ export default async function handler(req) {
   }
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-  let verificados = 0, corrigidos = 0;
+  let verificados = 0, corrigidos = 0, rebaixados = 0;
+  const mpGet = async (path) => {
+    const r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
+    return r.ok ? r.json() : null;
+  };
   try {
+    // ── UPGRADE: pagou (authorized) mas segue no Explorador → reativa. ─────────
     for (let offset = 0; offset < 3000; offset += 100) {
       const r = await fetch(`https://api.mercadopago.com/preapproval/search?status=authorized&offset=${offset}&limit=100`, {
         headers: { Authorization: `Bearer ${MP_TOKEN}` },
@@ -51,8 +56,41 @@ export default async function handler(req) {
       const total = Number(data?.paging?.total || 0);
       if (offset + 100 >= total) break;
     }
+
+    // ── DOWNGRADE: cancelou/pausou E o período pago já terminou → rebaixa. ─────
+    // Mantém o acesso até o fim do período pago (next_payment_date); só rebaixa
+    // depois disso. Rede de segurança caso o webhook de cancelamento não chegue.
+    const agora = new Date();
+    for (const status of ['cancelled', 'paused']) {
+      for (let offset = 0; offset < 3000; offset += 100) {
+        const data = await mpGet(`/preapproval/search?status=${status}&offset=${offset}&limit=100`);
+        const results = data?.results || [];
+        if (!results.length) break;
+
+        for (const sub of results) {
+          const [userId, planoKey] = String(sub.external_reference || '').split('|');
+          if (!userId || !planoKey) continue;
+          // Período pago ainda vigente → mantém acesso. Sem data confiável, não
+          // rebaixa (conservador: o webhook é o caminho primário).
+          const fim = sub.next_payment_date ? new Date(sub.next_payment_date) : null;
+          if (!fim || fim > agora) continue;
+
+          const { data: perfil } = await supabase.from('perfis').select('role').eq('id', userId).maybeSingle();
+          if (!perfil || perfil.role === 'explorador') continue;
+
+          // Não rebaixa quem tem assinatura ATIVA (re-assinou após cancelar).
+          const ativo = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(sub.payer_email || '')}&status=authorized&limit=1`);
+          if (ativo?.results?.length) continue;
+
+          try { await suspenderPlanoDireto({ userId, gateway: 'mercadopago' }); rebaixados++; }
+          catch (e) { console.error('[reconciliar] rebaixar', userId, e?.message); }
+        }
+        const total = Number(data?.paging?.total || 0);
+        if (offset + 100 >= total) break;
+      }
+    }
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
-  return new Response(JSON.stringify({ ok: true, verificados, corrigidos }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, verificados, corrigidos, rebaixados }), { headers: { 'Content-Type': 'application/json' } });
 }
