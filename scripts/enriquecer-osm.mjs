@@ -3,28 +3,28 @@
  * Índice de Localização (OSM) — job em lote no runner do GitHub (grátis).
  *
  * REGRA (validada com o dono): para cada imóvel com geocoding de ENDEREÇO
- * (preciso), consulta o Overpass ao redor da COORDENADA DO PRÓPRIO IMÓVEL e
- * calcula um score 0–10 por *distance-decay*: quanto MAIS PERTO, MAIOR a nota;
- * itens NEGATIVOS (presídio/aterro/usina) fazem o OPOSTO — quanto mais perto,
- * mais penalizam. Não calcula em bairro/cidade (coordenada aproximada → erro).
+ * (preciso), calcula um score 0–10 por *distance-decay* ao redor da COORDENADA
+ * DO PRÓPRIO IMÓVEL: quanto MAIS PERTO, MAIOR a nota; itens NEGATIVOS
+ * (presídio/aterro/usina) fazem o OPOSTO. Não calcula em bairro/cidade.
+ *
+ * FONTE DOS POIs: extrato local do OpenStreetMap (Geofabrik Brasil) já filtrado
+ * pelo osmium para um GeoJSONSeq com só as categorias de interesse. Assim NÃO
+ * dependemos do Overpass público (que bloqueia/limita o IP do runner). O workflow
+ * baixa o PBF, roda o osmium e chama este script apontando OSM_POIS_FILE.
  *
  * Grava pontos_proximos (POI mais próximo por categoria, com dist_m) e
- * score_localizacao. Categorias iguais às da tela: transporte, mercado, farmacia,
- * saude, escola, shopping.
+ * score_localizacao. Categorias iguais às da tela.
  *
- * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcional: OSM_LIMITE, OSM_PAUSA_MS.
+ * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY, OSM_POIS_FILE. Opcional: OSM_LIMITE.
  */
+import fs from 'node:fs';
+import readline from 'node:readline';
 import { createClient } from '@supabase/supabase-js';
 
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
-const LIMITE = parseInt(process.env.OSM_LIMITE || '3000', 10);
-const PAUSA_MS = parseInt(process.env.OSM_PAUSA_MS || '1200', 10); // gentil com o Overpass
-const ENDPOINTS = process.env.OVERPASS_URL
-  ? [process.env.OVERPASS_URL]
-  : ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const DEADLINE = Date.now() + 70 * 60 * 1000;
+const POIS_FILE = process.env.OSM_POIS_FILE || 'pois.geojsonl';
+const LIMITE = parseInt(process.env.OSM_LIMITE || '100000', 10);
 
 if (!SB || !KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const supabase = createClient(SB, KEY);
@@ -39,6 +39,8 @@ const POS = {
   shopping:   { peso: 1, ideal: 800, max: 4000, match: t => t.shop === 'mall' || t.amenity === 'marketplace' },
 };
 const NEG = { raio: 1200, match: t => t.amenity === 'prison' || t.landuse === 'landfill' || t.power === 'plant' || t.man_made === 'wastewater_plant' };
+const CATS = Object.keys(POS);
+const MAX_BUSCA_M = 4000; // maior raio de interesse (shopping)
 
 function haversine(lat1, lng1, lat2, lng2) {
   const R = 6371000, toRad = x => x * Math.PI / 180;
@@ -54,50 +56,69 @@ function scorePos(dist, ideal, max) {
 }
 function penalNeg(dist, raio) {
   if (dist == null || dist >= raio) return 0;
-  return -10 * (raio - dist) / raio; // colado = -10, decai a 0 no raio
+  return -10 * (raio - dist) / raio;
 }
 
-async function overpass(lat, lng) {
-  const q = `[out:json][timeout:25];(
-    nwr["railway"~"station|subway_entrance|tram_stop"](around:1500,${lat},${lng});
-    node["highway"="bus_stop"](around:1500,${lat},${lng});
-    node["public_transport"="station"](around:1500,${lat},${lng});
-    nwr["shop"~"supermarket|convenience|greengrocer"](around:1500,${lat},${lng});
-    nwr["amenity"="pharmacy"](around:2000,${lat},${lng});
-    nwr["shop"="chemist"](around:2000,${lat},${lng});
-    nwr["amenity"~"hospital|clinic|doctors"](around:3000,${lat},${lng});
-    nwr["amenity"~"school|kindergarten|college"](around:2000,${lat},${lng});
-    nwr["shop"="mall"](around:4000,${lat},${lng});
-    nwr["amenity"="prison"](around:1200,${lat},${lng});
-    nwr["landuse"="landfill"](around:1200,${lat},${lng});
-    nwr["power"="plant"](around:1200,${lat},${lng});
-  );out center tags;`;
-  let lastErr = 'sem tentativa';
-  for (const ep of ENDPOINTS) {
-    for (let tent = 0; tent < 2; tent++) {
-      try {
-        const r = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(40000) });
-        if (r.status === 429 || r.status === 504) { lastErr = `${ep} ${r.status}`; await sleep(4000); continue; }
-        if (!r.ok) { lastErr = `${ep} HTTP ${r.status}: ${(await r.text()).slice(0, 100)}`; break; }
-        return (await r.json()).elements || [];
-      } catch (e) { lastErr = `${ep} ${e.name}: ${e.message}`; await sleep(1000); }
-    }
+// Ponto representativo de uma geometria GeoJSON (centroide simples p/ área/linha).
+function repPonto(geom) {
+  if (!geom) return null;
+  const g = geom.coordinates;
+  if (geom.type === 'Point') return [g[1], g[0]];
+  const anel = geom.type === 'Polygon' ? g[0]
+    : geom.type === 'MultiPolygon' ? g[0]?.[0]
+    : geom.type === 'LineString' ? g
+    : geom.type === 'MultiLineString' ? g[0] : null;
+  if (!anel || !anel.length) return null;
+  let sx = 0, sy = 0;
+  for (const p of anel) { sx += p[0]; sy += p[1]; }
+  return [sy / anel.length, sx / anel.length];
+}
+
+// Índice espacial em grade (~2 km por célula) para achar POIs perto rapidamente.
+const CELL = 0.02;
+const chave = (la, ln) => `${Math.round(la / CELL)}_${Math.round(ln / CELL)}`;
+const grade = new Map();
+
+function categoria(t) {
+  for (const cat of CATS) if (POS[cat].match(t)) return cat;
+  if (NEG.match(t)) return 'negativo';
+  return null;
+}
+
+async function carregarPois() {
+  if (!fs.existsSync(POIS_FILE)) { console.error(`POIs não encontrado: ${POIS_FILE}`); process.exit(1); }
+  const rl = readline.createInterface({ input: fs.createReadStream(POIS_FILE), crlfDelay: Infinity });
+  let n = 0, usados = 0;
+  for await (let line of rl) {
+    line = line.replace(/^\x1e/, '').trim(); // geojsonseq pode prefixar RS (0x1e)
+    if (!line) continue;
+    n++;
+    let f; try { f = JSON.parse(line); } catch { continue; }
+    const cat = categoria(f.properties || {});
+    if (!cat) continue;
+    const pt = repPonto(f.geometry);
+    if (!pt) continue;
+    const [la, ln] = pt;
+    const k = chave(la, ln);
+    let arr = grade.get(k); if (!arr) { arr = []; grade.set(k, arr); }
+    arr.push({ lat: la, lng: ln, cat, nome: f.properties?.name || null });
+    usados++;
   }
-  throw new Error(lastErr);
+  console.log(`POIs lidos: ${n} · usados (categorizados): ${usados} · células ${grade.size}`);
 }
 
-function avaliar(lat, lng, elements) {
+function avaliar(lat, lng) {
+  const R = 2; // ±2 células (~5 km) cobre o maior raio de interesse (4 km)
+  const clat = Math.round(lat / CELL), clng = Math.round(lng / CELL);
   const nearest = {};
-  const registrar = (cat, el) => {
-    const elat = el.lat ?? el.center?.lat, elng = el.lon ?? el.center?.lon;
-    if (elat == null || elng == null) return;
-    const dist_m = Math.round(haversine(lat, lng, elat, elng));
-    if (!nearest[cat] || dist_m < nearest[cat].dist_m) nearest[cat] = { lat: elat, lng: elng, nome: el.tags?.name || null, dist_m };
-  };
-  for (const el of elements) {
-    const t = el.tags || {};
-    for (const [cat, cfg] of Object.entries(POS)) if (cfg.match(t)) { registrar(cat, el); break; }
-    if (NEG.match(t)) registrar('negativo', el);
+  for (let dla = -R; dla <= R; dla++) for (let dln = -R; dln <= R; dln++) {
+    const arr = grade.get(`${clat + dla}_${clng + dln}`);
+    if (!arr) continue;
+    for (const p of arr) {
+      const dist_m = Math.round(haversine(lat, lng, p.lat, p.lng));
+      if (dist_m > MAX_BUSCA_M + 500) continue;
+      if (!nearest[p.cat] || dist_m < nearest[p.cat].dist_m) nearest[p.cat] = { lat: p.lat, lng: p.lng, nome: p.nome, dist_m };
+    }
   }
   let somaPeso = 0, somaNota = 0;
   for (const [cat, cfg] of Object.entries(POS)) { somaNota += scorePos(nearest[cat]?.dist_m ?? null, cfg.ideal, cfg.max) * cfg.peso; somaPeso += cfg.peso; }
@@ -124,27 +145,27 @@ async function buscarCandidatos() {
 }
 
 async function main() {
+  await carregarPois();
   const cands = await buscarCandidatos();
   if (!cands.length) { console.log('OSM: sem candidatos (endereço).'); return; }
-  console.log(`OSM localização: ${cands.length} candidatos (endereço) · limite ${LIMITE} · pausa ${PAUSA_MS}ms`);
-  let ok = 0, falha = 0, feitos = 0;
-  for (const im of cands) {
-    if (Date.now() > DEADLINE) { console.log('OSM: teto de tempo atingido'); break; }
-    const lat = Number(im.latitude), lng = Number(im.longitude);
-    const patch = { proximidades_em: new Date().toISOString() };
-    try {
-      const els = await overpass(lat, lng);
-      const { nearest, score } = avaliar(lat, lng, els);
-      patch.pontos_proximos = nearest;
-      patch.score_localizacao = score;
-      ok++;
-    } catch (e) { falha++; if (falha <= 5) console.error(`  falha ${im.id}: ${e.message}`); }
-    feitos++;
-    await supabase.from('imoveis_leilao').update(patch).eq('id', im.id).then(() => {}, () => {});
-    if (feitos % 50 === 0) console.log(`  ${feitos}/${cands.length} · ok ${ok} · falha ${falha}`);
-    await new Promise(r => setTimeout(r, PAUSA_MS));
+  console.log(`OSM localização: ${cands.length} candidatos (endereço) · limite ${LIMITE}`);
+  let ok = 0, feitos = 0;
+  const CONC = 8; // gravação no Supabase em paralelo (cálculo é local e rápido)
+  let idx = 0;
+  async function worker() {
+    while (idx < cands.length) {
+      const im = cands[idx++];
+      const lat = Number(im.latitude), lng = Number(im.longitude);
+      const { nearest, score } = avaliar(lat, lng);
+      await supabase.from('imoveis_leilao')
+        .update({ pontos_proximos: nearest, score_localizacao: score, proximidades_em: new Date().toISOString() })
+        .eq('id', im.id).then(() => {}, () => {});
+      ok++; feitos++;
+      if (feitos % 500 === 0) console.log(`  ${feitos}/${cands.length} · score gravado ${ok}`);
+    }
   }
-  console.log(`FIM OSM localização: ok ${ok} · falha ${falha} · processados ${feitos}`);
+  await Promise.all(Array.from({ length: CONC }, () => worker()));
+  console.log(`FIM OSM localização: score gravado ${ok} · processados ${feitos}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

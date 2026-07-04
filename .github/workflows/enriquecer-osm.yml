@@ -1,8 +1,9 @@
 name: Enriquecer Localização OSM (runner)
 
 # Índice de localização (proximidades OSM) calculado sobre a coordenada PRECISA
-# de cada imóvel (geocod_nivel=endereco), no runner do GitHub. Consulta o Overpass
-# (grátis) e grava pontos_proximos + score_localizacao. Um lote por execução.
+# de cada imóvel (geocod_nivel=endereco), no runner do GitHub. NÃO usa Overpass
+# (que bloqueia o IP do runner): baixa o extrato do OpenStreetMap (Geofabrik
+# Brasil), filtra os POIs de interesse com osmium e calcula tudo localmente.
 on:
   schedule:
     - cron: '0 5 * * *'   # 2h BRT (5h UTC) — fora do horário dos outros jobs
@@ -11,12 +12,12 @@ on:
       limite:
         description: 'Máx. de imóveis por execução'
         required: false
-        default: '3000'
+        default: '100000'
 
 jobs:
   enriquecer-osm:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,9 +30,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Enriquecer localização (OSM)
+      - name: Install osmium
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+
+      - name: Baixar extrato OSM (Brasil)
+        run: curl -fSL --retry 3 -o brazil.osm.pbf https://download.geofabrik.de/south-america/brazil-latest.osm.pbf
+
+      - name: Filtrar POIs de interesse
+        run: |
+          osmium tags-filter brazil.osm.pbf \
+            n/highway=bus_stop \
+            nwr/railway=station,subway_entrance,tram_stop \
+            nwr/public_transport=station \
+            nwr/shop=supermarket,convenience,greengrocer,chemist,mall \
+            nwr/amenity=pharmacy,hospital,clinic,doctors,school,kindergarten,college,marketplace,prison \
+            nwr/healthcare \
+            nwr/landuse=landfill \
+            nwr/power=plant \
+            nwr/man_made=wastewater_plant \
+            -o pois.osm.pbf --overwrite
+          osmium export pois.osm.pbf -f geojsonseq -o pois.geojsonl --overwrite
+          echo "Linhas em pois.geojsonl:"; wc -l pois.geojsonl
+
+      - name: Enriquecer localização (local)
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          OSM_LIMITE: ${{ github.event.inputs.limite || '3000' }}
+          OSM_POIS_FILE: pois.geojsonl
+          OSM_LIMITE: ${{ github.event.inputs.limite || '100000' }}
         run: node scripts/enriquecer-osm.mjs
