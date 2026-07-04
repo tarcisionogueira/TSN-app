@@ -12,6 +12,7 @@
  * distância plausível do centróide do município); fora disso, é descartado.
  */
 import MUNICIPIOS from './_municipios.js';
+import { registrarUso } from './_uso.js';
 
 // UF → nome por extenso (para o parâmetro `state=` do Nominatim) + bounding box
 // generosa (validação de "está no estado certo?"). [latMin, latMax, lngMin, lngMax]
@@ -200,6 +201,7 @@ export async function googleGeocode(enderecoCompleto) {
     const lt = r.geometry.location_type; // ROOFTOP > RANGE_INTERPOLATED > GEOMETRIC_CENTER > APPROXIMATE
     const nivel = (lt === 'ROOFTOP' || lt === 'RANGE_INTERPOLATED') ? 'endereco'
       : lt === 'GEOMETRIC_CENTER' ? 'rua' : 'bairro';
+    registrarUso('google_geocode', 'geocode', { unidades: 1 }); // grátis até 10k/mês; custo além disso no painel
     return { lat: loc.lat, lng: loc.lng, nivel };
   } catch { return null; }
 }
@@ -247,6 +249,7 @@ export async function geocoderPago(enderecoCompleto) {
     const nivel = (tipo === 'house' || tipo === 'building' || classe === 'building') ? 'endereco'
       : (classe === 'highway' || tipo === 'road' || tipo === 'residential') ? 'rua'
       : 'bairro';
+    registrarUso('locationiq', 'geocode', { unidades: 1 }); // geocoder pago (por chamada)
     return { lat, lng, nivel };
   } catch { return null; }
 }

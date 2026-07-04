@@ -67,6 +67,8 @@ export default async function handler(req) {
   const res = get('resend');
   const daily = get('daily');
   const geo = get('locationiq');
+  const ggeo = get('google_geocode');
+  const geoFreeMes = num(process.env.GOOGLE_GEOCODE_FREE_MES, 10000);
 
   const provedores = [];
 
@@ -115,10 +117,31 @@ export default async function handler(req) {
     }
   } catch { /* opcional */ }
 
-  // RESEND / DAILY / LOCATIONIQ — volume (sem teto rígido; marcador informativo).
-  provedores.push({ chave: 'resend', label: 'Resend — e-mails transacionais',
-    mes: { unidades: res.mes.uni, custo_usd: res.mes.usd, custo_brl: brl(res.mes.usd) },
-    teto: { tipo: 'volume', nota: 'Plano gratuito ~3.000/mês. Marcador informativo.' } });
+  // GOOGLE GEOCODE — marcador de teto GRÁTIS mensal (10k/mês) + custo além.
+  {
+    const usados = ggeo.mes.uni;
+    const pct = geoFreeMes > 0 ? Math.round((usados / geoFreeMes) * 100) : 0;
+    const excedente = Math.max(0, usados - geoFreeMes);
+    const custoUsd = excedente * 0.005; // US$ 5 / 1.000 além da cota grátis
+    provedores.push({
+      chave: 'google_geocode', label: 'Google Geocoding — coordenadas dos imóveis',
+      mes: { unidades: usados, custo_usd: custoUsd, custo_brl: brl(custoUsd) },
+      teto: { tipo: 'geocodes_mes', limite: geoFreeMes, usado: usados, pct, status: status(pct),
+        nota: `Grátis até ${geoFreeMes.toLocaleString('pt-BR')}/mês (renova todo mês). Acima: US$ 5/1.000.` },
+    });
+  }
+
+  // RESEND — teto GRÁTIS mensal (~3.000). Cobertura parcial (só envios via _email.js).
+  {
+    const resFree = num(process.env.RESEND_FREE_MES, 3000);
+    const pct = resFree > 0 ? Math.round((res.mes.uni / resFree) * 100) : 0;
+    provedores.push({ chave: 'resend', label: 'Resend — e-mails transacionais',
+      mes: { unidades: res.mes.uni, custo_usd: res.mes.usd, custo_brl: brl(res.mes.usd) },
+      teto: { tipo: 'emails_mes', limite: resFree, usado: res.mes.uni, pct, status: status(pct),
+        nota: `Grátis até ~${resFree.toLocaleString('pt-BR')}/mês. Contagem parcial (envios centrais).` } });
+  }
+
+  // DAILY / LOCATIONIQ — volume (sem teto rígido; marcador informativo).
   provedores.push({ chave: 'daily', label: 'Daily.co — salas de vídeo',
     mes: { unidades: daily.mes.uni, custo_usd: daily.mes.usd, custo_brl: brl(daily.mes.usd) },
     teto: { tipo: 'volume', nota: 'Cobrança por minuto-participante. Marcador informativo.' } });

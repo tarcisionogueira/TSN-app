@@ -8,6 +8,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
 import { criarEventoAgenda } from './_gcal.js';
+import { registrarUso } from './_uso.js';
 
 const SUPABASE_URL  = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY;
@@ -122,6 +123,7 @@ export default async function handler(req) {
 
     if (dailyRes.ok) {
       meetLink = `https://${DAILY_DOMAIN}.daily.co/${roomName}`;
+      registrarUso('daily', 'sala', { unidades: 1 });
     }
   }
 

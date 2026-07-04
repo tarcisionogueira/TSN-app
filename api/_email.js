@@ -3,6 +3,8 @@
  * Suporta anexos: { filename, path } (URL que o Resend busca) ou { filename, content } (base64).
  * Retorna { ok, id, error }.
  */
+import { registrarUso } from './_uso.js';
+
 const RESEND_KEY = process.env.RESEND_API_KEY;
 
 export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers }) {
@@ -27,6 +29,8 @@ export async function enviarEmail({ from, to, cc, subject, html, text, attachmen
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data?.message || `resend_${res.status}` };
+    const n = payload.to.length + (payload.cc?.length || 0); // destinatários faturados
+    registrarUso('resend', 'email', { unidades: n });
     return { ok: true, id: data?.id || null };
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };

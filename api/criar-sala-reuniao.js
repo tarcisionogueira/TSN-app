@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { registrarUso } from './_uso.js';
 
 const DAILY_API = 'https://api.daily.co/v1';
 const DOMAIN = 'tsn-reunioes';
@@ -68,6 +69,7 @@ export default async function handler(req) {
   }
 
   const sala = await res.json();
+  registrarUso('daily', 'sala', { unidades: 1 }); // 1 sala criada (cobrança por minuto-participante ocorre no uso)
   const meetLink = `https://${DOMAIN}.daily.co/${roomName}`;
 
   return new Response(JSON.stringify({ meetLink, roomName, sala }), {
