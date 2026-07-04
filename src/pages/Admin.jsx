@@ -2918,6 +2918,31 @@ function PainelCustosUso() {
         <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>💸 Custos &amp; Uso das Integrações</div>
         <div style={{ fontSize: 13, color: '#64748b' }}>Estimado no mês: <b style={{ color: '#111111' }}>{brl(uso.total_mes?.custo_brl)}</b> <span style={{ color: '#94a3b8' }}>(~US$ {Number(uso.total_mes?.custo_usd || 0).toFixed(2)})</span></div>
       </div>
+
+      {/* Marcador de sustentabilidade: 1 Investidor Pro banca N consultas grátis */}
+      {uso.sustentabilidade && (() => {
+        const s = uso.sustentabilidade;
+        const cor = COR[s.status] || '#94a3b8';
+        const pct = Math.min(100, s.pct || 0);
+        return (
+          <div style={{ border: `1px solid ${cor}40`, background: cor + '0c', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>♻️ Sustentabilidade da IA grátis (Explorador)</div>
+              <div style={{ fontSize: 12, color: '#475569' }}>{int(s.analises_explorador_mes)} / {int(s.teto_sustentavel)} análises grátis · <span style={{ color: cor, fontWeight: 700 }}>{s.pct >= 999 ? '∞' : s.pct + '%'}</span></div>
+            </div>
+            <div style={{ height: 8, borderRadius: 4, background: '#f1f5f9', overflow: 'hidden', marginBottom: 8 }}>
+              <div style={{ width: pct + '%', height: '100%', background: cor, transition: 'width .3s' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12, color: '#334155', marginBottom: 4 }}>
+              <span><b>{int(s.n_investidor_pro)}</b> Investidor Pro</span>
+              <span><b>{int(s.n_explorador)}</b> Explorador</span>
+              <span>1 Pro banca <b>~{int(s.analises_por_pro)}</b> análises grátis/mês</span>
+              <span>Custo/análise ~<b>{brl(s.custo_analise_brl)}</b></span>
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.35 }}>{s.nota}</div>
+          </div>
+        );
+      })()}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
         {(uso.provedores || []).map((p) => {
           const t = p.teto || {};

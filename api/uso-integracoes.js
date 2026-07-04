@@ -32,6 +32,10 @@ export default async function handler(req) {
   const geminiBudget = num(process.env.GEMINI_BUDGET_USD_MES, 20);
   const claudeBudget = num(process.env.CLAUDE_BUDGET_USD_MES, 50);
   const bdTeto = num(process.env.BRIGHTDATA_MAX_REQ_SEMANA, 450);
+  // Sustentabilidade: quanto 1 Investidor Pro banca de consultas grátis do Explorador.
+  const precoPro = num(process.env.PRECO_PRO_BRL, 49.90);           // receita/mês de 1 Pro
+  const fracaoSubsidio = num(process.env.IA_FRACAO_SUBSIDIO, 0.45); // % da receita do Pro alocada à IA grátis
+  const custoAnaliseUsd = num(process.env.IA_CUSTO_ANALISE_USD, 0.49); // custo medido no piloto (Claude mercadológica)
 
   // Datas (UTC) — mesmo bucket usado pelo registrar_uso.
   const hoje = new Date().toISOString().slice(0, 10);
@@ -151,10 +155,45 @@ export default async function handler(req) {
 
   const totalMesUsd = provedores.reduce((s, p) => s + (p.mes?.custo_usd || 0), 0);
 
+  // ── SUSTENTABILIDADE: 1 Investidor Pro banca N consultas grátis do Explorador ──
+  // Marco por quantidade de usuários: com N Pros, o teto sustentável de análises
+  // grátis/mês é N × (quanto 1 Pro subsidia). Se o consumo grátis passar disso, o
+  // grátis está deficitário (marcador vermelho).
+  let sustentabilidade = null;
+  try {
+    let m = { n_investidor_pro: 0, n_explorador: 0, analises_explorador_mes: 0, analises_total_mes: 0 };
+    if (SB && KEY) {
+      const r = await fetch(`${SB}/rest/v1/rpc/sustentabilidade_ia`, {
+        method: 'POST', headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' }, body: '{}',
+      });
+      if (r.ok) m = await r.json();
+    }
+    const custoAnaliseBrl = custoAnaliseUsd * usdBrl;
+    // Quantas análises grátis 1 Pro sustenta (env sobrepõe o cálculo, se definido).
+    const analisesPorPro = Math.max(0, Math.floor(
+      num(process.env.IA_ANALISES_POR_PRO, (precoPro * fracaoSubsidio) / custoAnaliseBrl)));
+    const tetoSustentavel = m.n_investidor_pro * analisesPorPro;
+    const usado = m.analises_explorador_mes;
+    const pct = tetoSustentavel > 0 ? Math.round((usado / tetoSustentavel) * 100) : (usado > 0 ? 999 : 0);
+    sustentabilidade = {
+      n_investidor_pro: m.n_investidor_pro,
+      n_explorador: m.n_explorador,
+      analises_por_pro: analisesPorPro,
+      custo_analise_usd: custoAnaliseUsd,
+      custo_analise_brl: Math.round(custoAnaliseBrl * 100) / 100,
+      analises_explorador_mes: usado,
+      analises_total_mes: m.analises_total_mes,
+      teto_sustentavel: tetoSustentavel,
+      pct, status: status(pct),
+      nota: `Cada Investidor Pro (R$ ${precoPro.toFixed(2)}) banca ~${analisesPorPro} análises grátis/mês (${Math.round(fracaoSubsidio * 100)}% da mensalidade ÷ R$ ${(Math.round(custoAnaliseBrl * 100) / 100).toFixed(2)}/análise). Com ${m.n_investidor_pro} Pro(s) → teto ${tetoSustentavel} análises grátis/mês.`,
+    };
+  } catch { /* opcional */ }
+
   return new Response(JSON.stringify({
     gerado_em: new Date().toISOString(),
     usd_brl: usdBrl,
     total_mes: { custo_usd: totalMesUsd, custo_brl: brl(totalMesUsd) },
+    sustentabilidade,
     provedores,
   }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } });
 }
