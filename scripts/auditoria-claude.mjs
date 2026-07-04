@@ -20,12 +20,12 @@ if (!SUPABASE_URL || !SERVICE_KEY) { console.error('Supabase ausente'); process.
 
 const MAX_FILE = 26000;       // trunca arquivos grandes (evita blobs de dados)
 const MAX_LOTE = 90000;       // ~22k tokens por lote
-const CAP_TOTAL = Number(process.env.AUDIT_CAP_CHARS || 320000); // orçamento total (~4 lotes) p/ caber no tempo
-// Pula dados puros e scrapers grandes (menos críticos p/ segurança); o foco é
-// auth, pagamentos, webhooks e dados sensíveis.
-const PULAR = /(_municipios\.js|scraper-.*\.js|.*-debug\.js|.*-diag\.js)$/;
-// Prioriza segurança / dinheiro / dados sensíveis: esses entram primeiro.
-const PRIORIDADE = /(_auth|_webhook|_rate-limit|_email|_claude|_gemini|_uso|_geo|_onr|_cnj|_doc|mp[-_]|mp\.js|asaas|checkout|webhook|pagamento|garantia|assinar|contrato|cpf|kyc|selfie|admin|cron|token|reembolso|comiss|inbound|upload|storage)/i;
+const CAP_TOTAL = Number(process.env.AUDIT_CAP_CHARS || 460000); // orçamento total (~5-6 lotes) — inclui scrapers/leiloeiros
+// Pula só dados puros. Scrapers/leiloeiros ENTRAM na auditoria (contemplar coleta,
+// fotos e documentos), além de segurança/pagamentos.
+const PULAR = /(_municipios\.js|.*-debug\.js|.*-diag\.js)$/;
+// Prioriza segurança / dinheiro / dados sensíveis / SCRAPERS: esses entram primeiro.
+const PRIORIDADE = /(_auth|_webhook|_rate-limit|_email|_claude|_gemini|_uso|_geo|_onr|_cnj|_doc|mp[-_]|mp\.js|asaas|checkout|webhook|pagamento|garantia|assinar|contrato|cpf|kyc|selfie|admin|cron|token|reembolso|comiss|inbound|upload|storage|scraper|leilo|captur|enriquec|fotos?)/i;
 
 // Coleta os arquivos relevantes, PRIORIZANDO segurança/dinheiro/dados e
 // limitando o total (CAP_TOTAL) para a auditoria concluir dentro do tempo.
@@ -47,6 +47,7 @@ function coletarArquivos() {
     }
   };
   addDir('api', (n) => n.endsWith('.js'));
+  addDir('scripts', (n) => n.endsWith('.js') || n.endsWith('.mjs')); // scrapers/leiloeiros
   for (const f of ['src/utils/supabase.js', 'src/utils/apiCall.js', 'src/contexts/AuthContext.jsx']) {
     try { const txt = readFileSync(f, 'utf8'); brutos.push({ path: f, txt: txt.slice(0, MAX_FILE), prio: 0 }); } catch { /* ok */ }
   }
