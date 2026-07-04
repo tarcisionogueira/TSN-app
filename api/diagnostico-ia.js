@@ -82,8 +82,8 @@ Responda APENAS com este JSON (sem markdown):
   const t = setTimeout(() => ctrl.abort(), 45000);
   try {
     const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_KEY)}`,
-      { method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctrl.signal,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`,
+      { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY }, signal: ctrl.signal,
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: { maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 }, temperature: 0.4 },

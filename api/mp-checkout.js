@@ -60,7 +60,9 @@ export default async function handler(req, res) {
       headers: {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
-        'X-Idempotency-Key': `tsn-${user.id}-${Date.now()}`,
+        // Chave idempotente DETERMINÍSTICA: retry do mesmo pagamento não duplica
+        // cobrança (token de cartão é single-use; PIX dedupa por valor no intervalo).
+        'X-Idempotency-Key': `tsn-${user.id}-${payload.token || 'pix'}-${payload.transaction_amount || 0}`,
       },
       body: JSON.stringify(payload),
     });

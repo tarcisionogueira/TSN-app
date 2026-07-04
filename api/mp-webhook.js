@@ -20,7 +20,9 @@ const MP_BASE = 'https://api.mercadopago.com';
 //   'invalida'   → secret configurado mas HMAC não confere → BLOQUEAR
 function verificarAssinatura(req) {
   const secret = process.env.MP_WEBHOOK_SECRET;
-  if (!secret) return 'sem_secret';
+  // Sem secret, cada evento ainda é reconferido via API do MP antes de ativar
+  // (não confia no corpo). Mas isso é uma brecha — logue alto para o secret ser setado.
+  if (!secret) { console.error('[mp-webhook] CRÍTICO: MP_WEBHOOK_SECRET não configurado — assinatura não verificada. Configure no painel do Mercado Pago.'); return 'sem_secret'; }
 
   // MP envia x-signature: ts=<timestamp>,v1=<hmac>
   const xSig = req.headers['x-signature'] || '';

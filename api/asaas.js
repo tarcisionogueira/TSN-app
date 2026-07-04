@@ -346,8 +346,14 @@ export default async function handler(req, res) {
     if (action === 'transferir_pix') {
       const { chavePix, tipoChave, valor, descricao } = body;
       if (!chavePix || !valor) return res.status(400).json({ error: 'Chave PIX e valor são obrigatórios' });
+      // Validação de valor: número > 0 e dentro de um teto configurável — evita que
+      // uma sessão admin comprometida (ou CSRF) esvazie o saldo numa transferência.
+      const valorNum = Number(valor);
+      const tetoPix = Number(process.env.PIX_TRANSFER_MAX || 10000);
+      if (!Number.isFinite(valorNum) || valorNum <= 0) return res.status(400).json({ error: 'Valor inválido' });
+      if (valorNum > tetoPix) return res.status(400).json({ error: `Valor acima do teto por transferência (R$ ${tetoPix.toLocaleString('pt-BR')}). Ajuste PIX_TRANSFER_MAX se necessário.` });
       const data = await asaasPost('/transfers', {
-        value: valor,
+        value: valorNum,
         pixAddressKey: chavePix,
         pixAddressKeyType: tipoChave || 'CPF',
         description: descricao || 'Transferência BidPro Brasil',

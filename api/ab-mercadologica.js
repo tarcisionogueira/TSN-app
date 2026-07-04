@@ -64,9 +64,9 @@ async function rodarGemini(inp) {
   const timer = setTimeout(() => ctrl.abort(), 120000);
   try {
     const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_KEY)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`,
       {
-        method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctrl.signal,
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY }, signal: ctrl.signal,
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${inp.tipoImovel}). Retorne apenas JSON válido, sem markdown.` }] },
           contents: [{ role: 'user', parts: [{ text: promptMercado(inp) }] }],

@@ -18,7 +18,9 @@ export default async function handler(req, res) {
   }
   const sentSecret = req.headers['x-daily-webhook-secret'] || req.headers['authorization'] || '';
   const clean = sentSecret.replace(/^Bearer\s+/i, '').trim();
-  if (clean !== DAILY_WEBHOOK_SECRET) {
+  // Comparação em tempo constante (evita timing attack no segredo do webhook).
+  const eqCt = (a, b) => { let d = a.length ^ b.length; for (let i = 0; i < b.length; i++) d |= (a.charCodeAt(i) || 0) ^ b.charCodeAt(i); return d === 0; };
+  if (!eqCt(clean, DAILY_WEBHOOK_SECRET)) {
     return res.status(401).json({ error: 'Webhook secret inválido' });
   }
 

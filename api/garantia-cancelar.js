@@ -52,13 +52,12 @@ async function cancelarMP(email) {
 }
 
 // Cancela a assinatura recorrente do Asaas (por customer do e-mail).
-async function cancelarAsaas(email) {
-  if (!ASAAS_KEY || !email) return 0;
+// Cancela pelo customer id do PRÓPRIO usuário (perfil.asaas_id), não por e-mail —
+// e-mail pode ter duplicata/homônimo no Asaas e cancelaria assinatura de terceiro.
+async function cancelarAsaas(customerId) {
+  if (!ASAAS_KEY || !customerId) return 0;
   try {
-    const cr = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { access_token: ASAAS_KEY } });
-    const customer = (await cr.json().catch(() => null))?.data?.[0];
-    if (!customer) return 0;
-    const sr = await fetch(`${ASAAS_URL}/subscriptions?customer=${customer.id}&status=ACTIVE`, { headers: { access_token: ASAAS_KEY } });
+    const sr = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(customerId)}&status=ACTIVE`, { headers: { access_token: ASAAS_KEY } });
     const subs = (await sr.json().catch(() => null))?.data || [];
     let n = 0;
     for (const s of subs) {
@@ -87,7 +86,7 @@ export default async function handler(req, res) {
   const dentro7 = perfil.plano_pago_em && (Date.now() - new Date(perfil.plano_pago_em).getTime() <= JANELA_MS);
 
   // 1) Cancela a recorrência nos gateways (best-effort nos dois).
-  const cancelados = (await cancelarMP(email)) + (await cancelarAsaas(email));
+  const cancelados = (await cancelarMP(email)) + (await cancelarAsaas(perfil.asaas_id));
 
   if (dentro7) {
     // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida).

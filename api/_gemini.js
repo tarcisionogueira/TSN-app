@@ -48,8 +48,8 @@ export async function geminiFetch(options, { timeoutMs = 15000 } = {}) {
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(gBody), signal: ctrl.signal },
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(gBody), signal: ctrl.signal },
     );
     if (!res.ok) return null;
     const data = await res.json();
