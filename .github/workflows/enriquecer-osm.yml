@@ -1,0 +1,37 @@
+name: Enriquecer Localização OSM (runner)
+
+# Índice de localização (proximidades OSM) calculado sobre a coordenada PRECISA
+# de cada imóvel (geocod_nivel=endereco), no runner do GitHub. Consulta o Overpass
+# (grátis) e grava pontos_proximos + score_localizacao. Um lote por execução.
+on:
+  schedule:
+    - cron: '0 5 * * *'   # 2h BRT (5h UTC) — fora do horário dos outros jobs
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Máx. de imóveis por execução'
+        required: false
+        default: '3000'
+
+jobs:
+  enriquecer-osm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Enriquecer localização (OSM)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          OSM_LIMITE: ${{ github.event.inputs.limite || '3000' }}
+        run: node scripts/enriquecer-osm.mjs
