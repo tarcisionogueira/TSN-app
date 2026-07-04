@@ -18,7 +18,7 @@ import { createClient } from '@supabase/supabase-js';
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
 const LIMITE = parseInt(process.env.CEF_DATAS_LIMITE || '4000', 10);
-const CONC = parseInt(process.env.CEF_DATAS_CONC || '3', 10); // menos concorrência = menos 504 da Caixa
+const CONC = parseInt(process.env.CEF_DATAS_CONC || '2', 10); // gentil = sustenta mais antes do bloqueio da Caixa
 const DEADLINE = Date.now() + 75 * 60 * 1000; // para antes do timeout de 90 min
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -109,25 +109,30 @@ async function main() {
 
   const browser = await puppeteer.launch({ headless: true, args: BROWSER_ARGS });
   let idx = 0, ok = 0, semData = 0, falha = 0, feitos = 0;
+  // Disjuntor: a Caixa bloqueia o IP do runner depois de ~3 min de requisições
+  // (todas as páginas passam a dar erro). Sem isso, o job fica ~70 min re-tentando
+  // à toa. Abortamos após muitos erros seguidos e deixamos o resto p/ a próxima run.
+  const CORTE_ERROS = 40;
+  let errosSeguidos = 0, bloqueado = false;
 
-  // Carrega a página tratando o erro de borda da Caixa (504/CloudFront) como
-  // transitório: re-tenta algumas vezes com backoff antes de desistir.
+  // Carrega a página; o erro de borda da Caixa (504/CloudFront) é transitório,
+  // então re-tenta poucas vezes com backoff curto (o bloqueio não passa in-run).
   async function carregar(page, url) {
-    for (let tent = 0; tent < 4; tent++) {
+    for (let tent = 0; tent < 2; tent++) {
       let txt = '';
       try {
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
         txt = await page.evaluate(() => document.body?.innerText || '');
       } catch { txt = ''; }
       if (!paginaComErro(txt)) return { txt, erro: false };
-      await sleep(2500 * (tent + 1)); // 2.5s, 5s, 7.5s
+      await sleep(2000 * (tent + 1)); // 2s, 4s
     }
     return { txt: '', erro: true };
   }
 
   async function worker() {
     const page = await novaPagina(browser);
-    while (idx < cands.length && Date.now() < DEADLINE) {
+    while (idx < cands.length && Date.now() < DEADLINE && !bloqueado) {
       const im = cands[idx++];
       const url = im.url_lote || im.link_edital;
       const { txt, erro } = await carregar(page, url);
@@ -135,7 +140,9 @@ async function main() {
         // Erro persistente da Caixa: NÃO marca enriquecido_em, para voltar à
         // fila e ser re-tentado na próxima execução (não perde o imóvel).
         falha++;
+        if (++errosSeguidos >= CORTE_ERROS) { bloqueado = true; break; }
       } else {
+        errosSeguidos = 0;
         const patch = { enriquecido_em: new Date().toISOString() };
         const d = extrairDataLeilao(txt);
         if (d) { patch.data_leilao = d; ok++; } else semData++;
@@ -143,13 +150,14 @@ async function main() {
       }
       feitos++;
       if (feitos % 100 === 0) console.log(`  ${feitos}/${cands.length} · datas ${ok} · sem-data ${semData} · falha(erro-caixa) ${falha}`);
-      await sleep(300); // gentileza entre requisições
+      await sleep(500); // gentileza entre requisições
     }
     try { await page.close(); } catch {}
   }
 
   await Promise.all(Array.from({ length: CONC }, () => worker()));
   await browser.close();
+  if (bloqueado) console.log(`ATENÇÃO: a Caixa bloqueou o runner após ${errosSeguidos} erros seguidos — abortado; o restante fica p/ a próxima execução.`);
   console.log(`FIM CEF datas: preenchidas ${ok} · sem-data-na-pagina ${semData} · falha ${falha} · processados ${feitos}`);
 }
 

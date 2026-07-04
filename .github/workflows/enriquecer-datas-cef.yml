@@ -6,7 +6,9 @@ name: Enriquecer Datas CEF (navegador)
 # diárias cobrem o acervo. Mesma técnica validada no ZUK (42 → 539).
 on:
   schedule:
-    - cron: '0 4 * * *'   # 1h BRT (4h UTC) — fora do horário dos outros scrapers
+    # A cada 3h: a Caixa bloqueia o IP do runner após ~3 min/execução, então cada
+    # run pega um lote (IP novo a cada execução) e o acervo é coberto ao longo do dia.
+    - cron: '0 */3 * * *'
   workflow_dispatch:
     inputs:
       limite:
