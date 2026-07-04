@@ -74,14 +74,18 @@ async function rodarGemini(inp) {
         }),
       },
     );
-    if (!r.ok) return { precoM2: 0, valor: 0, fipezap: 0, amostras: 0, ms: Date.now() - t0, ok: false };
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      return { precoM2: 0, valor: 0, fipezap: 0, amostras: 0, ms: Date.now() - t0, ok: false, err: `HTTP ${r.status}: ${body.slice(0, 300)}` };
+    }
     const data = await r.json();
     const text = (data?.candidates?.[0]?.content?.parts || [])
       .map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('');
     const mercado = parseJSON(text) || {};
-    return { ...metricas(mercado), ms: Date.now() - t0, ok: !!mercado.consolidado };
-  } catch {
-    return { precoM2: 0, valor: 0, fipezap: 0, amostras: 0, ms: Date.now() - t0, ok: false };
+    const ok = !!mercado.consolidado;
+    return { ...metricas(mercado), ms: Date.now() - t0, ok, err: ok ? null : `sem consolidado (finishReason=${data?.candidates?.[0]?.finishReason || '?'}, texto=${(text || '').slice(0, 120)})` };
+  } catch (e) {
+    return { precoM2: 0, valor: 0, fipezap: 0, amostras: 0, ms: Date.now() - t0, ok: false, err: `exception: ${String(e?.message || e).slice(0, 200)}` };
   } finally {
     clearTimeout(timer);
   }
@@ -107,6 +111,8 @@ async function processarImovel(row) {
   } catch (e) {
     erro = String(e?.message || e);
   }
+  // Registra a causa da falha do Gemini (diagnóstico do piloto) sem mascarar erro geral.
+  if (!erro && gemini && !gemini.ok && gemini.err) erro = `gemini: ${gemini.err}`;
   const linha = {
     imovel_id: row.id,
     tipo: inp.tipoImovel, cidade: inp.cidade, estado: inp.estado, area_m2: inp.areaM2,
