@@ -871,14 +871,19 @@ export default function Analise() {
               mostra a inclusão manual em cima e a geração de relatórios embaixo.
               Some quando a entrada já é 100% manual (não há o que alternar). */}
           {!semImovelBase && (
-            <button onClick={() => setModoManual(m => !m)}
-              style={{ display:'flex', alignItems:'center', gap:9, width:'100%', padding:'12px 14px', border:`1px solid ${modoManual?'#7c3aed':'#e2e8f0'}`, background: modoManual?'#faf5ff':'white', borderRadius:14, cursor:'pointer', fontSize:13, fontWeight:800, color: modoManual?'#7c3aed':'#334155', textAlign:'left' }}>
-              <Building2 size={17} color={modoManual?'#7c3aed':'#94a3b8'}/>
-              <span style={{ flex:1 }}>{modoManual ? 'Inclusão manual ativa' : 'Incluir URL / arquivos'}</span>
-              <span style={{ width:34, height:18, borderRadius:20, background: modoManual?'#7c3aed':'#e2e8f0', position:'relative', flexShrink:0, transition:'background .15s' }}>
-                <span style={{ position:'absolute', top:2, left: modoManual?18:2, width:14, height:14, borderRadius:'50%', background:'white', transition:'left .15s' }}/>
-              </span>
-            </button>
+            <>
+              <button onClick={() => setModoManual(m => !m)}
+                style={{ display:'flex', alignItems:'center', gap:9, width:'100%', padding:'12px 14px', border:`1px solid ${modoManual?'#7c3aed':'#e2e8f0'}`, background: modoManual?'#faf5ff':'white', borderRadius:14, cursor:'pointer', fontSize:13, fontWeight:800, color: modoManual?'#7c3aed':'#334155', textAlign:'left' }}>
+                <Building2 size={17} color={modoManual?'#7c3aed':'#94a3b8'}/>
+                <span style={{ flex:1 }}>{modoManual ? 'Inclusão manual ativa' : 'Incluir URL / arquivos'}</span>
+                <span style={{ width:34, height:18, borderRadius:20, background: modoManual?'#7c3aed':'#e2e8f0', position:'relative', flexShrink:0, transition:'background .15s' }}>
+                  <span style={{ position:'absolute', top:2, left: modoManual?18:2, width:14, height:14, borderRadius:'50%', background:'white', transition:'left .15s' }}/>
+                </span>
+              </button>
+              <div style={{ fontSize:11, color:'#94a3b8', lineHeight:1.5, padding:'0 4px', marginTop:-2 }}>
+                Use quando o imóvel <strong>não veio da busca do BidPro</strong> ou quando <strong>algum documento não foi coletado</strong>: cole a <strong>URL do lote no site do leiloeiro</strong> (a IA busca os anexos) ou <strong>anexe os arquivos</strong> (edital, matrícula, regras) para a IA analisar.
+              </div>
+            </>
           )}
 
           {/* Documentos do leiloeiro */}
@@ -1003,14 +1008,19 @@ export default function Analise() {
           <>
             {/* Opção de menu no mobile (a barra lateral fica oculta em telas pequenas) */}
             {isMobile && !semImovelBase && (
-              <button onClick={() => setModoManual(m => !m)}
-                style={{ display:'flex', alignItems:'center', gap:9, width:'100%', padding:'12px 14px', border:`1px solid ${modoManual?'#7c3aed':'#e2e8f0'}`, background: modoManual?'#faf5ff':'white', borderRadius:14, cursor:'pointer', fontSize:13, fontWeight:800, color: modoManual?'#7c3aed':'#334155', textAlign:'left' }}>
-                <Building2 size={17} color={modoManual?'#7c3aed':'#94a3b8'}/>
-                <span style={{ flex:1 }}>{modoManual ? 'Inclusão manual ativa' : 'Incluir URL / arquivos'}</span>
-                <span style={{ width:34, height:18, borderRadius:20, background: modoManual?'#7c3aed':'#e2e8f0', position:'relative', flexShrink:0 }}>
-                  <span style={{ position:'absolute', top:2, left: modoManual?18:2, width:14, height:14, borderRadius:'50%', background:'white' }}/>
-                </span>
-              </button>
+              <>
+                <button onClick={() => setModoManual(m => !m)}
+                  style={{ display:'flex', alignItems:'center', gap:9, width:'100%', padding:'12px 14px', border:`1px solid ${modoManual?'#7c3aed':'#e2e8f0'}`, background: modoManual?'#faf5ff':'white', borderRadius:14, cursor:'pointer', fontSize:13, fontWeight:800, color: modoManual?'#7c3aed':'#334155', textAlign:'left' }}>
+                  <Building2 size={17} color={modoManual?'#7c3aed':'#94a3b8'}/>
+                  <span style={{ flex:1 }}>{modoManual ? 'Inclusão manual ativa' : 'Incluir URL / arquivos'}</span>
+                  <span style={{ width:34, height:18, borderRadius:20, background: modoManual?'#7c3aed':'#e2e8f0', position:'relative', flexShrink:0 }}>
+                    <span style={{ position:'absolute', top:2, left: modoManual?18:2, width:14, height:14, borderRadius:'50%', background:'white' }}/>
+                  </span>
+                </button>
+                <div style={{ fontSize:11, color:'#94a3b8', lineHeight:1.5, padding:'0 4px', marginTop:-2 }}>
+                  Use quando o imóvel <strong>não veio da busca do BidPro</strong> ou quando <strong>algum documento não foi coletado</strong>: cole a <strong>URL do lote no site do leiloeiro</strong> (a IA busca os anexos) ou <strong>anexe os arquivos</strong> para a IA analisar.
+                </div>
+              </>
             )}
 
             {/* ── Inclusão manual / imóvel de outro leiloeiro (URL + anexos) ──
