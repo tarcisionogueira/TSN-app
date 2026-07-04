@@ -1,0 +1,55 @@
+name: A/B Mercadológica (Claude vs Gemini)
+
+# Piloto A/B: para cada imóvel real roda a pesquisa mercadológica no Claude
+# (Sonnet 4.6 + web_search) e no Gemini (2.5 Flash + Google Search), grava a
+# comparação em `ab_mercadologica` e acumula a amostra. Dispara o endpoint
+# /api/ab-mercadologica em laço (cada chamada processa `lote` imóveis). Não toca
+# em produção — a geração real continua no Claude.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL do deploy'
+        required: false
+        default: 'https://tsn-app-git-main-tarcisio-nogueira-s-projects.vercel.app'
+      iteracoes:
+        description: 'Quantas chamadas ao endpoint (cada uma processa `lote` imóveis)'
+        required: false
+        default: '30'
+      lote:
+        description: 'Imóveis por chamada (1-5)'
+        required: false
+        default: '2'
+      pausa:
+        description: 'Segundos de pausa entre chamadas'
+        required: false
+        default: '5'
+
+jobs:
+  ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Rodar piloto A/B em laço
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          BASE="${{ github.event.inputs.base_url }}"
+          ITER="${{ github.event.inputs.iteracoes }}"
+          LOTE="${{ github.event.inputs.lote }}"
+          PAUSA="${{ github.event.inputs.pausa }}"
+          if [ -z "$CRON_SECRET" ]; then echo "::warning::CRON_SECRET vazio — cadastre o secret no GitHub"; fi
+          URL="$BASE/api/ab-mercadologica?lote=$LOTE"
+          for i in $(seq 1 "$ITER"); do
+            echo "=== Chamada $i/$ITER → $URL ==="
+            curl -sSL --max-time 300 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n" || true
+            python3 -m json.tool resp.json 2>/dev/null || cat resp.json
+            # Para cedo se o endpoint informar que não há mais imóveis pendentes.
+            if python3 -c "import json,sys; d=json.load(open('resp.json')); sys.exit(0 if d.get('processados',0)==0 else 1)" 2>/dev/null; then
+              echo "Sem imóveis pendentes — encerrando o laço."
+              break
+            fi
+            sleep "$PAUSA"
+          done
+          echo "--- última resposta ---"
+          python3 -m json.tool resp.json 2>/dev/null || cat resp.json

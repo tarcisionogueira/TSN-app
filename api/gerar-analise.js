@@ -30,11 +30,11 @@ async function upsertAnalise(row) {
   });
 }
 
-function extractText(data) {
+export function extractText(data) {
   if (!data?.content) return '';
   return data.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
 }
-function parseJSON(text) {
+export function parseJSON(text) {
   if (!text) return null;
   const clean = text.trim();
   try { return JSON.parse(clean); } catch {}
@@ -62,7 +62,7 @@ async function anthropic(payload, useSearch) {
   return r.json();
 }
 
-function promptMercado({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio }) {
+export function promptMercado({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio }) {
   return `Você é um perito avaliador imobiliário. Realize pesquisa de mercado COMPLETA em DOIS NÍVEIS para o imóvel:
 - Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
 - Endereço: ${endereco}, ${cidade}/${estado}
