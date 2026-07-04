@@ -47,11 +47,17 @@ export default async function handler(req, resp) {
   const ids = linhas.map(x => x.id);
   const agora = new Date().toISOString();
   // Marca como 'refazer' (entra na fila do cron geocodificar) e carimba o reproc.
-  const up = await sb(`imoveis_leilao?id=in.(${ids.join(',')})`, {
-    method: 'PATCH',
-    headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ geocod_nivel: 'refazer', geocod_reproc_em: agora }),
-  });
-  if (!up.ok) return resp.status(500).json({ error: 'patch falhou', detalhe: (await up.text()).slice(0, 200) });
-  return resp.status(200).json({ reenfileirados: ids.length });
+  // PATCH em blocos de 100 ids: uma URL com 500 UUIDs em id=in.(...) estoura o
+  // limite de tamanho de URL do PostgREST/proxy.
+  let ok = 0;
+  for (let i = 0; i < ids.length; i += 100) {
+    const bloco = ids.slice(i, i + 100);
+    const up = await sb(`imoveis_leilao?id=in.(${bloco.join(',')})`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ geocod_nivel: 'refazer', geocod_reproc_em: agora }),
+    });
+    if (up.ok) ok += bloco.length;
+  }
+  return resp.status(200).json({ reenfileirados: ok, selecionados: ids.length });
 }
