@@ -159,8 +159,16 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro) {
   if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
   if (cidadesFiltro?.length) q = q.in('cidade_norm', cidadesFiltro.map(normCidade));
   if (f.pagamento?.length > 0) {
-    const canon = pagamentoParaCanon(f.pagamento);
-    if (canon.length) q = q.in('forma_pagamento', canon);
+    // 'financiado' e 'hipotecado' são a mesma forma_pagamento ('financiado' =
+    // aceita parcelamento), separadas pela modalidade: financiado = parcelável
+    // NÃO-judicial; hipotecado = parcelável judicial (art. 895). Mesma lógica da
+    // RPC buscar_por_raio_v2 — os dois caminhos precisam concordar.
+    const canon = pagamentoParaCanon(f.pagamento); // ['a_vista'|'financiado'|'hipotecado']
+    const ors = [];
+    if (canon.includes('a_vista'))    ors.push('forma_pagamento.eq.a_vista');
+    if (canon.includes('financiado')) ors.push('and(forma_pagamento.eq.financiado,or(modalidade.neq.judicial,modalidade.is.null))');
+    if (canon.includes('hipotecado')) ors.push('and(forma_pagamento.eq.financiado,modalidade.eq.judicial)');
+    if (ors.length) q = q.or(ors.join(','));
   }
   return q;
 }
