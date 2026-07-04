@@ -155,6 +155,24 @@ export default async function handler(req) {
 
   const totalMesUsd = provedores.reduce((s, p) => s + (p.mes?.custo_usd || 0), 0);
 
+  // ── PROJEÇÃO FIM DE MÊS (run-rate) — cada indicador aprende a trajetória do
+  // fluxo real: projeta o mês inteiro a partir do ritmo dos dias já decorridos.
+  const now = new Date();
+  const diaDoMes = now.getUTCDate();
+  const diasNoMes = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  const fatorProj = diasNoMes / Math.max(1, diaDoMes);
+  provedores.forEach((p) => {
+    if (!p.mes) return;
+    if (p.mes.custo_usd != null) p.mes.projecao_custo_usd = Math.round(p.mes.custo_usd * fatorProj * 100) / 100;
+    if (p.mes.custo_brl != null) p.mes.projecao_custo_brl = Math.round(p.mes.custo_brl * fatorProj * 100) / 100;
+    if (p.mes.unidades != null) p.mes.projecao_unidades = Math.round(p.mes.unidades * fatorProj);
+    if (p.teto && typeof p.teto.limite === 'number' && p.teto.limite > 0 && p.teto.usado != null) {
+      p.teto.projecao = Math.round(p.teto.usado * fatorProj);
+      p.teto.pct_projecao = Math.round((p.teto.projecao / p.teto.limite) * 100);
+    }
+  });
+  const projecaoTotalUsd = totalMesUsd * fatorProj;
+
   // ── SUSTENTABILIDADE: 1 Investidor Pro banca N consultas grátis do Explorador ──
   // Marco por quantidade de usuários: com N Pros, o teto sustentável de análises
   // grátis/mês é N × (quanto 1 Pro subsidia). Se o consumo grátis passar disso, o
@@ -205,6 +223,7 @@ export default async function handler(req) {
       custo_base_amostras: baseAmostras, // nº de análises medidas que formam a média
       analises_explorador_mes: usado,
       analises_total_mes: m.analises_total_mes,
+      projecao_explorador_mes: Math.round(usado * fatorProj),
       teto_sustentavel: tetoSustentavel,
       pct, status: status(pct),
       nota: `Cada Investidor Pro (R$ ${precoPro.toFixed(2)}) banca ~${analisesPorPro} análises grátis/mês (${Math.round(fracaoSubsidio * 100)}% da mensalidade ÷ R$ ${(Math.round(custoAnaliseBrl * 100) / 100).toFixed(2)}/análise ${aprendido ? `aprendido de ${baseAmostras} análises reais` : '— média do piloto A/B'}). Com ${m.n_investidor_pro} Pro(s) → teto ${tetoSustentavel} análises grátis/mês.`,
@@ -214,7 +233,8 @@ export default async function handler(req) {
   return new Response(JSON.stringify({
     gerado_em: new Date().toISOString(),
     usd_brl: usdBrl,
-    total_mes: { custo_usd: totalMesUsd, custo_brl: brl(totalMesUsd) },
+    dia_do_mes: diaDoMes, dias_no_mes: diasNoMes,
+    total_mes: { custo_usd: totalMesUsd, custo_brl: brl(totalMesUsd), projecao_custo_usd: Math.round(projecaoTotalUsd * 100) / 100, projecao_custo_brl: brl(projecaoTotalUsd) },
     sustentabilidade,
     provedores,
   }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } });

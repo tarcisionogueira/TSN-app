@@ -2916,7 +2916,10 @@ function PainelCustosUso() {
     <div style={{ ...S.card, marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>💸 Custos &amp; Uso das Integrações</div>
-        <div style={{ fontSize: 13, color: '#64748b' }}>Estimado no mês: <b style={{ color: '#111111' }}>{brl(uso.total_mes?.custo_brl)}</b> <span style={{ color: '#94a3b8' }}>(~US$ {Number(uso.total_mes?.custo_usd || 0).toFixed(2)})</span></div>
+        <div style={{ fontSize: 13, color: '#64748b', textAlign: 'right' }}>
+          <div>No mês até agora: <b style={{ color: '#111111' }}>{brl(uso.total_mes?.custo_brl)}</b> <span style={{ color: '#94a3b8' }}>(~US$ {Number(uso.total_mes?.custo_usd || 0).toFixed(2)})</span></div>
+          {uso.total_mes?.projecao_custo_brl != null && <div style={{ fontSize: 11, color: '#94a3b8' }}>📈 projeção fim de mês (ritmo atual): <b>{brl(uso.total_mes.projecao_custo_brl)}</b></div>}
+        </div>
       </div>
 
       {/* Marcador de sustentabilidade: 1 Investidor Pro banca N consultas grátis */}
@@ -2978,6 +2981,69 @@ function PainelCustosUso() {
         })}
       </div>
       <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 10 }}>Estimativa a partir do uso medido (tokens/requisições). O valor oficial é o do painel de billing de cada provedor.</div>
+    </div>
+  );
+}
+
+// Diagnóstico por IA (Gemini, cacheado ~1×/dia) sobre os indicadores reais —
+// leitura + sugestões que mesclam assertividade (qualidade) e economia (custo).
+function PainelDiagnosticoIA() {
+  const [diag, setDiag] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [erro, setErro] = React.useState(false);
+  const carregar = React.useCallback(async (forcar) => {
+    setLoading(true); setErro(false);
+    try {
+      const res = await apiCall(`/api/diagnostico-ia${forcar ? '?forcar=1' : ''}`);
+      const data = await res.json();
+      if (res.ok) setDiag(data); else setErro(true);
+    } catch { setErro(true); }
+    setLoading(false);
+  }, []);
+  React.useEffect(() => { carregar(false); }, [carregar]);
+
+  const COR = { verde: '#10b981', amarelo: '#f59e0b', vermelho: '#dc2626' };
+  const PRIOR = { alta: '#dc2626', media: '#f59e0b', baixa: '#64748b' };
+  const IMP = { economia: '💰', qualidade: '⭐', crescimento: '📈', risco: '⚠️' };
+
+  if (erro) return null;
+  const cor = COR[diag?.saude] || '#64748b';
+
+  return (
+    <div style={{ ...S.card, marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', display: 'flex', alignItems: 'center', gap: 8 }}>
+          🧠 Diagnóstico &amp; Sugestões (IA)
+          {diag?.saude && <span style={{ width: 10, height: 10, borderRadius: '50%', background: cor, display: 'inline-block' }} />}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {diag?.gerado_em && <span style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(diag.gerado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}{diag.modelo ? ` · ${diag.modelo}` : ''}</span>}
+          <button onClick={() => carregar(true)} disabled={loading}
+            style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#0D63DB', cursor: loading ? 'default' : 'pointer' }}>
+            {loading ? 'Analisando…' : '↻ Atualizar'}
+          </button>
+        </div>
+      </div>
+      {loading && !diag ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Gerando diagnóstico…</div> : diag ? (
+        <>
+          {diag.resumo && <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, marginBottom: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, borderLeft: `3px solid ${cor}` }}>{diag.resumo}</div>}
+          {diag.economia_potencial_brl > 0 && <div style={{ fontSize: 12, color: '#059669', fontWeight: 700, marginBottom: 10 }}>💰 Economia potencial estimada: R$ {Number(diag.economia_potencial_brl).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(diag.pontos || []).map((p, i) => (
+              <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13 }}>{IMP[p.impacto] || '•'}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>{p.area}</span>
+                  {p.prioridade && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: (PRIOR[p.prioridade] || '#64748b') + '18', color: PRIOR[p.prioridade] || '#64748b', textTransform: 'uppercase' }}>{p.prioridade}</span>}
+                </div>
+                {p.diagnostico && <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5, marginBottom: 4 }}>{p.diagnostico}</div>}
+                {p.sugestao && <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}><b>→ </b>{p.sugestao}</div>}
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 10 }}>Gerado por IA (Gemini) a partir dos indicadores reais · atualiza ~1×/dia ou sob demanda. Sugestões consultivas.</div>
+        </>
+      ) : <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem diagnóstico disponível.</div>}
     </div>
   );
 }
@@ -3357,6 +3423,9 @@ function DashboardTab() {
 
       {/* Custos & Uso das integrações pagas (marcadores de teto/orçamento) */}
       <PainelCustosUso />
+
+      {/* Diagnóstico por IA sobre os indicadores (assertividade + economia) */}
+      <PainelDiagnosticoIA />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
