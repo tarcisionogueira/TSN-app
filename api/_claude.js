@@ -4,6 +4,7 @@
 // único para toda chamada Claude do backend: troque `fetch(URL_CLAUDE, opts)` por
 // `anthropicFetch(opts)`.
 import { geminiFetch } from './_gemini.js';
+import { medirClaude } from './_uso.js';
 
 export const URL_CLAUDE = 'https://api.anthropic.com/v1/messages';
 const RETRYABLE = new Set([429, 500, 502, 503, 529]);
@@ -18,7 +19,10 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(URL_CLAUDE, { ...options, signal: options.signal || ctrl.signal });
-      if (!RETRYABLE.has(res.status)) return res; // sucesso ou erro não-retryável → devolve direto
+      if (!RETRYABLE.has(res.status)) {
+        if (res.ok) medirClaude(options, res.clone()); // mede tokens/buscas sem consumir o corpo do caller
+        return res; // sucesso ou erro não-retryável → devolve direto
+      }
       if (tent === retries) { lastRes = res; break; } // retries exauridos com falha retryável
       const ra = Number(res.headers.get('retry-after'));
       const espera = ra > 0 ? ra * 1000 : baseDelay * 2 ** tent + Math.floor(Math.random() * 300);

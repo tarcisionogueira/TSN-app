@@ -9,6 +9,8 @@
 // NÃO cobre requisições com tools/web_search (só o Anthropic tem aqui).
 // Modelo configurável por GEMINI_MODEL (padrão gemini-2.5-flash).
 
+import { medirGemini } from './_uso.js';
+
 export async function geminiFetch(options, { timeoutMs = 15000 } = {}) {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) return null;
@@ -51,6 +53,7 @@ export async function geminiFetch(options, { timeoutMs = 15000 } = {}) {
     );
     if (!res.ok) return null;
     const data = await res.json();
+    medirGemini(model, data, 'messages'); // mede tokens (fire-and-forget)
     const text = (data?.candidates?.[0]?.content?.parts || [])
       .map((p) => (p && typeof p.text === 'string' ? p.text : ''))
       .join('');

@@ -12,6 +12,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
+import { medirGemini } from './_uso.js';
 import { promptMercado, extractText, parseJSON } from './gerar-analise.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -81,6 +82,7 @@ async function rodarGemini(inp) {
       return { precoM2: 0, valor: 0, fipezap: 0, amostras: 0, ms: Date.now() - t0, ok: false, err: `HTTP ${r.status}: ${body.slice(0, 300)}` };
     }
     const data = await r.json();
+    medirGemini(GEMINI_MODEL, data, 'grounding'); // mede tokens + busca (fire-and-forget)
     const text = (data?.candidates?.[0]?.content?.parts || [])
       .map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('');
     const mercado = parseJSON(text) || {};
