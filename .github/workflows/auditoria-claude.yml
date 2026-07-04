@@ -1,0 +1,31 @@
+name: Auditoria do Sistema (Claude)
+
+# Auditoria técnica pelo Claude: funcionalidades, fluxos de API e segurança dos
+# dados. Roda semanal (segunda 6h UTC) e sob demanda. Só LÊ o código e grava o
+# relatório em auditoria_sistema — não altera nada. As correções propostas nos
+# achados viram PR revisável quando aprovadas.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  auditoria:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rodar auditoria
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CLAUDE_KEY: ${{ secrets.CLAUDE_KEY }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/auditoria-claude.mjs

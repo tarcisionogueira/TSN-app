@@ -3048,6 +3048,92 @@ function PainelDiagnosticoIA() {
   );
 }
 
+// Auditoria técnica do sistema pelo Claude (só leitura). A auditoria roda numa
+// GitHub Action; aqui mostramos o último relatório. Correções viram PR revisável.
+function PainelAuditoriaSistema() {
+  const [a, setA] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [erro, setErro] = React.useState(false);
+  const [abertos, setAbertos] = React.useState({});
+  React.useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await apiCall('/api/auditoria-sistema');
+        const data = await res.json();
+        if (!vivo) return;
+        if (res.ok) setA(data); else setErro(true);
+      } catch { if (vivo) setErro(true); }
+      if (vivo) setLoading(false);
+    })();
+    return () => { vivo = false; };
+  }, []);
+
+  const COR = { verde: '#10b981', amarelo: '#f59e0b', vermelho: '#dc2626' };
+  const SEV = { critica: '#dc2626', alta: '#ea580c', media: '#f59e0b', baixa: '#64748b' };
+  const CAT = { seguranca: '🔒', api: '🔌', funcionalidade: '⚙️', dados: '🗄️' };
+  const TIPO = { auto: { t: 'vira PR', c: '#10b981' }, manual: { t: 'ação sua', c: '#f59e0b' }, externo: { t: 'externo', c: '#0D63DB' } };
+
+  if (erro || loading) return null;
+  if (!a || a.vazio) {
+    return (
+      <div style={{ ...S.card, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 6 }}>🔍 Auditoria do Sistema (Claude)</div>
+        <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>Auditoria ainda não executada. Roda automaticamente toda segunda-feira, ou dispare a Action <b>“Auditoria do Sistema (Claude)”</b> no GitHub. Ela audita funcionalidades, fluxos de API e segurança dos dados — e as correções viram PR para sua revisão.</div>
+      </div>
+    );
+  }
+  const cor = COR[a.saude] || '#64748b';
+  const achados = Array.isArray(a.achados) ? a.achados : [];
+
+  return (
+    <div style={{ ...S.card, marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', display: 'flex', alignItems: 'center', gap: 8 }}>
+          🔍 Auditoria do Sistema (Claude)
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: cor, display: 'inline-block' }} />
+        </div>
+        <div style={{ fontSize: 11, color: '#94a3b8' }}>
+          {a.gerado_em && new Date(a.gerado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+          {a.commit_sha ? ` · ${String(a.commit_sha).slice(0, 7)}` : ''}{a.modelo ? ` · ${a.modelo}` : ''}
+        </div>
+      </div>
+      {a.resumo && <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, marginBottom: 10, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, borderLeft: `3px solid ${cor}` }}>{a.resumo}</div>}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, marginBottom: 12 }}>
+        <span style={{ color: SEV.critica, fontWeight: 700 }}>{a.n_criticos || 0} críticos</span>
+        <span style={{ color: SEV.alta, fontWeight: 700 }}>{a.n_altos || 0} altos</span>
+        <span style={{ color: '#64748b' }}>{a.n_total || achados.length} achados no total</span>
+        {a.pr_url && <a href={a.pr_url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', fontWeight: 700 }}>Ver PR →</a>}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {achados.slice(0, 25).map((f, i) => {
+          const sc = SEV[f.severidade] || '#64748b';
+          const tp = TIPO[f.tipo] || null;
+          const aberto = !!abertos[i];
+          return (
+            <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+              <div onClick={() => setAbertos((o) => ({ ...o, [i]: !o[i] }))} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', cursor: 'pointer' }}>
+                <span style={{ fontSize: 13 }}>{CAT[f.categoria] || '•'}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: sc + '18', color: sc, textTransform: 'uppercase' }}>{f.severidade}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>{f.area}</span>
+                {tp && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: tp.c + '18', color: tp.c }}>{tp.t}</span>}
+                {f.arquivo && <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>{f.arquivo}{f.linha ? `:${f.linha}` : ''}</span>}
+              </div>
+              {aberto && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
+                  {f.descricao && <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5, marginBottom: 6 }}>{f.descricao}</div>}
+                  {f.correcao && <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}><b>Correção: </b>{f.correcao}</div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 10 }}>Auditoria por IA (Claude) · semanal ou sob demanda. Correções “vira PR” são aplicadas via Pull Request para sua revisão — nada entra em produção sozinho.</div>
+    </div>
+  );
+}
+
 function DashboardTab() {
   const planosCtx = usePlanos();
   const pNome = (key) => planosCtx?.[key]?.nome || key;
@@ -3426,6 +3512,9 @@ function DashboardTab() {
 
       {/* Diagnóstico por IA sobre os indicadores (assertividade + economia) */}
       <PainelDiagnosticoIA />
+
+      {/* Auditoria técnica do sistema pelo Claude (só leitura; correções via PR) */}
+      <PainelAuditoriaSistema />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
