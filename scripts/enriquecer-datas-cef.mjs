@@ -26,10 +26,12 @@ const BROWSER_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev
 if (!SB || !KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const supabase = createClient(SB, KEY);
 
-// Extrai a data do próximo leilão/licitação do TEXTO renderizado (mesma lógica de enriquecer-lote).
+// Extrai a data do próximo leilão/licitação do TEXTO renderizado.
+// Inclui rótulos de LICITAÇÃO ABERTA (fim/recebimento de propostas), que valem
+// como data-limite do certame — o usuário planeja em cima dela igual a um leilão.
 function extrairDataLeilao(txt) {
   if (!txt) return null;
-  const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
+  const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|proposta|recebimento|limite|abertura|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
   const ontem = Date.now() - 86400000;
   const limite = Date.now() + 400 * 86400000;
   const futuras = [];
@@ -57,15 +59,29 @@ async function novaPagina(browser) {
   return page;
 }
 
+// O Supabase limita cada resposta a ~1000 linhas; paginamos com range() para
+// juntar até LIMITE candidatos numa única execução (senão só cobria 1000/dia).
+async function buscarCandidatos() {
+  const PAG = 1000;
+  const out = [];
+  while (out.length < LIMITE) {
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .select('id, link_edital, url_lote')
+      .eq('fonte', 'CEF').eq('ativo', true).is('data_leilao', null)
+      .not('modalidade', 'ilike', '%venda%direta%')
+      .not('url_lote', 'is', null)
+      .order('enriquecido_em', { ascending: true, nullsFirst: true })
+      .range(out.length, out.length + PAG - 1);
+    if (error) { console.error('query erro:', error.message); break; }
+    if (!data?.length) break;
+    out.push(...data);
+    if (data.length < PAG) break;
+  }
+  return out.slice(0, LIMITE);
+}
+
 async function main() {
-  const { data: cands, error } = await supabase.from('imoveis_leilao')
-    .select('id, link_edital, url_lote')
-    .eq('fonte', 'CEF').eq('ativo', true).is('data_leilao', null)
-    .not('modalidade', 'ilike', '%venda%direta%')
-    .not('link_edital', 'is', null)
-    .order('enriquecido_em', { ascending: true, nullsFirst: true })
-    .limit(LIMITE);
-  if (error) { console.error('query erro:', error.message); process.exit(1); }
+  const cands = await buscarCandidatos();
   if (!cands?.length) { console.log('CEF: sem candidatos sem data.'); return; }
   console.log(`CEF sem data (não venda direta): ${cands.length} candidatos · conc ${CONC} · limite ${LIMITE}`);
 
