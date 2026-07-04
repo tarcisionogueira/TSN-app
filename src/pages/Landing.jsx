@@ -84,6 +84,25 @@ export default function Landing() {
   // Toda a landing funila para UMA tela de planos (/planos), onde o cadastro
   // acontece. Sem busca sem conta; sem páginas de plano paralelas.
 
+  // Dúvida pública (sem login): nome/email/telefone/mensagem → /api/duvida, que
+  // abre um chamado na tela de Atendimento. A resposta do analista chega por
+  // e-mail (dúvida única — sem conversa de ida e volta no chat).
+  const [dv, setDv] = useState({ open: false, nome: '', email: '', tel: '', msg: '', enviando: false, ok: false, erro: '' });
+  const enviarDuvida = async () => {
+    if (dv.msg.trim().length < 5) { setDv(d => ({ ...d, erro: 'Escreva sua dúvida.' })); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(dv.email)) { setDv(d => ({ ...d, erro: 'Informe um e-mail válido para receber a resposta.' })); return; }
+    setDv(d => ({ ...d, enviando: true, erro: '' }));
+    try {
+      const r = await fetch('/api/duvida', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: dv.nome, email: dv.email, telefone: dv.tel, mensagem: dv.msg, origem: 'duvida_landing' }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erro ao enviar');
+      setDv(s => ({ ...s, enviando: false, ok: true }));
+    } catch (e) { setDv(s => ({ ...s, enviando: false, erro: e.message })); }
+  };
+
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", color: '#111111' }}>
 
@@ -446,7 +465,7 @@ export default function Landing() {
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 14 }}>Plataforma</div>
-              {[['Criar conta grátis', '/login?modo=cadastro'], ['Planos', '/planos'], ['Calculadora', '/calculadora'], ['Entrar', '/login']].map(([l, h]) => (
+              {[['Planos', '/planos'], ['Calculadora', '/calculadora']].map(([l, h]) => (
                 <button key={l} onClick={() => nav(h)} style={{ display: 'block', background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', marginBottom: 10, padding: 0, textAlign: 'left', fontWeight: 500 }}>{l}</button>
               ))}
             </div>
@@ -458,9 +477,9 @@ export default function Landing() {
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 14 }}>Suporte</div>
-              <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+              <button onClick={() => setDv(d => ({ ...d, open: true, ok: false, erro: '' }))}
                 style={{ display: 'block', background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', padding: 0, textAlign: 'left', fontWeight: 500 }}>
-                Falar com a equipe
+                Tirar uma dúvida
               </button>
             </div>
           </div>
@@ -478,6 +497,52 @@ export default function Landing() {
           }
         }
       `}</style>
+
+      {/* ── MODAL: Tirar uma dúvida (público) ── */}
+      {dv.open && (
+        <div onClick={() => setDv(d => ({ ...d, open: false }))}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(8,15,26,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 1000 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'white', borderRadius: 18, padding: '28px 26px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
+            {dv.ok ? (
+              <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                <div style={{ fontSize: 44, marginBottom: 10 }}>✅</div>
+                <h3 style={{ fontSize: 19, fontWeight: 900, color: '#111', margin: '0 0 8px' }}>Dúvida recebida!</h3>
+                <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, margin: '0 0 20px' }}>
+                  Nossa equipe vai responder no e-mail <b>{dv.email}</b>. Fique de olho na sua caixa de entrada.
+                </p>
+                <button onClick={() => setDv({ open: false, nome: '', email: '', tel: '', msg: '', enviando: false, ok: false, erro: '' })}
+                  style={{ padding: '11px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                  Fechar
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                  <h3 style={{ fontSize: 19, fontWeight: 900, color: '#111', margin: 0 }}>Tirar uma dúvida</h3>
+                  <button onClick={() => setDv(d => ({ ...d, open: false }))} style={{ background: 'none', border: 'none', fontSize: 22, color: '#94a3b8', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                </div>
+                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 18px', lineHeight: 1.5 }}>Responderemos por e-mail. Sem compromisso.</p>
+                {['nome', 'email', 'tel'].map(campo => (
+                  <input key={campo}
+                    type={campo === 'email' ? 'email' : campo === 'tel' ? 'tel' : 'text'}
+                    placeholder={campo === 'nome' ? 'Seu nome' : campo === 'email' ? 'Seu e-mail (para receber a resposta)' : 'Telefone / WhatsApp'}
+                    value={dv[campo]} onChange={e => setDv(d => ({ ...d, [campo]: e.target.value, erro: '' }))}
+                    style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#111', outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
+                ))}
+                <textarea placeholder="Escreva sua dúvida…" rows={4}
+                  value={dv.msg} onChange={e => setDv(d => ({ ...d, msg: e.target.value, erro: '' }))}
+                  style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#111', outline: 'none', marginBottom: 10, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+                {dv.erro && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 10, fontWeight: 600 }}>{dv.erro}</div>}
+                <button onClick={enviarDuvida} disabled={dv.enviando}
+                  style={{ width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: dv.enviando ? 'default' : 'pointer', opacity: dv.enviando ? 0.7 : 1 }}>
+                  {dv.enviando ? 'Enviando…' : 'Enviar dúvida'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

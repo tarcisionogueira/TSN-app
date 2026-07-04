@@ -154,7 +154,10 @@ export default async function handler(req) {
   const attachments = (anexos || []).filter(a => a.url).map(a => ({ filename: a.nome || 'documento', path: a.url }));
 
   const r = await enviarEmail({
-    from: 'BidPro Brasil Jurídico <noreply@bidprobrasil.com.br>',
+    // Remetente REPLYÁVEL (não noreply): é o próprio endereço do caso, ingerido
+    // por /api/inbound-juridico. Assim o advogado responde ao e-mail normalmente
+    // (ao "de" ou ao reply-to, ambos caem no mesmo endereço e são registrados).
+    from: `BidPro Brasil Jurídico <juridico+${token}@${INBOUND_DOMAIN}>`,
     to: toList,
     cc: ccList,
     replyTo,
@@ -180,7 +183,7 @@ export default async function handler(req) {
   });
   // Auditoria
   await sb('juridico_emails', { method: 'POST', prefer: 'return=minimal',
-    body: { caso_id, direcao: 'saida', message_id: r.id, de: 'noreply@bidprobrasil.com.br', para: [...toList, ...ccList.map(c => `cc:${c}`)].join(', '), assunto: `Análise documental — Caso ${refCurto}`, anexos: attachments.map(a => ({ filename: a.filename })) } });
+    body: { caso_id, direcao: 'saida', message_id: r.id, de: `juridico+${token}@${INBOUND_DOMAIN}`, para: [...toList, ...ccList.map(c => `cc:${c}`)].join(', '), assunto: `Análise documental — Caso ${refCurto}`, anexos: attachments.map(a => ({ filename: a.filename })) } });
 
   // Chat interno (visível a analista/admin) amarrado ao caso
   let [chamado] = await (await sb(`chamados?caso_id=eq.${encodeURIComponent(caso_id)}&segmento=eq.interno&select=id&limit=1`)).json();
