@@ -833,7 +833,7 @@ export default function Analise() {
         <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : role === 'explorador' ? '#eff6ff' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : role === 'explorador' ? '#084BA6' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <span>{analisesBloqueado
             ? (role === 'explorador'
-                ? '🔒 Você usou suas 5 análises do mês. Faça upgrade para continuar.'
+                ? `🔒 Você usou suas ${limiteRole} análises do mês. Faça upgrade para continuar.`
                 : `🔒 Limite de ${limiteRole} análises mensais atingido.`)
             : role === 'explorador'
               ? `📊 Análises mercadológicas este mês: ${analisesUsadas}/${limiteRole}${analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`

@@ -168,7 +168,27 @@ export default async function handler(req) {
       });
       if (r.ok) m = await r.json();
     }
-    const custoAnaliseBrl = custoAnaliseUsd * usdBrl;
+
+    // Custo/análise APRENDIDO com o fluxo: soma de todo o custo mercadológico do
+    // Claude (web_search) ÷ nº de chamadas medidas. Começa semeado pela média do
+    // piloto A/B (env, ~US$ 0,49) e vai convergindo para o real conforme roda em
+    // produção. Cada mercadológica = 1 chamada web_search → custo/chamada é estável.
+    let custoAprendidoUsd = custoAnaliseUsd, baseAmostras = 0, aprendido = false;
+    try {
+      if (SB && KEY) {
+        const r = await fetch(`${SB}/rest/v1/uso_integracoes?provedor=eq.claude&operacao=eq.web_search&select=requests,custo_usd_micro`, {
+          headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+        });
+        if (r.ok) {
+          const linhas = await r.json();
+          const req = linhas.reduce((s, x) => s + (x.requests || 0), 0);
+          const usd = linhas.reduce((s, x) => s + (x.custo_usd_micro || 0), 0) / 1e6;
+          if (req >= 5) { custoAprendidoUsd = usd / req; baseAmostras = req; aprendido = true; }
+        }
+      }
+    } catch { /* mantém o seed do piloto */ }
+
+    const custoAnaliseBrl = custoAprendidoUsd * usdBrl;
     // Quantas análises grátis 1 Pro sustenta (env sobrepõe o cálculo, se definido).
     const analisesPorPro = Math.max(0, Math.floor(
       num(process.env.IA_ANALISES_POR_PRO, (precoPro * fracaoSubsidio) / custoAnaliseBrl)));
@@ -179,13 +199,15 @@ export default async function handler(req) {
       n_investidor_pro: m.n_investidor_pro,
       n_explorador: m.n_explorador,
       analises_por_pro: analisesPorPro,
-      custo_analise_usd: custoAnaliseUsd,
+      custo_analise_usd: Math.round(custoAprendidoUsd * 1e4) / 1e4,
       custo_analise_brl: Math.round(custoAnaliseBrl * 100) / 100,
+      custo_aprendido: aprendido,       // true = aprendido do fluxo real; false = semente do piloto A/B
+      custo_base_amostras: baseAmostras, // nº de análises medidas que formam a média
       analises_explorador_mes: usado,
       analises_total_mes: m.analises_total_mes,
       teto_sustentavel: tetoSustentavel,
       pct, status: status(pct),
-      nota: `Cada Investidor Pro (R$ ${precoPro.toFixed(2)}) banca ~${analisesPorPro} análises grátis/mês (${Math.round(fracaoSubsidio * 100)}% da mensalidade ÷ R$ ${(Math.round(custoAnaliseBrl * 100) / 100).toFixed(2)}/análise). Com ${m.n_investidor_pro} Pro(s) → teto ${tetoSustentavel} análises grátis/mês.`,
+      nota: `Cada Investidor Pro (R$ ${precoPro.toFixed(2)}) banca ~${analisesPorPro} análises grátis/mês (${Math.round(fracaoSubsidio * 100)}% da mensalidade ÷ R$ ${(Math.round(custoAnaliseBrl * 100) / 100).toFixed(2)}/análise ${aprendido ? `aprendido de ${baseAmostras} análises reais` : '— média do piloto A/B'}). Com ${m.n_investidor_pro} Pro(s) → teto ${tetoSustentavel} análises grátis/mês.`,
     };
   } catch { /* opcional */ }
 

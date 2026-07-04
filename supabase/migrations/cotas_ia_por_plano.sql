@@ -3,7 +3,7 @@
 -- Rodar no SQL Editor do Supabase. Aditivo e idempotente.
 --
 -- Regra: TODOS os acessos têm limite; só o admin é ilimitado.
---   mercadológico:   explorador 5 · top2/assessorado/clube 15 · equipe 100 · admin ∞
+--   mercadológico:   explorador 3 · top2/assessorado/clube 15 · equipe 100 · admin ∞
 --   documental+jur.: explorador 0 · top2/assessorado/clube 15 · equipe 100 · admin ∞
 -- Documental e jurídico saem na MESMA geração → contam no mesmo balde documental.
 -- Bônus (bonus_mercado/bonus_documental, concedidos pelo admin) somam POR CIMA do
@@ -26,12 +26,12 @@ RETURNS int LANGUAGE sql IMMUTABLE AS $$
       WHEN 'analista' THEN 100 WHEN 'advogado' THEN 100      -- equipe (ajustável)
       ELSE 0 END                                            -- explorador/consultor/sem-perfil: sem documental
     ELSE CASE p_role                                        -- mercadológico
-      WHEN 'explorador' THEN 5 WHEN 'consultor' THEN 5
+      WHEN 'explorador' THEN 3 WHEN 'consultor' THEN 5      -- explorador 3 (conservador; ver explorador_cota_mercadologica_3.sql)
       WHEN 'top2' THEN 15 WHEN 'top2_anual' THEN 15
       WHEN 'assessorado' THEN 15 WHEN 'assessorado_anual' THEN 15
       WHEN 'clube' THEN 15 WHEN 'clube_anual' THEN 15
       WHEN 'analista' THEN 100 WHEN 'advogado' THEN 100      -- equipe (ajustável)
-      ELSE 5 END
+      ELSE 3 END
   END
 $$;
 

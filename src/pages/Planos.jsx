@@ -160,7 +160,7 @@ export default function Planos() {
               Explore leilões em todo o Brasil, acesse cursos e use a calculadora de arrematação sem pagar nada.
             </p>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-              {['Busca de leilões em todo o Brasil', '5 relatórios Mercadológicos + Viabilidade/mês', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos', 'Acesso ao site do leiloeiro'].map(t => <CheckItem key={t} txt={t} />)}
+              {['Busca de leilões em todo o Brasil', '3 relatórios Mercadológicos + Viabilidade/mês', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos', 'Acesso ao site do leiloeiro'].map(t => <CheckItem key={t} txt={t} />)}
               <CheckItem txt="Análise Documental e Jurídica (Investidor Pro)" off />
             </div>
             <button onClick={() => nav('/checkout?plano=explorador')} disabled={atual('explorador')}

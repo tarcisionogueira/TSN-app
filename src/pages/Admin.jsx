@@ -2937,7 +2937,7 @@ function PainelCustosUso() {
               <span><b>{int(s.n_investidor_pro)}</b> Investidor Pro</span>
               <span><b>{int(s.n_explorador)}</b> Explorador</span>
               <span>1 Pro banca <b>~{int(s.analises_por_pro)}</b> análises grátis/mês</span>
-              <span>Custo/análise ~<b>{brl(s.custo_analise_brl)}</b></span>
+              <span>Custo/análise ~<b>{brl(s.custo_analise_brl)}</b> <span style={{ color: s.custo_aprendido ? '#10b981' : '#94a3b8', fontWeight: 700 }}>{s.custo_aprendido ? `📈 real (${int(s.custo_base_amostras)})` : '· piloto'}</span></span>
             </div>
             <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.35 }}>{s.nota}</div>
           </div>

@@ -96,7 +96,7 @@ function PopupBonusAnalises({ userId, onFechar }) {
         <div style={{ fontSize: 56, marginBottom: 12 }}>🎁</div>
         <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 10px' }}>Bem-vindo ao BidPro Brasil!</h2>
         <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.6, margin: '0 0 24px' }}>
-          Seu plano <strong style={{ color: '#0D63DB' }}>Explorador</strong> inclui <strong style={{ color: '#0D63DB' }}>5 análises Mercadológicas + Viabilidade por mês</strong>, de graça, para você avaliar imóveis em leilão.
+          Seu plano <strong style={{ color: '#0D63DB' }}>Explorador</strong> inclui <strong style={{ color: '#0D63DB' }}>3 análises Mercadológicas + Viabilidade por mês</strong>, de graça, para você avaliar imóveis em leilão.
         </p>
         <div style={{ background: '#eff6ff', borderRadius: 12, padding: '14px 20px', marginBottom: 24 }}>
           <div style={{ fontSize: 36, fontWeight: 900, color: '#0D63DB' }}>5</div>
