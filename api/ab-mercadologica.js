@@ -70,7 +70,9 @@ async function rodarGemini(inp) {
           systemInstruction: { parts: [{ text: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${inp.tipoImovel}). Retorne apenas JSON válido, sem markdown.` }] },
           contents: [{ role: 'user', parts: [{ text: promptMercado(inp) }] }],
           tools: [{ google_search: {} }],
-          generationConfig: { maxOutputTokens: 8000 },
+          // thinkingBudget:0 desliga o "pensamento" do 2.5-flash (que consumia o
+          // teto e truncava o JSON → finishReason=MAX_TOKENS). Teto amplo por margem.
+          generationConfig: { maxOutputTokens: 20000, thinkingConfig: { thinkingBudget: 0 } },
         }),
       },
     );
