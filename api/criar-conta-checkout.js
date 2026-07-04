@@ -10,6 +10,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { checkRateLimit } from './_rate-limit.js';
+import { hashCpf, encryptCpf } from './_cpf.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -69,10 +70,11 @@ export default async function handler(req, res) {
   const userId = data?.id || data?.user?.id || null;
   if (userId) {
     try {
+      const [cpf_hash, cpf_enc] = cpf ? await Promise.all([hashCpf(cpf), encryptCpf(cpf)]) : [null, null];
       await sb('perfis?on_conflict=id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ id: userId, nome, cpf: cpf || null, role: 'explorador', lgpd_aceito: true, lgpd_data: meta.lgpd_data }),
+        body: JSON.stringify({ id: userId, nome, cpf: cpf || null, cpf_hash, cpf_enc, role: 'explorador', lgpd_aceito: true, lgpd_data: meta.lgpd_data }),
       });
     } catch { /* best-effort; app tolera ausência de perfil */ }
   }

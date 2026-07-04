@@ -17,6 +17,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
+import { hashCpf, encryptCpf } from './_cpf.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -136,11 +137,12 @@ export default async function handler(req, res) {
   //    'pending', o webhook sobe o role ao confirmar). Upsert garante a linha
   //    mesmo sem trigger de criação de perfil.
   try {
+    const [cpf_hash, cpf_enc] = cpf ? await Promise.all([hashCpf(cpf), encryptCpf(cpf)]) : [null, null];
     await sb('perfis?on_conflict=id', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({
-        id: userId, nome, cpf,
+        id: userId, nome, cpf, cpf_hash, cpf_enc,
         ...(aprovado ? { role: plano, plano, inadimplente_desde: null } : {}),
         endereco_cep: end.cep || null, endereco_logradouro: end.logradouro || null,
         endereco_numero: end.numero || null, endereco_complemento: end.complemento || null,

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, Loader2, ShieldCheck } from 'lucide-react';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 
 const inp = {
@@ -51,13 +52,15 @@ export default function CompletarCadastro() {
     setLoading(true);
     try {
       const { error } = await supabase.from('perfis').update({
-        cpf: form.cpf.replace(/\D/g, ''),
         telefone: form.telefone.replace(/\D/g, ''),
         endereco: form.endereco || null,
         lgpd_aceito: true,
         lgpd_data: new Date().toISOString(),
       }).eq('id', user.id);
       if (error) throw error;
+      // CPF vai pelo backend, que grava também o hash + a cifra (chave só existe lá).
+      const rc = await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: form.cpf.replace(/\D/g, '') }) });
+      if (!rc.ok) throw new Error('Falha ao salvar o CPF.');
       // Replica no metadata do Auth (best-effort)
       supabase.auth.updateUser({ data: { cpf: form.cpf.replace(/\D/g, ''), telefone: form.telefone.replace(/\D/g, ''), lgpd_aceito: true } }).catch(() => {});
       if (setCadastroIncompleto) setCadastroIncompleto(false);

@@ -1,5 +1,7 @@
 export const config = { runtime: 'edge' };
 
+import { hashCpf } from './_cpf.js';
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
 
@@ -62,8 +64,18 @@ export default async function handler(req) {
   if (cpfLimpo.length < 11) return new Response(JSON.stringify({ temConta: false }), { status: 200, headers });
 
   // ── Busca perfil pelo CPF ──
-  const r = await sb(`perfis?cpf=eq.${cpfLimpo}&select=id,role`);
-  const perfis = await r.json();
+  // Preferência: pelo hash determinístico (não expõe o CPF cru na query).
+  // Fallback: pelo texto claro, para perfis ainda não migrados (backfill em curso).
+  let perfis = [];
+  const cpfHash = await hashCpf(cpfLimpo).catch(() => null);
+  if (cpfHash) {
+    const rh = await sb(`perfis?cpf_hash=eq.${cpfHash}&select=id,role`);
+    perfis = await rh.json().catch(() => []);
+  }
+  if (!Array.isArray(perfis) || !perfis.length) {
+    const r = await sb(`perfis?cpf=eq.${cpfLimpo}&select=id,role`);
+    perfis = await r.json().catch(() => []);
+  }
   if (!Array.isArray(perfis) || !perfis.length) {
     return new Response(JSON.stringify({ temConta: false }), { status: 200, headers });
   }

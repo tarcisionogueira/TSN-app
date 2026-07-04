@@ -381,8 +381,9 @@ export default function Checkout() {
       endereco: enderecoFmt || null, endereco_cep: end.cep || null, endereco_logradouro: end.logradouro || null,
       endereco_numero: end.numero || null, endereco_complemento: end.complemento || null, endereco_bairro: end.bairro || null,
       endereco_cidade: end.cidade || null, endereco_uf: end.uf || null,
-      ...(cpfOk ? { cpf: cpfDigits } : {}),
     }).eq('id', user.id);
+    // CPF pelo backend (grava também hash + cifra; a chave só existe lá).
+    if (cpfOk) { try { await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: cpfDigits }) }); } catch { /* best-effort */ } }
     // Replica o CPF no metadata se ainda não havia (usado por gateways/checkout).
     if (cpfOk && !user?.user_metadata?.cpf) { try { await supabase.auth.updateUser({ data: { cpf: cpfDigits } }); } catch { /* best-effort */ } }
   };
