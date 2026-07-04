@@ -83,8 +83,11 @@ export default function Landing() {
   const { user } = useAuth();
   const [faqAberto, setFaqAberto] = useState(null);
 
-  const ir = (destino) => nav(user ? destino : '/login');
-  const cadastrar = () => nav('/login');
+  // Destino que exige conta (ex.: /buscar). Deslogado → cadastro grátis já com o
+  // destino em `next`, para cair lá após criar a conta (a busca exige cadastro —
+  // Explorador grátis ou Investidor Pro). Logado → vai direto.
+  const ir = (destino) => nav(user ? destino : `/login?modo=cadastro&next=${encodeURIComponent(destino)}`);
+  const cadastrar = () => nav(user ? '/buscar' : '/login?modo=cadastro');
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", color: '#111111' }}>
@@ -332,7 +335,7 @@ export default function Landing() {
           <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.8, margin: '0 auto 32px', maxWidth: 540 }}>
             Nossa Calculadora de Arrematação calcula o teto máximo de lance com base no valor de mercado, débitos, reforma e o ROI que você quer atingir.
           </p>
-          <button onClick={() => ir('/calculadora')}
+          <button onClick={() => nav('/calculadora')}
             style={{ padding: '14px 32px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 28px rgba(16,185,129,0.35)' }}>
             🧮 Usar a Calculadora — é grátis
           </button>
@@ -374,10 +377,10 @@ export default function Landing() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
             {[
-              { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], destaque: false },
-              { nome: 'Investidor Pro', tag: 'Mais popular', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Cota mensal de análises'], destaque: true },
-              { nome: 'Assessoria', tag: 'Por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], destaque: false },
-            ].map(({ nome, tag, cor, items, destaque }) => (
+              { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], destaque: false, link: user ? '/buscar' : '/login?modo=cadastro' },
+              { nome: 'Investidor Pro', tag: 'Mais popular', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Cota mensal de análises'], destaque: true, link: '/p/plano/top2' },
+              { nome: 'Assessoria', tag: 'Por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], destaque: false, link: '/p/plano/assessorado' },
+            ].map(({ nome, tag, cor, items, destaque, link }) => (
               <div key={nome} style={{ background: destaque ? '#eff6ff' : 'white', borderRadius: 18, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '24px 20px', position: 'relative', boxShadow: destaque ? `0 8px 28px ${cor}20` : '0 2px 8px rgba(0,0,0,0.04)' }}>
                 {destaque && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: cor, color: 'white', fontSize: 9, fontWeight: 800, padding: '3px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, whiteSpace: 'nowrap' }}>Mais popular</div>}
                 <div style={{ fontSize: 12, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6 }}>{nome}</div>
@@ -391,9 +394,9 @@ export default function Landing() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => nav('/planos')}
+                <button onClick={() => nav(link)}
                   style={{ width: '100%', padding: '10px', border: destaque ? 'none' : `2px solid ${cor}`, borderRadius: 10, background: destaque ? cor : 'transparent', color: destaque ? 'white' : cor, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                  Ver detalhes do plano
+                  {nome === 'Explorador' ? 'Começar grátis' : 'Ver detalhes do plano'}
                 </button>
               </div>
             ))}

@@ -241,6 +241,29 @@ export default function Checkout() {
     setSuLoading(false);
   };
 
+  // Assessoria (por arrematação) só pode ser contratada por assinante Investidor
+  // Pro ou acima. Explorador/deslogado veem um upsell para assinar o Pro antes.
+  const ROLES_PRO_OU_ACIMA = ['top2', 'assessorado', 'clube', 'admin', 'analista', 'advogado', 'suporte'];
+  if (planoKey === 'assessorado' && !ROLES_PRO_OU_ACIMA.includes(role)) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+        <div style={{ maxWidth: 460, textAlign: 'center', background: '#1a1a1a', border: '1px solid #334155', borderRadius: 20, padding: '40px 32px' }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+          <h2 style={{ color: 'white', fontSize: 22, fontWeight: 900, marginBottom: 12 }}>Assessoria é exclusiva do Investidor Pro</h2>
+          <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
+            A Assessoria (do lance à imissão de posse) está disponível para assinantes do plano <strong style={{ color: '#60a5fa' }}>Investidor Pro</strong>. Assine o Investidor Pro primeiro para então contratar a assessoria por arrematação.
+          </p>
+          <button onClick={() => nav('/checkout?plano=top2')} style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 12 }}>
+            Assinar o Investidor Pro
+          </button>
+          <button onClick={() => nav('/planos')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+            Ver todos os planos
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Página de apresentação do plano Explorador (gratuito)
   if (planoKey === 'explorador') {
     const planoExp = PLANOS['explorador'];
