@@ -341,12 +341,16 @@ export default async function handler(req, res) {
     ];
     const pendencias = checklist.filter(c => c.status === 'pendente').length;
 
+    // Lembrete fixo (não-IA): análise preliminar; próximo passo é o analista e,
+    // com aprovação, o laudo jurídico definitivo por advogado.
+    const AVISO_DOCUMENTAL = '\n\n§ SEÇÃO: LEMBRETE E PRÓXIMO PASSO\nEsta análise documental e processual é gerada com apoio de inteligência artificial, a partir dos documentos disponíveis e de consultas públicas — pode conter imprecisões e não substitui a análise de um profissional. Recomendamos AGENDAR uma conversa com um analista para revisar o caso; uma vez aprovado, o caso é encaminhado ao JURÍDICO para emissão do LAUDO DEFINITIVO por advogado.';
+
     const result = {
       extracao: parsed.extracao || null,
       riscos: parsed.riscos || [],
       lacunas: parsed.lacunas || [],
       nivelRisco: parsed.nivelRisco || (temProc ? cnj.parecer?.nivel : null) || 'amarelo',
-      parecer: (parsed.parecer || '') + fontesTxt,
+      parecer: (parsed.parecer || '') + fontesTxt + AVISO_DOCUMENTAL,
       cnj: cnj ? { total: cnj.total, parecer: cnj.parecer, processos: cnj.processos?.slice(0, 12) || [], tribunais: cnj.tribunais_consultados } : null,
       fontesExternas,
       documentosLidos: lidos,

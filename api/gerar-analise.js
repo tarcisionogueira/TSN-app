@@ -272,6 +272,11 @@ export default async function handler(req, res) {
       } catch { /* laudo é complementar */ }
     }
 
+    // Lembrete fixo (não-IA): a análise é apoio e não substitui a verificação
+    // presencial. Recomenda visitar o imóvel ou ver um similar com corretor.
+    const AVISO_MERCADO = '§ SEÇÃO: LEMBRETE E PRÓXIMO PASSO\nEsta análise mercadológica é gerada com apoio de inteligência artificial e tem caráter informativo — pode conter imprecisões e não substitui a verificação presencial. Antes de decidir, recomendamos VISITAR o imóvel pessoalmente ou AGENDAR com um corretor de confiança para conhecer um imóvel similar na região, confirmando estado de conservação, localização e o valor praticado no mercado.';
+    if (parecer) parecer += `\n\n${AVISO_MERCADO}`;
+
     const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     res.status(200).json({ ok: true, result, cota });

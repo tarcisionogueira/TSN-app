@@ -422,5 +422,8 @@ SE NÃO HOUVER VIABILIDADE${usoProprio ? ' (economia irrelevante)' : ' (lucro < 
     system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA — sem análise jurídica, CNJ, débitos ou diligências. Preciso e persuasivo. Nunca use markdown, asteriscos ou formatação especial. Use apenas texto simples.',
   });
 
-  return extractText(data);
+  const texto = extractText(data);
+  // Lembrete fixo (não-IA): apoio à decisão, não substitui a verificação presencial.
+  const AVISO_MERCADO = '§ SEÇÃO: LEMBRETE E PRÓXIMO PASSO\nEsta análise mercadológica é gerada com apoio de inteligência artificial e tem caráter informativo — pode conter imprecisões e não substitui a verificação presencial. Antes de decidir, recomendamos VISITAR o imóvel pessoalmente ou AGENDAR com um corretor de confiança para conhecer um imóvel similar na região, confirmando estado de conservação, localização e o valor praticado no mercado.';
+  return texto ? `${texto}\n\n${AVISO_MERCADO}` : texto;
 }
