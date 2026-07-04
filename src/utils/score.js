@@ -23,12 +23,14 @@
 export const PESOS = { margem: 40, localizacao: 25, perfil: 15, juridico: 10, financeiro: 10 };
 
 // Perfil por MODALIDADE: quanto mais simples/líquida a operação, maior. (0–10)
+// ORDEM IMPORTA (usa o primeiro match): 'judicial' antes de 'leil' para que
+// "leilão judicial" caia em 4 (risco/ocupação), não em 6.
 const PERFIL_MODALIDADE = [
   [/venda[\s_-]?direta|venda[\s_-]?online/, 8], // compra direta, sem disputa
   [/licita/, 7],                                 // licitação aberta
+  [/judicial/, 4],                                // judicial: mais risco/ocupação
   [/extrajud|sfi|edital[\s_-]?[úu]nico/, 6],      // leilão extrajudicial
   [/leil/, 6],                                    // leilão (genérico)
-  [/judicial/, 4],                                // judicial: mais risco/ocupação
 ];
 // Perfil por TIPO de imóvel: liquidez de revenda/locação. (0–10)
 const PERFIL_TIPO = {
@@ -38,12 +40,13 @@ const PERFIL_TIPO = {
 };
 
 const round1 = (n) => Math.round(n * 10) / 10;
+const clamp10 = (n) => Math.max(0, Math.min(10, n));
 
-function norm10(v) {
-  const n = Number(v);
-  if (isNaN(n)) return null;
-  return n > 10 ? n / 10 : n; // aceita escala 0–100 ou 0–10
-}
+// Normaliza por CONTRATO conhecido de cada camada — NÃO adivinha a escala.
+// Adivinhar (n>10?n/10:n) invertia o sinal: um jurídico péssimo 9/100 virava 9/10.
+function toNum(v) { const n = Number(v); return isNaN(n) ? null : n; }
+function from100(v) { const n = toNum(v); return n == null ? null : clamp10(n / 10); } // escala 0–100 → 0–10
+function from10(v)  { const n = toNum(v); return n == null ? null : clamp10(n); }        // já 0–10
 
 function perfilScore(modalidade, tipo) {
   const m = String(modalidade || '').toLowerCase();
@@ -65,17 +68,17 @@ export function scoreBidPro({ desconto, modalidade, tipo, scoreLocalizacao, scor
     camadas.push({ key: 'margem', label: 'Margem', nota: round1(2 + (c / 60) * 8), peso: PESOS.margem });
   }
 
-  const loc = norm10(scoreLocalizacao);
-  if (loc != null) camadas.push({ key: 'localizacao', label: 'Localização', nota: round1(Math.max(0, Math.min(10, loc))), peso: PESOS.localizacao });
+  const loc = from10(scoreLocalizacao); // score_localizacao já é 0–10
+  if (loc != null) camadas.push({ key: 'localizacao', label: 'Localização', nota: round1(loc), peso: PESOS.localizacao });
 
   const perfil = perfilScore(modalidade, tipo);
   if (perfil != null) camadas.push({ key: 'perfil', label: 'Perfil', nota: perfil, peso: PESOS.perfil });
 
-  const sj = norm10(scoreJuridico);
-  if (sj != null) camadas.push({ key: 'juridico', label: 'Jurídico', nota: round1(Math.max(0, Math.min(10, sj))), peso: PESOS.juridico });
+  const sj = from100(scoreJuridico); // score_juridico é 0–100
+  if (sj != null) camadas.push({ key: 'juridico', label: 'Jurídico', nota: round1(sj), peso: PESOS.juridico });
 
-  const sf = norm10(scoreFinanceiro);
-  if (sf != null) camadas.push({ key: 'financeiro', label: 'Financeiro', nota: round1(Math.max(0, Math.min(10, sf))), peso: PESOS.financeiro });
+  const sf = from100(scoreFinanceiro); // score_financeiro é 0–100
+  if (sf != null) camadas.push({ key: 'financeiro', label: 'Financeiro', nota: round1(sf), peso: PESOS.financeiro });
 
   if (!camadas.length) return null;
 

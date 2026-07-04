@@ -53,7 +53,7 @@ const S = {
   tab: (active) => ({ padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: active ? '#111111' : '#fff', color: active ? '#fff' : '#475569', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
   card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16 },
   btn: (variant = 'primary') => ({
-    padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+    padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
     background: variant === 'primary' ? '#111111' : variant === 'danger' ? '#ef4444' : variant === 'outline' ? '#fff' : '#64748b',
     color: variant === 'outline' ? '#111111' : '#fff',
     border: variant === 'outline' ? '1px solid #cbd5e1' : 'none',
@@ -1108,7 +1108,7 @@ function ContratoModal({ chave, planos, onClose }) {
               )}
 
               {/* Novo contrato para outro cliente */}
-              <button onClick={() => { setContratoExistente(null); setConteudo(''); setNomeCliente(''); setCpfCliente(''); setEmailCliente(''); setLinkGerado(''); setEtapa('dados'); }}
+              <button onClick={() => { setContratoExistente(null); setConteudo(''); setLinkGerado(''); setEtapa('dados'); }}
                 style={{ padding:'10px', background:'#f8fafc', color:'#374151', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer' }}>
                 + Gerar para outro cliente
               </button>

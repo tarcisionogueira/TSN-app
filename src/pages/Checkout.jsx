@@ -112,6 +112,7 @@ export default function Checkout() {
   const pollingRef = React.useRef(null);
   const jaConfirmouRef = React.useRef(false);
   const assinandoRef = React.useRef(false); // trava anti-duplo-clique na assinatura
+  const cancelouAnterioresRef = React.useRef(false); // idempotência do cancelamento de assinaturas anteriores
 
   // Limpa o formulário inline ao trocar de plano (evita dados do plano anterior).
   useEffect(() => {
@@ -504,8 +505,8 @@ export default function Checkout() {
 
   // Evita DUPLICIDADE de assinatura: antes de criar uma nova recorrência,
   // cancela qualquer assinatura ativa do cliente nos dois gateways (idempotente).
-  // Só roda uma vez por sessão de checkout.
-  const cancelouAnterioresRef = useRef(false);
+  // Só roda uma vez por sessão de checkout. (cancelouAnterioresRef é declarado no
+  // topo do componente para respeitar as rules-of-hooks.)
   const cancelarAssinaturasAnteriores = async () => {
     if (cancelouAnterioresRef.current || !user?.email) return;
     cancelouAnterioresRef.current = true;

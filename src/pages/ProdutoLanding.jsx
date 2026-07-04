@@ -352,18 +352,13 @@ export default function ProdutoLanding() {
   const nav = useNavigate();
   const { user, isLoggedIn } = useAuth();
 
-  // SDR lead capture flow
-  if (tipo === 'captura') {
-    return <CapturaLanding id={id} />;
-  }
-
-
   const ref = searchParams.get('ref') || '';
   const [produto, setProduto] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
+      if (tipo === 'captura') { setLoading(false); return; } // captura tem fluxo próprio
       if (tipo === 'plano') {
         const info = PLANOS_INFO[id];
         if (info) {
@@ -399,6 +394,9 @@ export default function ProdutoLanding() {
     }
     load();
   }, [tipo, id]);
+
+  // SDR lead capture flow — após os hooks (rules-of-hooks)
+  if (tipo === 'captura') return <CapturaLanding id={id} />;
 
   if (loading) return <div style={{ minHeight:'100vh', background:'#111111', display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', fontSize:16 }}>Carregando…</div>;
 

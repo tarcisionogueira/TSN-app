@@ -1958,7 +1958,7 @@ export default function Analise() {
             <span style={{ fontSize:12, fontWeight:700, color:'#64748b' }}>CENÁRIO:</span>
             {[['aVista','À Vista','#0D63DB'],['financiado','Alavancado','#10b981']].map(([v,l,c])=>(
               <button key={v} onClick={()=>setCenario(v)} disabled={v==='financiado'&&d.somenteAVista}
-                style={{ padding:'7px 20px', borderRadius:8, border:'none', background:cenario===v?c:'white', color:cenario===v?'white':'#64748b', fontWeight:800, fontSize:13, cursor:'pointer', border:`2px solid ${cenario===v?c:'#e2e8f0'}`, opacity:v==='financiado'&&d.somenteAVista?0.4:1 }}>
+                style={{ padding:'7px 20px', borderRadius:8, background:cenario===v?c:'white', color:cenario===v?'white':'#64748b', fontWeight:800, fontSize:13, cursor:'pointer', border:`2px solid ${cenario===v?c:'#e2e8f0'}`, opacity:v==='financiado'&&d.somenteAVista?0.4:1 }}>
                 {l}
               </button>
             ))}
