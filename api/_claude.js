@@ -7,23 +7,29 @@ export const URL_CLAUDE = 'https://api.anthropic.com/v1/messages';
 const RETRYABLE = new Set([429, 500, 502, 503, 529]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function anthropicFetch(options, { retries = 3, baseDelay = 800 } = {}) {
+export async function anthropicFetch(options, { retries = 3, baseDelay = 800, timeoutMs = 120000 } = {}) {
   let lastRes; // último Response retornável (falha retryável exaurida)
   for (let tent = 0; tent <= retries; tent++) {
+    // Timeout por tentativa: sem ele, uma conexão pendurada trava a chamada para
+    // sempre e o retry/fallback nunca acionam. O abort cai no catch → re-tenta.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const res = await fetch(URL_CLAUDE, options);
+      const res = await fetch(URL_CLAUDE, { ...options, signal: options.signal || ctrl.signal });
       if (!RETRYABLE.has(res.status)) return res; // sucesso ou erro não-retryável → devolve direto
       if (tent === retries) { lastRes = res; break; } // retries exauridos com falha retryável
       const ra = Number(res.headers.get('retry-after'));
       const espera = ra > 0 ? ra * 1000 : baseDelay * 2 ** tent + Math.floor(Math.random() * 300);
       await sleep(espera);
     } catch (e) {
-      if (tent === retries) { // rede caiu no último ataque → tenta fallback antes de propagar
+      if (tent === retries) { // rede caiu/timeout no último ataque → tenta fallback antes de propagar
         const fb = await openaiFallback(options);
         if (fb) return fb;
         throw e;
       }
       await sleep(baseDelay * 2 ** tent + Math.floor(Math.random() * 300));
+    } finally {
+      clearTimeout(timer);
     }
   }
   // Chegou aqui = falha retryável do Anthropic esgotou os retries.
