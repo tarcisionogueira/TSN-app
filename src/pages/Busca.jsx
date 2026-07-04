@@ -1291,10 +1291,13 @@ export default function Busca() {
               </div>
               <div>
                 <label style={lbl}>Forma de Pagamento</label>
-                {[['aVista','À Vista'],['financiado','Financiado']].map(([v,l])=>(
+                {/* Multi-seleção: pode marcar mais de uma (união no filtro). Financiado
+                    = parcela extrajudicial (CEF); Hipotecado = parcela judicial (art. 895 CPC).
+                    Quem compra parcelado usa os dois — devem poder ser combinados. */}
+                {[['aVista','À Vista',''],['financiado','Financiado','parcela extrajudicial'],['hipotecado','Hipotecado','parcela judicial']].map(([v,l,sub])=>(
                   <label key={v} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:12, color:'#334155', marginBottom:5 }}>
                     <input type="checkbox" checked={filtros.pagamento.includes(v)} onChange={()=>togglePagamento(v)} style={{ width:14, height:14 }}/>
-                    {l}
+                    <span>{l}{sub && <span style={{ color:'#94a3b8', fontSize:10 }}> · {sub}</span>}</span>
                   </label>
                 ))}
                 {filtros.pagamento.length > 0 && (
