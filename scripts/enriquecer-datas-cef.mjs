@@ -18,28 +18,50 @@ import { createClient } from '@supabase/supabase-js';
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
 const LIMITE = parseInt(process.env.CEF_DATAS_LIMITE || '4000', 10);
-const CONC = parseInt(process.env.CEF_DATAS_CONC || '5', 10);
+const CONC = parseInt(process.env.CEF_DATAS_CONC || '3', 10); // menos concorrência = menos 504 da Caixa
 const DEADLINE = Date.now() + 75 * 60 * 1000; // para antes do timeout de 90 min
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const BROWSER_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--window-size=1280,900'];
 
 if (!SB || !KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const supabase = createClient(SB, KEY);
 
-// Extrai a data do próximo leilão/licitação do TEXTO renderizado.
-// Inclui rótulos de LICITAÇÃO ABERTA (fim/recebimento de propostas), que valem
-// como data-limite do certame — o usuário planeja em cima dela igual a um leilão.
+// A página da Caixa às vezes volta como erro de borda (504/CloudFront): um HTML
+// minúsculo "Server Error / Status Code 504". networkidle2 "carrega" essa página
+// sem falhar, mas ela NÃO tem data — se tratada como "sem data" e marcada como
+// enriquecida, o imóvel nunca mais é tentado. Detectamos o erro para RE-tentar.
+function paginaComErro(txt) {
+  if (!txt || txt.length < 500) return true;
+  if (/server error|status code\s*5\d\d|request id|erro inesperado|forbidden|access denied|indispon[íi]vel/i.test(txt)) return true;
+  // A página válida de detalhe sempre traz "Número do imóvel".
+  if (!/n[úu]mero do im[óo]vel/i.test(txt)) return true;
+  return false;
+}
+
+// Extrai a data do TEXTO renderizado. A página de detalhe da Caixa traz a data
+// INLINE, com rótulos específicos por modalidade (confirmado no diagnóstico):
+//   Leilão SFI / extrajudicial → "Data do 1º Leilão - DD/MM/AAAA" (+ 2º Leilão)
+//   Licitação Aberta          → "Data da Licitação Aberta - DD/MM/AAAA"
+// Usamos a data mais próxima no futuro (para leilão único, o 1º leilão).
 function extrairDataLeilao(txt) {
   if (!txt) return null;
-  const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|proposta|recebimento|limite|abertura|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
   const ontem = Date.now() - 86400000;
   const limite = Date.now() + 400 * 86400000;
   const futuras = [];
-  let m;
-  while ((m = re.exec(txt))) {
-    const y = m[3].length === 2 ? '20' + m[3] : m[3];
-    const t = Date.parse(`${y}-${m[2]}-${m[1]}`);
+  const push = (d, mo, y) => {
+    const yy = y.length === 2 ? '20' + y : y;
+    const t = Date.parse(`${yy}-${mo}-${d}`);
     if (!isNaN(t) && t >= ontem && t < limite) futuras.push(t);
+  };
+  // Rótulos específicos da Caixa (mais confiáveis).
+  const alvos = /(?:data do 1[ºo°]?\s*leil[ãa]o|data do 2[ºo°]?\s*leil[ãa]o|data da licita[çc][ãa]o aberta|data do leil[ãa]o)\s*[-–:]?\s*(\d{2})\/(\d{2})\/(\d{2,4})/gi;
+  let m;
+  while ((m = alvos.exec(txt))) push(m[1], m[2], m[3]);
+  // Fallback genérico (licitações/propostas com outros rótulos).
+  if (!futuras.length) {
+    const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|proposta|recebimento|limite|abertura|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
+    while ((m = re.exec(txt))) push(m[1], m[2], m[3]);
   }
   if (!futuras.length) return null;
   return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
@@ -88,21 +110,40 @@ async function main() {
   const browser = await puppeteer.launch({ headless: true, args: BROWSER_ARGS });
   let idx = 0, ok = 0, semData = 0, falha = 0, feitos = 0;
 
+  // Carrega a página tratando o erro de borda da Caixa (504/CloudFront) como
+  // transitório: re-tenta algumas vezes com backoff antes de desistir.
+  async function carregar(page, url) {
+    for (let tent = 0; tent < 4; tent++) {
+      let txt = '';
+      try {
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
+        txt = await page.evaluate(() => document.body?.innerText || '');
+      } catch { txt = ''; }
+      if (!paginaComErro(txt)) return { txt, erro: false };
+      await sleep(2500 * (tent + 1)); // 2.5s, 5s, 7.5s
+    }
+    return { txt: '', erro: true };
+  }
+
   async function worker() {
     const page = await novaPagina(browser);
     while (idx < cands.length && Date.now() < DEADLINE) {
       const im = cands[idx++];
       const url = im.url_lote || im.link_edital;
-      const patch = { enriquecido_em: new Date().toISOString() };
-      try {
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
-        const txt = await page.evaluate(() => document.body?.innerText || '');
+      const { txt, erro } = await carregar(page, url);
+      if (erro) {
+        // Erro persistente da Caixa: NÃO marca enriquecido_em, para voltar à
+        // fila e ser re-tentado na próxima execução (não perde o imóvel).
+        falha++;
+      } else {
+        const patch = { enriquecido_em: new Date().toISOString() };
         const d = extrairDataLeilao(txt);
         if (d) { patch.data_leilao = d; ok++; } else semData++;
-      } catch { falha++; }
+        await supabase.from('imoveis_leilao').update(patch).eq('id', im.id).then(() => {}, () => {});
+      }
       feitos++;
-      await supabase.from('imoveis_leilao').update(patch).eq('id', im.id).then(() => {}, () => {});
-      if (feitos % 100 === 0) console.log(`  ${feitos}/${cands.length} · datas ${ok} · sem-data ${semData} · falha ${falha}`);
+      if (feitos % 100 === 0) console.log(`  ${feitos}/${cands.length} · datas ${ok} · sem-data ${semData} · falha(erro-caixa) ${falha}`);
+      await sleep(300); // gentileza entre requisições
     }
     try { await page.close(); } catch {}
   }
