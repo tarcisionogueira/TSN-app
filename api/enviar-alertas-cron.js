@@ -11,7 +11,8 @@
  *   4. Completa até 12 num raio de 200km (centróide IBGE offline + PostGIS);
  *      se não fechar 12, manda os que houver no raio, por maior desconto.
  *
- * Links do e-mail: card → /#/imovel/:id (tela do imóvel) · logo → / (home).
+ * Links do e-mail: card → /#/imovel/:id (tela do imóvel) · logo e botão → /#/buscar
+ * (leva o cliente direto à plataforma/busca). Remetente: noreply@bidprobrasil.com.br.
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
@@ -39,7 +40,7 @@ export default async function handler(req) {
   const URL_ = process.env.VITE_SUPABASE_URL;
   const KEY = process.env.SUPABASE_SERVICE_KEY;
   const RESEND_KEY = process.env.RESEND_API_KEY;
-  const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <alertas@bidprobrasil.com.br>';
+  const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <noreply@bidprobrasil.com.br>';
   const BASE = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
   if (!URL_ || !KEY) return new Response(JSON.stringify({ error: 'env not configured' }), { status: 500 });
   const hdr = { apikey: KEY, Authorization: `Bearer ${KEY}` };
@@ -138,7 +139,7 @@ export default async function handler(req) {
       const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <a href="${BASE}/" style="text-decoration:none;">
+  <a href="${BASE}/#/buscar" style="text-decoration:none;">
     <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:24px 28px;text-align:center;">
       <div style="font-size:22px;font-weight:800;color:#fff;">BidPro Brasil</div>
       <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Leilão &amp; Investimentos</div>
