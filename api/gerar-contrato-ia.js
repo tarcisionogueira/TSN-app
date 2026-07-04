@@ -8,6 +8,7 @@ export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { anthropicFetch } from './_claude.js';
 
 const ROLES_STAFF = ['admin', 'consultor', 'analista', 'advogado'];
 
@@ -57,7 +58,7 @@ ${partesAdicionais ? `Informações adicionais sobre as partes:\n${partesAdicion
 Gere o contrato completo e pronto para uso.`;
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await anthropicFetch({
       method: 'POST',
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({

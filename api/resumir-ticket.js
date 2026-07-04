@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { anthropicFetch } from './_claude.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -52,7 +53,7 @@ export default async function handler(req) {
   const [perfil] = await perfilRes.json();
   const memoriaAtual = perfil?.memoria_ia || '';
 
-  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+  const claudeRes = await anthropicFetch({
     method: 'POST',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({

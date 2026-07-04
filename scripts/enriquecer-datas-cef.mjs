@@ -67,6 +67,47 @@ function extrairDataLeilao(txt) {
   return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
 }
 
+// Extrai a URL do "Baixar edital e anexos". O controle da Caixa NÃO é um <a href>
+// simples (diagnóstico: âncoras com pdf/edital no href = []); vem via onclick (ex.:
+// window.open('/editais/...pdf')) ou action de <form>. Esta função RODA NO NAVEGADOR
+// (passada a page.evaluate) e inspeciona o DOM: onclick/href de botões e links com
+// "edital"/"anexo", qualquer atributo que referencie /editais/ · .pdf · .asp?...edital,
+// e o action de <form> próximo. Devolve a melhor URL absoluta (resolvida contra a
+// origem) ou null, mais uma amostra do outerHTML do controle para diagnóstico.
+function extrairLinkEdital() {
+  try {
+    const abs = (u) => { if (!u) return null; try { return new URL(u.trim(), location.href).href; } catch { return null; } };
+    // parece link de edital/PDF de fato?
+    const bom = (u) => !!u && /(\/editais?\/|\.pdf(\?|#|$)|edital[^/"']*\.(?:pdf|asp)|\.asp\?[^"'\s]*edital)/i.test(u);
+    // extrai a 1ª URL de dentro de um trecho de JS (onclick), ex.: window.open('...').
+    const urlDeJS = (s) => {
+      if (!s) return null;
+      const m = s.match(/(?:https?:\/\/[^'"\s)]+|\/[^'"\s)]+|[\w.\-/]+\.(?:pdf|asp)[^'"\s)]*)/i);
+      return m ? m[0] : null;
+    };
+    let amostra = null;
+    // 1) elementos explicitamente ligados a "edital"/"anexo".
+    const ligados = Array.from(document.querySelectorAll('a,button,input,[onclick]')).filter((el) => {
+      const t = [el.textContent, el.value, el.getAttribute('onclick'), el.getAttribute('href'),
+        el.id, el.className, el.getAttribute('title')].join(' ');
+      return /edital|anexo/i.test(t);
+    });
+    for (const el of ligados) {
+      if (!amostra) amostra = (el.outerHTML || '').slice(0, 200);
+      const cand = abs(el.getAttribute('href'))
+        || abs(urlDeJS(el.getAttribute('onclick')))
+        || abs(el.closest('form') && el.closest('form').getAttribute('action'));
+      if (bom(cand)) return { url: cand, amostra };
+    }
+    // 2) varredura ampla: qualquer onclick/href/action na página que pareça edital.
+    for (const el of Array.from(document.querySelectorAll('[onclick],[href],[action]'))) {
+      const cand = abs(urlDeJS(el.getAttribute('onclick'))) || abs(el.getAttribute('href')) || abs(el.getAttribute('action'));
+      if (bom(cand)) return { url: cand, amostra };
+    }
+    return { url: null, amostra };
+  } catch { return { url: null, amostra: null }; }
+}
+
 async function novaPagina(browser) {
   const page = await browser.newPage();
   await page.setUserAgent(UA);
@@ -114,6 +155,7 @@ async function main() {
   // à toa. Abortamos após muitos erros seguidos e deixamos o resto p/ a próxima run.
   const CORTE_ERROS = 40;
   let errosSeguidos = 0, bloqueado = false;
+  let amostrasEdital = 0; // loga o outerHTML do controle "edital" p/ os primeiros casos sem URL
 
   // Carrega a página; o erro de borda da Caixa (504/CloudFront) é transitório,
   // então re-tenta poucas vezes com backoff curto (o bloqueio não passa in-run).
@@ -146,6 +188,19 @@ async function main() {
         const patch = { enriquecido_em: new Date().toISOString() };
         const d = extrairDataLeilao(txt);
         if (d) { patch.data_leilao = d; ok++; } else semData++;
+        // Best-effort ADICIONAL: captura o link do edital/anexos. Só grava quando
+        // acha algo confiável E o registro ainda não tem link_edital — nunca
+        // sobrescreve um valor bom com null. Não interfere na data nem no disjuntor.
+        try {
+          const ed = await page.evaluate(extrairLinkEdital);
+          if (ed?.url && !im.link_edital) {
+            patch.link_edital = ed.url;
+          } else if (!ed?.url && amostrasEdital < 5) {
+            amostrasEdital++;
+            const amostra = (ed?.amostra || '(nenhum controle "edital" no DOM)').replace(/\s+/g, ' ').slice(0, 200);
+            console.log(`  [edital ${amostrasEdital}] sem URL confiável · controle: ${amostra}`);
+          }
+        } catch { /* extração de edital é opcional; ignora falhas */ }
         await supabase.from('imoveis_leilao').update(patch).eq('id', im.id).then(() => {}, () => {});
       }
       feitos++;

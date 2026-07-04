@@ -1,5 +1,6 @@
 export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
+import { anthropicFetch } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -85,7 +86,7 @@ Seja preciso, direto e use os dados disponíveis. NUNCA invente dados que não e
     { role: 'user', content: contextoStr ? `${contextoStr}\n\n---\nPergunta: ${mensagem}` : mensagem },
   ];
 
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await anthropicFetch({
     method: 'POST',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, system, messages }),

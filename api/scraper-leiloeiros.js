@@ -375,7 +375,7 @@ async function coletarLJUD(paginas, deadline) {
   for (const v of variantes) {
     if (Date.now() > deadline) break;
     const url = `${API}?pg=1&qtd_por_pagina=48&${v.qs}`;
-    const bd = await fetchViaBrightData(url, { method: 'POST', headers: hdrs });
+    const bd = await fetchViaBrightData(url, { method: 'POST', headers: hdrs, proposito: 'ljud' });
     via = bd ? 'brightdata' : 'indisponivel';
     const txt = bd ? await bd.text().catch(() => '') : '';
     let data = null; try { data = JSON.parse(txt); } catch { /* */ }
@@ -400,7 +400,7 @@ async function coletarLJUD(paginas, deadline) {
     for (let p = 1; p <= totalPages; p++) {
       if (Date.now() > deadline) break;
       const url = `${API}?pg=${p}&qtd_por_pagina=48&${vencedora.qs}`;
-      const bd = await fetchViaBrightData(url, { method: 'POST', headers: hdrs });
+      const bd = await fetchViaBrightData(url, { method: 'POST', headers: hdrs, proposito: 'ljud' });
       let data = null; try { data = JSON.parse(await bd.text()); } catch { /* */ }
       const items = ljudItens(data);
       if (!items.length) break;
@@ -432,7 +432,7 @@ async function reconLJUD(deadline) {
   const hdrs = { Accept: 'application/json,*/*', Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/' };
   const commons = 'tipo=0&estado=&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
   const listUrl = `${base}get-bens-por-estados?pg=1&qtd_por_pagina=48&categoria=3&${commons}`;
-  const lb = await fetchViaBrightData(listUrl, { method: 'POST', headers: hdrs });
+  const lb = await fetchViaBrightData(listUrl, { method: 'POST', headers: hdrs, proposito: 'ljud' });
   let ldata = null; try { ldata = JSON.parse(lb ? await lb.text() : ''); } catch { /* */ }
   const items = ljudItens(ldata)
     .filter(it => Number(it.id_categoria) === 3 || /im[óo]ve/i.test(it.nm_categoria || ''))
@@ -453,7 +453,7 @@ async function reconLJUD(deadline) {
   for (const u of variantesLotes) {
     if (Date.now() > deadline) break;
     for (const m of ['POST', 'GET']) { // o site usa fetch; método pode variar
-      const r = await fetchViaBrightData(u, { method: m, headers: hdrs });
+      const r = await fetchViaBrightData(u, { method: m, headers: hdrs, proposito: 'ljud' });
       const txt = r ? await r.text().catch(() => '') : '';
       const erro = ehErro(txt);
       let d = null; try { d = JSON.parse(txt); } catch { /* */ }

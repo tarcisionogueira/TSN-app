@@ -5,6 +5,7 @@
 export const config = { runtime: 'edge' };
 import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { anthropicFetch } from './_claude.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response(JSON.stringify({ ok: false, mensagem: 'Método não permitido.' }), { status: 405 });
@@ -51,7 +52,7 @@ Regras:
 Responda SOMENTE com o JSON, sem texto adicional.`;
 
   try {
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+    const claudeRes = await anthropicFetch({
       method: 'POST',
       headers: {
         'x-api-key': claudeKey,

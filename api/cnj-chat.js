@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 import { getUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { anthropicFetch } from './_claude.js';
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -36,7 +37,7 @@ Seja direto e use linguagem acessível mas precisa. Não mencione IA ou sistemas
   ];
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await anthropicFetch({
       method: 'POST',
       headers: {
         'x-api-key': apiKey,

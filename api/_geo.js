@@ -204,6 +204,53 @@ export async function googleGeocode(enderecoCompleto) {
   } catch { return null; }
 }
 
+// BRASILAPI CEP → coordenada (grátis, sem chave). A API v2 da BrasilAPI enriquece o
+// CEP com coordenadas quando disponíveis. É mais precisa que o nível 'bairro', então
+// entra na cascata como uma rota de nível 'rua' sempre que houver um CEP.
+// `location.coordinates.{latitude,longitude}` vêm como STRING e podem faltar/vazias.
+export async function brasilapiCep(cep) {
+  const cepLimpo = String(cep || '').replace(/\D/g, '');
+  if (cepLimpo.length !== 8) return null;
+  try {
+    const res = await fetchGeo(`https://brasilapi.com.br/api/cep/v2/${cepLimpo}`, {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res || !res.ok) return null;
+    const data = await res.json();
+    const co = data?.location?.coordinates;
+    const lat = parseFloat(co?.latitude);
+    const lng = parseFloat(co?.longitude);
+    if (!isFinite(lat) || !isFinite(lng)) return null;
+    return { lat, lng };
+  } catch { return null; }
+}
+
+// GEOCODER PAGO — tier pronto para ativar, mas inerte hoje. Só roda se GEOCODER_KEY
+// estiver setada no ambiente; sem a chave, é no-op (return null) e nada muda. Provedor
+// padrão LocationIQ (compatível com Nominatim). Mapeia o nível pela natureza do
+// resultado (house/building → endereço, road → rua, resto → bairro).
+export async function geocoderPago(enderecoCompleto) {
+  const key = (process.env.GEOCODER_KEY || '').trim();
+  if (!key || !enderecoCompleto || !enderecoCompleto.trim()) return null;
+  const url = `https://us1.locationiq.com/v1/search?key=${encodeURIComponent(key)}&q=${encodeURIComponent(enderecoCompleto)}&format=json&countrycodes=br&limit=1&addressdetails=1`;
+  try {
+    const res = await fetchGeo(url, { signal: AbortSignal.timeout(8000) });
+    if (!res || !res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    const r = data[0];
+    const lat = parseFloat(r.lat);
+    const lng = parseFloat(r.lon);
+    if (!isFinite(lat) || !isFinite(lng)) return null;
+    const tipo = String(r.type || '').toLowerCase();
+    const classe = String(r.class || '').toLowerCase();
+    const nivel = (tipo === 'house' || tipo === 'building' || classe === 'building') ? 'endereco'
+      : (classe === 'highway' || tipo === 'road' || tipo === 'residential') ? 'rua'
+      : 'bairro';
+    return { lat, lng, nivel };
+  } catch { return null; }
+}
+
 /**
  * Cascata de geocodificação cruzando IBGE (validação/UF + fallback cidade) e
  * Correios/ViaCEP (limpeza do logradouro + CEP), com o Nominatim como fonte da
@@ -226,6 +273,14 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
   if (Date.now() < deadline) {
     const g = aceita(await googleGeocode(enderecoGoogle));
     if (g) return { ...g, cep: cep || null };
+  }
+
+  // Nível 0.5 — GEOCODER PAGO (LocationIQ), pronto para ativar via GEOCODER_KEY.
+  // Sem a chave é no-op. Roda depois do Google e antes das rotas públicas do
+  // Nominatim, pois quando ativo é mais confiável que os provedores gratuitos.
+  if (Date.now() < deadline) {
+    const p = aceita(await geocoderPago(enderecoGoogle));
+    if (p) return { ...p, cep: cep || null };
   }
 
   // Nível 1 — logradouro + número (estruturado + validação IBGE).
@@ -261,6 +316,10 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
   // 'rua' mesmo quando o Nominatim não encontra o NOME da rua (comum na Caixa).
   const cepLimpo = String(cep || cepEnc || '').replace(/\D/g, '');
   if (cepLimpo.length === 8 && Date.now() < deadline) {
+    // BrasilAPI: coordenada direta do CEP (grátis, sem chave). Mais precisa que o
+    // bairro; tratada como nível 'rua'. Roda antes do postalcode do Nominatim.
+    const cb = aceita(await brasilapiCep(cepLimpo));
+    if (cb) return { ...cb, nivel: 'rua', cep: cepLimpo };
     const c = aceita(await nominatimEstruturado({ postalcode: cepLimpo, city: cidade, state: ufNome }));
     if (c) return { ...c, nivel: 'rua', cep: cepLimpo };
     await pausa();

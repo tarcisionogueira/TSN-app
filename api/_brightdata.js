@@ -16,14 +16,43 @@ const SB_URL   = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY   = process.env.SUPABASE_SERVICE_KEY;
 const TETO     = parseInt(process.env.BRIGHTDATA_MAX_REQ_SEMANA || '450', 10);
 
+// Sub-cotas SUAVES por propósito: impedem que UM consumidor devore sozinho o teto
+// semanal e deixe os demais (datas/doc/geo) sem cota. A paginação profunda do LJUD
+// é o caso que estoura o orçamento, então limitamos 'ljud' a ~180/semana; os outros
+// propósitos seguem dividindo o restante até o teto global. O teto global (RPC no
+// banco) continua sendo o fail-safe DURO de custo — isto é só um repartidor.
+const SUBCOTAS = {
+  ljud: parseInt(process.env.BRIGHTDATA_MAX_LJUD_SEMANA || '180', 10),
+};
+// Contagem por propósito na semana corrente, mantida na memória do processo. A
+// paginação profunda (o caso que estoura a cota) roda numa única invocação, então
+// este contador a barra DENTRO da run; entre invocações ele reinicia (limite suave,
+// por isso o teto global no banco continua sendo a trava real). 'geral' não tem
+// sub-cota → comportamento idêntico ao de antes (compatível para trás).
+const usoPorProposito = new Map();
+let _baldeSemana = null;
+function contarProposito(proposito) {
+  const balde = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000)); // balde semanal
+  if (balde !== _baldeSemana) { usoPorProposito.clear(); _baldeSemana = balde; } // virou a semana → zera
+  return usoPorProposito.get(proposito) || 0;
+}
+function registrarProposito(proposito) {
+  usoPorProposito.set(proposito, contarProposito(proposito) + 1);
+}
+
 /** Bright Data está configurado nesta instância? */
 export function brightDataDisponivel() {
   return !!(BD_TOKEN && BD_ZONE);
 }
 
 /** Incrementa o consumo semanal e diz se ainda está sob o teto (atômico no banco). */
-async function consumirCota() {
+async function consumirCota(proposito = 'geral') {
   if (!SB_URL || !SB_KEY) return false;
+  // Sub-cota suave: se este propósito já bateu seu limite semanal (contagem por
+  // processo), recusa ANTES de gastar a cota global — assim sobra orçamento p/ os
+  // demais. Propósitos sem sub-cota (ex.: 'geral') não são afetados.
+  const sub = SUBCOTAS[proposito];
+  if (sub != null && contarProposito(proposito) >= sub) return false;
   try {
     const r = await fetch(`${SB_URL}/rest/v1/rpc/registrar_uso_brightdata`, {
       method: 'POST',
@@ -33,7 +62,10 @@ async function consumirCota() {
     });
     if (!r.ok) return false;
     const j = await r.json().catch(() => null);
-    return j?.permitido === true;
+    const permitido = j?.permitido === true;
+    // Só contabiliza no propósito o que efetivamente passou no teto global.
+    if (permitido && sub != null) registrarProposito(proposito);
+    return permitido;
   } catch {
     return false;
   }
@@ -44,9 +76,9 @@ async function consumirCota() {
  * com o corpo bruto da fonte, ou null se: BD não configurado, teto atingido, ou erro.
  * O chamador usa resp.ok / resp.arrayBuffer() / resp.text() normalmente.
  */
-export async function fetchViaBrightData(url, { method = 'GET', headers = null } = {}) {
+export async function fetchViaBrightData(url, { method = 'GET', headers = null, proposito = 'geral' } = {}) {
   if (!brightDataDisponivel()) return null;
-  const liberado = await consumirCota();
+  const liberado = await consumirCota(proposito);
   if (!liberado) return null; // teto semanal atingido → não chama (fail-safe de custo)
   try {
     // headers: a Web Unlocker API (/request) valida `headers` como OBJETO

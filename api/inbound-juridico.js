@@ -9,6 +9,7 @@
  * com o segredo em INBOUND_WEBHOOK_SECRET. Domínio de recebimento em INBOUND_EMAIL_DOMAIN.
  */
 export const config = { runtime: 'edge' };
+import { anthropicFetch } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -113,7 +114,7 @@ Responda SOMENTE com um JSON válido, sem texto fora dele:
 Regras: nunca invente fatos; se o advogado não deu posição clara, use null em resultado/nivel_risco e explique no relatório. Seja fiel ao que o advogado escreveu.`;
   const userMsg = `## Avaliação documental preliminar do sistema:\n${docMd || '(não disponível)'}\n\n## Devolutiva do advogado (e-mail):\n${devolutiva}`;
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await anthropicFetch({
       method: 'POST',
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2048, system: sys, messages: [{ role: 'user', content: userMsg }] }),

@@ -2,6 +2,7 @@ import { getUser, getUserRole } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { anthropicFetch } from './_claude.js';
 import { sanitizeText, sanitizeName } from './_sanitize.js';
 import { alertarErro } from './_error-alert.js';
 
@@ -153,7 +154,7 @@ ${ctxPadroes}
 ${ctxContratosAnteriores}`;
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await anthropicFetch({
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
