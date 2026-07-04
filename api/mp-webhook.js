@@ -71,9 +71,6 @@ export default async function handler(req, res) {
   if (tipo === 'subscription_preapproval' || tipo === 'subscription_authorized_payment') {
     if (!dataId) return res.status(200).json({ ok: true, ignored: 'sem id' });
     if (!ACCESS_TOKEN) return res.status(500).json({ error: 'MP_ACCESS_TOKEN não configurado' });
-    if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: dataId, evento: tipo })) {
-      return res.status(200).json({ ok: true, duplicado: true });
-    }
     try {
       let preapproval = null;
       let cobrancaRecusada = false;
@@ -90,6 +87,18 @@ export default async function handler(req, res) {
       if (!preapproval) return res.status(200).json({ ok: true, erro: 'preapproval não encontrado' });
       const [userId, planoKey] = String(preapproval.external_reference || '').split('|');
       if (!userId) return res.status(200).json({ ok: true, status: preapproval.status });
+
+      // Idempotência POR TRANSIÇÃO: o preapproval_id se repete durante todo o
+      // ciclo de vida da assinatura. Chavear só por (id, tipo) fazia o evento de
+      // cancelamento/pausa ser descartado como "duplicado" após o de ativação →
+      // acesso pago vitalício. Incluir o status na chave separa as transições.
+      // (authorized_payment tem id único por cobrança, então basta o tipo.)
+      const idemEvento = tipo === 'subscription_preapproval'
+        ? `subscription_preapproval:${preapproval.status}`
+        : tipo;
+      if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: dataId, evento: idemEvento })) {
+        return res.status(200).json({ ok: true, duplicado: true });
+      }
 
       // FALHA: cobrança recusada, ou assinatura pausada/cancelada no MP → rebaixa + avisa.
       const assinaturaMorta = preapproval.status === 'paused' || preapproval.status === 'cancelled';

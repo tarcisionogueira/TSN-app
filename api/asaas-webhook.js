@@ -53,13 +53,19 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, duplicado: true });
   }
 
+  // O Asaas envia payment.customer como STRING (id do cliente, ex. "cus_000...")
+  // — não como objeto. Ler .id/.email direto resultava em null e a confirmação
+  // virava no-op (perfil_nao_encontrado). Tolera os dois formatos.
+  const cust = pag?.customer;
+  const custId    = typeof cust === 'string' ? cust : (cust?.id || null);
+  const custEmail = (cust && typeof cust === 'object') ? (cust.email || null) : null;
   const contexto  = {
     gateway:           'asaas',
     valor,
     descricao:         pag?.description || '',
-    email:             pag?.customer?.email || null,
-    gatewayCustomerId: pag?.customer?.id   || null,
-    gatewayPaymentId:  pag?.id             || null,
+    email:             custEmail,
+    gatewayCustomerId: custId,
+    gatewayPaymentId:  pag?.id || null,
   };
 
   try {

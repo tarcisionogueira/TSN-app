@@ -162,12 +162,13 @@ export default async function handler(req, res) {
   // Mesmo padrão do mercadológico (gerar-analise): cobra só em análise NOVA deste
   // imóvel; re-gerar/atualizar o mesmo não recobra. Explorador já foi barrado
   // acima; admin é ilimitado na RPC. O limite por plano vem de limite_ia (banco).
+  let cota = null; // hoisted p/ permitir estorno no catch se a geração falhar
   try {
     const jaFeita = await (await sb(`analises_documental?user_id=eq.${user.id}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
     const isNovo = !(Array.isArray(jaFeita) && jaFeita.length);
     if (isNovo) {
       const rc = await sb('rpc/consumir_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
-      const cota = await rc.json().catch(() => null);
+      cota = await rc.json().catch(() => null);
       if (cota && cota.ok === false) {
         const msg = cota.erro === 'limite_mensal' ? 'Limite mensal de análises documentais atingido para o seu plano.'
           : cota.erro === 'sem_documental' ? 'A análise documental e jurídica não está incluída no seu plano.'
@@ -357,6 +358,10 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, result });
   } catch (e) {
     await upsertDoc({ ...base, status: 'erro', erro: String(e?.message || e) });
+    // Estorna a cota consumida (não cobra por análise que falhou).
+    if (cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
+    }
     res.status(500).json({ error: 'Falha ao gerar a análise documental', detalhe: String(e?.message || e) });
   }
 }

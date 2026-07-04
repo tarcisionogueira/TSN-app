@@ -277,6 +277,11 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, result, cota });
   } catch (e) {
     await upsertAnalise({ ...base, status: 'erro', erro: String(e?.message || e) });
+    // Estorna a cota consumida (não cobra por análise que falhou; evita cobrança
+    // dupla na re-tentativa, já que 'erro' não conta como concluída em isNovo).
+    if (cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
+    }
     res.status(500).json({ error: 'Falha ao gerar a análise', detalhe: String(e?.message || e) });
   }
 }
