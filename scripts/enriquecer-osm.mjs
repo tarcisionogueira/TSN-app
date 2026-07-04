@@ -20,7 +20,10 @@ const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
 const LIMITE = parseInt(process.env.OSM_LIMITE || '3000', 10);
 const PAUSA_MS = parseInt(process.env.OSM_PAUSA_MS || '1200', 10); // gentil com o Overpass
-const OVERPASS = process.env.OVERPASS_URL || 'https://overpass-api.de/api/interpreter';
+const ENDPOINTS = process.env.OVERPASS_URL
+  ? [process.env.OVERPASS_URL]
+  : ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 const DEADLINE = Date.now() + 70 * 60 * 1000;
 
 if (!SB || !KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
@@ -69,10 +72,18 @@ async function overpass(lat, lng) {
     nwr["landuse"="landfill"](around:1200,${lat},${lng});
     nwr["power"="plant"](around:1200,${lat},${lng});
   );out center tags;`;
-  const r = await fetch(OVERPASS, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: q, signal: AbortSignal.timeout(40000) });
-  if (r.status === 429 || r.status === 504) throw new Error('overpass_busy');
-  if (!r.ok) throw new Error('overpass_' + r.status);
-  return (await r.json()).elements || [];
+  let lastErr = 'sem tentativa';
+  for (const ep of ENDPOINTS) {
+    for (let tent = 0; tent < 2; tent++) {
+      try {
+        const r = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(40000) });
+        if (r.status === 429 || r.status === 504) { lastErr = `${ep} ${r.status}`; await sleep(4000); continue; }
+        if (!r.ok) { lastErr = `${ep} HTTP ${r.status}: ${(await r.text()).slice(0, 100)}`; break; }
+        return (await r.json()).elements || [];
+      } catch (e) { lastErr = `${ep} ${e.name}: ${e.message}`; await sleep(1000); }
+    }
+  }
+  throw new Error(lastErr);
 }
 
 function avaliar(lat, lng, elements) {
@@ -122,16 +133,12 @@ async function main() {
     const lat = Number(im.latitude), lng = Number(im.longitude);
     const patch = { proximidades_em: new Date().toISOString() };
     try {
-      let els = null;
-      for (let tent = 0; tent < 3; tent++) {
-        try { els = await overpass(lat, lng); break; }
-        catch (e) { if (e.message === 'overpass_busy' && tent < 2) { await new Promise(r => setTimeout(r, 5000)); continue; } throw e; }
-      }
+      const els = await overpass(lat, lng);
       const { nearest, score } = avaliar(lat, lng, els);
       patch.pontos_proximos = nearest;
       patch.score_localizacao = score;
       ok++;
-    } catch { falha++; }
+    } catch (e) { falha++; if (falha <= 5) console.error(`  falha ${im.id}: ${e.message}`); }
     feitos++;
     await supabase.from('imoveis_leilao').update(patch).eq('id', im.id).then(() => {}, () => {});
     if (feitos % 50 === 0) console.log(`  ${feitos}/${cands.length} · ok ${ok} · falha ${falha}`);
