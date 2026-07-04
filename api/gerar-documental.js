@@ -340,6 +340,21 @@ export default async function handler(req, res) {
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result });
 
+    // Alimenta a camada JURÍDICO do Score BidPro no acervo (antes ficava 0/acervo:
+    // só o fluxo staff gravava). Deriva 0–100 do nível de risco + severidade dos
+    // riscos encontrados. score_financeiro já é preenchido por backfill determinístico.
+    try {
+      const risc = Array.isArray(result.riscos) ? result.riscos : [];
+      const bloqueantes = risc.filter(r => r?.severidade === 'bloqueante').length;
+      const alertas     = risc.filter(r => r?.severidade === 'alerta').length;
+      const baseJur = result.nivelRisco === 'verde' ? 85 : result.nivelRisco === 'vermelho' ? 30 : 55;
+      const scoreJuridico = Math.max(0, Math.min(100, Math.round(baseJur - bloqueantes * 10 - alertas * 4)));
+      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ score_juridico: scoreJuridico, score_calculado_em: new Date().toISOString() }),
+      });
+    } catch { /* não bloqueia o laudo */ }
+
     // Data do leilão/prazo de propostas: a lista em massa da Caixa vem SEM data para
     // licitação/judicial/venda direta — mas o edital tem. Se a IA extraiu e o imóvel
     // está sem data, grava no imóvel (mantém a base fiel à fonte, sem sobrescrever).

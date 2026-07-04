@@ -84,7 +84,10 @@ export function scoreBidPro({ desconto, modalidade, tipo, scoreLocalizacao, scor
 
   const somaPeso = camadas.reduce((a, c) => a + c.peso, 0);
   const nota = Math.max(0, Math.min(10, round1(camadas.reduce((a, c) => a + c.nota * c.peso, 0) / somaPeso)));
-  const temAnalise = camadas.some((c) => c.key === 'juridico' || c.key === 'financeiro');
+  // "completo" = tem ANÁLISE JURÍDICA real (documental). O financeiro agora é
+  // determinístico/backfill para todo o acervo, então não deve, sozinho, marcar
+  // a nota como completa.
+  const temAnalise = camadas.some((c) => c.key === 'juridico');
   const base = temAnalise ? 'completo' : 'busca';
   const cor = nota >= 7 ? '#16a34a' : nota >= 4 ? '#d97706' : '#dc2626';
   return { nota, cor, base, camadas };
