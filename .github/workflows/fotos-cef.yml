@@ -1,8 +1,9 @@
-name: Fotos CEF — Download Diário
+name: Fotos CEF — Espelhar no Storage (manual)
 
+# Só manual: hoje as fotos CEF são servidas por hotlink (link_foto já preenchido
+# pelo scraper), então o espelhamento diário não encontrava candidatos (no-op).
+# Mantido para uso pontual, caso se decida espelhar de fato no Storage.
 on:
-  schedule:
-    - cron: '0 8 * * *'   # 5h BRT (8h UTC)
   workflow_dispatch:
 
 jobs:

@@ -20,9 +20,9 @@ const FROM_EMAIL  = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
 const APP_URL     = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
-// Fontes que o scraper Puppeteer deve reportar a cada execução.
-// LJUD fora por ora (parqueado — exige navegador real; ver scraper-puppeteer.mjs).
-const FONTES_ESPERADAS = ['MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRAZAO'];
+// Fontes com coleta DIÁRIA que devem reportar saúde a cada execução. CEF (maior
+// acervo, scraper CSV diário) agora incluída. LJUD/BB fora (sob demanda/não coletado).
+const FONTES_ESPERADAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRAZAO'];
 const MAX_IDADE_H = 36; // sem coleta há mais que isso = alerta
 
 export default async function handler(req) {

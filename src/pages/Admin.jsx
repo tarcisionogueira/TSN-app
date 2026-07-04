@@ -2747,14 +2747,15 @@ const FONTES_SCRAPER = [
 // fonte_saude, em MAIÚSCULAS). Alimenta a contagem E os cards do painel — assim
 // a lista nunca mais fica desatualizada ao adicionar um leiloeiro novo.
 const FONTES_LEILAO = [
+  { fonte: 'CEF',      nome: 'Caixa (CEF)',       cor: '#0055a4', desc: 'Maior acervo · venda direta e leilão' },
   { fonte: 'MEGA',     nome: 'Mega Leilões',      cor: '#0D63DB', desc: 'Residenciais e comerciais' },
   { fonte: 'SUPERBID', nome: 'Superbid',          cor: '#059669', desc: 'Maior marketplace do Brasil' },
   { fonte: 'ZUK',      nome: 'Portal Zuk',        cor: '#0ea5e9', desc: 'Zukerman · bancos e judicial' },
   { fonte: 'SOLD',     nome: 'Sold Leilões',      cor: '#7c3aed', desc: 'BV, Bradesco, Itaú e outros' },
   { fonte: 'FRAZAO',   nome: 'Frazão Leilões',    cor: '#db2777', desc: 'Judicial e extrajudicial · SP' },
   { fonte: 'SODRE',    nome: 'Sodré Santoro',     cor: '#ca8a04', desc: 'Judicial e bancário' },
-  { fonte: 'LJUD',     nome: 'Leilões Judiciais', cor: '#0d9488', desc: 'Portal nacional · centenas de leiloeiros' },
-  { fonte: 'BB',       nome: 'Banco do Brasil',   cor: '#d97706', desc: 'Carteira imobiliária do BB' },
+  // LJUD (coleta sob demanda via Bright Data) e BB (não coletado) saíram do
+  // monitor diário para não gerar falso-alarme — não são fontes de cron diário.
 ];
 
 // Monitor de coleta — usa a MESMA fonte de verdade da aba Scrapers (tabela

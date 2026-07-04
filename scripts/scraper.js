@@ -1593,6 +1593,17 @@ async function main() {
     await new Promise(r => setTimeout(r, 800));
   }
 
+  // Registra a saúde da fonte CEF (maior acervo) — antes ela não era monitorada.
+  // Alimenta os cards do dashboard e o alerta por e-mail se a coleta quebrar.
+  try {
+    await supabase.from('fonte_saude').insert({
+      fonte: 'CEF', total, estrategia: 'csv',
+      status: total > 0 ? 'ok' : 'falhou',
+      motivo: total > 0 ? null : 'CSV da Caixa não retornou imóveis',
+    });
+    console.log(`🩺 fonte_saude CEF registrada: ${total} imóveis`);
+  } catch (e) { console.log('registrarSaude CEF erro:', e.message); }
+
   // Leiloeiros consolidados no scraper-puppeteer.mjs (fonte única, diário 10h,
   // soft-deactivate). Este scraper cuida apenas da CEF para evitar dupla coleta.
 
