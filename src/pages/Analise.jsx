@@ -901,24 +901,30 @@ export default function Analise() {
               const ehArquivo = (v) => /^https?:\/\//i.test(v||'') && !/matricula\.asp|detalhe-imovel\.asp/i.test(v);
               // Matrícula CEF: PDF estático em /editais/matricula/<UF>/<num>.pdf.
               const matriculaCef = caixaMatriculaUrl({ fonte: imovelInicial?.fonte, estado: imovelInicial?.estado, fonteId: imovelInicial?.fonteId });
+              // Fallback "nunca sem documento": se o ARQUIVO não foi coletado, o
+              // documento cai na PÁGINA do lote no leiloeiro (onde ele está).
+              const paginaLeiloeiro = [imovelInicial?.urlLote, imovelInicial?.linkEdital, imovelInicial?.linkLeilao, imovelInicial?.url]
+                .find(u => /^https?:\/\//i.test(u || '')) || null;
               const docsView = topicos.map(t => {
                 const a = docsLeiloeiro.find(x => x.tipo === t);
                 const anexoUrl = (a?.url && /^https?:\/\//.test(a.url)) ? a.url : null;
-                let url;
+                let fileUrl;
                 if (t === 'matricula') {
                   // Prefere o PDF estático da Caixa (limpo, abre igual à tela do
                   // imóvel) ao anexo capturado — que às vezes é um "print" de
                   // visualizador, com baixa legibilidade. Anexo só como fallback.
-                  url = matriculaCef || anexoUrl || (ehArquivo(imovelInicial?.linkMatricula) ? imovelInicial.linkMatricula : null);
+                  fileUrl = matriculaCef || anexoUrl || (ehArquivo(imovelInicial?.linkMatricula) ? imovelInicial.linkMatricula : null);
                 } else if (t === 'regras_venda') {
                   // "Regras da Venda Online": PDF padrão da Caixa (o link azul do
                   // portal). É o ARQUIVO de regras de fato — preferido ao anexo.
-                  url = (isVendaDireta && caixaRegrasVendaUrl({ fonte: imovelInicial?.fonte }))
+                  fileUrl = (isVendaDireta && caixaRegrasVendaUrl({ fonte: imovelInicial?.fonte }))
                     || anexoUrl || (ehArquivo(imovelInicial?.linkRegrasVenda) ? imovelInicial.linkRegrasVenda : null);
                 } else {
-                  url = anexoUrl || (ehArquivo(imovelInicial?.linkEdital) ? imovelInicial.linkEdital : null);
+                  fileUrl = anexoUrl || (ehArquivo(imovelInicial?.linkEdital) ? imovelInicial.linkEdital : null);
                 }
-                return { t, label: docMap[t], url };
+                // Edital/regra/matrícula sempre com destino: arquivo, senão a página do leiloeiro.
+                const url = fileUrl || paginaLeiloeiro;
+                return { t, label: docMap[t], url, viaPagina: !fileUrl && !!paginaLeiloeiro };
               });
               const algum = docsView.some(x => x.url);
               return (
@@ -927,11 +933,13 @@ export default function Analise() {
                     <a key={it.t} href={it.url} target="_blank" rel="noreferrer"
                       style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:8, textDecoration:'none', fontSize:13, fontWeight:600, color:'#0D63DB' }}
                       onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                      <FileText size={14}/> {it.label} <ExternalLink size={11} style={{ marginLeft:'auto' }}/>
+                      <FileText size={14}/> {it.label}
+                      {it.viaPagina && <span style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>no site</span>}
+                      <ExternalLink size={11} style={{ marginLeft:'auto' }}/>
                     </a>
                   ) : (
-                    <div key={it.t} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', fontSize:13, fontWeight:600, color:'#cbd5e1' }}>
-                      <FileText size={14}/> {it.label} <span style={{ marginLeft:'auto', fontSize:11, fontWeight:700 }}>—</span>
+                    <div key={it.t} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', fontSize:13, fontWeight:600, color:'#94a3b8' }}>
+                      <FileText size={14}/> {it.label} <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700 }}>anexe acima ↑</span>
                     </div>
                   ))}
                   {!algum && <div style={{ fontSize:11, color:'#94a3b8', marginTop:4, lineHeight:1.4 }}>Sem anexos do leiloeiro para este imóvel.</div>}
