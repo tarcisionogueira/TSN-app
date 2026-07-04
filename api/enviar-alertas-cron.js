@@ -34,8 +34,9 @@ export default async function handler(req) {
   // (ignora a trava de 1x/semana e o opt-out) — prático para validar no navegador.
   const qs = new URL(req.url, 'http://localhost').searchParams;
   const testeEmail = (qs.get('email') || '').trim().toLowerCase();
-  const secretOk = qs.get('secret') && process.env.CRON_SECRET && qs.get('secret') === process.env.CRON_SECRET;
-  if (!isCronAuthorized(req) && !secretOk) return new Response('unauthorized', { status: 401 });
+  // Auth SOMENTE por header (isCronAuthorized) — sem ?secret= por query (vazaria em
+  // logs e permitia bular opt-out/throttle). O ?email= só escolhe o destinatário de teste.
+  if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
 
   const URL_ = process.env.VITE_SUPABASE_URL;
   const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -57,7 +58,8 @@ export default async function handler(req) {
   const filtroTeste = testeEmail ? `&email=eq.${encodeURIComponent(testeEmail)}` : '';
   const perfis = await sbGet(`perfis?select=id,nome,email,endereco_cidade,endereco_uf&email=not.is.null&role=in.(${ROLES})${filtroTeste}&limit=1000`);
   if (!Array.isArray(perfis) || !perfis.length) return new Response(JSON.stringify({ ok: true, enviados: 0, total: 0 }), { headers: { 'Content-Type': 'application/json' } });
-  const ids = perfis.map(p => p.id);
+  // Só UUIDs válidos entram na lista in.(...) — defesa contra interpolação indevida.
+  const ids = perfis.map(p => p.id).filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '')));
   const inList = `(${ids.join(',')})`;
 
   const [alertasArr, fsalvosArr, arremArr] = await Promise.all([

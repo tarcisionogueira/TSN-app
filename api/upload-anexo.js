@@ -83,7 +83,8 @@ export default async function handler(req) {
   const data_leilao = form.get('data_leilao') || null;
 
   if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'Arquivo obrigatório' }, 400);
-  if (!imovel_id) return json({ error: 'imovel_id obrigatório' }, 400);
+  // imovel_id precisa ser UUID válido antes de entrar em URLs PostgREST/Storage.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(imovel_id || ''))) return json({ error: 'imovel_id inválido' }, 400);
   if (!TIPOS_OK.includes(tipo)) return json({ error: "tipo deve ser 'matricula', 'edital' ou 'regras_venda'" }, 400);
 
   const contentType = file.type || 'application/octet-stream';
