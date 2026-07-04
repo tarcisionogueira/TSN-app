@@ -232,19 +232,19 @@ export default function ContratoLink() {
     }
 
     setEnviando(true);
-    const enc = new TextEncoder();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', enc.encode(JSON.stringify(dados) + assinatura + token));
-    const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
-    const { error } = await supabase.from('contratos_link').update({
-      status: 'assinado',
-      tipo_pessoa: tipoPessoa,
-      dados_signatario: dados,
-      assinatura,
-      assinado_em: new Date().toISOString(),
-      assinatura_hash: hash,
-      docs_identidade: imagensIdentidade,
-    }).eq('token', token);
-    if (error) { alert('Erro ao assinar: ' + error.message); setEnviando(false); return; }
+    // Finaliza no servidor: IP, carimbo de tempo e hash (incluindo o conteúdo do
+    // contrato) são gerados de forma autoritativa — não confiáveis se vindos do cliente.
+    try {
+      const resp = await fetch('/api/assinar-contrato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, tipo_pessoa: tipoPessoa, dados, assinatura, docs_identidade: imagensIdentidade }),
+      });
+      const out = await resp.json().catch(() => ({}));
+      if (!resp.ok || !out.ok) { alert('Erro ao assinar: ' + (out.error || 'tente novamente')); setEnviando(false); return; }
+    } catch (e) {
+      alert('Erro ao assinar: ' + (e.message || 'falha de conexão')); setEnviando(false); return;
+    }
     setEtapa('ok');
   };
 
