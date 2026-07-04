@@ -32,8 +32,6 @@
     { "path": "/api/financiamento-alertas-cron","schedule": "0 7 * * *"    },
     { "path": "/api/limpar-documentos-cron",  "schedule": "0 2 * * *"    },
     { "path": "/api/gerar-slots",             "schedule": "0 1 * * *"    },
-    { "path": "/api/scraper-leiloeiros?fontes=sold,superbid,mega,zuk,sodre,frazao", "schedule": "0 8 * * 1,4"  },
-    { "path": "/api/scraper-leiloeiros?fontes=ljud",                                 "schedule": "0 9 * * 1,4"  },
     { "path": "/api/cnj-monitor-cron",        "schedule": "0 10 * * *"   },
     { "path": "/api/juridico-lembretes-cron", "schedule": "0 12 * * 1-5" },
     { "path": "/api/limpar-analises-cron",    "schedule": "0 4 * * *"    },

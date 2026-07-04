@@ -532,10 +532,13 @@ export default async function handler(req, res) {
     const up = r.rows.length ? await upsert(r.rows) : 0;
     totalUpsert += up;
 
-    // Sweep só se a coleta veio saudável (evita zerar a fonte por bloqueio pontual)
+    // Sweep só se a coleta veio saudável (evita zerar a fonte por bloqueio pontual).
+    // SOFT-deactivate (ativo=false), não DELETE físico — alinhado ao scraper
+    // canônico (scraper-puppeteer.mjs). O DELETE destruía linhas que o scraper
+    // diário gerencia por flag, gerando guerra de sweeps entre os dois sistemas.
     if (r.rows.length >= 10) {
       await sb(`imoveis_leilao?fonte=eq.${f.toUpperCase()}&ativo=eq.true&atualizado_em=lt.${runStart}`, {
-        method: 'DELETE', headers: { Prefer: 'return=minimal' },
+        method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ativo: false }),
       }).catch(() => {});
     }
     resultado.push({ fonte: f.toUpperCase(), via: r.via, coletados: r.rows.length, upsert: up, ...(r.diag ? { diagnostico: r.diag } : {}) });
