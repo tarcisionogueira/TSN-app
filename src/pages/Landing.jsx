@@ -5,7 +5,6 @@ import {
   ChevronRight, CheckCircle2, Star, Gavel, Users, Lock, Clock,
   MapPin, ArrowRight, ChevronDown, ChevronUp, Sparkles, BadgeCheck, HelpCircle,
 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
 
 const STATS = [
   { v: 'R$ 70M+', l: 'em arrematações assessoradas' },
@@ -80,12 +79,10 @@ const FAQS = [
 
 export default function Landing() {
   const nav = useNavigate();
-  const { user } = useAuth();
   const [faqAberto, setFaqAberto] = useState(null);
 
-  // Não há busca sem conta — todo CTA convida ao cadastro (Explorador grátis) ou
-  // à página de planos. Logado → vai direto ao app.
-  const cadastrar = () => nav(user ? '/buscar' : '/login?modo=cadastro');
+  // Toda a landing funila para UMA tela de planos (/planos), onde o cadastro
+  // acontece. Sem busca sem conta; sem páginas de plano paralelas.
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", color: '#111111' }}>
@@ -105,13 +102,9 @@ export default function Landing() {
             A <strong style={{ color: '#ffffff', fontWeight: 800 }}>Bid Pro Brasil</strong> lê o edital, <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>mapeia os riscos jurídicos</strong> e calcula a <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>viabilidade financeira</strong> de cada imóvel — e te dá uma resposta clara <span style={{ color: '#34d399', fontWeight: 700 }}>antes do primeiro lance</span>.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={cadastrar}
-              style={{ padding: '15px 32px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, boxShadow: '0 8px 28px rgba(13,99,219,0.45)' }}>
-              Criar conta grátis <ArrowRight size={17} />
-            </button>
             <button onClick={() => nav('/planos')}
-              style={{ padding: '15px 32px', background: 'rgba(255,255,255,0.07)', color: 'white', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
-              Ver planos <ArrowRight size={16} />
+              style={{ padding: '15px 34px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, boxShadow: '0 8px 28px rgba(13,99,219,0.45)' }}>
+              Ver planos e começar <ArrowRight size={17} />
             </button>
           </div>
           <p style={{ color: '#475569', fontSize: 12, marginTop: 18 }}>Comece grátis · sem cartão de crédito</p>
@@ -154,10 +147,10 @@ export default function Landing() {
                 <div style={{ background: 'rgba(52,211,153,0.15)', borderRadius: 10, padding: 8, flexShrink: 0 }}><Sparkles size={17} color="#34d399" /></div>
                 <h3 style={{ fontSize: 15, fontWeight: 800, color: 'white', margin: 0, lineHeight: 1.3 }}>As 5 respostas em um número</h3>
               </div>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.65, margin: '0 0 14px' }}>O Bid Score reúne tudo numa nota de 0 a 100. Veja o de cada imóvel antes de dar o lance.</p>
-              <button onClick={cadastrar} style={{ alignSelf: 'flex-start', padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-                Criar conta grátis <ArrowRight size={14} />
-              </button>
+              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.65, margin: '0 0 14px' }}>O Bid Score reúne tudo numa nota de 0 a 100 — o filtro que transforma dúvida em decisão, antes do lance.</p>
+              <div style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: '#34d399' }}>
+                <Sparkles size={14} /> Incluído em todos os planos
+              </div>
             </div>
           </div>
         </div>
@@ -243,10 +236,12 @@ export default function Landing() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 20 }}>
             {PASSOS.map(({ n, icon: Icon, cor, titulo, desc }) => (
               <div key={n} style={{ background: 'white', borderRadius: 18, padding: '28px 24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden' }}>
-                {/* número em destaque — marca d'água na cor da etapa (antes era um cinza apagado) */}
-                <span style={{ position: 'absolute', top: 12, right: 20, fontSize: 48, fontWeight: 900, color: `${cor}1f`, lineHeight: 1, pointerEvents: 'none' }}>{n}</span>
-                <div style={{ background: cor, borderRadius: 14, width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, boxShadow: `0 6px 16px ${cor}40` }}>
-                  <Icon size={22} color="white" />
+                {/* Número da etapa — badge legível na cor da etapa (no topo do card). */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <div style={{ background: cor, borderRadius: 14, width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 16px ${cor}40`, flexShrink: 0 }}>
+                    <Icon size={22} color="white" />
+                  </div>
+                  <div style={{ minWidth: 34, height: 34, padding: '0 10px', borderRadius: 17, background: `${cor}14`, color: cor, fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>{n}</div>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Etapa {Number(n)}</div>
                 <h3 style={{ fontSize: 16, fontWeight: 800, color: '#111', margin: '0 0 10px' }}>{titulo}</h3>
@@ -375,16 +370,16 @@ export default function Landing() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
             {[
-              { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], destaque: false, link: '/p/plano/explorador' },
-              { nome: 'Investidor Pro', tag: 'Mais popular', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Cota mensal de análises'], destaque: true, link: '/p/plano/top2' },
-              { nome: 'Assessoria', tag: 'Por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], destaque: false, link: '/p/plano/assessorado' },
-            ].map(({ nome, tag, cor, items, destaque, link }) => (
+              { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], destaque: false },
+              { nome: 'Investidor Pro', tag: 'Mais popular', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Cota mensal de análises'], destaque: true },
+              { nome: 'Assessoria', tag: 'Por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], destaque: false },
+            ].map(({ nome, tag, cor, items, destaque }) => (
               <div key={nome} style={{ background: destaque ? '#eff6ff' : 'white', borderRadius: 18, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '24px 20px', position: 'relative', boxShadow: destaque ? `0 8px 28px ${cor}20` : '0 2px 8px rgba(0,0,0,0.04)' }}>
                 {destaque && <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: cor, color: 'white', fontSize: 9, fontWeight: 800, padding: '3px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1, whiteSpace: 'nowrap' }}>Mais popular</div>}
                 <div style={{ fontSize: 12, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6 }}>{nome}</div>
                 <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16, fontWeight: 600 }}>{tag}</div>
                 <div style={{ height: 1, background: '#f1f5f9', margin: '0 0 16px' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {items.map(item => (
                     <div key={item} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                       <CheckCircle2 size={13} color={cor} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -392,10 +387,6 @@ export default function Landing() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => nav(link)}
-                  style={{ width: '100%', padding: '10px', border: destaque ? 'none' : `2px solid ${cor}`, borderRadius: 10, background: destaque ? cor : 'transparent', color: destaque ? 'white' : cor, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                  {nome === 'Explorador' ? 'Começar grátis' : 'Ver detalhes do plano'}
-                </button>
               </div>
             ))}
           </div>
@@ -437,9 +428,9 @@ export default function Landing() {
           <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.7, margin: '0 0 36px' }}>
             Crie sua conta gratuitamente e comece a explorar oportunidades em todo o Brasil — sem cartão, sem compromisso.
           </p>
-          <button onClick={cadastrar}
+          <button onClick={() => nav('/planos')}
             style={{ padding: '16px 40px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 900, fontSize: 17, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 32px rgba(13,99,219,0.5)' }}>
-            Criar conta grátis <ArrowRight size={18} />
+            Veja o plano ideal para começar <ArrowRight size={18} />
           </button>
           <p style={{ color: '#475569', fontSize: 12, marginTop: 16 }}>Comece grátis · sem cartão · cancele quando quiser</p>
         </div>

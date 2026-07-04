@@ -4,16 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
 const PLANOS_INFO = {
-  explorador: {
-    tagline: 'Comece grátis: explore leilões em todo o Brasil com relatório e calculadora',
-    precoLabel: 'Grátis',
-    features: [
-      'Busca de leilões em todo o Brasil',
-      'Relatório Mercadológico + Viabilidade Financeira',
-      'Calculadora de Arrematação',
-      'Cursos gratuitos inclusos',
-    ],
-  },
   top2: {
     tagline: 'Acesse leilões, análises e cursos com o melhor custo-benefício',
     precoLabel: 'R$ 49,90/mês',
@@ -378,7 +368,7 @@ export default function ProdutoLanding() {
           const isVista = id !== baseKey;
           const { data } = await supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,assinatura,ativo').eq('plano_key', baseKey).single();
           let precoLabel = info.precoLabel;
-          let nome = id === 'explorador' ? 'Explorador' : id === 'top2' ? 'Investidor Pro' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
+          let nome = id === 'top2' ? 'Investidor Pro' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
           if (data) {
             nome = data.nome || nome;
             const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
@@ -426,14 +416,7 @@ export default function ProdutoLanding() {
     ? `/login?plano=${produto.key}&ref=${ref}`
     : `/login?curso=${produto.id}&ref=${ref}`;
 
-  const isExplorador = isPlano && produto.key === 'explorador';
-
   const handleCTA = () => {
-    if (isExplorador) {
-      // Plano grátis: cadastro direto (ou app, se já logado). Não passa por checkout.
-      window.location.href = isLoggedIn ? '/#/buscar' : `/#/login?modo=cadastro&ref=${ref}`;
-      return;
-    }
     if (isLoggedIn) {
       window.location.href = checkoutPath;
     } else {
@@ -441,11 +424,9 @@ export default function ProdutoLanding() {
     }
   };
 
-  const ctaLabel = isExplorador
-    ? (isLoggedIn ? 'Acessar a plataforma' : 'Criar conta grátis')
-    : isLoggedIn
-      ? (isPlano ? 'Assinar agora' : 'Adquirir curso')
-      : (isPlano ? 'Criar conta e assinar' : 'Criar conta e adquirir');
+  const ctaLabel = isLoggedIn
+    ? (isPlano ? 'Assinar agora' : 'Adquirir curso')
+    : (isPlano ? 'Criar conta e assinar' : 'Criar conta e adquirir');
 
   const accentColor = isPlano ? '#f59e0b' : (produto.cor || '#0D63DB');
   const emoji = isPlano ? '📋' : (produto.emoji || '🎓');
