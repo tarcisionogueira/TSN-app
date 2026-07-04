@@ -3,6 +3,8 @@
 // e erros de rede, com backoff exponencial + jitter, honrando Retry-After. Ponto
 // único para toda chamada Claude do backend: troque `fetch(URL_CLAUDE, opts)` por
 // `anthropicFetch(opts)`.
+import { geminiFetch } from './_gemini.js';
+
 export const URL_CLAUDE = 'https://api.anthropic.com/v1/messages';
 const RETRYABLE = new Set([429, 500, 502, 503, 529]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -23,7 +25,7 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
       await sleep(espera);
     } catch (e) {
       if (tent === retries) { // rede caiu/timeout no último ataque → tenta fallback antes de propagar
-        const fb = await iaFallback(options);
+        const fb = await geminiFetch(options, { timeoutMs: 8000 });
         if (fb) return fb;
         throw e;
       }
@@ -32,98 +34,18 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
       clearTimeout(timer);
     }
   }
-  // Chegou aqui = falha retryável do Anthropic esgotou os retries.
-  const fb = await iaFallback(options);
+  // Chegou aqui = falha retryável do Anthropic esgotou os retries → fallback Gemini.
+  const fb = await geminiFetch(options, { timeoutMs: 8000 });
   return fb || lastRes;
 }
 
-/**
- * FALLBACK GEMINI (remove o SPOF de "um provedor só").
- * -------------------------------------------------------
- * Só é acionado DEPOIS que os retries do Anthropic se esgotam (falha retryável
- * ou queda de rede). Requer `process.env.GEMINI_API_KEY`; sem essa env o
- * comportamento é IDÊNTICO ao de hoje (nunca dispara → seguro em produção).
- * Modelo configurável por `GEMINI_MODEL` (padrão gemini-2.5-flash).
- *
- * PRIVACIDADE: recomenda-se usar a chave do TIER PAGO do Gemini — no tier
- * gratuito o Google pode usar o conteúdo para treino, e o fluxo documental lê
- * edital E matrícula (a matrícula contém dados pessoais de terceiros). No tier
- * pago os dados não são usados para treino. Lembrando: isto é só a rede de
- * segurança — o Claude continua sendo o modelo primário de todas as chamadas.
- *
- * Traduz a requisição Anthropic (options.body em JSON) para o formato
- * generateContent do Gemini e devolve um Response SINTÉTICO no MESMO SHAPE do
- * Anthropic (`content[0].text`, `stop_reason`, `model`, `usage`), para que os
- * callers existentes continuem funcionando sem alteração.
- *
- * NÃO faz fallback quando a requisição usa `tools`/web search (só a Anthropic
- * replica a ferramenta aqui): retorna null e o chamador recebe o Response
- * original de falha. Uma única tentativa, timeout de 8s; falha → null.
- */
-async function iaFallback(options) {
-  const key = (process.env.GEMINI_API_KEY || '').trim();
-  if (!key) return null;
-  const model = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
-
-  let payload;
-  try {
-    payload = JSON.parse(options?.body || '{}');
-  } catch {
-    return null;
-  }
-
-  const { system, messages, max_tokens, tools } = payload;
-  // Sem suporte a tools/web_search no fallback.
-  if (tools) return null;
-  if (!Array.isArray(messages)) return null;
-
-  // Converte content do Anthropic (string OU array de {type:'text',text}) em string simples.
-  const toText = (content) => {
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
-        .map((b) => b.text)
-        .join('\n');
-    }
-    return '';
-  };
-
-  // Gemini usa papéis 'user' e 'model' (mapeia 'assistant'→'model') e
-  // systemInstruction separado.
-  const contents = messages.map((m) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: toText(m.content) }],
-  }));
-  const gBody = { contents };
-  if (system) gBody.systemInstruction = { parts: [{ text: system }] };
-  if (max_tokens) gBody.generationConfig = { maxOutputTokens: max_tokens };
-
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 8000);
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(gBody), signal: ctrl.signal },
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = (data?.candidates?.[0]?.content?.parts || [])
-      .map((p) => (p && typeof p.text === 'string' ? p.text : ''))
-      .join('');
-    if (!text) return null;
-    return new Response(
-      JSON.stringify({
-        content: [{ type: 'text', text }],
-        stop_reason: 'end_turn',
-        model,
-        usage: {},
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    );
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
-  }
+// IA com GEMINI PRIMÁRIO e Claude como fallback — para funções NÃO-críticas
+// (chat de dúvidas, resumo de tickets, cnj-chat). Decisão de custo: o núcleo
+// (jurídico/documental/mercadológico) continua no Claude via anthropicFetch.
+// Se GEMINI_API_KEY não existir, geminiFetch devolve null e cai no Claude
+// automaticamente (seguro). Devolve o Response no shape do Anthropic.
+export async function iaGeminiPrimary(options) {
+  const g = await geminiFetch(options, { timeoutMs: 20000 });
+  if (g) return g;
+  return anthropicFetch(options);
 }

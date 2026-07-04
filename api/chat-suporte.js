@@ -1,7 +1,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser, unauthorized } from './_auth.js';
-import { anthropicFetch } from './_claude.js';
+import { iaGeminiPrimary } from './_claude.js';
 
 const SYSTEM = `Você é o assistente virtual de suporte da BidPro Brasil, plataforma especializada em análise de imóveis em leilão judicial e extrajudicial no Brasil.
 
@@ -90,7 +90,7 @@ export default async function handler(req) {
 
   let data;
   try {
-    const res = await anthropicFetch({
+    const res = await iaGeminiPrimary({
       method: 'POST',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system: memoria ? `${SYSTEM}\n\n## Histórico deste cliente (use como contexto, não mencione diretamente ao cliente):\n${memoria}` : SYSTEM, messages }),
