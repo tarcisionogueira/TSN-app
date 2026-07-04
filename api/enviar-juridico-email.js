@@ -10,6 +10,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { urlDocumento } from './_storage.js';
 import { addDiasUteis } from './_dias-uteis.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -92,8 +93,9 @@ export default async function handler(req) {
   ccList = [...new Set(ccList)].filter(e => e && !toList.includes(e));
   const nomePrincipal = (Array.isArray(dests) && dests.find(d => d.copia === false)?.nome) || advPerfil?.nome || 'Doutor(a)';
 
-  // Anexos do imóvel
-  const anexos = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&select=nome,url,tipo`)).json();
+  // Anexos do imóvel — assina cada documento SOB DEMANDA (curta duração).
+  const anexos = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&select=nome,url,tipo,storage_path`)).json();
+  if (Array.isArray(anexos)) { for (const a of anexos) a.url = await urlDocumento(a); }
   // Triagem jurídica completa do sistema (documental + judicial/CNJ + sanções).
   // NÃO inclui mercadológico nem viabilidade financeira.
   const [doc] = await (await sb(`analise_relatorios?caso_id=eq.${encodeURIComponent(caso_id)}&tipo=eq.juridica_preliminar&select=conteudo_md,conteudo_json,versao&order=versao.desc&limit=1`)).json();

@@ -1,5 +1,6 @@
 import { getAuthUser, unauthorized, forbidden } from './_auth.js';
 import { sanitizeText } from './_sanitize.js';
+import { urlDocumento } from './_storage.js';
 import { calcularDistribuicao } from './_honorarios.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -200,6 +201,8 @@ export default async function handler(req) {
       `imovel_anexos?arrematacao_id=eq.${arrematacao.id}&select=*&order=criado_em.asc`,
     );
     const imovelAnexos = anexosRes.ok ? (anexosRes.data || []) : [];
+    // Assina cada documento SOB DEMANDA (curta duração) antes de devolver ao front.
+    for (const a of imovelAnexos) if (a && a.storage_path) a.url = (await urlDocumento(a)) || a.url;
 
     // Busca usuario_docs (só para o próprio usuário ou gestor)
     let usuarioDocs = [];
@@ -208,6 +211,7 @@ export default async function handler(req) {
         `usuario_docs?arrematacao_id=eq.${arrematacao.id}&user_id=eq.${arrematacao.arrematante_id}&select=*&order=criado_em.asc`,
       );
       usuarioDocs = udRes.ok ? (udRes.data || []) : [];
+      for (const d of usuarioDocs) if (d && d.storage_path) d.url = (await urlDocumento(d)) || d.url;
     }
 
     return json({ arrematacao, imovel_anexos: imovelAnexos, usuario_docs: usuarioDocs });

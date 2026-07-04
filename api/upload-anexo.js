@@ -122,19 +122,20 @@ export default async function handler(req) {
     return json({ error: 'Erro ao salvar no storage' }, 500);
   }
 
-  // Signed URL de 1 ano (bucket privado; usada também pela IA em processar-analise)
-  let urlPublica = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
+  // Signed URL CURTA (1h) apenas por conveniência imediata — o link definitivo é
+  // sempre assinado SOB DEMANDA a partir do storage_path (nada de 1 ano no banco).
+  let urlPublica = null;
   try {
     const signRes = await storage(`object/sign/${BUCKET}/${storagePath}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+      body: JSON.stringify({ expiresIn: 3600 }),
     });
     if (signRes.ok) {
       const { signedURL } = await signRes.json();
       if (signedURL) urlPublica = `${SUPABASE_URL}/storage/v1${signedURL}`;
     }
-  } catch (_) { /* mantém fallback */ }
+  } catch (_) { /* segue com url null; readers assinam pelo storage_path */ }
 
   const payload = {
     tipo,

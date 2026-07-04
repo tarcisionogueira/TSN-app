@@ -23,6 +23,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
+import { urlDocumento } from './_storage.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 import { anthropicFetch } from './_claude.js';
@@ -152,9 +153,11 @@ export default async function handler(req, res) {
   // 2. Documentos anexados ao IMÓVEL (matrícula/edital) — imovel_anexos é por
   //    imovel_id (compartilhado entre casos), NÃO por caso_id (coluna inexistente).
   let anexos = caso.imovel_id
-    ? await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&tipo=in.(matricula,edital,regras_venda)&storage_path=not.is.null&select=id,tipo,url,nome`)).json()
+    ? await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(caso.imovel_id)}&tipo=in.(matricula,edital,regras_venda)&storage_path=not.is.null&select=id,tipo,url,nome,storage_path`)).json()
     : [];
   if (!Array.isArray(anexos)) anexos = [];
+  // Assina cada documento SOB DEMANDA (curta duração) — não usa link de 1 ano.
+  for (const a of anexos) a.url = await urlDocumento(a);
   // Fallback (leiloeiros): sem anexo no storage, usa o edital/regras PÚBLICOS do
   // próprio imóvel (URL real, não a matricula.asp da Caixa que exige sessão).
   if (anexos.length === 0) {

@@ -15,6 +15,7 @@ export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { urlDocumento } from './_storage.js';
 import { addDiasUteis, diasUteisEntre } from './_dias-uteis.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -78,8 +79,10 @@ async function melhorAdvogado(excluirId) {
 
 async function anexosDoImovel(imovelId) {
   if (!imovelId) return [];
-  const a = await sbGet(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&select=nome,url,tipo`);
-  return (Array.isArray(a) ? a : []).filter(x => x.url);
+  const a = await sbGet(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&select=nome,url,tipo,storage_path`);
+  const lista = Array.isArray(a) ? a : [];
+  for (const x of lista) x.url = await urlDocumento(x); // assina sob demanda (curta duração)
+  return lista.filter(x => x.url);
 }
 
 async function chatInterno(caso, conteudo) {
