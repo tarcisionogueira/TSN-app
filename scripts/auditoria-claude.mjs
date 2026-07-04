@@ -108,7 +108,7 @@ function promptLote(arquivos) {
 - tipo=auto: corrigível no código deste repositório (vira PR).
 - tipo=manual: exige decisão/config sua (ex.: girar um segredo, ajustar painel).
 - tipo=externo: depende de serviço externo (ex.: configurar webhook no provedor).
-Se não houver achados relevantes, retorne {"achados":[]}.
+Seja OBJETIVO: descricao e correcao curtas (1-2 frases). Reporte no máximo os 10 achados MAIS RELEVANTES desta resposta (prioridade a crítica/alta). Se não houver achados relevantes, retorne {"achados":[]}.
 ${corpo}`;
 }
 
@@ -120,9 +120,10 @@ async function main() {
   let achados = [];
   for (let i = 0; i < lotes.length; i++) {
     console.log(`  Lote ${i + 1}/${lotes.length} (${lotes[i].length} arquivos)…`);
-    const txt = await claude(SISTEMA, promptLote(lotes[i]), 5000);
+    const txt = await claude(SISTEMA, promptLote(lotes[i]), 8000);
     const j = parseJSON(txt);
     if (j?.achados?.length) achados.push(...j.achados);
+    else console.log(`    (lote ${i + 1}: ${j ? '0 achados' : 'resposta não parseável'})`);
   }
 
   // Ordena por severidade e limita para o relatório não explodir.
