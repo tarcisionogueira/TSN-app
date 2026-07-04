@@ -18,13 +18,19 @@ const COMMIT_SHA   = process.env.GITHUB_SHA || null;
 if (!CLAUDE_KEY) { console.error('CLAUDE_KEY ausente'); process.exit(1); }
 if (!SUPABASE_URL || !SERVICE_KEY) { console.error('Supabase ausente'); process.exit(1); }
 
-const MAX_FILE = 30000;       // trunca arquivos grandes (evita blobs de dados)
-const MAX_LOTE = 90000;       // ~22k tokens por lote → cabe folgado no contexto
-const PULAR = /(_municipios)\.js$/; // dados puros, irrelevantes p/ auditoria
+const MAX_FILE = 26000;       // trunca arquivos grandes (evita blobs de dados)
+const MAX_LOTE = 90000;       // ~22k tokens por lote
+const CAP_TOTAL = Number(process.env.AUDIT_CAP_CHARS || 320000); // orçamento total (~4 lotes) p/ caber no tempo
+// Pula dados puros e scrapers grandes (menos críticos p/ segurança); o foco é
+// auth, pagamentos, webhooks e dados sensíveis.
+const PULAR = /(_municipios\.js|scraper-.*\.js|.*-debug\.js|.*-diag\.js)$/;
+// Prioriza segurança / dinheiro / dados sensíveis: esses entram primeiro.
+const PRIORIDADE = /(_auth|_webhook|_rate-limit|_email|_claude|_gemini|_uso|_geo|_onr|_cnj|_doc|mp[-_]|mp\.js|asaas|checkout|webhook|pagamento|garantia|assinar|contrato|cpf|kyc|selfie|admin|cron|token|reembolso|comiss|inbound|upload|storage)/i;
 
-// Coleta os arquivos de código relevantes (API + utilitários críticos do src).
+// Coleta os arquivos relevantes, PRIORIZANDO segurança/dinheiro/dados e
+// limitando o total (CAP_TOTAL) para a auditoria concluir dentro do tempo.
 function coletarArquivos() {
-  const out = [];
+  const brutos = [];
   const addDir = (dir, filtro) => {
     let entradas = [];
     try { entradas = readdirSync(dir); } catch { return; }
@@ -37,14 +43,21 @@ function coletarArquivos() {
       let txt = '';
       try { txt = readFileSync(p, 'utf8'); } catch { continue; }
       if (txt.length > MAX_FILE) txt = txt.slice(0, MAX_FILE) + `\n/* … truncado (${txt.length} chars) … */`;
-      out.push({ path: p, txt });
+      brutos.push({ path: p, txt, prio: PRIORIDADE.test(nome) ? 0 : 1 });
     }
   };
   addDir('api', (n) => n.endsWith('.js'));
-  // Utilitários de segurança/dados do front que importam contexto de auth/sessão.
   for (const f of ['src/utils/supabase.js', 'src/utils/apiCall.js', 'src/contexts/AuthContext.jsx']) {
-    try { const txt = readFileSync(f, 'utf8'); out.push({ path: f, txt: txt.slice(0, MAX_FILE) }); } catch { /* ok */ }
+    try { const txt = readFileSync(f, 'utf8'); brutos.push({ path: f, txt: txt.slice(0, MAX_FILE), prio: 0 }); } catch { /* ok */ }
   }
+  // Prioritários primeiro; acumula até o orçamento de chars.
+  brutos.sort((a, b) => a.prio - b.prio || a.path.localeCompare(b.path));
+  const out = []; let tam = 0, cortados = 0;
+  for (const a of brutos) {
+    if (tam + a.txt.length > CAP_TOTAL) { cortados++; continue; }
+    out.push(a); tam += a.txt.length;
+  }
+  if (cortados) console.log(`Aviso: ${cortados} arquivo(s) fora do orçamento desta rodada (foco em segurança/dinheiro/dados).`);
   return out;
 }
 
@@ -107,7 +120,7 @@ async function main() {
   let achados = [];
   for (let i = 0; i < lotes.length; i++) {
     console.log(`  Lote ${i + 1}/${lotes.length} (${lotes[i].length} arquivos)…`);
-    const txt = await claude(SISTEMA, promptLote(lotes[i]));
+    const txt = await claude(SISTEMA, promptLote(lotes[i]), 5000);
     const j = parseJSON(txt);
     if (j?.achados?.length) achados.push(...j.achados);
   }
