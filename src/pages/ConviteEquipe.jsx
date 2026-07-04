@@ -379,22 +379,18 @@ export default function ConviteEquipe() {
   const finalizarCadastro = async () => {
     setEnviando(true);
     try {
-      // Comprimir as 3 fotos KYC
+      // Comprimir as 3 fotos KYC. Elas são gravadas de forma privada em
+      // convites_equipe.kyc_fotos (RLS: só equipe/admin lê) via salvar_kyc_equipe.
+      // NÃO subimos a selfie para o bucket público de fotos de imóvel — é dado
+      // biométrico sensível (LGPD) e o bucket permite listagem.
       const selfie_rosto_compressed = form.selfie_rosto ? await comprimirImagem(form.selfie_rosto) : null;
       const doc_frente_compressed   = form.doc_frente   ? await comprimirImagem(form.doc_frente)   : null;
       const selfie_doc_compressed   = form.selfie_doc   ? await comprimirImagem(form.selfie_doc)   : null;
 
-      // Upload da primeira selfie para Supabase Storage (mantém URL para perfil)
-      let selfieUrl = null;
-      if (form.selfie_rosto) {
-        const blob = await (await fetch(form.selfie_rosto)).blob();
-        const path = `equipe/${Date.now()}_${form.cpf?.replace(/\D/g,'') || 'selfie'}.jpg`;
-        const { data: up } = await supabase.storage.from('imoveis-fotos').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-        if (up?.path) {
-          const { data: { publicUrl } } = supabase.storage.from('imoveis-fotos').getPublicUrl(up.path);
-          selfieUrl = publicUrl;
-        }
-      }
+      // Persiste o token para resgate do convite APÓS a autenticação (o RPC
+      // usar_convite_equipe agora exige sessão e só eleva o próprio perfil; se o
+      // cadastro exigir confirmação de e-mail, o AuthContext resgata no 1º login).
+      if (token) sessionStorage.setItem('tsn_convite_equipe', token.toUpperCase());
 
       const extraData = Object.fromEntries(cfg.passos_extras.map(p => [p.key, form[p.key] || '']));
 
@@ -407,7 +403,6 @@ export default function ConviteEquipe() {
             cpf: form.cpf,
             telefone: form.telefone,
             role: roleKey,
-            selfie_url: selfieUrl,
             lgpd_aceito: true,
             lgpd_data: new Date().toISOString(),
             ...extraData,
