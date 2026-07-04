@@ -268,7 +268,7 @@ export default function Planos() {
                 Mentoria contínua com assessoria ilimitada para todas as suas arrematações. Acesso total à plataforma e à nossa equipe.
               </p>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
-                {['Tudo dos planos anteriores', 'Arrematações ilimitadas com assessoria completa', 'Encontros regulares com Tarcísio (sócio fundador)', 'Oportunidades exclusivas de leilões', 'Estratégia de portfólio personalizada', 'Suporte prioritário com analista dedicado', 'Após 12 meses: cancele a qualquer momento'].map(t => <CheckItem key={t} txt={t} light />)}
+                {['Tudo dos planos anteriores', 'Arrematações ilimitadas com assessoria completa', 'Encontros regulares com nossos especialistas', 'Oportunidades exclusivas de leilões', 'Estratégia de portfólio personalizada', 'Suporte prioritário com analista dedicado', 'Após 12 meses: cancele a qualquer momento'].map(t => <CheckItem key={t} txt={t} light />)}
               </div>
               <button onClick={() => ir('clube')} disabled={atual('clube')}
                 style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('clube') ? 'rgba(255,255,255,0.1)' : '#6366f1', color: atual('clube') ? '#a5b4fc' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('clube') ? 'default' : 'pointer', boxShadow: atual('clube') ? 'none' : '0 4px 20px rgba(99,102,241,0.45)' }}>

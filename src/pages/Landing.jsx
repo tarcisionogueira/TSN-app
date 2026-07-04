@@ -40,7 +40,7 @@ const PASSOS = [
 const RECURSOS = [
   { icon: Zap,         titulo: 'IA que lê editais',          desc: 'Extração automática de dados do edital e da matrícula. Sem digitar nada manualmente.' },
   { icon: TrendingUp,  titulo: 'Projeções financeiras',       desc: 'Cenários SAC e Price, rentabilidade do aluguel, ROI esperado e teto máximo de lance calculados na hora.' },
-  { icon: ShieldCheck, titulo: 'Análise jurídica completa',   desc: 'Gravames, ônus reais, processos judiciais e risco de perda do imóvel identificados antes da arrematação.' },
+  { icon: ShieldCheck, titulo: 'Análise jurídica completa',   desc: 'Dívidas, penhoras e restrições presas ao imóvel, processos judiciais e risco de perda, identificados antes da arrematação.' },
   { icon: BarChart3,   titulo: 'Comparativos de mercado',     desc: 'Imóveis similares na mesma rua ou condomínio para defender o valor da oferta com dados reais.' },
   { icon: FileText,    titulo: 'Relatório executivo PDF',     desc: 'Documento profissional para apresentar ao cliente, ao sócio ou à família antes de arrematar.' },
   { icon: MapPin,      titulo: 'Atuação em todo o Brasil',    desc: 'O leilão segue a legislação federal — você pode arrematar em qualquer estado. Já temos operações realizadas em 11 estados e crescendo.' },
@@ -244,13 +244,13 @@ export default function Landing() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 20 }}>
             {PASSOS.map(({ n, icon: Icon, cor, titulo, desc }) => (
-              <div key={n} style={{ background: 'white', borderRadius: 18, padding: '28px 24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', position: 'relative' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-                  <div style={{ background: `${cor}15`, borderRadius: 12, padding: 10, flexShrink: 0 }}>
-                    <Icon size={22} color={cor} />
-                  </div>
-                  <span style={{ fontSize: 40, fontWeight: 900, color: '#f1f5f9', lineHeight: 1 }}>{n}</span>
+              <div key={n} style={{ background: 'white', borderRadius: 18, padding: '28px 24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden' }}>
+                {/* número em destaque — marca d'água na cor da etapa (antes era um cinza apagado) */}
+                <span style={{ position: 'absolute', top: 12, right: 20, fontSize: 48, fontWeight: 900, color: `${cor}1f`, lineHeight: 1, pointerEvents: 'none' }}>{n}</span>
+                <div style={{ background: cor, borderRadius: 14, width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, boxShadow: `0 6px 16px ${cor}40` }}>
+                  <Icon size={22} color="white" />
                 </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Etapa {Number(n)}</div>
                 <h3 style={{ fontSize: 16, fontWeight: 800, color: '#111', margin: '0 0 10px' }}>{titulo}</h3>
                 <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.7, margin: 0 }}>{desc}</p>
               </div>
@@ -330,7 +330,7 @@ export default function Landing() {
             Ferramenta gratuita
           </div>
           <h2 style={{ fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, color: 'white', margin: '0 0 14px', lineHeight: 1.2 }}>
-            Quanto você pode pagar no leilão — e ainda lucrar?
+            Quanto você pode pagar no leilão e ainda lucrar?
           </h2>
           <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.8, margin: '0 auto 32px', maxWidth: 540 }}>
             Nossa Calculadora de Arrematação calcula o teto máximo de lance com base no valor de mercado, débitos, reforma e o ROI que você quer atingir.
@@ -348,14 +348,14 @@ export default function Landing() {
           <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12 }}>Quem está do seu lado</div>
           <h2 style={{ fontSize: 'clamp(24px,4vw,34px)', fontWeight: 900, color: '#111', margin: '0 0 14px' }}>8 anos formando arrematadores no Brasil</h2>
           <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.8, maxWidth: 620, margin: '0 auto 48px' }}>
-            A Bid Pro Brasil nasceu da experiência prática no mercado de leilões imobiliários. Nossa equipe inclui analistas, advogados especializados em pós-arrematação e o sócio fundador à frente da formação dos arrematadores.
+            A Bid Pro Brasil nasceu da experiência prática no mercado de leilões imobiliários. Nossa equipe reúne analistas, advogados especializados em pós-arrematação e especialistas com anos de experiência na formação de arrematadores.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(165px,1fr))', gap: 16, maxWidth: 820, margin: '0 auto' }}>
             {[
               { emoji: '⚖️', cargo: 'Jurídico',         desc: 'Advogados especializados em pós-arrematação, registro e regularização' },
               { emoji: '📊', cargo: 'Análise',           desc: 'Analistas que revisam cada imóvel antes do lance do cliente' },
               { emoji: '🏛️', cargo: 'Relações Cartoriais',desc: 'Equipe com acesso direto a cartórios para agilizar o registro' },
-              { emoji: '👤', cargo: 'Sócio Fundador',    desc: 'Tarcísio conduz a parte educacional no Leilão Club — o clube de negócios da Bid Pro' },
+              { emoji: '🎓', cargo: 'Formação & Comunidade', desc: 'Especialistas com anos de experiência conduzem a formação dos arrematadores e o clube de negócios da Bid Pro' },
             ].map(({ emoji, cargo, desc }) => (
               <div key={cargo} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                 <div style={{ fontSize: 34, marginBottom: 12 }}>{emoji}</div>
