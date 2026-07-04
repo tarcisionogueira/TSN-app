@@ -2886,6 +2886,77 @@ function UsuariosPlanoDetalhe({ planoKey }) {
   );
 }
 
+// Painel "Custos & Uso das Integrações" — marcadores de teto (grátis/orçamento)
+// por provedor pago (Gemini, Claude, geocoders, Resend, Daily, Bright Data), para
+// não haver surpresa ao estourar cota/custo. Fonte: /api/uso-integracoes.
+function PainelCustosUso() {
+  const [uso, setUso] = React.useState(null);
+  const [erro, setErro] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await apiCall('/api/uso-integracoes');
+        const data = await res.json();
+        if (!vivo) return;
+        if (res.ok) setUso(data); else setErro(true);
+      } catch { if (vivo) setErro(true); }
+    })();
+    return () => { vivo = false; };
+  }, []);
+
+  const COR = { verde: '#10b981', amarelo: '#f59e0b', vermelho: '#dc2626' };
+  const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const int = (v) => Number(v || 0).toLocaleString('pt-BR');
+
+  if (erro) return null; // some silenciosamente se indisponível (não trava o dashboard)
+  if (!uso) return <div style={{ ...S.card, color: '#94a3b8', fontSize: 13, marginBottom: 16 }}>Carregando custos…</div>;
+
+  return (
+    <div style={{ ...S.card, marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>💸 Custos &amp; Uso das Integrações</div>
+        <div style={{ fontSize: 13, color: '#64748b' }}>Estimado no mês: <b style={{ color: '#111111' }}>{brl(uso.total_mes?.custo_brl)}</b> <span style={{ color: '#94a3b8' }}>(~US$ {Number(uso.total_mes?.custo_usd || 0).toFixed(2)})</span></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
+        {(uso.provedores || []).map((p) => {
+          const t = p.teto || {};
+          const temBarra = typeof t.limite === 'number' && t.limite > 0;
+          const cor = COR[t.status] || '#94a3b8';
+          const pct = Math.min(100, t.pct || 0);
+          return (
+            <div key={p.chave} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, background: '#ffffff' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#111111', marginBottom: 6 }}>{p.label}</div>
+              {temBarra && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#475569', marginBottom: 4 }}>
+                    <span>{int(t.usado)} / {int(t.limite)}</span>
+                    <span style={{ color: cor, fontWeight: 700 }}>{t.pct || 0}%</span>
+                  </div>
+                  <div style={{ height: 7, borderRadius: 4, background: '#f1f5f9', overflow: 'hidden', marginBottom: 8 }}>
+                    <div style={{ width: pct + '%', height: '100%', background: cor, transition: 'width .3s' }} />
+                  </div>
+                </>
+              )}
+              {p.mes?.custo_brl != null && (
+                <div style={{ fontSize: 12, color: '#334155', marginBottom: 4 }}>Mês: <b>{brl(p.mes.custo_brl)}</b>{p.mes.buscas_web ? ` · ${int(p.mes.buscas_web)} buscas web` : ''}</div>
+              )}
+              {p.mes?.unidades != null && !temBarra && (
+                <div style={{ fontSize: 12, color: '#334155', marginBottom: 4 }}>Mês: {int(p.mes.unidades)}</div>
+              )}
+              {p.hoje && p.hoje.requests != null && (
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>Hoje: {int(p.hoje.requests)} req · {int(p.hoje.tokens)} tokens</div>
+              )}
+              {t.nota && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6, lineHeight: 1.35 }}>{t.nota}</div>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 10 }}>Estimativa a partir do uso medido (tokens/requisições). O valor oficial é o do painel de billing de cada provedor.</div>
+    </div>
+  );
+}
+
 function DashboardTab() {
   const planosCtx = usePlanos();
   const pNome = (key) => planosCtx?.[key]?.nome || key;
@@ -3258,6 +3329,9 @@ function DashboardTab() {
         {statCard('Inadimplentes', fmtN(dados.inadimplentes || 0), dados.inadimplentes ? 'assinaturas com pagamento em falha' : 'nenhum em atraso', dados.inadimplentes ? '#f59e0b' : '#94a3b8')}
         {statCard('Reembolsos pendentes', fmtN(dados.reembolsosPendentes || 0), dados.reembolsosPendentes ? 'garantia 7 dias — ação em Prestação de contas' : 'nenhum pendente', dados.reembolsosPendentes ? '#dc2626' : '#94a3b8')}
       </div>
+
+      {/* Custos & Uso das integrações pagas (marcadores de teto/orçamento) */}
+      <PainelCustosUso />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
@@ -3707,17 +3781,17 @@ function DashboardTab() {
             },
           },
           {
-            nome: 'Anthropic (Claude)', categoria: 'Laudos & Visão IA',
-            veredicto: 'MANTER',
+            nome: 'IA híbrida — Claude + Gemini', categoria: 'Laudos, Visão & Chat IA',
+            veredicto: 'HÍBRIDO ATIVO',
             cor: '#10b981',
             icone: '🤖',
-            justificativa: 'Melhor modelo de visão do mercado para extração de documentos e laudos em português. O custo de ~R$ 0,08/doc é competitivo e o resultado é superior ao dos concorrentes para este caso de uso.',
-            gatilhoTroca: 'Volume > 10.000 laudos/mês (custo > R$ 800/mês)',
+            justificativa: 'Arquitetura em camadas já em produção: o NÚCLEO (jurídico, documental, contratos e visão/KYC) fica no Claude pela qualidade em português; as funções não-críticas (chat de dúvidas, resumo de tickets e CNJ-chat) foram para o Gemini 2.5 Flash pelo custo, com fallback automático ao Claude se o Gemini falhar. O consumo dos dois é acompanhado no painel "Custos & Uso" acima.',
+            gatilhoTroca: 'Piloto A/B da pesquisa mercadológica (Claude vs Gemini) em andamento — migrar essa função ao vencedor ao concluir',
             atingiuGatilho: false,
             alternativa: {
-              nome: 'Google Gemini Flash 2.0',
-              motivo: 'Alternativa de menor custo para volume alto. Flash 2.0 tem visão excelente, processa PDFs nativamente e custa ~60% menos que o Haiku para prompts longos. Mantém a mesma API REST. Troca seria pontual no código.',
-              custo: '~R$ 0,03/doc',
+              nome: 'Gemini 2.5 Flash (já em uso)',
+              motivo: 'Menor custo para prompts longos e alto volume; grounding com Google Search para pesquisa. Já atende chat/dúvidas/tickets em produção. O teto gratuito e o custo estão visíveis nos marcadores do painel Custos & Uso, evitando surpresa ao exceder a cota.',
+              custo: 'grátis até a cota diária · depois pré-pago',
               url: 'ai.google.dev',
             },
           },
