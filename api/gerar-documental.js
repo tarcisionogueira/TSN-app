@@ -261,9 +261,25 @@ export default async function handler(req, res) {
     if (!content.length) content.push({ type: 'text', text: 'Nenhum documento pôde ser lido automaticamente. Produza a análise possível e detalhe em "lacunas" o que precisa ser obtido e onde.' });
     content.push({ type: 'text', text: promptDocumental(im, temProc) });
 
+    // APRENDIZADO: incorpora as correções que os advogados fizeram em devolutivas
+    // anteriores (tabela juridico_aprendizado, alimentada por inbound-juridico),
+    // para o parecer evitar repetir os mesmos erros. Loop de melhoria contínua —
+    // sem devolutivas ainda, é no-op; vai ficando mais preciso com o uso.
+    let aprendizados = '';
+    try {
+      const licoes = await (await sb('juridico_aprendizado?select=campo,valor_ia,valor_advogado,observacao&order=criado_em.desc&limit=40')).json();
+      if (Array.isArray(licoes)) {
+        const linhas = licoes
+          .filter(l => l && (l.campo || l.observacao || l.valor_advogado))
+          .slice(0, 30)
+          .map(l => `- ${l.campo ? l.campo + ': ' : ''}o sistema indicou "${String(l.valor_ia || '—').slice(0, 120)}", o advogado corrigiu para "${String(l.valor_advogado || '—').slice(0, 120)}"${l.observacao ? ` — ${String(l.observacao).slice(0, 200)}` : ''}`);
+        if (linhas.length) aprendizados = `\n\nAPRENDIZADOS COM ADVOGADOS (correções reais de devolutivas anteriores — aplique estas lições e NÃO repita os mesmos erros):\n${linhas.join('\n')}`;
+      }
+    } catch { /* aprendizado é best-effort, nunca trava o parecer */ }
+
     const data = await anthropic({
       model: MODEL, max_tokens: 6000,
-      system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.',
+      system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
       messages: [{ role: 'user', content }],
     });
     const parsed = parseJSON(extractText(data)) || {};

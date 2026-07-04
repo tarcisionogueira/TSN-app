@@ -14,18 +14,21 @@ export default function Privacidade() {
           <ArrowLeft size={16} /> Voltar
         </button>
         <h1 style={{ fontSize: 32, fontWeight: 900, color: '#111111', margin: '0 0 6px' }}>Política de Privacidade (LGPD)</h1>
-        <p style={{ color: '#94a3b8', fontSize: 13 }}>Última atualização: junho de 2026</p>
+        <p style={{ color: '#94a3b8', fontSize: 13 }}>Última atualização: julho de 2026</p>
 
         <p style={{ marginTop: 20 }}>Esta política descreve como a BidPro Brasil (Nogueira Empreendimentos LTDA) coleta, usa e protege os dados pessoais dos seus usuários, em conformidade com a Lei nº 13.709/2018 (LGPD).</p>
 
         <h2 style={h2}>1. Dados que coletamos</h2>
-        <p>Nome, e-mail, CPF, telefone e endereço informados no cadastro; dados de uso da plataforma; e informações dos imóveis que você analisa. Não coletamos dados sensíveis.</p>
+        <p>Nome, e-mail, CPF, telefone e endereço informados no cadastro; dados de uso da plataforma; informações dos imóveis que você analisa; e os documentos que você envia para análise (editais, matrículas, certidões), que podem conter dados de terceiros constantes de registros públicos. Usamos cookies e ferramentas de análise (ex.: Google Analytics) para medir o uso e melhorar a plataforma. Não solicitamos dados sensíveis no cadastro; caso documentos enviados contenham dados dessa natureza, eles são tratados apenas para a finalidade da análise contratada.</p>
 
         <h2 style={h2}>2. Finalidade do tratamento</h2>
         <p>Utilizamos seus dados para: criar e manter sua conta; processar assinaturas e emitir documentos fiscais; gerar análises e relatórios; e prestar suporte. A base legal é a execução do contrato e o seu consentimento, fornecido no momento do cadastro.</p>
 
-        <h2 style={h2}>3. Compartilhamento</h2>
-        <p>Compartilhamos dados apenas com prestadores essenciais à operação — processador de pagamentos (Asaas), infraestrutura (Supabase) e, quando aplicável, escritório jurídico parceiro para a assessoria contratada. Não vendemos seus dados.</p>
+        <h2 style={h2}>3. Compartilhamento e transferência internacional</h2>
+        <p>Compartilhamos dados apenas com prestadores essenciais à operação, na medida necessária para prestar o serviço: processadores de pagamento (Asaas e Mercado Pago), infraestrutura e banco de dados (Supabase), envio de e-mails (Resend), reuniões por vídeo (Daily.co) e, quando aplicável, advogado/escritório jurídico parceiro para a assessoria contratada. Não vendemos seus dados.</p>
+        <p style={{ marginTop: 10 }}><strong>Uso de inteligência artificial:</strong> para gerar as análises, dados do imóvel e o conteúdo dos documentos enviados podem ser processados por provedores de IA (Anthropic/Claude e Google/Gemini). Esses provedores atuam como operadores, tratando os dados exclusivamente para gerar o resultado solicitado.</p>
+        <p style={{ marginTop: 10 }}><strong>Transferência internacional (LGPD Art. 33):</strong> alguns desses prestadores (ex.: provedores de IA, e-mail e vídeo) processam dados em servidores fora do Brasil, inclusive nos Estados Unidos. Nesses casos, a transferência ocorre com base na execução do contrato e no seu consentimento, e adotamos salvaguardas contratuais e técnicas para proteger seus dados.</p>
+        <p style={{ marginTop: 10 }}><strong>Reuniões por vídeo:</strong> as reuniões de assessoria podem ser transcritas automaticamente para fins de qualidade e auditoria, mediante aviso na entrada da sala, conforme a Lei nº 9.296/1996 (Art. 10) e a LGPD (Art. 7º, I).</p>
 
         <h2 style={h2}>4. Seus direitos (LGPD Art. 18)</h2>
         <p>Em conformidade com o Art. 18 da LGPD, você tem os seguintes direitos em relação aos seus dados pessoais, exercíveis a qualquer momento:</p>
