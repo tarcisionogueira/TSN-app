@@ -530,6 +530,7 @@ export default function ImovelDetalhe() {
           latitude: data.latitude, longitude: data.longitude, pontosProximos: data.pontos_proximos, geocodNivel: data.geocod_nivel,
           scoreFinanceiro: data.score_financeiro ?? null,
           scoreJuridico: data.score_juridico ?? null,
+          scoreLocalizacao: data.score_localizacao ?? null,
         });
       })
       .finally(() => setLoading(false));
@@ -1032,8 +1033,9 @@ export default function ImovelDetalhe() {
               )}
               {/* Score BidPro (0–10): potencial de oportunidade num relance */}
               {(() => {
-                const sb = scoreBidPro({ desconto: imovel.descontoPercentual, scoreJuridico: imovel.scoreJuridico, scoreFinanceiro: imovel.scoreFinanceiro });
+                const sb = scoreBidPro({ desconto: imovel.descontoPercentual, modalidade: imovel.modalidade, tipo: imovel.tipo, scoreLocalizacao: imovel.scoreLocalizacao, scoreJuridico: imovel.scoreJuridico, scoreFinanceiro: imovel.scoreFinanceiro });
                 if (!sb) return null;
+                const corCamada = (n) => n >= 7 ? '#16a34a' : n >= 4 ? '#d97706' : '#dc2626';
                 return (
                   <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, marginBottom: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1043,13 +1045,27 @@ export default function ImovelDetalhe() {
                         <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.3 }}>{scoreLabel(sb.base)}</div>
                       </div>
                     </div>
+                    {/* Sub-scores (camadas) — transparência: cada camada e seu peso */}
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {sb.camadas.map(c => (
+                        <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 78, fontSize: 11, fontWeight: 700, color: '#475569', flexShrink: 0 }}>{c.label}</div>
+                          <div style={{ flex: 1, height: 7, background: '#e2e8f0', borderRadius: 20, overflow: 'hidden' }}>
+                            <div style={{ width: `${c.nota * 10}%`, height: '100%', background: corCamada(c.nota), borderRadius: 20 }}/>
+                          </div>
+                          <div style={{ width: 58, textAlign: 'right', fontSize: 11, color: '#64748b', flexShrink: 0 }}>{c.nota.toFixed(1)} <span style={{ color: '#cbd5e1' }}>·{c.peso}%</span></div>
+                        </div>
+                      ))}
+                    </div>
                     <details style={{ marginTop: 10 }}>
                       <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#0D63DB' }}>Como funciona o Score?</summary>
                       <div style={{ marginTop: 8, fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
-                        Nota de <strong>0 a 10</strong> que resume, num relance, o potencial de oportunidade do imóvel:
+                        Nota de <strong>0 a 10</strong> = média <strong>ponderada das camadas presentes</strong> (re-normalizada), então já na busca a nota pode chegar a 10 e <strong>refina</strong> quando a análise chega:
                         <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
-                          <li><strong>Margem (peso 65%)</strong> — desconto do lance mínimo vs. avaliação. 0% ≈ 2 · 30% ≈ 6 · 55%+ ≈ 10.</li>
-                          <li><strong>Risco (peso 35%)</strong> — entra <strong>só depois</strong> que o imóvel tem análise (score jurídico/financeiro). Antes disso a nota é só de margem e <strong>refina após a análise</strong>.</li>
+                          <li><strong>Margem (40%)</strong> — desconto do lance vs. avaliação.</li>
+                          <li><strong>Localização (25%)</strong> — proximidades (OSM); só p/ imóvel com coordenada precisa.</li>
+                          <li><strong>Perfil (15%)</strong> — modalidade + tipo (liquidez da operação).</li>
+                          <li><strong>Jurídico (10%)</strong> e <strong>Financeiro (10%)</strong> — entram após a análise.</li>
                         </ul>
                         <div style={{ marginTop: 6 }}>Cores: <span style={{ color: '#16a34a', fontWeight: 700 }}>verde ≥ 7</span> · <span style={{ color: '#d97706', fontWeight: 700 }}>âmbar 4–6,9</span> · <span style={{ color: '#dc2626', fontWeight: 700 }}>vermelho &lt; 4</span>.</div>
                         <div style={{ marginTop: 6, color: '#94a3b8' }}>É um indicador de <strong>triagem</strong> — não substitui a análise completa nem o parecer do analista.</div>
