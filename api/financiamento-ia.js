@@ -2,6 +2,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { anthropicFetch } from './_claude.js';
 
 const MODELOS_PERMITIDOS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
 
@@ -50,7 +51,7 @@ Se algum campo não estiver no edital, retorne null para esse campo.`;
     { role: 'user', content: `Texto do edital:\n\n${editalTexto}` },
   ];
 
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+  const resp = await anthropicFetch({
     method: 'POST',
     headers: {
       'x-api-key': CLAUDE_KEY,
@@ -59,7 +60,7 @@ Se algum campo não estiver no edital, retorne null para esse campo.`;
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
+      max_tokens: 1024,
       system,
       messages,
     }),

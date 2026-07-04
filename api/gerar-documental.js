@@ -10,6 +10,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
+import { anthropicFetch } from './_claude.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
@@ -50,7 +51,7 @@ function parseJSON(text) {
 }
 async function anthropic(payload) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
-  const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(payload) });
+  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) });
   return r.json();
 }
 

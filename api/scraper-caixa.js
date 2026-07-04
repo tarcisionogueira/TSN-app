@@ -1,5 +1,7 @@
 export const maxDuration = 300;
 
+import { fetchViaBrightData } from './_brightdata.js';
+
 const TODOS_ESTADOS = [
   'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA',
   'MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN',
@@ -116,31 +118,43 @@ const CAIXA_HEADERS = {
   'Connection': 'keep-alive',
 };
 
+// Decodifica o CSV da Caixa (windows-1252 padrão; UTF-8 se houver BOM).
+function decodificarCsv(buf) {
+  const bytes = new Uint8Array(buf);
+  const hasBomUtf8 = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
+  const encoding = hasBomUtf8 ? 'utf-8' : 'windows-1252';
+  return { text: new TextDecoder(encoding).decode(buf), encoding };
+}
+
 async function fetchEstado(uf) {
   const urls = [
     `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf}.csv`,
     `https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_${uf.toLowerCase()}.csv`,
   ];
   let lastStatus = null;
+  // 1ª rota: fetch direto. Em erro de rede NÃO desiste — tenta a próxima URL/rota.
   for (const url of urls) {
     try {
-      const res = await fetch(url, {
-        headers: CAIXA_HEADERS,
-        signal: AbortSignal.timeout(30000),
-      });
+      const res = await fetch(url, { headers: CAIXA_HEADERS, signal: AbortSignal.timeout(30000) });
       lastStatus = res.status;
       if (!res.ok) continue;
-      const buf = await res.arrayBuffer();
-      // Tentar windows-1252 (padrão Caixa); fallback para UTF-8 se BOM presente
-      const bytes = new Uint8Array(buf);
-      const hasBomUtf8 = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
-      const text = new TextDecoder(hasBomUtf8 ? 'utf-8' : 'windows-1252').decode(buf);
-      if (text.length > 100) return { csv: text, encoding: hasBomUtf8 ? 'utf-8' : 'windows-1252' };
+      const { text, encoding } = decodificarCsv(await res.arrayBuffer());
+      if (text.length > 100) return { csv: text, encoding };
     } catch (e) {
-      return { erro: `Timeout/rede: ${e.message}` };
+      lastStatus = `rede:${e.message}`;
     }
   }
-  return { erro: `HTTP ${lastStatus} — Caixa recusou a requisição (possível bloqueio de IP de cloud)` };
+  // 2ª rota: Bright Data (Web Unlocker). O IP da Vercel é o mais bloqueado pela
+  // Caixa; o proxy contorna o bloqueio quando o fetch direto falha. Respeita o teto
+  // semanal (fail-safe de custo dentro de fetchViaBrightData).
+  try {
+    const resp = await fetchViaBrightData(urls[0], { headers: CAIXA_HEADERS });
+    if (resp && resp.ok) {
+      const { text, encoding } = decodificarCsv(await resp.arrayBuffer());
+      if (text.length > 100) return { csv: text, encoding, via: 'brightdata' };
+    }
+  } catch { /* proxy indisponível/teto atingido — cai no erro abaixo */ }
+  return { erro: `HTTP ${lastStatus} — Caixa recusou (fetch direto e Bright Data)` };
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

@@ -5,6 +5,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
+import { anthropicFetch } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -57,7 +58,7 @@ async function mercadoRecente(imovelId) {
 async function anthropic(payload, useSearch) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
-  const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(payload) });
+  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) });
   return r.json();
 }
 

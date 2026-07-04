@@ -289,7 +289,15 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 
         const popupHTML = `
           <div style="font-family:Inter,sans-serif;min-width:190px;max-width:220px">
-            ${im.link_foto ? `<img src="${im.fonte === 'CEF' || im.fonte === 'caixa' ? 'https://venda-imoveis.caixa.gov.br/fotos/F' + encodeURIComponent((im.fonte_id||'').replace(/^(caixa_|cef_)/,'')) + '21.jpg' : '/api/img-proxy?url=' + encodeURIComponent(im.link_foto)}" onerror="this.style.display='none'" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>` : ''}
+            ${(() => {
+              // Mesma cascata dos cards (hotlink → padrão Caixa → proxy): o popup
+              // usava só o proxy, que vários hosts de leiloeiro bloqueiam → foto em
+              // branco. Aqui avança pelos candidatos no onerror e só some no fim.
+              const cands = fotoCandidatos({ foto: im.link_foto, fonte: im.fonte, fonteId: im.fonte_id });
+              if (!cands.length) return '';
+              const resto = JSON.stringify(cands.slice(1)).replace(/'/g, '&#39;');
+              return `<img src="${cands[0]}" data-cands='${resto}' onerror="(function(el){try{var c=JSON.parse(el.getAttribute('data-cands')||'[]');if(c.length){el.setAttribute('data-cands',JSON.stringify(c.slice(1)));el.src=c[0];}else{el.style.display='none';}}catch(e){el.style.display='none';}})(this)" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>`;
+            })()}
             <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${im.titulo || 'Imóvel'}</div>
             <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${im.cidade} — ${im.estado}</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">

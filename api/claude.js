@@ -6,6 +6,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 import { getUser } from './_auth.js';
 import { checkRateLimit } from './_rate-limit.js';
+import { anthropicFetch } from './_claude.js';
 
 const MODELOS_PERMITIDOS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8'];
 
@@ -53,7 +54,7 @@ export default async function handler(req, res) {
   if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
 
   try {
-    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+    const anthropicRes = await anthropicFetch({
       method: 'POST',
       headers,
       body: JSON.stringify(payload),

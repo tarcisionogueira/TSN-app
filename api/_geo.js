@@ -119,6 +119,25 @@ export async function viacepCanonico(uf, cidade, via, timeoutMs = 6000) {
 const NOMINATIM_UA = 'BidProBrasil/1.0 (tarcisioaraujo@reimob.com.br)';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Fetch com retry/backoff para os provedores de geocoding: um 429/5xx ou queda de
+// rede transitória deixava o imóvel cair de nível (perda de precisão silenciosa).
+// Re-tenta em 429/5xx e erro de rede, honrando Retry-After. Devolve Response ou null.
+const RETRY_GEO = new Set([429, 500, 502, 503, 504]);
+async function fetchGeo(url, opts, retries = 2) {
+  for (let t = 0; t <= retries; t++) {
+    try {
+      const res = await fetch(url, opts);
+      if (!RETRY_GEO.has(res.status) || t === retries) return res;
+      const ra = Number(res.headers.get('retry-after'));
+      await sleep(ra > 0 ? ra * 1000 : 600 * 2 ** t);
+    } catch {
+      if (t === retries) return null;
+      await sleep(600 * 2 ** t);
+    }
+  }
+  return null;
+}
+
 // Ranking de precisão (maior = melhor). Usado para "só sobe, nunca desce".
 export const NIVEL_RANK = { endereco: 4, rua: 3, bairro: 2, cidade: 1, falhou: 0 };
 export const rankNivel = (n) => NIVEL_RANK[n] ?? 0;
@@ -131,11 +150,11 @@ export async function nominatimEstruturado(params) {
   if (params.state) qs.set('state', params.state);
   if (params.postalcode) qs.set('postalcode', params.postalcode);
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`, {
+    const res = await fetchGeo(`https://nominatim.openstreetmap.org/search?${qs}`, {
       headers: { 'User-Agent': NOMINATIM_UA },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return null;
+    if (!res || !res.ok) return null;
     const data = await res.json();
     if (!data?.length) return null;
     return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
@@ -151,10 +170,10 @@ export async function nominatimTextoLivre(q) {
   if (!q || !q.trim()) return null;
   const qs = new URLSearchParams({ format: 'json', addressdetails: '1', limit: '1', countrycodes: 'br', q });
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`, {
+    const res = await fetchGeo(`https://nominatim.openstreetmap.org/search?${qs}`, {
       headers: { 'User-Agent': NOMINATIM_UA }, signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return null;
+    if (!res || !res.ok) return null;
     const data = await res.json();
     if (!data?.length) return null;
     // class=place/highway/building são coordenadas úteis; evita resultados vagos.
@@ -171,8 +190,8 @@ export async function googleGeocode(enderecoCompleto) {
   if (!key || !enderecoCompleto || !enderecoCompleto.trim()) return null;
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(enderecoCompleto)}&region=br&language=pt-BR&key=${key}`;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
+    const res = await fetchGeo(url, { signal: AbortSignal.timeout(8000) });
+    if (!res || !res.ok) return null;
     const data = await res.json();
     if (data.status !== 'OK' || !data.results?.length) return null;
     const r = data.results[0];

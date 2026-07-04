@@ -25,6 +25,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getUser } from './_auth.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
+import { anthropicFetch } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -46,7 +47,7 @@ function sb(path, opts = {}) {
 }
 
 async function claude({ model, system, messages, max_tokens = 2048 }) {
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+  const resp = await anthropicFetch({
     method: 'POST',
     headers: {
       'x-api-key': CLAUDE_KEY,

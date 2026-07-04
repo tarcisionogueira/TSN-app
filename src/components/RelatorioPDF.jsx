@@ -72,12 +72,24 @@ ${riscosBloq.length>0?`<div class="box av"><div style="font-size:13px;font-weigh
 
 ${d.observacoes?`<div class="obs av"><b style="font-size:9px;text-transform:uppercase;">Anotações da Gestão:</b><br/><span style="color:#475569;">${d.observacoes.replace(/\n/g,'<br/>')}</span></div>`:''}
 
+${(() => {
+  // Guarda de dados insuficientes: sem valor de arrematação E de mercado/avaliação,
+  // o veredito seria carimbado sobre R$ 0 (enganoso). Mostra aviso âmbar no lugar.
+  const arremat = Number(d.valorArrematacao) || 0;
+  const referencia = Number(d.valorMercado) || Number(d.valorAvaliacao) || 0;
+  if (arremat <= 0 || referencia <= 0) return `
+<div class="viab av" style="border-color:#d97706;background:#fef3c7;">
+  <div style="font-size:15px;font-weight:900;color:#92400e;">⚠ DADOS INSUFICIENTES PARA CONCLUSÃO DE VIABILIDADE</div>
+  <div style="font-size:10px;color:#b45309;margin-top:4px;">Informe o valor de arrematação e o valor de mercado/avaliação (e a área) para calcular a viabilidade. Os indicadores abaixo podem estar incompletos.</div>
+</div>`;
+  return `
 <div class="viab av" style="border-color:${isViavel?'#10b981':'#dc2626'};background:${isViavel?'#d1fae5':'#fee2e2'};">
   <div style="font-size:15px;font-weight:900;color:${isViavel?'#065f46':'#b91c1c'};">${isViavel?'✓ OPERAÇÃO VIÁVEL — APROVADA':'✗ OPERAÇÃO REPROVADA — RETORNO INSUFICIENTE'}</div>
   <div style="font-size:10px;color:${isViavel?'#047857':'#dc2626'};margin-top:4px;">
     ${isUsoProprio?`Economia de R$ ${fmt(m.lucro)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 30% mínimos':'Abaixo dos 30% exigidos pela BidPro Brasil'} · Teto de disputa: R$ ${fmt(teto)}`}
   </div>
-</div>
+</div>`;
+})()}
 
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;" class="av">
   ${[['Capital Aportado',`R$ ${fmt(m.capitalMobilizado)}`,'#dc2626'],
