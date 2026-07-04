@@ -6,7 +6,7 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const DAILY_KEY = process.env.DAILY_API_KEY;
 const APP_URL = process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.APP_FROM_EMAIL || 'alertas@bidprobrasil.com.br';
+const FROM_EMAIL = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
 
 async function enviarAlertaEmail(statusGeral, resumo, itens) {

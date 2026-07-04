@@ -3,7 +3,7 @@
 export const config = { runtime: 'edge' };
 
 const RESEND_KEY  = process.env.RESEND_API_KEY;
-const FROM_EMAIL  = process.env.APP_FROM_EMAIL  || 'alertas@bidprobrasil.com.br';
+const FROM_EMAIL  = process.env.APP_FROM_EMAIL  || 'noreply@bidprobrasil.com.br';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL      || 'tarcisioaraujo@reimob.com.br';
 const CRON_SECRET = process.env.CRON_SECRET;
 const APP_URL     = process.env.APP_BASE_URL     || 'https://bidprobrasil.com.br';

@@ -12,7 +12,7 @@ export async function enviarAlertaOnr({ tipo, detalhe, ultimoSucesso }) {
     return;
   }
 
-  const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <alertas@bidprobrasil.com.br>';
+  const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <noreply@bidprobrasil.com.br>';
   const dataHora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const ultimoOk = ultimoSucesso
     ? new Date(ultimoSucesso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
