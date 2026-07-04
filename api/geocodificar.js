@@ -130,11 +130,10 @@ export default async function handler(req, resp) {
     return resp.status(403).json({ error: 'Não autorizado' });
   }
   const _url = new URL(req.url, 'http://localhost');
-  // Vercel cron envia: Authorization: Bearer <CRON_SECRET>
-  // Chamadas manuais podem enviar: x-cron-secret header ou ?secret= query param
+  // Vercel cron envia: Authorization: Bearer <CRON_SECRET>. Chamadas manuais:
+  // x-cron-secret header. Sem ?secret= por query string (vazaria em logs).
   const authHeader = (req.headers.get ? req.headers.get('authorization') : req.headers['authorization']) || '';
   const sent = (req.headers.get ? req.headers.get('x-cron-secret') : req.headers['x-cron-secret'])
-    || _url.searchParams.get('secret')
     || authHeader.replace(/^Bearer\s+/i, '');
   if (sent !== cronSecret) return resp.status(401).json({ error: 'Não autorizado' });
 

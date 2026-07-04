@@ -19,7 +19,7 @@ export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br',
         'Access-Control-Allow-Methods': 'POST',
         'Access-Control-Allow-Headers': 'Content-Type',
       },
@@ -80,7 +80,8 @@ export default async function handler(req) {
       headers: {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
-        'X-Idempotency-Key': `festa-${metodo}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        // Chave idempotente determinística: retry do mesmo pagamento não duplica cobrança.
+        'X-Idempotency-Key': `festa-${metodo}-${(payload?.payer?.email || '')}-${payload?.transaction_amount || 0}`,
       },
       body: JSON.stringify(payload),
     });
@@ -104,7 +105,7 @@ export default async function handler(req) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br',
       },
     });
   } catch (e) {

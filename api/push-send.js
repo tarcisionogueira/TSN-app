@@ -20,7 +20,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
-const VAPID_SUBJECT = process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app';
+const VAPID_SUBJECT = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {

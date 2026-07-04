@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) { res.status(503).json({ error: 'CRON_SECRET não configurado' }); return; }
   const auth = (req.headers.authorization || '').replace('Bearer ', '');
-  const sent = req.headers['x-cron-secret'] || auth || new URL(req.url, 'http://localhost').searchParams.get('secret');
+  const sent = req.headers['x-cron-secret'] || auth; // sem ?secret= (vazaria o segredo em logs)
   if (sent !== cronSecret) { res.status(401).json({ error: 'Não autorizado' }); return; }
 
   let stats = null;

@@ -52,7 +52,7 @@ export default async function handler(req) {
         transcription_enabled_default: true,
         max_participants: 2,
         lang: 'pt',
-        redirect_on_meeting_exit: process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app',
+        redirect_on_meeting_exit: process.env.APP_BASE_URL || 'https://bidprobrasil.com.br',
         advanced_chat: false,
         // Tela de entrada com aviso legal de transcrição (Lei 9.296/1996 Art. 10 + LGPD Art. 7º, I)
         enable_prejoin_ui: true,

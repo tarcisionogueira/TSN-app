@@ -4,7 +4,7 @@ import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const DAILY_KEY = process.env.DAILY_API_KEY;
-const APP_URL = process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app';
+const APP_URL = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';

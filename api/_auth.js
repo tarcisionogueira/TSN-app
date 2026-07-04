@@ -26,17 +26,20 @@ export async function getAuthUser(req) {
   }
 }
 
+// Origem permitida no CORS — nunca '*' em respostas de API autenticada.
+const APP_ORIGIN = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+
 export function unauthorized(msg = 'Não autorizado') {
   return new Response(JSON.stringify({ error: msg }), {
     status: 401,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN },
   });
 }
 
 export function forbidden(msg = 'Acesso negado') {
   return new Response(JSON.stringify({ error: msg }), {
     status: 403,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': APP_ORIGIN },
   });
 }
 
@@ -91,7 +94,7 @@ export async function getUserRoleById(userId) {
 /**
  * Valida CRON_SECRET para endpoints chamados pelo Vercel Cron.
  * Vercel envia: Authorization: Bearer <CRON_SECRET>
- * Chamadas manuais podem enviar: x-cron-secret header ou ?secret= query param.
+ * Chamadas manuais: header x-cron-secret. NÃO aceita ?secret= (vazaria em logs).
  *
  * Funciona com Edge Runtime (req = Request) e Node.js Runtime (req = IncomingMessage).
  * Retorna true se autorizado.
@@ -110,15 +113,23 @@ export function isCronAuthorized(req) {
   const auth = getH('authorization').replace(/^Bearer\s+/i, '');
   const xCron = getH('x-cron-secret');
 
-  let secret = xCron || auth;
+  // Apenas via header (Authorization: Bearer <CRON_SECRET> — padrão do Vercel Cron —
+  // ou x-cron-secret). Sem fallback por query string: '?secret=' vazaria o segredo
+  // em logs de acesso, CDN e histórico do navegador.
+  const secret = xCron || auth;
+  if (!secret) return false;
 
-  // Query param fallback (?secret=) para chamadas manuais
-  if (!secret) {
-    try {
-      const url = new URL(req.url, 'http://localhost');
-      secret = url.searchParams.get('secret') || '';
-    } catch { /* ignore */ }
-  }
+  // Comparação em tempo constante (evita timing attack).
+  return timingSafeEqualStr(secret, cronSecret);
+}
 
-  return secret === cronSecret;
+// Comparação de strings resistente a timing attack (sem depender de Buffer/crypto
+// do Node — funciona no Edge). Comprimentos diferentes retornam false cedo, mas o
+// laço roda sobre o segredo esperado para não vazar tamanho por tempo.
+function timingSafeEqualStr(a, b) {
+  const bb = String(b || '');
+  const aa = String(a || '');
+  let diff = aa.length ^ bb.length;
+  for (let i = 0; i < bb.length; i++) diff |= aa.charCodeAt(i) ^ bb.charCodeAt(i);
+  return diff === 0;
 }

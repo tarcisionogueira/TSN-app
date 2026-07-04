@@ -4,7 +4,7 @@ const UFS_VALIDAS = new Set(['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','
 
 export default async function handler(req) {
   const CRON_SECRET = process.env.CRON_SECRET;
-  const sent = req.headers.get('x-cron-secret') || new URL(req.url).searchParams.get('secret') || '';
+  const sent = req.headers.get('x-cron-secret') || (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '') || ''; // sem ?secret= (vazaria em logs)
   if (!CRON_SECRET || sent !== CRON_SECRET) {
     return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }

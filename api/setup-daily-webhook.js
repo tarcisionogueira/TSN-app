@@ -11,7 +11,7 @@ export default async function handler(req) {
   }
 
   const DAILY_KEY = process.env.DAILY_API_KEY;
-  const BASE_URL = process.env.APP_BASE_URL || 'https://tsn-app-two.vercel.app';
+  const BASE_URL = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
   if (!DAILY_KEY) return new Response(JSON.stringify({ error: 'DAILY_API_KEY não configurada' }), { status: 500 });
 

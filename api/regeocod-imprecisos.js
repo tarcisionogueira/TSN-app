@@ -27,9 +27,8 @@ export default async function handler(req, resp) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return resp.status(403).json({ error: 'CRON_SECRET não configurado' });
   const auth = (req.headers.get ? req.headers.get('authorization') : req.headers['authorization']) || '';
-  const url = new URL(req.url, 'http://localhost');
   const sent = (req.headers.get ? req.headers.get('x-cron-secret') : req.headers['x-cron-secret'])
-    || url.searchParams.get('secret') || auth.replace(/^Bearer\s+/i, '');
+    || auth.replace(/^Bearer\s+/i, ''); // sem ?secret= por query string (vazaria em logs)
   if (sent !== cronSecret) return resp.status(401).json({ error: 'Não autorizado' });
   if (!SUPABASE_URL || !SERVICE_KEY) return resp.status(500).json({ error: 'Supabase env vars ausentes' });
 
