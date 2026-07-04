@@ -40,7 +40,10 @@ export default async function handler(req) {
   const URL_ = process.env.VITE_SUPABASE_URL;
   const KEY = process.env.SUPABASE_SERVICE_KEY;
   const RESEND_KEY = process.env.RESEND_API_KEY;
-  const FROM = process.env.APP_FROM_EMAIL || 'BidPro Brasil <noreply@bidprobrasil.com.br>';
+  // Remetente do e-mail do CLIENTE: desacoplado do APP_FROM_EMAIL (que é o
+  // remetente global de alertas de sistema/admin). Garante noreply@ para o
+  // cliente independentemente do env global. Override dedicado se precisar.
+  const FROM = process.env.APP_ALERTS_FROM || 'BidPro Brasil <noreply@bidprobrasil.com.br>';
   const BASE = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
   if (!URL_ || !KEY) return new Response(JSON.stringify({ error: 'env not configured' }), { status: 500 });
   const hdr = { apikey: KEY, Authorization: `Bearer ${KEY}` };

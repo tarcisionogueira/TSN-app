@@ -23,7 +23,7 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
       await sleep(espera);
     } catch (e) {
       if (tent === retries) { // rede caiu/timeout no último ataque → tenta fallback antes de propagar
-        const fb = await openaiFallback(options);
+        const fb = await iaFallback(options);
         if (fb) return fb;
         throw e;
       }
@@ -33,33 +33,37 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
     }
   }
   // Chegou aqui = falha retryável do Anthropic esgotou os retries.
-  const fb = await openaiFallback(options);
+  const fb = await iaFallback(options);
   return fb || lastRes;
 }
 
 /**
- * FALLBACK OPENAI (remove o SPOF de "um provedor só").
+ * FALLBACK GEMINI (remove o SPOF de "um provedor só").
  * -------------------------------------------------------
  * Só é acionado DEPOIS que os retries do Anthropic se esgotam (falha retryável
- * ou queda de rede). Requer `process.env.OPENAI_API_KEY`; sem essa env o
+ * ou queda de rede). Requer `process.env.GEMINI_API_KEY`; sem essa env o
  * comportamento é IDÊNTICO ao de hoje (nunca dispara → seguro em produção).
+ * Modelo configurável por `GEMINI_MODEL` (padrão gemini-2.5-flash).
+ *
+ * PRIVACIDADE: recomenda-se usar a chave do TIER PAGO do Gemini — no tier
+ * gratuito o Google pode usar o conteúdo para treino, e o fluxo documental lê
+ * edital E matrícula (a matrícula contém dados pessoais de terceiros). No tier
+ * pago os dados não são usados para treino. Lembrando: isto é só a rede de
+ * segurança — o Claude continua sendo o modelo primário de todas as chamadas.
  *
  * Traduz a requisição Anthropic (options.body em JSON) para o formato
- * chat/completions da OpenAI e devolve um Response SINTÉTICO com corpo no
- * MESMO SHAPE do Anthropic (`content[0].text`, `stop_reason`, `model`, `usage`),
- * para que os callers existentes (`data.content[0].text`, `res.ok`, `res.status`)
- * continuem funcionando sem alteração.
+ * generateContent do Gemini e devolve um Response SINTÉTICO no MESMO SHAPE do
+ * Anthropic (`content[0].text`, `stop_reason`, `model`, `usage`), para que os
+ * callers existentes continuem funcionando sem alteração.
  *
- * NÃO faz fallback quando a requisição usa `tools`/web search — a OpenAI não
- * replica a ferramenta web_search do Anthropic aqui; nesse caso retorna null e
- * o chamador recebe o Response original de falha do Anthropic.
- *
- * Estratégia: uma única tentativa (sem loop de retry), timeout de 8s.
- * Qualquer falha → retorna null (chamador usa o Response de falha original).
+ * NÃO faz fallback quando a requisição usa `tools`/web search (só a Anthropic
+ * replica a ferramenta aqui): retorna null e o chamador recebe o Response
+ * original de falha. Uma única tentativa, timeout de 8s; falha → null.
  */
-async function openaiFallback(options) {
-  const key = process.env.OPENAI_API_KEY;
+async function iaFallback(options) {
+  const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) return null;
+  const model = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 
   let payload;
   try {
@@ -85,32 +89,34 @@ async function openaiFallback(options) {
     return '';
   };
 
-  const oaMessages = [];
-  if (system) oaMessages.push({ role: 'system', content: system });
-  for (const m of messages) {
-    oaMessages.push({ role: m.role, content: toText(m.content) });
-  }
-
-  const oaBody = { model: 'gpt-4o', messages: oaMessages };
-  if (max_tokens) oaBody.max_completion_tokens = max_tokens;
+  // Gemini usa papéis 'user' e 'model' (mapeia 'assistant'→'model') e
+  // systemInstruction separado.
+  const contents = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: toText(m.content) }],
+  }));
+  const gBody = { contents };
+  if (system) gBody.systemInstruction = { parts: [{ text: system }] };
+  if (max_tokens) gBody.generationConfig = { maxOutputTokens: max_tokens };
 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-      body: JSON.stringify(oaBody),
-      signal: ctrl.signal,
-    });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(gBody), signal: ctrl.signal },
+    );
     if (!res.ok) return null;
     const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content || '';
+    const text = (data?.candidates?.[0]?.content?.parts || [])
+      .map((p) => (p && typeof p.text === 'string' ? p.text : ''))
+      .join('');
+    if (!text) return null;
     return new Response(
       JSON.stringify({
         content: [{ type: 'text', text }],
         stop_reason: 'end_turn',
-        model: 'gpt-4o',
+        model,
         usage: {},
       }),
       { status: 200, headers: { 'content-type': 'application/json' } },
