@@ -60,6 +60,7 @@ export async function getSession() {
   // 1. GET da página de login para obter tokens ASP.NET
   const getRes = await fetch(`${BASE}/FAcesso.aspx`, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BidProBrasil/1.0)' },
+    signal: AbortSignal.timeout(15000),
   });
   const html = await getRes.text();
   const initCookie = parseCookies(getRes.headers.get('set-cookie') || '');
@@ -68,9 +69,12 @@ export async function getSession() {
   const eventValidation    = extractInput(html, '__EVENTVALIDATION');
   const viewstateGenerator = extractInput(html, '__VIEWSTATEGENERATOR');
 
-  const emailField = findEmailField(html) || 'ctl00$cphConteudo$txtLogin';
-  const senhaField = findSenhaField(html) || 'ctl00$cphConteudo$txtSenha';
-  const btnField   = findBtnEntrar(html)  || 'ctl00$cphConteudo$btnEntrar';
+  // Nomes de campo vêm do HTML do ONR — valida o formato ASP.NET esperado antes de
+  // usar como chave do POST (evita nome forjado se a página vier adulterada).
+  const campoOk = (v) => typeof v === 'string' && /^[\w$]+$/.test(v);
+  const emailField = (campoOk(findEmailField(html)) && findEmailField(html)) || 'ctl00$cphConteudo$txtLogin';
+  const senhaField = (campoOk(findSenhaField(html)) && findSenhaField(html)) || 'ctl00$cphConteudo$txtSenha';
+  const btnField   = (campoOk(findBtnEntrar(html))  && findBtnEntrar(html))  || 'ctl00$cphConteudo$btnEntrar';
 
   const body = new URLSearchParams({
     __VIEWSTATE:          viewstate,
@@ -93,6 +97,7 @@ export async function getSession() {
     },
     body: body.toString(),
     redirect: 'manual',
+    signal: AbortSignal.timeout(15000),
   });
 
   const setCookie = postRes.headers.get('set-cookie') || '';
@@ -140,6 +145,7 @@ export async function onrAjax(handler, method, payload = {}, requireSession = tr
       ...(sessionCookie ? { Cookie: sessionCookie } : {}),
     },
     body: body.toString(),
+    signal: AbortSignal.timeout(15000),
   });
 
   const text = await res.text();

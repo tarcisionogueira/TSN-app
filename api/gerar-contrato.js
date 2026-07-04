@@ -112,8 +112,10 @@ export default async function handler(req, res) {
       .order('assinado_em', { ascending: false })
       .limit(3);
     if (anteriores && anteriores.length > 0) {
-      ctxContratosAnteriores = '\n\nContratos anteriores aprovados como referência de estilo e padrão:\n' +
-        anteriores.map((c, i) => `${i+1}. ${c.titulo}\n${(c.conteudo || '').slice(0, 300)}…`).join('\n\n');
+      // Só o TÍTULO como referência de estilo — não injeta o corpo de contratos
+      // anteriores no prompt (evita prompt-injection via dado salvo no banco).
+      ctxContratosAnteriores = '\n\nTítulos de contratos anteriores aprovados (referência de estilo):\n' +
+        anteriores.map((c, i) => `${i + 1}. ${String(c.titulo || '').slice(0, 120)}`).join('\n');
     }
   } catch (_) {}
 

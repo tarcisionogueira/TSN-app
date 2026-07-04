@@ -29,7 +29,7 @@ function sb(path, { method = 'GET', body, prefer } = {}) {
 async function verificarAssinatura(req, raw) {
   // Fail-closed: sem segredo configurado, REJEITA (evita processar e-mails forjados
   // que sobrescreveriam o parecer jurídico). Em produção, definir INBOUND_WEBHOOK_SECRET.
-  if (!WH_SECRET) return false;
+  if (!WH_SECRET) { console.error('[inbound-juridico] INBOUND_WEBHOOK_SECRET não configurado — devolutivas do advogado serão rejeitadas. Configure no deploy.'); return false; }
   try {
     const id = req.headers.get('svix-id');
     const ts = req.headers.get('svix-timestamp');

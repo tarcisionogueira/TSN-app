@@ -41,8 +41,10 @@ export default async function handler(req, res) {
       if (fin.data_primeira_parcela && fin.num_parcelas && fin.valor_parcela) {
         const base = new Date(fin.data_primeira_parcela);
         for (let i = 0; i < fin.num_parcelas; i++) {
-          const dt = new Date(base);
-          dt.setMonth(dt.getMonth() + i);
+          // Soma i meses SEM overflow (31/jan + 1 mês = 28/fev, não 3/mar):
+          // fixa no dia 1 do mês-alvo e recorta o dia ao último dia daquele mês.
+          const ultimoDia = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + i + 1, 0)).getUTCDate();
+          const dt = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + i, Math.min(base.getUTCDate(), ultimoDia)));
           const dtStr = dt.toISOString().slice(0, 10);
           if (dtStr === hoje) {
             vencimentos.push({ tipo: 'Parcela', valor: fin.valor_parcela, data: hoje, parcela: i + 1 });

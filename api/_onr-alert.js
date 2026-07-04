@@ -5,6 +5,8 @@
 
 const ADMIN_EMAIL = process.env.ONR_ALERT_EMAIL || process.env.ONR_EMAIL || 'tarcisioaraujo@reimob.com.br';
 
+const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export async function enviarAlertaOnr({ tipo, detalhe, ultimoSucesso }) {
   const RESEND_KEY = process.env.RESEND_API_KEY;
   if (!RESEND_KEY) {
@@ -52,7 +54,7 @@ export async function enviarAlertaOnr({ tipo, detalhe, ultimoSucesso }) {
   <h2>${titulo}</h2>
   <div class="row"><span class="label">Data/hora:</span> ${dataHora}</div>
   <div class="row"><span class="label">Tipo:</span> ${tipo}</div>
-  <div class="row"><span class="label">Detalhe:</span> ${detalhe || '—'}</div>
+  <div class="row"><span class="label">Detalhe:</span> ${escHtml(detalhe) || '—'}</div>
   <div class="row"><span class="label">Último sucesso:</span> ${ultimoOk}</div>
   <div class="dica"><strong>O que fazer:</strong><br>${dica}</div>
   <div class="footer">BidPro Brasil · Integração ONR Digital · ridigital.org.br</div>
