@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: 'Base URL do deploy'
+        description: 'Base URL do deploy (produção — o preview git fica atrás do Vercel Authentication)'
         required: false
-        default: 'https://tsn-app-git-main-tarcisio-nogueira-s-projects.vercel.app'
+        default: 'https://bidprobrasil.com.br'
       iteracoes:
         description: 'Quantas chamadas ao endpoint (cada uma processa `lote` imóveis)'
         required: false
