@@ -83,10 +83,8 @@ export default function Landing() {
   const { user } = useAuth();
   const [faqAberto, setFaqAberto] = useState(null);
 
-  // Destino que exige conta (ex.: /buscar). Deslogado → cadastro grátis já com o
-  // destino em `next`, para cair lá após criar a conta (a busca exige cadastro —
-  // Explorador grátis ou Investidor Pro). Logado → vai direto.
-  const ir = (destino) => nav(user ? destino : `/login?modo=cadastro&next=${encodeURIComponent(destino)}`);
+  // Não há busca sem conta — todo CTA convida ao cadastro (Explorador grátis) ou
+  // à página de planos. Logado → vai direto ao app.
   const cadastrar = () => nav(user ? '/buscar' : '/login?modo=cadastro');
 
   return (
@@ -111,9 +109,9 @@ export default function Landing() {
               style={{ padding: '15px 32px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, boxShadow: '0 8px 28px rgba(13,99,219,0.45)' }}>
               Criar conta grátis <ArrowRight size={17} />
             </button>
-            <button onClick={() => ir('/buscar')}
+            <button onClick={() => nav('/planos')}
               style={{ padding: '15px 32px', background: 'rgba(255,255,255,0.07)', color: 'white', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
-              <Search size={16} /> Buscar imóveis
+              Ver planos <ArrowRight size={16} />
             </button>
           </div>
           <p style={{ color: '#475569', fontSize: 12, marginTop: 18 }}>Comece grátis · sem cartão de crédito</p>
@@ -157,8 +155,8 @@ export default function Landing() {
                 <h3 style={{ fontSize: 15, fontWeight: 800, color: 'white', margin: 0, lineHeight: 1.3 }}>As 5 respostas em um número</h3>
               </div>
               <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.65, margin: '0 0 14px' }}>O Bid Score reúne tudo numa nota de 0 a 100. Veja o de cada imóvel antes de dar o lance.</p>
-              <button onClick={() => ir('/buscar')} style={{ alignSelf: 'flex-start', padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-                Buscar imóveis <ArrowRight size={14} />
+              <button onClick={cadastrar} style={{ alignSelf: 'flex-start', padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                Criar conta grátis <ArrowRight size={14} />
               </button>
             </div>
           </div>
@@ -377,7 +375,7 @@ export default function Landing() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
             {[
-              { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], destaque: false, link: user ? '/buscar' : '/login?modo=cadastro' },
+              { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', items: ['Busca de leilões em todo o Brasil', 'Relatório Mercadológico + Viabilidade Financeira', 'Calculadora de Arrematação', 'Cursos gratuitos inclusos'], destaque: false, link: '/p/plano/explorador' },
               { nome: 'Investidor Pro', tag: 'Mais popular', cor: '#0D63DB', items: ['Tudo do Explorador', 'Relatório Documental e Jurídico por IA', 'Bid Score completo da operação', 'Comparativos de mercado', 'Cota mensal de análises'], destaque: true, link: '/p/plano/top2' },
               { nome: 'Assessoria', tag: 'Por arrematação', cor: '#d97706', items: ['Tudo do Investidor Pro', 'Analista dedicado (valida o Bid Score)', 'Do lance à imissão de posse', 'Registro via plataforma (ONR)'], destaque: false, link: '/p/plano/assessorado' },
             ].map(({ nome, tag, cor, items, destaque, link }) => (
@@ -457,7 +455,7 @@ export default function Landing() {
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 14 }}>Plataforma</div>
-              {[['Buscar leilões', '/buscar'], ['Calculadora', '/calculadora'], ['Planos', '/planos'], ['Entrar', '/login']].map(([l, h]) => (
+              {[['Criar conta grátis', '/login?modo=cadastro'], ['Planos', '/planos'], ['Calculadora', '/calculadora'], ['Entrar', '/login']].map(([l, h]) => (
                 <button key={l} onClick={() => nav(h)} style={{ display: 'block', background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', marginBottom: 10, padding: 0, textAlign: 'left', fontWeight: 500 }}>{l}</button>
               ))}
             </div>

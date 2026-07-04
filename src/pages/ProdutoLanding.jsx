@@ -4,6 +4,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 
 const PLANOS_INFO = {
+  explorador: {
+    tagline: 'Comece grátis: explore leilões em todo o Brasil com relatório e calculadora',
+    precoLabel: 'Grátis',
+    features: [
+      'Busca de leilões em todo o Brasil',
+      'Relatório Mercadológico + Viabilidade Financeira',
+      'Calculadora de Arrematação',
+      'Cursos gratuitos inclusos',
+    ],
+  },
   top2: {
     tagline: 'Acesse leilões, análises e cursos com o melhor custo-benefício',
     precoLabel: 'R$ 49,90/mês',
@@ -368,7 +378,7 @@ export default function ProdutoLanding() {
           const isVista = id !== baseKey;
           const { data } = await supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,assinatura,ativo').eq('plano_key', baseKey).single();
           let precoLabel = info.precoLabel;
-          let nome = id === 'top2' ? 'Investidor Pro' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
+          let nome = id === 'explorador' ? 'Explorador' : id === 'top2' ? 'Investidor Pro' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
           if (data) {
             nome = data.nome || nome;
             const fmtBRL = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
@@ -416,7 +426,14 @@ export default function ProdutoLanding() {
     ? `/login?plano=${produto.key}&ref=${ref}`
     : `/login?curso=${produto.id}&ref=${ref}`;
 
+  const isExplorador = isPlano && produto.key === 'explorador';
+
   const handleCTA = () => {
+    if (isExplorador) {
+      // Plano grátis: cadastro direto (ou app, se já logado). Não passa por checkout.
+      window.location.href = isLoggedIn ? '/#/buscar' : `/#/login?modo=cadastro&ref=${ref}`;
+      return;
+    }
     if (isLoggedIn) {
       window.location.href = checkoutPath;
     } else {
@@ -424,13 +441,21 @@ export default function ProdutoLanding() {
     }
   };
 
-  const ctaLabel = isLoggedIn
-    ? (isPlano ? 'Assinar agora' : 'Adquirir curso')
-    : (isPlano ? 'Criar conta e assinar' : 'Criar conta e adquirir');
+  const ctaLabel = isExplorador
+    ? (isLoggedIn ? 'Acessar a plataforma' : 'Criar conta grátis')
+    : isLoggedIn
+      ? (isPlano ? 'Assinar agora' : 'Adquirir curso')
+      : (isPlano ? 'Criar conta e assinar' : 'Criar conta e adquirir');
 
   const accentColor = isPlano ? '#f59e0b' : (produto.cor || '#0D63DB');
   const emoji = isPlano ? '📋' : (produto.emoji || '🎓');
-  const preco = isPlano ? produto.precoLabel : (Number(produto.preco) > 0 ? `R$ ${Number(produto.preco).toFixed(2).replace('.',',')}` : 'Gratuito');
+  // Assessoria e Clube: valores só aparecem dentro da plataforma, após o cadastro.
+  // Pré-login, dizemos que o plano existe, mas sem expor o preço.
+  const VALOR_SOB_CADASTRO = ['assessorado', 'assessorado_vista', 'clube', 'clube_vista'];
+  const ocultarValor = isPlano && !isLoggedIn && VALOR_SOB_CADASTRO.includes(produto.key);
+  const preco = ocultarValor
+    ? 'Condições e valores após criar sua conta'
+    : (isPlano ? produto.precoLabel : (Number(produto.preco) > 0 ? `R$ ${Number(produto.preco).toFixed(2).replace('.',',')}` : 'Gratuito'));
 
   return (
     <div style={{ minHeight:'100vh', background:'#111111', fontFamily:"'Inter', sans-serif", color:'#e2e8f0' }}>
@@ -455,7 +480,7 @@ export default function ProdutoLanding() {
           <p style={{ margin:'0 0 24px', fontSize:17, color:'#94a3b8', lineHeight:1.6 }}>
             {isPlano ? produto.tagline : (produto.subtitulo || produto.tagline)}
           </p>
-          <div style={{ fontSize:32, fontWeight:900, color:'#f8fafc', marginBottom:32 }}>{preco}</div>
+          <div style={{ fontSize: ocultarValor ? 16 : 32, fontWeight: ocultarValor ? 700 : 900, color: ocultarValor ? '#94a3b8' : '#f8fafc', marginBottom:32 }}>{preco}</div>
           <button onClick={handleCTA}
             style={{ padding:'16px 40px', background:'#059669', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:17, cursor:'pointer', letterSpacing:0.5 }}>
             {ctaLabel}
