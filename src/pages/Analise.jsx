@@ -282,10 +282,13 @@ export default function Analise() {
   // Análise mercadológica roda em SEGUNDO PLANO no AnalisesContext: o usuário pode
   // sair desta tela e navegar/buscar imóveis enquanto gera. "Gerando" deriva do
   // contexto; o resultado é aplicado de volta quando concluído (efeito abaixo).
-  const { iniciar: iniciarAnalise, getAnalise, iniciarDocumental, getDocumental } = useAnalises();
+  const { iniciar: iniciarAnalise, getAnalise, iniciarDocumental, getDocumental, iniciarLaudo, getLaudo } = useAnalises();
   const analiseImovelId = imovelInicial?.id || d.id;
   const analiseEntry = getAnalise(analiseImovelId);
   const docEntry = getDocumental(analiseImovelId);
+  const laudoEntry = getLaudo(analiseImovelId);
+  const gerandoLaudo = laudoEntry?.status === 'gerando';
+  const relLaudoGerado = laudoEntry?.status === 'concluida' && !laudoEntry?.result?.precisaRelatorios;
   const gerandoMercado = analiseEntry?.status === 'gerando';
   // Documental também roda em SEGUNDO PLANO no servidor (/api/gerar-documental):
   // o "gerando"/"pronto" derivam do contexto (persistente, vale entre devices).
@@ -702,6 +705,18 @@ export default function Analise() {
 
   const ambosRelatorios = relMercadoGerado && relDocumentalGerado;
 
+  // ─── Relatório 3: Laudo de Viabilidade (Agente de Defesa / parecer final) ───
+  // Consolida os DOIS relatórios anteriores num veredito. Roda no servidor
+  // (/api/gerar-laudo-viabilidade) e NÃO reprocessa fontes pagas — só sintetiza o
+  // que já foi gerado. Só liberado com os dois relatórios prontos.
+  const gerarRelLaudo = () => {
+    if (!ambosRelatorios) { showMsg('Gere o Mercadológico e a Documental antes do Laudo de Viabilidade.', 'error'); return; }
+    if (gerandoLaudo) return;
+    showMsg('Laudo de viabilidade iniciado no servidor — consolida os dois relatórios; pode fechar a aba.');
+    iniciarLaudo({ imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null });
+    setRelSel('laudo');
+  };
+
   // ─── Workflow: reunião com analista → encaminhar ao jurídico ────────────────
   const solicitarReuniao = async () => {
     if (!ambosRelatorios) return;
@@ -1090,6 +1105,7 @@ export default function Analise() {
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
                   { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
+                  { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes — sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
                 ].map(c => {
                   const travado = c.gerando || c.block || c.seqBloqueado || c.planoBloqueado;
                   return (
@@ -1251,6 +1267,69 @@ export default function Analise() {
               </div>
             </div>
           )}
+
+          {/* ===== RELATÓRIO 3: LAUDO DE VIABILIDADE (AGENTE DE DEFESA) ===== */}
+          {relSel === 'laudo' && (
+            <div style={{ background:'linear-gradient(135deg,#111827,#334155)', borderRadius:16, padding:'18px 22px', color:'white' }}>
+              <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85 }}>Parecer Final · BidPro Brasil</div>
+              <div style={{ fontSize:18, fontWeight:900, marginTop:2, display:'flex', alignItems:'center', gap:8 }}><Award size={19}/> Laudo de Viabilidade</div>
+              <div style={{ fontSize:12, opacity:0.9, marginTop:4 }}>Consolida o Mercadológico + a Documental num veredito de defesa · {d.nome||'Imóvel'}</div>
+            </div>
+          )}
+
+          {relSel === 'laudo' && (gerandoLaudo || (laudoEntry?.status === 'gerando')) && (
+            <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'28px 22px', display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center' }}>
+              <Loader2 size={28} color="#111827" style={{ animation:'spin 1s linear infinite' }}/>
+              <div style={{ fontSize:15, fontWeight:800, color:'#111' }}>Consolidando o parecer final…</div>
+              <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6, maxWidth:460 }}>O agente de defesa está cruzando o relatório mercadológico/financeiro com o documental/jurídico para emitir o veredito. É rápido — não refaz pesquisas nem lê documentos de novo, só sintetiza o que já foi gerado.</div>
+            </div>
+          )}
+
+          {relSel === 'laudo' && laudoEntry?.result?.precisaRelatorios && (
+            <div style={{ background:'#fffbeb', border:'2px solid #fde68a', borderRadius:16, padding:'22px', display:'flex', gap:14, alignItems:'flex-start' }}>
+              <AlertTriangle size={22} color="#d97706" style={{ flexShrink:0, marginTop:2 }}/>
+              <div>
+                <div style={{ fontSize:14, fontWeight:900, color:'#92400e', marginBottom:4 }}>Gere os dois relatórios antes do laudo</div>
+                <div style={{ fontSize:13, color:'#b45309', lineHeight:1.6 }}>{laudoEntry.result.motivo || 'O laudo de viabilidade é uma síntese — precisa do Mercadológico e da Documental prontos.'}</div>
+              </div>
+            </div>
+          )}
+
+          {relSel === 'laudo' && relLaudoGerado && laudoEntry?.result && (() => {
+            const L = laudoEntry.result;
+            const vMap = {
+              aprovado:    { txt:'APROVADO — VIÁVEL', bg:'#dcfce7', bd:'#86efac', cor:'#15803d', ic:'✓' },
+              condicional: { txt:'CONDICIONAL — VIÁVEL COM RESSALVAS', bg:'#fef3c7', bd:'#fde68a', cor:'#92400e', ic:'!' },
+              reprovado:   { txt:'REPROVADO — NÃO RECOMENDADO', bg:'#fee2e2', bd:'#fca5a5', cor:'#b91c1c', ic:'✗' },
+            };
+            const v = vMap[L.veredito] || vMap.condicional;
+            const bloco = (titulo, itens, cor) => (Array.isArray(itens) && itens.length) ? (
+              <div style={{ marginTop:14 }}>
+                <div style={{ fontSize:12, fontWeight:800, color:cor, textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>{titulo}</div>
+                <ul style={{ margin:0, paddingLeft:18, display:'flex', flexDirection:'column', gap:4 }}>
+                  {itens.map((it,i)=><li key={i} style={{ fontSize:13, color:'#334155', lineHeight:1.6 }}>{it}</li>)}
+                </ul>
+              </div>
+            ) : null;
+            return (
+              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'22px' }}>
+                <div style={{ background:v.bg, border:`2px solid ${v.bd}`, borderRadius:12, padding:'14px 16px', textAlign:'center' }}>
+                  <div style={{ fontSize:16, fontWeight:900, color:v.cor }}>{v.ic} VEREDITO: {v.txt}</div>
+                  {L.resumoExecutivo && <div style={{ fontSize:13, color:v.cor, marginTop:6, lineHeight:1.6 }}>{L.resumoExecutivo}</div>}
+                </div>
+                {bloco('Pontos fortes', L.pontosFortes, '#15803d')}
+                {bloco('Pontos de atenção', L.pontosDeAtencao, '#92400e')}
+                {bloco('Condições para aprovação', L.condicoes, '#b45309')}
+                {bloco('Diligências pendentes (confirmar antes do lance)', L.diligenciasPendentes, '#0369a1')}
+                {L.parecer && (
+                  <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid #f1f5f9' }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Parecer de defesa</div>
+                    <div style={{ fontSize:13, color:'#334155', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{String(L.parecer).replace(/§\s*SEÇÃO:/g, '\n§ ').trim()}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {relSel === 'documental' && isStaffAnalise && (<>
 
