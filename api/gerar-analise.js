@@ -284,9 +284,22 @@ export default async function handler(req, res) {
           perfilInvestidor = p?.perfil_investidor || null;
         } catch { /* sem perfil → parecer padrão pelo objetivoCompra */ }
         const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor };
+        // APRENDIZADO: correções que analistas fizeram em avaliações anteriores
+        // (via transcrição de reunião → mercado_aprendizado) voltam ao prompt. No-op
+        // enquanto não houver lições; fica mais assertivo com o uso.
+        let aprendizadoMercado = '';
+        try {
+          const licoes = await (await sb('mercado_aprendizado?select=campo,valor_ia,valor_real,observacao&order=criado_em.desc&limit=30')).json();
+          if (Array.isArray(licoes)) {
+            const linhas = licoes
+              .filter(l => l && (l.valor_real || l.observacao))
+              .map(l => `- ${l.campo ? l.campo + ': ' : ''}o sistema estimou "${String(l.valor_ia || '—').slice(0, 100)}", o analista corrigiu para "${String(l.valor_real || '—').slice(0, 100)}"${l.observacao ? ` — ${String(l.observacao).slice(0, 160)}` : ''}`);
+            if (linhas.length) aprendizadoMercado = `\n\nAPRENDIZADOS COM ANALISTAS (correções reais de avaliações anteriores — aplique estas lições e evite repetir os mesmos erros):\n${linhas.join('\n')}`;
+          }
+        } catch { /* aprendizado é best-effort */ }
         const pData = await anthropic({
           model: MODEL, max_tokens: 8000,
-          system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Apenas texto simples.',
+          system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Apenas texto simples.' + aprendizadoMercado,
           messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs) }],
         }, false);
         parecer = extractText(pData);
