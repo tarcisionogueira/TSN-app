@@ -691,6 +691,7 @@ export default function ImovelDetalhe() {
           analiseViavel: data.analise_viavel ?? null,
           fichaCef: data.ficha_cef || null,
           fichaJuridica: data.ficha_juridica || null,
+          ocupacao: data.ocupacao || null,
         });
       })
       .finally(() => setLoading(false));
@@ -944,6 +945,15 @@ export default function ImovelDetalhe() {
                     <Tag size={14} color="#0891b2" /> {imovel.leiloeiro}
                   </span>
                 )}
+                {imovel.ocupacao && (() => {
+                  const desocup = /desocupad/i.test(imovel.ocupacao);
+                  return (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, padding: '2px 10px', borderRadius: 999,
+                      background: desocup ? '#f0fdf4' : '#fffbeb', color: desocup ? '#15803d' : '#b45309', border: `1px solid ${desocup ? '#bbf7d0' : '#fde68a'}` }}>
+                      {desocup ? '✓' : '⚠'} {imovel.ocupacao}
+                    </span>
+                  );
+                })()}
               </div>
               {/* Localização: mapa embutido + botões para abrir no Google */}
               {temLocal && (

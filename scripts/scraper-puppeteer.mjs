@@ -1041,6 +1041,27 @@ function extrairCidadeTexto(texto, uf) {
   return '';
 }
 
+// Lê a PÁGINA DE DETALHE de um lote do Frazão (mesma origem, HTML server-rendered)
+// e extrai área, ocupação, matrícula e avaliação. O site não tem API; buscamos o
+// HTML do lote e casamos os rótulos (cobertura ~100% confirmada no garimpo).
+async function detalheFrazao(page, url) {
+  try {
+    return await page.evaluate(async (u) => {
+      const r = await fetch(u, { credentials: 'same-origin' });
+      if (!r.ok) return null;
+      const html = await r.text();
+      const t = (new DOMParser().parseFromString(html, 'text/html').body?.innerText || '').replace(/\s+/g, ' ');
+      const g = (re) => { const m = t.match(re); return m ? (m[1] || m[0]).trim() : null; };
+      return {
+        areaTxt: g(/[áa]rea[^:]*:?\s*([\d.,]+)\s*m²/i) || g(/([\d.,]+)\s*m²/i),
+        ocupacao: g(/\b(DESOCUPAD[AO]|OCUPAD[AO])\b/i),
+        matriculaTxt: g(/matr[íi]cula[:\s]*n?[º°]?\s*([\d.\/-]{3,})/i),
+        avaliacaoTxt: g(/avalia[çc][ãa]o[^R]{0,25}R\$\s*([\d.,]+)/i),
+      };
+    }, url);
+  } catch { return null; }
+}
+
 async function scraperFrazao(browser) {
   console.log('  Frazão Leilões — coletando leilões de imóveis...');
   const page = await browser.newPage();
@@ -1126,7 +1147,7 @@ async function scraperFrazao(browser) {
         valor_avaliacao: 0,
         valor_minimo: valMin,
         area_m2: 0,
-        descricao: [c.titulo, c.addr].filter(Boolean).join(' — ').slice(0, 500),
+        descricao: [c.titulo, c.addr].filter(Boolean).join(' · ').slice(0, 500),
         link_edital: href,
         link_foto: c.img || null,
         leiloeiro: 'Frazão Leilões',
@@ -1135,6 +1156,25 @@ async function scraperFrazao(browser) {
       };
     }).filter(Boolean);
     console.log(`    Frazão: ${imoveis.length} imóveis mapeados`);
+
+    // Enriquece cada lote pela PÁGINA DE DETALHE: área real, ocupação e matrícula
+    // (o CSV/listagem não traz). Cap de segurança + gentileza entre requisições.
+    const brl2num = (s) => { const n = parseFloat(String(s || '').replace(/\./g, '').replace(',', '.')); return isNaN(n) ? 0 : n; };
+    let enr = 0;
+    for (const im of imoveis.slice(0, 400)) {
+      const d = await detalheFrazao(page, im.link_edital);
+      if (d) {
+        const area = brl2num(d.areaTxt);
+        if (area > 0) im.area_m2 = area;
+        if (d.matriculaTxt) { const mm = d.matriculaTxt.replace(/\D/g, ''); if (mm) im.numero_matricula = mm; }
+        if (d.ocupacao) im.ocupacao = /desocupad/i.test(d.ocupacao) ? 'Desocupado' : 'Ocupado';
+        const av = brl2num(d.avaliacaoTxt);
+        if (av > 0) im.valor_avaliacao = av;
+        enr++;
+      }
+      await new Promise(r => setTimeout(r, 180));
+    }
+    console.log(`    Frazão: ${enr}/${imoveis.length} enriquecidos (área/ocupação/matrícula)`);
     return imoveis;
   } catch (err) {
     console.log(`  Erro Frazão: ${err.message.slice(0, 100)}`);
