@@ -501,6 +501,9 @@ function UsuariosTab() {
   const [auditoriaUser, setAuditoriaUser] = useState(null);
   const [auditoriaData, setAuditoriaData] = useState(null);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
+  const [atribUser, setAtribUser] = useState(null);   // usuário recebendo a atribuição de arremate
+  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial' });
+  const [atribLoad, setAtribLoad] = useState(false);
   const [exito, setExito] = useState(null); // editor do % de êxito INDIVIDUAL do membro da equipe
 
   // Abre o editor do % de êxito individual deste membro (advogado/analista/consultor).
@@ -616,6 +619,24 @@ function UsuariosTab() {
     loadAuditoria(u.id);
   }
 
+  // Atribui um arremate ao usuário: cria o caso (arrematado) e o promove a Assessorado.
+  async function atribuirArremate() {
+    if (!atribUser) return;
+    setAtribLoad(true);
+    try {
+      const res = await apiCall('/api/atribuir-arremate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');
+      setUsers(users.map(u => u.id === atribUser.id ? { ...u, role: 'assessorado' } : u));
+      setAtribUser(null);
+    } catch (e) {
+      alert('Erro ao atribuir arremate: ' + (e.message || e));
+    } finally { setAtribLoad(false); }
+  }
+
   const filtered = users.filter(u => {
     if (!busca) return true;
     const q = busca.toLowerCase();
@@ -697,6 +718,14 @@ function UsuariosTab() {
                                 onClick={() => abrirAuditoria(u)}>
                                 🔍 Auditoria
                               </button>
+                              {u.role !== 'assessorado' && (
+                                <button
+                                  style={{ padding: '5px 10px', background: '#fef9c3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#a16207', cursor: 'pointer' }}
+                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial' }); }}
+                                  title="Atribuir uma arrematação a este usuário e torná-lo Assessorado (habilita o acompanhamento e os lançamentos)">
+                                  🏷 Atribuir arremate
+                                </button>
+                              )}
                               {['advogado','analista','consultor'].includes(u.role) && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#f0fdf4', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#059669', cursor: 'pointer' }}
@@ -715,6 +744,44 @@ function UsuariosTab() {
             </div>
           )}
       </div>
+
+      {/* Modal — Atribuir arremate (torna Assessorado) */}
+      {atribUser && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={e => { if (e.target === e.currentTarget) setAtribUser(null); }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 4 }}>🏷 Atribuir arremate</div>
+            <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
+              Cria o acompanhamento (arrematado) para <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> e o promove a <b>Assessorado</b> imediatamente — habilita os lançamentos financeiros e os indicadores.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Imóvel (endereço)</label>
+                <input value={atribForm.endereco} onChange={e => setAtribForm(p => ({ ...p, endereco: e.target.value }))} placeholder="Rua, nº, cidade/UF" style={S.input} />
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Valor arrematado (R$)</label>
+                  <input value={atribForm.valor} onChange={e => setAtribForm(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" style={S.input} />
+                </div>
+                <div style={{ width: 150 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Tipo</label>
+                  <select value={atribForm.tipo} onChange={e => setAtribForm(p => ({ ...p, tipo: e.target.value }))} style={S.input}>
+                    <option value="extrajudicial">Extrajudicial</option>
+                    <option value="judicial">Judicial</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button onClick={() => setAtribUser(null)} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={atribuirArremate} disabled={atribLoad} style={{ flex: 2, padding: '10px', background: atribLoad ? '#cbd5e1' : '#a16207', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: atribLoad ? 'default' : 'pointer' }}>
+                {atribLoad ? 'Atribuindo…' : 'Atribuir e tornar Assessorado'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Auditoria */}
       {auditoriaUser && (

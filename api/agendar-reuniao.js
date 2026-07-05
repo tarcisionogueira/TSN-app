@@ -86,6 +86,13 @@ export default async function handler(req) {
       const ans = await (await sb('perfis?role=eq.analista&ativo=eq.true&select=id')).json();
       if (Array.isArray(ans) && ans.length) analistaId = ans[Math.floor(Math.random() * ans.length)].id;
     }
+    // Fallback: sem NENHUM analista ativo, o ADMIN assume a função (mantém o fluxo
+    // funcionando na largada). Quando um analista for habilitado, os novos casos
+    // passam a sorteá-lo automaticamente (admin só entra como último recurso).
+    if (!analistaId) {
+      const adm = await (await sb('perfis?role=eq.admin&ativo=not.is.false&select=id&limit=1')).json();
+      if (Array.isArray(adm) && adm.length) analistaId = adm[0].id;
+    }
     if (analistaId) {
       await sb(`casos?id=eq.${caso_id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ analista_id: analistaId }) });
       caso.analista_id = analistaId;

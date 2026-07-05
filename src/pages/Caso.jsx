@@ -456,13 +456,14 @@ export default function Caso() {
   // Botão fixo na tela + popup automático na 1ª vez que o cliente acessa após arrematar.
   const [guiaAberta, setGuiaAberta] = useState(false);
   useEffect(() => {
-    if (!arrematacao || !casoId) return;
+    const temPos = !!arrematacao || caso?.status_etapa === 'arrematado';
+    if (!temPos || !casoId) return;
     const chave = `bidpro_guia_visto_${casoId}`;
     if (!localStorage.getItem(chave)) {
       setGuiaAberta(true);
       try { localStorage.setItem(chave, '1'); } catch { /* ignore */ }
     }
-  }, [arrematacao, casoId]);
+  }, [arrematacao, caso?.status_etapa, casoId]);
   const [procuracao, setProcuracao] = useState(null);
   const [cota, setCota] = useState(null);
 
@@ -961,19 +962,20 @@ export default function Caso() {
   if (!caso) return null;
 
   const statusAtual = caso.status_etapa;
+  const temPosArremate = !!arrematacao || statusAtual === 'arrematado';
 
   return (
     <div style={{ maxWidth:860, margin:'0 auto', padding: isMobile ? '16px 12px' : '28px 20px' }}>
 
       {/* Pós-arremate: botão FIXO + popup (auto na 1ª vez). Guia + Financiamento
           só existem depois de sinalizar o arremate — o lançamento real é aqui. */}
-      {arrematacao && (
+      {temPosArremate && (
         <button onClick={() => setGuiaAberta(true)}
           style={{ position:'fixed', right:20, bottom:20, zIndex:1500, padding:'12px 18px', background:'#059669', color:'white', border:'none', borderRadius:30, fontWeight:800, fontSize:13, cursor:'pointer', boxShadow:'0 8px 24px rgba(5,150,105,0.4)', display:'flex', alignItems:'center', gap:8 }}>
           <ClipboardList size={16}/> Guia pós-arremate
         </button>
       )}
-      {arrematacao && guiaAberta && (
+      {temPosArremate && guiaAberta && (
         <div onClick={e => { if (e.target === e.currentTarget) setGuiaAberta(false); }}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div style={{ background:'#f8fafc', borderRadius:16, width:'100%', maxWidth:760, maxHeight:'92vh', overflowY:'auto', padding:20, boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
@@ -983,10 +985,10 @@ export default function Caso() {
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
               <div style={card}>
-                <GuiaPosArrematacao modalidade={caso.tipo_leilao || 'extrajudicial'} imovelId={caso.imovel_id} onNavCNJ={()=>{}} onNavCertidoes={()=>{}} />
+                <GuiaPosArrematacao modalidade={caso.tipo_leilao || 'extrajudicial'} imovelId={caso.imovel_id || caso.id} onNavCNJ={()=>{}} onNavCertidoes={()=>{}} />
               </div>
               <div style={card}>
-                <FinanciamentoTracker imovelId={caso.imovel_id} imovelNome={caso.imovel_endereco || 'Imóvel arrematado'} onSalvo={()=>{}} />
+                <FinanciamentoTracker imovelId={caso.imovel_id || caso.id} imovelNome={caso.imovel_endereco || 'Imóvel arrematado'} onSalvo={()=>{}} />
               </div>
             </div>
           </div>
