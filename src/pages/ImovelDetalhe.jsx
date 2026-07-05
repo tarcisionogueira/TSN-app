@@ -69,6 +69,7 @@ const distPonto = (imLat, imLng, p) => distHaversine(imLat, imLng, p?.lat, p?.ln
 function MiniMapa({ lat, lng, pontos, nivel }) {
   const ref = useRef(null);
   const mapRef = useRef(null);
+  const roRef = useRef(null);
   const aproximado = nivel === 'bairro' || nivel === 'cidade';
   const raioM = nivel === 'cidade' ? 6000 : nivel === 'bairro' ? 1200 : 0;
   const zoomBase = nivel === 'cidade' ? 11 : nivel === 'bairro' ? 14 : 16;
@@ -119,9 +120,22 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
       }
       mapRef.current = map;
       enquadrar();
-      setTimeout(() => { map.invalidateSize(); enquadrar(); }, 120);
+      // Robustez contra "mapa em branco": o container pode ter 0px na 1ª pintura
+      // (a foto acima ainda ajustando o layout, ou a remontagem ao carregar os
+      // pontos próximos). Reinvalida o tamanho algumas vezes e também quando o
+      // elemento ganha dimensão real — sem isso o Leaflet fica cinza/vazio.
+      [120, 400, 800].forEach(t => setTimeout(() => { if (mapRef.current === map) { map.invalidateSize(); enquadrar(); } }, t));
+      if (typeof ResizeObserver !== 'undefined' && ref.current) {
+        const ro = new ResizeObserver(() => { if (mapRef.current === map) map.invalidateSize(); });
+        ro.observe(ref.current);
+        roRef.current = ro;
+      }
     });
-    return () => { cancel = true; if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
+    return () => {
+      cancel = true;
+      if (roRef.current) { roRef.current.disconnect(); roRef.current = null; }
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+    };
   }, [lat, lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
