@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Calculator, Gavel, TrendingUp, Target, Lock, Share2, Copy, Check, Info } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -79,6 +79,12 @@ function Linha({ label, valor, destaque, cor, sublabel }) {
 
 export default function Calculadora() {
   const nav = useNavigate();
+  // Imóvel vindo da tela do imóvel ("Simular na Calculadora"): pré-preenche os
+  // valores e, do raio-X jurídico (ficha_juridica), os débitos assumidos e o
+  // custo estimado de desocupação. Vazio quando aberta direto pelo menu.
+  const locCalc = useLocation();
+  const imPre = locCalc.state?.imovel || null;
+  const fjPre = imPre?.fichaJuridica || imPre?.ficha_juridica || null;
   const [searchParams] = useSearchParams();
   const { user, role, effectiveRole, loading: authLoading } = useAuth();
 
@@ -121,17 +127,17 @@ export default function Calculadora() {
     setLeadEnviando(false);
   }
 
-  const [origem, setOrigem] = useState('extrajudicial');
+  const [origem, setOrigem] = useState(/judicial/i.test(imPre?.modalidade || '') ? 'judicial' : 'extrajudicial');
   const [pagamento, setPagamento] = useState('a_vista');
   const [tabela, setTabela] = useState('sac');
 
-  // Valores iniciam zerados para o usuário preencher
-  const [arrematacao, setArrematacao] = useState('');
-  const [mercado, setMercado] = useState('');
-  const [avaliacao, setAvaliacao] = useState('');
+  // Valores pré-preenchidos do imóvel (quando veio da tela do imóvel); senão vazios.
+  const [arrematacao, setArrematacao] = useState(imPre?.valorMinimo ? String(imPre.valorMinimo) : '');
+  const [mercado, setMercado] = useState(imPre?.valorMercado ? String(imPre.valorMercado) : '');
+  const [avaliacao, setAvaliacao] = useState(imPre?.valorAvaliacao ? String(imPre.valorAvaliacao) : '');
 
-  const [debitos, setDebitos] = useState(0);
-  const [reforma, setReforma] = useState(0);
+  const [debitos, setDebitos] = useState(Number(fjPre?.debitosAssumidos) || 0);
+  const [reforma, setReforma] = useState(Number(fjPre?.desocupacaoCusto) || 0);
   const [iptuMensal, setIptuMensal] = useState(0);
   const [condominioMensal, setCondominioMensal] = useState(0);
   const [sinal, setSinal] = useState(25);
@@ -261,13 +267,24 @@ export default function Calculadora() {
             </div>
           )}
 
+          {imPre && (fjPre || imPre.valorMinimo) && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '11px 14px', marginBottom: 14, fontSize: 12.5, color: '#1e3a5f', lineHeight: 1.55 }}>
+              <span>🧮</span>
+              <div>
+                Valores pré-preenchidos de <strong>{imPre.titulo || 'este imóvel'}</strong>.
+                {fjPre?.debitosAssumidos ? ` Débitos assumidos (propter rem) do laudo: R$ ${Number(fjPre.debitosAssumidos).toLocaleString('pt-BR')}.` : ''}
+                {fjPre?.desocupacaoCusto ? ` Custo estimado de desocupação em "Reforma/desocupação": R$ ${Number(fjPre.desocupacaoCusto).toLocaleString('pt-BR')}${fjPre.desocupacaoPrazoMeses ? ` (~${fjPre.desocupacaoPrazoMeses} ${fjPre.desocupacaoPrazoMeses > 1 ? 'meses' : 'mês'})` : ''}.` : ''}
+                {' '}Revise antes de decidir.
+              </div>
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <Campo label="Valor de arrematação" value={arrematacao} onChange={setArrematacao} prefix="R$" placeholder="0" />
             <Campo label="Valor de avaliação" value={avaliacao} onChange={setAvaliacao} prefix="R$" placeholder="0" />
             <Campo label="Valor de mercado" value={mercado} onChange={setMercado} prefix="R$" placeholder="0" />
             <Campo label="Prazo p/ revenda" value={prazoVenda} onChange={setPrazoVenda} suffix="meses" />
             <Campo label="Débitos assumidos" value={debitos} onChange={setDebitos} prefix="R$" placeholder="0" />
-            <Campo label="Reforma estimada" value={reforma} onChange={setReforma} prefix="R$" placeholder="0" />
+            <Campo label="Reforma / desocupação" value={reforma} onChange={setReforma} prefix="R$" placeholder="0" />
             <Campo label="IPTU mensal" value={iptuMensal} onChange={setIptuMensal} prefix="R$" placeholder="0" />
             <Campo label="Condomínio mensal" value={condominioMensal} onChange={setCondominioMensal} prefix="R$" placeholder="0" />
           </div>

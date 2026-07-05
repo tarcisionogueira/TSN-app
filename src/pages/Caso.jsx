@@ -445,6 +445,8 @@ export default function Caso() {
 
   // ─── Estados gerais ──────────────────────────────────────────────────────
   const [caso, setCaso] = useState(null);
+  const [certidoes, setCertidoes] = useState([]);   // certidões recomendadas (raio-X jurídico do laudo)
+  const [certStatus, setCertStatus] = useState({}); // { slug: true } — o que já foi obtido
   const [imovelExtra, setImovelExtra] = useState(null); // data_leilao, titulo, link_leilao
   const [showAgendar, setShowAgendar] = useState(null); // null | 1 | 2
   const [jobs, setJobs] = useState([]);
@@ -624,6 +626,32 @@ export default function Caso() {
   }, [casoId, user, role, imovelInit, nav]);
 
   useEffect(() => { carregarCaso(); }, [carregarCaso]);
+
+  // Certidões recomendadas do laudo documental (raio-X jurídico) → checklist.
+  const slugCert = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60);
+  useEffect(() => {
+    if (!caso?.imovel_id) return;
+    let cancel = false;
+    (async () => {
+      const { data } = await supabase.from('analises_documental').select('result').eq('imovel_id', caso.imovel_id).limit(8);
+      if (cancel) return;
+      let lista = [];
+      for (const r of (data || [])) {
+        const c = r?.result?.raioX?.certidoesRecomendadas;
+        if (Array.isArray(c) && c.length) { lista = c; break; }
+      }
+      setCertidoes(lista.filter(x => x && x.nome));
+      setCertStatus(caso.certidoes_status && typeof caso.certidoes_status === 'object' ? caso.certidoes_status : {});
+    })();
+    return () => { cancel = true; };
+  }, [caso?.imovel_id, caso?.certidoes_status]);
+
+  const toggleCert = async (nome) => {
+    const k = slugCert(nome);
+    const novo = { ...certStatus, [k]: !certStatus[k] };
+    setCertStatus(novo);
+    try { await supabase.from('casos').update({ certidoes_status: novo }).eq('id', caso.id); } catch { /* best-effort */ }
+  };
 
   // Scroll chat
   useEffect(() => {
@@ -1026,6 +1054,33 @@ export default function Caso() {
           <EtapaTimeline status={statusAtual}/>
         </div>
       </div>
+
+      {/* Certidões e diligências (checklist interativo do raio-X jurídico) */}
+      {certidoes.length > 0 && (
+        <div style={{ ...card, marginBottom:20 }}>
+          <div style={{ fontSize:15, fontWeight:900, color:'#111', display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>📋 Certidões e diligências</div>
+          <div style={{ fontSize:12, color:'#64748b', marginBottom:12 }}>
+            Marque conforme obtiver cada documento. <strong>{certidoes.filter(c => certStatus[slugCert(c.nome)]).length}/{certidoes.length}</strong> concluídas.
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {certidoes.map((c, i) => {
+              const feito = !!certStatus[slugCert(c.nome)];
+              return (
+                <button key={i} onClick={() => toggleCert(c.nome)}
+                  style={{ display:'flex', gap:10, alignItems:'flex-start', textAlign:'left', background: feito?'#f0fdf4':'#f8fafc', border:`1px solid ${feito?'#bbf7d0':'#e2e8f0'}`, borderRadius:10, padding:'10px 12px', cursor:'pointer' }}>
+                  <span style={{ flexShrink:0, width:18, height:18, borderRadius:5, border:`2px solid ${feito?'#16a34a':'#cbd5e1'}`, background: feito?'#16a34a':'white', color:'white', fontSize:12, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', marginTop:1 }}>{feito?'✓':''}</span>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#111', textDecoration: feito?'line-through':'none' }}>
+                      {c.nome} {c.online ? <span style={{ fontSize:10, color:'#15803d', fontWeight:800 }}>· online</span> : null}
+                    </div>
+                    <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.5 }}>{[c.orgao, c.motivo].filter(Boolean).join(' · ')}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Cota */}
       {isCliente && (
