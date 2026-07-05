@@ -94,6 +94,14 @@ ${resMerc}
 ${resDoc}
 
 ════════ SUA TAREFA ════════
+Além de consolidar, você é o MODERADOR/CONTROLE DE QUALIDADE dos dois relatórios:
+avalie a CONFIANÇA de cada um (0–100: completude + consistência + presença de dados
+concretos vs. "não consta"), aponte CONTRADIÇÕES entre eles (ex.: mercadológico diz
+"ótimo desconto" mas o documental achou ocupação/ônus que corrói a margem) e as
+LACUNAS CRÍTICAS que faltam para decidir. Se houver contradição relevante ou um
+relatório com confiança baixa (<50), marque "recomendaRevisao": true (o caso deve
+ser revisado antes do lance).
+
 Emita um VEREDITO consolidado, cruzando as duas visões:
 - "aprovado": mercado/financeiro favorável E sem risco jurídico bloqueante.
 - "condicional": vale a pena, MAS depende de resolver diligências/pendências (ex.: confirmar débitos, ocupação, laudêmio) ou de respeitar um teto de lance. Liste as CONDIÇÕES objetivas.
@@ -113,7 +121,8 @@ Retorne APENAS este JSON (sem markdown):
   "pontosDeAtencao": ["", ""],
   "condicoes": ["condições objetivas para o 'condicional' — vazio se não se aplica"],
   "diligenciasPendentes": ["o que confirmar antes do lance, se houver"],
-  "parecer": "Parecer de defesa em português formal, texto simples, estruturado com '§ SEÇÃO:' — § SEÇÃO: SÍNTESE DA OPORTUNIDADE (mercado x aquisição); § SEÇÃO: LEITURA JURÍDICA E DE RISCO; § SEÇÃO: CRUZAMENTO E VEREDITO (por que aprovado/condicional/reprovado, cruzando as duas frentes); § SEÇÃO: CONDIÇÕES E DILIGÊNCIAS; § SEÇÃO: RECOMENDAÇÃO FINAL AO CLIENTE."
+  "controleQualidade": { "confiancaMercadologico": 0, "confiancaDocumental": 0, "contradicoes": ["contradições entre os dois relatórios, se houver"], "lacunasCriticas": ["o que falta para decidir com segurança"], "recomendaRevisao": false },
+  "parecer": "Parecer de defesa em português formal, texto simples, estruturado com '§ SEÇÃO:' — § SEÇÃO: SÍNTESE DA OPORTUNIDADE (mercado x aquisição); § SEÇÃO: LEITURA JURÍDICA E DE RISCO; § SEÇÃO: CONTROLE DE QUALIDADE (confiança de cada relatório e contradições encontradas); § SEÇÃO: CRUZAMENTO E VEREDITO (por que aprovado/condicional/reprovado, cruzando as duas frentes); § SEÇÃO: CONDIÇÕES E DILIGÊNCIAS; § SEÇÃO: RECOMENDAÇÃO FINAL AO CLIENTE."
 }`;
 }
 
@@ -198,6 +207,13 @@ export default async function handler(req, res) {
       pontosDeAtencao: Array.isArray(parsed.pontosDeAtencao) ? parsed.pontosDeAtencao : [],
       condicoes: Array.isArray(parsed.condicoes) ? parsed.condicoes : [],
       diligenciasPendentes: Array.isArray(parsed.diligenciasPendentes) ? parsed.diligenciasPendentes : [],
+      controleQualidade: parsed.controleQualidade && typeof parsed.controleQualidade === 'object' ? {
+        confiancaMercadologico: Number(parsed.controleQualidade.confiancaMercadologico) || null,
+        confiancaDocumental: Number(parsed.controleQualidade.confiancaDocumental) || null,
+        contradicoes: Array.isArray(parsed.controleQualidade.contradicoes) ? parsed.controleQualidade.contradicoes : [],
+        lacunasCriticas: Array.isArray(parsed.controleQualidade.lacunasCriticas) ? parsed.controleQualidade.lacunasCriticas : [],
+        recomendaRevisao: !!parsed.controleQualidade.recomendaRevisao,
+      } : null,
       parecer: (parsed.parecer || '') + AVISO,
       baseadoEm: { mercadoEm: mRow.updated_at, documentalEm: dRow.updated_at },
       geradoEm: new Date().toISOString(),

@@ -1334,6 +1334,32 @@ export default function Analise() {
                 {bloco('Pontos de atenção', L.pontosDeAtencao, '#92400e')}
                 {bloco('Condições para aprovação', L.condicoes, '#b45309')}
                 {bloco('Diligências pendentes (confirmar antes do lance)', L.diligenciasPendentes, '#0369a1')}
+                {L.controleQualidade && (() => {
+                  const q = L.controleQualidade;
+                  const barra = (label, v) => (
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <div style={{ width:110, fontSize:11, fontWeight:700, color:'#475569' }}>{label}</div>
+                      <div style={{ flex:1, height:7, background:'#e2e8f0', borderRadius:20, overflow:'hidden' }}>
+                        <div style={{ width:`${Math.max(0,Math.min(100,v||0))}%`, height:'100%', background: (v||0)>=70?'#16a34a':(v||0)>=50?'#d97706':'#dc2626', borderRadius:20 }}/>
+                      </div>
+                      <div style={{ width:38, textAlign:'right', fontSize:11, color:'#64748b' }}>{v!=null?`${v}%`:'—'}</div>
+                    </div>
+                  );
+                  return (
+                    <div style={{ marginTop:16, padding:'12px 14px', border:'1px solid #e2e8f0', borderRadius:12, background:'#f8fafc' }}>
+                      <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8, display:'flex', alignItems:'center', gap:8 }}>
+                        Controle de qualidade dos relatórios
+                        {q.recomendaRevisao && <span style={{ fontSize:10, fontWeight:800, color:'#b91c1c', background:'#fee2e2', padding:'2px 8px', borderRadius:20 }}>Revisar antes do lance</span>}
+                      </div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                        {barra('Mercadológico', q.confiancaMercadologico)}
+                        {barra('Documental', q.confiancaDocumental)}
+                      </div>
+                      {bloco('Contradições encontradas', q.contradicoes, '#b91c1c')}
+                      {bloco('Lacunas críticas', q.lacunasCriticas, '#92400e')}
+                    </div>
+                  );
+                })()}
                 {L.parecer && (
                   <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid #f1f5f9' }}>
                     <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Parecer de defesa</div>
