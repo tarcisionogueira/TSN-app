@@ -59,8 +59,10 @@ export function mapearPlano(valor, descricao = '') {
   if (dentroFaixa(v, 99.9))  return { plano: 'top2', role: 'top2' }; // legado (preço antigo)
   if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // Investidor Pro anual
 
-  // Leilão Club — verificar ANTES de assessorado pois ambos têm opção de R$5.000
-  if (dentroFaixa(v, 5000) && desc.includes('clube')) return { plano: 'clube', role: 'clube' };
+  // Leilão Club — verificar ANTES de assessorado pois ambos têm opção de R$5.000.
+  // Casa 'clube' E 'club' (o nome oficial é "Leilão Club", sem o 'e'); sem isso
+  // um pagamento de Club de R$5.000 caía por engano em assessorado.
+  if (dentroFaixa(v, 5000) && desc.includes('club')) return { plano: 'clube', role: 'clube' };
   if (dentroFaixa(v, 48000, 100)) return { plano: 'clube', role: 'clube' };
   if (dentroFaixa(v, 60000, 200)) return { plano: 'clube', role: 'clube' };
 
