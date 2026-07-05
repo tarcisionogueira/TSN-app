@@ -20,6 +20,12 @@ import RiscoJuridico from '../components/RiscoJuridico';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { apiCall } from '../utils/apiCall';
 
+// Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
+const OCUP_LABEL_A = {
+  desocupado: 'Desocupado', proprietario: 'Ocupado pelo proprietário', locatario: 'Ocupado por locatário',
+  posseiro: 'Ocupado por posseiro', comodato: 'Ocupado (comodato)', invasao: 'Ocupado (invasão)',
+};
+
 const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
   nomeCondominio: '', objetivoCompra: 'investimento', status: 'analise', origem: 'extrajudicial',
@@ -1249,6 +1255,90 @@ export default function Analise() {
                   )}
                 </div>
               )}
+              {parecerDocumental.raioX && (() => {
+                const rx = parecerDocumental.raioX;
+                const brl = v => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+                const dataBR = s => { const m = String(s || '').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : (s || ''); };
+                const cad = (rx.cadeiaDominial || []).filter(a => a && (a.parte || a.evento));
+                const cert = (rx.certidoesRecomendadas || []).filter(c => c && c.nome);
+                const oc = rx.ocupacaoDetalhe || {}, fr = rx.fraudeExecucao || {}, dp = rx.direitoPreferencia || {}, db = rx.debitos || {}, cr = rx.cronogramaLeilao || {};
+                const temOc = oc.tipo && oc.tipo !== 'nao_consta';
+                const temFr = fr.risco && fr.risco !== 'nenhum';
+                const cron = [cr.primeiraPraca && `1ª praça: ${dataBR(cr.primeiraPraca)}`, cr.segundaPraca && `2ª praça: ${dataBR(cr.segundaPraca)}`, cr.prazoPagamento && `Pagamento: ${cr.prazoPagamento}`, cr.prazoEmbargos && `Embargos: ${cr.prazoEmbargos}`].filter(Boolean);
+                if (!cad.length && !cert.length && !temOc && !temFr && !dp.existe && !db.totalAssumidoArrematante && !db.aLevantar && !cron.length) return null;
+                const Bloco = ({ titulo, children }) => (
+                  <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'12px 14px' }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:'#334155', marginBottom:8 }}>{titulo}</div>
+                    {children}
+                  </div>
+                );
+                return (
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    <div style={{ fontSize:13, fontWeight:900, color:'#1e3a8a', display:'flex', alignItems:'center', gap:7 }}>🔎 Raio-X jurídico</div>
+                    {temFr && (
+                      <div style={{ background: fr.risco==='alto'?'#fef2f2':'#fffbeb', border:`1px solid ${fr.risco==='alto'?'#fecaca':'#fde68a'}`, borderRadius:10, padding:'12px 14px' }}>
+                        <div style={{ fontSize:12.5, fontWeight:800, color: fr.risco==='alto'?'#b91c1c':'#b45309' }}>⚠ Risco de fraude à execução: {fr.risco}</div>
+                        {fr.motivo && <div style={{ fontSize:12, color:'#475569', marginTop:4, lineHeight:1.5 }}>{fr.motivo}</div>}
+                      </div>
+                    )}
+                    {temOc && (
+                      <Bloco titulo="Ocupação">
+                        <div style={{ fontSize:12.5, color:'#334155', lineHeight:1.6 }}>
+                          <strong>{OCUP_LABEL_A[oc.tipo] || oc.tipo}</strong>
+                          {oc.direitos ? ` · ${oc.direitos}` : ''}
+                          {oc.prazoMeses ? ` · desocupação ~${oc.prazoMeses} ${oc.prazoMeses>1?'meses':'mês'}` : ''}
+                          {oc.custoEstimado ? ` · custo est. ${brl(oc.custoEstimado)}` : ''}
+                          {oc.procedimentoDesocupacao ? <div style={{ color:'#64748b', marginTop:3 }}>{oc.procedimentoDesocupacao}</div> : null}
+                        </div>
+                      </Bloco>
+                    )}
+                    {(db.totalAssumidoArrematante > 0 || (db.propterRem||[]).length > 0 || db.aLevantar) && (
+                      <Bloco titulo="Débitos">
+                        <div style={{ fontSize:12.5, color:'#334155', lineHeight:1.6 }}>
+                          {db.totalAssumidoArrematante > 0 ? <div>Você assume (propter rem): <strong style={{ color:'#b45309' }}>{brl(db.totalAssumidoArrematante)}</strong></div> : (db.aLevantar ? <div style={{ color:'#b45309' }}>Débitos propter rem a levantar (IPTU/condomínio).</div> : null)}
+                          {(db.propterRem||[]).length>0 && <div style={{ color:'#64748b' }}>Acompanham o imóvel: {(db.propterRem).join(', ')}</div>}
+                          {(db.pessoais||[]).length>0 && <div style={{ color:'#64748b' }}>Do devedor (não transferem): {(db.pessoais).join(', ')}</div>}
+                        </div>
+                      </Bloco>
+                    )}
+                    {dp.existe && (
+                      <Bloco titulo="Direito de preferência/adjudicação">
+                        <div style={{ fontSize:12.5, color:'#334155' }}>Sujeito a preferência de: {(dp.titulares||[]).join(', ') || 'terceiros (verificar)'}.</div>
+                      </Bloco>
+                    )}
+                    {cron.length > 0 && (
+                      <Bloco titulo="Cronograma do leilão">
+                        <div style={{ fontSize:12.5, color:'#334155', display:'flex', flexWrap:'wrap', gap:'4px 14px' }}>{cron.map((c,i)=><span key={i}>{c}</span>)}</div>
+                      </Bloco>
+                    )}
+                    {cad.length > 0 && (
+                      <Bloco titulo={`Cadeia dominial (${cad.length})`}>
+                        <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                          {cad.slice(0,10).map((a,i)=>(
+                            <div key={i} style={{ fontSize:12, color:'#334155', display:'flex', gap:8 }}>
+                              <span style={{ color:'#94a3b8', fontWeight:700, flexShrink:0, minWidth:70 }}>{a.ato || '—'}{a.data ? ` · ${dataBR(a.data)}` : ''}</span>
+                              <span>{[a.evento, a.parte].filter(Boolean).join(' — ')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </Bloco>
+                    )}
+                    {cert.length > 0 && (
+                      <Bloco titulo={`Certidões recomendadas (${cert.length})`}>
+                        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                          {cert.map((c,i)=>(
+                            <div key={i} style={{ fontSize:12, color:'#334155', display:'flex', gap:8, alignItems:'flex-start' }}>
+                              <span style={{ flexShrink:0 }}>{c.online ? '🟢' : '📄'}</span>
+                              <div><strong>{c.nome}</strong>{c.orgao ? ` · ${c.orgao}` : ''}{c.motivo ? <span style={{ color:'#64748b' }}> — {c.motivo}</span> : ''}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:6 }}>🟢 emissão online gratuita · 📄 requer cartório/órgão</div>
+                      </Bloco>
+                    )}
+                  </div>
+                );
+              })()}
               {parecerDocumental.parecer && (
                 <div style={{ fontSize:13.5, color:'#334155', lineHeight:1.75, whiteSpace:'pre-wrap' }}>
                   {parecerDocumental.parecer.replace(/§\s*SEÇÃO:/g, '\n§ ').trim()}

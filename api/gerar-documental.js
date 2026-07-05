@@ -217,9 +217,27 @@ OCUPAÇÃO POR PESSOA VULNERÁVEL (risco de desocupação — avaliar SEMPRE, em
 - NÃO é possível — nem lícito — confirmar isso remotamente por dados de saúde: o cadastro do SUS/CNS é DADO PESSOAL SENSÍVEL protegido pela LGPD (art. 11), de acesso restrito ao sistema de saúde. NÃO afirme ter consultado essa base, NÃO invente idade/condição do ocupante.
 - Em TODO imóvel, registre em "riscos" o item de possível vulnerabilidade na ocupação (severidade "alerta") e recomende as diligências LÍCITAS de verificação: (a) consulta processual pública — se for leilão JUDICIAL, checar no processo o marcador de PRIORIDADE DE TRAMITAÇÃO (idoso/PcD/doença grave), que é público; (b) visita ao imóvel e diligência de vizinhança (imprescindível — o status do edital não substitui); (c) leitura atenta do edital/auto de constatação, que às vezes descreve os ocupantes. Cite isso na seção OCUPAÇÃO E POSSE do parecer.
 
+RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e do CNJ. Quando um item NÃO constar nos documentos, deixe vazio/zero — NÃO invente):
+1) CADEIA DOMINIAL: sequência de proprietários e atos da matrícula (registros "R-" e averbações "Av-"), com data e evento (compra e venda, doação, penhora, baixa de ônus...). Do mais recente ao mais antigo, no máximo 10.
+2) CERTIDÕES RECOMENDADAS: as que o arrematante deve obter antes do lance, com órgão e por quê (ônus reais atualizada no CRI; distribuidores cível/trabalhista/federal do executado p/ checar fraude à execução; CND de IPTU; declaração de débitos do condomínio). "online": true quando é emitida grátis pela internet.
+3) FRAUDE À EXECUÇÃO/CONTRA CREDORES: cruzando o executado com o CNJ, o risco de a arrematação ser anulada (transmissão do bem após o início da ação; outras execuções contra o devedor). risco "nenhum|baixo|medio|alto" + motivo curto.
+4) OCUPAÇÃO DETALHADA: tipo, direitos do ocupante (ex.: locatário com preferência), procedimento e prazo/custo estimado de desocupação.
+5) DIREITO DE PREFERÊNCIA/ADJUDICAÇÃO DE TERCEIROS: condômino, locatário, credor hipotecário/fiduciário, confrontante (rural). Liste os titulares.
+6) DÉBITOS PROPTER REM × PESSOAIS: separe o que ACOMPANHA o imóvel (IPTU, condomínio, taxas) do que é pessoal do devedor. Estime o total que o ARREMATANTE assume em R$; se não der, marque aLevantar=true.
+7) CRONOGRAMA DO LEILÃO: 1ª e 2ª praça, prazo de pagamento e prazo de embargos/recursos, conforme o edital.
+
 Retorne APENAS este JSON (sem markdown):
 {
   "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/proprietário, se constar)", "executadoDoc": "(CPF ou CNPJ do executado/devedor, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "raioX": {
+    "cadeiaDominial": [{"ato":"","data":"AAAA-MM-DD","evento":"","parte":""}],
+    "certidoesRecomendadas": [{"nome":"","orgao":"","online":false,"motivo":""}],
+    "fraudeExecucao": {"risco":"nenhum|baixo|medio|alto","motivo":""},
+    "ocupacaoDetalhe": {"tipo":"desocupado|proprietario|locatario|posseiro|comodato|invasao|nao_consta","direitos":"","procedimentoDesocupacao":"","prazoMeses":0,"custoEstimado":0},
+    "direitoPreferencia": {"existe":false,"titulares":[]},
+    "debitos": {"totalAssumidoArrematante":0,"propterRem":[],"pessoais":[],"aLevantar":true},
+    "cronogramaLeilao": {"primeiraPraca":"","segundaPraca":"","prazoPagamento":"","prazoEmbargos":""}
+  },
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "nivelRisco": "verde|amarelo|vermelho",
@@ -505,6 +523,7 @@ export default async function handler(req, res) {
       documentosLidos: lidos,
       checklist,
       pendencias,
+      raioX: parsed.raioX || null,
       geradoEm: new Date().toISOString(),
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result });
@@ -542,6 +561,33 @@ export default async function handler(req, res) {
           method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ficha_cef: fichaMerged }),
         });
       }
+    } catch { /* não bloqueia o laudo */ }
+
+    // Raio-X jurídico COMPACTO na TELA DO IMÓVEL (selos + campos): persiste um
+    // resumo do raioX no imóvel para a ficha exibir sem reabrir o laudo. Custo
+    // zero (mesma leitura). Sobrescreve com o dado mais recente da análise.
+    try {
+      const rx = parsed.raioX || {};
+      const oc = rx.ocupacaoDetalhe || {};
+      const fj = {
+        nivelRisco: result.nivelRisco || null,
+        fraudeExecucao: rx.fraudeExecucao?.risco && rx.fraudeExecucao.risco !== 'nenhum' ? rx.fraudeExecucao.risco : null,
+        direitoPreferencia: !!(rx.direitoPreferencia?.existe),
+        ocupacaoTipo: oc.tipo && oc.tipo !== 'nao_consta' ? oc.tipo : null,
+        desocupacaoPrazoMeses: Number(oc.prazoMeses) || null,
+        desocupacaoCusto: Number(oc.custoEstimado) || null,
+        debitosAssumidos: Number(rx.debitos?.totalAssumidoArrematante) || null,
+        debitosALevantar: !!(rx.debitos?.aLevantar),
+        proprietariosNaCadeia: Array.isArray(rx.cadeiaDominial) ? rx.cadeiaDominial.filter(a => a && (a.parte || a.evento)).length : 0,
+        primeiraPraca: rx.cronogramaLeilao?.primeiraPraca || null,
+        segundaPraca: rx.cronogramaLeilao?.segundaPraca || null,
+        prazoPagamento: rx.cronogramaLeilao?.prazoPagamento || null,
+        certidoesPendentes: Array.isArray(rx.certidoesRecomendadas) ? rx.certidoesRecomendadas.length : 0,
+        atualizadoEm: new Date().toISOString(),
+      };
+      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ficha_juridica: fj }),
+      });
     } catch { /* não bloqueia o laudo */ }
 
     // Data do leilão/prazo de propostas: a lista em massa da Caixa vem SEM data para

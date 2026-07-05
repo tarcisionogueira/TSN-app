@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
@@ -582,6 +582,67 @@ function FichaTecnicaCEF({ ficha }) {
   );
 }
 
+// Raio-X jurídico (Fase 1) — selos e campos derivados do laudo documental,
+// persistidos no imóvel (ficha_juridica). Só aparece após uma análise documental.
+const OCUP_LABEL = {
+  desocupado: 'Desocupado', proprietario: 'Ocupado pelo proprietário', locatario: 'Ocupado por locatário',
+  posseiro: 'Ocupado por posseiro', comodato: 'Ocupado (comodato)', invasao: 'Ocupado (invasão)',
+};
+function AnaliseJuridicaCard({ fj }) {
+  if (!fj || typeof fj !== 'object') return null;
+  const temAlgo = fj.fraudeExecucao || fj.direitoPreferencia || fj.ocupacaoTipo || fj.debitosAssumidos ||
+    fj.proprietariosNaCadeia > 0 || fj.primeiraPraca || fj.certidoesPendentes > 0;
+  if (!temAlgo) return null;
+  const brl = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const dataBR = (s) => { const m = String(s || '').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : (s || ''); };
+  const fraudeCor = fj.fraudeExecucao === 'alto' ? '#b91c1c' : '#b45309';
+
+  const Selo = ({ bg, cor, br, children }) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, padding: '5px 12px', borderRadius: 999, background: bg, color: cor, border: `1px solid ${br}` }}>{children}</span>
+  );
+  const Linha = ({ rot, val, cor }) => (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
+      <span style={{ color: '#94a3b8', minWidth: 150 }}>{rot}:</span>
+      <span style={{ fontWeight: 700, color: cor || '#334155' }}>{val}</span>
+    </div>
+  );
+
+  const selos = [];
+  if (fj.fraudeExecucao) selos.push(<Selo key="fr" bg="#fef2f2" cor={fraudeCor} br="#fecaca"><AlertTriangle size={13} /> Risco de fraude à execução: {fj.fraudeExecucao}</Selo>);
+  if (fj.direitoPreferencia) selos.push(<Selo key="dp" bg="#fffbeb" cor="#b45309" br="#fde68a"><AlertTriangle size={13} /> Sujeito a direito de preferência</Selo>);
+  if (fj.nivelRisco) {
+    const c = fj.nivelRisco === 'vermelho' ? ['#fef2f2', '#b91c1c', '#fecaca'] : fj.nivelRisco === 'amarelo' ? ['#fffbeb', '#b45309', '#fde68a'] : ['#f0fdf4', '#15803d', '#bbf7d0'];
+    selos.push(<Selo key="nr" bg={c[0]} cor={c[1]} br={c[2]}><ShieldCheck size={13} /> Risco jurídico {fj.nivelRisco}</Selo>);
+  }
+
+  const linhas = [];
+  if (fj.ocupacaoTipo) {
+    const prazo = fj.desocupacaoPrazoMeses ? ` · desocupação ~${fj.desocupacaoPrazoMeses} ${fj.desocupacaoPrazoMeses > 1 ? 'meses' : 'mês'}` : '';
+    const custo = fj.desocupacaoCusto ? ` · custo est. ${brl(fj.desocupacaoCusto)}` : '';
+    linhas.push(<Linha key="oc" rot="Ocupação" val={`${OCUP_LABEL[fj.ocupacaoTipo] || fj.ocupacaoTipo}${prazo}${custo}`} cor={fj.ocupacaoTipo === 'desocupado' ? '#15803d' : '#b45309'} />);
+  }
+  if (fj.debitosAssumidos) linhas.push(<Linha key="db" rot="Débitos que você assume" val={`${brl(fj.debitosAssumidos)} (propter rem)`} cor="#b45309" />);
+  else if (fj.debitosALevantar) linhas.push(<Linha key="db2" rot="Débitos propter rem" val="a levantar (IPTU/condomínio)" />);
+  if (fj.proprietariosNaCadeia > 0) linhas.push(<Linha key="cd" rot="Cadeia dominial" val={`${fj.proprietariosNaCadeia} proprietário(s)/ato(s) na matrícula`} />);
+  if (fj.primeiraPraca || fj.segundaPraca) {
+    const p = [fj.primeiraPraca && `1ª praça ${dataBR(fj.primeiraPraca)}`, fj.segundaPraca && `2ª praça ${dataBR(fj.segundaPraca)}`].filter(Boolean).join(' · ');
+    linhas.push(<Linha key="cr" rot="Cronograma do leilão" val={p} />);
+  }
+  if (fj.prazoPagamento) linhas.push(<Linha key="pp" rot="Prazo de pagamento" val={fj.prazoPagamento} />);
+  if (fj.certidoesPendentes > 0) linhas.push(<Linha key="ce" rot="Certidões recomendadas" val={`${fj.certidoesPendentes} no laudo documental`} />);
+
+  return (
+    <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
+      <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <ScrollText size={18} color="#1e3a8a" /> Análise jurídica
+      </h2>
+      <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '0 0 16px' }}>Resumo do laudo documental. Detalhes e diligências no relatório completo.</p>
+      {selos.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: linhas.length ? 16 : 0 }}>{selos}</div>}
+      {linhas.length > 0 && <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>{linhas}</div>}
+    </div>
+  );
+}
+
 export default function ImovelDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -629,6 +690,7 @@ export default function ImovelDetalhe() {
           valorMercado: data.valor_mercado ?? null,
           analiseViavel: data.analise_viavel ?? null,
           fichaCef: data.ficha_cef || null,
+          fichaJuridica: data.ficha_juridica || null,
         });
       })
       .finally(() => setLoading(false));
@@ -977,6 +1039,9 @@ export default function ImovelDetalhe() {
             {/* Ficha técnica, CEF vem da página oficial; demais lotes (judicial/
                 extrajudicial) vêm da matrícula lida no laudo documental. */}
             <FichaTecnicaCEF ficha={imovel.fichaCef} />
+
+            {/* Análise jurídica (raio-X): aparece após o laudo documental. */}
+            <AnaliseJuridicaCard fj={imovel.fichaJuridica} />
 
             {/* Simulação rápida, estimativa pela avaliação do leilão (NÃO é a mercadológica) */}
             {imovel.valorMinimo > 0 && imovel.valorAvaliacao > 0 && (() => {
