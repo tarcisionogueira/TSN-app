@@ -17,7 +17,6 @@ import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import RiscoJuridico from '../components/RiscoJuridico';
-import Lancamentos from '../components/Lancamentos';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { apiCall } from '../utils/apiCall';
 import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
@@ -1800,7 +1799,9 @@ export default function Analise() {
           <div>
             <Field label="Observações / Notas de Visita" name="observacoes" value={d.observacoes||''} onChange={upN} type="textarea" rows={3} ph="Anotações de visita, pontos de atenção, potencial de negociação..."/>
           </div>
-          <Lancamentos lancamentos={d.lancamentos||[]} onChange={l=>up('lancamentos',l)}/>
+          {/* Lançamentos financeiros NÃO pertencem à análise (que é de ORIENTAÇÃO).
+              O lançamento real acontece no fluxo de ACOMPANHAMENTO pós-arrematação
+              (tela do Caso/Guia). Removido daqui para não confundir. */}
         </div>
       </Section>
 
