@@ -23,7 +23,7 @@ async function fetchPerfil(userId) {
   if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0, cadastroIncompleto: false };
   const { data } = await supabase
     .from('perfis')
-    .select('role, ativo, inadimplente_desde, cpf, lgpd_aceito')
+    .select('role, ativo, inadimplente_desde, cpf_hash, lgpd_aceito')
     .eq('id', userId)
     .single();
 
@@ -41,7 +41,7 @@ async function fetchPerfil(userId) {
       role_anterior: data.role,
       role: 'explorador',
     }).eq('id', userId);
-    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: (!data?.cpf || !data?.lgpd_aceito) };
+    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: (!data?.cpf_hash || !data?.lgpd_aceito) };
   }
 
   // Normaliza o sufixo _anual: a modalidade anual é forma de PAGAMENTO, não um
@@ -55,7 +55,7 @@ async function fetchPerfil(userId) {
     ativo: data?.ativo !== false,
     inadimplenteDias,
     // Cliente sem CPF ou sem aceite LGPD (ex.: cadastro via Google) precisa completar
-    cadastroIncompleto: ehCliente && (!data?.cpf || !data?.lgpd_aceito),
+    cadastroIncompleto: ehCliente && (!data?.cpf_hash || !data?.lgpd_aceito),
   };
 }
 

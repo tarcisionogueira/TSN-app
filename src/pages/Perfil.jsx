@@ -200,11 +200,19 @@ export default function Perfil() {
       .catch(() => setLoadRelatorios(false));
   }, [user?.id]);
 
-  // Carrega dados cadastrais (nome/cpf fixos + telefone/endereço/pix editáveis)
+  // CPF é mostrado mascarado (o valor cheio nunca vem para o navegador; a chave
+  // de decifra fica só no backend). O próprio dono recebe a máscara.
+  useEffect(() => {
+    if (!user?.id) return;
+    apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id] }) })
+      .then(r => r.json()).then(d => setCpf(d?.cpfs?.[user.id] || '')).catch(() => {});
+  }, [user?.id]);
+
+  // Carrega dados cadastrais (nome fixo + telefone/endereço/pix editáveis)
   useEffect(() => {
     if (!user?.id) return;
     supabase.from('perfis')
-      .select('nome,cpf,telefone,chave_pix,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
+      .select('nome,telefone,chave_pix,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
       .eq('id', user.id).single()
       .then(({ data }) => {
         if (!data) return;
@@ -218,7 +226,6 @@ export default function Perfil() {
           },
         };
         if (data.nome) setNome(data.nome);
-        setCpf(data.cpf || '');
         setTelefone(snap.telefone);
         setChavePix(snap.chavePix);
         setEnd(snap.end);

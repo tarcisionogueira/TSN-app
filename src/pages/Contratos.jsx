@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, CheckCircle2, Clock, ShieldCheck, X, Users, MapPin, Download, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 import { useIsMobile } from '../utils/useIsMobile';
 import AssinaturaCanvas from '../components/AssinaturaCanvas';
 
@@ -77,11 +78,12 @@ export default function Contratos() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  // pré-preenche CPF do perfil
+  // pré-preenche o CPF do assinante (cheio, decifrado no backend — é o próprio
+  // titular assinando; o texto claro não fica mais no perfil).
   useEffect(() => {
     if (!user) return;
-    supabase.from('perfis').select('cpf').eq('id', user.id).single()
-      .then(({ data }) => { if (data?.cpf) setCpfAssinante(data.cpf); });
+    apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id], full: true }) })
+      .then(r => r.json()).then(d => { const c = d?.cpfs?.[user.id]; if (c) setCpfAssinante(c); }).catch(() => {});
   }, [user]);
 
   const abrir = (c) => {

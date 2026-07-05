@@ -537,11 +537,21 @@ function UsuariosTab() {
   };
 
   const [planosCfg, setPlanosCfg] = useState([]);
+  const [cpfMasc, setCpfMasc] = useState({}); // { userId: '•••.•••.XXX-••' } — vindo do backend
   const loadUsers = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('perfis').select('id, nome, cpf, role, role_anterior, plano, created_at, ativo').order('created_at', { ascending: false });
+    const { data } = await supabase.from('perfis').select('id, nome, role, role_anterior, plano, created_at, ativo').order('created_at', { ascending: false });
     setUsers(data || []);
     setLoading(false);
+    // CPF mascarado vem do backend (o texto claro não trafega mais para o navegador).
+    const ids = (data || []).map(u => u.id);
+    if (ids.length) {
+      try {
+        const r = await apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids }) });
+        const d = await r.json();
+        setCpfMasc(d?.cpfs || {});
+      } catch { /* mostra '—' */ }
+    }
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
@@ -609,7 +619,7 @@ function UsuariosTab() {
   const filtered = users.filter(u => {
     if (!busca) return true;
     const q = busca.toLowerCase();
-    return (u.nome || '').toLowerCase().includes(q) || (u.cpf || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q) || labelRole(u.role).toLowerCase().includes(q);
+    return (u.nome || '').toLowerCase().includes(q) || (cpfMasc[u.id] || '').includes(q) || (u.role || '').toLowerCase().includes(q) || labelRole(u.role).toLowerCase().includes(q);
   });
 
   const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626', leiloeiro: '#ea580c' };
@@ -644,7 +654,7 @@ function UsuariosTab() {
                     return (
                       <tr key={u.id} style={{ opacity: ativo ? 1 : 0.6 }}>
                         <td style={S.td}><strong>{u.nome || '—'}</strong></td>
-                        <td style={S.td}>{u.cpf || '—'}</td>
+                        <td style={S.td}>{cpfMasc[u.id] || '—'}</td>
                         <td style={S.td}>
                           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: (ROLE_COLORS[u.role] || '#64748b') + '20', color: ROLE_COLORS[u.role] || '#64748b' }}>
                             {labelRole(u.role)}
@@ -7254,8 +7264,8 @@ function CentralEquipeTab() {
       setCasos(lista);
       const ids = [...new Set(lista.flatMap(c => [c.cliente_id, c.analista_id, c.advogado_id]).filter(Boolean))];
       if (ids.length) {
-        const { data: ps } = await supabase.from('perfis').select('id,nome,cpf').in('id', ids);
-        const m = {}; (ps || []).forEach(p => { m[p.id] = p.nome || p.cpf || p.id.slice(0, 8); });
+        const { data: ps } = await supabase.from('perfis').select('id,nome').in('id', ids);
+        const m = {}; (ps || []).forEach(p => { m[p.id] = p.nome || p.id.slice(0, 8); });
         setNomes(m);
       }
       setLoading(false);

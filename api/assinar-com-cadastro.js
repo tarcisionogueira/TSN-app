@@ -82,7 +82,8 @@ export default async function handler(req, res) {
   if (!cardTokenId) return res.status(400).json({ error: 'Dados do cartão ausentes.' });
 
   // 1) Cria a conta (já confirmada — o cliente vai pagar em seguida). role explorador.
-  const meta = { nome, cpf, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString() };
+  // CPF NÃO vai para o metadata do Auth (só hash+cifra em perfis, adiante).
+  const meta = { nome, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString() };
   const cRes = await adminAuth('users', { method: 'POST', body: JSON.stringify({ email, password: senha, email_confirm: true, user_metadata: meta }) });
   const cData = await cRes.json().catch(() => ({}));
   if (!cRes.ok) {

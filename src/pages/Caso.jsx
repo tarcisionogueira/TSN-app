@@ -782,19 +782,26 @@ export default function Caso() {
     if (!caso || !arrematacao) return;
     setGerandoProc(true);
     try {
-      // Busca dados do cliente e advogado
-      const { data: perfilCliente } = await supabase.from('perfis').select('nome,cpf,endereco').eq('id', caso.cliente_id).single();
+      // Busca dados do cliente e advogado (CPF vem cheio e decifrado do backend,
+      // pois entra no documento legal — autorizado para o jurídico/titular).
       const advId = caso.advogado_id;
-      const perfilAdv = advId ? (await supabase.from('perfis').select('nome,cpf,endereco').eq('id', advId).single()).data : null;
+      const { data: perfilCliente } = await supabase.from('perfis').select('nome,endereco').eq('id', caso.cliente_id).single();
+      const perfilAdv = advId ? (await supabase.from('perfis').select('nome,endereco').eq('id', advId).single()).data : null;
+      let cpfs = {};
+      try {
+        const idsCpf = [caso.cliente_id, advId].filter(Boolean);
+        const rc = await apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: idsCpf, full: true }) });
+        cpfs = (await rc.json())?.cpfs || {};
+      } catch { /* segue sem CPF se o backend falhar */ }
 
       const dadosOutorgante = {
         nome: perfilCliente?.nome || '',
-        cpf: perfilCliente?.cpf || '',
+        cpf: cpfs[caso.cliente_id] || '',
         endereco: perfilCliente?.endereco || '',
       };
       const dadosOutorgado = perfilAdv ? {
         nome: perfilAdv.nome || '',
-        cpf: perfilAdv.cpf || '',
+        cpf: (advId && cpfs[advId]) || '',
         endereco: perfilAdv.endereco || '',
       } : {};
       const dadosImovel = {

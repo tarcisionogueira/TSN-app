@@ -88,12 +88,15 @@ export default function OnrRegistro() {
       .then(({ data }) => { setRegistros(data || []); setLoadingReg(false); });
   }, [imovelId]);
 
-  // Preenche nome do arrematante com dados do usuário logado
+  // Preenche nome do arrematante com dados do usuário logado. O CPF vem cheio e
+  // decifrado do backend (é o próprio titular; não fica mais em texto claro).
   useEffect(() => {
     if (!user) return;
     const nome = user.user_metadata?.nome || '';
-    const cpf = user.user_metadata?.cpf || '';
-    setForm(p => ({ ...p, nome_arrematante: p.nome_arrematante || nome, cpf_arrematante: p.cpf_arrematante || cpf }));
+    setForm(p => ({ ...p, nome_arrematante: p.nome_arrematante || nome }));
+    apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id], full: true }) })
+      .then(r => r.json()).then(d => { const c = d?.cpfs?.[user.id]; if (c) setForm(p => ({ ...p, cpf_arrematante: p.cpf_arrematante || c })); })
+      .catch(() => {});
   }, [user]);
 
   const setVal = (k, v) => setForm(p => ({ ...p, [k]: v }));

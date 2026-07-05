@@ -51,7 +51,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.' });
   }
 
-  const meta = { nome, cpf, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString() };
+  // CPF NÃO vai para o metadata do Auth (só hash+cifra em perfis, abaixo).
+  const meta = { nome, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString() };
   if (refCodigo) meta.ref_codigo = refCodigo;
   const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
     method: 'POST',

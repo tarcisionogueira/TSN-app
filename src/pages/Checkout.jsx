@@ -131,7 +131,7 @@ export default function Checkout() {
   useEffect(() => {
     if (!user?.id) return;
     supabase.from('perfis')
-      .select('cpf,nome,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
+      .select('nome,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
       .eq('id', user.id).single()
       .then(({ data }) => {
         if (data) {
@@ -139,12 +139,14 @@ export default function Checkout() {
             cep: data.endereco_cep || '', logradouro: data.endereco_logradouro || '', numero: data.endereco_numero || '',
             complemento: data.endereco_complemento || '', bairro: data.endereco_bairro || '', cidade: data.endereco_cidade || '', uf: data.endereco_uf || '',
           });
-          // CPF canônico é perfis.cpf; user_metadata pode estar vazio (OAuth).
-          setCpf(data.cpf || user?.user_metadata?.cpf || '');
           setNomeFat(data.nome || '');
         }
         setEndLoaded(true);
       }, () => setEndLoaded(true)); // erro no perfil não pode travar o checkout
+    // CPF do próprio titular, decifrado no backend, para pré-preencher (o texto
+    // claro não fica mais no perfil/metadata; o valor vem via endpoint seguro).
+    apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id], full: true }) })
+      .then(r => r.json()).then(d => { const c = d?.cpfs?.[user.id]; if (c) setCpf(c); }).catch(() => {});
   }, [user?.id]);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
@@ -382,10 +384,9 @@ export default function Checkout() {
       endereco_numero: end.numero || null, endereco_complemento: end.complemento || null, endereco_bairro: end.bairro || null,
       endereco_cidade: end.cidade || null, endereco_uf: end.uf || null,
     }).eq('id', user.id);
-    // CPF pelo backend (grava também hash + cifra; a chave só existe lá).
+    // CPF pelo backend (grava só hash + cifra; a chave só existe lá). Não
+    // gravamos mais o CPF em texto claro no metadata do Auth.
     if (cpfOk) { try { await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: cpfDigits }) }); } catch { /* best-effort */ } }
-    // Replica o CPF no metadata se ainda não havia (usado por gateways/checkout).
-    if (cpfOk && !user?.user_metadata?.cpf) { try { await supabase.auth.updateUser({ data: { cpf: cpfDigits } }); } catch { /* best-effort */ } }
   };
   // Salva os dados de faturamento e então dispara o fluxo de pagamento original.
   // Visitante não-logado: cria a conta no checkout (cadastro normal, com
