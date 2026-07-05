@@ -111,14 +111,14 @@ export default function Landing() {
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(ellipse at 15% 85%, rgba(13,99,219,0.18) 0%, transparent 55%), radial-gradient(ellipse at 85% 15%, rgba(99,102,241,0.12) 0%, transparent 55%)' }} />
         <div style={{ maxWidth: 820, margin: '0 auto', position: 'relative' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(13,99,219,0.15)', border: '1px solid rgba(13,99,219,0.3)', borderRadius: 24, padding: '6px 18px', fontSize: 11, color: '#93c5fd', fontWeight: 800, marginBottom: 28, textTransform: 'uppercase', letterSpacing: 1.5 }}>
-            <ShieldCheck size={12} /> A camada de confiança dos leilões do Brasil
+            <ShieldCheck size={12} /> Sua vantagem nos leilões de imóveis
           </div>
           <h1 style={{ fontSize: 'clamp(32px, 6vw, 60px)', fontWeight: 900, color: 'white', lineHeight: 1.08, margin: '0 0 22px', letterSpacing: '-1.5px' }}>
             Arremate imóveis com<br />
             <span style={{ background: 'linear-gradient(90deg, #60a5fa 0%, #34d399 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>segurança e inteligência.</span>
           </h1>
           <p style={{ fontSize: 'clamp(15px,2vw,18px)', color: '#94a3b8', maxWidth: 600, margin: '0 auto 40px', lineHeight: 1.75 }}>
-            A <strong style={{ color: '#ffffff', fontWeight: 800 }}>Bid Pro Brasil</strong> lê o edital, <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>mapeia os riscos jurídicos</strong> e calcula a <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>viabilidade financeira</strong> de cada imóvel — e te dá uma resposta clara <span style={{ color: '#34d399', fontWeight: 700 }}>antes do primeiro lance</span>.
+            A <strong style={{ color: '#ffffff', fontWeight: 800 }}>Bid Pro Brasil</strong> lê o edital, <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>mapeia os riscos jurídicos</strong> e calcula a <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>viabilidade financeira</strong> de cada imóvel e te dá uma resposta clara <span style={{ color: '#34d399', fontWeight: 700 }}>antes do primeiro lance</span>.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => nav('/planos')}
