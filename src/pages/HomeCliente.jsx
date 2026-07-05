@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, Calendar, Scale } from 'lucide-react';
+import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, Calendar, Scale, Gavel } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import TriagemPerfil from '../components/TriagemPerfil';
@@ -18,6 +18,12 @@ const PLANO_INFO = {
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
+const STATUS_CASO = {
+  analise_solicitada: 'Em análise', primeira_reuniao: 'Reunião agendada', segunda_reuniao: '2ª reunião',
+  juridico_solicitado: 'No jurídico', juridico_concluido: 'Jurídico concluído', arrematado: '✅ Arrematado',
+  procuracao_assinada: 'Procuração assinada', concluido: 'Concluído',
+};
+
 export default function HomeCliente() {
   const nav = useNavigate();
   const { user, effectiveRole, effectiveUserId } = useAuth();
@@ -26,6 +32,14 @@ export default function HomeCliente() {
 
   const [usadas, setUsadas] = useState(0);
   const [copiado, setCopiado] = useState(false);
+  const [meusCasos, setMeusCasos] = useState([]);
+
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    supabase.from('casos').select('id, imovel_endereco, status_etapa, criado_em')
+      .eq('cliente_id', effectiveUserId).order('criado_em', { ascending: false }).limit(10)
+      .then(({ data }) => setMeusCasos(data || []));
+  }, [effectiveUserId]);
 
   useEffect(() => {
     if (!effectiveUserId || info.limite == null) return;
@@ -85,6 +99,27 @@ export default function HomeCliente() {
             <Acao Icon={TrendingUp} titulo="Fazer upgrade" desc="Investidor Pro: análise documental e jurídica + 15 relatórios/mês." cor="#0D63DB" onClick={() => nav('/planos')} />
           )}
         </div>
+
+        {/* Meus acompanhamentos — casos do cliente (inclui arremates atribuídos pela equipe) */}
+        {meusCasos.length > 0 && (
+          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#111', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Gavel size={16} color="#059669" /> Meus acompanhamentos
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {meusCasos.map(c => (
+                <button key={c.id} onClick={() => nav(`/caso/${c.id}`)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, cursor: 'pointer', textAlign: 'left' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.imovel_endereco || 'Arrematação'}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{STATUS_CASO[c.status_etapa] || c.status_etapa}</div>
+                  </div>
+                  <ArrowRight size={16} color="#cbd5e1" style={{ flexShrink: 0 }} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Aviso de operação de risco */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: '12px 16px' }}>
