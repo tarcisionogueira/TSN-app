@@ -193,6 +193,16 @@ CUSTOS DO EDITAL (importantes p/ a projeção financeira): capture a comissão d
 
 REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver discriminado nos documentos disponíveis, NÃO invente — sinalize como "não consta na documentação analisada" e indique ONDE confirmar (certidão de débitos na Prefeitura; declaração de débitos com a administradora/síndico; matrícula atualizada no Cartório de Registro de Imóveis; cláusulas do edital; SPU para laudêmio/foro).
 
+CLASSIFICAÇÃO DE RISCO — REGRAS ESTRITAS (evite alarmismo; leilão de imóvel tem particularidades legais que o comprador leigo desconhece):
+- AUSÊNCIA DE INFORMAÇÃO NÃO É RISCO BLOQUEANTE. Quando um dado não consta nos documentos, é DILIGÊNCIA PENDENTE — severidade "informativo" (no máximo "alerta"), NUNCA "bloqueante". Falta de documento é "a confirmar", não "operação inviável".
+- ITENS COMUNS E ESPERADOS EM LEILÃO, que a LEI resolve e NÃO impedem a arrematação (classifique "informativo" ou "alerta", sempre com a nota legal — jamais "bloqueante"):
+  • Penhora/execução que originou o leilão: é o que levou o bem à hasta; baixada com a arrematação.
+  • Hipoteca: EXTINGUE-SE com a arrematação (art. 1.499, VI, CC; art. 903 CPC) — o arrematante recebe livre do gravame.
+  • Indisponibilidades/bloqueios da execução (BACENJUD/RENAJUD/CNIB): levantados na expedição da carta de arrematação.
+  • Ocupação (devedor/terceiro): o juízo garante a IMISSÃO DE POSSE ao arrematante no leilão judicial — é questão de PRAZO e CUSTO, não impedimento.
+- "BLOQUEANTE" é reservado a RISCO CONCRETO E COMPROVADO nos documentos que realmente inviabiliza: cláusula real de inalienabilidade, indisponibilidade que NÃO se resolve com a arrematação, ação anulatória do próprio leilão em curso, vício grave no edital, bem de família com impedimento específico. NA DÚVIDA, use "alerta", não "bloqueante".
+- Se NÃO houver documento legível, NÃO produza um laudo marcando tudo como "não consta/bloqueante" — apenas registre que os documentos precisam ser obtidos (nível de risco "amarelo", não "vermelho").
+
 VALORES A LEVANTAR (OBRIGATÓRIO sinalizar como pendência/diligência quando não vierem discriminados em R$ nos documentos):
 - LAUDÊMIO E FORO/PENSÃO: se a matrícula/edital indicar imóvel FOREIRO, AFORADO, terreno de MARINHA ou da UNIÃO/SPU, avise que há laudêmio (≈5%) e foro a pagar e que o VALOR PRECISA SER LEVANTADO na SPU/SPUnet antes do lance.
 - DÉBITOS CONDOMINIAIS: se houver condomínio e o valor do débito não estiver discriminado, avise que o débito condominial precisa ser levantado com a administradora/síndico (pode ser propter rem — acompanha o imóvel).
@@ -329,19 +339,19 @@ export default async function handler(req, res) {
     if (body?.textoEdital) blocos.push({ type: 'text', text: `=== EDITAL (texto informado) ===\n${String(body.textoEdital).slice(0, 12000)}` });
     if (body?.textoMatricula) blocos.push({ type: 'text', text: `=== MATRÍCULA (texto informado) ===\n${String(body.textoMatricula).slice(0, 12000)}` });
 
-    // GATE: sem NENHUM insumo legível (nenhum documento lido, nenhum texto colado
-    // e nenhum nº de processo), NÃO gera um laudo inteiro de "não consta —
-    // confirmar" (inútil e assustador). Pede os documentos. A análise só roda
-    // quando há material para dar assertividade.
+    // GATE: sem documento LEGÍVEL (nenhum lido e nenhum texto colado), NÃO gera um
+    // laudo de "não consta/bloqueante" — falta de leitura NÃO é risco jurídico, é
+    // diligência pendente (o laudo "operação suspensa" era falso e assustador).
+    // Vale MESMO quando há nº de processo: sem a matrícula/edital não há base
+    // documental para um parecer. Pede/obtém os documentos.
     const temTextoColado = !!(body?.textoEdital || body?.textoMatricula);
-    const temProcInput = !!(body?.processoNumero || row?.numero_processo || body?.processoNome);
-    if (lidos.length === 0 && !temTextoColado && !temProcInput) {
+    if (lidos.length === 0 && !temTextoColado) {
       return res.status(200).json({ ok: true, result: {
         precisaDocumentos: true,
         documentosLidos: [],
         motivo: urls.length
-          ? 'Os documentos do lote existem, mas a fonte não liberou a leitura automática agora. Anexe a matrícula e o edital (PDF) para gerar a análise.'
-          : 'Este lote não tem documentos vinculados. Anexe a matrícula e o edital (PDF) para gerar a análise.',
+          ? 'Os documentos deste lote existem, mas a fonte (Caixa) não liberou a leitura automática agora. Vamos tentar de novo em segundo plano; você também pode anexar a matrícula e o edital (PDF) para gerar a análise na hora.'
+          : 'Este lote ainda não tem documentos vinculados. Anexe a matrícula e o edital (PDF) para gerar a análise.',
       } });
     }
 
@@ -386,6 +396,24 @@ export default async function handler(req, res) {
       messages: [{ role: 'user', content }],
     });
     const parsed = parseJSON(extractText(data)) || {};
+
+    // SALVAGUARDA anti-alarmismo (reforça o prompt): ausência de informação e itens
+    // ROTINEIROS de leilão (penhora/execução, hipoteca que se extingue, bloqueios
+    // da execução, ocupação com imissão garantida) NÃO podem sair como "bloqueante".
+    // Rebaixa para "alerta" — o bloqueante fica só para risco concreto e comprovado.
+    if (Array.isArray(parsed.riscos)) {
+      const rotineiro = /penhora|execu[çc]|hipotec|indisponibil|bacenjud|renajud|arresto|ocupa|imiss|bloqueio/i;
+      for (const r of parsed.riscos) {
+        if (!r || r.severidade !== 'bloqueante') continue;
+        const txt = `${r.categoria || ''} ${r.descricao || ''}`;
+        const ausente = r.constaNaDoc === false || /n[ãa]o consta|a confirmar|n[ãa]o (?:foi|puderam|p[ôo]de)/i.test(txt);
+        if (ausente || rotineiro.test(txt)) r.severidade = 'alerta';
+      }
+      // Coerência: sem bloqueante real, não classifica como "vermelho".
+      if (!parsed.riscos.some(r => r?.severidade === 'bloqueante') && parsed.nivelRisco === 'vermelho') {
+        parsed.nivelRisco = 'amarelo';
+      }
+    }
 
     // ── Fontes externas do laudo (best-effort — NUNCA travam o parecer) ─────────
     // Com base no processo e no CPF/CNPJ do executado que a IA extraiu: andamentos
