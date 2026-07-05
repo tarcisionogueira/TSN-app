@@ -163,7 +163,7 @@ export default async function handler(req) {
       caso.imovel_endereco ? `Imóvel: ${caso.imovel_endereco}` : '',
       meetLink ? `Videochamada: ${meetLink}` : '',
       `Caso: ${APP_URL}/#/caso/${caso_id}`,
-      '⚠️ A reunião é gravada e transcrita para fins de auditoria interna (LGPD Art. 7º, I).',
+      '⚠️ A reunião é transcrita (sem gravação de vídeo) para registro e melhoria da análise (LGPD Art. 7º, I).',
     ].filter(Boolean).join('\n');
 
     const ev = await criarEventoAgenda({
@@ -224,7 +224,7 @@ export default async function handler(req) {
             </div>
             ${meetLink ? `<a href="${meetLink}" style="display:inline-block;padding:12px 24px;background:#0D63DB;color:white;border-radius:8px;text-decoration:none;font-weight:700">Acessar videochamada</a>` : ''}
             <p style="margin-top:20px"><a href="${gcalLink || calLink}" style="color:#0D63DB">📅 ${gcalLink ? 'Ver na sua Google Agenda' : 'Adicionar ao Google Agenda'}</a></p>
-            <p style="font-size:12px;color:#94a3b8;margin-top:24px">⚠️ Esta reunião será gravada e transcrita para fins de auditoria interna.</p>
+            <p style="font-size:12px;color:#94a3b8;margin-top:24px">⚠️ Esta reunião é transcrita (sem gravação de vídeo) para registro e melhoria da análise.</p>
           </div>
         `,
       }),

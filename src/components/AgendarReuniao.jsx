@@ -112,7 +112,7 @@ export default function AgendarReuniao({ casoId, analistaId, reuniaoNum, titulo,
         {titulo || 'Escolha um horário'}
       </div>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
-        Sessões de 30 minutos via videochamada (gravada para auditoria).
+        Sessões de 30 minutos via videochamada (transcrita — sem gravação de vídeo — para registro e melhoria da análise).
       </div>
 
       {loading ? (
