@@ -238,15 +238,25 @@ export default async function handler(req, res) {
   const { imovelId, titulo, cidade, estado, imovel } = body;
   if (!imovelId) { res.status(400).json({ error: 'imovelId obrigatório' }); return; }
 
+  // Geração EM NOME DE (admin/analista ao atribuir arremate manual): grava sob o
+  // cliente e não cobra cota (atribuição administrativa gratuita).
+  let ownerId = user.id, onBehalf = false;
+  if (body.paraUserId && body.paraUserId !== user.id) {
+    try {
+      const [p] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
+      if (p && (p.role === 'admin' || p.role === 'analista')) { ownerId = String(body.paraUserId); onBehalf = true; }
+    } catch { /* mantém o próprio */ }
+  }
+
   // ── Cota documental NO SERVIDOR (anti-abuso do custo de IA) ─────────────────
   // Mesmo padrão do mercadológico (gerar-analise): cobra só em análise NOVA deste
   // imóvel; re-gerar/atualizar o mesmo não recobra. Explorador já foi barrado
   // acima; admin é ilimitado na RPC. O limite por plano vem de limite_ia (banco).
   let cota = null; // hoisted p/ permitir estorno no catch se a geração falhar
   try {
-    const jaFeita = await (await sb(`analises_documental?user_id=eq.${user.id}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
+    const jaFeita = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
     const isNovo = !(Array.isArray(jaFeita) && jaFeita.length);
-    if (isNovo) {
+    if (isNovo && !onBehalf) {
       const rc = await sb('rpc/consumir_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null);
       if (cota && cota.ok === false) {
@@ -276,7 +286,7 @@ export default async function handler(req, res) {
     return raw && !isNaN(Date.parse(raw)) ? new Date(raw).toISOString() : null;
   })();
 
-  const base = { user_id: user.id, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, inputs: body.inputs || null, data_leilao: dataLeilao };
+  const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, inputs: body.inputs || null, data_leilao: dataLeilao };
   await upsertDoc({ ...base, status: 'gerando', erro: null, result: null });
 
   const deadline = Date.now() + 250000;

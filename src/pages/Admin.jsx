@@ -632,14 +632,18 @@ function UsuariosTab() {
       if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');
       setUsers(users.map(u => u.id === atribUser.id ? { ...u, role: 'assessorado' } : u));
       const casoId = data.caso_id;
+      const alvoId = atribUser.id;
+      const alvoNome = atribUser.nome || atribUser.cpf;
       const end = atribForm.endereco; const tipo = atribForm.tipo;
       const valorNum = Number(String(atribForm.valor || '').replace(/\./g, '').replace(',', '.')) || 0;
       setAtribUser(null);
       // Amarração do arremate MANUAL: abre a análise deste arremate (chave = caso)
-      // para anexar TODOS os documentos e gerar os relatórios — que ficam de
-      // registro e alimentam a IA. É gratuito (atribuição administrativa).
-      if (casoId && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nAbrir a análise deste arremate para anexar documentos e gerar os relatórios?')) {
-        navSup('/analise', { state: { manual: true, imovel: { id: casoId, endereco: end, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
+      // para anexar TODOS os documentos e gerar os relatórios EM NOME DO cliente
+      // (entra em modo suporte para a tela refletir o status + paraUserId grava sob
+      // o cliente). Gratuito (atribuição administrativa), sem cobrar cota.
+      if (casoId && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nAbrir a análise deste arremate (como o cliente) para anexar documentos e gerar os relatórios?')) {
+        iniciarSuporte({ id: alvoId, nome: alvoNome, role: 'assessorado' });
+        navSup('/analise', { state: { manual: true, paraUserId: alvoId, imovel: { id: casoId, endereco: end, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
       }
     } catch (e) {
       alert('Erro ao atribuir arremate: ' + (e.message || e));

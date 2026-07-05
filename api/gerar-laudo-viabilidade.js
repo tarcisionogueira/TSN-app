@@ -146,10 +146,19 @@ export default async function handler(req, res) {
   const { imovelId, titulo, cidade, estado, imovel } = body;
   if (!imovelId) { res.status(400).json({ error: 'imovelId obrigatório' }); return; }
 
+  // Geração EM NOME DE (admin/analista): lê os relatórios do CLIENTE e grava sob ele.
+  let ownerId = user.id;
+  if (body.paraUserId && body.paraUserId !== user.id) {
+    try {
+      const [p] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
+      if (p && (p.role === 'admin' || p.role === 'analista')) ownerId = String(body.paraUserId);
+    } catch { /* mantém o próprio */ }
+  }
+
   // Lê os dois relatórios já concluídos deste usuário para este imóvel.
   const [mRow, dRow] = await Promise.all([
-    ultimoConcluido('analises_mercado', user.id, imovelId),
-    ultimoConcluido('analises_documental', user.id, imovelId),
+    ultimoConcluido('analises_mercado', ownerId, imovelId),
+    ultimoConcluido('analises_documental', ownerId, imovelId),
   ]);
   const faltando = [];
   if (!mRow?.result) faltando.push('mercadológico');
@@ -171,7 +180,7 @@ export default async function handler(req, res) {
     const raw = imovel?.dataLeilao || mRow?.data_leilao || dRow?.data_leilao || null;
     return raw && !isNaN(Date.parse(raw)) ? new Date(raw).toISOString() : null;
   })();
-  const baseRow = { user_id: user.id, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, data_leilao: dataLeilao };
+  const baseRow = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, data_leilao: dataLeilao };
   await upsertLaudo({ ...baseRow, status: 'gerando', erro: null, result: null });
 
   try {

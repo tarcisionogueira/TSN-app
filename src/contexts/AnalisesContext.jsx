@@ -89,7 +89,7 @@ export function AnalisesProvider({ children }) {
     upsert({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-analise', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null, ...payload }),
+      body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null, paraUserId: meta.paraUserId || undefined, ...payload }),
     }).then(r => r.json()).then(d => {
       if (d?.result) upsert({ imovelId, status: 'concluida', result: d.result, erro: null });
       else if (d?.error) upsert({ imovelId, status: 'erro', erro: d.error });
@@ -105,7 +105,7 @@ export function AnalisesProvider({ children }) {
     upsertDoc({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-documental', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null, ...payload }),
+      body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null, paraUserId: meta.paraUserId || undefined, ...payload }),
     }).then(r => r.json()).then(d => {
       if (d?.result) upsertDoc({ imovelId, status: 'concluida', result: d.result, erro: null });
       else if (d?.error) upsertDoc({ imovelId, status: 'erro', erro: d.error });
@@ -121,7 +121,7 @@ export function AnalisesProvider({ children }) {
     upsertLaudo({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-laudo-viabilidade', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null }),
+      body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null, paraUserId: meta.paraUserId || undefined }),
     }).then(r => r.json()).then(d => {
       if (d?.result) upsertLaudo({ imovelId, status: 'concluida', result: d.result, erro: null });
       else if (d?.error) upsertLaudo({ imovelId, status: 'erro', erro: d.error });

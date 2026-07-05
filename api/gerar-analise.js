@@ -210,10 +210,21 @@ export default async function handler(req, res) {
   const { imovelId, titulo, cidade, estado, imovel, mercadoInputs, parecerInputs } = body;
   if (!imovelId || !mercadoInputs) { res.status(400).json({ error: 'imovelId e mercadoInputs obrigatórios' }); return; }
 
+  // Geração EM NOME DE (admin/analista ao atribuir um arremate manual): grava sob o
+  // CLIENTE (para o relatório pertencer a ele) e não cobra cota — atribuição
+  // administrativa gratuita. Só admin/analista pode; senão ignora e usa o próprio.
+  let ownerId = user.id, onBehalf = false;
+  if (body.paraUserId && body.paraUserId !== user.id) {
+    try {
+      const [p] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
+      if (p && (p.role === 'admin' || p.role === 'analista')) { ownerId = String(body.paraUserId); onBehalf = true; }
+    } catch { /* mantém o próprio */ }
+  }
+
   // Data do leilão (para a regra de limpeza: 15 dias após o leilão sem arrematar).
   const rawData = imovel?.dataLeilao || parecerInputs?.d?.dataLeilao || null;
   const dataLeilao = rawData && !isNaN(Date.parse(rawData)) ? new Date(rawData).toISOString() : null;
-  const base = { user_id: user.id, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs }, data_leilao: dataLeilao };
+  const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs }, data_leilao: dataLeilao };
 
   // ── Cota NO SERVIDOR (anti-abuso do custo de IA) ────────────────────────────
   // A cota é consumida aqui (onde o custo ocorre), não mais só no cliente — que
@@ -222,9 +233,9 @@ export default async function handler(req, res) {
   // (espelha o "isNovo" do cliente). Falha na checagem não trava quem tem direito.
   let cota = null;
   try {
-    const jaConcluida = await (await sb(`analises_mercado?user_id=eq.${user.id}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
+    const jaConcluida = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
     const isNovo = !(Array.isArray(jaConcluida) && jaConcluida.length);
-    if (isNovo) {
+    if (isNovo && !onBehalf) {
       const rc = await sb('rpc/consumir_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null);
       if (cota && cota.ok === false) {
@@ -280,7 +291,7 @@ export default async function handler(req, res) {
         // Perfil-base do investidor (triagem) — direciona o foco do parecer.
         let perfilInvestidor = null;
         try {
-          const [p] = await (await sb(`perfis?id=eq.${user.id}&select=perfil_investidor&limit=1`)).json();
+          const [p] = await (await sb(`perfis?id=eq.${ownerId}&select=perfil_investidor&limit=1`)).json();
           perfilInvestidor = p?.perfil_investidor || null;
         } catch { /* sem perfil → parecer padrão pelo objetivoCompra */ }
         const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor };

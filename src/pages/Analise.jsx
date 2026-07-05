@@ -118,6 +118,9 @@ export default function Analise() {
   const isMobile = useIsMobile();
   const { user, role } = useAuth();
   const imovelInicial = location.state?.imovel;
+  // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
+  // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
+  const paraUserId = location.state?.paraUserId || null;
   // Modo "inclusão manual de lote": cola URL e/ou anexa edital/matrícula; a IA
   // extrai e libera os relatórios. Vira um botão de opção no menu — ao ativar, a
   // inclusão manual sobe pro topo do centro e a geração de relatórios fica abaixo.
@@ -617,7 +620,7 @@ export default function Analise() {
     const parecerInputs = { d: dSnap, metricas, teto, cenario: isAVista ? 'À Vista' : 'Alavancado' };
     showMsg('Geração iniciada no servidor — pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
-      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null },
+      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId },
       { mercadoInputs, parecerInputs }
     );
   };
@@ -675,7 +678,7 @@ export default function Analise() {
     };
     showMsg('Análise documental iniciada no servidor — pode fechar a aba; acompanhe em "Análises" no topo.');
     iniciarDocumental(
-      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null },
+      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId },
       payload
     );
     setRelSel('documental');
@@ -744,7 +747,7 @@ export default function Analise() {
     if (!ambosRelatorios) { showMsg('Gere o Mercadológico e a Documental antes do Laudo de Viabilidade.', 'error'); return; }
     if (gerandoLaudo) return;
     showMsg('Laudo de viabilidade iniciado no servidor — consolida os dois relatórios; pode fechar a aba.');
-    iniciarLaudo({ imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null });
+    iniciarLaudo({ imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId });
     setRelSel('laudo');
   };
 
