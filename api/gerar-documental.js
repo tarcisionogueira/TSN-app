@@ -35,6 +35,76 @@ async function upsertDoc(row) {
   });
 }
 
+// ── Cache de documentos no bucket privado `documentos` ──────────────────────
+// O servidor recebe 403 nos PDFs da Caixa (IP de datacenter) e cai no Bright Data
+// (IP residencial), que tem TETO SEMANAL. Cachear o PDF baixado evita re-baixar
+// nas re-gerações e no laudo de viabilidade — economiza Bright Data. A retenção
+// (5d sem reunião / 30d com reunião / permanente se arrematou) é do cron.
+const BUCKET = 'documentos';
+const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || '');
+function storage(path, opts = {}) {
+  return fetch(`${SUPABASE_URL}/storage/v1/${path}`, {
+    ...opts,
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, ...(opts.headers || {}) },
+  });
+}
+function tipoDoRotulo(rotulo) {
+  const r = String(rotulo || '').toLowerCase();
+  if (r.includes('matríc') || r.includes('matric')) return 'matricula';
+  if (r.includes('edital')) return 'edital';
+  if (r.includes('regras')) return 'regras_venda';
+  return null; // anexos genéricos não entram no cache por tipo
+}
+// Documentos já ARMAZENADOS deste imóvel (manual do analista ou cache anterior).
+async function mapaCache(imovelId) {
+  try {
+    const rows = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&storage_path=not.is.null&select=tipo,storage_path&limit=10`)).json();
+    const m = {};
+    for (const x of (Array.isArray(rows) ? rows : [])) if (x?.tipo && !m[x.tipo]) m[x.tipo] = x;
+    return m;
+  } catch { return {}; }
+}
+async function lerDocDoBucket(storagePath) {
+  try {
+    const sign = await storage(`object/sign/${BUCKET}/${storagePath}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 600 }),
+    });
+    if (!sign.ok) return null;
+    const { signedURL } = await sign.json().catch(() => ({}));
+    if (!signedURL) return null;
+    const r = await fetch(`${SUPABASE_URL}/storage/v1${signedURL}`, { signal: AbortSignal.timeout(12000) });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (!buf.length) return null;
+    return { kind: 'pdf', base64: buf.toString('base64') };
+  } catch { return null; }
+}
+// Salva o PDF baixado no bucket (só se AINDA não houver doc armazenado do tipo —
+// nunca sobrescreve um upload manual do analista). Best-effort: nunca trava o laudo.
+async function salvarDocBucket(imovelId, tipo, rotulo, origemUrl, base64, dataLeilaoIso) {
+  try {
+    const buffer = Buffer.from(base64, 'base64');
+    if (!buffer.length || buffer.length > 20 * 1024 * 1024) return;
+    const storagePath = `casos/${imovelId}/${Date.now()}_${tipo}.pdf`;
+    const up = await storage(`object/${BUCKET}/${storagePath}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/pdf', 'x-upsert': 'true' }, body: buffer,
+    });
+    if (!up.ok) return;
+    let url = '';
+    try {
+      const s = await storage(`object/sign/${BUCKET}/${storagePath}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 3600 }) });
+      if (s.ok) { const { signedURL } = await s.json().catch(() => ({})); if (signedURL) url = `${SUPABASE_URL}/storage/v1${signedURL}`; }
+    } catch { /* url fica '' — os leitores assinam sob demanda pelo storage_path */ }
+    const payload = {
+      imovel_id: imovelId, tipo, nome: `${rotulo}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_'),
+      url, storage_path: storagePath, origem_url: origemUrl || null,
+      data_leilao: dataLeilaoIso ? String(dataLeilaoIso).slice(0, 10) : null,
+      arrematado: false, tamanho_kb: Math.round(buffer.length / 1024),
+    };
+    await sb('imovel_anexos', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(payload) });
+  } catch { /* cache best-effort */ }
+}
+
 function extractText(data) {
   if (!data?.content) return '';
   return data.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
@@ -228,13 +298,30 @@ export default async function handler(req, res) {
       }
     } catch { /* sem anexos manuais → segue com os do lote */ }
 
+    // Cache-first: documentos já armazenados deste imóvel (poupa Bright Data).
+    const podeCache = isUuid(String(imovelId));
+    const cache = podeCache ? await mapaCache(String(imovelId)) : {};
     const blocos = [];
     const lidos = [];
     for (const u of urls) {
       if (blocos.length >= 4 || Date.now() > deadline) break; // limita custo/payload
-      const doc = await lerDoc(u.url, deadline);
+      const tipoDoc = tipoDoRotulo(u.rotulo);
+      let doc = null, deCache = false;
+      // 1) Se já temos o PDF no bucket (manual do analista ou cache anterior), lê de lá.
+      if (podeCache && tipoDoc && cache[tipoDoc]?.storage_path) {
+        doc = await lerDocDoBucket(cache[tipoDoc].storage_path);
+        if (doc) deCache = true;
+      }
+      // 2) Senão, lê da fonte (fetch direto → Bright Data) e GUARDA para a próxima.
+      if (!doc) {
+        doc = await lerDoc(u.url, deadline);
+        if (doc?.kind === 'pdf' && doc.base64 && podeCache && tipoDoc && !cache[tipoDoc] && Date.now() < deadline) {
+          cache[tipoDoc] = { tipo: tipoDoc }; // evita salvar 2× o mesmo tipo neste run
+          await salvarDocBucket(String(imovelId), tipoDoc, u.rotulo, u.url, doc.base64, dataLeilao);
+        }
+      }
       if (!doc) continue;
-      lidos.push({ rotulo: u.rotulo, url: u.url, kind: doc.kind });
+      lidos.push({ rotulo: u.rotulo, url: u.url, kind: doc.kind, cache: deCache });
       if (doc.kind === 'pdf') blocos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 }, title: u.rotulo });
       else blocos.push({ type: 'text', text: `=== ${u.rotulo} (${u.url}) ===\n${doc.text}` });
     }
