@@ -4117,6 +4117,8 @@ function SystemStatusCard() {
   const [loading, setLoading] = React.useState(true);
   const [gcalTest, setGcalTest] = React.useState(null);
   const [gcalTesting, setGcalTesting] = React.useState(false);
+  const [cpfMig, setCpfMig] = React.useState(null);
+  const [cpfMigrando, setCpfMigrando] = React.useState(false);
   React.useEffect(() => {
     apiCall('/api/system-status').then(r => r.json()).then(d => { setStatus(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
@@ -4130,6 +4132,26 @@ function SystemStatusCard() {
       setGcalTest({ ok: false, erro: e.message });
     }
     setGcalTesting(false);
+  };
+  // Backfill da criptografia de CPF: cifra os CPFs antigos (que só têm texto
+  // claro) em lotes. Roda quantas vezes precisar até 'restantes' zerar.
+  const migrarCPF = async () => {
+    setCpfMigrando(true);
+    let migrados = 0, erros = 0, voltas = 0;
+    try {
+      while (voltas < 40) {
+        voltas++;
+        const r = await apiCall('/api/cpf-migrar', { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { setCpfMig({ ok: false, erro: d.error || `Erro ${r.status}` }); setCpfMigrando(false); return; }
+        migrados += d.migrados || 0; erros += d.erros || 0;
+        if ((d.restantes_neste_lote || 0) <= 0) break;
+      }
+      setCpfMig({ ok: true, migrados, erros });
+    } catch (e) {
+      setCpfMig({ ok: false, erro: e.message });
+    }
+    setCpfMigrando(false);
   };
   const GRUPOS = {
     geral:  { label: 'Geral', items: ['baseUrl', 'cron'] },
@@ -4188,6 +4210,27 @@ function SystemStatusCard() {
               ); })}
             </div>
           ))}
+        </div>
+      )}
+      {!loading && (
+        <div style={{ display: 'flex', gap: 10, padding: '10px 12px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe', marginBottom: 16, fontSize: 12, color: '#1e40af' }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>🔐</span>
+          <div style={{ lineHeight: 1.5 }}>
+            <strong>Criptografia de CPF:</strong> cifra os CPFs já cadastrados (que ainda estão em texto claro). Rode uma vez, após ter salvo a variável <code>CPF_ENC_KEY</code> na Vercel e redeployado. Novos cadastros já entram cifrados automaticamente.
+            <div style={{ marginTop: 8 }}>
+              <button onClick={migrarCPF} disabled={cpfMigrando}
+                style={{ padding: '5px 12px', borderRadius: 8, background: 'white', color: '#1e40af', border: '1px solid #bfdbfe', cursor: cpfMigrando ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700 }}>
+                {cpfMigrando ? '⏳ Migrando…' : '🔐 Migrar CPFs antigos'}
+              </button>
+              {cpfMig && (
+                <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 700, color: cpfMig.ok ? '#059669' : '#dc2626' }}>
+                  {cpfMig.ok
+                    ? `✅ Concluído: ${cpfMig.migrados} cifrado(s)${cpfMig.erros ? `, ${cpfMig.erros} erro(s)` : ''}.`
+                    : `❌ Falhou: ${cpfMig.erro || 'erro desconhecido'}`}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
       {!loading && (
