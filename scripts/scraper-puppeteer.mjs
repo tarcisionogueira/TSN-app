@@ -1222,6 +1222,91 @@ async function scraperLeiloesJudiciais(browser) {
   }
 }
 
+// ─── LJUD via NAVEGADOR REAL (page.evaluate) — sem Bright Data ─────────────────
+// A tentativa anterior (Node fetch + cookie) recebia 200 vazio: a API detecta o
+// FINGERPRINT TLS do Node. A correção é fazer o fetch DENTRO da página (page.evaluate)
+// → TLS de Chrome real → a API pública responde (confirmado: sem token). Usamos o
+// endpoint get-lotes, que traz dt_fechamento (a DATA da praça). Isto vira a estratégia
+// PRIMÁRIA (grátis); o Bright Data (api/scraper-leiloeiros.js) fica de BACKUP.
+function parseDataLJUD(s) {
+  if (!s || typeof s !== 'string') return null;
+  const iso = s.trim().replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00');
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const ano = d.getUTCFullYear();
+  if (ano < 2020 || ano > 2035) return null;
+  return iso;
+}
+function mapLoteLJUD_pp(it) {
+  const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').replace(/\s+/g, ' ').trim();
+  const cidade = String(it.nm_cidade || '').trim();
+  const valMin = parseFloat(it.vl_lanceminimo || it.vl_ordenacao || 0) || 0;
+  const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : null;
+  const urlLeiloeiro = String(it.nm_url_leiloeiro || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  return {
+    fonte: 'LJUD', fonte_id: `ljud_${it.lote_id || it.id}`,
+    titulo: (titulo || `Imóvel ${it.lote_id || it.id}`).slice(0, 180),
+    tipo: normalizarTipo(it.nm_subcategoria || it.nm_categoria || titulo),
+    modalidade: /extrajudicial/i.test(it.nm_titulo_leilao || it.nm_tipo_leilao || '') ? 'extrajudicial' : 'judicial',
+    estado: String(it.nm_estado || '').toUpperCase().slice(0, 2), cidade: toTitleCase(cidade),
+    bairro: '', endereco: '', valor_avaliacao: parseFloat(it.vl_avaliacao || 0) || 0, valor_minimo: valMin,
+    area_m2: (() => { const m = (titulo.match(/([\d.,]+)\s*m²/) || [])[1]; return m ? parseBRL(m) : 0; })(),
+    descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500),
+    link_edital: urlLeiloeiro ? `https://${urlLeiloeiro}` : 'https://www.leiloesjudiciais.com.br',
+    link_foto: foto, leiloeiro: String(it.nm_leiloeiro || 'Leilões Judiciais').slice(0, 120),
+    data_leilao: parseDataLJUD(it.dt_fechamento), forma_pagamento: 'a_vista',
+  };
+}
+// Coleta LJUD por um endpoint, fazendo o fetch DENTRO da página (TLS de Chrome).
+async function scraperLJUD_navegador(browser, endpoint) {
+  const page = await browser.newPage();
+  const bens = new Map();
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+    await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
+    await new Promise(r => setTimeout(r, 2000));
+    const base = `https://api.leiloesjudiciais.com.br/core/api/${endpoint}`;
+    const commons = 'tipo=3&categoria=0&estado=0&cidade=0&valor_min=0&valor_max=0&palavra_chave=&leilao_id=0&lote_id=0&ordenacao=null';
+    let totalPages = 100, vistos = 0;
+    for (let pg = 1; pg <= totalPages; pg++) {
+      const url = `${base}?pg=${pg}&qtd_por_pagina=48&${commons}`;
+      // fetch NO CONTEXTO DA PÁGINA → usa o TLS/fingerprint do Chrome real.
+      const data = await page.evaluate(async (u) => {
+        try {
+          const r = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+          if (!r.ok) return { __status: r.status };
+          return await r.json();
+        } catch (e) { return { __err: String((e && e.message) || e) }; }
+      }, url).catch(() => null);
+      const items = (data && (data.items || data.data || (Array.isArray(data) ? data : []))) || [];
+      if (pg === 1) {
+        console.log(`    LJUD/${endpoint} p1: status=${data?.__status ?? 200} total=${data?.totalItems ?? '?'} items=${items.length}`);
+        if (!items.length) break;
+        totalPages = Math.min(160, Number(data.totalPages) || 100);
+      }
+      if (!items.length) break;
+      vistos++;
+      for (const it of items) { const id = String(it.lote_id || it.imovel_id || it.id || ''); if (id && !bens.has(id)) bens.set(id, it); }
+      await new Promise(r => setTimeout(r, 120));
+    }
+    console.log(`    LJUD/${endpoint}: ${bens.size} bens em ${vistos} páginas`);
+  } finally { try { await page.close(); } catch {} }
+  const seen = new Set(); const imoveis = [];
+  for (const it of bens.values()) {
+    const ehImovel = Number(it.id_categoria) === 3 || it.imovel_id != null || /im[óo]ve/i.test(it.nm_categoria || '');
+    if (!ehImovel) continue;
+    if (it.statuslote_id != null && Number(it.statuslote_id) !== 1) continue;
+    const t = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').toLowerCase();
+    if (/simula|teste/.test(t)) continue;
+    const row = mapLoteLJUD_pp(it);
+    if (!row.valor_minimo || seen.has(row.fonte_id)) continue;
+    seen.add(row.fonte_id); imoveis.push(row);
+  }
+  console.log(`    LJUD/${endpoint}: ${imoveis.length} imóveis mapeados (com data: ${imoveis.filter(i => i.data_leilao).length})`);
+  return imoveis;
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -1307,11 +1392,21 @@ async function main() {
     console.log('\n📋 Frazão Leilões...');
     await coletarFonte('FRAZAO', () => scraperFrazao(browser));
 
-    // 7. Leilões Judiciais — PARQUEADO no Puppeteer. Diagnóstico: a API não usa
-    // cookie; entrega dados só ao FINGERPRINT de navegador real (Node fetch é
-    // detectado e recebe 200 vazio). Movido para o scraper Bright Data
-    // (api/scraper-leiloeiros.js → coletarLJUD), que usa fingerprint de navegador.
-    // console.log('\n📋 Leilões Judiciais (portal nacional)...');
+    // 7. Leilões Judiciais — REATIVADO via NAVEGADOR REAL (page.evaluate → TLS de
+    // Chrome). Esteira multi-estratégia: tenta get-lotes (traz a DATA da praça) e,
+    // se o site mudar, cai no get-bens-por-estados. A estratégia que passa é
+    // registrada em fonte_saude (vira a principal). O Bright Data
+    // (api/scraper-leiloeiros.js → coletarLJUD) fica de BACKUP, e é poupado quando
+    // esta coleta mantém o LJUD fresco — controlando o custo.
+    console.log('\n📋 Leilões Judiciais (portal nacional — navegador)...');
+    {
+      const { imoveis, estrategia, validacao } = await coletarComEsteira('LJUD', [
+        { nome: 'navegador-getlotes', fn: () => scraperLJUD_navegador(browser, 'get-lotes') },
+        { nome: 'navegador-getbens',  fn: () => scraperLJUD_navegador(browser, 'get-bens-por-estados') },
+      ]);
+      total += await salvarEFinalizar(imoveis, 'LJUD');
+      await registrarSaude('LJUD', imoveis, estrategia, validacao);
+    }
 
   } finally {
     await browser.close();

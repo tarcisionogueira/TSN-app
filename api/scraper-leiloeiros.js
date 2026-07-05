@@ -359,6 +359,20 @@ function mapLoteLJUD(it) {
 
 async function coletarLJUD(paginas, deadline) {
   const out = []; let via = '-';
+  // BACKUP: a coleta PRIMÁRIA do LJUD é via navegador real (scraper-puppeteer, sem
+  // Bright Data). Se o LJUD já está FRESCO (atualizado há < 30h), poupamos o Bright
+  // Data — só entra quando a coleta grátis não rodou/falhou. Controla o custo.
+  try {
+    const r = await sb('imoveis_leilao?fonte=eq.LJUD&select=atualizado_em&order=atualizado_em.desc&limit=1');
+    if (r.ok) {
+      const [row] = await r.json().catch(() => []);
+      const ts = row?.atualizado_em ? new Date(row.atualizado_em).getTime() : 0;
+      if (ts && (Date.now() - ts) < 30 * 3600 * 1000) {
+        console.log('[LJUD] fresco (<30h) — Bright Data poupado (backup só quando a coleta grátis não rodou).');
+        return { rows: [], via: 'poupado_fresco', diag: { poupado: true, ultima: row.atualizado_em } };
+      }
+    }
+  } catch { /* na dúvida, segue a coleta normal */ }
   // get-lotes = endpoint REAL do portal (payload rico, já com dt_fechamento). tipo=3 =
   // Imóveis (confirmado no recon: id_categoria 3, statuslote 1 = "Aberto para Lance").
   // Mantemos o filtro de imóvel no cliente por segurança.
