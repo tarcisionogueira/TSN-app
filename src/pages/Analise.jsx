@@ -716,35 +716,18 @@ export default function Analise() {
     setRelSel('laudo');
   };
 
-  // ─── Workflow: reunião com analista → encaminhar ao jurídico ────────────────
-  const solicitarReuniao = async () => {
-    if (!ambosRelatorios) return;
-    await solicitarAnalista();
-    setReuniaoSolicitada(true);
-  };
-  const marcarReuniaoRealizada = () => {
-    setReuniaoRealizada(true);
-    showMsg('Reunião marcada como realizada. Encaminhamento ao jurídico liberado.');
-  };
-  const encaminharJuridico = async () => {
-    if (!reuniaoRealizada || juridicoEnviado) return;
-    try {
-      if (user) {
-        await supabase.from('solicitacoes').insert({
-          user_id: user.id,
-          imovel_ref: d.id || null,
-          imovel_nome: d.nome || d.endereco || 'Imóvel',
-          imovel_cidade: d.cidade || '',
-          tipo: 'juridico',
-          status: 'solicitado',
-          notas_analista: 'Encaminhamento ao jurídico após reunião com analista (tela de análise).',
-        });
-      }
-      setJuridicoEnviado(true);
-      showMsg('Encaminhado ao jurídico. A devolutiva chega no Atendimento.');
-    } catch {
-      showMsg('Erro ao encaminhar ao jurídico.', 'error');
-    }
+  // ─── Reunião com analista → ACOMPANHAMENTO (fluxo real no Caso) ─────────────
+  // O agendamento de verdade (escolher analista+horário, o analista dar o parecer
+  // e só então liberar o jurídico) vive na tela do Caso. Aqui apenas levamos o
+  // cliente para lá — o Caso cria/abre o caso deste imóvel e mostra o agendamento.
+  // Isso substitui o antigo stub (flags locais + "marcar realizada" pelo cliente).
+  const irParaAcompanhamento = () => {
+    if (!ambosRelatorios) { showMsg('Gere os dois relatórios antes de agendar.', 'error'); return; }
+    const imv = imovelInicial || {
+      id: d.id, endereco: d.endereco, cidade: d.cidade, estado: d.estado,
+      valorMinimo: d.valorArrematacao, valorAvaliacao: d.valorAvaliacao, modalidade: d.origem,
+    };
+    nav('/caso', { state: { imovel: imv } });
   };
 
   const salvar = async () => {
@@ -999,34 +982,19 @@ export default function Analise() {
             </div>
           </div>
 
-          {/* Workflow: reunião com analista → encaminhar ao jurídico */}
+          {/* Reunião com analista → acompanhamento (fluxo real no Caso: agenda o
+              horário, o analista dá o parecer e só então libera o jurídico). */}
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            <button onClick={solicitarReuniao} disabled={!ambosRelatorios || reuniaoSolicitada}
+            <button onClick={irParaAcompanhamento} disabled={!ambosRelatorios}
               title={!ambosRelatorios ? 'Gere os dois relatórios para liberar' : ''}
-              style={{ width:'100%', padding:'11px', background: !ambosRelatorios ? '#e2e8f0' : reuniaoSolicitada ? '#10b981' : '#0D63DB', color: !ambosRelatorios ? '#94a3b8' : 'white', border:'none', borderRadius:12, fontWeight:700, fontSize:13, cursor: (!ambosRelatorios||reuniaoSolicitada) ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              {reuniaoSolicitada ? <><CheckCircle2 size={15}/> Reunião solicitada</> : <><Calendar size={15}/> Solicitar reunião com analista</>}
+              style={{ width:'100%', padding:'11px', background: !ambosRelatorios ? '#e2e8f0' : '#0D63DB', color: !ambosRelatorios ? '#94a3b8' : 'white', border:'none', borderRadius:12, fontWeight:700, fontSize:13, cursor: !ambosRelatorios ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              <Calendar size={15}/> Agendar reunião com analista
             </button>
-            {!ambosRelatorios && <div style={{ fontSize:10, color:'#94a3b8', textAlign:'center', lineHeight:1.4 }}>Disponível após gerar os dois relatórios.</div>}
-
-            {isStaffAnalise && reuniaoSolicitada && !reuniaoRealizada && (
-              <button onClick={marcarReuniaoRealizada}
-                style={{ width:'100%', padding:'9px', background:'#111111', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:12, cursor:'pointer' }}>
-                ✓ Marcar reunião realizada
-              </button>
-            )}
-
-            <button onClick={encaminharJuridico} disabled={!reuniaoRealizada || juridicoEnviado}
-              title={!reuniaoRealizada ? 'Disponível somente após a reunião com o analista' : ''}
-              style={{ width:'100%', padding:'11px', background: juridicoEnviado ? '#10b981' : !reuniaoRealizada ? '#e2e8f0' : '#7c3aed', color: (!reuniaoRealizada && !juridicoEnviado) ? '#94a3b8' : 'white', border:'none', borderRadius:12, fontWeight:700, fontSize:13, cursor: (!reuniaoRealizada||juridicoEnviado) ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              {juridicoEnviado ? <><CheckCircle2 size={15}/> Encaminhado ao jurídico</> : <><Scale size={15}/> Encaminhar ao jurídico</>}
-            </button>
-            {juridicoEnviado ? (
-              <div style={{ fontSize:10, color:'#0f766e', textAlign:'center', lineHeight:1.4, background:'#f0fdfa', border:'1px solid #99f6e4', borderRadius:8, padding:'6px 8px' }}>
-                📨 Encaminhado. Aguardando a devolutiva do jurídico — prazo de <b>até 7 dias úteis</b>. Você é avisado no Atendimento assim que o parecer chegar.
-              </div>
-            ) : !reuniaoRealizada && (
-              <div style={{ fontSize:10, color:'#94a3b8', textAlign:'center', lineHeight:1.4 }}>Disponível somente após a reunião com o analista.</div>
-            )}
+            <div style={{ fontSize:10, color:'#94a3b8', textAlign:'center', lineHeight:1.4 }}>
+              {!ambosRelatorios
+                ? 'Disponível após gerar os dois relatórios.'
+                : 'Você escolhe o horário; após a reunião o analista dá o parecer e libera o jurídico.'}
+            </div>
           </div>
         </aside>
         )}
@@ -1257,10 +1225,10 @@ export default function Analise() {
                 <div style={{ fontSize:12.5, color:'#4c1d95', lineHeight:1.7, marginBottom:12 }}>
                   Arrematar é uma <strong>operação de risco</strong> e deve ser conduzida profissionalmente. Com os dois relatórios prontos, <strong>agende uma reunião com um analista BidPro</strong> para revisar a operação, tirar dúvidas e decidir com segurança.
                 </div>
-                <button onClick={solicitarReuniao} disabled={!ambosRelatorios || reuniaoSolicitada}
+                <button onClick={irParaAcompanhamento} disabled={!ambosRelatorios}
                   title={!ambosRelatorios ? 'Gere também o relatório Mercadológico para liberar' : ''}
-                  style={{ padding:'11px 18px', background: (!ambosRelatorios||reuniaoSolicitada)?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:(!ambosRelatorios||reuniaoSolicitada)?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
-                  {reuniaoSolicitada ? <><CheckCircle2 size={15}/> Reunião solicitada</> : <><Calendar size={15}/> Agendar reunião com analista</>}
+                  style={{ padding:'11px 18px', background: !ambosRelatorios?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:!ambosRelatorios?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+                  <Calendar size={15}/> Agendar reunião com analista
                 </button>
                 {!ambosRelatorios && <div style={{ fontSize:11, color:'#7c3aed', marginTop:8 }}>Gere também o relatório Mercadológico + Viabilidade para liberar o agendamento.</div>}
               </div>
