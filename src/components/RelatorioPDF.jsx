@@ -234,6 +234,9 @@ ${mercado?`<div class="av">
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
 ${mercado.comentario?`<p style="font-size:10px;color:#475569;margin:0 0 10px;background:#f8fafc;padding:8px;border-radius:4px;">${mercado.comentario}</p>`:''}
+${mercado.zoneamento?`<div style="font-size:10px;color:#334155;margin:0 0 10px;background:#f0f9ff;border:1px solid #dbeafe;padding:8px 10px;border-radius:4px;"><b>Zoneamento (uso do solo):</b> ${mercado.zoneamento.encontrado
+  ? `${mercado.zoneamento.zona||'—'}${mercado.zoneamento.resumoUso?' — '+mercado.zoneamento.resumoUso:''} <span style="color:#64748b">· fonte: ${mercado.zoneamento.fonte||'órgão oficial'}</span>`
+  : `não localizado em fonte oficial. Onde confirmar: ${mercado.zoneamento.ondeObter||'Secretaria de Urbanismo/Planejamento da Prefeitura, pelo endereço ou inscrição imobiliária.'}`}</div>`:''}
 ${mercado.vendas?.length?`<h3>Amostras de Venda (${mercado.totalAmostrasVenda} encontradas)</h3>
 <table><tr><th>Imóvel</th><th class="r">Valor Total</th><th class="r">R$/m²</th><th>Fonte</th></tr>
 ${mercado.vendas.slice(0,8).map(v=>`<tr><td>${v.descricao}</td><td class="r g">R$ ${fmt(v.valor)}</td><td class="r">R$ ${fmt(v.valorM2)}</td><td style="font-size:9px;color:#94a3b8">${v.fonte}</td></tr>`).join('')}</table>`:''}
