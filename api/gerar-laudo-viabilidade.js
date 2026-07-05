@@ -109,7 +109,7 @@ Emita um VEREDITO consolidado, cruzando as duas visões:
 
 REGRAS:
 - Um RISCO BLOQUEANTE no jurídico derruba para "reprovado" ou "condicional" mesmo com bom retorno — explique o porquê.
-- OCUPAÇÃO POR PESSOA VULNERÁVEL (idoso, PcD, criança, vulnerabilidade social) apontada no documental é fator de RESISTÊNCIA/ATRASO na desocupação — trate como CONDIÇÃO (leva a "condicional"), não como bloqueio automático, e liste a verificação lícita (consulta processual/prioridade de tramitação se judicial, visita ao imóvel). Nunca sugira consultar dados de saúde/SUS — é ilegal (LGPD) e não deve constar como diligência.
+- VULNERABILIDADE NA OCUPAÇÃO (idoso, PcD, criança, vulnerabilidade social) é fator de RESISTÊNCIA/ATRASO na desocupação e deve entrar como CONDIÇÃO/diligência em TODO imóvel — o status "ocupado/desocupado" do edital é notoriamente furado (dito desocupado com moradores e vice-versa), então a verificação em campo é sempre necessária, mesmo que o documental não tenha apontado ocupação. Trate como "condicional", nunca bloqueio automático, e liste a verificação lícita (consulta processual/prioridade de tramitação se judicial, visita ao imóvel). Nunca sugira consultar dados de saúde/SUS — é ilegal (LGPD) e não deve constar como diligência.
 - Retorno abaixo de 30% (investimento) sem economia relevante = "reprovado".
 - Seja HONESTO e OBJETIVO. Se reprovado, seja curto e direto no porquê. Não invente dados que não estão nos relatórios; se algo é incerto, trate como condição/diligência.
 - Texto formal, simples, sem markdown/asteriscos.
