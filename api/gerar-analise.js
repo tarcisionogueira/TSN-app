@@ -279,6 +279,24 @@ export default async function handler(req, res) {
 
     const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
+
+    // Realimenta o SCORE do imóvel com o veredito REAL desta análise (valor de
+    // mercado estimado + viabilidade por ROI), para o card não mostrar "boa nota"
+    // num imóvel que a análise reprovou. Best-effort (não bloqueia a resposta).
+    try {
+      const roi = Number(parecerInputs?.metricas?.roi);
+      const viavel = isFinite(roi) ? roi >= 30 : null;
+      if (imovelId && (valorMercado || viavel != null)) {
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            ...(valorMercado ? { valor_mercado: valorMercado } : {}),
+            ...(viavel != null ? { analise_viavel: viavel } : {}),
+            analise_em: new Date().toISOString(),
+          }),
+        });
+      }
+    } catch { /* realimentação do score é best-effort */ }
     res.status(200).json({ ok: true, result, cota });
   } catch (e) {
     await upsertAnalise({ ...base, status: 'erro', erro: String(e?.message || e) });

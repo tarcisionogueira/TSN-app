@@ -59,13 +59,19 @@ function perfilScore(modalidade, tipo) {
   return round1(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
 
-export function scoreBidPro({ desconto, modalidade, tipo, scoreLocalizacao, scoreJuridico, scoreFinanceiro } = {}) {
+export function scoreBidPro({ desconto, modalidade, tipo, scoreLocalizacao, scoreJuridico, scoreFinanceiro, valorMercado, valorMinimo, analiseViavel } = {}) {
   const camadas = [];
 
-  const d = Number(desconto);
-  if (!isNaN(d)) {
-    const c = Math.max(0, Math.min(60, d));
-    camadas.push({ key: 'margem', label: 'Margem', nota: round1(2 + (c / 60) * 8), peso: PESOS.margem });
+  // Margem: quando há análise real (valor de mercado estimado), usa o desconto
+  // REAL vs. mercado — não o desconto vs. AVALIAÇÃO da Caixa, que costuma estar
+  // inflada e dava nota alta a imóvel ruim. Sem análise, cai no desconto vs.
+  // avaliação (preliminar).
+  const vm = Number(valorMercado), vmin = Number(valorMinimo);
+  const usaMercado = vm > 0 && vmin > 0;
+  const descEfetivo = usaMercado ? (1 - vmin / vm) * 100 : Number(desconto);
+  if (!isNaN(descEfetivo)) {
+    const c = Math.max(0, Math.min(60, descEfetivo));
+    camadas.push({ key: 'margem', label: 'Margem', nota: round1(2 + (c / 60) * 8), peso: PESOS.margem, fonte: usaMercado ? 'mercado' : 'avaliacao' });
   }
 
   const loc = from10(scoreLocalizacao); // score_localizacao já é 0–10
@@ -83,14 +89,19 @@ export function scoreBidPro({ desconto, modalidade, tipo, scoreLocalizacao, scor
   if (!camadas.length) return null;
 
   const somaPeso = camadas.reduce((a, c) => a + c.peso, 0);
-  const nota = Math.max(0, Math.min(10, round1(camadas.reduce((a, c) => a + c.nota * c.peso, 0) / somaPeso)));
+  let nota = Math.max(0, Math.min(10, round1(camadas.reduce((a, c) => a + c.nota * c.peso, 0) / somaPeso)));
+  // Veredito da análise: um imóvel REPROVADO na viabilidade financeira não pode
+  // exibir nota alta (o desconto vs. avaliação enganava). Rebaixa e pinta de
+  // vermelho — coerência entre o card e o relatório.
+  if (analiseViavel === false) nota = Math.min(nota, 3.5);
   // "completo" = tem ANÁLISE JURÍDICA real (documental). O financeiro agora é
   // determinístico/backfill para todo o acervo, então não deve, sozinho, marcar
   // a nota como completa.
-  const temAnalise = camadas.some((c) => c.key === 'juridico');
+  const temAnalise = camadas.some((c) => c.key === 'juridico') || analiseViavel != null;
   const base = temAnalise ? 'completo' : 'busca';
+  const margemFonte = camadas.find((c) => c.key === 'margem')?.fonte || 'avaliacao';
   const cor = nota >= 7 ? '#16a34a' : nota >= 4 ? '#d97706' : '#dc2626';
-  return { nota, cor, base, camadas };
+  return { nota, cor, base, camadas, margemFonte, analiseViavel: analiseViavel ?? null };
 }
 
 // Rótulo curto do que a nota representa (para tooltip/legenda).

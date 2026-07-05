@@ -202,7 +202,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const { data } = await aplicarFiltros(
         supabase
           .from('imoveis_leilao')
-          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id, area_m2, link_edital, link_matricula, score_juridico, score_financeiro')
+          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id, area_m2, link_edital, link_matricula, score_juridico, score_financeiro, valor_mercado, analise_viavel')
           .not('latitude', 'is', null)
           .neq('latitude', 0)
           .limit(2000)
@@ -1551,7 +1551,7 @@ export default function Busca() {
               const desc = desconto(im);
               const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#084BA6' };
               const imgSrc = fotoCandidatos(im);
-              const sb = scoreBidPro({ desconto: desc, modalidade: im.modalidade, tipo: im.tipo, scoreLocalizacao: im.scoreLocalizacao, scoreJuridico: im.scoreJuridico, scoreFinanceiro: im.scoreFinanceiro });
+              const sb = scoreBidPro({ desconto: desc, modalidade: im.modalidade, tipo: im.tipo, scoreLocalizacao: im.scoreLocalizacao, scoreJuridico: im.scoreJuridico, scoreFinanceiro: im.scoreFinanceiro, valorMercado: im.valor_mercado, valorMinimo: im.valor_minimo, analiseViavel: im.analise_viavel });
               const sbTitle = sb ? `Score BidPro ${sb.nota.toFixed(1)}/10 · ${scoreLabel(sb.base)}\n` + sb.camadas.map(c => `• ${c.label}: ${c.nota.toFixed(1)} (peso ${c.peso})`).join('\n') : '';
 
               return (

@@ -545,6 +545,8 @@ export default function ImovelDetalhe() {
           scoreFinanceiro: data.score_financeiro ?? null,
           scoreJuridico: data.score_juridico ?? null,
           scoreLocalizacao: data.score_localizacao ?? null,
+          valorMercado: data.valor_mercado ?? null,
+          analiseViavel: data.analise_viavel ?? null,
         });
       })
       .finally(() => setLoading(false));
@@ -1047,7 +1049,7 @@ export default function ImovelDetalhe() {
               )}
               {/* Score BidPro (0–10): potencial de oportunidade num relance */}
               {(() => {
-                const sb = scoreBidPro({ desconto: imovel.descontoPercentual, modalidade: imovel.modalidade, tipo: imovel.tipo, scoreLocalizacao: imovel.scoreLocalizacao, scoreJuridico: imovel.scoreJuridico, scoreFinanceiro: imovel.scoreFinanceiro });
+                const sb = scoreBidPro({ desconto: imovel.descontoPercentual, modalidade: imovel.modalidade, tipo: imovel.tipo, scoreLocalizacao: imovel.scoreLocalizacao, scoreJuridico: imovel.scoreJuridico, scoreFinanceiro: imovel.scoreFinanceiro, valorMercado: imovel.valorMercado, valorMinimo: imovel.valorMinimo, analiseViavel: imovel.analiseViavel });
                 if (!sb) return null;
                 const corCamada = (n) => n >= 7 ? '#16a34a' : n >= 4 ? '#d97706' : '#dc2626';
                 return (

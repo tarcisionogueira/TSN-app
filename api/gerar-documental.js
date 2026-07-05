@@ -242,6 +242,22 @@ export default async function handler(req, res) {
     if (body?.textoEdital) blocos.push({ type: 'text', text: `=== EDITAL (texto informado) ===\n${String(body.textoEdital).slice(0, 12000)}` });
     if (body?.textoMatricula) blocos.push({ type: 'text', text: `=== MATRÍCULA (texto informado) ===\n${String(body.textoMatricula).slice(0, 12000)}` });
 
+    // GATE: sem NENHUM insumo legível (nenhum documento lido, nenhum texto colado
+    // e nenhum nº de processo), NÃO gera um laudo inteiro de "não consta —
+    // confirmar" (inútil e assustador). Pede os documentos. A análise só roda
+    // quando há material para dar assertividade.
+    const temTextoColado = !!(body?.textoEdital || body?.textoMatricula);
+    const temProcInput = !!(body?.processoNumero || row?.numero_processo || body?.processoNome);
+    if (lidos.length === 0 && !temTextoColado && !temProcInput) {
+      return res.status(200).json({ ok: true, result: {
+        precisaDocumentos: true,
+        documentosLidos: [],
+        motivo: urls.length
+          ? 'Os documentos do lote existem, mas a fonte não liberou a leitura automática agora. Anexe a matrícula e o edital (PDF) para gerar a análise.'
+          : 'Este lote não tem documentos vinculados. Anexe a matrícula e o edital (PDF) para gerar a análise.',
+      } });
+    }
+
     // 2) Consulta o CNJ (quando há processo e UF). Modalidade judicial prioriza.
     const procNum = body?.processoNumero || row?.numero_processo || null;
     const procNome = body?.processoNome || null;

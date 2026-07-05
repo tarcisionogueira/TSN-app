@@ -662,6 +662,14 @@ export default function Analise() {
     if (aplicadoDocRef.current === docEntry.updatedAt) return;
     aplicadoDocRef.current = docEntry.updatedAt;
     const r = docEntry.result;
+    // Sem documentos legíveis → não mostra um laudo de "não consta"; pede os
+    // anexos (matrícula/edital). A análise só roda com material real.
+    if (r.precisaDocumentos) {
+      setParecerDocumental(r);
+      setDocMsg(r.motivo || 'Anexe a matrícula e o edital (PDF) para gerar a análise documental.');
+      showMsg('Anexe a matrícula e o edital para gerar a análise.', 'error');
+      return;
+    }
     setParecerDocumental(r);
     // Preenche os riscos do imóvel a partir do que a IA encontrou nos documentos.
     if (Array.isArray(r.riscos) && r.riscos.length) {
@@ -1134,7 +1142,21 @@ export default function Analise() {
           )}
 
           {/* Parecer documental gerado NO SERVIDOR (lê edital/matrícula/anexos + CNJ) */}
-          {relSel === 'documental' && parecerDocumental && (
+          {relSel === 'documental' && parecerDocumental?.precisaDocumentos && (
+            <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:16, padding:'24px', display:'flex', flexDirection:'column', gap:12, alignItems:'flex-start' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <FileText size={20} color="#c2410c"/>
+                <div style={{ fontSize:16, fontWeight:900, color:'#9a3412' }}>Anexe os documentos para gerar a análise</div>
+              </div>
+              <p style={{ fontSize:14, color:'#7c2d12', lineHeight:1.6, margin:0 }}>
+                {parecerDocumental.motivo || 'Para dar assertividade, a análise jurídica é gerada a partir dos documentos. Anexe ao menos a matrícula e o edital (PDF).'}
+              </p>
+              <button onClick={()=>setModoManual(true)} style={{ padding:'11px 18px', background:'#c2410c', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer' }}>
+                📎 Anexar matrícula e edital
+              </button>
+            </div>
+          )}
+          {relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos && (
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'20px 22px', display:'flex', flexDirection:'column', gap:14 }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
                 <Scale size={18} color="#1e3a8a"/>
