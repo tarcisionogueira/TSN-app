@@ -516,6 +516,7 @@ function FichaTecnicaCEF({ ficha }) {
   ].filter(([, v]) => v);
   const refs = [
     ['Matrícula', ficha.matricula],
+    ['Cartório', ficha.cartorio],
     ['Inscrição imobiliária', ficha.inscricao_imobiliaria],
     ['Comarca', ficha.comarca],
     ['Ofício', ficha.oficio],
@@ -543,9 +544,9 @@ function FichaTecnicaCEF({ ficha }) {
   return (
     <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
       <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Building2 size={18} color="#0D63DB" /> Ficha técnica (Caixa)
+        <Building2 size={18} color="#0D63DB" /> Ficha técnica
       </h2>
-      <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '0 0 16px' }}>Dados oficiais da página do imóvel na Caixa.</p>
+      <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '0 0 16px' }}>Dados da página oficial e da matrícula do imóvel.</p>
 
       {aceites.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: (areas.length || refs.length || ficha.ocupacao) ? 16 : 0 }}>
@@ -973,8 +974,9 @@ export default function ImovelDetalhe() {
               )}
             </div>
 
-            {/* Ficha técnica da Caixa — campos extras da página oficial (CEF) */}
-            {(imovel.fonte === 'CEF' || imovel.fonte === 'caixa') && <FichaTecnicaCEF ficha={imovel.fichaCef} />}
+            {/* Ficha técnica — CEF vem da página oficial; demais lotes (judicial/
+                extrajudicial) vêm da matrícula lida no laudo documental. */}
+            <FichaTecnicaCEF ficha={imovel.fichaCef} />
 
             {/* Simulação rápida — estimativa pela avaliação do leilão (NÃO é a mercadológica) */}
             {imovel.valorMinimo > 0 && imovel.valorAvaliacao > 0 && (() => {

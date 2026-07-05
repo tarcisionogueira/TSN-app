@@ -189,6 +189,8 @@ ESCOPO: leitura dos documentos e situação processual. NÃO faça análise de m
 
 Avalie e descreva: ônus reais, gravames, hipotecas, penhoras, arrestos, indisponibilidades, usufruto, alienação fiduciária; ocupação (ocupado/desocupado/posseiro/locado) e quem responde pela desocupação; débitos discriminados (IPTU, condomínio, taxas) e DE QUEM é a responsabilidade após a arrematação (conforme o edital); condições do edital (forma de pagamento, prazos, comissão, AJG); restrições registrárias; e a situação do(s) processo(s).
 
+REGISTRO DO IMÓVEL: extraia do CABEÇALHO da matrícula o CARTÓRIO/SERVENTIA de Registro de Imóveis (com o número do Ofício, ex.: "1º Ofício de Registro de Imóveis"), a COMARCA/município do registro e o número da MATRÍCULA. Esses dados constam no topo de toda matrícula. Preencha "cartorio", "comarca" e "numeroMatricula" em "extracao" quando constarem; se não houver matrícula legível, deixe vazio (não invente).
+
 CUSTOS DO EDITAL (importantes p/ a projeção financeira): capture a comissão do leiloeiro e, SE HOUVER, a TAXA ADMINISTRATIVA do leilão/portal (percentual sobre a arrematação, ALÉM da comissão do leiloeiro — comum na Superbid) em "taxaAdministrativaPercentual", e eventuais DESPESAS ADMINISTRATIVAS de valor fixo em "despesasAdministrativas". Se o edital não mencionar, deixe 0.
 
 REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver discriminado nos documentos disponíveis, NÃO invente — sinalize como "não consta na documentação analisada" e indique ONDE confirmar (certidão de débitos na Prefeitura; declaração de débitos com a administradora/síndico; matrícula atualizada no Cartório de Registro de Imóveis; cláusulas do edital; SPU para laudêmio/foro).
@@ -217,7 +219,7 @@ OCUPAÇÃO POR PESSOA VULNERÁVEL (risco de desocupação — avaliar SEMPRE, em
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "extracao": { "numeroMatricula": "", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/proprietário, se constar)", "executadoDoc": "(CPF ou CNPJ do executado/devedor, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/proprietário, se constar)", "executadoDoc": "(CPF ou CNPJ do executado/devedor, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "nivelRisco": "verde|amarelo|vermelho",
@@ -278,7 +280,7 @@ export default async function handler(req, res) {
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
   try {
-    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,link_edital,link_matricula,link_regras_venda,anexos,numero_processo&limit=1`)).json();
+    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao&limit=1`)).json();
     row = r || null;
   } catch { /* segue com o que veio no body */ }
 
@@ -520,6 +522,26 @@ export default async function handler(req, res) {
         method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ score_juridico: scoreJuridico, score_calculado_em: new Date().toISOString() }),
       });
+    } catch { /* não bloqueia o laudo */ }
+
+    // Ficha do imóvel (cartório/ofício, comarca, matrícula, ocupação) lida da
+    // matrícula/edital pela IA — disponibiliza na TELA DO IMÓVEL para todo lote
+    // judicial/extrajudicial, sem custo extra (mesma leitura do laudo). Faz MERGE
+    // com a ficha existente (ex.: a que o cron da Caixa capturou) e nunca apaga.
+    try {
+      const ex = parsed.extracao || {};
+      const extra = {};
+      const setStr = (k, v) => { const s = String(v || '').trim(); if (s && !/^(n[ãa]o consta|n\/a|-|vazio)$/i.test(s)) extra[k] = s; };
+      setStr('cartorio', ex.cartorio);
+      setStr('comarca', ex.comarca);
+      setStr('matricula', ex.numeroMatricula);
+      if (ex.ocupacao) setStr('ocupacao', ex.ocupacao);
+      if (Object.keys(extra).length) {
+        const fichaMerged = { ...(row?.ficha_cef && typeof row.ficha_cef === 'object' ? row.ficha_cef : {}), ...extra };
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ficha_cef: fichaMerged }),
+        });
+      }
     } catch { /* não bloqueia o laudo */ }
 
     // Data do leilão/prazo de propostas: a lista em massa da Caixa vem SEM data para
