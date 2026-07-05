@@ -48,7 +48,8 @@ export default async function handler(req, res) {
   const up = await sb(`perfis?id=eq.${encodeURIComponent(user.id)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ cpf, cpf_hash, cpf_enc }),
+    // Só hash + cifra; zera qualquer texto claro remanescente na coluna.
+    body: JSON.stringify({ cpf: null, cpf_hash, cpf_enc }),
   });
   if (!up.ok) {
     const txt = await up.text().catch(() => '');

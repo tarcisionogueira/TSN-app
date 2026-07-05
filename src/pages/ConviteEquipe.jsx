@@ -400,7 +400,6 @@ export default function ConviteEquipe() {
         options: {
           data: {
             nome: form.nome.trim(),
-            cpf: form.cpf,
             telefone: form.telefone,
             role: roleKey,
             lgpd_aceito: true,
@@ -417,6 +416,11 @@ export default function ConviteEquipe() {
           p_token: token.toUpperCase(),
           p_user_id: signUpData.user.id,
         });
+        // CPF gravado só como hash + cifra (nunca em texto claro). Se já houver
+        // sessão (conta auto-confirmada), persiste agora; senão, no 1º acesso.
+        if (signUpData?.session && form.cpf) {
+          try { await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: form.cpf.replace(/\D/g, '') }) }); } catch { /* melhor esforço */ }
+        }
       }
 
       // Salvar fotos KYC via função SECURITY DEFINER (RLS não permite UPDATE direto)

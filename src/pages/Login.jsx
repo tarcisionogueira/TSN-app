@@ -256,7 +256,7 @@ export default function Login() {
         options: {
           emailRedirectTo: `${window.location.origin}/`,
           data: {
-            nome: form.nome, cpf: form.cpf.replace(/\D/g, ''), telefone: form.telefone.replace(/\D/g, ''), endereco: form.endereco, role: 'explorador',
+            nome: form.nome, telefone: form.telefone.replace(/\D/g, ''), endereco: form.endereco, role: 'explorador',
             lgpd_aceito: true, lgpd_data: new Date().toISOString(),
             ref_codigo: refCodigo || undefined,
           },

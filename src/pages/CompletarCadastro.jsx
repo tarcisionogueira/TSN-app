@@ -62,7 +62,7 @@ export default function CompletarCadastro() {
       const rc = await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: form.cpf.replace(/\D/g, '') }) });
       if (!rc.ok) throw new Error('Falha ao salvar o CPF.');
       // Replica no metadata do Auth (best-effort)
-      supabase.auth.updateUser({ data: { cpf: form.cpf.replace(/\D/g, ''), telefone: form.telefone.replace(/\D/g, ''), lgpd_aceito: true } }).catch(() => {});
+      supabase.auth.updateUser({ data: { telefone: form.telefone.replace(/\D/g, ''), lgpd_aceito: true } }).catch(() => {});
       if (setCadastroIncompleto) setCadastroIncompleto(false);
       // Continua para o destino que o usuário tentava acessar (ou home)
       const dest = sessionStorage.getItem('tsn_oauth_redirect');

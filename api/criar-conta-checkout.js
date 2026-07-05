@@ -75,7 +75,7 @@ export default async function handler(req, res) {
       await sb('perfis?on_conflict=id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ id: userId, nome, cpf: cpf || null, cpf_hash, cpf_enc, role: 'explorador', lgpd_aceito: true, lgpd_data: meta.lgpd_data }),
+        body: JSON.stringify({ id: userId, nome, cpf_hash, cpf_enc, role: 'explorador', lgpd_aceito: true, lgpd_data: meta.lgpd_data }),
       });
     } catch { /* best-effort; app tolera ausência de perfil */ }
   }
