@@ -113,10 +113,16 @@ async function novaPagina(browser) {
   await page.setUserAgent(UA);
   try {
     await page.setRequestInterception(true);
+    // A data/edital vêm SERVER-SIDE no HTML (confirmado: sem XHR). Então cortamos
+    // TUDO que não é o documento: imagens/mídia/fontes/css e os scripts de
+    // analytics/ads de terceiros (GA, GTM, DoubleClick, Clarity...). Página mínima
+    // = muito mais rápida por imóvel = MAIS imóveis por run antes do bloqueio de IP.
+    const BLOCK_HOST = /google-analytics|googletagmanager|doubleclick|googlesyndication|googleadservices|google\.com\/(ads|pagead)|clarity\.ms|facebook\.|connect\.facebook|hotjar|\/collect\b/i;
     page.on('request', req => {
       const t = req.resourceType();
-      if (t === 'image' || t === 'media' || t === 'font' || t === 'stylesheet') req.abort();
-      else req.continue();
+      if (t === 'image' || t === 'media' || t === 'font' || t === 'stylesheet') return req.abort();
+      if ((t === 'script' || t === 'xhr' || t === 'fetch' || t === 'other') && BLOCK_HOST.test(req.url())) return req.abort();
+      req.continue();
     });
   } catch { /* segue sem interceptar */ }
   return page;
@@ -163,7 +169,9 @@ async function main() {
     for (let tent = 0; tent < 2; tent++) {
       let txt = '';
       try {
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+        // 'domcontentloaded' (não 'networkidle2'): a data já está no HTML inicial
+        // renderizado pelo servidor — não esperamos analytics/ads terminarem.
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
         txt = await page.evaluate(() => document.body?.innerText || '');
       } catch { txt = ''; }
       if (!paginaComErro(txt)) return { txt, erro: false };
