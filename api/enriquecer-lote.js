@@ -14,6 +14,8 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { vasculharDocumentos } from './_doc-scan.js';
+import { extrairRegistroMatricula } from './_registro-matricula.js';
+import { PDFParse } from 'pdf-parse';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -64,6 +66,24 @@ export function extrairDataLeilao(html) {
   return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
 }
 
+// Lê cartório/ofício/comarca do CABEÇALHO da matrícula (PDF de texto). GRÁTIS:
+// download DIRETO apenas (nunca Bright Data — matrícula bloqueada por 403 fica
+// para o laudo documental, que já usa o proxy pago sob demanda). Devolve os
+// campos extraídos ou null. Só tenta quando a URL é um .pdf.
+async function lerCartorioMatricula(url) {
+  if (!url || !/^https?:\/\//.test(url) || !/\.pdf(\?|#|$)/i.test(url)) return null;
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' }, redirect: 'follow', signal: AbortSignal.timeout(9000) });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > 12_000_000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') return null;
+    const parser = new PDFParse({ data: buf });
+    const res = await parser.getText();
+    await parser.destroy();
+    return extrairRegistroMatricula(res?.text || '');
+  } catch { return null; }
+}
+
 export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
@@ -74,7 +94,7 @@ export default async function handler(req, res) {
   const forcar = params.get('forcar') === '1';
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em&limit=1`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em&limit=1`)).json();
   if (!im) { res.status(404).json({ error: 'Imóvel não encontrado' }); return; }
 
   // CEF: os LINKS de documento são determinísticos (não precisa vasculhar), MAS a
@@ -94,6 +114,19 @@ export default async function handler(req, res) {
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
     res.status(200).json({ ok: !!data, pulado: 'cef', alterado: !!data, data_leilao: data || null }); return;
   }
+  // Ficha (cartório/ofício/comarca) a partir da matrícula em PDF — GRÁTIS e só
+  // uma vez por imóvel (marca matricula_scan_em, igual ao cron). Roda mesmo que o
+  // resto já esteja completo, desde que falte o cartório e já exista o link.
+  const temCartorio = !!(im.ficha_cef && typeof im.ficha_cef === 'object' && im.ficha_cef.cartorio);
+  if (!im.matricula_scan_em && !temCartorio && /\.pdf(\?|#|$)/i.test(im.link_matricula || '')) {
+    const reg = await lerCartorioMatricula(im.link_matricula);
+    const p = { matricula_scan_em: new Date().toISOString() };
+    if (reg) p.ficha_cef = { ...(im.ficha_cef && typeof im.ficha_cef === 'object' ? im.ficha_cef : {}), ...reg };
+    await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(p) }).catch(() => {});
+    im.matricula_scan_em = p.matricula_scan_em;
+    if (p.ficha_cef) im.ficha_cef = p.ficha_cef;
+  }
+
   // Revisita se o imóvel AINDA não tem documentos. Antes, uma tentativa que falhava
   // (fonte bloqueava o fetch) marcava enriquecido_em e o imóvel ficava travado SEM
   // matrícula/edital/regras PARA SEMPRE. Agora: só pula de vez quando já achou algo;
@@ -131,6 +164,14 @@ export default async function handler(req, res) {
   // Data do leilão do leiloeiro (mesma extração da CEF): só quando falta e não é venda direta.
   const dataLeilao = precisaData ? extrairDataLeilao(html) : null;
   if (dataLeilao) patch.data_leilao = dataLeilao;
+
+  // Matrícula recém-descoberta (PDF) e ainda sem cartório → lê o cabeçalho grátis.
+  const matriculaUrlFinal = patch.link_matricula || im.link_matricula;
+  if (!im.matricula_scan_em && !temCartorio && /\.pdf(\?|#|$)/i.test(matriculaUrlFinal || '')) {
+    const reg = await lerCartorioMatricula(matriculaUrlFinal);
+    patch.matricula_scan_em = new Date().toISOString();
+    if (reg) patch.ficha_cef = { ...(im.ficha_cef && typeof im.ficha_cef === 'object' ? im.ficha_cef : {}), ...reg };
+  }
 
   const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
 

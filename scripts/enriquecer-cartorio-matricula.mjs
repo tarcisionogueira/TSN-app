@@ -13,6 +13,7 @@
  */
 import { PDFParse } from 'pdf-parse';
 import { createClient } from '@supabase/supabase-js';
+import { extrairRegistroMatricula } from '../api/_registro-matricula.js';
 
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -24,36 +25,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 if (!SB || !KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const supabase = createClient(SB, KEY);
-
-const limpar = (s) => String(s || '').replace(/\s+/g, ' ').trim().replace(/[.,;\-\s]+$/, '');
-
-// Lê o CABEÇALHO da matrícula e extrai cartório/ofício/comarca/nº. Heurístico e
-// tolerante — devolve só o que casar. Toda matrícula traz esses dados no topo.
-function extrairRegistro(txt) {
-  if (!txt) return null;
-  const t = String(txt).replace(/\s+/g, ' ').slice(0, 6000);
-  const f = {};
-  // Cartório / Serventia de Registro de Imóveis (com ofício/circunscrição).
-  let m = t.match(/(\d+[ºªo°]?\s*(?:of[íi]cio|circunscri[çc][ãa]o|servi[çc]o registral|cart[óo]rio)[^.\n;]{0,70}?registr(?:o|al) de im[óo]veis[^.\n;]{0,40})/i)
-       || t.match(/((?:oficial|of[íi]cio|cart[óo]rio|serventia|servi[çc]o)[^.\n;]{0,25}registr(?:o|al) de im[óo]veis[^.\n;]{0,50})/i)
-       || t.match(/(registr(?:o|al) de im[óo]veis[^.\n;]{0,55})/i);
-  if (m) {
-    // Corta o que vier depois do cabeçalho do cartório (nº da matrícula, livro…).
-    const c = limpar(m[1]).split(/\bmatr[íi]cula\b|\blivro\b|\bficha\b|\bregistro geral\b|\bn[º°]\s*\d/i)[0];
-    f.cartorio = limpar(c).slice(0, 90);
-  }
-  // Comarca / município do registro.
-  m = t.match(/comarca\s+de\s+([A-Za-zÀ-ú][A-Za-zÀ-ú'’.\- ]{2,45}?)(?=\s*[-–,\/;]|\s+estado|\s+e\s+o?\s|\.|$)/i)
-   || t.match(/munic[íi]pio\s+de\s+([A-Za-zÀ-ú][A-Za-zÀ-ú'’.\- ]{2,45}?)(?=\s*[-–,\/;]|\s+estado|\.|$)/i);
-  if (m) f.comarca = limpar(m[1]);
-  // Número do ofício.
-  m = t.match(/(\d+)\s*[ºªo°]\s*of[íi]cio/i);
-  if (m) f.oficio = `${m[1]}º Ofício`;
-  // Número da matrícula.
-  m = t.match(/matr[íi]cula[\s:º°n.\-]*([\d.]{2,12}\d|\d{2,8})/i);
-  if (m) { const num = m[1].replace(/\.+$/, ''); if (/\d/.test(num)) f.matricula = num; }
-  return Object.keys(f).length ? f : null;
-}
 
 // Paginação (Supabase limita ~1000/resposta) até LIMITE candidatos.
 async function buscarCandidatos() {
@@ -120,7 +91,7 @@ async function main() {
         await parser.destroy();
       } catch { texto = ''; }
       const patch = { matricula_scan_em: new Date().toISOString() };
-      const reg = texto ? extrairRegistro(texto) : null;
+      const reg = texto ? extrairRegistroMatricula(texto) : null;
       if (reg) {
         patch.ficha_cef = { ...(im.ficha_cef && typeof im.ficha_cef === 'object' ? im.ficha_cef : {}), ...reg };
         ok++;
