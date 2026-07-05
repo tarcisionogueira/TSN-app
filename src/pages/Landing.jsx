@@ -111,7 +111,7 @@ export default function Landing() {
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(ellipse at 15% 85%, rgba(13,99,219,0.18) 0%, transparent 55%), radial-gradient(ellipse at 85% 15%, rgba(99,102,241,0.12) 0%, transparent 55%)' }} />
         <div style={{ maxWidth: 820, margin: '0 auto', position: 'relative' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(13,99,219,0.15)', border: '1px solid rgba(13,99,219,0.3)', borderRadius: 24, padding: '6px 18px', fontSize: 11, color: '#93c5fd', fontWeight: 800, marginBottom: 28, textTransform: 'uppercase', letterSpacing: 1.5 }}>
-            <ShieldCheck size={12} /> Saiba o lucro antes de arrematar
+            <ShieldCheck size={12} /> Lucre antes de arrematar
           </div>
           <h1 style={{ fontSize: 'clamp(32px, 6vw, 60px)', fontWeight: 900, color: 'white', lineHeight: 1.08, margin: '0 0 22px', letterSpacing: '-1.5px' }}>
             Arremate imóveis com<br />
