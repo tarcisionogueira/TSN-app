@@ -536,6 +536,7 @@ function UsuariosTab() {
     navSup('/'); // entra na Home por plano do cliente (não mais no Portfólio antigo)
   };
 
+  const [planosCfg, setPlanosCfg] = useState([]);
   const loadUsers = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('perfis').select('id, nome, cpf, role, role_anterior, plano, created_at, ativo').order('created_at', { ascending: false });
@@ -544,6 +545,22 @@ function UsuariosTab() {
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+  useEffect(() => { supabase.from('planos_config').select('plano_key, nome, preco').then(({ data }) => setPlanosCfg(data || [])); }, []);
+
+  // Rótulos de equipe/parceiro que não são "plano de cliente".
+  const ROLE_EXTRA = { admin: 'Administrador', leiloeiro: 'Leiloeiro' };
+  const STAFF = ['admin', 'consultor', 'analista', 'advogado', 'leiloeiro'];
+  // Nome amigável do role (nunca mostra a chave interna crua tipo "top2").
+  const labelRole = (role) => (planosCfg.find(p => p.plano_key === role)?.nome) || ROLE_EXTRA[role] || role || 'Explorador';
+  // Plano do cliente DERIVADO do role (a coluna perfis.plano está obsoleta —
+  // vale sempre 'gratuito'). Assim um plano pago nunca aparece como gratuito.
+  const planoInfo = (role) => {
+    if (STAFF.includes(role)) return { txt: 'Equipe', pago: false, neutro: true };
+    const cfg = planosCfg.find(p => p.plano_key === role);
+    const pago = Number(cfg?.preco || 0) > 0;
+    if (role === 'explorador' || !role) return { txt: 'Gratuito', pago: false };
+    return { txt: cfg?.nome || role, pago };
+  };
 
   async function saveRole(id) {
     await supabase.from('perfis').update({ role: newRole }).eq('id', id);
@@ -592,7 +609,7 @@ function UsuariosTab() {
   const filtered = users.filter(u => {
     if (!busca) return true;
     const q = busca.toLowerCase();
-    return (u.nome || '').toLowerCase().includes(q) || (u.cpf || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
+    return (u.nome || '').toLowerCase().includes(q) || (u.cpf || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q) || labelRole(u.role).toLowerCase().includes(q);
   });
 
   const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626', leiloeiro: '#ea580c' };
@@ -630,10 +647,17 @@ function UsuariosTab() {
                         <td style={S.td}>{u.cpf || '—'}</td>
                         <td style={S.td}>
                           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: (ROLE_COLORS[u.role] || '#64748b') + '20', color: ROLE_COLORS[u.role] || '#64748b' }}>
-                            {u.role || 'explorador'}
+                            {labelRole(u.role)}
                           </span>
                         </td>
-                        <td style={S.td}>{u.plano || '—'}</td>
+                        <td style={S.td}>
+                          {(() => { const pi = planoInfo(u.role); return (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: pi.neutro ? '#94a3b8' : '#111111', fontWeight: pi.pago ? 700 : 400 }}>{pi.txt}</span>
+                              {pi.pago && <span style={{ fontSize: 10, fontWeight: 800, color: '#059669', background: '#d1fae5', borderRadius: 6, padding: '1px 6px' }}>PAGO</span>}
+                            </span>
+                          ); })()}
+                        </td>
                         <td style={S.td}>{u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—'}</td>
                         <td style={S.td}>
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: ativo ? '#d1fae5' : '#fee2e2', color: ativo ? '#059669' : '#dc2626' }}>
