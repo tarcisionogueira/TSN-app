@@ -1,0 +1,44 @@
+name: Enriquecer Cartório/Ofício (matrícula PDF)
+
+# Backfill grátis de cartório/ofício/comarca lendo o TEXTO da matrícula (PDF).
+# Sem IA e sem OCR — roda no runner do GitHub. Complementa a ficha do imóvel
+# para lotes judiciais e extrajudiciais (não-CEF). Matrículas escaneadas ficam
+# para o laudo documental (IA, sob demanda). Processa um lote por execução.
+on:
+  schedule:
+    # 1x/dia (madrugada BRT). O acervo é coberto ao longo dos dias.
+    - cron: '20 6 * * *'
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Máx. de matrículas por execução'
+        required: false
+        default: '3000'
+
+# Sem sobreposição de execuções (evita trabalho duplicado).
+concurrency:
+  group: enriquecer-cartorio-matricula
+  cancel-in-progress: false
+
+jobs:
+  enriquecer-cartorio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Enriquecer cartório/ofício (matrícula)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MATRICULA_LIMITE: ${{ github.event.inputs.limite || '3000' }}
+        run: node scripts/enriquecer-cartorio-matricula.mjs
