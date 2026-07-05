@@ -2,7 +2,7 @@
  * GET /api/limpar-documentos-cron
  * Cron diário: apaga do bucket os documentos (edital/matrícula/anexos) elegíveis
  * pela RETENÇÃO EM CAMADAS (RPC anexos_expirados):
- *   • SEM reunião com analista → apaga 5 dias após a criação (curioso gera de novo).
+ *   • SEM reunião com analista → apaga no dia seguinte ao leilão (curioso gera de novo).
  *   • COM reunião realizada    → mantém 30 dias após o leilão (janela p/ arremate).
  *   • arrematado = true        → nunca apaga (permanente).
  *
