@@ -136,7 +136,11 @@ async function buscarCandidatos() {
   while (out.length < LIMITE) {
     const { data, error } = await supabase.from('imoveis_leilao')
       .select('id, link_edital, url_lote')
-      .eq('fonte', 'CEF').eq('ativo', true).is('data_leilao', null)
+      .eq('fonte', 'CEF').eq('ativo', true)
+      // Precisa de enriquecimento se falta a DATA ou o EDITAL REAL (PDF em /editais/).
+      // Antes só pegava sem-data; agora os com-data-sem-edital também entram — uma
+      // única visita à página captura os DOIS (data + edital), sem custo extra.
+      .or('data_leilao.is.null,link_edital.is.null,link_edital.not.ilike.*/editais/*')
       .not('modalidade', 'ilike', '%venda%direta%')
       .not('url_lote', 'is', null)
       .order('enriquecido_em', { ascending: true, nullsFirst: true })
@@ -201,9 +205,15 @@ async function main() {
         // sobrescreve um valor bom com null. Não interfere na data nem no disjuntor.
         try {
           const ed = await page.evaluate(extrairLinkEdital);
-          if (ed?.url && !im.link_edital) {
+          // Grava o EDITAL REAL (PDF em /editais/EL....PDF, achado no onclick do botão
+          // "Baixar edital e anexos") sobrescrevendo o placeholder (a página de
+          // detalhe). Antes a condição era `!im.link_edital` — e como o CEF já vem
+          // com link_edital = página de detalhe, NUNCA gravava o PDF (0/32k). Agora
+          // sobrescreve quando o atual não é um edital real.
+          const jaTemEditalReal = /\/editais\//i.test(im.link_edital || '');
+          if (ed?.url && !jaTemEditalReal) {
             patch.link_edital = ed.url;
-          } else if (!ed?.url && amostrasEdital < 5) {
+          } else if (!ed?.url && !jaTemEditalReal && amostrasEdital < 5) {
             amostrasEdital++;
             const amostra = (ed?.amostra || '(nenhum controle "edital" no DOM)').replace(/\s+/g, ' ').slice(0, 200);
             console.log(`  [edital ${amostrasEdital}] sem URL confiável · controle: ${amostra}`);
