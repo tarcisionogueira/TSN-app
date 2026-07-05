@@ -1,13 +1,17 @@
 name: Enriquecer Cartório/Ofício (matrícula PDF)
 
 # Backfill grátis de cartório/ofício/comarca lendo o TEXTO da matrícula (PDF).
-# Sem IA e sem OCR — roda no runner do GitHub. Complementa a ficha do imóvel
-# para lotes judiciais e extrajudiciais (não-CEF). Matrículas escaneadas ficam
-# para o laudo documental (IA, sob demanda). Processa um lote por execução.
+# Sem IA e sem OCR — roda no runner do GitHub. Rede OPORTUNISTA: a maioria dos
+# lotes não-CEF NÃO pré-armazena o PDF da matrícula (documentos são buscados sob
+# demanda), e alguns leiloeiros (ex.: Superbid) bloqueiam download direto (403,
+# só IP residencial). Então este cron captura apenas os casos com matrícula em
+# PDF de texto e download livre. A cobertura principal do cartório para não-CEF
+# vem do LAUDO DOCUMENTAL (que lê a matrícula sob demanda). Semanal para não
+# gerar execução diária à toa.
 on:
   schedule:
-    # 1x/dia (madrugada BRT). O acervo é coberto ao longo dos dias.
-    - cron: '20 6 * * *'
+    # Semanal (domingo, madrugada BRT).
+    - cron: '20 6 * * 0'
   workflow_dispatch:
     inputs:
       limite:
