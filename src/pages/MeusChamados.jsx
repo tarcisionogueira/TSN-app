@@ -172,7 +172,7 @@ export default function MeusChamados() {
             <div ref={msgEndRef} />
           </div>
 
-          {/* Input — só para chamados abertos */}
+          {/* Input, só para chamados abertos */}
           {chamadoAtivo.status !== 'finalizado' ? (
             <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9' }}>
               {anexos.length > 0 && (
@@ -210,7 +210,7 @@ export default function MeusChamados() {
           ) : (
             <div style={{ padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', fontSize: 13, color: '#64748b', textAlign: 'center' }}>
               <CheckCircle2 size={14} style={{ verticalAlign: 'middle', marginRight: 6, color: '#10b981' }} />
-              Chamado finalizado — abra um novo chamado se precisar de mais ajuda
+              Chamado finalizado, abra um novo chamado se precisar de mais ajuda
             </div>
           )}
         </div>

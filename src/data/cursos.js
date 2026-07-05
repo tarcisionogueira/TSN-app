@@ -4,7 +4,7 @@ export const CURSOS = [
   {
     id: 'onboarding',
     titulo: 'Destravando Leilões',
-    subtitulo: 'Seu ponto de partida — do zero ao primeiro lance',
+    subtitulo: 'Seu ponto de partida, do zero ao primeiro lance',
     tagline: 'Gratuito para sempre',
     descricao: 'Entenda como funciona o universo dos leilões imobiliários, conheça a metodologia BidPro Brasil e descubra como a plataforma vai te ajudar a encontrar, analisar e arrematar imóveis com segurança e rentabilidade.',
     emoji: '🚀',
@@ -19,17 +19,17 @@ export const CURSOS = [
     destaque: false,
     modulos: [
       {
-        titulo: 'Módulo 1 — Sua Jornada Começa Aqui',
+        titulo: 'Módulo 1, Sua Jornada Começa Aqui',
         licoes: [
           { id: 'ob-1', titulo: 'Por que leilões imobiliários são a maior oportunidade do Brasil hoje', duracao: '10 min', gratis: true, descricao: 'O mercado de leilões movimenta mais de R$ 30 bilhões por ano. Entenda por que investidores experientes migram para cá e como você pode entrar agora.' },
-          { id: 'ob-2', titulo: 'A metodologia BidPro Brasil — o método dos 30%', duracao: '8 min', gratis: true, descricao: 'Conheça o critério exclusivo da BidPro Brasil: só aprovamos operações com ROI mínimo de 30%. Entenda o porquê e como isso protege seu capital.' },
+          { id: 'ob-2', titulo: 'A metodologia BidPro Brasil, o método dos 30%', duracao: '8 min', gratis: true, descricao: 'Conheça o critério exclusivo da BidPro Brasil: só aprovamos operações com ROI mínimo de 30%. Entenda o porquê e como isso protege seu capital.' },
           { id: 'ob-3', titulo: 'Navegando pela plataforma BidPro Brasil', duracao: '7 min', gratis: true, descricao: 'Tour completo: busca inteligente de leilões, análise de viabilidade, portfólio e controle financeiro. Tudo que você precisa em um só lugar.' },
         ],
       },
       {
-        titulo: 'Módulo 2 — Seus Primeiros Passos',
+        titulo: 'Módulo 2, Seus Primeiros Passos',
         licoes: [
-          { id: 'ob-4', titulo: 'Qual é o seu perfil de investidor?', duracao: '8 min', gratis: true, descricao: 'Conservador, Moderado ou Arrojado — descubra seu perfil e como ele define sua estratégia de lances e alocação de capital.' },
+          { id: 'ob-4', titulo: 'Qual é o seu perfil de investidor?', duracao: '8 min', gratis: true, descricao: 'Conservador, Moderado ou Arrojado, descubra seu perfil e como ele define sua estratégia de lances e alocação de capital.' },
           { id: 'ob-5', titulo: 'Entendendo o teto de lance', duracao: '10 min', gratis: true, descricao: 'O conceito mais importante que você vai aprender: como calcular o lance máximo que preserva sua margem de 30%. Nunca mais pague caro demais.' },
           { id: 'ob-6', titulo: 'Próximos passos: sua trilha de aprendizado', duracao: '5 min', gratis: true, descricao: 'Roteiro de cursos recomendado para o seu perfil e como aproveitar ao máximo os recursos da BidPro Brasil.' },
         ],
@@ -42,7 +42,7 @@ export const CURSOS = [
     titulo: 'Leilão Seguro',
     subtitulo: 'Do zero à primeira arrematação com tranquilidade',
     tagline: 'Gratuito para sempre',
-    descricao: 'Entenda profundamente o que é um leilão imobiliário, como o processo funciona na prática, quais são as proteções legais do arrematante e por que — ao contrário do que muitos pensam — leilões são mais seguros do que a compra comum quando feitos com método.',
+    descricao: 'Entenda profundamente o que é um leilão imobiliário, como o processo funciona na prática, quais são as proteções legais do arrematante e por que, ao contrário do que muitos pensam, leilões são mais seguros do que a compra comum quando feitos com método.',
     emoji: '🛡️',
     cor: '#7c3aed',
     bg: '#ede9fe',
@@ -55,20 +55,20 @@ export const CURSOS = [
     destaque: false,
     modulos: [
       {
-        titulo: 'Módulo 1 — Leilão Desmistificado',
+        titulo: 'Módulo 1, Leilão Desmistificado',
         licoes: [
-          { id: 'seg-1', titulo: 'O que é um leilão imobiliário — mitos e verdades', duracao: '12 min', gratis: true, descricao: '"Leilão é coisa de endividado" — destruindo os 5 maiores mitos do mercado e apresentando a realidade dos números.' },
-          { id: 'seg-2', titulo: 'Leilão Judicial vs Extrajudicial — qual a diferença?', duracao: '14 min', gratis: true, descricao: 'As duas modalidades, diferenças de risco, processo e quais os melhores para cada perfil de investidor.' },
-          { id: 'seg-3', titulo: 'Primeira e Segunda Praça — onde está a oportunidade', duracao: '10 min', gratis: true, descricao: 'Os dois momentos do leilão judicial, como os preços chegam a 50% de desconto e qual a estratégia para cada praça.' },
+          { id: 'seg-1', titulo: 'O que é um leilão imobiliário, mitos e verdades', duracao: '12 min', gratis: true, descricao: '"Leilão é coisa de endividado", destruindo os 5 maiores mitos do mercado e apresentando a realidade dos números.' },
+          { id: 'seg-2', titulo: 'Leilão Judicial vs Extrajudicial, qual a diferença?', duracao: '14 min', gratis: true, descricao: 'As duas modalidades, diferenças de risco, processo e quais os melhores para cada perfil de investidor.' },
+          { id: 'seg-3', titulo: 'Primeira e Segunda Praça, onde está a oportunidade', duracao: '10 min', gratis: true, descricao: 'Os dois momentos do leilão judicial, como os preços chegam a 50% de desconto e qual a estratégia para cada praça.' },
         ],
       },
       {
-        titulo: 'Módulo 2 — Suas Garantias Legais',
+        titulo: 'Módulo 2, Suas Garantias Legais',
         licoes: [
           { id: 'seg-4', titulo: 'A lei que protege o arrematante (CPC Art. 879)', duracao: '10 min', gratis: true, descricao: 'O Código de Processo Civil garante seus direitos. Entenda as principais proteções e o que o vendedor NÃO pode fazer após a arrematação.' },
           { id: 'seg-5', titulo: 'Como o leiloeiro credenciado garante a lisura', duracao: '8 min', gratis: true, descricao: 'O papel das Juntas Comerciais no credenciamento, responsabilidades do leiloeiro e como verificar se ele é idôneo.' },
-          { id: 'seg-6', titulo: 'O que pode dar errado — e como evitar', duracao: '10 min', gratis: true, descricao: 'Os 5 erros mais comuns dos arrematantes iniciantes e como a metodologia BidPro Brasil elimina cada um deles sistematicamente.' },
-          { id: 'seg-7', titulo: 'Imissão na posse — tomando o imóvel de forma legal', duracao: '8 min', gratis: true, descricao: 'Como funciona o processo de imissão, prazo, casos de ocupação pelo antigo dono e como agir em cada situação.' },
+          { id: 'seg-6', titulo: 'O que pode dar errado, e como evitar', duracao: '10 min', gratis: true, descricao: 'Os 5 erros mais comuns dos arrematantes iniciantes e como a metodologia BidPro Brasil elimina cada um deles sistematicamente.' },
+          { id: 'seg-7', titulo: 'Imissão na posse, tomando o imóvel de forma legal', duracao: '8 min', gratis: true, descricao: 'Como funciona o processo de imissão, prazo, casos de ocupação pelo antigo dono e como agir em cada situação.' },
           { id: 'seg-8', titulo: 'Casos reais: 3 operações BidPro Brasil bem-sucedidas', duracao: '10 min', gratis: true, descricao: 'Três estudos de caso reais: apartamento judicial SP, casa CEF RJ e terreno comercial MG. Números, timeline e lições aprendidas.' },
         ],
       },
@@ -93,23 +93,23 @@ export const CURSOS = [
     destaque: false,
     modulos: [
       {
-        titulo: 'Módulo 1 — A Pesquisa Profissional',
+        titulo: 'Módulo 1, A Pesquisa Profissional',
         licoes: [
           { id: 'merc-1', titulo: 'Os dois níveis de pesquisa que ninguém te ensina', duracao: '12 min', gratis: true, descricao: 'Nível 1: mesmo condomínio/endereço. Nível 2: bairro/vizinhança. A metodologia BidPro Brasil de dois níveis e por que ela é mais precisa que qualquer outra.' },
-          { id: 'merc-2', titulo: 'Fontes de dados — onde encontrar amostras reais', duracao: '14 min', gratis: false, descricao: 'ZAP Imóveis, VivaReal, OLX, Quinto Andar, Loft, IBGE — como usar cada fonte, coletar o máximo de amostras e identificar dados distorcidos.' },
+          { id: 'merc-2', titulo: 'Fontes de dados, onde encontrar amostras reais', duracao: '14 min', gratis: false, descricao: 'ZAP Imóveis, VivaReal, OLX, Quinto Andar, Loft, IBGE, como usar cada fonte, coletar o máximo de amostras e identificar dados distorcidos.' },
           { id: 'merc-3', titulo: 'Como tratar e homogeneizar amostras', duracao: '12 min', gratis: false, descricao: 'Padronizar área, padrão construtivo, andar, vagas e estado de conservação. O processo que transforma dados brutos em avaliação defensável.' },
         ],
       },
       {
-        titulo: 'Módulo 2 — Calculando o Valor Real',
+        titulo: 'Módulo 2, Calculando o Valor Real',
         licoes: [
-          { id: 'merc-4', titulo: 'R$/m² — calculando o preço médio ponderado', duracao: '14 min', gratis: false, descricao: 'Como calcular o preço médio, eliminar outliers e chegar ao VGV (valor geral de vendas) que você consegue defender para qualquer imóvel.' },
-          { id: 'merc-5', titulo: 'Rentabilidade do aluguel (yield) — quanto o imóvel vai gerar de renda', duracao: '14 min', gratis: false, descricao: 'Pesquisa de aluguel, cálculo da rentabilidade bruta e líquida (yield), comparativo com CDI e FIIs. Como saber se o imóvel paga conta como investimento de renda.' },
-          { id: 'merc-6', titulo: 'Tendências de bairro — onde o dinheiro está indo', duracao: '10 min', gratis: false, descricao: 'Como identificar bairros em valorização, detectar especulação imobiliária, onde evitar e onde concentrar suas buscas.' },
+          { id: 'merc-4', titulo: 'R$/m², calculando o preço médio ponderado', duracao: '14 min', gratis: false, descricao: 'Como calcular o preço médio, eliminar outliers e chegar ao VGV (valor geral de vendas) que você consegue defender para qualquer imóvel.' },
+          { id: 'merc-5', titulo: 'Rentabilidade do aluguel (yield), quanto o imóvel vai gerar de renda', duracao: '14 min', gratis: false, descricao: 'Pesquisa de aluguel, cálculo da rentabilidade bruta e líquida (yield), comparativo com CDI e FIIs. Como saber se o imóvel paga conta como investimento de renda.' },
+          { id: 'merc-6', titulo: 'Tendências de bairro, onde o dinheiro está indo', duracao: '10 min', gratis: false, descricao: 'Como identificar bairros em valorização, detectar especulação imobiliária, onde evitar e onde concentrar suas buscas.' },
         ],
       },
       {
-        titulo: 'Módulo 3 — Usando a IA da BidPro Brasil',
+        titulo: 'Módulo 3, Usando a IA da BidPro Brasil',
         licoes: [
           { id: 'merc-7', titulo: 'Avaliação automática com IA em 2 minutos', duracao: '14 min', gratis: false, descricao: 'Como usar a função de Avaliação Mercadológica da plataforma BidPro Brasil para gerar comparativos automáticos com dezenas de amostras.' },
           { id: 'merc-8', titulo: 'Interpretando os resultados da IA', duracao: '12 min', gratis: false, descricao: 'Como ler o relatório de dois níveis, identificar distorções, ajustar manualmente e chegar ao preço de mercado final.' },
@@ -124,7 +124,7 @@ export const CURSOS = [
     titulo: 'Radiografia do Imóvel',
     subtitulo: 'Edital, matrícula e pré-avaliação jurídica',
     tagline: 'Acesso vitalício por R$ 147',
-    descricao: 'Saiba ler e interpretar todos os documentos de um leilão como um advogado especialista: edital, matrícula, certidões, ônus reais, usufrutos, penhoras e tudo que pode impedir — ou alavancar — sua arrematação.',
+    descricao: 'Saiba ler e interpretar todos os documentos de um leilão como um advogado especialista: edital, matrícula, certidões, ônus reais, usufrutos, penhoras e tudo que pode impedir, ou alavancar, sua arrematação.',
     emoji: '📋',
     cor: '#dc2626',
     bg: '#fee2e2',
@@ -137,24 +137,24 @@ export const CURSOS = [
     destaque: false,
     modulos: [
       {
-        titulo: 'Módulo 1 — Documentação Essencial',
+        titulo: 'Módulo 1, Documentação Essencial',
         licoes: [
-          { id: 'rad-1', titulo: 'Anatomia de uma matrícula — lendo linha por linha', duracao: '20 min', gratis: true, descricao: 'O documento mais importante da operação. Aprenda a ler matrícula do zero: abertura, transmissões, ônus, averbações e o que cada campo revela.' },
-          { id: 'rad-2', titulo: 'Analisando o edital — as cláusulas que definem tudo', duracao: '16 min', gratis: false, descricao: 'Cláusulas-armadilha, responsabilidade por débitos, condições de pagamento, prazo e o que pode mudar de um edital para outro.' },
-          { id: 'rad-3', titulo: 'Certidões necessárias — o checklist completo', duracao: '12 min', gratis: false, descricao: 'Quais certidões solicitar antes de qualquer lance: IPTU, condomínio, ações reais, executivos fiscais, interdito proibitório.' },
+          { id: 'rad-1', titulo: 'Anatomia de uma matrícula, lendo linha por linha', duracao: '20 min', gratis: true, descricao: 'O documento mais importante da operação. Aprenda a ler matrícula do zero: abertura, transmissões, ônus, averbações e o que cada campo revela.' },
+          { id: 'rad-2', titulo: 'Analisando o edital, as cláusulas que definem tudo', duracao: '16 min', gratis: false, descricao: 'Cláusulas-armadilha, responsabilidade por débitos, condições de pagamento, prazo e o que pode mudar de um edital para outro.' },
+          { id: 'rad-3', titulo: 'Certidões necessárias, o checklist completo', duracao: '12 min', gratis: false, descricao: 'Quais certidões solicitar antes de qualquer lance: IPTU, condomínio, ações reais, executivos fiscais, interdito proibitório.' },
         ],
       },
       {
-        titulo: 'Módulo 2 — Riscos que Podem Travar a Operação',
+        titulo: 'Módulo 2, Riscos que Podem Travar a Operação',
         licoes: [
-          { id: 'rad-4', titulo: 'Usufruto vitalício — o maior perigo dos leilões', duracao: '16 min', gratis: false, descricao: 'O risco mais perigoso que existe: quando o imóvel tem usufruto e você não pode tomar posse. Como identificar, o que fazer e quando abandonar.' },
+          { id: 'rad-4', titulo: 'Usufruto vitalício, o maior perigo dos leilões', duracao: '16 min', gratis: false, descricao: 'O risco mais perigoso que existe: quando o imóvel tem usufruto e você não pode tomar posse. Como identificar, o que fazer e quando abandonar.' },
           { id: 'rad-5', titulo: 'Hipoteca e alienação fiduciária', duracao: '12 min', gratis: false, descricao: 'Diferença entre hipoteca e alienação fiduciária, sub-rogação de dívidas bancárias e como calcular o impacto real no seu ROI.' },
-          { id: 'rad-6', titulo: 'Bem de família — quando o imóvel é intocável', duracao: '10 min', gratis: false, descricao: 'A Lei 8.009/90 e quando ela protege o imóvel do leilão. Como identificar casos e por que isso pode invalidar toda a operação.' },
-          { id: 'rad-7', titulo: 'Débitos assumidos — IPTU, condomínio e concessionárias', duracao: '10 min', gratis: false, descricao: 'O que vai junto com o imóvel, como calcular o total de débitos, estratégias de negociação e quando o edital garante quitação.' },
+          { id: 'rad-6', titulo: 'Bem de família, quando o imóvel é intocável', duracao: '10 min', gratis: false, descricao: 'A Lei 8.009/90 e quando ela protege o imóvel do leilão. Como identificar casos e por que isso pode invalidar toda a operação.' },
+          { id: 'rad-7', titulo: 'Débitos assumidos, IPTU, condomínio e concessionárias', duracao: '10 min', gratis: false, descricao: 'O que vai junto com o imóvel, como calcular o total de débitos, estratégias de negociação e quando o edital garante quitação.' },
         ],
       },
       {
-        titulo: 'Módulo 3 — Usando a IA para Pré-Avaliação',
+        titulo: 'Módulo 3, Usando a IA para Pré-Avaliação',
         licoes: [
           { id: 'rad-8', titulo: 'Extraindo dados do edital com IA em segundos', duracao: '14 min', gratis: false, descricao: 'Como usar a função de upload da plataforma BidPro Brasil para extrair automaticamente todos os dados do edital e matrícula com IA.' },
           { id: 'rad-9', titulo: 'Interpretando os alertas de risco da plataforma', duracao: '10 min', gratis: false, descricao: 'Os três níveis de risco BidPro Brasil: bloqueante (para a operação), alerta (analise com cuidado) e informativo. Como agir em cada caso.' },
@@ -169,7 +169,7 @@ export const CURSOS = [
     titulo: 'A Arte do Lance Perfeito',
     subtitulo: 'Estratégia de arrematação do início ao fim',
     tagline: 'Acesso vitalício por R$ 197',
-    descricao: 'Do checklist pré-leilão ao auto de arrematação: domine a estratégia de lance, a psicologia da disputa, quando entrar, quando parar e como sair com o imóvel certo pelo preço certo — sempre respeitando seu teto.',
+    descricao: 'Do checklist pré-leilão ao auto de arrematação: domine a estratégia de lance, a psicologia da disputa, quando entrar, quando parar e como sair com o imóvel certo pelo preço certo, sempre respeitando seu teto.',
     emoji: '🎯',
     cor: '#d97706',
     bg: '#fef3c7',
@@ -182,26 +182,26 @@ export const CURSOS = [
     destaque: true,
     modulos: [
       {
-        titulo: 'Módulo 1 — Preparação é Vitória',
+        titulo: 'Módulo 1, Preparação é Vitória',
         licoes: [
           { id: 'arte-1', titulo: 'Checklist das 48h antes do leilão', duracao: '14 min', gratis: true, descricao: 'Tudo que precisa estar verificado antes de dar o primeiro lance: habilitação, documentos, capital disponível, análise confirmada e limite de lance definido.' },
-          { id: 'arte-2', titulo: 'Leilão online vs presencial — o que muda na prática', duracao: '12 min', gratis: false, descricao: 'Plataformas digitais, leilão por WhatsApp, leilão presencial — diferenças práticas e como evitar erros técnicos em cada modalidade.' },
-          { id: 'arte-3', titulo: 'A psicologia do leilão — não deixe a emoção custar caro', duracao: '12 min', gratis: false, descricao: 'Efeito de ancoragem, febre do lance, apego emocional ao imóvel. Como manter frieza absoluta usando o teto de lance como âncora racional.' },
+          { id: 'arte-2', titulo: 'Leilão online vs presencial, o que muda na prática', duracao: '12 min', gratis: false, descricao: 'Plataformas digitais, leilão por WhatsApp, leilão presencial, diferenças práticas e como evitar erros técnicos em cada modalidade.' },
+          { id: 'arte-3', titulo: 'A psicologia do leilão, não deixe a emoção custar caro', duracao: '12 min', gratis: false, descricao: 'Efeito de ancoragem, febre do lance, apego emocional ao imóvel. Como manter frieza absoluta usando o teto de lance como âncora racional.' },
         ],
       },
       {
-        titulo: 'Módulo 2 — Na Arena do Lance',
+        titulo: 'Módulo 2, Na Arena do Lance',
         licoes: [
-          { id: 'arte-4', titulo: 'Estratégia agressiva vs conservadora — quando usar cada uma', duracao: '14 min', gratis: false, descricao: 'Quando entrar cedo com lance alto, quando esperar, incrementos ideais e jogadas psicológicas para intimidar competidores sem pagar mais.' },
-          { id: 'arte-5', titulo: 'Leilão em segunda praça — a segunda chance de ouro', duracao: '12 min', gratis: false, descricao: 'Como identificar leilões que vão à segunda praça, como se preparar com antecedência e como aproveitar a queda adicional no preço mínimo.' },
+          { id: 'arte-4', titulo: 'Estratégia agressiva vs conservadora, quando usar cada uma', duracao: '14 min', gratis: false, descricao: 'Quando entrar cedo com lance alto, quando esperar, incrementos ideais e jogadas psicológicas para intimidar competidores sem pagar mais.' },
+          { id: 'arte-5', titulo: 'Leilão em segunda praça, a segunda chance de ouro', duracao: '12 min', gratis: false, descricao: 'Como identificar leilões que vão à segunda praça, como se preparar com antecedência e como aproveitar a queda adicional no preço mínimo.' },
           { id: 'arte-6', titulo: 'A decisão mais difícil: quando parar de dar lances', duracao: '10 min', gratis: false, descricao: 'Disciplina de saída é o que separa amadores de profissionais. Critérios objetivos para respeitar o teto e entender que perder um leilão pode ser lucrar.' },
         ],
       },
       {
-        titulo: 'Módulo 3 — Após o Martelo',
+        titulo: 'Módulo 3, Após o Martelo',
         licoes: [
-          { id: 'arte-7', titulo: 'Auto de arrematação e carta — seus documentos de posse', duracao: '10 min', gratis: false, descricao: 'O que receber, em qual prazo, como registrar no cartório e quais os documentos que provam que o imóvel é seu.' },
-          { id: 'arte-8', titulo: 'Processo de transferência — do pagamento ao registro', duracao: '10 min', gratis: false, descricao: 'Passo a passo: pagamento → carta de arrematação → ITBI → escritura/formal de partilha → registro na matrícula. Prazos reais.' },
+          { id: 'arte-7', titulo: 'Auto de arrematação e carta, seus documentos de posse', duracao: '10 min', gratis: false, descricao: 'O que receber, em qual prazo, como registrar no cartório e quais os documentos que provam que o imóvel é seu.' },
+          { id: 'arte-8', titulo: 'Processo de transferência, do pagamento ao registro', duracao: '10 min', gratis: false, descricao: 'Passo a passo: pagamento → carta de arrematação → ITBI → escritura/formal de partilha → registro na matrícula. Prazos reais.' },
           { id: 'arte-9', titulo: 'Tomando posse: imissão e negociação com ocupantes', duracao: '10 min', gratis: false, descricao: 'Imóvel ocupado? Como agir: negociação amigável, ajuda de custo, despejo liminar e imissão na posse pela via judicial. Casos reais.' },
         ],
       },
@@ -226,29 +226,29 @@ export const CURSOS = [
     destaque: true,
     modulos: [
       {
-        titulo: 'Módulo 1 — Controle Financeiro de Verdade',
+        titulo: 'Módulo 1, Controle Financeiro de Verdade',
         licoes: [
-          { id: 'port-1', titulo: 'DRE do imóvel — a conta real que todo investidor ignora', duracao: '16 min', gratis: true, descricao: 'A diferença entre ROI estimado e ROI real. Como registrar cada despesa e receita para saber exatamente quanto você ganhou.' },
-          { id: 'port-2', titulo: 'Reforma e retrofit — planeja antes de bater o martelo', duracao: '14 min', gratis: false, descricao: 'Orçamento realista de reforma, cronograma, contratação de fornecedores, controle de obra e como evitar o estouro de custo mais comum.' },
-          { id: 'port-3', titulo: 'KPIs do portfólio — os números que importam', duracao: '12 min', gratis: false, descricao: 'TIR, VPL, payback, múltiplo de capital — os indicadores que investidores profissionais usam e como calcular cada um com a plataforma BidPro Brasil.' },
+          { id: 'port-1', titulo: 'DRE do imóvel, a conta real que todo investidor ignora', duracao: '16 min', gratis: true, descricao: 'A diferença entre ROI estimado e ROI real. Como registrar cada despesa e receita para saber exatamente quanto você ganhou.' },
+          { id: 'port-2', titulo: 'Reforma e retrofit, planeja antes de bater o martelo', duracao: '14 min', gratis: false, descricao: 'Orçamento realista de reforma, cronograma, contratação de fornecedores, controle de obra e como evitar o estouro de custo mais comum.' },
+          { id: 'port-3', titulo: 'KPIs do portfólio, os números que importam', duracao: '12 min', gratis: false, descricao: 'TIR, VPL, payback, múltiplo de capital, os indicadores que investidores profissionais usam e como calcular cada um com a plataforma BidPro Brasil.' },
           { id: 'port-4', titulo: 'Usando o controle financeiro da BidPro Brasil', duracao: '10 min', gratis: false, descricao: 'Como registrar lançamentos de entrada e saída por imóvel na plataforma, acompanhar o saldo em tempo real e exportar relatórios.' },
         ],
       },
       {
-        titulo: 'Módulo 2 — Estratégias de Saída',
+        titulo: 'Módulo 2, Estratégias de Saída',
         licoes: [
-          { id: 'port-5', titulo: 'Vender ou alugar? — o modelo de decisão BidPro Brasil', duracao: '14 min', gratis: false, descricao: 'Quando a rentabilidade do aluguel compensa segurar o imóvel vs quando vender e reinvestir. O modelo de decisão em 4 critérios.' },
+          { id: 'port-5', titulo: 'Vender ou alugar?, o modelo de decisão BidPro Brasil', duracao: '14 min', gratis: false, descricao: 'Quando a rentabilidade do aluguel compensa segurar o imóvel vs quando vender e reinvestir. O modelo de decisão em 4 critérios.' },
           { id: 'port-6', titulo: 'Precificação para vender em 90 dias', duracao: '12 min', gratis: false, descricao: 'Como precificar para girar rápido sem queimar margem. Posicionamento de preço, marketing, fotos e home staging básico que funciona.' },
-          { id: 'port-7', titulo: 'Gestão de locatários — do contrato ao reajuste', duracao: '10 min', gratis: false, descricao: 'Contrato de locação, garantias (fiança, seguro fiança, depósito), inadimplência e despejo amigável. Como evitar dores de cabeça.' },
+          { id: 'port-7', titulo: 'Gestão de locatários, do contrato ao reajuste', duracao: '10 min', gratis: false, descricao: 'Contrato de locação, garantias (fiança, seguro fiança, depósito), inadimplência e despejo amigável. Como evitar dores de cabeça.' },
         ],
       },
       {
-        titulo: 'Módulo 3 — Escalando o Portfólio',
+        titulo: 'Módulo 3, Escalando o Portfólio',
         licoes: [
-          { id: 'port-8', titulo: 'PF vs PJ — quando criar sua holding imobiliária', duracao: '14 min', gratis: false, descricao: 'Vantagens tributárias da pessoa jurídica, IR sobre ganho de capital, distribuição de lucros e quando a holding começa a fazer sentido.' },
-          { id: 'port-9', titulo: 'Captando sócios — como estruturar uma SPE', duracao: '12 min', gratis: false, descricao: 'Como criar uma Sociedade de Propósito Específico para um único imóvel, como apresentar a oportunidade e dividir resultados.' },
-          { id: 'port-10', titulo: 'Alavancagem responsável — até onde ir com financiamento', duracao: '12 min', gratis: false, descricao: 'A teoria do ROE na prática: quando financiar aumenta seu retorno e quando te coloca em risco. Os limites seguros de alavancagem.' },
-          { id: 'port-11', titulo: 'Construindo o pipeline — nunca fique sem operação', duracao: '12 min', gratis: false, descricao: 'Como ter sempre 3-5 imóveis em análise simultânea, o sistema de funil BidPro Brasil e como escalar de 1 para 10 imóveis no portfólio.' },
+          { id: 'port-8', titulo: 'PF vs PJ, quando criar sua holding imobiliária', duracao: '14 min', gratis: false, descricao: 'Vantagens tributárias da pessoa jurídica, IR sobre ganho de capital, distribuição de lucros e quando a holding começa a fazer sentido.' },
+          { id: 'port-9', titulo: 'Captando sócios, como estruturar uma SPE', duracao: '12 min', gratis: false, descricao: 'Como criar uma Sociedade de Propósito Específico para um único imóvel, como apresentar a oportunidade e dividir resultados.' },
+          { id: 'port-10', titulo: 'Alavancagem responsável, até onde ir com financiamento', duracao: '12 min', gratis: false, descricao: 'A teoria do ROE na prática: quando financiar aumenta seu retorno e quando te coloca em risco. Os limites seguros de alavancagem.' },
+          { id: 'port-11', titulo: 'Construindo o pipeline, nunca fique sem operação', duracao: '12 min', gratis: false, descricao: 'Como ter sempre 3-5 imóveis em análise simultânea, o sistema de funil BidPro Brasil e como escalar de 1 para 10 imóveis no portfólio.' },
         ],
       },
     ],
@@ -405,7 +405,7 @@ export const ROLES = {
   top2:        { nome: 'Investidor Pro', tipo: 'plano', descricao: 'Relatório + análise jurídica documental inclusa' },
   assessorado: { nome: 'Assessorado', tipo: 'plano', descricao: 'Assessoria para 1 arrematação' },
   clube:       { nome: 'Leilão Club', tipo: 'plano', descricao: 'Mentoria contínua e arrematações ilimitadas' },
-  consultor:   { nome: 'Consultor (Afiliado)', tipo: 'operacional', descricao: 'Vende cursos e planos — não assiste o conteúdo' },
+  consultor:   { nome: 'Consultor (Afiliado)', tipo: 'operacional', descricao: 'Vende cursos e planos, não assiste o conteúdo' },
   analista:    { nome: 'Analista', tipo: 'operacional', descricao: 'Recebe e revisa demandas: abre os relatórios do cliente na reunião, agenda reuniões e envia ao jurídico (não gera relatórios)' },
   advogado:    { nome: 'Advogado', tipo: 'operacional', descricao: 'Recebe as demandas jurídicas e emite o parecer conforme o checklist (não gera relatórios)' },
 };

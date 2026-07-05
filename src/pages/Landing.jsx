@@ -25,15 +25,15 @@ const PERGUNTAS = [
 // Exemplos de Bid Score (assinatura visual da marca — estilo "Serasa dos leilões").
 const BID_EXEMPLOS = [
   { nota: 94, cor: '#10b981', bg: '#f0fdf4', emoji: '🟢', t: 'Excelente oportunidade', d: 'Sem ônus relevantes na matrícula. Desconto de 38% sobre o mercado.' },
-  { nota: 73, cor: '#f59e0b', bg: '#fffbeb', emoji: '🟡', t: 'Boa oportunidade',        d: 'Imóvel ocupado — prever custo e prazo de desocupação.' },
+  { nota: 73, cor: '#f59e0b', bg: '#fffbeb', emoji: '🟡', t: 'Boa oportunidade',        d: 'Imóvel ocupado, prever custo e prazo de desocupação.' },
   { nota: 31, cor: '#ef4444', bg: '#fef2f2', emoji: '🔴', t: 'Risco elevado',           d: 'Três processos pendentes e penhora ativa. Recomendação: passar.' },
 ];
 
 const PASSOS = [
   { n: '01', icon: Search,    cor: '#0D63DB', titulo: 'Encontre o imóvel',     desc: 'Busque em todos os leiloeiros credenciados do Brasil. Filtre por tipo, cidade, valor e data do leilão.' },
   { n: '02', icon: FileText,  cor: '#8b5cf6', titulo: 'Analise a viabilidade', desc: 'Carregue o edital e a matrícula. A IA extrai dados e gera análise financeira, jurídica e mercadológica em minutos.' },
-  { n: '03', icon: ShieldCheck,cor:'#10b981', titulo: 'Identifique os riscos',  desc: 'Penhoras, usufruto, hipotecas, ações judiciais e outros ônus que podem inviabilizar a posse — tudo mapeado antes do lance.' },
-  { n: '04', icon: Gavel,     cor: '#f59e0b', titulo: 'Arremate com segurança', desc: 'Com a nossa equipe do seu lado — da estratégia de lance à documentação e ao registro do imóvel.' },
+  { n: '03', icon: ShieldCheck,cor:'#10b981', titulo: 'Identifique os riscos',  desc: 'Penhoras, usufruto, hipotecas, ações judiciais e outros ônus que podem inviabilizar a posse, tudo mapeado antes do lance.' },
+  { n: '04', icon: Gavel,     cor: '#f59e0b', titulo: 'Arremate com segurança', desc: 'Com a nossa equipe do seu lado, da estratégia de lance à documentação e ao registro do imóvel.' },
 ];
 
 const RECURSOS = [
@@ -42,14 +42,14 @@ const RECURSOS = [
   { icon: ShieldCheck, titulo: 'Análise jurídica completa',   desc: 'Dívidas, penhoras e restrições presas ao imóvel, processos judiciais e risco de perda, identificados antes da arrematação.' },
   { icon: BarChart3,   titulo: 'Comparativos de mercado',     desc: 'Imóveis similares na mesma rua ou condomínio para defender o valor da oferta com dados reais.' },
   { icon: FileText,    titulo: 'Relatório executivo PDF',     desc: 'Documento profissional para apresentar ao cliente, ao sócio ou à família antes de arrematar.' },
-  { icon: MapPin,      titulo: 'Atuação em todo o Brasil',    desc: 'O leilão segue a legislação federal — você pode arrematar em qualquer estado. Já temos operações realizadas em 11 estados e crescendo.' },
+  { icon: MapPin,      titulo: 'Atuação em todo o Brasil',    desc: 'O leilão segue a legislação federal, você pode arrematar em qualquer estado. Já temos operações realizadas em 11 estados e crescendo.' },
 ];
 
 const PARA_QUEM = [
   {
     emoji: '🏠',
     titulo: 'Quero comprar meu imóvel',
-    desc: 'Economize de 20% a 50% em relação ao mercado. Nossa plataforma mostra todos os riscos antes do lance — você decide com segurança.',
+    desc: 'Economize de 20% a 50% em relação ao mercado. Nossa plataforma mostra todos os riscos antes do lance, você decide com segurança.',
     items: ['Busca por cidade e tipo', 'Análise de viabilidade', 'Acompanhamento da documentação', 'Sem surpresa na posse'],
   },
   {
@@ -68,12 +68,12 @@ const PARA_QUEM = [
 ];
 
 const FAQS = [
-  { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 100 (🟢🟡🔴) que resume o risco e a oportunidade de cada imóvel — juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o relatório Documental + Jurídico (Investidor Pro) completa o Bid Score da operação.' },
+  { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 100 (🟢🟡🔴) que resume o risco e a oportunidade de cada imóvel, juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o relatório Documental + Jurídico (Investidor Pro) completa o Bid Score da operação.' },
   { q: 'Preciso ter experiência em leilões para usar a plataforma?', r: 'Não. A plataforma foi criada para guiar tanto iniciantes quanto investidores experientes. O plano Explorador é gratuito e inclui cursos de formação.' },
-  { q: 'A análise da IA substitui um advogado?', r: 'Não substitui. A IA é o primeiro filtro — identifica riscos em segundos e mostra o que merece um estudo mais profundo. A decisão de arrematar deve sempre contar com a validação de um especialista: nos planos com assessoria, a análise jurídica é conduzida pela nossa equipe.' },
-  { q: 'As análises por IA são ilimitadas?', r: 'Não. Cada análise consome dados pagos de fontes externas, por isso cada plano inclui uma quantidade definida de relatórios. Se uma fonte estiver instável no momento da solicitação, avisamos e liberamos o relatório assim que possível (em até 24–48h), continuando as tentativas.' },
+  { q: 'A análise da IA substitui um advogado?', r: 'Não substitui. A IA é o primeiro filtro, identifica riscos em segundos e mostra o que merece um estudo mais profundo. A decisão de arrematar deve sempre contar com a validação de um especialista: nos planos com assessoria, a análise jurídica é conduzida pela nossa equipe.' },
+  { q: 'As análises por IA são ilimitadas?', r: 'Não. Cada análise consome dados pagos de fontes externas, por isso cada plano inclui uma quantidade definida de relatórios. Se uma fonte estiver instável no momento da solicitação, avisamos e liberamos o relatório assim que possível (em até 24 a 48h), continuando as tentativas.' },
   { q: 'Posso cancelar a assinatura quando quiser?', r: 'Sim. O plano Investidor Pro é mensal sem fidelidade. Cancele quando quiser, sem multa.' },
-  { q: 'Como funciona a assessoria?', r: 'No plano Assessoria, a equipe acompanha você do estudo do imóvel ao registro final — estratégia de lance, documentação, regularização e imissão de posse.' },
+  { q: 'Como funciona a assessoria?', r: 'No plano Assessoria, a equipe acompanha você do estudo do imóvel ao registro final, estratégia de lance, documentação, regularização e imissão de posse.' },
   { q: 'Em quais lugares posso arrematar?', r: 'Em todo o Brasil. O leilão segue a legislação federal, igual para todos os estados. Já realizamos operações em 11 estados e seguimos crescendo.' },
 ];
 
@@ -147,7 +147,7 @@ export default function Landing() {
             <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>O problema real</div>
             <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 12px' }}>Oportunidade nunca faltou. Resposta, sim.</h2>
             <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.7, maxWidth: 640, margin: '0 auto 8px' }}>
-              Existem milhares de imóveis excelentes em leilão. O que faz 99% das pessoas desistirem é não conseguir responder a 5 perguntas. A Bid Pro responde todas — antes do lance.
+              Existem milhares de imóveis excelentes em leilão. O que faz 99% das pessoas desistirem é não conseguir responder a 5 perguntas. A Bid Pro responde todas, antes do lance.
             </p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, marginTop: 36 }}>
@@ -160,13 +160,13 @@ export default function Landing() {
                 <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.65, margin: 0 }}>{r}</p>
               </div>
             ))}
-            {/* 6º card — fecha o grid e converte */}
+            {/* 6º card, fecha o grid e converte */}
             <div style={{ borderRadius: 16, border: '1px solid #0D63DB', padding: '24px 22px', background: 'linear-gradient(135deg,#0a1f3d,#0d2a50)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                 <div style={{ background: 'rgba(52,211,153,0.15)', borderRadius: 10, padding: 8, flexShrink: 0 }}><Sparkles size={17} color="#34d399" /></div>
                 <h3 style={{ fontSize: 15, fontWeight: 800, color: 'white', margin: 0, lineHeight: 1.3 }}>As 5 respostas em um número</h3>
               </div>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.65, margin: '0 0 14px' }}>O Bid Score reúne tudo numa nota de 0 a 100 — o filtro que transforma dúvida em decisão, antes do lance.</p>
+              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.65, margin: '0 0 14px' }}>O Bid Score reúne tudo numa nota de 0 a 100, o filtro que transforma dúvida em decisão, antes do lance.</p>
               <div style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: '#34d399' }}>
                 <Sparkles size={14} /> Incluído em todos os planos
               </div>
@@ -187,13 +187,13 @@ export default function Landing() {
                 Uma nota que responde: <span style={{ background: 'linear-gradient(90deg,#60a5fa,#34d399)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>você compraria este imóvel?</span>
               </h2>
               <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.8, marginBottom: 22 }}>
-                Em vez de 180 páginas de edital e matrícula, a Bid Pro traduz tudo em uma nota de 0 a 100 — risco jurídico, viabilidade financeira, ocupação e documentação num só lugar. Como o Serasa dos leilões.
+                Em vez de 180 páginas de edital e matrícula, a Bid Pro traduz tudo em uma nota de 0 a 100: risco jurídico, viabilidade financeira, ocupação e documentação num só lugar. Como o Serasa dos leilões.
               </p>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '16px 18px' }}>
                 <BadgeCheck size={22} color="#34d399" style={{ flexShrink: 0, marginTop: 1 }} />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: 'white', marginBottom: 4 }}>IA + Especialistas certificados Bid Pro</div>
-                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6 }}>A inteligência faz 95% da análise em minutos. Nossos especialistas validam os casos críticos — você não depende de uma máquina sozinha.</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6 }}>A inteligência faz 95% da análise em minutos. Nossos especialistas validam os casos críticos. Você não depende de uma máquina sozinha.</div>
                 </div>
               </div>
             </div>
@@ -250,12 +250,12 @@ export default function Landing() {
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Processo em 4 etapas</div>
             <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 12px' }}>Do zero ao imóvel arrematado com segurança</h2>
-            <p style={{ color: '#64748b', fontSize: 15, maxWidth: 520, margin: '0 auto' }}>Cada etapa guiada pela plataforma — você não precisa saber tudo para começar.</p>
+            <p style={{ color: '#64748b', fontSize: 15, maxWidth: 520, margin: '0 auto' }}>Cada etapa guiada pela plataforma, você não precisa saber tudo para começar.</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 20 }}>
             {PASSOS.map(({ n, icon: Icon, cor, titulo, desc }) => (
               <div key={n} style={{ background: 'white', borderRadius: 18, padding: '28px 24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden' }}>
-                {/* Número da etapa — badge legível na cor da etapa (no topo do card). */}
+                {/* Número da etapa, badge legível na cor da etapa (no topo do card). */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                   <div style={{ background: cor, borderRadius: 14, width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 16px ${cor}40`, flexShrink: 0 }}>
                     <Icon size={22} color="white" />
@@ -279,7 +279,7 @@ export default function Landing() {
               <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12 }}>O que a plataforma faz</div>
               <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 18px', lineHeight: 1.2 }}>Análise completa em minutos, não em semanas</h2>
               <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.8, marginBottom: 32 }}>
-                Nossa IA lê editais e matrículas, pesquisa processos judiciais, calcula a viabilidade financeira e identifica riscos jurídicos — tudo antes do seu lance.
+                Nossa IA lê editais e matrículas, pesquisa processos judiciais, calcula a viabilidade financeira e identifica riscos jurídicos, tudo antes do seu lance.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {RECURSOS.map(({ icon: Icon, titulo, desc }) => (
@@ -349,7 +349,7 @@ export default function Landing() {
           </p>
           <button onClick={() => nav('/calculadora')}
             style={{ padding: '14px 32px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 28px rgba(16,185,129,0.35)' }}>
-            🧮 Usar a Calculadora — é grátis
+            🧮 Usar a Calculadora, é grátis
           </button>
         </div>
       </section>
@@ -379,13 +379,13 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── PLANOS PREVIEW (sem preços — fonte de verdade é a tela /planos) ── */}
+      {/* ── PLANOS PREVIEW (sem preços, fonte de verdade é a tela /planos) ── */}
       <section style={{ padding: '80px 20px', background: 'white' }}>
         <div style={{ maxWidth: 960, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 48 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Planos</div>
             <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 12px' }}>Comece grátis. Evolua no seu ritmo.</h2>
-            <p style={{ color: '#64748b', fontSize: 15 }}>Do plano gratuito à assessoria completa — veja preços e condições atualizados na página de planos.</p>
+            <p style={{ color: '#64748b', fontSize: 15 }}>Do plano gratuito à assessoria completa, veja preços e condições atualizados na página de planos.</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
             {[
@@ -445,7 +445,7 @@ export default function Landing() {
             Seu próximo imóvel pode estar no leilão de amanhã.
           </h2>
           <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.7, margin: '0 0 36px' }}>
-            Crie sua conta gratuitamente e comece a explorar oportunidades em todo o Brasil — sem cartão, sem compromisso.
+            Crie sua conta gratuitamente e comece a explorar oportunidades em todo o Brasil, sem cartão, sem compromisso.
           </p>
           <button onClick={() => nav('/planos')}
             style={{ padding: '16px 40px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 900, fontSize: 17, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 32px rgba(13,99,219,0.5)' }}>

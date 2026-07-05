@@ -79,7 +79,7 @@ export default function ProdutoPublico({ tipo }) {
 
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '48px 20px', display: 'grid', gridTemplateColumns: 'minmax(0,1.2fr) minmax(0,1fr)', gap: 32, alignItems: 'start' }} className="produto-grid">
 
-        {/* Coluna esquerda — apresentação */}
+        {/* Coluna esquerda, apresentação */}
         <div style={{ color: 'white' }}>
           {/* Capa */}
           {produto.capa_url && (
@@ -103,7 +103,7 @@ export default function ProdutoPublico({ tipo }) {
           {tipo === 'curso' && aulas.length > 0 && (
             <div>
               <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
-                Conteúdo do curso — {aulas.length} aulas
+                Conteúdo do curso, {aulas.length} aulas
               </div>
               {Object.entries(modulos).map(([mod, licoes]) => (
                 <div key={mod} style={{ marginBottom: 16 }}>
@@ -121,7 +121,7 @@ export default function ProdutoPublico({ tipo }) {
           )}
         </div>
 
-        {/* Coluna direita — CTA */}
+        {/* Coluna direita, CTA */}
         <div style={{ position: 'sticky', top: 24 }}>
           <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px' }}>
             <div style={{ fontSize: 34, fontWeight: 900, color: '#111111', marginBottom: 4 }}>
@@ -156,11 +156,11 @@ export default function ProdutoPublico({ tipo }) {
                 </button>
                 <button onClick={() => nav(`/login?produto=${tipo}:${id}${isPago ? '' : `&plano=top2`}${ref ? `&ref=${ref}` : ''}`)}
                   style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>
-                  Já tenho conta — Entrar
+                  Já tenho conta, Entrar
                 </button>
                 {!isPago && (
                   <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>
-                    Incluído no plano <strong>Investidor Pro</strong> — R$ 49,90/mês
+                    Incluído no plano <strong>Investidor Pro</strong>, R$ 49,90/mês
                   </div>
                 )}
               </>

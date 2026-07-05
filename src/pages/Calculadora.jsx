@@ -257,7 +257,7 @@ export default function Calculadora() {
           )}
           {origem === 'judicial' && pagamento === 'a_vista' && (
             <div style={{ marginBottom: 14, padding: '8px 12px', background: '#fef3c7', borderRadius: 8, fontSize: 12, color: '#92400e', fontWeight: 600 }}>
-              Pagamento à vista no prazo fixado pelo juiz (geralmente 24h–15 dias após a arrematação).
+              Pagamento à vista no prazo fixado pelo juiz (geralmente 24h a 15 dias após a arrematação).
             </div>
           )}
 
@@ -336,8 +336,8 @@ export default function Calculadora() {
             }
           </div>
 
-          {/* Contador de lances — quantos lances cabem até o teto mantendo a meta.
-              O INCREMENTO vem do edital (informado pelo usuário) — nunca chutamos,
+          {/* Contador de lances, quantos lances cabem até o teto mantendo a meta.
+              O INCREMENTO vem do edital (informado pelo usuário), nunca chutamos,
               para não orientar errado. Só aparece com teto válido acima do lance atual. */}
           {temDados && teto > 0 && (
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 22 }}>
@@ -383,7 +383,7 @@ export default function Calculadora() {
               {m.manutencao > 0 && <Linha label="Reforma estimada" valor={`R$ ${fmt(m.manutencao, 2)}`} />}
               {m.custoCarrrego > 0 && <Linha label="Carrego (IPTU + cond.)" valor={`R$ ${fmt(m.custoCarrrego, 2)}`} />}
 
-              {/* Necessidade de caixa — o que precisa ter disponível */}
+              {/* Necessidade de caixa, o que precisa ter disponível */}
               <div style={{ margin: '12px 0 4px', padding: '12px 14px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: '#084BA6', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Necessidade de caixa</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -423,13 +423,13 @@ export default function Calculadora() {
               <div style={{ marginTop: 14, padding: '10px 12px', background: '#fef9c3', borderRadius: 8, display: 'flex', gap: 8 }}>
                 <Info size={14} color="#a16207" style={{ flexShrink: 0, marginTop: 1 }} />
                 <p style={{ fontSize: 11, color: '#a16207', margin: 0, lineHeight: 1.5 }}>
-                  <strong>Estimativa conservadora.</strong> Os valores reais podem divergir conforme custos cartorários específicos, honorários negociados, condições jurídicas do imóvel e variações de mercado. Os percentuais de cada custo não são exibidos aqui — consulte nosso analista para o detalhamento completo.
+                  <strong>Estimativa conservadora.</strong> Os valores reais podem divergir conforme custos cartorários específicos, honorários negociados, condições jurídicas do imóvel e variações de mercado. Os percentuais de cada custo não são exibidos aqui, consulte nosso analista para o detalhamento completo.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Link de afiliado — consultores e admin */}
+          {/* Link de afiliado, consultores e admin */}
           {linkAfiliado && (
             <div style={{ background: '#ecfdf5', borderRadius: 16, border: '1px solid #a7f3d0', padding: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#065f46', marginBottom: 8, fontSize: 13 }}>
@@ -471,7 +471,7 @@ export default function Calculadora() {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-                  ⭐ Investidor Pro — o plano completo
+                  ⭐ Investidor Pro, o plano completo
                 </div>
                 <h3 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>
                   {isExplorador
@@ -481,7 +481,7 @@ export default function Calculadora() {
                       : 'Invista com mais segurança e inteligência'}
                 </h3>
                 <p style={{ color: '#bfdbfe', fontSize: 13, lineHeight: 1.7, margin: '0 0 10px' }}>
-                  Esta calculadora é só o começo. No <strong style={{ color: 'white' }}>Investidor Pro</strong> você tem a <strong style={{ color: 'white' }}>informação completa de cada imóvel</strong>: relatório de viabilidade, análise jurídica do edital e da matrícula, análise processual e o <strong style={{ color: 'white' }}>Bid Score</strong> da operação — tudo para dar o lance certo, com segurança.
+                  Esta calculadora é só o começo. No <strong style={{ color: 'white' }}>Investidor Pro</strong> você tem a <strong style={{ color: 'white' }}>informação completa de cada imóvel</strong>: relatório de viabilidade, análise jurídica do edital e da matrícula, análise processual e o <strong style={{ color: 'white' }}>Bid Score</strong> da operação, tudo para dar o lance certo, com segurança.
                 </p>
                 <p style={{ color: '#93c5fd', fontSize: 12, lineHeight: 1.6, margin: '0 0 18px', fontWeight: 600 }}>
                   📊 Pare de adivinhar: veja o imóvel por inteiro antes do lance.
@@ -511,7 +511,7 @@ export default function Calculadora() {
               </div>
             </div>
 
-            {/* Formulário lead — apenas quando vem de link de consultor */}
+            {/* Formulário lead, apenas quando vem de link de consultor */}
             {temRef && (
               <form onSubmit={submeterLead} style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd', marginBottom: 2 }}>Ou deixe seu contato para receber mais informações:</div>

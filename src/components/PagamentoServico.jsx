@@ -251,7 +251,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
         </div>
       )}
 
-      {/* QR Code — só aparece após clique */}
+      {/* QR Code, só aparece após clique */}
       {showQR && brCode && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           <QRCodeImg value={brCode} size={200} />
@@ -452,7 +452,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
 
       {assinatura ? (
         <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: '#1e40af' }}>
-          Assinatura mensal de <strong>{fmtBRL(servico.valor)}</strong> — cobrança recorrente
+          Assinatura mensal de <strong>{fmtBRL(servico.valor)}</strong>, cobrança recorrente
           automática no cartão. Cancele quando quiser pela plataforma.
         </div>
       ) : (
@@ -464,7 +464,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
               const total = pv * n;
               return (
                 <option key={n} value={n}>
-                  {n}× de {fmtBRL(pv)}{n <= 3 ? ' — sem juros' : ` (total ${fmtBRL(total)})`}
+                  {n}× de {fmtBRL(pv)}{n <= 3 ? ', sem juros' : ` (total ${fmtBRL(total)})`}
                 </option>
               );
             })}

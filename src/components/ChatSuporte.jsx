@@ -302,7 +302,7 @@ export default function ChatSuporte() {
 
   return (
     <>
-      {/* Botão flutuante — círculo no tema do header (preto) com a marca B */}
+      {/* Botão flutuante, círculo no tema do header (preto) com a marca B */}
       {!isOpen && (
         <button onClick={() => setIsOpen(true)} title="Precisa de ajuda? Fale com a gente"
           style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, height: 58, borderRadius: 999, background: '#111111', color: 'white', border: '1px solid #1f2937', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 0, padding: 0, overflow: 'hidden', boxShadow: '0 8px 24px rgba(17,17,17,0.28)', transition: 'gap 0.2s, padding 0.2s, box-shadow 0.2s, transform 0.15s' }}
@@ -502,7 +502,7 @@ export default function ChatSuporte() {
               {/* Banner atendimento encerrado */}
               {isFinalizado && (
                 <div style={{ padding: '10px 14px', background: '#f0fdf4', borderTop: '1px solid #86efac', fontSize: 12, color: '#166534', textAlign: 'center' }}>
-                  ✅ Atendimento encerrado — abra um novo chamado se precisar de mais ajuda
+                  ✅ Atendimento encerrado, abra um novo chamado se precisar de mais ajuda
                 </div>
               )}
 

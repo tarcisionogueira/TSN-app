@@ -16,7 +16,7 @@ const FASES_JUDICIAL = [
   {
     id: 'j2', cor: '#7c3aed', titulo: 'Tributação e Registro',
     itens: [
-      { id: 'j2a', texto: 'Calcular e recolher o ITBI junto à Prefeitura do município do imóvel (base de cálculo: valor do lance)', lei: 'Art. 156, II CF/88 — alíquota municipal de 2% a 3%', dica: null, integracao: null },
+      { id: 'j2a', texto: 'Calcular e recolher o ITBI junto à Prefeitura do município do imóvel (base de cálculo: valor do lance)', lei: 'Art. 156, II CF/88, alíquota municipal de 2% a 3%', dica: null, integracao: null },
       { id: 'j2b', texto: 'Obter Certidão Negativa de Débitos (CND) federal e Dívida Ativa PGFN para compor o dossiê de registro', lei: 'Art. 47 Lei 8.212/91', dica: 'Use as Certidões Fiscais do sistema', integracao: 'certidoes' },
       { id: 'j2c', texto: 'Protocolar no Cartório de Registro de Imóveis (CRI): Carta de Arrematação + guia ITBI quitada + certidões', lei: 'Art. 167, I, 26 e 37 Lei 6.015/73 (LRP)', dica: null, integracao: null },
       { id: 'j2d', texto: 'Acompanhar a abertura/atualização da matrícula em nome do arrematante', lei: 'Arts. 176 e 228 Lei 6.015/73', dica: null, integracao: null },
@@ -26,7 +26,7 @@ const FASES_JUDICIAL = [
     id: 'j3', cor: '#059669', titulo: 'Imissão na Posse',
     itens: [
       { id: 'j3a', texto: 'Verificar situação de ocupação do imóvel (desocupado, devedor, terceiros)', lei: null, dica: null, integracao: null },
-      { id: 'j3b', texto: 'Solicitar ao Juízo o mandado de imissão na posse (petição simples nos autos da execução)', lei: 'Art. 626 CPC — via simples petição nos autos', dica: 'Protocolar nos autos monitorados pelo CNJ DataJud', integracao: 'cnj' },
+      { id: 'j3b', texto: 'Solicitar ao Juízo o mandado de imissão na posse (petição simples nos autos da execução)', lei: 'Art. 626 CPC, via simples petição nos autos', dica: 'Protocolar nos autos monitorados pelo CNJ DataJud', integracao: 'cnj' },
       { id: 'j3c', texto: 'Aguardar cumprimento do mandado pelo Oficial de Justiça (prazo médio 15 a 60 dias)', lei: 'Art. 538 CPC', dica: null, integracao: null },
       { id: 'j3d', texto: 'Se houver resistência: solicitar ao Juízo auxílio de força policial para cumprimento coercitivo', lei: 'Art. 538 §3° CPC', dica: null, integracao: null },
       { id: 'j3e', texto: 'Documentar estado do imóvel com fotos e vídeos na data da imissão', lei: null, dica: null, integracao: null },
@@ -35,19 +35,19 @@ const FASES_JUDICIAL = [
   {
     id: 'j4', cor: '#d97706', titulo: 'Dívidas Sub-rogadas e Regularização',
     itens: [
-      { id: 'j4a', texto: 'Verificar débitos de condomínio — sub-rogação das últimas 5 contribuições anteriores à arrematação', lei: 'STJ Súmula 478 — Art. 908 §1° CPC', dica: null, integracao: null },
-      { id: 'j4b', texto: 'Verificar e negociar IPTU em aberto com a Prefeitura — responsabilidade propter rem sub-roga ao imóvel', lei: 'Art. 130 CTN (Lei 5.172/1966)', dica: 'Verifique via Certidões do sistema', integracao: 'certidoes' },
+      { id: 'j4a', texto: 'Verificar débitos de condomínio, sub-rogação das últimas 5 contribuições anteriores à arrematação', lei: 'STJ Súmula 478, Art. 908 §1° CPC', dica: null, integracao: null },
+      { id: 'j4b', texto: 'Verificar e negociar IPTU em aberto com a Prefeitura, responsabilidade propter rem sub-roga ao imóvel', lei: 'Art. 130 CTN (Lei 5.172/1966)', dica: 'Verifique via Certidões do sistema', integracao: 'certidoes' },
       { id: 'j4c', texto: 'Verificar na matrícula ônus remanescentes não cancelados (hipotecas, penhoras, gravames)', lei: 'Art. 1.473 CC (Lei 10.406/2002)', dica: null, integracao: null },
       { id: 'j4d', texto: 'Transferir titularidade do IPTU na Prefeitura municipal', lei: 'Art. 34 CTN', dica: null, integracao: null },
-      { id: 'j4e', texto: 'Transferir titularidade de água (concessionária local) e energia elétrica (distribuidora)', lei: 'Resolução ANEEL 1.000/2021 — Art. 18 Lei 8.987/95', dica: null, integracao: null },
+      { id: 'j4e', texto: 'Transferir titularidade de água (concessionária local) e energia elétrica (distribuidora)', lei: 'Resolução ANEEL 1.000/2021, Art. 18 Lei 8.987/95', dica: null, integracao: null },
     ],
   },
   {
     id: 'j5', cor: '#dc2626', titulo: 'Monitoramento de Riscos Pós-Arrematação',
     itens: [
-      { id: 'j5a', texto: 'Monitorar prazo de embargos à arrematação (15 dias após assinatura do Auto) — pode ensejar desfazimento', lei: 'Art. 903 §1° CPC', dica: 'Monitore movimentações pelo CNJ DataJud do sistema', integracao: 'cnj', risco: true },
+      { id: 'j5a', texto: 'Monitorar prazo de embargos à arrematação (15 dias após assinatura do Auto), pode ensejar desfazimento', lei: 'Art. 903 §1° CPC', dica: 'Monitore movimentações pelo CNJ DataJud do sistema', integracao: 'cnj', risco: true },
       { id: 'j5b', texto: 'Verificar se há recurso pendente nos autos (agravo de petição, apelação, embargos de terceiro)', lei: 'Arts. 674 e 1.015 CPC', dica: 'Acompanhe via CNJ DataJud', integracao: 'cnj', risco: true },
-      { id: 'j5c', texto: 'Verificar se há ação anulatória da arrematação proposta por terceiros (prazo prescricional: 10 anos)', lei: 'Art. 903 §4° CPC — Art. 205 CC', dica: null, integracao: 'cnj', risco: true },
+      { id: 'j5c', texto: 'Verificar se há ação anulatória da arrematação proposta por terceiros (prazo prescricional: 10 anos)', lei: 'Art. 903 §4° CPC, Art. 205 CC', dica: null, integracao: 'cnj', risco: true },
       { id: 'j5d', texto: 'Após imissão: contratar seguro patrimonial para o imóvel', lei: null, dica: null, integracao: null },
     ],
   },
@@ -57,17 +57,17 @@ const FASES_EXTRAJUDICIAL = [
   {
     id: 'e1', cor: '#0D63DB', titulo: 'Pagamento e Formalização',
     itens: [
-      { id: 'e1a', texto: 'Pagar o saldo do lance no prazo do edital (geralmente 30 dias corridos do leilão)', lei: 'Art. 27 Lei 9.514/97 (alienação fiduciária) — contrato de compra e venda nas demais modalidades', dica: null, integracao: null },
-      { id: 'e1b', texto: 'Obter o Auto/Certidão de Arrematação emitido e autenticado pelo leiloeiro oficial', lei: 'Art. 24 Decreto 21.981/1932 — instrumento hábil para transferência de propriedade', dica: null, integracao: null },
+      { id: 'e1a', texto: 'Pagar o saldo do lance no prazo do edital (geralmente 30 dias corridos do leilão)', lei: 'Art. 27 Lei 9.514/97 (alienação fiduciária), contrato de compra e venda nas demais modalidades', dica: null, integracao: null },
+      { id: 'e1b', texto: 'Obter o Auto/Certidão de Arrematação emitido e autenticado pelo leiloeiro oficial', lei: 'Art. 24 Decreto 21.981/1932, instrumento hábil para transferência de propriedade', dica: null, integracao: null },
       { id: 'e1c', texto: 'Confirmar quitação total do sinal/caução pago na entrada', lei: null, dica: null, integracao: null },
     ],
   },
   {
     id: 'e2', cor: '#7c3aed', titulo: 'Tributação e Registro',
     itens: [
-      { id: 'e2a', texto: 'Calcular e recolher o ITBI junto à Prefeitura municipal (base: valor do lance)', lei: 'Art. 156, II CF/88 — alíquota municipal de 2% a 3%', dica: null, integracao: null },
+      { id: 'e2a', texto: 'Calcular e recolher o ITBI junto à Prefeitura municipal (base: valor do lance)', lei: 'Art. 156, II CF/88, alíquota municipal de 2% a 3%', dica: null, integracao: null },
       { id: 'e2b', texto: 'Obter CND Receita Federal e Dívida Ativa PGFN para compor dossiê de registro', lei: 'Art. 47 Lei 8.212/91', dica: 'Use as Certidões Fiscais do sistema', integracao: 'certidoes' },
-      { id: 'e2c', texto: 'Protocolar no CRI: Auto de Arrematação + ITBI quitado + certidões exigidas pelo cartório', lei: 'Art. 167, I, 37 Lei 6.015/73 — Art. 26 §7° Lei 9.514/97', dica: null, integracao: null },
+      { id: 'e2c', texto: 'Protocolar no CRI: Auto de Arrematação + ITBI quitado + certidões exigidas pelo cartório', lei: 'Art. 167, I, 37 Lei 6.015/73, Art. 26 §7° Lei 9.514/97', dica: null, integracao: null },
       { id: 'e2d', texto: 'Acompanhar emissão da nova matrícula em nome do arrematante', lei: 'Arts. 176 e 228 Lei 6.015/73', dica: null, integracao: null },
     ],
   },
@@ -76,25 +76,25 @@ const FASES_EXTRAJUDICIAL = [
     itens: [
       { id: 'e3a', texto: 'Verificar situação de ocupação do imóvel antes de entrar', lei: null, dica: null, integracao: null },
       { id: 'e3b', texto: 'Se desocupado: imissão imediata de posse com o registro da nova matrícula', lei: 'Art. 1.204 CC (Lei 10.406/2002)', dica: null, integracao: null },
-      { id: 'e3c', texto: 'Se ocupado (alienação fiduciária — Lei 9.514/97): notificar o ocupante pelo CRI concedendo 60 dias para desocupação voluntária', lei: 'Art. 30 Lei 9.514/97 (incluído pela Lei 13.465/2017)', dica: null, integracao: null },
-      { id: 'e3d', texto: 'Se ocupado por terceiros sem título: propor ação de imissão de posse ou reintegração (prazo 15 dias para liminar)', lei: 'Art. 626 CPC — Art. 1.210 CC', dica: null, integracao: null },
+      { id: 'e3c', texto: 'Se ocupado (alienação fiduciária, Lei 9.514/97): notificar o ocupante pelo CRI concedendo 60 dias para desocupação voluntária', lei: 'Art. 30 Lei 9.514/97 (incluído pela Lei 13.465/2017)', dica: null, integracao: null },
+      { id: 'e3d', texto: 'Se ocupado por terceiros sem título: propor ação de imissão de posse ou reintegração (prazo 15 dias para liminar)', lei: 'Art. 626 CPC, Art. 1.210 CC', dica: null, integracao: null },
       { id: 'e3e', texto: 'Documentar estado do imóvel com fotos e vídeos imediatamente após imissão na posse', lei: null, dica: null, integracao: null },
     ],
   },
   {
     id: 'e4', cor: '#d97706', titulo: 'Dívidas Sub-rogadas e Regularização',
     itens: [
-      { id: 'e4a', texto: 'Verificar débitos de condomínio — responsabilidade pelas últimas 5 contribuições anteriores ao leilão', lei: 'STJ Súmula 478 — confirmada no EREsp 1.610.860/MG (2017)', dica: null, integracao: null },
+      { id: 'e4a', texto: 'Verificar débitos de condomínio, responsabilidade pelas últimas 5 contribuições anteriores ao leilão', lei: 'STJ Súmula 478, confirmada no EREsp 1.610.860/MG (2017)', dica: null, integracao: null },
       { id: 'e4b', texto: 'Verificar e negociar IPTU em aberto com a Prefeitura', lei: 'Art. 130 CTN (Lei 5.172/1966)', dica: 'Verifique via Certidões do sistema', integracao: 'certidoes' },
       { id: 'e4c', texto: 'Verificar na matrícula ônus remanescentes (hipotecas, penhoras, servidões)', lei: 'Art. 1.473 CC', dica: null, integracao: null },
       { id: 'e4d', texto: 'Transferir titularidade do IPTU junto à Prefeitura', lei: 'Art. 34 CTN', dica: null, integracao: null },
-      { id: 'e4e', texto: 'Transferir contas de água (concessionária), energia elétrica e gás', lei: 'Resolução ANEEL 1.000/2021 — Art. 18 Lei 8.987/95', dica: null, integracao: null },
+      { id: 'e4e', texto: 'Transferir contas de água (concessionária), energia elétrica e gás', lei: 'Resolução ANEEL 1.000/2021, Art. 18 Lei 8.987/95', dica: null, integracao: null },
     ],
   },
   {
     id: 'e5', cor: '#64748b', titulo: 'Regularização Complementar',
     itens: [
-      { id: 'e5a', texto: 'Verificar regularidade perante o Município: Habite-se, Alvará (comercial), AVCB (Corpo de Bombeiros)', lei: 'Lei 10.257/2001 (Estatuto da Cidade) — lei municipal de uso e ocupação do solo', dica: null, integracao: null },
+      { id: 'e5a', texto: 'Verificar regularidade perante o Município: Habite-se, Alvará (comercial), AVCB (Corpo de Bombeiros)', lei: 'Lei 10.257/2001 (Estatuto da Cidade), lei municipal de uso e ocupação do solo', dica: null, integracao: null },
       { id: 'e5b', texto: 'Averbar eventuais construções/reformas não registradas na matrícula', lei: 'Art. 167, II, 4 Lei 6.015/73', dica: null, integracao: null },
       { id: 'e5c', texto: 'Verificar existência de usufruto, servidões ou cláusulas restritivas no título original', lei: 'Arts. 1.390 a 1.416 CC', dica: null, integracao: null },
       { id: 'e5d', texto: 'Contratar seguro patrimonial após imissão na posse', lei: null, dica: null, integracao: null },

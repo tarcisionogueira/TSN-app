@@ -66,7 +66,7 @@ export default function HomeCliente() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px', display: 'grid', gridTemplateColumns: info.indica ? 'minmax(0,1fr) 320px' : '1fr', gap: 20, alignItems: 'start' }}>
-      {/* Triagem de perfil — modal one-time no 1º acesso do cliente */}
+      {/* Triagem de perfil, modal one-time no 1º acesso do cliente */}
       <TriagemPerfil userId={user?.id} />
       {/* Coluna principal */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
@@ -100,7 +100,7 @@ export default function HomeCliente() {
           )}
         </div>
 
-        {/* Meus acompanhamentos — casos do cliente (inclui arremates atribuídos pela equipe) */}
+        {/* Meus acompanhamentos, casos do cliente (inclui arremates atribuídos pela equipe) */}
         {meusCasos.length > 0 && (
           <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' }}>
             <div style={{ fontSize: 14, fontWeight: 800, color: '#111', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -125,7 +125,7 @@ export default function HomeCliente() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 16px' }}>
           <ShieldCheck size={16} color="#0D63DB" style={{ flexShrink: 0, marginTop: 2 }} />
           <div style={{ fontSize: 12, color: '#1e3a5f', lineHeight: 1.6 }}>
-            <strong>Arremate com segurança.</strong> Cada imóvel vem com relatórios de viabilidade e jurídico e, se quiser, você valida a operação com um analista antes do lance — para decidir com confiança.
+            <strong>Arremate com segurança.</strong> Cada imóvel vem com relatórios de viabilidade e jurídico e, se quiser, você valida a operação com um analista antes do lance, para decidir com confiança.
           </div>
         </div>
       </div>
@@ -138,7 +138,7 @@ export default function HomeCliente() {
             <div style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>Indique e Ganhe</div>
           </div>
           <div style={{ fontSize: 12.5, color: '#4c1d95', lineHeight: 1.65 }}>
-            Para cada pessoa que assinar o Investidor Pro pelo seu link, você ganha <strong>20% de desconto na sua mensalidade</strong> — <strong>acumulativo</strong> e válido <strong>enquanto ela continuar pagando</strong>. Indicou 5 que pagam? Sua mensalidade fica <strong>grátis</strong>.
+            Para cada pessoa que assinar o Investidor Pro pelo seu link, você ganha <strong>20% de desconto na sua mensalidade</strong>, <strong>acumulativo</strong> e válido <strong>enquanto ela continuar pagando</strong>. Indicou 5 que pagam? Sua mensalidade fica <strong>grátis</strong>.
           </div>
           <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkIndicacao}</div>
           <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>

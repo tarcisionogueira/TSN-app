@@ -214,7 +214,7 @@ export default function OnrRegistro() {
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <FileText size={22} color="#0D63DB" />
-          <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: 0 }}>Registro de Imóvel — ONR Digital</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: 0 }}>Registro de Imóvel, ONR Digital</h2>
         </div>
         {imovel && (
           <div style={{ fontSize: 13, color: '#64748b' }}>
@@ -266,7 +266,7 @@ export default function OnrRegistro() {
               <input type="number" value={form.valor_arrematacao} onChange={e => setVal('valor_arrematacao', e.target.value)}
                 placeholder="Ex: 150000" style={S.input} />
             </Campo>
-            <Campo label="Alíquota ITBI (%) — verifique na prefeitura">
+            <Campo label="Alíquota ITBI (%), verifique na prefeitura">
               <input type="number" step="0.1" value={form.aliquota_itbi} onChange={e => setVal('aliquota_itbi', e.target.value)}
                 style={S.input} />
               {itbi && <div style={{ fontSize: 11, color: '#059669', marginTop: 4, fontWeight: 600 }}>ITBI estimado: {fmtBRL(itbi)}</div>}
@@ -357,13 +357,13 @@ export default function OnrRegistro() {
       {etapa === 'protocolo' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <InfoBox>
-            Agora você tem duas opções para protocolar: <strong>(1) SREI — Protocolo Eletrônico</strong> (se o cartório aceitar) ou
+            Agora você tem duas opções para protocolar: <strong>(1) SREI, Protocolo Eletrônico</strong> (se o cartório aceitar) ou
             <strong> (2) Presencial</strong> no cartório. Após protocolar, registre o número do protocolo abaixo para acompanhar.
           </InfoBox>
 
           {/* Opção 1: SREI */}
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '16px 18px' }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#1d4ed8', marginBottom: 8 }}>Opção 1 — Protocolo Eletrônico via SREI</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#1d4ed8', marginBottom: 8 }}>Opção 1, Protocolo Eletrônico via SREI</div>
             <p style={{ fontSize: 13, color: '#334155', margin: '0 0 12px', lineHeight: 1.6 }}>
               O SREI (Sistema de Registro de Imóveis Eletrônico) permite protocolar documentos digitalmente.
               Você precisará de <strong>certificado digital e-CPF ou e-CNPJ (ICP-Brasil)</strong> para assinar os documentos eletronicamente.
@@ -383,7 +383,7 @@ export default function OnrRegistro() {
 
           {/* Opção 2: Presencial */}
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px' }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#111111', marginBottom: 8 }}>Opção 2 — Protocolo Presencial</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#111111', marginBottom: 8 }}>Opção 2, Protocolo Presencial</div>
             <p style={{ fontSize: 13, color: '#475569', margin: '0 0 12px', lineHeight: 1.6 }}>
               Leve os documentos originais e cópias ao Cartório de Registro de Imóveis em {form.cartorio_cidade || 'sua cidade'}/{form.cartorio_uf}.
               Você receberá um número de protocolo que deverá ser registrado abaixo.

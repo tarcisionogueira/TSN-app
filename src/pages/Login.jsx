@@ -288,17 +288,17 @@ export default function Login() {
         {/* Banner convite cliente */}
         {conviteParam && !planoEscolhido && !conviteEquipeParam && (
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#15803d', fontWeight: 600 }}>
-            🎯 Você foi convidado — crie sua conta ou entre para continuar
+            🎯 Você foi convidado, crie sua conta ou entre para continuar
           </div>
         )}
         {/* Banner convite equipe */}
         {conviteEquipeParam && !planoEscolhido && (
           <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#5b21b6', fontWeight: 600 }}>
-            🏢 Convite de equipe BidPro Brasil — entre ou crie sua conta para aceitar
+            🏢 Convite de equipe BidPro Brasil, entre ou crie sua conta para aceitar
           </div>
         )}
 
-        {/* Marca BidPro Brasil (wordmark — legível no fundo claro) */}
+        {/* Marca BidPro Brasil (wordmark, legível no fundo claro) */}
         <button onClick={() => nav('/')}
           style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 11, width: '100%', marginBottom: 30, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
           <div style={{ background: '#0D63DB', borderRadius: 12, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(13,99,219,0.30)', flexShrink: 0 }}>
@@ -402,7 +402,7 @@ export default function Login() {
         {modo === 'cadastro' && (
           <>
             <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>Criar conta</h2>
-            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Grátis — sem cartão de crédito</p>
+            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Grátis, sem cartão de crédito</p>
             <form onSubmit={handleCadastro} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={lbl}>Nome completo *</label>
@@ -602,7 +602,7 @@ export default function Login() {
           </>
         )}
 
-        {/* Recuperar senha — sucesso */}
+        {/* Recuperar senha, sucesso */}
         {modo === 'recuperar_sucesso' && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 16px' }} />

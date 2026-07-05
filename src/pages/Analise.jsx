@@ -249,7 +249,7 @@ export default function Analise() {
         const novos = [];
         data.processos.forEach(p => {
           p.riscos?.forEach(r => {
-            const txt = `[CNJ ${p.tribunal}] ${r.descricao} — ${p.numero}`;
+            const txt = `[CNJ ${p.tribunal}] ${r.descricao}, ${p.numero}`;
             if (!existentes.has(txt)) {
               novos.push({ id: Date.now() + Math.random(), texto: txt, tipo: r.severidade });
               existentes.add(txt);
@@ -618,7 +618,7 @@ export default function Analise() {
       nomeCondominio: dSnap.nomeCondominio || '',
     };
     const parecerInputs = { d: dSnap, metricas, teto, cenario: isAVista ? 'À Vista' : 'Alavancado' };
-    showMsg('Geração iniciada no servidor — pode até fechar a aba; acompanhe em "Análises" no topo.');
+    showMsg('Geração iniciada no servidor, pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
       { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId },
       { mercadoInputs, parecerInputs }
@@ -646,7 +646,7 @@ export default function Analise() {
     if (r.valorLocacao) up('valorLocacao', r.valorLocacao);
     if (r.parecer) { setParecer(r.parecer); setD(p => ({ ...p, parecer: r.parecer })); }
     setRelMercadoGerado(true);
-    carregarCota(); // a geração consumiu cota no servidor — atualiza os contadores
+    carregarCota(); // a geração consumiu cota no servidor, atualiza os contadores
     showMsg('Relatório Mercadológico + Viabilidade pronto!');
   }, [analiseEntry?.status, analiseEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -676,7 +676,7 @@ export default function Analise() {
       processoNumero: cnjNumero.trim() || undefined,
       processoNome: cnjNome.trim() || undefined,
     };
-    showMsg('Análise documental iniciada no servidor — pode fechar a aba; acompanhe em "Análises" no topo.');
+    showMsg('Análise documental iniciada no servidor, pode fechar a aba; acompanhe em "Análises" no topo.');
     iniciarDocumental(
       { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId },
       payload
@@ -712,7 +712,7 @@ export default function Analise() {
     if (Array.isArray(r.riscos) && r.riscos.length) {
       setD(p => ({ ...p, riscos: r.riscos.map(x => ({
         id: Date.now() + Math.random(),
-        texto: x.constaNaDoc === false ? `${x.descricao || x.categoria} (não consta na documentação — confirmar)` : (x.descricao || x.categoria),
+        texto: x.constaNaDoc === false ? `${x.descricao || x.categoria} (não consta na documentação, a confirmar)` : (x.descricao || x.categoria),
         tipo: x.severidade === 'bloqueante' ? 'bloqueante' : 'alerta',
       })) }));
     }
@@ -746,7 +746,7 @@ export default function Analise() {
   const gerarRelLaudo = () => {
     if (!ambosRelatorios) { showMsg('Gere o Mercadológico e a Documental antes do Laudo de Viabilidade.', 'error'); return; }
     if (gerandoLaudo) return;
-    showMsg('Laudo de viabilidade iniciado no servidor — consolida os dois relatórios; pode fechar a aba.');
+    showMsg('Laudo de viabilidade iniciado no servidor, consolida os dois relatórios; pode fechar a aba.');
     iniciarLaudo({ imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId });
     setRelSel('laudo');
   };
@@ -808,7 +808,7 @@ export default function Analise() {
         // cron só apaga as NÃO arrematadas 15 dias após o leilão) — mercado + documental.
         await supabase.from('analises_mercado').update({ arrematado: isArrematado }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
         await supabase.from('analises_documental').update({ arrematado: isArrematado }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
-      } catch { /* portfólio local já foi salvo — erro de rede não bloqueia o usuário */ }
+      } catch { /* portfólio local já foi salvo, erro de rede não bloqueia o usuário */ }
     }
 
     // A cota NÃO é mais consumida aqui: o consumo passou para o servidor, na
@@ -903,7 +903,7 @@ export default function Analise() {
         <div style={{ background:'#fef2f2', border:'2px solid #dc2626', borderRadius:14, padding:'14px 18px', display:'flex', gap:12 }}>
           <ShieldAlert size={22} color="#dc2626" style={{flexShrink:0,marginTop:2}}/>
           <div>
-            <div style={{ fontWeight:900, color:'#b91c1c', fontSize:14, marginBottom:6 }}>⚠ RISCO JURÍDICO BLOQUEANTE — OPERAÇÃO SUSPENSA</div>
+            <div style={{ fontWeight:900, color:'#b91c1c', fontSize:14, marginBottom:6 }}>⚠ RISCO JURÍDICO BLOQUEANTE, OPERAÇÃO SUSPENSA</div>
             {riscosBloqueantes.map(r=><div key={r.id} style={{color:'#dc2626',fontSize:12,marginBottom:2}}>• {r.texto}</div>)}
           </div>
         </div>
@@ -1045,7 +1045,7 @@ export default function Analise() {
             </div>
           )}
 
-          {/* LAUNCHER — inclusão manual (topo, quando ativa) + botões de gerar */}
+          {/* LAUNCHER, inclusão manual (topo, quando ativa) + botões de gerar */}
           {relSel === null && (
           <>
             {/* Opção de menu no mobile (a barra lateral fica oculta em telas pequenas) */}
@@ -1074,11 +1074,11 @@ export default function Analise() {
                   <div style={{ fontSize:15, fontWeight:900, color:'#111' }}>{semImovelBase ? 'Incluir lote manualmente' : 'Imóvel de outro leiloeiro'}</div>
                 </div>
                 <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>
-                  Cole o <strong>link do lote</strong> e/ou anexe o <strong>edital/matrícula</strong> de um imóvel que não está na nossa base. A IA extrai os dados (endereço, valores, área, leiloeiro, riscos) e libera os relatórios abaixo. <strong>É uma análise fora da base</strong> — os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.
+                  Cole o <strong>link do lote</strong> e/ou anexe o <strong>edital/matrícula</strong> de um imóvel que não está na nossa base. A IA extrai os dados (endereço, valores, área, leiloeiro, riscos) e libera os relatórios abaixo. <strong>É uma análise fora da base</strong>, os dados dependem do que você fornecer (sem a curadoria BidPro). Nossa equipe é avisada para avaliar integrar este leiloeiro.
                 </div>
                 {externoNotificado ? (
                   <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:10, fontSize:12, fontWeight:700, color:'#065f46' }}>
-                    <CheckCircle2 size={15}/> Análise liberada — gere os relatórios abaixo. Equipe avisada.
+                    <CheckCircle2 size={15}/> Análise liberada, gere os relatórios abaixo. Equipe avisada.
                   </div>
                 ) : (
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -1102,12 +1102,12 @@ export default function Analise() {
 
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding: isMobile?'18px':'26px' }}>
               <div style={{ fontSize:16, fontWeight:900, color:'#111', marginBottom:4 }}>Gerar relatórios de análise</div>
-              <div style={{ fontSize:13, color:'#64748b', marginBottom:18, lineHeight:1.6 }}>A IA usa automaticamente os dados e documentos deste imóvel. Gere cada relatório — eles vão para a barra lateral e abrem aqui. Com os dois prontos, libera a reunião com o analista.</div>
+              <div style={{ fontSize:13, color:'#64748b', marginBottom:18, lineHeight:1.6 }}>A IA usa automaticamente os dados e documentos deste imóvel. Gere cada relatório, eles vão para a barra lateral e abrem aqui. Com os dois prontos, libera a reunião com o analista.</div>
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
                   { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
-                  { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes — sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
+                  { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
                 ].map(c => {
                   const travado = c.gerando || c.block || c.seqBloqueado || c.planoBloqueado;
                   return (
@@ -1137,8 +1137,8 @@ export default function Analise() {
                     {c.gerando && (
                       <div style={{ fontSize:11, color:c.cor, lineHeight:1.4, textAlign:'center' }}>
                         {c.k==='mercado'
-                          ? 'Buscando preços de mercado em tempo real e montando a viabilidade — pode levar até ~2 min. Pode fechar a aba; continua no servidor.'
-                          : 'Lendo edital/matrícula/anexos e consultando o processo no CNJ — roda no servidor; pode fechar a aba.'}
+                          ? 'Buscando preços de mercado em tempo real e montando a viabilidade, pode levar até ~2 min. Pode fechar a aba; continua no servidor.'
+                          : 'Lendo edital/matrícula/anexos e consultando o processo no CNJ, roda no servidor; pode fechar a aba.'}
                       </div>
                     )}
                   </div>
@@ -1159,12 +1159,12 @@ export default function Analise() {
           )}
 
           {/* Enquanto a IA gera (cliente): estado de carregamento no lugar da antiga
-              tela de formulários — a análise roda inteira no servidor. */}
+              tela de formulários, a análise roda inteira no servidor. */}
           {relSel === 'documental' && !parecerDocumental && (gerandoDocumental || docEntry?.status === 'gerando') && (
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'28px 22px', display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center' }}>
               <Loader2 size={28} color="#1e3a8a" style={{ animation:'spin 1s linear infinite' }}/>
               <div style={{ fontSize:15, fontWeight:800, color:'#111' }}>Gerando a análise documental e jurídica…</div>
-              <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6, maxWidth:460 }}>A IA está lendo o edital/matrícula e as regras da venda, consultando o processo no CNJ e as certidões fiscais. Leva alguns instantes — você pode fechar a aba; continua no servidor e aparece aqui quando pronto.</div>
+              <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6, maxWidth:460 }}>A IA está lendo o edital/matrícula e as regras da venda, consultando o processo no CNJ e as certidões fiscais. Leva alguns instantes, você pode fechar a aba; continua no servidor e aparece aqui quando pronto.</div>
             </div>
           )}
 
@@ -1244,7 +1244,7 @@ export default function Analise() {
                   </div>
                   {parecerDocumental.pendencias > 0 && (
                     <div style={{ marginTop:10, fontSize:11.5, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 11px', lineHeight:1.5 }}>
-                      Algumas fontes públicas estavam instáveis/em verificação no momento. Liberamos o relatório com o que já temos e ele é <strong>complementado automaticamente em até 48h</strong> — sem custo extra.
+                      Algumas fontes públicas estavam instáveis/em verificação no momento. Liberamos o relatório com o que já temos e ele é <strong>complementado automaticamente em até 48h</strong>, sem custo extra.
                     </div>
                   )}
                 </div>
@@ -1265,7 +1265,7 @@ export default function Analise() {
             </div>
           )}
 
-          {/* PRÓXIMO PASSO — destaque ao fim do Documental: reunião com o analista */}
+          {/* PRÓXIMO PASSO, destaque ao fim do Documental: reunião com o analista */}
           {relSel === 'documental' && parecerDocumental && !isStaffAnalise && (
             <div style={{ background:'#faf5ff', border:'2px solid #c4b5fd', borderRadius:16, padding:'18px 20px', display:'flex', gap:14, alignItems:'flex-start' }}>
               <ShieldAlert size={22} color="#7c3aed" style={{ flexShrink:0, marginTop:2 }}/>
@@ -1297,7 +1297,7 @@ export default function Analise() {
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'28px 22px', display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center' }}>
               <Loader2 size={28} color="#111827" style={{ animation:'spin 1s linear infinite' }}/>
               <div style={{ fontSize:15, fontWeight:800, color:'#111' }}>Consolidando o parecer final…</div>
-              <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6, maxWidth:460 }}>O agente de defesa está cruzando o relatório mercadológico/financeiro com o documental/jurídico para emitir o veredito. É rápido — não refaz pesquisas nem lê documentos de novo, só sintetiza o que já foi gerado.</div>
+              <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6, maxWidth:460 }}>O agente de defesa está cruzando o relatório mercadológico/financeiro com o documental/jurídico para emitir o veredito. É rápido, não refaz pesquisas nem lê documentos de novo, só sintetiza o que já foi gerado.</div>
             </div>
           )}
 
@@ -1306,7 +1306,7 @@ export default function Analise() {
               <AlertTriangle size={22} color="#d97706" style={{ flexShrink:0, marginTop:2 }}/>
               <div>
                 <div style={{ fontSize:14, fontWeight:900, color:'#92400e', marginBottom:4 }}>Gere os dois relatórios antes do laudo</div>
-                <div style={{ fontSize:13, color:'#b45309', lineHeight:1.6 }}>{laudoEntry.result.motivo || 'O laudo de viabilidade é uma síntese — precisa do Mercadológico e da Documental prontos.'}</div>
+                <div style={{ fontSize:13, color:'#b45309', lineHeight:1.6 }}>{laudoEntry.result.motivo || 'O laudo de viabilidade é uma síntese, precisa do Mercadológico e da Documental prontos.'}</div>
               </div>
             </div>
           )}
@@ -1314,9 +1314,9 @@ export default function Analise() {
           {relSel === 'laudo' && relLaudoGerado && laudoEntry?.result && (() => {
             const L = laudoEntry.result;
             const vMap = {
-              aprovado:    { txt:'APROVADO — VIÁVEL', bg:'#dcfce7', bd:'#86efac', cor:'#15803d', ic:'✓' },
-              condicional: { txt:'CONDICIONAL — VIÁVEL COM RESSALVAS', bg:'#fef3c7', bd:'#fde68a', cor:'#92400e', ic:'!' },
-              reprovado:   { txt:'REPROVADO — NÃO RECOMENDADO', bg:'#fee2e2', bd:'#fca5a5', cor:'#b91c1c', ic:'✗' },
+              aprovado:    { txt:'APROVADO, VIÁVEL', bg:'#dcfce7', bd:'#86efac', cor:'#15803d', ic:'✓' },
+              condicional: { txt:'CONDICIONAL, VIÁVEL COM RESSALVAS', bg:'#fef3c7', bd:'#fde68a', cor:'#92400e', ic:'!' },
+              reprovado:   { txt:'REPROVADO, NÃO RECOMENDADO', bg:'#fee2e2', bd:'#fca5a5', cor:'#b91c1c', ic:'✗' },
             };
             const v = vMap[L.veredito] || vMap.condicional;
             const bloco = (titulo, itens, cor) => (Array.isArray(itens) && itens.length) ? (
@@ -1439,10 +1439,10 @@ export default function Analise() {
       </>)}
       {/* Formulários manuais (CNJ, certidões, dados/custos editáveis) são ferramenta
           da EQUIPE. O cliente clica "Gerar" e recebe o PARECER pronto (a IA já faz a
-          consulta CNJ e as certidões no servidor) — sem tela intermediária. */}
+          consulta CNJ e as certidões no servidor), sem tela intermediária. */}
       {relSel === 'documental' && isStaffAnalise && (<>
 
-      {/* ── ETAPA 1C: CONSULTA JURÍDICA CNJ — apenas roles com CNJ ── */}
+      {/* ── ETAPA 1C: CONSULTA JURÍDICA CNJ, apenas roles com CNJ ── */}
       {!temCNJ && (
         <div style={{ padding:'12px 16px', borderRadius:10, background:'#f8fafc', border:'1px solid #e2e8f0', fontSize:13, color:'#64748b', display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
           <Lock size={15} color="#94a3b8"/>
@@ -1450,7 +1450,7 @@ export default function Analise() {
           <button onClick={() => nav('/planos')} style={{ marginLeft:'auto', padding:'5px 12px', background:'#0D63DB', color:'white', border:'none', borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer' }}>Ver planos</button>
         </div>
       )}
-      {temCNJ && <Section step="1C" title="Consulta Jurídica — CNJ DataJud" icon={Scale} color="#dc2626"
+      {temCNJ && <Section step="1C" title="Consulta Jurídica, CNJ DataJud" icon={Scale} color="#dc2626"
         open={openSec.cnj ?? false} onToggle={() => toggleSec('cnj')}
         badge="Investidor Pro">
 
@@ -1490,7 +1490,7 @@ export default function Analise() {
           /* Funcionalidade completa para Investidor Pro+ */
           <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#b91c1c', lineHeight: 1.6 }}>
-              <strong>DataJud — CNJ:</strong> Busca o processo diretamente no tribunal do estado informado na Etapa 2. Penhoras e arrestos são adicionados automaticamente como riscos jurídicos.
+              <strong>DataJud, CNJ:</strong> Busca o processo diretamente no tribunal do estado informado na Etapa 2. Penhoras e arrestos são adicionados automaticamente como riscos jurídicos.
             </div>
 
             {/* Formulário de busca */}
@@ -1570,7 +1570,7 @@ export default function Analise() {
                         ))}
                       </div>
                       <div style={{ fontSize: 12, color: '#64748b' }}>
-                        {proc.classe}{proc.assuntos ? ` — ${proc.assuntos}` : ''} · Fase: <strong>{proc.fase}</strong>
+                        {proc.classe}{proc.assuntos ? `, ${proc.assuntos}` : ''} · Fase: <strong>{proc.fase}</strong>
                       </div>
                     </div>
 
@@ -1651,7 +1651,7 @@ export default function Analise() {
             {/* ── Certidões: CND + PGFN ── */}
             <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Certidões Fiscais — CPF ou CNPJ do Executado
+              Certidões Fiscais, CPF ou CNPJ do Executado
             </div>
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#475569' }}>
               Consulta pública na <strong>Receita Federal</strong> (situação cadastral) e <strong>PGFN</strong> (Dívida Ativa da União). Não requer certificado digital.
@@ -1708,7 +1708,7 @@ export default function Analise() {
                     {/* PGFN */}
                     {certResultados.divida_ativa && (
                       <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Dívida Ativa — PGFN</div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Dívida Ativa, PGFN</div>
                         {certResultados.divida_ativa.ok ? (
                           <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: certResultados.divida_ativa.regular ? '#16a34a' : '#dc2626' }} />
@@ -1739,7 +1739,7 @@ export default function Analise() {
             <div style={{ fontSize:11, fontWeight:800, color:'#0D63DB', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #eff6ff' }}>Identificação</div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
               <div style={{ gridColumn:'span 2' }}>
-                <Field label="Nome / Referência" name="nome" value={d.nome||''} onChange={upN} ph="Ex: Apt 302 Torre Norte — Rua das Flores"/>
+                <Field label="Nome / Referência" name="nome" value={d.nome||''} onChange={upN} ph="Ex: Apt 302 Torre Norte, Rua das Flores"/>
               </div>
               <Field label="Tipo de Imóvel" name="tipo" value={d.tipo} onChange={upN} type="select" opts={TIPO_OPTS}/>
               <Field label="Modalidade" name="origem" value={d.origem||'extrajudicial'} onChange={upN} type="select" opts={[['extrajudicial','Extrajudicial'],['judicial','Judicial']]}/>
@@ -1784,12 +1784,12 @@ export default function Analise() {
               <Field label="ITBI + Registro (%)" name="itbiPercentual" value={d.itbiPercentual||3} onChange={upN} type="number"/>
               {/* Honorários BidPro (taxa de ÊXITO do escritório, partilhada com jurídico/
                   analista quando ativos): 10% por padrão, aplica-se a TODO arremate
-                  (judicial E extrajudicial) — NÃO é sucumbência. Editável; entra nos
+                  (judicial E extrajudicial), NÃO é sucumbência. Editável; entra nos
                   aportes e na viabilidade. */}
               <Field label="Honorários BidPro / êxito (%)" name="honorariosPercentual"
                 value={d.honorariosPercentual != null ? d.honorariosPercentual : 10}
                 onChange={upN} type="number"/>
-              {/* Taxa administrativa do leilão (% além do leiloeiro — comum na Superbid)
+              {/* Taxa administrativa do leilão (% além do leiloeiro, comum na Superbid)
                   e despesas administrativas (valor fixo, raras). Constam no EDITAL. */}
               <Field label="Taxa Administrativa (%)" name="taxaAdministrativaPercentual" value={d.taxaAdministrativaPercentual||0} onChange={upN} type="number"/>
               <Field label="Despesas Administrativas (R$)" name="despesasAdministrativas" value={d.despesasAdministrativas||0} onChange={upN} type="number"/>
@@ -1865,7 +1865,7 @@ export default function Analise() {
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
             {isViavel ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>}
             <span style={{ fontSize:16, fontWeight:900, color:isViavel?'#065f46':'#b91c1c' }}>
-              {isUsoProprio ? 'Aprovado para uso próprio' : (isViavel ? 'Operação viável — vale avançar' : 'Operação reprovada — retorno insuficiente')}
+              {isUsoProprio ? 'Aprovado para uso próprio' : (isViavel ? 'Operação viável, vale avançar' : 'Operação reprovada, retorno insuficiente')}
             </span>
           </div>
           <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:10 }}>
@@ -1953,7 +1953,7 @@ export default function Analise() {
                 ))}
               </div>
 
-              {/* Validação FipeZAP — média dos anúncios × índice independente */}
+              {/* Validação FipeZAP, média dos anúncios × índice independente */}
               {mercado.referenciaFipeZap?.encontrado && mercado.referenciaFipeZap.precoMedioM2 > 0 && (() => {
                 const anuncios = mercado.precoMedioM2 || 0;
                 const fipe = mercado.referenciaFipeZap.precoMedioM2 || 0;
@@ -1977,11 +1977,11 @@ export default function Analise() {
                 );
               })()}
 
-              {/* Nível 1 — Mesmo Condomínio */}
+              {/* Nível 1, Mesmo Condomínio */}
               <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
                 <div style={{ background:'#0D63DB', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
                   <Building2 size={15} color="white"/>
-                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Comparativos diretos — mesmo condomínio / endereço (raio ~250 m)</span>
+                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Comparativos diretos, mesmo condomínio / endereço (raio ~250 m)</span>
                   <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white', whiteSpace:'nowrap' }}>
                     {mercado.nivel1?.totalAmostras||0} amostras
                   </span>
@@ -1992,7 +1992,7 @@ export default function Analise() {
                 <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
                   {mercado.nivel1?.vendas?.length > 0 && (
                     <div>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:8 }}>Venda — {mercado.nivel1.vendas.length} imóveis</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:8 }}>Venda, {mercado.nivel1.vendas.length} imóveis</div>
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
                         {[['Mín R$/m²',`${fmt(mercado.nivel1.precoMinM2||0)}`,'#ef4444'],['Médio R$/m²',`${fmt(mercado.nivel1.precoMedioM2||0)}`,'#0D63DB'],['Máx R$/m²',`${fmt(mercado.nivel1.precoMaxM2||0)}`,'#10b981']].map(([l,v,c])=>(
                           <div key={l} style={{ background:'#f8fafc', borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
@@ -2013,7 +2013,7 @@ export default function Analise() {
                   )}
                   {mercado.nivel1?.locacoes?.length > 0 && (
                     <div>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#8b5cf6', textTransform:'uppercase', marginBottom:8 }}>Locação — {mercado.nivel1.locacoes.length} imóveis</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#8b5cf6', textTransform:'uppercase', marginBottom:8 }}>Locação, {mercado.nivel1.locacoes.length} imóveis</div>
                       <div style={{ background:'#f5f3ff', borderRadius:8, padding:'10px 12px', marginBottom:8, textAlign:'center' }}>
                         <div style={{ fontSize:9, color:'#7c3aed', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>Aluguel Médio</div>
                         <div style={{ fontSize:20, fontWeight:900, color:'#7c3aed' }}>R$ {fmt(mercado.nivel1.aluguelMedio||0)}/mês</div>
@@ -2037,11 +2037,11 @@ export default function Analise() {
                 </div>
               </div>
 
-              {/* Nível 2 — Vizinhança */}
+              {/* Nível 2, Vizinhança */}
               <div style={{ borderRadius:12, border:'2px solid #10b981', overflow:'hidden' }}>
                 <div style={{ background:'#10b981', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
                   <MapPin size={15} color="white"/>
-                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Vizinhança — bairro e adjacências (~1 km)</span>
+                  <span style={{ fontWeight:800, color:'white', fontSize:13 }}>Vizinhança, bairro e adjacências (~1 km)</span>
                   <span style={{ marginLeft:'auto', background:'rgba(255,255,255,0.2)', borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:700, color:'white', whiteSpace:'nowrap' }}>
                     {mercado.nivel2?.totalAmostras||0} amostras
                   </span>
@@ -2052,7 +2052,7 @@ export default function Analise() {
                 <div style={{ padding:14, display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:14 }}>
                   {mercado.nivel2?.vendas?.length > 0 && (
                     <div>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#10b981', textTransform:'uppercase', marginBottom:8 }}>Venda — {mercado.nivel2.vendas.length} imóveis</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#10b981', textTransform:'uppercase', marginBottom:8 }}>Venda, {mercado.nivel2.vendas.length} imóveis</div>
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
                         {[['Mín',`${fmt(mercado.nivel2.precoMinM2||0)}`,'#ef4444'],['Médio',`${fmt(mercado.nivel2.precoMedioM2||0)}`,'#10b981'],['Máx',`${fmt(mercado.nivel2.precoMaxM2||0)}`,'#0D63DB']].map(([l,v,c])=>(
                           <div key={l} style={{ background:'#f0fdf4', borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
@@ -2073,7 +2073,7 @@ export default function Analise() {
                   )}
                   {mercado.nivel2?.locacoes?.length > 0 && (
                     <div>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#8b5cf6', textTransform:'uppercase', marginBottom:8 }}>Locação — {mercado.nivel2.locacoes.length} imóveis</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#8b5cf6', textTransform:'uppercase', marginBottom:8 }}>Locação, {mercado.nivel2.locacoes.length} imóveis</div>
                       <div style={{ background:'#f5f3ff', borderRadius:8, padding:'10px 12px', marginBottom:8, textAlign:'center' }}>
                         <div style={{ fontSize:9, color:'#7c3aed', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>Aluguel Médio</div>
                         <div style={{ fontSize:20, fontWeight:900, color:'#7c3aed' }}>R$ {fmt(mercado.nivel2.aluguelMedio||0)}/mês</div>
@@ -2118,7 +2118,7 @@ export default function Analise() {
             ))}
           </div>
 
-          {/* Cenários de disputa — Sem disputa vs Com disputa (piso de 30% de lucro) */}
+          {/* Cenários de disputa, Sem disputa vs Com disputa (piso de 30% de lucro) */}
           {!isUsoProprio && d.valorArrematacao > 0 && d.valorMercado > 0 && (() => {
             const cd = cenariosDisputa;
             const pisoOk = cd.tetoBest > cd.lanceBase;
@@ -2128,7 +2128,7 @@ export default function Analise() {
             // do mínimo) — então não exibimos esse card irreal.
             const cards = [
               { tag:'SEM DISPUTA', cor:'#10b981', bg:'#f0fdf4', lance:cd.lanceBase, m:cd.semDisputa, nota:'Arremata pelo lance base' },
-              ...(pisoOk ? [{ tag:'COM DISPUTA — PIOR CASO', cor:'#f59e0b', bg:'#fef3c7', lance:cd.tetoBest, m:cd.comDisputa, nota:`Piso de ${PISO_LUCRO}% de lucro líquido` }] : []),
+              ...(pisoOk ? [{ tag:'COM DISPUTA, PIOR CASO', cor:'#f59e0b', bg:'#fef3c7', lance:cd.tetoBest, m:cd.comDisputa, nota:`Piso de ${PISO_LUCRO}% de lucro líquido` }] : []),
             ];
             return (
               <div style={{ border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
@@ -2162,8 +2162,8 @@ export default function Analise() {
                 <div style={{ padding:'0 14px 14px' }}>
                   <div style={{ background: pisoOk ? '#f0fdf4' : '#fef2f2', border:`1px solid ${pisoOk ? '#bbf7d0' : '#fecaca'}`, borderRadius:10, padding:'10px 14px', fontSize:12, color: pisoOk ? '#15803d' : '#b91c1c', lineHeight:1.6 }}>
                     {pisoOk
-                      ? <><strong>Validação:</strong> mesmo numa disputa, dá para cobrir até <strong>R$ {fmt(cd.tetoBest)}</strong> mantendo o piso de {PISO_LUCRO}% de lucro líquido. Acima desse lance, a operação deixa de compensar — é o limite para parar de dar lances.</>
-                      : <><strong>Atenção:</strong> no lance base o retorno já está abaixo de {PISO_LUCRO}%. Não há margem para disputa — só compensa abaixo de <strong>R$ {fmt(cd.tetoBest)}</strong>.</>}
+                      ? <><strong>Validação:</strong> mesmo numa disputa, dá para cobrir até <strong>R$ {fmt(cd.tetoBest)}</strong> mantendo o piso de {PISO_LUCRO}% de lucro líquido. Acima desse lance, a operação deixa de compensar, é o limite para parar de dar lances.</>
+                      : <><strong>Atenção:</strong> no lance base o retorno já está abaixo de {PISO_LUCRO}%. Não há margem para disputa, só compensa abaixo de <strong>R$ {fmt(cd.tetoBest)}</strong>.</>}
                   </div>
                 </div>
               </div>
@@ -2184,7 +2184,7 @@ export default function Analise() {
               {isViavel ? <CheckCircle2 size={32} color="#10b981"/> : <XCircle size={32} color="#ef4444"/>}
               <div>
                 <div style={{ fontWeight:900, fontSize:17, color:isViavel?'#065f46':'#b91c1c' }}>
-                  {isViavel ? (isUsoProprio?'Aprovado para Uso Próprio':'Operação Viável — Aprovada pela BidPro Brasil') : 'Operação Reprovada — Retorno Insuficiente'}
+                  {isViavel ? (isUsoProprio?'Aprovado para Uso Próprio':'Operação Viável, Aprovada pela BidPro Brasil') : 'Operação Reprovada, Retorno Insuficiente'}
                 </div>
                 <div style={{ fontSize:13, color:isViavel?'#047857':'#dc2626', marginTop:4 }}>
                   {isUsoProprio ? `Economia de R$ ${fmt(metricas.lucro)} sobre o valor de mercado` : `ROI ${fmtPct(metricas.roi)} · Mínimo exigido: ${META}% · Teto de lance: R$ ${fmt(teto)}`}
@@ -2204,7 +2204,7 @@ export default function Analise() {
           {/* Tabela financeira detalhada */}
           <div style={{ borderRadius:12, border:'1px solid #e2e8f0', overflow:'hidden' }}>
             <div style={{ background:'#111111', padding:'12px 18px' }}>
-              <div style={{ fontSize:13, fontWeight:800, color:'white' }}>Detalhamento Financeiro — Lance sem disputa vs com disputa</div>
+              <div style={{ fontSize:13, fontWeight:800, color:'white' }}>Detalhamento Financeiro, Lance sem disputa vs com disputa</div>
             </div>
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
@@ -2375,7 +2375,7 @@ export default function Analise() {
         </div>
       </Section>
 
-      {/* PRÓXIMO PASSO — destaque ao fim do Mercadológico: seguir para o Documental */}
+      {/* PRÓXIMO PASSO, destaque ao fim do Mercadológico: seguir para o Documental */}
       <div style={{ background:'#fff7ed', border:'2px solid #fdba74', borderRadius:16, padding:'18px 20px', display:'flex', gap:14, alignItems:'flex-start' }}>
         <ShieldAlert size={22} color="#ea580c" style={{ flexShrink:0, marginTop:2 }}/>
         <div style={{ flex:1, minWidth:0 }}>
@@ -2385,7 +2385,7 @@ export default function Analise() {
           </div>
           {ROLES_SEM_DOCUMENTAL.includes(role) ? (
             <button onClick={()=>nav('/planos')} style={{ padding:'11px 18px', background:'#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
-              <Lock size={15}/> Análise Documental — disponível no Investidor Pro
+              <Lock size={15}/> Análise Documental, disponível no Investidor Pro
             </button>
           ) : (
             <button onClick={()=> relDocumentalGerado ? setRelSel('documental') : gerarRelDocumental()} disabled={gerandoDocumental}
@@ -2399,7 +2399,7 @@ export default function Analise() {
       </>)}
 
       {/* Guia Pós-Arrematação, Financiamento e registro ONR foram movidos para o
-          ACOMPANHAMENTO (tela do Caso) — o pós-arremate não pertence à análise de
+          ACOMPANHAMENTO (tela do Caso), o pós-arremate não pertence à análise de
           orientação. Lá aparecem num botão fixo + popup após sinalizar o arremate. */}
 
         </div>{/* fim central */}

@@ -570,7 +570,7 @@ function FichaTecnicaCEF({ ficha }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
             <span style={{ color: '#94a3b8', minWidth: 140 }}>Situação:</span>
             <span style={{ fontWeight: 700, color: ficha.ocupacao === 'Desocupado' ? '#15803d' : '#b45309' }}>{ficha.ocupacao}</span>
-            <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>(confirmar em visita — o status da Caixa costuma divergir)</span>
+            <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>(confirmar em visita, o status da Caixa costuma divergir)</span>
           </div>
         )}
         {refs.map(([rot, val]) => <Linha key={rot} rot={rot} val={val} />)}
@@ -887,14 +887,14 @@ export default function ImovelDetalhe() {
               {temLocal && (
                 <div style={{ marginTop: 16 }}>
                   {temCoord && <MiniMapa key={imovel.pontosProximos ? 'm-com-pontos' : 'm-so-imovel'} lat={Number(_lat)} lng={Number(_lng)} pontos={imovel.pontosProximos} nivel={nivelGeo} />}
-                  {/* Selo de precisão — honesto sobre coordenada exata vs aproximada */}
+                  {/* Selo de precisão, honesto sobre coordenada exata vs aproximada */}
                   {temCoord && (
                     <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 8,
                       background: localPrecisa ? '#f0fdf4' : '#fffbeb', color: localPrecisa ? '#15803d' : '#b45309', border: `1px solid ${localPrecisa ? '#bbf7d0' : '#fde68a'}` }}>
                       <MapPin size={12} />
                       {localPrecisa
                         ? 'Localização exata (endereço)'
-                        : `Localização aproximada${nivelTxt ? ` — nível ${nivelTxt}` : ''}: o círculo mostra a região, não o lote exato`}
+                        : `Localização aproximada${nivelTxt ? `, nível ${nivelTxt}` : ''}: o círculo mostra a região, não o lote exato`}
                     </div>
                   )}
                   {/* Legenda dos pontos próximos (atratividade) */}
@@ -974,11 +974,11 @@ export default function ImovelDetalhe() {
               )}
             </div>
 
-            {/* Ficha técnica — CEF vem da página oficial; demais lotes (judicial/
+            {/* Ficha técnica, CEF vem da página oficial; demais lotes (judicial/
                 extrajudicial) vêm da matrícula lida no laudo documental. */}
             <FichaTecnicaCEF ficha={imovel.fichaCef} />
 
-            {/* Simulação rápida — estimativa pela avaliação do leilão (NÃO é a mercadológica) */}
+            {/* Simulação rápida, estimativa pela avaliação do leilão (NÃO é a mercadológica) */}
             {imovel.valorMinimo > 0 && imovel.valorAvaliacao > 0 && (() => {
               const lance = imovel.valorMinimo;
               const custosAquisicao = lance * 0.095; // ITBI ~3% + registro ~1,5% + comissão leiloeiro 5%
@@ -1075,7 +1075,7 @@ export default function ImovelDetalhe() {
                 )}
 
                 {/* Botões DIRETOS: Matrícula + Regras de venda online/Edital.
-                    Montados na hora a partir dos dados — abrem direto o PDF/portal da
+                    Montados na hora a partir dos dados, abrem direto o PDF/portal da
                     Caixa no navegador (sem captura/espera). */}
                 {(matriculaUrl || regrasEditalUrl) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -1094,7 +1094,7 @@ export default function ImovelDetalhe() {
                   </div>
                 )}
 
-                {/* Anexos do leiloeiro — documentos vasculhados na página do lote
+                {/* Anexos do leiloeiro, documentos vasculhados na página do lote
                     (matrícula, edital, laudo, ônus, certidões…). Cada leiloeiro
                     guarda em lugar diferente; o servidor varre a página e lista aqui. */}
                 {anexosLeiloeiro.length > 0 && (
@@ -1141,7 +1141,7 @@ export default function ImovelDetalhe() {
                   {descLabel}% abaixo da avaliação
                 </div>
               )}
-              {/* Score BidPro (0–10): potencial de oportunidade num relance */}
+              {/* Score BidPro (0 a 10): potencial de oportunidade num relance */}
               {(() => {
                 const sb = scoreBidPro({ desconto: imovel.descontoPercentual, modalidade: imovel.modalidade, tipo: imovel.tipo, scoreLocalizacao: imovel.scoreLocalizacao, scoreJuridico: imovel.scoreJuridico, scoreFinanceiro: imovel.scoreFinanceiro, valorMercado: imovel.valorMercado, valorMinimo: imovel.valorMinimo, analiseViavel: imovel.analiseViavel });
                 if (!sb) return null;
@@ -1155,7 +1155,7 @@ export default function ImovelDetalhe() {
                         <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.3 }}>{scoreLabel(sb.base)}</div>
                       </div>
                     </div>
-                    {/* Sub-scores (camadas) — transparência: cada camada e seu peso */}
+                    {/* Sub-scores (camadas), transparência: cada camada e seu peso */}
                     <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {sb.camadas.map(c => (
                         <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1172,13 +1172,13 @@ export default function ImovelDetalhe() {
                       <div style={{ marginTop: 8, fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
                         Nota de <strong>0 a 10</strong> = média <strong>ponderada das camadas presentes</strong> (re-normalizada), então já na busca a nota pode chegar a 10 e <strong>refina</strong> quando a análise chega:
                         <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
-                          <li><strong>Margem (40%)</strong> — desconto do lance vs. avaliação.</li>
-                          <li><strong>Localização (25%)</strong> — proximidades (OSM); só p/ imóvel com coordenada precisa.</li>
-                          <li><strong>Perfil (15%)</strong> — modalidade + tipo (liquidez da operação).</li>
-                          <li><strong>Jurídico (10%)</strong> e <strong>Financeiro (10%)</strong> — entram após a análise.</li>
+                          <li><strong>Margem (40%)</strong>, desconto do lance vs. avaliação.</li>
+                          <li><strong>Localização (25%)</strong>, proximidades (OSM); só p/ imóvel com coordenada precisa.</li>
+                          <li><strong>Perfil (15%)</strong>, modalidade + tipo (liquidez da operação).</li>
+                          <li><strong>Jurídico (10%)</strong> e <strong>Financeiro (10%)</strong>, entram após a análise.</li>
                         </ul>
-                        <div style={{ marginTop: 6 }}>Cores: <span style={{ color: '#16a34a', fontWeight: 700 }}>verde ≥ 7</span> · <span style={{ color: '#d97706', fontWeight: 700 }}>âmbar 4–6,9</span> · <span style={{ color: '#dc2626', fontWeight: 700 }}>vermelho &lt; 4</span>.</div>
-                        <div style={{ marginTop: 6, color: '#94a3b8' }}>É um indicador de <strong>triagem</strong> — não substitui a análise completa nem o parecer do analista.</div>
+                        <div style={{ marginTop: 6 }}>Cores: <span style={{ color: '#16a34a', fontWeight: 700 }}>verde ≥ 7</span> · <span style={{ color: '#d97706', fontWeight: 700 }}>âmbar 4 a 6,9</span> · <span style={{ color: '#dc2626', fontWeight: 700 }}>vermelho &lt; 4</span>.</div>
+                        <div style={{ marginTop: 6, color: '#94a3b8' }}>É um indicador de <strong>triagem</strong>, não substitui a análise completa nem o parecer do analista.</div>
                       </div>
                     </details>
                   </div>
@@ -1249,7 +1249,7 @@ export default function ImovelDetalhe() {
         </div>
       </div>
 
-      {/* Seção Arrematação removida desta tela — a arrematação é registrada no Caso. */}
+      {/* Seção Arrematação removida desta tela, a arrematação é registrada no Caso. */}
 
       <style>{`
         @media (max-width: 900px) {

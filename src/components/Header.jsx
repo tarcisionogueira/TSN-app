@@ -100,7 +100,7 @@ function ModalFeedback({ user, onClose }) {
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>SATISFAÇÃO GERAL (0–10)</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>SATISFAÇÃO GERAL (0 a 10)</label>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {Array.from({ length: 11 }, (_, i) => (
                   <button key={i} onClick={() => setNps(i)}
@@ -222,7 +222,7 @@ export default function Header() {
       {/* Banner do modo suporte */}
       {impersonate && (
         <div style={{ background: '#d97706', color: 'white', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
-          <Eye size={15} /> Modo suporte — visualizando a conta de <strong>{impersonate.nome}</strong>
+          <Eye size={15} /> Modo suporte, visualizando a conta de <strong>{impersonate.nome}</strong>
           <button onClick={encerrarSuporte}
             style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             Sair do modo suporte
@@ -232,7 +232,7 @@ export default function Header() {
       {/* Banner de simulação de role (apenas admin) */}
       {roleSimulado && (
         <div style={{ background: '#7c3aed', color: 'white', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
-          🎭 Simulando como <strong style={{ textTransform: 'capitalize' }}>{roleSimulado}</strong> — a interface está sendo exibida conforme esse perfil veria
+          🎭 Simulando como <strong style={{ textTransform: 'capitalize' }}>{roleSimulado}</strong>, a interface está sendo exibida conforme esse perfil veria
           <button onClick={() => simularRole(null)}
             style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             Voltar ao Admin

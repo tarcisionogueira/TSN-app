@@ -125,7 +125,7 @@ export default function MinhasAnalises() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Imóvel'}</div>
-                  <div style={{ fontSize: 12.5, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[a.cidade, a.estado].filter(Boolean).join(' — ')}</div>
+                  <div style={{ fontSize: 12.5, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[a.cidade, a.estado].filter(Boolean).join(', ')}</div>
                   <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 7, marginTop: 3 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <s.Icon size={12} color={s.cor} style={s.spin ? { animation: 'spin 1s linear infinite' } : undefined} />

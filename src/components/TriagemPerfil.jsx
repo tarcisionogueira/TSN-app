@@ -6,10 +6,10 @@ import { Loader2, Target, X } from 'lucide-react';
 // que direciona os agentes e prioriza o enriquecimento pelas cidades de interesse.
 // Não aparece para equipe/admin nem depois de respondida (perfis.triagem_em).
 const PERFIS = [
-  ['revenda', '🔁 Comprar para revender', 'Arremato e revendo (flip) — foco em margem e liquidez de saída.'],
-  ['locacao', '🏠 Comprar para alugar', 'Arremato e coloco para locação — foco em renda e yield.'],
-  ['uso_proprio', '🔑 Comprar para uso', 'Para morar ou usar no meu negócio — foco em economia e adequação.'],
-  ['incorporacao', '🏗️ Comprar para incorporar', 'Terreno/imóvel para construir e vender — foco em potencial construtivo.'],
+  ['revenda', '🔁 Comprar para revender', 'Arremato e revendo (flip), foco em margem e liquidez de saída.'],
+  ['locacao', '🏠 Comprar para alugar', 'Arremato e coloco para locação, foco em renda e yield.'],
+  ['uso_proprio', '🔑 Comprar para uso', 'Para morar ou usar no meu negócio, foco em economia e adequação.'],
+  ['incorporacao', '🏗️ Comprar para incorporar', 'Terreno/imóvel para construir e vender, foco em potencial construtivo.'],
 ];
 const FAIXAS = [
   ['ate_150k', 'Até R$ 150 mil'],
@@ -29,7 +29,7 @@ const CONSORCIO = [
 ];
 const EXPERIENCIA = [
   ['primeira', 'Primeira vez'],
-  ['1_2', 'Já arrematei 1–2'],
+  ['1_2', 'Já arrematei 1 a 2'],
   ['recorrente', 'Investidor recorrente'],
 ];
 

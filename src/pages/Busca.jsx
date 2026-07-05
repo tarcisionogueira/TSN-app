@@ -307,7 +307,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
               return `<img src="${cands[0]}" data-cands='${resto}' onerror="(function(el){try{var c=JSON.parse(el.getAttribute('data-cands')||'[]');if(c.length){el.setAttribute('data-cands',JSON.stringify(c.slice(1)));el.src=c[0];}else{el.style.display='none';}}catch(e){el.style.display='none';}})(this)" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>`;
             })()}
             <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${im.titulo || 'Imóvel'}</div>
-            <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${im.cidade} — ${im.estado}</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${im.cidade}, ${im.estado}</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
               ${desc ? `<span style="font-size:10px;font-weight:800;background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:20px">-${desc}%</span>` : ''}
               ${pgtoLabel ? `<span style="font-size:10px;font-weight:700;background:${pgtoBg};color:${pgtoColor};padding:1px 6px;border-radius:20px">${pgtoLabel}</span>` : ''}
@@ -412,7 +412,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       {!carregando && imoveisMapa.length === 0 && semCoordenadas && (
         <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'white', padding: '10px 18px', borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', fontSize: 12, color: '#64748b', textAlign: 'center', maxWidth: 320 }}>
           <div style={{ fontWeight: 700, color: '#334155', marginBottom: 3 }}>📍 {totalLista} imóvel(is) encontrado(s) sem localização</div>
-          <div>Coordenadas ainda não cadastradas. A geocodificação automática ocorre entre 21h e 7h (BRT) — os pins aparecem após o processamento noturno.</div>
+          <div>Coordenadas ainda não cadastradas. A geocodificação automática ocorre entre 21h e 7h (BRT), os pins aparecem após o processamento noturno.</div>
         </div>
       )}
       {!carregando && imoveisMapa.length === 0 && !semCoordenadas && (
@@ -530,7 +530,7 @@ export default function Busca() {
       }
       setFiltrosPersist(prev => {
         const jaTem = prev.estado || prev.cidades?.length || prev.tipos?.length || prev.modalidades?.length || prev.pagamento?.length || prev.valorMin || prev.valorMax;
-        if (jaTem) return prev; // usuário já interagiu — não mexe
+        if (jaTem) return prev; // usuário já interagiu, não mexe
         if (uf || cidade) return { ...prev, estado: uf || prev.estado, cidades: cidade ? [cidade] : prev.cidades };
         if (alerta) return { ...FILTROS_INICIAL, ...alerta };
         return prev;
@@ -1042,13 +1042,13 @@ export default function Busca() {
         <div style={{ position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)', zIndex:1000, background: totalDisp > 0 ? '#0D63DB' : '#dc2626', color:'white', borderRadius:999, padding:'8px 20px', fontSize:13, fontWeight:700, boxShadow:'0 4px 20px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap' }}>
           {totalDisp > 0
             ? `📊 ${analisesRestantes}/${limiteAnalises} análises este mês${effectiveRole === 'explorador' && analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
-            : '🔒 Análises do mês esgotadas — faça upgrade'}
+            : '🔒 Análises do mês esgotadas, faça upgrade'}
         </div>
       );
     })()}
     <div style={{ maxWidth:1480, margin:'0 auto', padding: isMobile ? '16px 12px' : '20px', display:'flex', flexDirection:'column', gap:16 }}>
 
-      {/* FILTROS (dropdown no topo — libera a largura toda para lista/mapa) */}
+      {/* FILTROS (dropdown no topo, libera a largura toda para lista/mapa) */}
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
 
         {/* Filtros */}
@@ -1111,7 +1111,7 @@ export default function Busca() {
                 </select>
               </div>
               <div>
-                <label style={lbl}>Cidade(s) — opcional, múltipla seleção</label>
+                <label style={lbl}>Cidade(s), opcional, múltipla seleção</label>
                 <div style={{ fontSize:10, color:'#94a3b8', marginBottom:6 }}>Deixe vazio para buscar em todo o estado</div>
                 {/* Cidades selecionadas */}
                 {filtros.cidades.length > 0 && (
@@ -1183,7 +1183,7 @@ export default function Busca() {
                   );
                 })()}
               </div>
-              {/* Radius search — toggle sempre visível */}
+              {/* Radius search, toggle sempre visível */}
               <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:12 }}>
                 <label style={{ ...lbl, display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
                   <span style={{ display:'flex', alignItems:'center', gap:5 }}><MapPin size={11}/> Buscar por raio</span>
@@ -1197,7 +1197,7 @@ export default function Busca() {
                   <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                     {filtros.cidades.length > 0 ? (
                       <div style={{ fontSize:10, color:'#16a34a', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:6, padding:'6px 8px', display:'flex', alignItems:'center', gap:4 }}>
-                        <MapPin size={10}/> Centro: <strong>{filtros.cidades[0]}{filtros.estado ? ` — ${filtros.estado}` : ''}</strong>
+                        <MapPin size={10}/> Centro: <strong>{filtros.cidades[0]}{filtros.estado ? `, ${filtros.estado}` : ''}</strong>
                       </div>
                     ) : (
                       <div style={{ fontSize:10, color:'#92400e', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:6, padding:'6px 8px' }}>
@@ -1301,7 +1301,7 @@ export default function Busca() {
                 <label style={lbl}>Forma de Pagamento</label>
                 {/* Multi-seleção: pode marcar mais de uma (união no filtro). Financiado
                     = parcela extrajudicial (CEF); Hipotecado = parcela judicial (art. 895 CPC).
-                    Quem compra parcelado usa os dois — devem poder ser combinados. */}
+                    Quem compra parcelado usa os dois, devem poder ser combinados. */}
                 {[['aVista','À Vista',''],['financiado','Financiado','parcela extrajudicial'],['hipotecado','Hipotecado','parcela judicial']].map(([v,l,sub])=>(
                   <label key={v} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:12, color:'#334155', marginBottom:5 }}>
                     <input type="checkbox" checked={filtros.pagamento.includes(v)} onChange={()=>togglePagamento(v)} style={{ width:14, height:14 }}/>
@@ -1455,7 +1455,7 @@ export default function Busca() {
           </div>
         )}
 
-        {/* Vista Mapa embutido — usa snapshot dos filtros no momento da busca */}
+        {/* Vista Mapa embutido, usa snapshot dos filtros no momento da busca */}
         {buscaFeita && filtrosBusca && (
           <div style={{ display: (vista === 'mapa' || vista === 'ambos') ? 'block' : 'none' }}>
             {vista === 'ambos' ? (
@@ -1475,7 +1475,7 @@ export default function Busca() {
                         <LazyImage src={imgSrc} alt={im.titulo} style={{ width:72, height:72, flexShrink:0 }} />
                         <div style={{ padding:'8px 10px', flex:1, minWidth:0 }}>
                           <div style={{ fontSize:11, fontWeight:700, color:'#111', marginBottom:2, lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{im.titulo || 'Imóvel'}</div>
-                          <div style={{ fontSize:10, color:'#64748b', marginBottom:4 }}>📍 {im.cidade} — {im.estado}</div>
+                          <div style={{ fontSize:10, color:'#64748b', marginBottom:4 }}>📍 {im.cidade}, {im.estado}</div>
                           <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap' }}>
                             <span style={{ fontSize:12, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
                             {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
@@ -1488,7 +1488,7 @@ export default function Busca() {
                   })}
                   {resultadosFiltrados.length > 30 && (
                     <div style={{ textAlign:'center', fontSize:11, color:'#94a3b8', padding:'8px 0' }}>
-                      + {resultadosFiltrados.length - 30} imóveis — use Lista para ver todos
+                      + {resultadosFiltrados.length - 30} imóveis, use Lista para ver todos
                     </div>
                   )}
                 </div>
@@ -1515,7 +1515,7 @@ export default function Busca() {
                             <LazyImage src={imgSrc} alt={im.titulo} style={{ width:64, height:64, flexShrink:0 }} />
                             <div style={{ padding:'7px 10px', flex:1, minWidth:0 }}>
                               <div style={{ fontSize:12, fontWeight:700, color:'#111', lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{im.titulo || 'Imóvel'}</div>
-                              <div style={{ fontSize:10, color:'#64748b', margin:'2px 0 4px' }}>📍 {im.cidade} — {im.estado}</div>
+                              <div style={{ fontSize:10, color:'#64748b', margin:'2px 0 4px' }}>📍 {im.cidade}, {im.estado}</div>
                               <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
                                 <span style={{ fontSize:13, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
                                 {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
@@ -1575,7 +1575,7 @@ export default function Busca() {
                         -{fmtDesc(desc)}%
                       </div>
                     )}
-                    {/* Score BidPro (0–10): potencial num relance, estilo IPL */}
+                    {/* Score BidPro (0 a 10): potencial num relance, estilo IPL */}
                     {sb && (
                       <div title={sbTitle}
                         style={{ position:'absolute', top:8, left:8, background:sb.cor, color:'white', fontWeight:900, fontSize:13, minWidth:34, textAlign:'center', padding:'3px 7px', borderRadius:8, boxShadow:'0 1px 4px rgba(0,0,0,0.2)' }}>

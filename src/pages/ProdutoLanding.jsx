@@ -30,7 +30,7 @@ const PLANOS_INFO = {
     ],
   },
   assessorado_vista: {
-    tagline: 'Assessoria completa 12 meses — pagamento único com desconto',
+    tagline: 'Assessoria completa 12 meses, pagamento único com desconto',
     precoLabel: 'R$ 4.800 à vista',
     features: [
       'Tudo do plano Assessorado',
@@ -51,7 +51,7 @@ const PLANOS_INFO = {
     ],
   },
   clube_vista: {
-    tagline: 'Clube de Negócios — pagamento único anual com máximo desconto',
+    tagline: 'Clube de Negócios, pagamento único anual com máximo desconto',
     precoLabel: 'R$ 48.000 à vista',
     features: [
       'Tudo do Clube de Negócios mensal',
@@ -167,7 +167,7 @@ function CapturaLanding({ id }) {
             <div style={{ fontSize: 22, marginBottom: 8 }}>🎁</div>
             <div style={{ fontWeight: 800, fontSize: 16, color: '#34d399', marginBottom: 6 }}>Seu acesso é 100% gratuito</div>
             <div style={{ fontSize: 14, color: '#a7f3d0', lineHeight: 1.6 }}>
-              O {tipoLabel.toLowerCase()} fica disponível <strong>dentro da plataforma BidPro Brasil</strong> — sem custo, sem cartão de crédito. Basta criar sua conta gratuita em menos de 1 minuto.
+              O {tipoLabel.toLowerCase()} fica disponível <strong>dentro da plataforma BidPro Brasil</strong>, sem custo, sem cartão de crédito. Basta criar sua conta gratuita em menos de 1 minuto.
             </div>
           </div>
 

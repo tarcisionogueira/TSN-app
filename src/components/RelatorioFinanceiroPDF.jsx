@@ -29,7 +29,7 @@ export function gerarPDFFinanceiro({ grupos, totalEntradas, totalSaidas }) {
         <tbody>
           ${linhasGrupo(g)}
           <tr style="background:#f1f5f9;font-weight:700;">
-            <td colspan="4">Subtotal — Entradas R$ ${fmt(ent)} · Saídas R$ ${fmt(sai)}</td>
+            <td colspan="4">Subtotal, Entradas R$ ${fmt(ent)} · Saídas R$ ${fmt(sai)}</td>
             <td class="r ${sld >= 0 ? 'g' : 'rd'}">Saldo R$ ${fmt(sld)}</td>
           </tr>
         </tbody>

@@ -122,7 +122,7 @@ function AnaliseCard({ info, job, relatorio, onSolicitar, solicitando, podeSolic
           <div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>{info.desc}</div>
           {job && job.status !== 'concluido' && (
             <div style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>
-              {job.status === 'aguardando' && 'Na fila — prazo de 48h para conclusão'}
+              {job.status === 'aguardando' && 'Na fila, prazo de 48h para conclusão'}
               {job.status === 'processando' && 'Analisando dados...'}
               {job.status === 'falha' && `Erro: ${job.erro_msg || 'Falha no processamento'}`}
               {job.status === 'falha_parcial' && 'Concluído com informações parciais'}
@@ -147,7 +147,7 @@ function AnaliseCard({ info, job, relatorio, onSolicitar, solicitando, podeSolic
           </div>
           {relatorio.incompleto && (
             <div style={{ marginTop:10, padding:'8px 12px', background:'#fef3c7', borderRadius:8, fontSize:11, color:'#92400e' }}>
-              <AlertTriangle size={12} style={{marginRight:4,verticalAlign:'middle'}}/> Relatório parcial — algumas seções não puderam ser obtidas.
+              <AlertTriangle size={12} style={{marginRight:4,verticalAlign:'middle'}}/> Relatório parcial, algumas seções não puderam ser obtidas.
             </div>
           )}
           <button onClick={() => window.print()} style={{ ...btn('#64748b'), fontSize:11, padding:'6px 12px', marginTop:10 }}>
@@ -294,7 +294,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
         </div>
         <div style={{ flex:1 }}>
           <div style={{ fontWeight:800, fontSize:14, color:'#111111' }}>Análise jurídica automática (IA)</div>
-          <div style={{ fontSize:11.5, color:'#64748b' }}>Equipe — anexe matrícula/edital e gere o parecer com score</div>
+          <div style={{ fontSize:11.5, color:'#64748b' }}>Equipe, anexe matrícula/edital e gere o parecer com score</div>
         </div>
       </div>
 
@@ -308,7 +308,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
         <DocUploadRow tipo="matricula" label="Matrícula" anexo={anexoDe('matricula')} enviando={enviando} onArquivo={enviarArquivo}/>
         <DocUploadRow tipo="edital" label="Edital" anexo={anexoDe('edital')} enviando={enviando} onArquivo={enviarArquivo}/>
 
-        {/* Documentos adicionais (múltiplos — laudo, ata, regras de venda, etc.) */}
+        {/* Documentos adicionais (múltiplos, laudo, ata, regras de venda, etc.) */}
         <div style={{ borderTop:'1px dashed #e2e8f0', paddingTop:8 }}>
           <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:6 }}>Outros documentos ({extras.length})</div>
           {extras.map(a => (
@@ -326,7 +326,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
         </div>
       </div>
 
-      {/* Checklist de conferência — auditoria do que temos e do que a IA validou */}
+      {/* Checklist de conferência, auditoria do que temos e do que a IA validou */}
       <div style={{ marginTop:12, padding:'10px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:10 }}>
         <div style={{ fontSize:11, fontWeight:800, color:'#334155', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Checklist de conferência</div>
         {[
@@ -342,7 +342,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
         ))}
         {(!temMatricula || !temEdital || (temResultado && incompleto)) && (
           <div style={{ marginTop:8, fontSize:11, color:'#92400e', lineHeight:1.5 }}>
-            ⚠️ Falta documento ou a IA não conseguiu ler tudo — <strong>requer conferência humana</strong>. A IA nunca reprova sozinha por falta de dado.
+            ⚠️ Falta documento ou a IA não conseguiu ler tudo, <strong>requer conferência humana</strong>. A IA nunca reprova sozinha por falta de dado.
           </div>
         )}
       </div>
@@ -405,7 +405,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
 
           {incompleto && (
             <div style={{ marginTop:10, padding:'8px 12px', background:'#fef3c7', borderRadius:8, fontSize:11, color:'#92400e' }}>
-              <AlertTriangle size={12} style={{ marginRight:4, verticalAlign:'middle' }}/> Análise parcial — algumas seções não puderam ser obtidas.
+              <AlertTriangle size={12} style={{ marginRight:4, verticalAlign:'middle' }}/> Análise parcial, algumas seções não puderam ser obtidas.
             </div>
           )}
         </div>
@@ -743,8 +743,8 @@ export default function Caso() {
       setObsReu('');
       await carregarCaso();
       setMsg(parecer === 'aprovado'
-        ? '✅ Reunião concluída — aprovada para arrematação. Encaminhamento ao jurídico liberado.'
-        : '⛔ Reunião concluída — reprovada para arrematação. O fluxo não segue para o jurídico.');
+        ? '✅ Reunião concluída, aprovada para arrematação. Encaminhamento ao jurídico liberado.'
+        : '⛔ Reunião concluída, reprovada para arrematação. O fluxo não segue para o jurídico.');
     } catch (e) {
       setMsg(`Erro: ${e.message}`);
     } finally {
@@ -939,7 +939,7 @@ export default function Caso() {
 
     const params = new URLSearchParams({
       action: 'TEMPLATE',
-      text: `🏠 Leilão — ${titulo}`,
+      text: `🏠 Leilão, ${titulo}`,
       ...(dates ? { dates } : {}),
       details: detalhes,
       ...(endereco ? { location: endereco } : {}),
@@ -971,7 +971,7 @@ export default function Caso() {
     <div style={{ maxWidth:860, margin:'0 auto', padding: isMobile ? '16px 12px' : '28px 20px' }}>
 
       {/* Pós-arremate: botão FIXO + popup (auto na 1ª vez). Guia + Financiamento
-          só existem depois de sinalizar o arremate — o lançamento real é aqui. */}
+          só existem depois de sinalizar o arremate, o lançamento real é aqui. */}
       {temPosArremate && (
         <button onClick={() => setGuiaAberta(true)}
           style={{ position:'fixed', right:20, bottom:20, zIndex:1500, padding:'12px 18px', background:'#059669', color:'white', border:'none', borderRadius:30, fontWeight:800, fontSize:13, cursor:'pointer', boxShadow:'0 8px 24px rgba(5,150,105,0.4)', display:'flex', alignItems:'center', gap:8 }}>
@@ -1105,7 +1105,7 @@ export default function Caso() {
               ) : (
                 <>
                   <div style={{ fontWeight:700, fontSize:14, color:'#084BA6', marginBottom:8 }}>
-                    {isAnalista ? 'Relatórios prontos — agendar reunião com cliente' : 'Relatórios prontos — agende sua reunião com o analista'}
+                    {isAnalista ? 'Relatórios prontos, agendar reunião com cliente' : 'Relatórios prontos, agende sua reunião com o analista'}
                   </div>
                   <button onClick={() => setShowAgendar(1)} style={{ ...btn('#0D63DB'), fontSize:12 }}>
                     <Calendar size={13} style={{marginRight:6,verticalAlign:'middle'}}/>Escolher horário
@@ -1181,7 +1181,7 @@ export default function Caso() {
                 </div>
               )}
 
-              {/* Reprovado — estado terminal */}
+              {/* Reprovado, estado terminal */}
               {reuniao1.parecer_arrematacao === 'reprovado' && (
                 <div style={{ marginTop:16, padding:'12px 14px', background:'#fef2f2', borderRadius:10, border:'1px solid #fecaca', fontSize:12, color:'#991b1b' }}>
                   O analista <strong>não recomendou</strong> este imóvel para arrematação. O fluxo não segue para a análise jurídica.
@@ -1230,7 +1230,7 @@ export default function Caso() {
         >
           {juridica ? (
             <div style={{ paddingTop:14 }}>
-              {/* Visualização para cliente — só após entrega */}
+              {/* Visualização para cliente, só após entrega */}
               {isCliente && !juridica.entregue_em && (
                 <div style={{ color:'#64748b', fontSize:13 }}>
                   O advogado está analisando. Prazo: <strong>{fmtDate(juridica.prazo_ate)}</strong>
@@ -1263,7 +1263,7 @@ export default function Caso() {
                 </div>
               )}
 
-              {/* Cliente — ações após parecer jurídico entregue */}
+              {/* Cliente, ações após parecer jurídico entregue */}
               {isCliente && juridica.entregue_em && (
                 <div style={{ marginTop:16, padding:'14px 16px', background:'#eff6ff', borderRadius:10, border:'1px solid #bfdbfe' }}>
                   <div style={{ fontWeight:700, fontSize:13, color:'#084BA6', marginBottom:4 }}>Próximos passos</div>
@@ -1288,12 +1288,12 @@ export default function Caso() {
                 </div>
               )}
 
-              {/* Advogado — formulário de checklist */}
+              {/* Advogado, formulário de checklist */}
               {isAdvogado && !juridica.entregue_em && (
                 <ChecklistJuridico juridica={juridica} casoId={caso.id} onSalvo={carregarCaso}/>
               )}
 
-              {/* 2ª reunião — analista ou cliente agenda após parecer */}
+              {/* 2ª reunião, analista ou cliente agenda após parecer */}
               {juridica.entregue_em && !reuniao2 && (isAnalista || (COTAS_PLANO[role]?.reunioes || 0) >= 2) && (
                 <div style={{ marginTop:16, padding:'14px', background:'#ecfdf5', borderRadius:10, border:'1px solid #bbf7d0' }}>
                   {showAgendar === 2 ? (
@@ -1301,7 +1301,7 @@ export default function Caso() {
                       casoId={caso.id}
                       analistaId={caso.analista_id}
                       reuniaoNum={2}
-                      titulo="Agendar 2ª Reunião — Aprovação"
+                      titulo="Agendar 2ª Reunião, Aprovação"
                       onAgendado={() => { setShowAgendar(null); carregarCaso(); }}
                       onCancelar={() => setShowAgendar(null)}
                     />
@@ -1332,7 +1332,7 @@ export default function Caso() {
       {reuniao2 && (
         <div style={{ marginBottom:12 }}>
           <Secao
-            title="2ª Reunião — Aprovação"
+            title="2ª Reunião, Aprovação"
             icon={Video}
             color="#0891b2"
             open={secOpen.reuniao2 || false}
@@ -1352,7 +1352,7 @@ export default function Caso() {
               {reuniao2.observacoes && (
                 <div style={{ marginTop:10, fontSize:12, color:'#475569' }}><strong>Observações:</strong> {reuniao2.observacoes}</div>
               )}
-              {/* Botão Google Agenda para o leilão — visível ao cliente */}
+              {/* Botão Google Agenda para o leilão, visível ao cliente */}
               {isCliente && (
                 <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid #e2e8f0' }}>
                   <div style={{ fontSize:12, color:'#64748b', marginBottom:8 }}>Não esqueça de salvar o leilão na sua agenda:</div>
@@ -1379,7 +1379,7 @@ export default function Caso() {
           color="#059669"
           open={secOpen.arr}
           onToggle={() => toggleSec('arr')}
-          badge={arrematacao ? `${fmt(arrematacao.valor_arrematado)} — ${arrematacao.honorarios_status}` : 'Aguardando habilitação no leiloeiro'}
+          badge={arrematacao ? `${fmt(arrematacao.valor_arrematado)}, ${arrematacao.honorarios_status}` : 'Aguardando habilitação no leiloeiro'}
           disabled={!juridica?.entregue_em && !arrematacao}
         >
           {arrematacao ? (
@@ -1641,7 +1641,7 @@ function ChecklistJuridico({ juridica, casoId, onSalvo }) {
 
       {/* Seção 5: débitos e hierarquia */}
       <div style={{ background:'#f8fafc', borderRadius:10, padding:'14px', marginBottom:10 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:10, textTransform:'uppercase' }}>Seção 5 — Débitos e Hierarquia</div>
+        <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:10, textTransform:'uppercase' }}>Seção 5, Débitos e Hierarquia</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
           <div><label style={lbl}>Débitos IPTU (R$)</label><input value={form.debitos_iptu_valor} onChange={e=>f('debitos_iptu_valor',e.target.value)} style={inp2} placeholder="0.00"/></div>
           <div><label style={lbl}>Débitos Condomínio (R$)</label><input value={form.debitos_cond_valor} onChange={e=>f('debitos_cond_valor',e.target.value)} style={inp2} placeholder="0.00"/></div>
@@ -1660,7 +1660,7 @@ function ChecklistJuridico({ juridica, casoId, onSalvo }) {
 
       {/* Seção 6: Conclusão */}
       <div style={{ background:'#f8fafc', borderRadius:10, padding:'14px', marginBottom:12 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:10, textTransform:'uppercase' }}>Seção 6 — Conclusão</div>
+        <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:10, textTransform:'uppercase' }}>Seção 6, Conclusão</div>
         <div style={{ marginBottom:10 }}><label style={lbl}>Red flags identificadas</label><textarea value={form.red_flags} onChange={e=>f('red_flags',e.target.value)} rows={2} style={{...inp2,resize:'vertical'}} placeholder="Descreva riscos ocultos identificados"/></div>
         <div style={{ marginBottom:10 }}>
           <label style={lbl}>Nível de Risco</label>

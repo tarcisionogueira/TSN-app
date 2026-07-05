@@ -377,7 +377,7 @@ export default function Membros() {
             <div style={{ borderRadius:14, border:'2px dashed #f59e0b', padding:'18px 20px', background:'#fffbeb', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
               <div style={{ flex:1, minWidth:200 }}>
                 <div style={{ fontSize:12, fontWeight:800, color:'#92400e', textTransform:'uppercase', letterSpacing:1, marginBottom:4 }}>📦 {PACOTE.titulo}</div>
-                <div style={{ fontSize:13, color:'#78350f' }}>Todos os 4 cursos pagos em um único pacote — economize <strong>R$ {PACOTE.economia}</strong></div>
+                <div style={{ fontSize:13, color:'#78350f' }}>Todos os 4 cursos pagos em um único pacote, economize <strong>R$ {PACOTE.economia}</strong></div>
               </div>
               <div style={{ textAlign:'right' }}>
                 <div style={{ fontSize:12, color:'#94a3b8', textDecoration:'line-through' }}>R$ {PACOTE.precoOriginal}</div>
@@ -436,7 +436,7 @@ export default function Membros() {
                       const okMp = rMp.status === 'fulfilled' && rMp.value.ok;
                       const okAs = rAs.status === 'fulfilled' && rAs.value.ok;
                       if (!okMp && !okAs) throw new Error('Não foi possível cancelar a renovação. Fale com o suporte.');
-                      setCancelMsg('Renovação automática cancelada. Você mantém o acesso até o fim do período já pago — sem novas cobranças.');
+                      setCancelMsg('Renovação automática cancelada. Você mantém o acesso até o fim do período já pago, sem novas cobranças.');
                     } catch(e) {
                       setCancelMsg('Erro: ' + e.message);
                     }

@@ -157,7 +157,7 @@ export default function TourGuia() {
           <div>
             {ehNovas && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#eff6ff', color: '#084BA6', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                ✨ Novidade — {VERSAO_ATUAL}
+                ✨ Novidade, {VERSAO_ATUAL}
               </div>
             )}
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#111111', lineHeight: 1.3 }}>{etapa.titulo}</h3>

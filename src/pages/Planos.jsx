@@ -8,13 +8,13 @@ import { fetchPlanosComConfig } from '../utils/planosConfig';
 // FAQs montados com os valores reais do planos_config (evita valores fixos
 // divergentes). Os labels de preço chegam já formatados.
 const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel }) => [
-  { q: 'Posso cancelar o plano a qualquer momento?', r: 'Sim. No plano mensal (sem fidelidade), cancele quando quiser, sem multa. No plano anual, você cancela a renovação automática a qualquer momento — sem novas cobranças e sem estorno do período já contratado, mantendo o acesso até o fim dos 12 meses.' },
-  { q: 'O plano Assessoria cobre quantas arrematações?', r: 'Uma arrematação por contrato. O assessorado tem até 12 meses para realizar a arrematação — buscando oportunidades e também recebendo indicações da nossa equipe —, com acompanhamento completo do início até a imissão de posse.' },
+  { q: 'Posso cancelar o plano a qualquer momento?', r: 'Sim. No plano mensal (sem fidelidade), cancele quando quiser, sem multa. No plano anual, você cancela a renovação automática a qualquer momento, sem novas cobranças e sem estorno do período já contratado, mantendo o acesso até o fim dos 12 meses.' },
+  { q: 'O plano Assessoria cobre quantas arrematações?', r: 'Uma arrematação por contrato. O assessorado tem até 12 meses para realizar a arrematação, buscando oportunidades e também recebendo indicações da nossa equipe, com acompanhamento completo do início até a imissão de posse.' },
   // (FAQ de honorários removido da tela comercial — detalhes ficam no checkout/contrato)
   { q: 'O Leilão Club inclui arrematações ilimitadas?', r: 'Sim. Com o Clube você tem acesso a assessoria contínua para todas as arrematações durante a vigência do plano.' },
-  { q: 'Posso pagar parcelado no cartão?', r: 'Sim. Aceitamos crédito, débito e PIX. Parcelamento em até 12× disponível — a partir da 4ª parcela os juros são assumidos pelo cliente conforme a operadora.' },
+  { q: 'Posso pagar parcelado no cartão?', r: 'Sim. Aceitamos crédito, débito e PIX. Parcelamento em até 12× disponível, a partir da 4ª parcela os juros são assumidos pelo cliente conforme a operadora.' },
   { q: 'O que é o relatório de viabilidade?', r: 'Nossa IA analisa edital, matrícula e documentos do imóvel e gera um relatório completo com análise mercadológica, financeira e jurídica em menos de 5 minutos.' },
-  { q: 'Qual a diferença entre pagar mensal e anual?', r: `No plano anual você economiza ${economiaPctLabel} — paga o equivalente a ${mesAnualLabel}/mês (${anoLabel} cobrados uma única vez) em vez de ${precoMesLabel}/mês no mensal.` },
+  { q: 'Qual a diferença entre pagar mensal e anual?', r: `No plano anual você economiza ${economiaPctLabel}, paga o equivalente a ${mesAnualLabel}/mês (${anoLabel} cobrados uma única vez) em vez de ${precoMesLabel}/mês no mensal.` },
 ];
 
 export default function Planos() {
@@ -135,7 +135,7 @@ export default function Planos() {
             <span style={{ color: '#60a5fa' }}>Arremate com segurança.</span>
           </h1>
           <p style={{ color: '#94a3b8', fontSize: 'clamp(14px,2vw,17px)', maxWidth: 520, margin: '0 auto 36px', lineHeight: 1.75 }}>
-            Da pesquisa gratuita à assessoria completa — escolha o suporte certo para o seu momento.
+            Da pesquisa gratuita à assessoria completa, escolha o suporte certo para o seu momento.
           </p>
           <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' }}>
             {[{ icon: Shield, txt: 'Análise jurídica incluída' }, { icon: Zap, txt: 'Relatório em menos de 5 min' }, { icon: Users, txt: '+8 anos no mercado' }].map(({ icon: Icon, txt }) => (
@@ -223,7 +223,7 @@ export default function Planos() {
             A nossa equipe do seu lado, do lance à posse.
           </h2>
           <p style={{ color: '#64748b', fontSize: 15, maxWidth: 520, margin: '0 auto', lineHeight: 1.7 }}>
-            Para quem quer resultado com segurança total — análise, estratégia, documentação e registro feitos por especialistas.
+            Para quem quer resultado com segurança total, análise, estratégia, documentação e registro feitos por especialistas.
           </p>
         </div>
 
@@ -245,7 +245,7 @@ export default function Planos() {
               <PrecoComercial planoKey="assessorado" />
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>1 arrematação · pagamento único</div>
               <p style={{ fontSize: 14, color: '#64748b', marginBottom: 20, lineHeight: 1.7 }}>
-                Assessoria completa para 1 arrematação — da análise do imóvel até a imissão de posse. Acesso à plataforma por 12 meses, extensível até a conclusão.
+                Assessoria completa para 1 arrematação, da análise do imóvel até a imissão de posse. Acesso à plataforma por 12 meses, extensível até a conclusão.
               </p>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
                 {['Tudo do Investidor Pro', 'Análise jurídica e estratégia de lance', 'Acompanhamento até a imissão de posse', 'Suporte com documentação pós-arrematação', 'Registro do imóvel via plataforma (ONR)', '12 meses de acesso · extensível até a posse'].map(t => <CheckItem key={t} txt={t} />)}
@@ -285,7 +285,7 @@ export default function Planos() {
         <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, maxWidth: 820, margin: '56px auto 0' }}>
           {[
             { icon: '🔒', titulo: 'Pagamento 100% seguro', sub: 'Crédito, débito e PIX com ambiente certificado' },
-            { icon: '✅', titulo: 'Cancele quando quiser', sub: 'No mensal, sem fidelidade. No anual, cancele a renovação automática — sem estorno do período já contratado' },
+            { icon: '✅', titulo: 'Cancele quando quiser', sub: 'No mensal, sem fidelidade. No anual, cancele a renovação automática, sem estorno do período já contratado' },
             { icon: '🤝', titulo: 'Equipe especializada', sub: 'Analistas, advogados e sócio disponíveis para você' },
           ].map(({ icon, titulo, sub }) => (
             <div key={titulo} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px 20px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
@@ -320,7 +320,7 @@ export default function Planos() {
               Ficou com alguma dúvida?{' '}
               <span style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 700 }} onClick={() => setDv(d => ({ ...d, open: true }))}>
                 Envie sua pergunta
-              </span>{' '}— respondemos por e-mail.
+              </span>{' '}e respondemos por e-mail.
             </p>
           )}
 

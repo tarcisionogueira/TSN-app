@@ -34,7 +34,7 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8">
-<title>Relatório BidPro Brasil — ${d.nome||d.endereco}</title>
+<title>Relatório BidPro Brasil, ${d.nome||d.endereco}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   body{font-family:'Inter',sans-serif;font-size:10.5px;color:#111111;padding:20px;line-height:1.5;background:white;margin:0;}
@@ -65,7 +65,7 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
     <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">BidPro Brasil</div>
     <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Aquisição em Leilão & Investimentos Estratégicos</div>
     <div style="font-size:13px;font-weight:900;margin-bottom:3px;">ANÁLISE DE VIABILIDADE DE ARREMATAÇÃO</div>
-    <div style="font-size:10px;color:#475569;">${(d.tipo||'').toUpperCase()} — ${d.endereco||''} ${d.cidade?'· '+d.cidade:''} ${d.estado?'/'+d.estado:''}</div>
+    <div style="font-size:10px;color:#475569;">${(d.tipo||'').toUpperCase()}, ${d.endereco||''} ${d.cidade?'· '+d.cidade:''} ${d.estado?'/'+d.estado:''}</div>
     ${d.leiloeiro?`<div style="font-size:9px;color:#64748b;margin-top:3px;">Leiloeiro: ${d.leiloeiro}${d.dataLeilao?' · '+d.dataLeilao:''}</div>`:''}
   </div>
   <div style="text-align:right;flex-shrink:0;">
@@ -84,8 +84,8 @@ ${(() => {
     <div style="font-size:8px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${l}</div>
     <div style="font-size:11.5px;font-weight:800;color:${c};margin-top:2px;">${v}</div></div>`;
   const vereditoTxt = isUsoProprio
-    ? (isViavel ? 'RECOMENDADO PARA USO PRÓPRIO' : 'ECONOMIA IRRELEVANTE — REAVALIAR')
-    : (isViavel ? 'APROVADO — VIÁVEL' : 'REPROVADO — RETORNO INSUFICIENTE');
+    ? (isViavel ? 'RECOMENDADO PARA USO PRÓPRIO' : 'ECONOMIA IRRELEVANTE, REAVALIAR')
+    : (isViavel ? 'APROVADO, VIÁVEL' : 'REPROVADO, RETORNO INSUFICIENTE');
   const vCor = isViavel ? '#065f46' : '#b91c1c';
   const vBg  = isViavel ? '#d1fae5' : '#fee2e2';
   return `
@@ -110,7 +110,7 @@ ${(() => {
 
 ${semMargemDisputa?`<div class="av" style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:6px;padding:9px 12px;margin-bottom:12px;">
   <div style="font-size:11px;font-weight:800;color:#92400e;">⚠ Sem margem para disputa</div>
-  <div style="font-size:10px;color:#b45309;margin-top:3px;">O lance máximo que ainda preserva o piso de ${isUsoProprio?'economia':'30% de lucro'} (R$ ${fmt(teto)}) é igual ou inferior ao lance mínimo (R$ ${fmt(lanceBase)}). Na prática, qualquer lance acima do mínimo já inviabiliza a operação — arrematar só compensa no próprio lance mínimo, sem entrar em disputa.</div>
+  <div style="font-size:10px;color:#b45309;margin-top:3px;">O lance máximo que ainda preserva o piso de ${isUsoProprio?'economia':'30% de lucro'} (R$ ${fmt(teto)}) é igual ou inferior ao lance mínimo (R$ ${fmt(lanceBase)}). Na prática, qualquer lance acima do mínimo já inviabiliza a operação, arrematar só compensa no próprio lance mínimo, sem entrar em disputa.</div>
 </div>`:''}
 
 ${riscosBloq.length>0?`<div class="box av"><div style="font-size:13px;font-weight:900;color:#b91c1c;margin-bottom:6px;">⚠ RISCO JURÍDICO BLOQUEANTE</div>${riscosBloq.map(r=>`<div style="color:#dc2626;font-size:10px;margin-bottom:3px;">• ${r.texto}</div>`).join('')}</div>`:''}
@@ -129,7 +129,7 @@ ${(() => {
 </div>`;
   return `
 <div class="viab av" style="border-color:${isViavel?'#10b981':'#dc2626'};background:${isViavel?'#d1fae5':'#fee2e2'};">
-  <div style="font-size:15px;font-weight:900;color:${isViavel?'#065f46':'#b91c1c'};">${isViavel?'✓ OPERAÇÃO VIÁVEL — APROVADA':'✗ OPERAÇÃO REPROVADA — RETORNO INSUFICIENTE'}</div>
+  <div style="font-size:15px;font-weight:900;color:${isViavel?'#065f46':'#b91c1c'};">${isViavel?'✓ OPERAÇÃO VIÁVEL, APROVADA':'✗ OPERAÇÃO REPROVADA, RETORNO INSUFICIENTE'}</div>
   <div style="font-size:10px;color:${isViavel?'#047857':'#dc2626'};margin-top:4px;">
     ${isUsoProprio?`Economia de R$ ${fmt(m.lucro)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 30% mínimos':'Abaixo dos 30% exigidos pela BidPro Brasil'} · ${semMargemDisputa?'Sem margem para disputa (arrematar só no lance mínimo)':`Teto de disputa: R$ ${fmt(teto)}`}`}
   </div>
@@ -147,7 +147,7 @@ ${(() => {
 ${ind?`
 <div class="av" style="margin-bottom:14px;">
   <h2>Indicadores de Retorno</h2>
-  <div style="font-size:9px;color:#64748b;margin-bottom:6px;">Régua (TMA): ${fmtPct(ind.tma,0)} ao ano — já descontada nos números abaixo.</div>
+  <div style="font-size:9px;color:#64748b;margin-bottom:6px;">Régua (TMA): ${fmtPct(ind.tma,0)} ao ano, já descontada nos números abaixo.</div>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
     ${[['VPL (revenda)',`R$ ${fmt(ind.vpl,0)}`,(ind.vpl>=0?'#059669':'#dc2626')],
        ['TIR (revenda)',ind.tir!=null?`${fmtPct(ind.tir)} a.a.`:'—','#7c3aed'],
@@ -159,9 +159,9 @@ ${ind?`
   <div style="margin-top:8px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;padding:8px 10px;">
     <div style="font-size:8.5px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Legenda dos indicadores</div>
     <div style="font-size:9px;color:#475569;line-height:1.6;">
-      <b>VPL — Valor Presente Líquido:</b> quanto a operação gera hoje, já descontado o custo do dinheiro no tempo (positivo = cria valor). ·
-      <b>TIR — Taxa Interna de Retorno:</b> a rentabilidade anual da operação (compare com a TMA). ·
-      <b>TMA — Taxa Mínima de Atratividade:</b> a rentabilidade mínima aceitável, a “régua” do projeto. ·
+      <b>VPL, Valor Presente Líquido:</b> quanto a operação gera hoje, já descontado o custo do dinheiro no tempo (positivo = cria valor). ·
+      <b>TIR, Taxa Interna de Retorno:</b> a rentabilidade anual da operação (compare com a TMA). ·
+      <b>TMA, Taxa Mínima de Atratividade:</b> a rentabilidade mínima aceitável, a “régua” do projeto. ·
       <b>Payback:</b> em quantos meses o dinheiro investido retorna. ·
       <b>Múltiplo do capital:</b> quantas vezes o capital investido volta (ex.: 1,5× = ganho de 50%). ·
       <b>ROI / ROE:</b> retorno percentual sobre o investimento / sobre o capital próprio.
@@ -235,7 +235,7 @@ ${mercado?`<div class="av">
 </div>
 ${mercado.comentario?`<p style="font-size:10px;color:#475569;margin:0 0 10px;background:#f8fafc;padding:8px;border-radius:4px;">${mercado.comentario}</p>`:''}
 ${mercado.zoneamento?`<div style="font-size:10px;color:#334155;margin:0 0 10px;background:#f0f9ff;border:1px solid #dbeafe;padding:8px 10px;border-radius:4px;"><b>Zoneamento (uso do solo):</b> ${mercado.zoneamento.encontrado
-  ? `${mercado.zoneamento.zona||'—'}${mercado.zoneamento.resumoUso?' — '+mercado.zoneamento.resumoUso:''} <span style="color:#64748b">· fonte: ${mercado.zoneamento.fonte||'órgão oficial'}</span>`
+  ? `${mercado.zoneamento.zona||'—'}${mercado.zoneamento.resumoUso?', '+mercado.zoneamento.resumoUso:''} <span style="color:#64748b">· fonte: ${mercado.zoneamento.fonte||'órgão oficial'}</span>`
   : `não localizado em fonte oficial. Onde confirmar: ${mercado.zoneamento.ondeObter||'Secretaria de Urbanismo/Planejamento da Prefeitura, pelo endereço ou inscrição imobiliária.'}`}</div>`:''}
 ${mercado.vendas?.length?`<h3>Amostras de Venda (${mercado.totalAmostrasVenda} encontradas)</h3>
 <table><tr><th>Imóvel</th><th class="r">Valor Total</th><th class="r">R$/m²</th><th>Fonte</th></tr>
@@ -263,7 +263,7 @@ ${fluxo.linhas.map((r,i)=>`<tr style="background:${i%2===0?'white':'#f8fafc'}">
 </div>
 
 ${!isAVista&&sacTab?.length>0?`<div class="pb av">
-<h2>Tabelas de Financiamento — SAC vs PRICE</h2>
+<h2>Tabelas de Financiamento, SAC vs PRICE</h2>
 <p style="font-size:9px;color:#475569;margin-bottom:8px;">Principal: R$ ${fmt((d.valorArrematacao||0)*(1-(d.sinalPercentual||0)/100))} · CET: ${fmtPct(d.cetAnual)} a.a. · Prazo: ${d.prazoMeses} meses</p>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
   <div style="background:#f8fafc;border-radius:5px;padding:10px;">

@@ -112,7 +112,7 @@ REGRAS:
 - VULNERABILIDADE NA OCUPAÇÃO (idoso, PcD, criança, vulnerabilidade social) é fator de RESISTÊNCIA/ATRASO na desocupação e deve entrar como CONDIÇÃO/diligência em TODO imóvel — o status "ocupado/desocupado" do edital é notoriamente furado (dito desocupado com moradores e vice-versa), então a verificação em campo é sempre necessária, mesmo que o documental não tenha apontado ocupação. Trate como "condicional", nunca bloqueio automático, e liste a verificação lícita (consulta processual/prioridade de tramitação se judicial, visita ao imóvel). Nunca sugira consultar dados de saúde/SUS — é ilegal (LGPD) e não deve constar como diligência.
 - Retorno abaixo de 30% (investimento) sem economia relevante = "reprovado".
 - Seja HONESTO e OBJETIVO. Se reprovado, seja curto e direto no porquê. Não invente dados que não estão nos relatórios; se algo é incerto, trate como condição/diligência.
-- Texto formal, simples, sem markdown/asteriscos.
+- Texto formal, simples, sem markdown/asteriscos e SEM travessão "—" (use vírgula, ponto ou dois-pontos; o travessão dá cara de texto de IA e reduz a confiança do cliente).
 
 Retorne APENAS este JSON (sem markdown):
 {
@@ -203,7 +203,7 @@ export default async function handler(req, res) {
 
     const data = await anthropic({
       model: MODEL, max_tokens: 4000,
-      system: 'Você é o gestor sênior de decisão da BidPro Brasil. Emite o parecer final de viabilidade consolidando o relatório mercadológico/financeiro e o documental/jurídico. Pondera as duas visões, não as refaz. Honesto e objetivo. Nunca use markdown nem asteriscos. Retorne apenas JSON válido.' + aprendizados,
+      system: 'Você é o gestor sênior de decisão da BidPro Brasil. Emite o parecer final de viabilidade consolidando o relatório mercadológico/financeiro e o documental/jurídico. Pondera as duas visões, não as refaz. Honesto e objetivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Retorne apenas JSON válido.' + aprendizados,
       messages: [{ role: 'user', content: promptDefesa(im, resMerc, resDoc) }],
     });
     const parsed = parseJSON(extractText(data)) || {};

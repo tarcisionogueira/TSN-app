@@ -431,8 +431,8 @@ export default function Curso() {
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:20 }}>
               {[
-                { p:'essencial', label:'Plano Essencial — R$ 97/mês', desc:'Fundamentos completos' },
-                { p:'profissional', label:'Plano Profissional — R$ 297/mês', desc:'Todos os cursos + novidades', destaque:true },
+                { p:'essencial', label:'Plano Essencial, R$ 97/mês', desc:'Fundamentos completos' },
+                { p:'profissional', label:'Plano Profissional, R$ 297/mês', desc:'Todos os cursos + novidades', destaque:true },
               ].map(({p:pk,label,desc,destaque})=>(
                 <button key={pk} onClick={()=>{ localStorage.setItem('tsn_plano_membro',pk); setShowUpgrade(false); window.location.reload(); }}
                   style={{ padding:'14px 18px', border:`2px solid ${destaque?'#7c3aed':'#e2e8f0'}`, borderRadius:12, background:destaque?'#ede9fe':'white', cursor:'pointer', textAlign:'left' }}>
@@ -442,7 +442,7 @@ export default function Curso() {
               ))}
             </div>
             <p style={{ margin:0, fontSize:11, color:'#94a3b8', textAlign:'center' }}>
-              Simulação local — integração Asaas em breve para pagamento real.
+              Simulação local, integração Asaas em breve para pagamento real.
             </p>
           </div>
         </div>

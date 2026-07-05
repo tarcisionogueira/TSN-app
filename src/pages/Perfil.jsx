@@ -264,7 +264,7 @@ export default function Perfil() {
       const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
       const j = await r.json();
       if (!j.erro) setEnd(p => ({ ...p, cep, logradouro: j.logradouro || p.logradouro, bairro: j.bairro || p.bairro, cidade: j.localidade || p.cidade, uf: j.uf || p.uf }));
-    } catch { /* CEP offline — usuário preenche manualmente */ }
+    } catch { /* CEP offline, usuário preenche manualmente */ }
     setCepLoading(false);
   };
 
@@ -479,7 +479,7 @@ export default function Perfil() {
           </div>
         </div>
 
-        {/* Modal — cancelamento (garantia de 7 dias × renovação) */}
+        {/* Modal, cancelamento (garantia de 7 dias × renovação) */}
         {cancelModal && (
           <div onClick={() => !cancelando && setCancelModal(false)}
             style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
@@ -490,12 +490,12 @@ export default function Perfil() {
               {dentroGarantia ? (
                 <p style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.6, marginBottom: 16 }}>
                   Você está dentro da <strong>garantia de 7 dias</strong> ({diasRestantesGarantia} {diasRestantesGarantia === 1 ? 'dia restante' : 'dias restantes'}).
-                  Ao confirmar, cancelamos sua assinatura e o <strong>reembolso de 100%</strong> do valor pago é processado — sem burocracia.
+                  Ao confirmar, cancelamos sua assinatura e o <strong>reembolso de 100%</strong> do valor pago é processado, sem burocracia.
                   Seu acesso volta ao plano Explorador.
                 </p>
               ) : (
                 <p style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.6, marginBottom: 16 }}>
-                  Ao confirmar, cancelamos a <strong>renovação automática</strong> — você não será mais cobrado.
+                  Ao confirmar, cancelamos a <strong>renovação automática</strong>, você não será mais cobrado.
                   Seu acesso continua até o fim do período já pago. Não há reembolso fora da janela de 7 dias.
                 </p>
               )}
@@ -520,7 +520,7 @@ export default function Perfil() {
           </div>
         )}
 
-        {/* Validação de Identidade — assessorado e clube */}
+        {/* Validação de Identidade, assessorado e clube */}
         {ROLES_SELFIE.includes(role) && (
           <div style={{ background: identValidada ? '#f0fdf4' : '#fffbeb', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: `1px solid ${identValidada ? '#bbf7d0' : '#fde68a'}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -828,7 +828,7 @@ export default function Perfil() {
               <div style={{ fontSize: 15, fontWeight: 700, color: '#111111' }}>Notificações Push</div>
             </div>
             <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px' }}>
-              Receba alertas de novos imóveis, atualizações dos seus casos e avisos importantes diretamente no seu navegador — mesmo com o site fechado.
+              Receba alertas de novos imóveis, atualizações dos seus casos e avisos importantes diretamente no seu navegador, mesmo com o site fechado.
             </p>
             {pushMensagem && (
               <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13, background: pushMensagem.tipo === 'ok' ? '#f0fdf4' : '#fef2f2', color: pushMensagem.tipo === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${pushMensagem.tipo === 'ok' ? '#bbf7d0' : '#fca5a5'}` }}>

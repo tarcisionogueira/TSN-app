@@ -2,16 +2,16 @@ import React, { useState } from 'react';
 import { ShieldAlert, Plus, Trash2, AlertTriangle, XCircle, Info } from 'lucide-react';
 
 const RISCOS_COMUNS = [
-  { texto: 'Usufruto vitalício — impossibilita a posse imediata do imóvel', tipo: 'bloqueante' },
-  { texto: 'Ação de nulidade em curso — risco de desfazimento do arremate', tipo: 'bloqueante' },
+  { texto: 'Usufruto vitalício, impossibilita a posse imediata do imóvel', tipo: 'bloqueante' },
+  { texto: 'Ação de nulidade em curso, risco de desfazimento do arremate', tipo: 'bloqueante' },
   { texto: 'Bem de família declarado judicialmente', tipo: 'bloqueante' },
   { texto: 'Aforamento com direito de preferência da União/Município', tipo: 'alerta' },
-  { texto: 'Laudêmio pendente — custo adicional no registro', tipo: 'alerta' },
+  { texto: 'Laudêmio pendente, custo adicional no registro', tipo: 'alerta' },
   { texto: 'Imóvel em área de preservação ambiental (APP)', tipo: 'alerta' },
   { texto: 'Pendência de ITBI anterior não quitado', tipo: 'alerta' },
-  { texto: 'Irregularidade construtiva — pode exigir regularização', tipo: 'informativo' },
+  { texto: 'Irregularidade construtiva, pode exigir regularização', tipo: 'informativo' },
   { texto: 'Débitos de condomínio além dos informados no edital', tipo: 'informativo' },
-  { texto: 'Imóvel com locatário — necessidade de notificação extrajudicial', tipo: 'informativo' },
+  { texto: 'Imóvel com locatário, necessidade de notificação extrajudicial', tipo: 'informativo' },
 ];
 
 const TIPO_CONFIG = {

@@ -223,7 +223,7 @@ Retorne APENAS este JSON (sem markdown):
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "nivelRisco": "verde|amarelo|vermelho",
-  "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos), estruturado com '§ SEÇÃO:' — § SEÇÃO: SITUAÇÃO REGISTRÁRIA (matrícula/ônus/gravames); § SEÇÃO: OCUPAÇÃO E POSSE; § SEÇÃO: DÉBITOS E RESPONSABILIDADES (o que consta e o que precisa ser confirmado, com as referências); § SEÇÃO: CONDIÇÕES DO EDITAL; § SEÇÃO: SITUAÇÃO PROCESSUAL${temProc ? ' (com base no CNJ)' : ''}; § SEÇÃO: CONCLUSÃO E DILIGÊNCIAS RECOMENDADAS."
+  "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. § SEÇÃO: SITUAÇÃO REGISTRÁRIA (matrícula/ônus/gravames); § SEÇÃO: OCUPAÇÃO E POSSE; § SEÇÃO: DÉBITOS E RESPONSABILIDADES (o que consta e o que precisa ser confirmado, com as referências); § SEÇÃO: CONDIÇÕES DO EDITAL; § SEÇÃO: SITUAÇÃO PROCESSUAL${temProc ? ' (com base no CNJ)' : ''}; § SEÇÃO: CONCLUSÃO E DILIGÊNCIAS RECOMENDADAS."
 }`;
 
 export default async function handler(req, res) {

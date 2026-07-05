@@ -289,7 +289,7 @@ export default function ContratoLink() {
           <ShieldCheck size={18} color="white" />
         </div>
         <div>
-          <div style={{ fontSize:11, color:'#60a5fa', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>BidPro Brasil — Contrato Digital</div>
+          <div style={{ fontSize:11, color:'#60a5fa', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>BidPro Brasil, Contrato Digital</div>
           <div style={{ fontSize:15, fontWeight:800, color:'white' }}>{contrato.titulo}</div>
         </div>
       </div>
@@ -350,8 +350,8 @@ export default function ContratoLink() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                 {[
-                  { key: 'selfie_rosto', label: '1. Selfie — Identidade Visual', desc: 'Foto do signatário para identificação' },
-                  { key: 'doc_frente', label: '2. Documento de Identidade', desc: 'RG ou CNH — frente' },
+                  { key: 'selfie_rosto', label: '1. Selfie, Identidade Visual', desc: 'Foto do signatário para identificação' },
+                  { key: 'doc_frente', label: '2. Documento de Identidade', desc: 'RG ou CNH, frente' },
                   { key: 'selfie_doc', label: '3. Selfie com Documento', desc: 'Confirmação de posse do documento' },
                 ].filter(({ key }) => contrato.kyc_fotos[key]).map(({ key, label, desc }) => (
                   <div key={key} style={{ background: '#1a2744', border: '1px solid #111111', borderRadius: 12, overflow: 'hidden' }}>

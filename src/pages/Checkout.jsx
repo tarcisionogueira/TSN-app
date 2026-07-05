@@ -70,7 +70,7 @@ export default function Checkout() {
   const planoKey = params.get('plano');
   const promoCode = params.get('promo')?.toUpperCase() || '';
   const refCode = params.get('ref') || '';
-  const mpStatus = params.get('status'); // 'approved' | 'rejected' | 'pending' — vindo do redirect MP
+  const mpStatus = params.get('status'); // 'approved' | 'rejected' | 'pending', vindo do redirect MP
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   // À prova de falha: nunca indexa um PLANOS indefinido e sempre cai no estático.
   const plano = (PLANOS && PLANOS[planoKey]) || PLANOS_STATIC[planoKey] || null;
@@ -105,7 +105,7 @@ export default function Checkout() {
   // Cadastro inline do visitante não-logado (cria a conta no próprio checkout)
   const [su, setSu] = useState({ nome: '', email: '', senha: '', aceite: false });
   const [card, setCard] = useState({ numero: '', nome: '', validade: '', cvv: '' });
-  const [etapa, setEtapa] = useState('ident'); // 'ident' (dados) | 'pgto' (cartão) — só top2 não-logado
+  const [etapa, setEtapa] = useState('ident'); // 'ident' (dados) | 'pgto' (cartão), só top2 não-logado
   const [suErro, setSuErro] = useState('');
   const [suLoading, setSuLoading] = useState(false);
   const [contaCriada, setContaCriada] = useState(false);
@@ -211,7 +211,7 @@ export default function Checkout() {
       if (tentativas >= MAX_TENTATIVAS && !jaConfirmouRef.current) {
         clearInterval(pollingRef.current);
         setVerificando(false);
-        setErro('Ainda não recebemos a confirmação do pagamento. Se você já pagou, o acesso é liberado automaticamente assim que o banco confirmar (pode levar alguns minutos). Você pode fechar esta tela com segurança — ou tentar novamente.');
+        setErro('Ainda não recebemos a confirmação do pagamento. Se você já pagou, o acesso é liberado automaticamente assim que o banco confirmar (pode levar alguns minutos). Você pode fechar esta tela com segurança, ou tentar novamente.');
       }
     };
     verificar(); // primeira verificação imediata
@@ -272,7 +272,7 @@ export default function Checkout() {
     return (
       <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) minmax(280px, 420px)', gap: 24, maxWidth: 840, width: '100%', alignItems: 'stretch' }} className="checkout-grid">
-          {/* Coluna esquerda — apresentação */}
+          {/* Coluna esquerda, apresentação */}
           <div style={{ color: 'white' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
               <div style={{ background: '#0D63DB', borderRadius: 12, padding: 10, fontSize: 20 }}>🏢</div>
@@ -281,10 +281,10 @@ export default function Checkout() {
                 <div style={{ fontSize: 11, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
               </div>
             </div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Plano Explorador — Gratuito</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Plano Explorador, Gratuito</div>
             <h1 style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.2, margin: '0 0 16px' }}>Comece a explorar leilões imobiliários sem pagar nada.</h1>
             <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.8, marginBottom: 28 }}>
-              Crie sua conta gratuitamente e tenha acesso à plataforma BidPro Brasil — sem cartão de crédito, sem compromisso.
+              Crie sua conta gratuitamente e tenha acesso à plataforma BidPro Brasil, sem cartão de crédito, sem compromisso.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
@@ -303,7 +303,7 @@ export default function Checkout() {
               ))}
             </div>
           </div>
-          {/* Coluna direita — cadastro grátis inline (mesma lógica, sem pagamento) */}
+          {/* Coluna direita, cadastro grátis inline (mesma lógica, sem pagamento) */}
           <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div style={{ fontSize: 28, fontWeight: 900, color: '#111111', marginBottom: 2 }}>Grátis</div>
             <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18 }}>Sem cartão de crédito · Acesso imediato</div>
@@ -369,7 +369,7 @@ export default function Checkout() {
       const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
       const j = await r.json();
       if (!j.erro) setEnd(p => ({ ...p, cep, logradouro: j.logradouro || p.logradouro, bairro: j.bairro || p.bairro, cidade: j.localidade || p.cidade, uf: j.uf || p.uf }));
-    } catch { /* CEP offline — usuário preenche manualmente */ }
+    } catch { /* CEP offline, usuário preenche manualmente */ }
     setCepLoadingCk(false);
   };
   const salvarDadosFaturamento = async () => {
@@ -418,7 +418,7 @@ export default function Checkout() {
     } catch (e) {
       const m = String(e?.message || '');
       setSuErro(/already|registered|exists/i.test(m)
-        ? 'Este e-mail já tem conta. Clique em "Já tenho conta — Entrar".'
+        ? 'Este e-mail já tem conta. Clique em "Já tenho conta, Entrar".'
         : (m || 'Erro ao criar a conta.'));
     }
     setSuLoading(false);
@@ -714,11 +714,11 @@ export default function Checkout() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
 
-      {/* Banner: MP rejeitou o pagamento — oferece Asaas com 1 clique */}
+      {/* Banner: MP rejeitou o pagamento, oferece Asaas com 1 clique */}
       {mpStatus === 'rejected' && !ofertandoFallback && gatewayUsado !== 'asaas' && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 998, background: '#fef3c7', borderBottom: '2px solid #f59e0b', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 14, color: '#92400e', fontWeight: 600 }}>
-            ⚠️ Pagamento não aprovado no Mercado Pago. Tente finalizar pelo Asaas (link bancário seguro) — seus dados já estão preenchidos.
+            ⚠️ Pagamento não aprovado no Mercado Pago. Tente finalizar pelo Asaas (link bancário seguro), seus dados já estão preenchidos.
           </span>
           <button
             onClick={pagarAsaas}
@@ -731,7 +731,7 @@ export default function Checkout() {
         </div>
       )}
 
-      {/* Popup de erro — overlay sobre o checkout */}
+      {/* Popup de erro, overlay sobre o checkout */}
       {erro && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={() => setErro('')}>
@@ -768,7 +768,7 @@ export default function Checkout() {
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) minmax(280px, 460px)', gap: 24, maxWidth: 880, width: '100%', alignItems: 'stretch' }} className="checkout-grid">
 
-        {/* Coluna esquerda — conteúdo BidPro Brasil sobre o produto (alinhado ao topo) */}
+        {/* Coluna esquerda, conteúdo BidPro Brasil sobre o produto (alinhado ao topo) */}
         <div style={{ color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', padding: '4px 4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
             <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
@@ -783,7 +783,7 @@ export default function Checkout() {
             Arremate imóveis com segurança e inteligência de dados.
           </h2>
           <p style={{ color: '#cbd5e1', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
-            A BidPro Brasil une análise mercadológica, viabilidade financeira e leitura jurídica para você investir em leilões com confiança — do primeiro lance à arrematação.
+            A BidPro Brasil une análise mercadológica, viabilidade financeira e leitura jurídica para você investir em leilões com confiança, do primeiro lance à arrematação.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {[
@@ -805,13 +805,13 @@ export default function Checkout() {
           <div style={{ marginTop: 22, display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 12, padding: '12px 14px' }}>
             <CheckCircle2 size={18} color="#34d399" style={{ flexShrink: 0 }} />
             <div style={{ fontSize: 12.5, color: '#a7f3d0', lineHeight: 1.5 }}>
-              <strong style={{ color: '#fff' }}>Método dos 30%:</strong> só recomendamos operações com margem de segurança — você dá o lance certo, no valor certo.
+              <strong style={{ color: '#fff' }}>Método dos 30%:</strong> só recomendamos operações com margem de segurança, você dá o lance certo, no valor certo.
             </div>
           </div>
           <p style={{ fontSize: 11, color: '#64748b', marginTop: 16 }}>Cancele quando quiser · Sem fidelidade · Pagamento seguro</p>
         </div>
 
-        {/* Coluna direita — card de checkout */}
+        {/* Coluna direita, card de checkout */}
         <div style={{ background: 'white', borderRadius: 20, padding: '36px 34px', boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
 
           {ehMudanca && (
@@ -830,7 +830,7 @@ export default function Checkout() {
             Plano {plano.nome}
           </h2>
 
-          {/* Toggle mensal/anual — Investidor Pro (top2) */}
+          {/* Toggle mensal/anual, Investidor Pro (top2) */}
           {temToggleAnual && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 20, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
               {[
@@ -847,7 +847,7 @@ export default function Checkout() {
             </div>
           )}
 
-          {/* Seletor de modalidade — apenas para assessorado e clube */}
+          {/* Seletor de modalidade, apenas para assessorado e clube */}
           {temModalidade && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
               {[
@@ -880,7 +880,7 @@ export default function Checkout() {
                 </div>
                 <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef9c3', borderRadius: 8, fontSize: 13, color: '#a16207', fontWeight: 700 }}>
                   🎁 Código <strong>{promoCode}</strong> aplicado
-                  {promoInfo.descricao_condicoes && ` — ${promoInfo.descricao_condicoes}`}
+                  {promoInfo.descricao_condicoes && `, ${promoInfo.descricao_condicoes}`}
                 </div>
               </div>
             );
@@ -893,7 +893,7 @@ export default function Checkout() {
                     <span style={{ color: '#64748b', fontSize: 15, fontWeight: 600 }}>/mês</span>
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-                    Assinatura recorrente — cobrado <strong>{plano.precoLabel}</strong> todo mês no cartão. Cancele a qualquer momento pela plataforma. Sem multa ou fidelidade.
+                    Assinatura recorrente, cobrado <strong>{plano.precoLabel}</strong> todo mês no cartão. Cancele a qualquer momento pela plataforma. Sem multa ou fidelidade.
                   </div>
                 </>
               ) : (
@@ -903,7 +903,7 @@ export default function Checkout() {
                     <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% off</span>
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-                    Total de <strong>{plano?.precoAnualLabel || 'R$ 449,90'}/ano</strong>, em até 12× no cartão ou à vista. Renova automaticamente a cada 12 meses pelo valor vigente. Você pode <strong>cancelar a renovação quando quiser</strong> — o acesso continua até o fim do período já pago.
+                    Total de <strong>{plano?.precoAnualLabel || 'R$ 449,90'}/ano</strong>, em até 12× no cartão ou à vista. Renova automaticamente a cada 12 meses pelo valor vigente. Você pode <strong>cancelar a renovação quando quiser</strong>, o acesso continua até o fim do período já pago.
                   </div>
                 </>
               )}
@@ -942,7 +942,7 @@ export default function Checkout() {
               Plano atual: <strong>{planoAtual.nome}</strong> ({planoAtual.precoLabel})
             </div>
           )}
-          {/* Aviso LGPD — CPF e nome são enviados ao processador de pagamento */}
+          {/* Aviso LGPD, CPF e nome são enviados ao processador de pagamento */}
           <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '8px 12px', marginBottom: 20, fontSize: 11, color: '#0369a1', lineHeight: 1.5 }}>
             Seus dados (nome e CPF) serão compartilhados com o processador de pagamento para emissão da cobrança, conforme a <strong>Lei nº 13.709/2018 (LGPD)</strong>.
           </div>
@@ -976,7 +976,7 @@ export default function Checkout() {
               <div style={{ fontSize: 40, marginBottom: 12 }}>🔗</div>
               <p style={{ fontWeight: 800, color: '#111111', marginBottom: 8, fontSize: 16 }}>Página de pagamento aberta!</p>
               <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, marginBottom: 20 }}>
-                Complete o pagamento na página de pagamento. <strong>Não precisa fazer mais nada</strong> — assim que o pagamento cair, seu plano é ativado automaticamente. Se a página não abrir, use o botão abaixo.
+                Complete o pagamento na página de pagamento. <strong>Não precisa fazer mais nada</strong>, assim que o pagamento cair, seu plano é ativado automaticamente. Se a página não abrir, use o botão abaixo.
               </p>
               <a href={linkPagamento} target="_blank" rel="noopener noreferrer"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px', background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box', marginBottom: 10 }}>
@@ -1106,7 +1106,7 @@ export default function Checkout() {
                   </button>
                   <button onClick={() => nav(`/login?plano=${planoKey}${promoCode ? '&promo=' + promoCode : ''}`)}
                     style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 12 }}>
-                    Já tenho conta — Entrar
+                    Já tenho conta, Entrar
                   </button>
                   <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
                     {planoKey === 'top2' ? 'Cartão de crédito · Cancele quando quiser' : 'Pague via PIX ou cartão de crédito · Cancele quando quiser'}
@@ -1145,7 +1145,7 @@ export default function Checkout() {
             />
           ) : (
             <>
-              {/* Dados de faturamento — aparecem SÓ quando o perfil não está completo
+              {/* Dados de faturamento, aparecem SÓ quando o perfil não está completo
                   (CPF + endereço). Necessários para faturamento e emissão fiscal. */}
               {!linkPagamento && !perfilFaturamentoOk && (
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, marginBottom: 14, background: '#f8fafc' }}>
@@ -1183,7 +1183,7 @@ export default function Checkout() {
                 </div>
               )}
 
-              {/* Aceite dos termos — prova de consentimento */}
+              {/* Aceite dos termos, prova de consentimento */}
               {!linkPagamento && (
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
                   <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
@@ -1192,7 +1192,7 @@ export default function Checkout() {
                     {planoKey === 'assessorado'
                       ? `Estou ciente de que este é um serviço de assessoria ${modalidade === 'vista' ? 'pago à vista' : 'parcelado em até 12×'}. O acesso à assessoria é ativado após confirmação do pagamento.`
                       : temToggleAnual && modalidade === 'anual'
-                        ? `Estou ciente de que esta é uma contratação anual de valor único (${plano?.precoAnualLabel || 'R$ 449,90'}), podendo ser paga em até 12× no cartão. Não há renovação automática — o acesso é válido por 12 meses a partir da confirmação do pagamento.`
+                        ? `Estou ciente de que esta é uma contratação anual de valor único (${plano?.precoAnualLabel || 'R$ 449,90'}), podendo ser paga em até 12× no cartão. Não há renovação automática, o acesso é válido por 12 meses a partir da confirmação do pagamento.`
                         : 'Autorizo a cobrança recorrente mensal conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma sem multa.'}
                   </span>
                 </label>

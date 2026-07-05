@@ -78,7 +78,7 @@ export default function Promo() {
       <div style={{ textAlign: 'center', padding: '60px 20px 0', maxWidth: 720, margin: '0 auto' }}>
         {temDesconto && (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#dc2626', color: 'white', fontSize: 13, fontWeight: 800, padding: '6px 16px', borderRadius: 20, marginBottom: 20, textTransform: 'uppercase', letterSpacing: 1 }}>
-            <Zap size={14} /> Oferta especial — {pctDesconto}% de desconto
+            <Zap size={14} /> Oferta especial, {pctDesconto}% de desconto
           </div>
         )}
         <div style={{ fontSize: 52, marginBottom: 12 }}>{ICONE_PLANO[link.produto] || '🎯'}</div>
