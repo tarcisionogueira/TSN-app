@@ -776,6 +776,11 @@ async function enriquecerDatasZuk(browser, imoveis) {
       const txt = await page.evaluate(() => document.body?.innerText || '');
       const d = extrairDataLeilaoHTML(txt);
       if (d) { im.data_leilao = d; ok++; }
+      // Mesma visita: captura área e ocupação do texto do lote (grátis) — o Zuk
+      // não traz área na listagem, só na página interna.
+      const ext = extrairDaDescricao(txt);
+      if (ext.area_m2 && !im.area_m2) im.area_m2 = ext.area_m2;
+      if (ext.ocupacao && !im.ocupacao) im.ocupacao = ext.ocupacao;
     } catch { /* best-effort */ }
     feitos++;
     if (feitos % 50 === 0) console.log(`    PortalZuk datas: ${feitos}/${imoveis.length} · ${ok} ok`);
