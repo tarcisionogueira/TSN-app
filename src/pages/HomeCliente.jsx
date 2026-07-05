@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, Calendar, Scale } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import TriagemPerfil from '../components/TriagemPerfil';
 
 // Rótulo e configuração da home por plano (usa o role EFETIVO — respeita o modo suporte).
 const PLANO_INFO = {
@@ -51,6 +52,8 @@ export default function HomeCliente() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px', display: 'grid', gridTemplateColumns: info.indica ? 'minmax(0,1fr) 320px' : '1fr', gap: 20, alignItems: 'start' }}>
+      {/* Triagem de perfil — modal one-time no 1º acesso do cliente */}
+      <TriagemPerfil userId={user?.id} />
       {/* Coluna principal */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
         {/* Boas-vindas */}

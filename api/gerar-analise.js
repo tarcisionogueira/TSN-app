@@ -135,11 +135,22 @@ REFERÊNCIAS para confirmar/obter os valores quando não constarem na documenta�
 - Laudêmio/foro (terreno de marinha): SPU — Secretaria de Patrimônio da União, ou o ente foreiro.`;
 }
 
+// Foco do parecer por PERFIL-BASE do investidor (triagem no cadastro). Direciona o
+// que o agente prioriza — o mesmo imóvel se defende diferente para cada perfil.
+const PERFIL_FOCO = {
+  revenda: 'PERFIL DO COMPRADOR: REVENDA (flip). Priorize margem, velocidade de saída e liquidez de revenda; enfatize o teto de lance que preserva o lucro na revenda.',
+  locacao: 'PERFIL DO COMPRADOR: LOCAÇÃO (renda). Priorize o yield (aluguel/preço), a renda mensal líquida e o payback pela locação; o cenário de revenda é secundário.',
+  uso_proprio: 'PERFIL DO COMPRADOR: USO PRÓPRIO. Priorize a economia frente ao mercado e a adequação ao uso; o piso de 30% de lucro não se aplica.',
+  incorporacao: 'PERFIL DO COMPRADOR: INCORPORAÇÃO. Priorize o POTENCIAL CONSTRUTIVO (terreno, aproveitamento e zoneamento) e a viabilidade de incorporar; avalie o valor pelo potencial, não só pelo imóvel atual.',
+};
+
 function promptParecer(inp, m, mercado, docs) {
   const usoProprio = inp.objetivoCompra === 'uso_proprio';
   const debitos = blocoDebitos(inp, docs, brl);
+  const focoPerfil = PERFIL_FOCO[inp._perfil] || '';
   return `
 Redija um PARECER EXECUTIVO MERCADOLÓGICO E DE VIABILIDADE FINANCEIRA como Gestor Sênior da BidPro Brasil.
+${focoPerfil ? `\n${focoPerfil}\n` : ''}
 
 ESCOPO ESTRITO: foque EXCLUSIVAMENTE em mercado × valor de aquisição e viabilidade
 financeira. NÃO faça análise JURÍDICA (consulta de processo/CNJ, validade de penhora,
@@ -262,7 +273,13 @@ export default async function handler(req, res) {
           const [dRow] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_edital,link_matricula,link_regras_venda,anexos&limit=1`)).json();
           if (dRow) docs = { edital: dRow.link_edital, matricula: dRow.link_matricula, regras: dRow.link_regras_venda, anexos: dRow.anexos };
         } catch { /* sem docs → o parecer orienta onde buscar */ }
-        const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto };
+        // Perfil-base do investidor (triagem) — direciona o foco do parecer.
+        let perfilInvestidor = null;
+        try {
+          const [p] = await (await sb(`perfis?id=eq.${user.id}&select=perfil_investidor&limit=1`)).json();
+          perfilInvestidor = p?.perfil_investidor || null;
+        } catch { /* sem perfil → parecer padrão pelo objetivoCompra */ }
+        const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor };
         const pData = await anthropic({
           model: MODEL, max_tokens: 8000,
           system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Apenas texto simples.',
