@@ -108,6 +108,66 @@ function extrairLinkEdital() {
   } catch { return { url: null, amostra: null }; }
 }
 
+// Ficha estruturada da Caixa, lida do MESMO texto renderizado da visita da data
+// (custo zero). Tolerante: devolve só os campos que encontrar. Complementa a tela
+// do imóvel com o que a Caixa mostra na página de detalhe e o CSV não traz:
+// ocupação, áreas, matrícula, inscrição imobiliária, comarca, ofício, aceite de
+// FGTS/consórcio/financiamento e responsabilidade das despesas (IPTU/condomínio).
+function extrairFichaCEF(txt) {
+  if (!txt) return null;
+  const t = String(txt).replace(/\r/g, ' ').replace(/[ \t]{2,}/g, ' ');
+  const f = {};
+  const val = (rot, vre = '([^\\n]{1,90})') => {
+    const m = t.match(new RegExp(rot + '\\s*[:\\-–]?\\s*\\n?\\s*' + vre, 'i'));
+    return m ? m[1].trim().replace(/[.;,]\s*$/, '') : null;
+  };
+  const areaDe = (tipo) => {
+    const m = t.match(new RegExp('([\\d.,]+)\\s+de\\s+[áa]rea\\s+' + tipo, 'i'));
+    return m ? m[1].replace('.', ',') : null;
+  };
+
+  // Ocupação (o status da Caixa é falho, mas é uma referência).
+  const oc = /im[óo]vel\s+ocupad|situa[çc][ãa]o[^\n]{0,20}ocupad/i.test(t) ? 'Ocupado'
+           : /desocupad|im[óo]vel\s+(?:livre|vazio)|situa[çc][ãa]o[^\n]{0,20}desocupad/i.test(t) ? 'Desocupado' : null;
+  if (oc) f.ocupacao = oc;
+
+  // Áreas
+  const aP = areaDe('privativa'), aT = areaDe('total'), aTer = areaDe('do\\s+terreno'), aC = areaDe('constru[íi]da');
+  if (aP) f.area_privativa = aP;
+  if (aT) f.area_total = aT;
+  if (aTer) f.area_terreno = aTer;
+  if (aC) f.area_construida = aC;
+
+  // Referências registrárias
+  const matr = val('matr[íi]cula(?:\\(s\\))?(?:\\s+n[º°o]?\\.?(?:\\(s\\))?)?', '([\\d./\\-\\s]{2,40})');
+  if (matr && /\d/.test(matr)) f.matricula = matr.replace(/\s{2,}/g, ' ').trim();
+  const insc = val('inscri[çc][ãa]o\\s+imobili[áa]ria', '([\\w./\\-]{2,40})');
+  if (insc && /\d/.test(insc)) f.inscricao_imobiliaria = insc;
+  const com = val('comarca', '([A-Za-zÀ-ú0-9 ./\\-]{2,60})');
+  if (com) f.comarca = com;
+  const ofc = val('of[íi]cio', '([\\wº°ª./\\- ]{1,30})');
+  if (ofc && /\d/.test(ofc)) f.oficio = ofc.trim();
+
+  // Formas de pagamento aceitas (lê o bloco perto do rótulo p/ não pegar "não").
+  const iFp = t.search(/formas?\s+de\s+pagamento/i);
+  const bloco = iFp >= 0 ? t.slice(iFp, iFp + 500) : t;
+  const aceita = (re) => {
+    if (!re.test(bloco)) return undefined;
+    return !new RegExp('n[ãa]o[^.\\n]{0,25}' + re.source, 'i').test(bloco);
+  };
+  const fgts = aceita(/fgts/i);              if (fgts !== undefined) f.fgts = fgts;
+  const cons = aceita(/cons[óo]rcio/i);      if (cons !== undefined) f.consorcio = cons;
+  const finc = aceita(/financiament/i);      if (finc !== undefined) f.financiamento = finc;
+
+  // Responsabilidade das despesas (quem paga IPTU/condomínio/tributos).
+  if (/(condom[íi]nio|iptu|tributo|despesa)[^.\n]{0,60}(arrematante|comprador)\s+(?:paga|arca|responsáve)/i.test(t)
+      || /(arrematante|comprador)\s+(?:paga|arca|responsáve)[^.\n]{0,50}(condom[íi]nio|iptu|tributo|despesa)/i.test(t)) {
+    f.despesas_por_conta = 'Arrematante';
+  }
+
+  return Object.keys(f).length ? f : null;
+}
+
 async function novaPagina(browser) {
   const page = await browser.newPage();
   await page.setUserAgent(UA);
@@ -135,12 +195,12 @@ async function buscarCandidatos() {
   const out = [];
   while (out.length < LIMITE) {
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('id, link_edital, url_lote')
+      .select('id, link_edital, url_lote, ficha_cef')
       .eq('fonte', 'CEF').eq('ativo', true)
-      // Precisa de enriquecimento se falta a DATA ou o EDITAL REAL (PDF em /editais/).
-      // Antes só pegava sem-data; agora os com-data-sem-edital também entram — uma
-      // única visita à página captura os DOIS (data + edital), sem custo extra.
-      .or('data_leilao.is.null,link_edital.is.null,link_edital.not.ilike.*/editais/*')
+      // Precisa de enriquecimento se falta a DATA, o EDITAL REAL (PDF em /editais/)
+      // ou a FICHA técnica. Uma única visita à página captura os três (data +
+      // edital + ficha), sem custo extra.
+      .or('data_leilao.is.null,link_edital.is.null,link_edital.not.ilike.*/editais/*,ficha_cef.is.null')
       .not('modalidade', 'ilike', '%venda%direta%')
       .not('url_lote', 'is', null)
       .order('enriquecido_em', { ascending: true, nullsFirst: true })
@@ -166,6 +226,7 @@ async function main() {
   const CORTE_ERROS = 40;
   let errosSeguidos = 0, bloqueado = false;
   let amostrasEdital = 0; // loga o outerHTML do controle "edital" p/ os primeiros casos sem URL
+  let fichasLog = 0;      // loga a ficha extraída dos primeiros imóveis (validar rótulos)
 
   // Carrega a página; o erro de borda da Caixa (504/CloudFront) é transitório,
   // então re-tenta poucas vezes com backoff curto (o bloqueio não passa in-run).
@@ -219,6 +280,15 @@ async function main() {
             console.log(`  [edital ${amostrasEdital}] sem URL confiável · controle: ${amostra}`);
           }
         } catch { /* extração de edital é opcional; ignora falhas */ }
+        // Ficha técnica (mesma página): complementa a tela do imóvel. Só grava
+        // quando encontra algo — nunca zera uma ficha boa com null.
+        try {
+          const ficha = extrairFichaCEF(txt);
+          if (ficha) {
+            patch.ficha_cef = ficha;
+            if (fichasLog < 3) { fichasLog++; console.log(`  [ficha ${fichasLog}] ${JSON.stringify(ficha)}`); }
+          }
+        } catch { /* ficha é opcional; ignora falhas */ }
         await supabase.from('imoveis_leilao').update(patch).eq('id', im.id).then(() => {}, () => {});
       }
       feitos++;

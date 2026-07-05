@@ -501,6 +501,86 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
 }
 
 
+// Ficha técnica da Caixa — campos extras da página de detalhe capturados no
+// enriquecimento (ficha_cef). Complementa a tela com o que o CSV não traz:
+// aceite de FGTS/consórcio/financiamento, áreas, matrícula, inscrição, comarca,
+// ofício e responsabilidade das despesas. Só renderiza os campos presentes.
+function FichaTecnicaCEF({ ficha }) {
+  if (!ficha || typeof ficha !== 'object' || !Object.keys(ficha).length) return null;
+  const m2 = (v) => (v == null || v === '' ? null : `${v} m²`);
+  const areas = [
+    ['Área privativa', m2(ficha.area_privativa)],
+    ['Área total', m2(ficha.area_total)],
+    ['Área construída', m2(ficha.area_construida)],
+    ['Terreno', m2(ficha.area_terreno)],
+  ].filter(([, v]) => v);
+  const refs = [
+    ['Matrícula', ficha.matricula],
+    ['Inscrição imobiliária', ficha.inscricao_imobiliaria],
+    ['Comarca', ficha.comarca],
+    ['Ofício', ficha.oficio],
+  ].filter(([, v]) => v);
+  const aceites = [
+    ['Financiamento', ficha.financiamento],
+    ['FGTS', ficha.fgts],
+    ['Consórcio', ficha.consorcio],
+  ].filter(([, v]) => typeof v === 'boolean');
+  if (!areas.length && !refs.length && !aceites.length && !ficha.ocupacao && !ficha.despesas_por_conta) return null;
+
+  const Chip = ({ label, ok }) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, padding: '5px 12px', borderRadius: 999,
+      background: ok ? '#f0fdf4' : '#fef2f2', color: ok ? '#15803d' : '#b91c1c', border: `1px solid ${ok ? '#bbf7d0' : '#fecaca'}` }}>
+      {ok ? <CheckCircle size={13} /> : <AlertTriangle size={13} />} {label}: {ok ? 'Aceita' : 'Não aceita'}
+    </span>
+  );
+  const Linha = ({ rot, val }) => (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
+      <span style={{ color: '#94a3b8', minWidth: 140 }}>{rot}:</span>
+      <span style={{ fontWeight: 700, color: '#334155' }}>{val}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
+      <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Building2 size={18} color="#0D63DB" /> Ficha técnica (Caixa)
+      </h2>
+      <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '0 0 16px' }}>Dados oficiais da página do imóvel na Caixa.</p>
+
+      {aceites.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: (areas.length || refs.length || ficha.ocupacao) ? 16 : 0 }}>
+          {aceites.map(([label, ok]) => <Chip key={label} label={label} ok={ok} />)}
+        </div>
+      )}
+
+      {areas.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: (refs.length || ficha.ocupacao || ficha.despesas_por_conta) ? 16 : 0 }}>
+          {areas.map(([rot, val]) => (
+            <div key={rot} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>{rot}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#111' }}>{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {ficha.ocupacao && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
+            <span style={{ color: '#94a3b8', minWidth: 140 }}>Situação:</span>
+            <span style={{ fontWeight: 700, color: ficha.ocupacao === 'Desocupado' ? '#15803d' : '#b45309' }}>{ficha.ocupacao}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>(confirmar em visita — o status da Caixa costuma divergir)</span>
+          </div>
+        )}
+        {refs.map(([rot, val]) => <Linha key={rot} rot={rot} val={val} />)}
+        {ficha.despesas_por_conta && (
+          <Linha rot="Despesas (IPTU/condomínio)" val={`Por conta do ${ficha.despesas_por_conta.toLowerCase()}`} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ImovelDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -547,6 +627,7 @@ export default function ImovelDetalhe() {
           scoreLocalizacao: data.score_localizacao ?? null,
           valorMercado: data.valor_mercado ?? null,
           analiseViavel: data.analise_viavel ?? null,
+          fichaCef: data.ficha_cef || null,
         });
       })
       .finally(() => setLoading(false));
@@ -891,6 +972,9 @@ export default function ImovelDetalhe() {
                 </div>
               )}
             </div>
+
+            {/* Ficha técnica da Caixa — campos extras da página oficial (CEF) */}
+            {(imovel.fonte === 'CEF' || imovel.fonte === 'caixa') && <FichaTecnicaCEF ficha={imovel.fichaCef} />}
 
             {/* Simulação rápida — estimativa pela avaliação do leilão (NÃO é a mercadológica) */}
             {imovel.valorMinimo > 0 && imovel.valorAvaliacao > 0 && (() => {
