@@ -765,6 +765,9 @@ export default function Caso() {
       const { data: arr, error } = await supabase.from('arrematacoes').upsert({
         caso_id: caso.id,
         cliente_id: user.id,
+        arrematante_id: user.id,            // compat com api/arrematacoes.js (honorários)
+        imovel_id: caso.imovel_id || null,  // pode ser nulo em arremate manual (fora da base)
+        status: 'registrado',
         tipo_leilao: arrForm.tipo_leilao,
         valor_arrematado: valor,
         honorarios_valor: honorariosValor,
