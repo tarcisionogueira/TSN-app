@@ -19,8 +19,6 @@ import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import RiscoJuridico from '../components/RiscoJuridico';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { apiCall } from '../utils/apiCall';
-import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
-import FinanciamentoTracker from '../components/FinanciamentoTracker';
 
 const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
@@ -2371,48 +2369,9 @@ export default function Analise() {
 
       </>)}
 
-      {/* ── GUIA PÓS-ARREMATAÇÃO (aparece somente quando status = arrematado) ── */}
-      {d.status === 'arrematado' && relSel === 'mercado' && (
-        <>
-          <Section step="7" title="Guia Pós-Arrematação" icon={ClipboardCheck} color="#059669"
-            open={openSec.guia} onToggle={() => toggleSec('guia')}
-            badge={`${d.origem === 'judicial' ? 'Judicial' : 'Extrajudicial'} — checklist completo`}>
-            <div style={{ paddingTop: 14 }}>
-              <GuiaPosArrematacao
-                modalidade={d.origem || 'extrajudicial'}
-                imovelId={d.id}
-                onNavCNJ={() => { toggleSec('cnj'); document.querySelector('[data-sec="cnj"]')?.scrollIntoView({ behavior: 'smooth' }); }}
-                onNavCertidoes={() => { toggleSec('cnj'); }}
-              />
-            </div>
-          </Section>
-
-          {/* ── FINANCIAMENTO TRACKER ── */}
-          <Section step="8" title="Financiamento da Arrematação" icon={CreditCard} color="#7c3aed"
-            open={openSec.financiamento} onToggle={() => toggleSec('financiamento')}
-            badge="Sinal · Parcelas · Alertas de vencimento">
-            <div style={{ paddingTop: 14 }}>
-              <FinanciamentoTracker
-                imovelId={d.id}
-                imovelNome={d.nome || d.endereco || 'Imóvel arrematado'}
-                onSalvo={() => {}}
-              />
-            </div>
-          </Section>
-
-          {/* Atalho rápido para ONR */}
-          <div style={{ margin: '8px 0', padding: '14px 18px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#1d4ed8' }}>Registrar imóvel — ONR Digital</div>
-              <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 2 }}>Protocole o registro de transferência de propriedade no cartório via SREI ou presencialmente.</div>
-            </div>
-            <button onClick={() => nav(`/registro-imovel/${d.id}`)}
-              style={{ padding: '9px 18px', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              Iniciar registro →
-            </button>
-          </div>
-        </>
-      )}
+      {/* Guia Pós-Arrematação, Financiamento e registro ONR foram movidos para o
+          ACOMPANHAMENTO (tela do Caso) — o pós-arremate não pertence à análise de
+          orientação. Lá aparecem num botão fixo + popup após sinalizar o arremate. */}
 
         </div>{/* fim central */}
       </div>{/* fim grid 2 colunas */}

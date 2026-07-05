@@ -12,6 +12,8 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useIsMobile } from '../utils/useIsMobile';
 import AgendarReuniao from '../components/AgendarReuniao';
+import GuiaPosArrematacao from '../components/GuiaPosArrematacao';
+import FinanciamentoTracker from '../components/FinanciamentoTracker';
 
 // ─── Estilos base ────────────────────────────────────────────────────────────
 const card = { background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding:'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' };
@@ -450,6 +452,17 @@ export default function Caso() {
   const [reunioes, setReunioes] = useState([]);
   const [juridica, setJuridica] = useState(null);
   const [arrematacao, setArrematacao] = useState(null);
+  // Guia pós-arrematação + Financiamento: só existem DEPOIS de sinalizar o arremate.
+  // Botão fixo na tela + popup automático na 1ª vez que o cliente acessa após arrematar.
+  const [guiaAberta, setGuiaAberta] = useState(false);
+  useEffect(() => {
+    if (!arrematacao || !casoId) return;
+    const chave = `bidpro_guia_visto_${casoId}`;
+    if (!localStorage.getItem(chave)) {
+      setGuiaAberta(true);
+      try { localStorage.setItem(chave, '1'); } catch { /* ignore */ }
+    }
+  }, [arrematacao, casoId]);
   const [procuracao, setProcuracao] = useState(null);
   const [cota, setCota] = useState(null);
 
@@ -951,6 +964,34 @@ export default function Caso() {
 
   return (
     <div style={{ maxWidth:860, margin:'0 auto', padding: isMobile ? '16px 12px' : '28px 20px' }}>
+
+      {/* Pós-arremate: botão FIXO + popup (auto na 1ª vez). Guia + Financiamento
+          só existem depois de sinalizar o arremate — o lançamento real é aqui. */}
+      {arrematacao && (
+        <button onClick={() => setGuiaAberta(true)}
+          style={{ position:'fixed', right:20, bottom:20, zIndex:1500, padding:'12px 18px', background:'#059669', color:'white', border:'none', borderRadius:30, fontWeight:800, fontSize:13, cursor:'pointer', boxShadow:'0 8px 24px rgba(5,150,105,0.4)', display:'flex', alignItems:'center', gap:8 }}>
+          <ClipboardList size={16}/> Guia pós-arremate
+        </button>
+      )}
+      {arrematacao && guiaAberta && (
+        <div onClick={e => { if (e.target === e.currentTarget) setGuiaAberta(false); }}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#f8fafc', borderRadius:16, width:'100%', maxWidth:760, maxHeight:'92vh', overflowY:'auto', padding:20, boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <div style={{ fontSize:17, fontWeight:900, color:'#065f46', display:'flex', alignItems:'center', gap:8 }}><ClipboardList size={19}/> Acompanhamento pós-arrematação</div>
+              <button onClick={() => setGuiaAberta(false)} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              <div style={card}>
+                <GuiaPosArrematacao modalidade={caso.tipo_leilao || 'extrajudicial'} imovelId={caso.imovel_id} onNavCNJ={()=>{}} onNavCertidoes={()=>{}} />
+              </div>
+              <div style={card}>
+                <FinanciamentoTracker imovelId={caso.imovel_id} imovelNome={caso.imovel_endereco || 'Imóvel arrematado'} onSalvo={()=>{}} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cabeçalho */}
       <div style={{ ...card, marginBottom:20 }}>
