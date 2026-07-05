@@ -1104,7 +1104,10 @@ async function scraperFrazao(browser) {
       // só ~25% traziam UF (título sem a sigla), reprovando a qualidade.
       const parts = c.titulo.split(',').map(s => s.trim()).filter(Boolean);
       const ufTitulo = parts.length && /^[A-Za-z]{2}$/.test(parts[parts.length - 1]) && UF_SIGLAS.has(parts[parts.length - 1].toUpperCase()) ? parts[parts.length - 1].toUpperCase() : '';
-      const uf = ufTitulo || extrairUFTexto(c.addr, c.titulo);
+      // O slug da URL do lote termina em "...-cidade-uf" (ex.: ...-sao-paulo-sp),
+      // fonte mais confiável de UF que o título — confirmado no garimpo do site.
+      const hrefTxt = (c.href || '').replace(/[-\/]+/g, ' ');
+      const uf = ufTitulo || extrairUFTexto(c.addr, c.titulo, hrefTxt);
       let cidade = ufTitulo && parts.length >= 2 ? parts[parts.length - 2] : '';
       if (!cidade) cidade = extrairCidadeTexto(c.addr, uf) || extrairCidadeTexto(c.titulo, uf);
       const dm = c.cal.match(/(\d{2})\/(\d{2})\/(\d{4})/);
