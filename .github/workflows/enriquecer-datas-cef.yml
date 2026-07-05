@@ -6,15 +6,22 @@ name: Enriquecer Datas CEF (navegador)
 # diárias cobrem o acervo. Mesma técnica validada no ZUK (42 → 539).
 on:
   schedule:
-    # A cada 3h: a Caixa bloqueia o IP do runner após ~3 min/execução, então cada
-    # run pega um lote (IP novo a cada execução) e o acervo é coberto ao longo do dia.
-    - cron: '0 */3 * * *'
+    # A cada 2h: a Caixa bloqueia o IP do runner após ~3 min/execução; cada run pega
+    # um lote (IP novo a cada execução). Com a página mínima (domcontentloaded + corte
+    # de analytics), cada run rende mais — 12 runs/dia cobrem o acervo mais rápido.
+    - cron: '0 */2 * * *'
   workflow_dispatch:
     inputs:
       limite:
         description: 'Máx. de imóveis por execução'
         required: false
         default: '4000'
+
+# Garante que os runs NÃO se sobreponham (sem trabalho duplicado): um run em
+# andamento termina antes do próximo começar (qualidade > quantidade bruta).
+concurrency:
+  group: enriquecer-datas-cef
+  cancel-in-progress: false
 
 jobs:
   enriquecer-cef:
