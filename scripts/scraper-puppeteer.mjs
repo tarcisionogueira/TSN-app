@@ -561,6 +561,8 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
       const tipoRaw = (sub && !/im[oó]ve/i.test(sub)) ? sub : titulo;
       const linkURL = str(of.linkURL);
       const desc = str(of.offerDescription) || titulo;
+      // Área/ocupação vêm no texto (título+descrição) — confirmado nos dados.
+      const ext = extrairDaDescricao(`${titulo} ${desc}`);
 
       return {
         fonte,
@@ -574,7 +576,8 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
         endereco: toTitleCase(str(loc.street)),
         valor_avaliacao: valAval,
         valor_minimo: valMin,
-        area_m2: 0,
+        area_m2: ext.area_m2 || 0,
+        ocupacao: ext.ocupacao || null,
         descricao: desc.replace(/<[^>]+>/g, '').slice(0, 500),
         link_edital: linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`),
         link_foto: p.thumbnailUrl || null,
@@ -859,7 +862,8 @@ async function scraperPortalZuk(browser) {
         valor_avaliacao: valAval,
         valor_minimo: valMin,
         area_m2: 0,
-        descricao: [c.title, c.ocup].filter(Boolean).join(' — ').slice(0, 500),
+        ocupacao: extrairDaDescricao(`${c.title} ${c.ocup}`).ocupacao || null,
+        descricao: [c.title, c.ocup].filter(Boolean).join(' · ').slice(0, 500),
         link_edital: c.href,
         link_foto: c.img,
         leiloeiro: 'Zukerman (PortalZuk)',
@@ -991,7 +995,8 @@ async function scraperSodre(browser) {
         endereco: toTitleCase(r.lot_street || ''),
         valor_avaliacao: 0,
         valor_minimo: valMin,
-        area_m2: area,
+        area_m2: area || extrairDaDescricao(`${titulo} ${r.lot_description || ''}`).area_m2 || 0,
+        ocupacao: extrairDaDescricao(`${titulo} ${r.lot_description || ''}`).ocupacao || null,
         descricao: String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500),
         link_edital: `https://www.sodresantoro.com.br/imoveis/lote/${r.lot_id || r.id}`,
         link_foto: r.lot_image || r.image || null,
@@ -1016,6 +1021,20 @@ async function scraperSodre(browser) {
 // [data-tipo][data-addr] + img (cdn) + .lot-info (.lot-title-cap b[title="...,
 // Cidade, UF"], .price-line "R$ x", .inf-leilao-calendar "Leilão: DD/MM/AAAA").
 // (/imoveis dá 404 — não existe controller; os lotes vêm pelos leilões.)
+// Extrai área (m²) e ocupação do TEXTO (título/descrição) que já coletamos — sem
+// requisição extra. Ocupação só casa desocupad/ocupad (NÃO "livre", que costuma
+// ser "livre de débitos", não posse). Confirmado nos dados: Superbid/Sold/Sodré
+// trazem área na descrição; Superbid/Zuk trazem ocupação.
+function extrairDaDescricao(txt) {
+  const t = String(txt || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const out = {};
+  const am = t.match(/([\d][\d.]*(?:,\d+)?)\s*m(?:²|2)(?![a-z0-9])/i);
+  if (am) { const n = parseFloat(am[1].replace(/\./g, '').replace(',', '.')); if (n > 0 && n < 1e7) out.area_m2 = n; }
+  const om = t.match(/\b(desocupad[ao]|ocupad[ao])\b/i);
+  if (om) out.ocupacao = /desocupad/i.test(om[1]) ? 'Desocupado' : 'Ocupado';
+  return out;
+}
+
 const UF_SIGLAS = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
 const NOME_UF = { 'acre':'AC','alagoas':'AL','amapa':'AP','amazonas':'AM','bahia':'BA','ceara':'CE','distrito federal':'DF','espirito santo':'ES','goias':'GO','maranhao':'MA','mato grosso do sul':'MS','mato grosso':'MT','minas gerais':'MG','para':'PA','paraiba':'PB','parana':'PR','pernambuco':'PE','piaui':'PI','rio de janeiro':'RJ','rio grande do norte':'RN','rio grande do sul':'RS','rondonia':'RO','roraima':'RR','santa catarina':'SC','sao paulo':'SP','sergipe':'SE','tocantins':'TO' };
 // Extrai a UF do texto (título/endereço). Pega a sigla mais ao FIM (o estado
