@@ -1016,6 +1016,31 @@ async function scraperSodre(browser) {
 // [data-tipo][data-addr] + img (cdn) + .lot-info (.lot-title-cap b[title="...,
 // Cidade, UF"], .price-line "R$ x", .inf-leilao-calendar "Leilão: DD/MM/AAAA").
 // (/imoveis dá 404 — não existe controller; os lotes vêm pelos leilões.)
+const UF_SIGLAS = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
+const NOME_UF = { 'acre':'AC','alagoas':'AL','amapa':'AP','amazonas':'AM','bahia':'BA','ceara':'CE','distrito federal':'DF','espirito santo':'ES','goias':'GO','maranhao':'MA','mato grosso do sul':'MS','mato grosso':'MT','minas gerais':'MG','para':'PA','paraiba':'PB','parana':'PR','pernambuco':'PE','piaui':'PI','rio de janeiro':'RJ','rio grande do norte':'RN','rio grande do sul':'RS','rondonia':'RO','roraima':'RR','santa catarina':'SC','sao paulo':'SP','sergipe':'SE','tocantins':'TO' };
+// Extrai a UF do texto (título/endereço). Pega a sigla mais ao FIM (o estado
+// costuma vir no fim do endereço); se não houver sigla, tenta o nome por extenso.
+function extrairUFTexto(...textos) {
+  const t = textos.filter(Boolean).join(' ');
+  if (!t) return '';
+  const siglas = [...t.matchAll(/[-,\/\s]([A-Za-z]{2})\b/g)].map(m => m[1].toUpperCase()).filter(s => UF_SIGLAS.has(s));
+  if (siglas.length) return siglas[siglas.length - 1];
+  const norm = t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  for (const [nome, uf] of Object.entries(NOME_UF)) if (new RegExp(`\\b${nome}\\b`).test(norm)) return uf;
+  return '';
+}
+// Cidade = trecho imediatamente antes da UF no endereço (heurístico).
+function extrairCidadeTexto(texto, uf) {
+  if (!texto || !uf) return '';
+  const segs = texto.split(/[,\-\/]/).map(s => s.trim()).filter(Boolean);
+  for (let i = segs.length - 1; i >= 0; i--) {
+    if (segs[i].toUpperCase() === uf) return segs[i - 1] || '';
+    const m = segs[i].match(/^(.*?)[\s\/-]([A-Za-z]{2})$/);
+    if (m && m[2].toUpperCase() === uf) return m[1].trim();
+  }
+  return '';
+}
+
 async function scraperFrazao(browser) {
   console.log('  Frazão Leilões — coletando leilões de imóveis...');
   const page = await browser.newPage();
@@ -1074,10 +1099,14 @@ async function scraperFrazao(browser) {
     const imoveis = [...imoveisMap.values()].map(c => {
       const valMin = parseBRL(c.priceLine);
       if (!valMin) return null;
-      // título "Tipo na Bairro, Cidade, UF" → UF/cidade nos 2 últimos campos
+      // título "Tipo na Bairro, Cidade, UF" → UF/cidade nos 2 últimos campos;
+      // fallback no endereço (data-addr) e no nome do estado por extenso — antes
+      // só ~25% traziam UF (título sem a sigla), reprovando a qualidade.
       const parts = c.titulo.split(',').map(s => s.trim()).filter(Boolean);
-      const uf = parts.length && /^[A-Za-z]{2}$/.test(parts[parts.length - 1]) ? parts[parts.length - 1].toUpperCase() : '';
-      const cidade = uf && parts.length >= 2 ? parts[parts.length - 2] : '';
+      const ufTitulo = parts.length && /^[A-Za-z]{2}$/.test(parts[parts.length - 1]) && UF_SIGLAS.has(parts[parts.length - 1].toUpperCase()) ? parts[parts.length - 1].toUpperCase() : '';
+      const uf = ufTitulo || extrairUFTexto(c.addr, c.titulo);
+      let cidade = ufTitulo && parts.length >= 2 ? parts[parts.length - 2] : '';
+      if (!cidade) cidade = extrairCidadeTexto(c.addr, uf) || extrairCidadeTexto(c.titulo, uf);
       const dm = c.cal.match(/(\d{2})\/(\d{2})\/(\d{4})/);
       const data_leilao = dm ? `${dm[3]}-${dm[2]}-${dm[1]}T00:00:00-03:00` : null;
       const href = c.href.startsWith('http') ? c.href : `https://www.frazaoleiloes.com.br${c.href}`;
