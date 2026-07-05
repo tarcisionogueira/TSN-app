@@ -46,6 +46,16 @@ export async function decryptCpf(enc) {
   } catch { return null; }
 }
 
+// Leitura unificada: dado um registro de perfil (ou similar) com cpf_enc e/ou
+// cpf, devolve o CPF em dígitos. Prefere decifrar o cpf_enc; se não houver (ou a
+// chave sumir), cai no texto claro. É isto que os pontos de saída
+// (Asaas/MP/NFS-e/contrato/ONR) devem chamar em vez de ler .cpf direto.
+export async function cpfDoRegistro(row) {
+  if (!row) return null;
+  if (row.cpf_enc) { const d = await decryptCpf(row.cpf_enc); if (d) return soDigitos(d); }
+  return row.cpf ? soDigitos(row.cpf) : null;
+}
+
 // Máscara para exibição (não revela o CPF cheio).
 export function maskCpf(cpf) {
   const d = soDigitos(cpf);
