@@ -57,15 +57,17 @@ export default function HomeCliente() {
       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
       <div style={{ width: 40, height: 40, borderRadius: 10, background: `${cor}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={20} color={cor} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: '#111', marginBottom: 2 }}>{titulo}</div>
-        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>{desc}</div>
+        <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 3 }}>{titulo}</div>
+        <div style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.55 }}>{desc}</div>
       </div>
       <ArrowRight size={16} color="#cbd5e1" style={{ flexShrink: 0, marginTop: 10 }} />
     </button>
   );
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px', display: 'grid', gridTemplateColumns: info.indica ? 'minmax(0,1fr) 320px' : '1fr', gap: 20, alignItems: 'start' }}>
+    <div className="home-grid" style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px', display: 'grid', gridTemplateColumns: info.indica ? 'minmax(0,1fr) 320px' : '1fr', gap: 20, alignItems: 'start' }}>
+      {/* No celular a coluna lateral (Indique e Ganhe) empilha embaixo do conteúdo. */}
+      <style>{`@media (max-width: 820px){ .home-grid{ grid-template-columns: 1fr !important; } }`}</style>
       {/* Triagem de perfil, modal one-time no 1º acesso do cliente */}
       <TriagemPerfil userId={user?.id} />
       {/* Coluna principal */}
@@ -103,16 +105,16 @@ export default function HomeCliente() {
         {/* Meus acompanhamentos, casos do cliente (inclui arremates atribuídos pela equipe) */}
         {meusCasos.length > 0 && (
           <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#111', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Gavel size={16} color="#059669" /> Meus acompanhamentos
+            <div style={{ fontSize: 16.5, fontWeight: 800, color: '#111', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Gavel size={18} color="#059669" /> Meus acompanhamentos
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {meusCasos.map(c => (
                 <button key={c.id} onClick={() => nav(`/caso/${c.id}`)}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, cursor: 'pointer', textAlign: 'left' }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.imovel_endereco || 'Arrematação'}</div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{STATUS_CASO[c.status_etapa] || c.status_etapa}</div>
+                    <div style={{ fontSize: 14.5, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.imovel_endereco || 'Arrematação'}</div>
+                    <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 2 }}>{STATUS_CASO[c.status_etapa] || c.status_etapa}</div>
                   </div>
                   <ArrowRight size={16} color="#cbd5e1" style={{ flexShrink: 0 }} />
                 </button>

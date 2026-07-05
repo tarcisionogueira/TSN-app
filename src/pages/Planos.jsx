@@ -155,7 +155,7 @@ export default function Planos() {
 
           {/* Explorador */}
           <div style={{ background: 'white', borderRadius: 20, border: atual('explorador') ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Explorador</div>
+            <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#eef2ff', color: '#1e293b', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Explorador</div>
             <div style={{ fontSize: 48, fontWeight: 900, color: '#111', marginBottom: 2 }}>Grátis</div>
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 28 }}>Sem cartão de crédito</div>
             <p style={{ fontSize: 14, color: '#64748b', marginBottom: 28, lineHeight: 1.7 }}>
@@ -177,7 +177,7 @@ export default function Planos() {
             <div style={{ position: 'absolute', top: 20, right: 20, background: '#fbbf24', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 4 }}>
               <Star size={9} fill="#78350f" /> Mais popular
             </div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Investidor Pro</div>
+            <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: 'rgba(255,255,255,0.2)', color: '#ffffff', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Investidor Pro</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
               <div style={{ fontSize: 48, fontWeight: 900, color: 'white' }}>
                 {periodo === 'anual' ? pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49') : pLabel('top2', 'precoLabel', 'R$ 49,90')}
@@ -241,7 +241,7 @@ export default function Planos() {
             {/* Assessoria */}
             {ativoPlano('assessorado') && (
             <div style={{ background: 'white', borderRadius: 20, border: atual('assessorado') ? '2px solid #d97706' : '1px solid #fed7aa', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(217,119,6,0.08)' }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#d97706', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Assessoria</div>
+              <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#fff7ed', color: '#c2410c', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Assessoria</div>
               <PrecoComercial planoKey="assessorado" />
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>1 arrematação · pagamento único</div>
               <p style={{ fontSize: 14, color: '#64748b', marginBottom: 20, lineHeight: 1.7 }}>
@@ -264,7 +264,7 @@ export default function Planos() {
               <div style={{ position: 'absolute', top: 20, right: 20, background: '#4f46e5', color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Nível máximo
               </div>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Leilão Club</div>
+              <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: 'rgba(255,255,255,0.16)', color: '#ffffff', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Leilão Club</div>
               <PrecoComercial planoKey="clube" dark mensal />
               <p style={{ fontSize: 14, color: '#c7d2fe', marginBottom: 20, lineHeight: 1.7 }}>
                 Mentoria contínua com assessoria ilimitada para todas as suas arrematações. Acesso total à plataforma e à nossa equipe.
