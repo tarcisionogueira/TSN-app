@@ -450,6 +450,40 @@ export default function Analise() {
     setLoadDoc(false);
   };
 
+  // Upload do PDF direto para o bucket (imovel_anexos) feito PELO PRÓPRIO USUÁRIO —
+  // sem os documentos ele não gera os relatórios nem agenda. O arquivo vira CACHE
+  // (a análise documental passa a ler o documento de verdade). Requer imóvel da
+  // base (uuid); em inclusão manual pura, o caminho é colar o texto do documento.
+  const [enviandoAnexo, setEnviandoAnexo] = useState('');
+  const enviarDocBucket = async (file, tipo) => {
+    if (!file) return;
+    const imovelId = imovelInicial?.id;
+    if (!imovelId) { showMsg('Envio direto de arquivo é para imóveis da base. Aqui, cole o texto do documento.', 'error'); return; }
+    if (file.type !== 'application/pdf') { showMsg('Envie o documento em PDF.', 'error'); return; }
+    if (file.size > 20 * 1024 * 1024) { showMsg('Arquivo acima de 20 MB.', 'error'); return; }
+    setEnviandoAnexo(tipo);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('imovel_id', imovelId);
+      fd.append('tipo', tipo);
+      if (imovelInicial?.dataLeilao) fd.append('data_leilao', String(imovelInicial.dataLeilao).slice(0, 10));
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/upload-anexo', {
+        method: 'POST',
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha no envio');
+      setDocsLeiloeiro(prev => [...prev.filter(x => x.tipo !== tipo), { id: data.anexo_id, tipo, nome: file.name, url: data.url_publica }]);
+      showMsg(`${tipo === 'matricula' ? 'Matrícula' : 'Edital'} enviado! Gerando a análise…`);
+      gerarRelDocumental();
+    } catch (e) {
+      showMsg(e.message || 'Erro ao enviar o documento.', 'error');
+    } finally { setEnviandoAnexo(''); }
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1143,9 +1177,23 @@ export default function Analise() {
               <p style={{ fontSize:14, color:'#7c2d12', lineHeight:1.6, margin:0 }}>
                 {parecerDocumental.motivo || 'Para dar assertividade, a análise jurídica é gerada a partir dos documentos. Anexe ao menos a matrícula e o edital (PDF).'}
               </p>
-              <button onClick={()=>setModoManual(true)} style={{ padding:'11px 18px', background:'#c2410c', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer' }}>
-                📎 Anexar matrícula e edital
-              </button>
+              {imovelInicial?.id ? (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
+                  <label style={{ padding:'11px 18px', background:'#c2410c', color:'white', borderRadius:10, fontWeight:800, fontSize:14, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: enviandoAnexo?0.7:1 }}>
+                    {enviandoAnexo==='matricula' ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Enviando…</> : <>📎 Enviar matrícula (PDF)</>}
+                    <input type="file" accept="application/pdf" disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f,'matricula'); }} style={{display:'none'}}/>
+                  </label>
+                  <label style={{ padding:'11px 18px', background:'#9a3412', color:'white', borderRadius:10, fontWeight:800, fontSize:14, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: enviandoAnexo?0.7:1 }}>
+                    {enviandoAnexo==='edital' ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Enviando…</> : <>📎 Enviar edital (PDF)</>}
+                    <input type="file" accept="application/pdf" disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f,'edital'); }} style={{display:'none'}}/>
+                  </label>
+                  <button onClick={()=>setModoManual(true)} style={{ padding:'11px 16px', background:'white', color:'#9a3412', border:'1px solid #fed7aa', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer' }}>ou colar o texto</button>
+                </div>
+              ) : (
+                <button onClick={()=>setModoManual(true)} style={{ padding:'11px 18px', background:'#c2410c', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer' }}>
+                  📎 Anexar matrícula e edital
+                </button>
+              )}
             </div>
           )}
           {relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos && (

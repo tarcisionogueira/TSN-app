@@ -69,10 +69,12 @@ export default async function handler(req) {
   const user = await getAuthUser(req);
   if (!user) return json({ error: 'Não autenticado' }, 401);
 
+  // Qualquer usuário AUTENTICADO pode anexar a matrícula/edital do lote que está
+  // analisando — sem os documentos ele não consegue gerar os relatórios nem
+  // agendar. O arquivo também vira CACHE (beneficia as próximas análises). A
+  // equipe segue com as mesmas permissões; o tipo/tamanho é validado abaixo.
   const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role`)).json();
-  if (!perfil || !ROLES_STAFF.includes(perfil.role)) {
-    return json({ error: 'Apenas a equipe pode anexar documentos.' }, 403);
-  }
+  if (!perfil) return json({ error: 'Perfil não encontrado.' }, 403);
 
   let form;
   try { form = await req.formData(); } catch { return json({ error: 'Envio inválido (esperado multipart/form-data)' }, 400); }
