@@ -24,5 +24,15 @@ export function fmtData(d, modalidade) {
   return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
+// Menção curta explicando POR QUE não há data — facilita o entendimento (o usuário
+// via "Prazo no edital"/"Venda Direta" sem saber o motivo).
+export function explicacaoData(modalidade) {
+  if (modalidade === 'venda_direta')
+    return 'Venda direta é compra contínua — não tem data de leilão. Fica disponível enquanto estiver listada no acervo da Caixa.';
+  if (modalidade === 'licitacao_aberta')
+    return 'Nesta licitação a data/prazo para envio das propostas consta no edital (a lista em massa da Caixa não traz esse campo).';
+  return 'A data do leilão será confirmada no edital do lote.';
+}
+
 export const fmtBRL = (v) =>
   v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';

@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
-import { fmtBRL, fmtData, MODAL_LABEL } from '../utils/format';
+import { fmtBRL, fmtData, MODAL_LABEL, explicacaoData } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { formatarDescricaoImovel } from '../utils/descricao';
@@ -938,6 +938,11 @@ export default function ImovelDetalhe() {
                 <Clock size={16} color="#64748b" />
                 <span style={{ fontSize: 15, fontWeight: 600, color: '#334155' }}>{fmtData(imovel.dataLeilao, imovel.modalidade)}</span>
               </div>
+              {!imovel.dataLeilao && (
+                <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 8, lineHeight: 1.5, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px' }}>
+                  ℹ️ {explicacaoData(imovel.modalidade)}
+                </div>
+              )}
             </div>
 
             {/* Descrição */}
