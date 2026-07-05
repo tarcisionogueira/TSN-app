@@ -19,6 +19,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { alertarErro } from './_error-alert.js';
 import { emitirNFSeServico, nfseAtivo } from './_nfse.js';
+import { cpfDoRegistro } from './_cpf.js';
 
 export const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -199,10 +200,11 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
   if (mapeado && Number(valor) > 0 && nfseAtivo()) {
     try {
       const { data: tomador } = await supabase.from('perfis')
-        .select('nome, cpf, endereco_cep, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cidade, endereco_uf')
+        .select('nome, cpf, cpf_enc, endereco_cep, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cidade, endereco_uf')
         .eq('id', cliente.id).single();
+      const cpfTomador = await cpfDoRegistro(tomador);
       const r = await emitirNFSeServico({
-        tomador: { ...(tomador || {}), email },
+        tomador: { ...(tomador || {}), cpf: cpfTomador, email },
         valor,
         descricao: descricao || `Assinatura ${mapeado.plano} — BidPro Brasil`,
         referencia: gatewayPaymentId,

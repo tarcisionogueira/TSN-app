@@ -13,6 +13,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
+import { cpfDoRegistro } from './_cpf.js';
 
 const MP_URL    = 'https://api.mercadopago.com';
 const TOKEN     = (process.env.MP_ACCESS_TOKEN || '').trim();
@@ -304,6 +305,13 @@ export default async function handler(req) {
   const { action, ...params } = body;
   // Segurança: o usuário do checkout é SEMPRE o autenticado (evita IDOR)
   params.userId = user.id;
+  // CPF SEMPRE do perfil autenticado (decifra o cpf_enc; não confia no body).
+  try {
+    const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const KEY = process.env.SUPABASE_SERVICE_KEY;
+    const r = await fetch(`${SB}/rest/v1/perfis?id=eq.${user.id}&select=cpf,cpf_enc`, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+    if (r.ok) { const [row] = await r.json(); const dec = await cpfDoRegistro(row); if (dec) params.cpf = dec; }
+  } catch { /* mantém params.cpf do body como fallback */ }
 
   try {
     let result;

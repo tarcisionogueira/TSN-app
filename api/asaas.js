@@ -1,6 +1,23 @@
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { alertarErro } from './_error-alert.js';
+import { cpfDoRegistro } from './_cpf.js';
+
+// CPF do usuário autenticado: decifra o cpf_enc do próprio perfil (não confia
+// no CPF que veio do body). Fallback ao body só durante a transição da cifra.
+async function cpfAutenticado(userId, cpfBody) {
+  const fb = String(cpfBody || '').replace(/\D/g, '') || null;
+  if (!userId) return fb;
+  try {
+    const r = await fetch(
+      `${process.env.VITE_SUPABASE_URL}/rest/v1/perfis?id=eq.${userId}&select=cpf,cpf_enc`,
+      { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!r.ok) return fb;
+    const [row] = await r.json();
+    return (await cpfDoRegistro(row)) || fb;
+  } catch { return fb; }
+}
 // Define ASAAS_ENV=sandbox na Vercel para testar sem cobrar de verdade.
 // Em produção (default) usa a URL real do Asaas.
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
@@ -127,8 +144,9 @@ export default async function handler(req, res) {
     const PLANOS = await getPlanosConfig();
 
     if (action === 'criar_assinatura') {
-      const { nome, email, cpf, plano } = body;
+      const { nome, email, plano } = body;
       if (!PLANOS[plano]) return res.status(400).json({ error: 'Plano inválido' });
+      const cpf = await cpfAutenticado(authUser?.id, body.cpf);
 
       // 1. Cria ou recupera customer
       const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, {
@@ -276,10 +294,10 @@ export default async function handler(req, res) {
 
     // ── Busca ou cria customer pelo CPF/email ──
     if (action === 'sync_customer') {
-      const { nome, email, cpf } = body;
+      const { nome, email } = body;
       if (!email) return res.status(400).json({ error: 'Email obrigatório' });
 
-      const cpfLimpo = (cpf || '').replace(/\D/g, '');
+      const cpfLimpo = await cpfAutenticado(authUser?.id, body.cpf);
       let customerId = null;
 
       // Tenta por CPF primeiro

@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { cpfDoRegistro } from './_cpf.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -24,7 +25,7 @@ export default async function handler(req) {
   const userId = user.id;
 
   const [perfil, compras, chamados, alertas, filtrosSalvos, buscaHistorico] = await Promise.all([
-    sb(`perfis?id=eq.${userId}&select=nome,email,cpf,telefone,role,created_at`),
+    sb(`perfis?id=eq.${userId}&select=nome,email,cpf,cpf_enc,telefone,role,created_at`),
     sb(`compras?user_id=eq.${userId}&select=produto,valor,created_at`),
     sb(`chamados?user_id=eq.${userId}&select=titulo,status,created_at`),
     sb(`alertas_email?user_id=eq.${userId}&select=filtros,ativo,created_at`),
@@ -32,9 +33,15 @@ export default async function handler(req) {
     sb(`busca_historico?user_id=eq.${userId}&select=estado,cidade,tipo_imovel,criado_em&limit=100`),
   ]);
 
+  // Decifra o CPF do titular para a exportação (é o próprio dono pedindo os
+  // seus dados). Remove o campo cifrado do JSON entregue.
+  const titular = (Array.isArray(perfil) ? perfil[0] : null) || {};
+  if (titular.cpf_enc || titular.cpf) titular.cpf = await cpfDoRegistro(titular);
+  delete titular.cpf_enc;
+
   const exportData = {
     exportado_em: new Date().toISOString(),
-    titular: perfil[0] || {},
+    titular,
     compras: compras || [],
     chamados_suporte: chamados || [],
     alertas_email: alertas || [],

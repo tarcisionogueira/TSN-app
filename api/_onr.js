@@ -48,11 +48,20 @@ function findBtnEntrar(html) {
  * Faz login no RI Digital e retorna o cookie de sessão.
  * Armazena em cache por 25 minutos (sessão ASP.NET padrão = 30 min).
  */
+let _loginPromise = null;
+
 export async function getSession() {
   if (_sessionCache.cookie && Date.now() < _sessionCache.expiresAt) {
     return _sessionCache.cookie;
   }
+  // Serializa logins concorrentes: se já há um em andamento, todos aguardam o
+  // MESMO login — evita dois logins paralelos cujos cookies se sobrescrevem.
+  if (_loginPromise) return _loginPromise;
+  _loginPromise = _doLogin().finally(() => { _loginPromise = null; });
+  return _loginPromise;
+}
 
+async function _doLogin() {
   const email = process.env.ONR_EMAIL;
   const senha = process.env.ONR_SENHA;
   if (!email || !senha) throw new Error('ONR_EMAIL e ONR_SENHA não configurados');
