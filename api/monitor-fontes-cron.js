@@ -21,8 +21,9 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
 const APP_URL     = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
 // Fontes com coleta DIÁRIA que devem reportar saúde a cada execução. CEF (maior
-// acervo, scraper CSV diário) agora incluída. LJUD/BB fora (sob demanda/não coletado).
-const FONTES_ESPERADAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRAZAO'];
+// acervo) e LJUD (reativado via navegador real, page.evaluate) incluídos — se a
+// coleta grátis quebrar (site mudou/fingerprint), o admin é avisado para agir.
+const FONTES_ESPERADAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRAZAO', 'LJUD'];
 const MAX_IDADE_H = 36; // sem coleta há mais que isso = alerta
 
 export default async function handler(req) {

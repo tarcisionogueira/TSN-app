@@ -52,7 +52,20 @@ async function coletarSnapshot() {
       if (req >= 5) custoAnaliseUsd = usd / req;
     }
   } catch { /* segue com o que tem */ }
-  return { snapshot: snap || {}, sustentabilidade: sust || {}, custos_mes_usd: custos, custo_analise_usd: Math.round(custoAnaliseUsd * 1e4) / 1e4 };
+  // Saúde da COLETA (fontes de leilão): estratégia ativa + status por fonte. Deixa
+  // a IA monitorar o scraping — inclusive a economia (LJUD/CEF migraram para
+  // NAVEGADOR grátis; Bright Data virou backup).
+  let coleta = [];
+  try {
+    const r = await sb('fonte_saude?select=fonte,total,status,estrategia,executado_em&order=executado_em.desc&limit=80');
+    if (r.ok) {
+      const rows = await r.json();
+      const vistos = new Set();
+      for (const x of rows) { if (vistos.has(x.fonte)) continue; vistos.add(x.fonte); coleta.push({ fonte: x.fonte, total: x.total, status: x.status, estrategia: x.estrategia, em: x.executado_em }); }
+    }
+  } catch { /* segue sem a saúde da coleta */ }
+
+  return { snapshot: snap || {}, sustentabilidade: sust || {}, custos_mes_usd: custos, custo_analise_usd: Math.round(custoAnaliseUsd * 1e4) / 1e4, coleta_fontes: coleta };
 }
 
 async function gerarDiagnostico(dados) {
@@ -64,6 +77,11 @@ REGRAS:
 - Cada sugestão deve equilibrar ASSERTIVIDADE (qualidade/funcionalidade para o cliente) e ECONOMIA (custo): economize onde NÃO prejudica o cliente; invista onde melhora resultado e for viável.
 - Seja direto, específico e prático. Nada de generalidades.
 - Câmbio de referência: US$ 1 = R$ ${usdBrl}.
+- MONITORE a COLETA (campo "coleta_fontes"): é a saúde do scraping dos leiloeiros (1 registro por fonte com estratégia ativa + status).
+  * Sinalize como ponto de PRIORIDADE ALTA / impacto "risco" qualquer fonte com status "falhou" (coleta zerada) ou "degradado" (qualidade reprovou) — o acervo dessa fonte para de atualizar e some das análises.
+  * Se uma fonte esperada (CEF, MEGA, SUPERBID, SOLD, ZUK, SODRE, FRAZAO, LJUD) não aparecer em "coleta_fontes", trate como coleta parada (site pode ter mudado / fingerprint bloqueado) e recomende reconectar.
+  * Comente a ECONOMIA da coleta: LJUD e CEF migraram para NAVEGADOR real (page.evaluate / puppeteer) — coleta grátis; Bright Data ficou só como BACKUP (custa cota). Se a estratégia ativa de uma fonte for "brightdata"/pago quando havia caminho grátis, aponte como oportunidade de economia. Se o grátis estiver saudável, confirme que não há gasto de cota desnecessário.
+  * Se toda a coleta estiver saudável e grátis, diga isso em 1 frase — não invente problema onde não há.
 
 INDICADORES (JSON):
 ${JSON.stringify(dados, null, 2)}
