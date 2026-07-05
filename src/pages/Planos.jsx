@@ -85,9 +85,9 @@ export default function Planos() {
     </div>
   );
 
-  // Preço comercial: valor À VISTA (PIX/cartão 1×) em DESTAQUE com o % off, e o
-  // valor cheio + parcelas em texto discreto. `mensal` mostra o cheio como /mês
-  // (Leilão Club); senão como 12× (Assessoria). Regra de juros: sem juros até 3×.
+  // Preço comercial: a PARCELA em DESTAQUE (visão de acessibilidade — mais
+  // comercial) e o valor à vista com o % OFF em texto secundário. `mensal` mostra
+  // a parcela como /mês (Leilão Club); senão como 12× (Assessoria). Sem juros até 3×.
   const PrecoComercial = ({ planoKey, dark, mensal }) => {
     const p = PLANOS[planoKey] || {};
     const vistaLabel = p.precoVistaLabel || p.precoLabel || '';
@@ -101,19 +101,21 @@ export default function Planos() {
     const corDis = dark ? 'rgba(165,180,252,0.85)' : '#94a3b8';
     const badgeBg = dark ? 'rgba(134,239,172,0.16)' : '#dcfce7';
     const badgeFg = dark ? '#86efac' : '#15803d';
-    const discreto = mensal
-      ? `ou ${fmtR(cheio / 12)}/mês — total ${cheioLabel} em 12×`
-      : `ou ${cheioLabel} em até 12× de ${fmtR(cheio / 12)}`;
+    const parcela = fmtR(cheio / 12);
+    const destaque = mensal ? parcela : `12× ${parcela}`;
+    const linhaMeio = mensal
+      ? `total ${cheioLabel} em 12× no cartão ou PIX`
+      : `em até 12× no cartão · sem juros até 3×`;
+    const linhaVista = `ou ${vistaLabel} à vista no PIX${economia ? ` · economize ${fmtR(economia)}` : ''}`;
     return (
       <div style={{ marginBottom: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 42, fontWeight: 900, color: corPrim, lineHeight: 1.05 }}>{vistaLabel}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 42, fontWeight: 900, color: corPrim, lineHeight: 1.05 }}>{destaque}</div>
+          {mensal && <div style={{ fontSize: 16, fontWeight: 800, color: corSec }}>/mês</div>}
           {desc > 0 && <span style={{ background: badgeBg, color: badgeFg, fontSize: 12, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>{desc.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% OFF à vista</span>}
         </div>
-        <div style={{ fontSize: 13, color: corSec, marginTop: 5, fontWeight: 600 }}>
-          à vista no PIX ou cartão{economia ? ` · economize ${fmtR(economia)}` : ''}
-        </div>
-        <div style={{ fontSize: 12, color: corDis, marginTop: 7 }}>{discreto} · sem juros até 3×</div>
+        <div style={{ fontSize: 13, color: corSec, marginTop: 5, fontWeight: 600 }}>{linhaMeio}</div>
+        <div style={{ fontSize: 12, color: corDis, marginTop: 7 }}>{linhaVista}</div>
       </div>
     );
   };

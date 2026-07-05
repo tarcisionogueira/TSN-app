@@ -74,17 +74,22 @@ export function scoreBidPro({ desconto, modalidade, tipo, scoreLocalizacao, scor
     camadas.push({ key: 'margem', label: 'Margem', nota: round1(2 + (c / 60) * 8), peso: PESOS.margem, fonte: usaMercado ? 'mercado' : 'avaliacao' });
   }
 
+  // Para as camadas do ACERVO, o valor 0 significa "ainda não medido" (proximidades
+  // não calculadas / sem análise / backfill pendente), NÃO uma nota real 0. Incluir
+  // esse 0 arrastava a nota para baixo e exibia uma barra "0.0" enganosa. Então
+  // 0 → camada AUSENTE (não conta na média nem aparece). Um dado real nunca é 0
+  // exato (proximidades > 0; jurídico reprovado é floor 3, não 0).
   const loc = from10(scoreLocalizacao); // score_localizacao já é 0–10
-  if (loc != null) camadas.push({ key: 'localizacao', label: 'Localização', nota: round1(loc), peso: PESOS.localizacao });
+  if (loc != null && loc > 0) camadas.push({ key: 'localizacao', label: 'Localização', nota: round1(loc), peso: PESOS.localizacao });
 
   const perfil = perfilScore(modalidade, tipo);
   if (perfil != null) camadas.push({ key: 'perfil', label: 'Perfil', nota: perfil, peso: PESOS.perfil });
 
   const sj = from100(scoreJuridico); // score_juridico é 0–100
-  if (sj != null) camadas.push({ key: 'juridico', label: 'Jurídico', nota: round1(sj), peso: PESOS.juridico });
+  if (sj != null && sj > 0) camadas.push({ key: 'juridico', label: 'Jurídico', nota: round1(sj), peso: PESOS.juridico });
 
   const sf = from100(scoreFinanceiro); // score_financeiro é 0–100
-  if (sf != null) camadas.push({ key: 'financeiro', label: 'Financeiro', nota: round1(sf), peso: PESOS.financeiro });
+  if (sf != null && sf > 0) camadas.push({ key: 'financeiro', label: 'Financeiro', nota: round1(sf), peso: PESOS.financeiro });
 
   if (!camadas.length) return null;
 

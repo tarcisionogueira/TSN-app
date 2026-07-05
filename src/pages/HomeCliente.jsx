@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, Calendar, Scale, Gavel } from 'lucide-react';
+import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, Calendar, ShieldCheck, Gavel } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import TriagemPerfil from '../components/TriagemPerfil';
@@ -121,11 +121,11 @@ export default function HomeCliente() {
           </div>
         )}
 
-        {/* Aviso de operação de risco */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: '12px 16px' }}>
-          <Scale size={16} color="#ea580c" style={{ flexShrink: 0, marginTop: 2 }} />
-          <div style={{ fontSize: 12, color: '#7c2d12', lineHeight: 1.6 }}>
-            Arrematar em leilão é uma <strong>operação de risco</strong>. Use os relatórios de viabilidade e jurídico e, quando possível, valide com um analista antes de dar o lance.
+        {/* Mensagem de segurança (tom positivo, não alarmista) */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 16px' }}>
+          <ShieldCheck size={16} color="#0D63DB" style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ fontSize: 12, color: '#1e3a5f', lineHeight: 1.6 }}>
+            <strong>Arremate com segurança.</strong> Cada imóvel vem com relatórios de viabilidade e jurídico e, se quiser, você valida a operação com um analista antes do lance — para decidir com confiança.
           </div>
         </div>
       </div>
