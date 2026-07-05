@@ -88,11 +88,22 @@ export function scoreBidPro({ desconto, modalidade, tipo, scoreLocalizacao, scor
 
   if (!camadas.length) return null;
 
+  // Veredito da análise: um imóvel REPROVADO na viabilidade financeira não pode
+  // exibir nota alta NEM barras verdes de Margem/Financeiro (o desconto vs.
+  // avaliação da Caixa enganava). Quando a análise reprovou, rebaixamos as
+  // próprias camadas Margem e Financeiro ANTES de ponderar — assim as barrinhas
+  // ficam coerentes com o card vermelho e com o relatório (o cliente via
+  // "Financeiro 7.7" num imóvel reprovado, justamente o que reclamou).
+  if (analiseViavel === false) {
+    for (const c of camadas) {
+      if (c.key === 'margem' || c.key === 'financeiro') c.nota = Math.min(c.nota, 3);
+    }
+  }
+
   const somaPeso = camadas.reduce((a, c) => a + c.peso, 0);
   let nota = Math.max(0, Math.min(10, round1(camadas.reduce((a, c) => a + c.nota * c.peso, 0) / somaPeso)));
-  // Veredito da análise: um imóvel REPROVADO na viabilidade financeira não pode
-  // exibir nota alta (o desconto vs. avaliação enganava). Rebaixa e pinta de
-  // vermelho — coerência entre o card e o relatório.
+  // Trava final: reprovado nunca passa de 3,5 (vermelho), mesmo que Localização/
+  // Perfil puxem a média para cima.
   if (analiseViavel === false) nota = Math.min(nota, 3.5);
   // "completo" = tem ANÁLISE JURÍDICA real (documental). O financeiro agora é
   // determinístico/backfill para todo o acervo, então não deve, sozinho, marcar

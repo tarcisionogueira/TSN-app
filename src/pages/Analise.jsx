@@ -820,20 +820,29 @@ export default function Analise() {
           <div style={{ fontSize:18, fontWeight:900, color:'white', lineHeight:1.2 }}>{d.nome||'Novo Imóvel'}</div>
           {d.cidade && <div style={{ fontSize:12, color:'#94a3b8', marginTop:3, display:'flex', alignItems:'center', gap:5 }}><MapPin size={11}/>{d.cidade}{d.estado?`, ${d.estado}`:''}</div>}
         </div>
-        {/* Status + Salvar + PDF só aparecem quando já há algo gerado (no launcher
-            limpo eram redundantes). */}
-        {(relMercadoGerado || relDocumentalGerado) && (
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          <button onClick={salvar} style={{ padding:'8px 16px', background:saved?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, transition:'background 0.2s' }}>
-            {saved ? <><CheckCircle2 size={14}/> Salvo!</> : <><Save size={14}/> Salvar</>}
-          </button>
-          {parecer && (
-            <button onClick={imprimirPDF} style={{ padding:'8px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-              <Printer size={14}/> PDF
+        {/* Ações do topo. "Ver imóvel" leva à ficha completa (mais fotos, mapa,
+            documentos e dados que podem ser úteis durante a análise). Salvar/PDF
+            só aparecem quando já há algo gerado. */}
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          {imovelInicial?.id && (
+            <button onClick={() => nav(`/imovel/${imovelInicial.id}`)} title="Abrir a ficha completa do imóvel"
+              style={{ padding:'8px 14px', background:'transparent', color:'white', border:'1px solid #475569', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+              <Building2 size={14}/> Ver imóvel
             </button>
           )}
+          {(relMercadoGerado || relDocumentalGerado) && (
+            <>
+              <button onClick={salvar} style={{ padding:'8px 16px', background:saved?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, transition:'background 0.2s' }}>
+                {saved ? <><CheckCircle2 size={14}/> Salvo!</> : <><Save size={14}/> Salvar</>}
+              </button>
+              {parecer && (
+                <button onClick={imprimirPDF} style={{ padding:'8px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                  <Printer size={14}/> PDF
+                </button>
+              )}
+            </>
+          )}
         </div>
-        )}
       </div>
 
       {/* Contador de análises por role */}

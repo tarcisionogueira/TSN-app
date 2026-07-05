@@ -285,13 +285,25 @@ export default async function handler(req, res) {
     // num imóvel que a análise reprovou. Best-effort (não bloqueia a resposta).
     try {
       const roi = Number(parecerInputs?.metricas?.roi);
-      const viavel = isFinite(roi) ? roi >= 30 : null;
+      const usoProprio = parecerInputs?.d?.objetivoCompra === 'uso_proprio';
+      // Meta de viabilidade: 30% de ROI para investimento; para uso próprio a
+      // régua é a economia (qualquer desconto real relevante já vale).
+      const meta = usoProprio ? 0 : 30;
+      const viavel = isFinite(roi) ? roi >= meta : null;
+      // score_financeiro REAL (0–100) derivado do ROE/ROI da análise — substitui a
+      // proxy determinística do desconto vs. avaliação da Caixa (que dava nota alta
+      // a imóvel ruim). A régua (meta) vira o ponto neutro 50; abaixo dela cai,
+      // acima sobe. Assim a camada Financeiro do Score fica assertiva.
+      const scoreFin = isFinite(roi)
+        ? Math.max(0, Math.min(100, Math.round(50 + (roi - meta) * 1.5)))
+        : null;
       if (imovelId && (valorMercado || viavel != null)) {
         await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
           method: 'PATCH', headers: { Prefer: 'return=minimal' },
           body: JSON.stringify({
             ...(valorMercado ? { valor_mercado: valorMercado } : {}),
             ...(viavel != null ? { analise_viavel: viavel } : {}),
+            ...(scoreFin != null ? { score_financeiro: scoreFin } : {}),
             analise_em: new Date().toISOString(),
           }),
         });

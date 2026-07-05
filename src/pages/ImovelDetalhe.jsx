@@ -724,8 +724,11 @@ export default function ImovelDetalhe() {
   const nivelTxt = { endereco: 'endereço exato', rua: 'rua', bairro: 'bairro', cidade: 'cidade/município' }[nivelGeo];
   // STREET VIEW só faz sentido com coordenada PRECISA; no aproximado o pano cairia
   // numa rua qualquer do bairro → usamos a busca pelo endereço (mais honesto).
+  // Usamos cbll (ancora no panorama MAIS PRÓXIMO da coordenada) + cbp com PITCH
+  // NIVELADO no horizonte — o `map_action=pano&viewpoint=` deixava o Google
+  // escolher uma orientação arbitrária (olhando pro céu/parede) e dava tela preta.
   const streetViewUrl = (temCoord && localPrecisa)
-    ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${_lat},${_lng}`
+    ? `https://www.google.com/maps?q=&layer=c&cbll=${_lat},${_lng}&cbp=11,0,0,0,0`
     : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
   // Google Maps: coordenada só quando precisa; caso contrário busca pelo texto do
   // endereço (o Google mostra a região sem fingir um pino exato no lugar errado).

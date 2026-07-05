@@ -3120,6 +3120,11 @@ function PainelAuditoriaSistema() {
   }
   const cor = COR[a.saude] || '#64748b';
   const achados = Array.isArray(a.achados) ? a.achados : [];
+  // Staleness: a auditoria é um retrato do dia em que rodou. Correções aplicadas
+  // DEPOIS não se refletem até rodar de novo — então mostramos a idade e avisamos
+  // quando ela pode estar desatualizada (evita alarme falso de achados já corrigidos).
+  const diasAtras = a.gerado_em ? Math.floor((Date.now() - new Date(a.gerado_em).getTime()) / 86400000) : null;
+  const desatualizada = diasAtras != null && diasAtras >= 2;
 
   return (
     <div style={{ ...S.card, marginBottom: 16 }}>
@@ -3130,9 +3135,15 @@ function PainelAuditoriaSistema() {
         </div>
         <div style={{ fontSize: 11, color: '#94a3b8' }}>
           {a.gerado_em && new Date(a.gerado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+          {diasAtras != null && diasAtras > 0 ? ` · há ${diasAtras}d` : ''}
           {a.commit_sha ? ` · ${String(a.commit_sha).slice(0, 7)}` : ''}{a.modelo ? ` · ${a.modelo}` : ''}
         </div>
       </div>
+      {desatualizada && (
+        <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '9px 13px', marginBottom: 10, lineHeight: 1.5 }}>
+          ⚠ Este relatório é de <b>{diasAtras} dias atrás</b> e pode não refletir correções já aplicadas desde então — vários achados podem já estar resolvidos no código atual. Rode a Action <b>“Auditoria do Sistema (Claude)”</b> no GitHub para atualizar o retrato antes de agir sobre os itens abaixo.
+        </div>
+      )}
       {a.resumo && <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, marginBottom: 10, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, borderLeft: `3px solid ${cor}` }}>{a.resumo}</div>}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, marginBottom: 12 }}>
         <span style={{ color: SEV.critica, fontWeight: 700 }}>{a.n_criticos || 0} críticos</span>

@@ -23,6 +23,15 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
   const priceTotal = (priceTab||[]).reduce((s,r)=>s+r.parcela,0);
   const sacPrincipal = (sacTab||[]).reduce((s,r)=>s+r.amortizacao,0);
 
+  // Lance base (2ª praça / lance mínimo) e teto viável de disputa. Quando o teto
+  // que ainda preserva o piso de lucro é MENOR/IGUAL ao lance mínimo, não há
+  // margem para disputar: qualquer lance acima do mínimo já derruba a operação.
+  const lanceBase = Number(d.valorArrematacao) || 0;
+  const semMargemDisputa = !isUsoProprio && Number(teto) > 0 && Number(teto) <= lanceBase;
+  // Valor pretendido de venda (referência de saída): venda bruta a 90% do mercado
+  // (uso próprio usa o valor de mercado cheio como referência de economia).
+  const valorVendaPretendido = Number(m?.valorRef) || 0;
+
   const html = `<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8">
 <title>Relatório BidPro Brasil — ${d.nome||d.endereco}</title>
@@ -68,6 +77,42 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
   </div>
 </div>
 
+${(() => {
+  // QUADRO-RESUMO — leitura rápida no topo (imóvel, lances das praças, valor
+  // pretendido de venda, forma de pagamento e veredito). O corpo detalha depois.
+  const cel = (l, v, c='#111111') => `<div style="padding:8px 10px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
+    <div style="font-size:8px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${l}</div>
+    <div style="font-size:11.5px;font-weight:800;color:${c};margin-top:2px;">${v}</div></div>`;
+  const vereditoTxt = isUsoProprio
+    ? (isViavel ? 'RECOMENDADO PARA USO PRÓPRIO' : 'ECONOMIA IRRELEVANTE — REAVALIAR')
+    : (isViavel ? 'APROVADO — VIÁVEL' : 'REPROVADO — RETORNO INSUFICIENTE');
+  const vCor = isViavel ? '#065f46' : '#b91c1c';
+  const vBg  = isViavel ? '#d1fae5' : '#fee2e2';
+  return `
+<div class="av" style="border:2px solid #111111;border-radius:8px;overflow:hidden;margin-bottom:16px;">
+  <div style="background:#111111;color:white;padding:7px 12px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;">Quadro-Resumo da Operação</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #e2e8f0;">
+    ${cel('Imóvel', `${(d.tipo||'—').toUpperCase()} · ${d.cidade||''}${d.estado?'/'+d.estado:''}`)}
+    ${cel('Área', `${d.areaM2||0} m²${d.areaTerrenoM2?` (terreno ${d.areaTerrenoM2} m²)`:''}`)}
+    ${cel('Forma de pagamento', isAVista?'À vista':'Financiado / alavancado')}
+    ${cel('1ª praça (avaliação)', d.valorAvaliacao>0?`R$ ${fmt(d.valorAvaliacao)}`:'—')}
+    ${cel('2ª praça (lance mínimo)', lanceBase>0?`R$ ${fmt(lanceBase)}`:'—','#0D63DB')}
+    ${cel('Teto com disputa', semMargemDisputa?'Sem margem':(teto>0?`R$ ${fmt(teto)}`:'—'), semMargemDisputa?'#d97706':'#d97706')}
+    ${cel('Valor pretendido de venda', valorVendaPretendido>0?`R$ ${fmt(valorVendaPretendido)}`:'—','#059669')}
+    ${cel(isUsoProprio?'Economia estimada':'Lucro líquido estimado', `R$ ${fmt(m.lucro)}`, (m.lucro>=0?'#059669':'#dc2626'))}
+    ${cel('Retorno', `${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'}`,'#7c3aed')}
+  </div>
+  <div style="background:${vBg};color:${vCor};padding:9px 12px;font-size:12px;font-weight:900;text-align:center;letter-spacing:0.5px;">
+    ${isViavel?'✓':'✗'} VEREDITO: ${vereditoTxt}
+  </div>
+</div>`;
+})()}
+
+${semMargemDisputa?`<div class="av" style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:6px;padding:9px 12px;margin-bottom:12px;">
+  <div style="font-size:11px;font-weight:800;color:#92400e;">⚠ Sem margem para disputa</div>
+  <div style="font-size:10px;color:#b45309;margin-top:3px;">O lance máximo que ainda preserva o piso de ${isUsoProprio?'economia':'30% de lucro'} (R$ ${fmt(teto)}) é igual ou inferior ao lance mínimo (R$ ${fmt(lanceBase)}). Na prática, qualquer lance acima do mínimo já inviabiliza a operação — arrematar só compensa no próprio lance mínimo, sem entrar em disputa.</div>
+</div>`:''}
+
 ${riscosBloq.length>0?`<div class="box av"><div style="font-size:13px;font-weight:900;color:#b91c1c;margin-bottom:6px;">⚠ RISCO JURÍDICO BLOQUEANTE</div>${riscosBloq.map(r=>`<div style="color:#dc2626;font-size:10px;margin-bottom:3px;">• ${r.texto}</div>`).join('')}</div>`:''}
 
 ${d.observacoes?`<div class="obs av"><b style="font-size:9px;text-transform:uppercase;">Anotações da Gestão:</b><br/><span style="color:#475569;">${d.observacoes.replace(/\n/g,'<br/>')}</span></div>`:''}
@@ -86,7 +131,7 @@ ${(() => {
 <div class="viab av" style="border-color:${isViavel?'#10b981':'#dc2626'};background:${isViavel?'#d1fae5':'#fee2e2'};">
   <div style="font-size:15px;font-weight:900;color:${isViavel?'#065f46':'#b91c1c'};">${isViavel?'✓ OPERAÇÃO VIÁVEL — APROVADA':'✗ OPERAÇÃO REPROVADA — RETORNO INSUFICIENTE'}</div>
   <div style="font-size:10px;color:${isViavel?'#047857':'#dc2626'};margin-top:4px;">
-    ${isUsoProprio?`Economia de R$ ${fmt(m.lucro)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 30% mínimos':'Abaixo dos 30% exigidos pela BidPro Brasil'} · Teto de disputa: R$ ${fmt(teto)}`}
+    ${isUsoProprio?`Economia de R$ ${fmt(m.lucro)} vs mercado (${fmtPct(m.roi)} de desconto efetivo)`:`Retorno ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'} · ${isViavel?'Atinge 30% mínimos':'Abaixo dos 30% exigidos pela BidPro Brasil'} · ${semMargemDisputa?'Sem margem para disputa (arrematar só no lance mínimo)':`Teto de disputa: R$ ${fmt(teto)}`}`}
   </div>
 </div>`;
 })()}
@@ -111,6 +156,17 @@ ${ind?`
     <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
   </div>
   <div style="font-size:9px;color:#475569;margin-top:6px;">Locação (${ind.loc?.horizonte||60} meses + venda ao final): aluguel líquido R$ ${fmt(ind.loc?.aluguelLiquido||0)}/mês · VPL R$ ${fmt(ind.loc?.vpl||0,0)} · TIR ${ind.loc?.tir!=null?`${fmtPct(ind.loc.tir)} a.a.`:'—'}.</div>
+  <div style="margin-top:8px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;padding:8px 10px;">
+    <div style="font-size:8.5px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Legenda dos indicadores</div>
+    <div style="font-size:9px;color:#475569;line-height:1.6;">
+      <b>VPL — Valor Presente Líquido:</b> quanto a operação gera hoje, já descontado o custo do dinheiro no tempo (positivo = cria valor). ·
+      <b>TIR — Taxa Interna de Retorno:</b> a rentabilidade anual da operação (compare com a TMA). ·
+      <b>TMA — Taxa Mínima de Atratividade:</b> a rentabilidade mínima aceitável, a “régua” do projeto. ·
+      <b>Payback:</b> em quantos meses o dinheiro investido retorna. ·
+      <b>Múltiplo do capital:</b> quantas vezes o capital investido volta (ex.: 1,5× = ganho de 50%). ·
+      <b>ROI / ROE:</b> retorno percentual sobre o investimento / sobre o capital próprio.
+    </div>
+  </div>
 </div>`:''}
 
 ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</pre></div>`:''}
