@@ -1259,6 +1259,39 @@ export default function Analise() {
                   </span>
                 )}
               </div>
+
+              {/* Resumo escaneável: pontos de atenção + dados-chave da matrícula */}
+              {(() => {
+                const pa = parecerDocumental.pontosAtencao;
+                const ex = parecerDocumental.extracao || {};
+                const chips = [];
+                if (pa && pa.total > 0) {
+                  if (pa.altos > 0) chips.push({ t: `${pa.altos} alta${pa.altos>1?'s':''}`, bg:'#fee2e2', c:'#b91c1c' });
+                  if (pa.medios > 0) chips.push({ t: `${pa.medios} média${pa.medios>1?'s':''}`, bg:'#fef3c7', c:'#92400e' });
+                }
+                const fatos = [];
+                if (ex.indisponibilidadePenhora === 'sim') fatos.push({ t:'Indisponibilidade/penhora ativa', bg:'#fee2e2', c:'#b91c1c' });
+                else if (ex.indisponibilidadePenhora === 'nao') fatos.push({ t:'Sem indisponibilidade/penhora', bg:'#dcfce7', c:'#15803d' });
+                if (ex.dataConsolidacao) fatos.push({ t:`Consolidação: ${ex.dataConsolidacao}`, bg:'#eff6ff', c:'#0D63DB' });
+                if (ex.condominioNome) fatos.push({ t:`Condomínio: ${ex.condominioNome}${ex.condominioCnpj?` (${ex.condominioCnpj})`:''}`, bg:'#f1f5f9', c:'#475569' });
+                if (!chips.length && !fatos.length) return null;
+                return (
+                  <div style={{ display:'flex', flexDirection:'column', gap:8, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:'12px 14px' }}>
+                    {pa && pa.total > 0 && (
+                      <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                        <span style={{ fontSize:12.5, fontWeight:800, color:'#334155' }}>⚠ {pa.total} ponto{pa.total>1?'s':''} de atenção</span>
+                        {chips.map((c,i)=><span key={i} style={{ fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:20, background:c.bg, color:c.c }}>{c.t}</span>)}
+                      </div>
+                    )}
+                    {fatos.length > 0 && (
+                      <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                        {fatos.map((c,i)=><span key={i} style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:8, background:c.bg, color:c.c }}>{c.t}</span>)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {(parecerDocumental.documentosLidos || []).length > 0 && (
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                   {parecerDocumental.documentosLidos.map((dl, i) => (

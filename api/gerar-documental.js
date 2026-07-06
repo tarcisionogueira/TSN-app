@@ -191,6 +191,11 @@ Avalie e descreva: ônus reais, gravames, hipotecas, penhoras, arrestos, indispo
 
 REGISTRO DO IMÓVEL: extraia do CABEÇALHO da matrícula o CARTÓRIO/SERVENTIA de Registro de Imóveis (com o número do Ofício, ex.: "1º Ofício de Registro de Imóveis"), a COMARCA/município do registro e o número da MATRÍCULA. Esses dados constam no topo de toda matrícula. Preencha "cartorio", "comarca" e "numeroMatricula" em "extracao" quando constarem; se não houver matrícula legível, deixe vazio (não invente).
 
+DADOS-CHAVE DA MATRÍCULA (quando constarem — preencha em "extracao"; se não constar, deixe vazio, NÃO invente):
+- "dataConsolidacao": data da CONSOLIDAÇÃO DA PROPRIEDADE em nome do credor fiduciário (típico de alienação fiduciária/Lei 9.514, na averbação "Av-"), formato AAAA-MM-DD. É determinante para os prazos do ex-mutuário — capture se houver.
+- "indisponibilidadePenhora": há INDISPONIBILIDADE, PENHORA, ARRESTO ou bloqueio ATIVO na matrícula? Responda "sim", "nao" ou "nao_consta".
+- "condominioNome" e "condominioCnpj": nome do condomínio e CNPJ, se o imóvel for em condomínio (útil para levantar o débito condominial).
+
 CUSTOS DO EDITAL (importantes p/ a projeção financeira): capture a comissão do leiloeiro e, SE HOUVER, a TAXA ADMINISTRATIVA do leilão/portal (percentual sobre a arrematação, ALÉM da comissão do leiloeiro — comum na Superbid) em "taxaAdministrativaPercentual", e eventuais DESPESAS ADMINISTRATIVAS de valor fixo em "despesasAdministrativas". Se o edital não mencionar, deixe 0.
 
 REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver discriminado nos documentos disponíveis, NÃO invente — sinalize como "não consta na documentação analisada" e indique ONDE confirmar (certidão de débitos na Prefeitura; declaração de débitos com a administradora/síndico; matrícula atualizada no Cartório de Registro de Imóveis; cláusulas do edital; SPU para laudêmio/foro).
@@ -228,7 +233,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/proprietário, se constar)", "executadoDoc": "(CPF ou CNPJ do executado/devedor, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário, se constar)", "executadoDoc": "(CPF ou CNPJ do executado/devedor, só dígitos, se constar)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "raioX": {
     "cadeiaDominial": [{"ato":"","data":"AAAA-MM-DD","evento":"","parte":""}],
     "certidoesRecomendadas": [{"nome":"","orgao":"","online":false,"motivo":""}],
@@ -512,9 +517,27 @@ export default async function handler(req, res) {
     // com aprovação, o laudo jurídico definitivo por advogado.
     const AVISO_DOCUMENTAL = '\n\n§ SEÇÃO: LEMBRETE E PRÓXIMO PASSO\nEsta análise documental e processual é gerada com apoio de inteligência artificial, a partir dos documentos disponíveis e de consultas públicas — pode conter imprecisões e não substitui a análise de um profissional. Recomendamos AGENDAR uma conversa com um analista para revisar o caso; uma vez aprovado, o caso é encaminhado ao JURÍDICO para emissão do LAUDO DEFINITIVO por advogado.';
 
+    // LGPD: mascara o CPF do executado/ex-mutuário no resultado exibido (só os
+    // dígitos do meio ficam visíveis). O documento cheio já foi usado nas consultas
+    // acima (CNJ/certidões) e NÃO é exibido — diferencial nosso frente a quem vaza
+    // o CPF completo de terceiros no relatório.
+    if (parsed.extracao && parsed.extracao.executadoDoc) {
+      const d = String(parsed.extracao.executadoDoc).replace(/\D/g, '');
+      parsed.extracao.executadoDoc = d.length === 11 ? `•••.${d.slice(3, 6)}.${d.slice(6, 9)}-••`
+        : d.length === 14 ? `••.${d.slice(2, 5)}.${d.slice(5, 8)}/••••-••` : null;
+    }
+    // Pontos de atenção (resumo escaneável no topo, com contagem por severidade).
+    const rlist = Array.isArray(parsed.riscos) ? parsed.riscos : [];
+    const pontosAtencao = {
+      total: rlist.length,
+      altos: rlist.filter(r => r?.severidade === 'bloqueante').length,
+      medios: rlist.filter(r => r?.severidade === 'alerta').length,
+    };
+
     const result = {
       extracao: parsed.extracao || null,
       riscos: parsed.riscos || [],
+      pontosAtencao,
       lacunas: parsed.lacunas || [],
       nivelRisco: parsed.nivelRisco || (temProc ? cnj.parecer?.nivel : null) || 'amarelo',
       parecer: (parsed.parecer || '') + fontesTxt + AVISO_DOCUMENTAL,
@@ -555,6 +578,11 @@ export default async function handler(req, res) {
       setStr('comarca', ex.comarca);
       setStr('matricula', ex.numeroMatricula);
       if (ex.ocupacao) setStr('ocupacao', ex.ocupacao);
+      // Dados-chave da matrícula (inspirado no que os concorrentes destacam).
+      setStr('dataConsolidacao', ex.dataConsolidacao);
+      setStr('condominioNome', ex.condominioNome);
+      setStr('condominioCnpj', ex.condominioCnpj);
+      if (ex.indisponibilidadePenhora && ex.indisponibilidadePenhora !== 'nao_consta') extra.indisponibilidadePenhora = ex.indisponibilidadePenhora;
       if (Object.keys(extra).length) {
         const fichaMerged = { ...(row?.ficha_cef && typeof row.ficha_cef === 'object' ? row.ficha_cef : {}), ...extra };
         await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
