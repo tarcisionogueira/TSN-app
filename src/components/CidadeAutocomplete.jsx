@@ -5,7 +5,10 @@ import { buscarTodasCidades } from '../data/cidades';
 // Substitui o campo livre de cidade + o campo separado de UF (que o cliente deixava
 // vazio, gravando cidade sem estado e quebrando os filtros da Busca). Ao escolher,
 // devolve onSelect({ cidade, uf }). Sem digitação livre de UF, sem erro de grafia.
-const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+// Remove acentos de forma robusta (faixa Unicode dos diacríticos combinantes, via
+// escape — não depende de caracteres combinantes literais no fonte, que podem se
+// corromper). Assim "vitória" e "vitoria" batem igual.
+const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 export default function CidadeAutocomplete({ value = '', onSelect, placeholder = 'Digite a cidade…', style }) {
   const [q, setQ] = useState(value);
@@ -19,7 +22,24 @@ export default function CidadeAutocomplete({ value = '', onSelect, placeholder =
   useEffect(() => {
     const t = norm(q).trim();
     if (t.length < 2) { setSugestoes([]); return; }
-    setSugestoes(todas.filter(c => norm(c).includes(t)).slice(0, 8));
+    // RANKING: sem ordenar, "Vitória - ES" ficava fora do top 8 (perdia para
+    // "Manoel Vitorino", "Porto Vitória" etc.) e o cliente achava que o acento
+    // "quebrava" a busca. Prioriza nome exato > começa com > contém no nome > contém.
+    const scored = [];
+    for (const c of todas) {
+      const nc = norm(c);
+      const nomeCidade = norm(c.split(' - ')[0]); // parte antes da UF
+      let score;
+      if (nomeCidade === t) score = 0;
+      else if (nomeCidade.startsWith(t)) score = 1;
+      else if (nc.startsWith(t)) score = 2;
+      else if (nomeCidade.includes(t)) score = 3;
+      else if (nc.includes(t)) score = 4;
+      else continue;
+      scored.push({ c, score });
+    }
+    scored.sort((a, b) => a.score - b.score || a.c.localeCompare(b.c, 'pt-BR'));
+    setSugestoes(scored.slice(0, 8).map(s => s.c));
   }, [q, todas]);
   useEffect(() => {
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };

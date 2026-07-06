@@ -1050,14 +1050,16 @@ export default function Busca() {
 
   return (
     <div style={{ position:'relative' }}>
-    {/* Selo fixo de análises disponíveis (explorador 5/mês, Investidor Pro 15/mês) */}
+    {/* Selo fixo de relatórios DISPONÍVEIS no mês (explorador 3/mês, Investidor Pro 15/mês) */}
     {analisesRestantes !== null && (() => {
       const totalDisp = analisesRestantes + (effectiveRole === 'explorador' ? (analisesBonus || 0) : 0);
       return (
         <div style={{ position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)', zIndex:1000, background: totalDisp > 0 ? '#0D63DB' : '#dc2626', color:'white', borderRadius:999, padding:'8px 20px', fontSize:13, fontWeight:700, boxShadow:'0 4px 20px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap' }}>
           {totalDisp > 0
-            ? `📊 ${analisesRestantes}/${limiteAnalises} análises este mês${effectiveRole === 'explorador' && analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
-            : '🔒 Análises do mês esgotadas, faça upgrade'}
+            ? (effectiveRole === 'explorador' && analisesBonus > 0
+                ? `📊 ${totalDisp} ${totalDisp === 1 ? 'relatório disponível' : 'relatórios disponíveis'} este mês (${analisesRestantes} do plano + ${analisesBonus} bônus)`
+                : `📊 ${analisesRestantes} de ${limiteAnalises} ${limiteAnalises === 1 ? 'relatório disponível' : 'relatórios disponíveis'} este mês`)
+            : '🔒 Relatórios do mês esgotados, faça upgrade'}
         </div>
       );
     })()}
