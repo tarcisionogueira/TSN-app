@@ -194,7 +194,7 @@ export default function Analise() {
       const { data } = await supabase.from('imovel_anexos')
         .select('id,tipo,nome,url,criado_em')
         .eq('imovel_id', idImovel)
-        .in('tipo', ['matricula', 'edital', 'regras_venda']);
+        .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'proposta', 'outro']);
       if (!cancel) setDocsLeiloeiro(data || []);
     })();
     return () => { cancel = true; };
@@ -958,12 +958,19 @@ export default function Analise() {
           <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Documentos do leiloeiro</div>
             {(() => {
-              const docMap = { edital:'Edital', matricula:'Matrícula', regras_venda:'Regra de venda online' };
+              const docMap = { edital:'Edital', matricula:'Matrícula', regras_venda:'Regra de venda online', laudo:'Laudo de Avaliação' };
               // Só os tópicos pertinentes à modalidade: venda direta tem "regra de
               // venda online" (não edital de leilão); leilão judicial/extrajudicial
               // tem edital. Matrícula vale em todos.
               const isVendaDireta = (imovelInicial?.modalidade || '') === 'venda_direta';
-              const topicos = isVendaDireta ? ['regras_venda','matricula'] : ['edital','matricula'];
+              // Anexos capturados pelo scraper/on-demand (imoveis_leilao.anexos) —
+              // fonte do Laudo de Avaliação e demais docs além do que o usuário subiu.
+              const anexosScrape = Array.isArray(imovelInicial?.anexos) ? imovelInicial.anexos : [];
+              const acharAnexo = (t) => docsLeiloeiro.find(x => x.tipo === t) || anexosScrape.find(x => x.tipo === t);
+              const temLaudo = !!acharAnexo('laudo');
+              const base = isVendaDireta ? ['regras_venda','matricula'] : ['edital','matricula'];
+              // Laudo de avaliação entra quando existe (traz o valor oficial — pesa no mercadológico).
+              const topicos = temLaudo ? [...base, 'laudo'] : base;
               // Links válidos: matricula.asp e detalhe-imovel.asp são páginas do
               // portal (dão 404 / não são arquivo) — não viram link de documento.
               const ehArquivo = (v) => /^https?:\/\//i.test(v||'') && !/matricula\.asp|detalhe-imovel\.asp/i.test(v);
@@ -974,7 +981,7 @@ export default function Analise() {
               const paginaLeiloeiro = [imovelInicial?.urlLote, imovelInicial?.linkEdital, imovelInicial?.linkLeilao, imovelInicial?.url]
                 .find(u => /^https?:\/\//i.test(u || '')) || null;
               const docsView = topicos.map(t => {
-                const a = docsLeiloeiro.find(x => x.tipo === t);
+                const a = acharAnexo(t);
                 const anexoUrl = (a?.url && /^https?:\/\//.test(a.url)) ? a.url : null;
                 let fileUrl;
                 if (t === 'matricula') {
@@ -987,6 +994,10 @@ export default function Analise() {
                   // portal). É o ARQUIVO de regras de fato — preferido ao anexo.
                   fileUrl = (isVendaDireta && caixaRegrasVendaUrl({ fonte: imovelInicial?.fonte }))
                     || anexoUrl || (ehArquivo(imovelInicial?.linkRegrasVenda) ? imovelInicial.linkRegrasVenda : null);
+                } else if (t === 'laudo') {
+                  // Laudo de avaliação: só existe como anexo capturado (sem coluna
+                  // dedicada). Não cai na página do lote — se não há arquivo, não mostra.
+                  fileUrl = anexoUrl;
                 } else {
                   fileUrl = anexoUrl || (ehArquivo(imovelInicial?.linkEdital) ? imovelInicial.linkEdital : null);
                 }
