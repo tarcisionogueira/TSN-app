@@ -21,6 +21,15 @@ export default function Promo() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Fluxo SDR do link promocional: perguntas (uma por vez) + contato → lead p/
+  // consultor → depois segue para o checkout com o desconto.
+  const [sdrAberto, setSdrAberto] = useState(false);
+  const [passo, setPasso] = useState(0);
+  const [respostas, setRespostas] = useState({});
+  const [contato, setContato] = useState({ nome: '', whatsapp: '', email: '' });
+  const [enviandoSdr, setEnviandoSdr] = useState(false);
+  const [erroSdr, setErroSdr] = useState('');
+
   useEffect(() => {
     if (!codigo) return;
     supabase
@@ -64,11 +73,41 @@ export default function Promo() {
   const temDesconto = precoPromo < precoOriginal;
   const pctDesconto = precoOriginal > 0 ? Math.round((1 - precoPromo / precoOriginal) * 100) : 0;
 
-  const irParaCheckout = () => {
+  const perguntas = Array.isArray(link.perguntas) ? link.perguntas.filter(p => p && String(p.texto || '').trim()) : [];
+
+  const seguirCheckout = () => {
     const dest = user
       ? `/checkout?plano=${link.produto}&promo=${link.codigo}`
       : `/login?plano=${link.produto}&promo=${link.codigo}`;
     nav(dest);
+  };
+
+  const irParaCheckout = () => {
+    // Traffic novo (sem login) + link com perguntas → qualifica antes (função SDR).
+    if (perguntas.length && !user) { setSdrAberto(true); setPasso(0); setErroSdr(''); return; }
+    seguirCheckout();
+  };
+
+  const totalPassos = perguntas.length + 1; // perguntas + tela de contato
+  const noContato = passo >= perguntas.length;
+  const perguntaAtual = perguntas[passo];
+  const respondida = (p) => p && String(respostas[p.id] ?? '').trim() !== '';
+
+  const enviarSdr = async () => {
+    if (!contato.nome.trim() || contato.whatsapp.replace(/\D/g, '').length < 10) {
+      setErroSdr('Preencha nome e um WhatsApp válido (com DDD).'); return;
+    }
+    setEnviandoSdr(true); setErroSdr('');
+    try {
+      const respArr = perguntas.map(p => ({ pergunta: p.texto, resposta: respostas[p.id] ?? '' }));
+      const r = await fetch('/api/promo-capturar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo: link.codigo, nome: contato.nome, whatsapp: contato.whatsapp, email: contato.email, respostas: respArr }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) throw new Error(data.error || 'Não foi possível enviar. Tente novamente.');
+      seguirCheckout();
+    } catch (e) { setErroSdr(e.message); setEnviandoSdr(false); }
   };
 
   return (
@@ -127,6 +166,12 @@ export default function Promo() {
             <ShieldCheck size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
             Pagamento seguro · Cancele quando quiser
           </div>
+          {(link.carencia_dias > 0 || link.beneficio_validade_dias > 0) && (
+            <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {link.carencia_dias > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '4px 10px', borderRadius: 20 }}>🎁 {link.carencia_dias} dias de carência</span>}
+              {link.beneficio_validade_dias > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: '#eff6ff', color: '#084BA6', padding: '4px 10px', borderRadius: 20 }}>⏳ Benefício por {link.beneficio_validade_dias} dias</span>}
+            </div>
+          )}
         </div>
       </div>
 
@@ -179,6 +224,77 @@ export default function Promo() {
           Já tem conta? <button onClick={() => nav(`/login?plano=${link.produto}&promo=${link.codigo}`)} style={{ background: 'none', border: 'none', color: '#60a5fa', fontWeight: 700, cursor: 'pointer' }}>Entrar e assinar</button>
         </div>
       </div>
+
+      {/* Fluxo SDR: perguntas uma por vez + contato → lead p/ consultor → checkout */}
+      {sdrAberto && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={(e) => { if (e.target === e.currentTarget && !enviandoSdr) setSdrAberto(false); }}>
+          <div style={{ background: 'white', borderRadius: 18, width: '100%', maxWidth: 460, padding: '26px 24px', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+            {/* Progresso */}
+            <div style={{ display: 'flex', gap: 5, marginBottom: 18 }}>
+              {Array.from({ length: totalPassos }).map((_, i) => (
+                <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i <= passo ? plano.cor : '#e2e8f0' }} />
+              ))}
+            </div>
+
+            {!noContato ? (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', marginBottom: 6 }}>Pergunta {passo + 1} de {perguntas.length}</div>
+                <div style={{ fontSize: 19, fontWeight: 800, color: '#111', marginBottom: 18, lineHeight: 1.3 }}>{perguntaAtual.texto}</div>
+
+                {perguntaAtual.tipo === 'sim_nao' ? (
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {['Sim', 'Não'].map(op => (
+                      <button key={op} onClick={() => setRespostas(r => ({ ...r, [perguntaAtual.id]: op }))}
+                        style={{ flex: 1, padding: '14px', borderRadius: 12, border: `2px solid ${respostas[perguntaAtual.id] === op ? plano.cor : '#e2e8f0'}`, background: respostas[perguntaAtual.id] === op ? `${plano.cor}12` : 'white', color: '#111', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>{op}</button>
+                    ))}
+                  </div>
+                ) : perguntaAtual.tipo === 'multipla' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {String(perguntaAtual.opcoes || '').split(',').map(o => o.trim()).filter(Boolean).map(op => (
+                      <button key={op} onClick={() => setRespostas(r => ({ ...r, [perguntaAtual.id]: op }))}
+                        style={{ textAlign: 'left', padding: '13px 16px', borderRadius: 12, border: `2px solid ${respostas[perguntaAtual.id] === op ? plano.cor : '#e2e8f0'}`, background: respostas[perguntaAtual.id] === op ? `${plano.cor}12` : 'white', color: '#111', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{op}</button>
+                    ))}
+                  </div>
+                ) : (
+                  <input autoFocus value={respostas[perguntaAtual.id] || ''} onChange={e => setRespostas(r => ({ ...r, [perguntaAtual.id]: e.target.value }))}
+                    placeholder="Sua resposta…" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
+                )}
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 19, fontWeight: 800, color: '#111', marginBottom: 4 }}>Quase lá! Como falamos com você?</div>
+                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18 }}>Um consultor pode te ajudar a garantir a melhor condição.</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input value={contato.nome} onChange={e => setContato(c => ({ ...c, nome: e.target.value }))} placeholder="Seu nome" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
+                  <input value={contato.whatsapp} onChange={e => setContato(c => ({ ...c, whatsapp: e.target.value }))} placeholder="WhatsApp (com DDD)" inputMode="tel" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
+                  <input value={contato.email} onChange={e => setContato(c => ({ ...c, email: e.target.value }))} placeholder="E-mail (opcional)" inputMode="email" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
+                </div>
+              </>
+            )}
+
+            {erroSdr && <div style={{ marginTop: 12, padding: '9px 12px', background: '#fee2e2', color: '#dc2626', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>{erroSdr}</div>}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => { if (passo === 0) setSdrAberto(false); else setPasso(p => p - 1); }} disabled={enviandoSdr}
+                style={{ padding: '12px 18px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                {passo === 0 ? 'Cancelar' : 'Voltar'}
+              </button>
+              {!noContato ? (
+                <button onClick={() => setPasso(p => p + 1)} disabled={perguntaAtual.tipo === 'texto' ? false : !respondida(perguntaAtual)}
+                  style={{ flex: 1, padding: '12px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', opacity: (perguntaAtual.tipo !== 'texto' && !respondida(perguntaAtual)) ? 0.5 : 1 }}>
+                  Próxima
+                </button>
+              ) : (
+                <button onClick={enviarSdr} disabled={enviandoSdr}
+                  style={{ flex: 1, padding: '12px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', opacity: enviandoSdr ? 0.6 : 1 }}>
+                  {enviandoSdr ? 'Enviando…' : 'Continuar para o checkout →'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`@media(max-width:600px){ .promo-recursos{ grid-template-columns: 1fr !important; } }`}</style>
     </div>

@@ -2677,7 +2677,7 @@ function ContratosTab() {
 }
 
 // ─── Aba Promoções ────────────────────────────────────────────────────────────
-const defaultPromo = () => ({ codigo: '', produto: 'top2', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', beneficios: '', ativo: true });
+const defaultPromo = () => ({ codigo: '', produto: 'top2', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', beneficios: '', carencia_dias: '', beneficio_validade_dias: '', validade_ate: '', perguntas: [], ativo: true });
 
 function buildProdutosPromo(planos) {
   const fmt = (v, d = 2) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })}`;
@@ -2742,6 +2742,11 @@ function PromoTab() {
       desconto_pct: Number(form.desconto_pct) || 0,
       desconto_valor: Number(form.desconto_valor) || 0,
       beneficios: form.beneficios || null,
+      carencia_dias: form.carencia_dias === '' ? null : Number(form.carencia_dias),
+      beneficio_validade_dias: form.beneficio_validade_dias === '' ? null : Number(form.beneficio_validade_dias),
+      validade_ate: form.validade_ate ? new Date(form.validade_ate).toISOString() : null,
+      // Só perguntas com texto preenchido (descarta linhas vazias do editor).
+      perguntas: (form.perguntas || []).filter(p => p && String(p.texto || '').trim()),
       ativo: form.ativo,
       criado_por: user.id,
     };
@@ -2753,7 +2758,7 @@ function PromoTab() {
     setSalvando(false);
   };
 
-  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', beneficios: l.beneficios || '', ativo: l.ativo }); setEditId(l.id); };
+  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', beneficios: l.beneficios || '', carencia_dias: l.carencia_dias ?? '', beneficio_validade_dias: l.beneficio_validade_dias ?? '', validade_ate: l.validade_ate ? String(l.validade_ate).slice(0, 10) : '', perguntas: Array.isArray(l.perguntas) ? l.perguntas : [], ativo: l.ativo }); setEditId(l.id); };
   const toggleAtivo = async (l) => { await supabase.from('links_promo').update({ ativo: !l.ativo }).eq('id', l.id); await carregar(); };
   const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${cod}`);
 
@@ -2787,6 +2792,70 @@ function PromoTab() {
           <textarea value={form.beneficios} onChange={e => up('beneficios', e.target.value)}
             placeholder="Benefícios incluídos (ex: 'Acesso a todos os cursos gravados + eBooks exclusivos')"
             rows={2} style={{ ...S.input, resize: 'vertical', marginBottom: 14 }} />
+
+          {/* Benefício: carência + validade do benefício + validade do link */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 6 }}>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>CARÊNCIA (dias)</label>
+              <input type="number" min="0" value={form.carencia_dias} onChange={e => up('carencia_dias', e.target.value)} placeholder="ex: 30 (1º mês grátis)" style={S.input} />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>VALIDADE DO BENEFÍCIO (dias)</label>
+              <input type="number" min="0" value={form.beneficio_validade_dias} onChange={e => up('beneficio_validade_dias', e.target.value)} placeholder="ex: 90" style={S.input} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>VALIDADE DO LINK (até)</label>
+            <input type="date" value={form.validade_ate} onChange={e => up('validade_ate', e.target.value)} style={S.input} />
+          </div>
+
+          {/* Perguntas de qualificação (SDR) — respostas viram lead para o consultor */}
+          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111111' }}>Perguntas de qualificação (SDR)</div>
+              <button type="button" onClick={() => up('perguntas', [...(form.perguntas || []), { id: Date.now(), texto: '', tipo: 'texto', opcoes: '' }])}
+                style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}>+ Adicionar pergunta</button>
+            </div>
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
+              💡 Na página do link, as perguntas aparecem <strong>uma por vez</strong>. O visitante também informa nome, WhatsApp e e-mail. As respostas viram um <strong>lead para um consultor</strong>, e aí ele segue para o checkout com o desconto.
+            </div>
+            {(form.perguntas || []).length === 0 && (
+              <div style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', padding: '8px 0' }}>Sem perguntas: o link vai direto ao checkout com o desconto (sem etapa SDR).</div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(form.perguntas || []).map((p, i) => (
+                <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <input style={{ ...S.input, marginBottom: 6 }} value={p.texto} placeholder={`Pergunta ${i + 1}`}
+                        onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, texto: e.target.value } : q))} />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <select style={{ ...S.input, width: 130, fontSize: 12 }} value={p.tipo}
+                          onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, tipo: e.target.value } : q))}>
+                          <option value="texto">Texto livre</option>
+                          <option value="multipla">Múltipla escolha</option>
+                          <option value="sim_nao">Sim / Não</option>
+                        </select>
+                        {p.tipo === 'multipla' && (
+                          <input style={{ ...S.input, flex: 1, fontSize: 12 }} value={p.opcoes || ''} placeholder="Opções separadas por vírgula"
+                            onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, opcoes: e.target.value } : q))} />
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <button type="button" disabled={i === 0} onClick={() => up('perguntas', (() => { const a = [...form.perguntas]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })())}
+                        style={{ padding: '3px 8px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, color: '#475569', cursor: i === 0 ? 'default' : 'pointer', opacity: i === 0 ? 0.4 : 1 }}>↑</button>
+                      <button type="button" disabled={i === (form.perguntas || []).length - 1} onClick={() => up('perguntas', (() => { const a = [...form.perguntas]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })())}
+                        style={{ padding: '3px 8px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, color: '#475569', cursor: 'pointer' }}>↓</button>
+                      <button type="button" onClick={() => up('perguntas', form.perguntas.filter((_, j) => j !== i))}
+                        style={{ padding: '3px 8px', background: '#fee2e2', border: 'none', borderRadius: 6, fontSize: 11, color: '#dc2626', cursor: 'pointer' }}>✕</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', marginBottom: 14, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.ativo} onChange={e => up('ativo', e.target.checked)} /> Link ativo
           </label>
@@ -2823,6 +2892,12 @@ function PromoTab() {
                       </div>
                       {l.descricao_condicoes && <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>📋 {l.descricao_condicoes}</div>}
                       {l.beneficios && <div style={{ fontSize: 11, color: '#059669', marginTop: 4 }}>✅ {l.beneficios}</div>}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                        {l.carencia_dias > 0 && <span style={{ fontSize: 10, fontWeight: 700, background: '#f0fdf4', color: '#15803d', padding: '2px 8px', borderRadius: 20 }}>Carência {l.carencia_dias}d</span>}
+                        {l.beneficio_validade_dias > 0 && <span style={{ fontSize: 10, fontWeight: 700, background: '#eff6ff', color: '#084BA6', padding: '2px 8px', borderRadius: 20 }}>Benefício {l.beneficio_validade_dias}d</span>}
+                        {l.validade_ate && <span style={{ fontSize: 10, fontWeight: 700, background: '#fef9c3', color: '#a16207', padding: '2px 8px', borderRadius: 20 }}>Link até {new Date(l.validade_ate).toLocaleDateString('pt-BR')}</span>}
+                        {Array.isArray(l.perguntas) && l.perguntas.length > 0 && <span style={{ fontSize: 10, fontWeight: 700, background: '#f5f3ff', color: '#6d28d9', padding: '2px 8px', borderRadius: 20 }}>SDR · {l.perguntas.length} pergunta(s)</span>}
+                      </div>
                       <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', wordBreak: 'break-all' }}>{linkUrl}</div>
                       {l.perfis?.nome && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Criado por: {l.perfis.nome}</div>}
                     </div>
@@ -5802,7 +5877,7 @@ function SdrTab() {
                 <td style={S.td}>{l.nome}</td>
                 <td style={S.td}><div style={{ display: 'flex', gap: 6 }}>{l.whatsapp}<a href={`https://wa.me/55${l.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '2px 6px', textDecoration: 'none', fontWeight: 600 }}>WA</a></div></td>
                 <td style={S.td}>{l.email || '—'}</td>
-                <td style={S.td}>{l.sdr_produtos?.nome || '—'}</td>
+                <td style={S.td}>{l.sdr_produtos?.nome || l.origem || '—'}{l.promo_id && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, background: '#f5f3ff', color: '#6d28d9', padding: '1px 6px', borderRadius: 20 }}>promo</span>}</td>
                 <td style={S.td}><select value={l.status} onChange={e => updateLeadStatus(l.id, e.target.value)} style={{ background: STATUS_COLORS[l.status]+'22', color: STATUS_COLORS[l.status], border: `1px solid ${STATUS_COLORS[l.status]}`, borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>{STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></td>
                 <td style={S.td}>{new Date(l.criado_em).toLocaleDateString('pt-BR')}</td>
                 <td style={S.td}><button style={{ ...S.btn('outline'), fontSize: 11, padding: '3px 8px' }} onClick={() => setLeadDetalhe(l)}>Ver</button></td>
@@ -5841,7 +5916,7 @@ function SdrTab() {
                   {/* Fallback: show raw if no perguntas meta */}
                   {!(leadDetalhe.sdr_produtos?.perguntas?.length) && Object.entries(leadDetalhe.respostas).map(([k, v]) => (
                     <div key={k} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px' }}>
-                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Pergunta ID: {k}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{/^\d+$/.test(k) ? `Pergunta ${k}` : k}</div>
                       <div style={{ fontSize: 14, color: '#111111', fontWeight: 600 }}>{v}</div>
                     </div>
                   ))}
