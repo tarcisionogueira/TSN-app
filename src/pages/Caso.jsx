@@ -488,6 +488,28 @@ export default function Caso() {
 
   // ─── Arrematação form ─────────────────────────────────────────────────────
   const [arrForm, setArrForm] = useState({ valor_arrematado:'', documento_url:'', tipo_leilao:'judicial', em_nome_proprio:true, beneficiario_nome:'', beneficiario_cpf:'', beneficiario_qualif:'', beneficiario_endereco:'' });
+
+  // Posse do imóvel: encerra a assessoria deste caso. Quem já é Clube/Investidor
+  // Pro mantém o plano; assessorado volta a Explorador (decisão do dono).
+  const [posseLoad, setPosseLoad] = useState(false);
+  const marcarPosse = async () => {
+    if (!window.confirm('Confirmar que você tomou a POSSE deste imóvel?\n\nIsto encerra o trabalho da assessoria para este imóvel.')) return;
+    setPosseLoad(true);
+    try {
+      const r = await apiCall('/api/marcar-posse', { method:'POST', body: JSON.stringify({ caso_id: caso.id }) });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Falha ao registrar a posse.');
+      setCaso(c => ({ ...c, posse_em: d.posse_em, status_etapa: 'pos_arrematacao' }));
+      if (d.reduziu) {
+        alert('Posse registrada! A assessoria deste imóvel foi concluída.\n\nSeu acesso voltou ao plano Explorador. Se quiser continuar com relatórios ilimitados, conheça o Investidor Pro.');
+        window.location.href = '/#/planos';
+      } else {
+        alert('Posse registrada! A assessoria deste imóvel foi concluída. Seu plano atual foi mantido.');
+      }
+    } catch (e) {
+      alert(e.message || 'Erro ao registrar a posse.');
+    } finally { setPosseLoad(false); }
+  };
   const [arrFileNome, setArrFileNome] = useState('');
   const [salvandoArr, setSalvandoArr] = useState(false);
 
@@ -1020,6 +1042,27 @@ export default function Caso() {
               </div>
               <div style={card}>
                 <FinanciamentoTracker imovelId={caso.imovel_id || caso.id} imovelNome={caso.imovel_endereco || 'Imóvel arrematado'} onSalvo={()=>{}} />
+              </div>
+              {/* Encerramento da assessoria: o cliente sinaliza a posse do imóvel. */}
+              <div style={card}>
+                {caso.posse_em ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:10, color:'#065f46' }}>
+                    <CheckCircle2 size={20} color="#059669"/>
+                    <div>
+                      <div style={{ fontSize:14, fontWeight:800 }}>Assessoria concluída</div>
+                      <div style={{ fontSize:12, color:'#64748b' }}>Posse do imóvel registrada em {new Date(caso.posse_em).toLocaleDateString('pt-BR')}. O trabalho da assessoria para este imóvel foi encerrado.</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:800, color:'#111', marginBottom:4 }}>Já tomou posse do imóvel?</div>
+                    <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>Ao tomar posse, o trabalho da assessoria para este imóvel se encerra. Registre abaixo quando isso acontecer.</div>
+                    <button onClick={marcarPosse} disabled={posseLoad}
+                      style={{ padding:'11px 18px', background: posseLoad ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: posseLoad ? 'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+                      {posseLoad ? <><Loader2 size={15} style={{ animation:'spin 1s linear infinite' }}/> Registrando…</> : <><CheckCircle2 size={15}/> Tomei posse do imóvel</>}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
