@@ -244,7 +244,8 @@ function MainLayout() {
           <Route path="/caso" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/caso/:id" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
-          <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin']}><Consultor /></PrivateRoute>} />
+          <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin','afiliado']}><Consultor /></PrivateRoute>} />
+          <Route path="/afiliado" element={<PrivateRoute roles={['afiliado','admin']}><Consultor /></PrivateRoute>} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
           <Route path="/contratos/novo" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><CriarContrato /></PrivateRoute>} />
           <Route path="/contratos/templates" element={<PrivateRoute roles={['admin']}><ContratosTemplates /></PrivateRoute>} />

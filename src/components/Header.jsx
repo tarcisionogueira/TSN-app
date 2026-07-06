@@ -131,7 +131,7 @@ function ModalFeedback({ user, onClose }) {
 
 const ROLE_LABELS_STATIC = {
   admin: 'Admin', explorador: 'Explorador',
-  consultor: 'Consultor', analista: 'Analista', advogado: 'Advogado',
+  consultor: 'Consultor', afiliado: 'Afiliado', analista: 'Analista', advogado: 'Advogado',
 };
 
 export default function Header() {
@@ -251,6 +251,13 @@ export default function Header() {
             </button>
           )}
 
+          {effectiveRole === 'afiliado' && (
+            <button onClick={() => nav('/afiliado')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/afiliado') ? '#db2777' : '#db277722', color: '#f9a8d4', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              📣 Afiliado
+            </button>
+          )}
+
           {effectiveRole === 'advogado' && (
             <button onClick={() => nav('/advogado')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/advogado') ? '#7c3aed' : '#7c3aed22', color: '#c4b5fd', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -356,6 +363,12 @@ export default function Header() {
             <button onClick={() => { nav('/consultor'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#6ee7b7', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               🤝 Comercial
+            </button>
+          )}
+          {effectiveRole === 'afiliado' && (
+            <button onClick={() => { nav('/afiliado'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#f9a8d4', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              📣 Afiliado
             </button>
           )}
           {effectiveRole === 'advogado' && (

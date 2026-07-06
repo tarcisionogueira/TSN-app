@@ -35,6 +35,16 @@ const ROLE_CONFIG = {
       { key: 'carteira', label: 'Possui carteira de clientes investidores?', tipo: 'select', opts: ['Sim, ativa','Em construção','Não ainda'] },
     ],
   },
+  afiliado: {
+    emoji: '📣',
+    label: 'Afiliado',
+    cor: '#db2777',
+    descricao: 'Você foi convidado como Afiliado da BidPro Brasil. Divulgue seus links de venda e ganhe comissão sobre cada venda que vier por eles.',
+    passos_extras: [
+      { key: 'canal', label: 'Como você vai divulgar?', tipo: 'select', opts: ['Instagram','YouTube','TikTok','WhatsApp/Grupos','Site/Blog','Outro'] },
+      { key: 'audiencia', label: 'Tamanho aproximado da sua audiência?', tipo: 'select', opts: ['Até 5 mil','5 a 20 mil','20 a 100 mil','Mais de 100 mil'] },
+    ],
+  },
   leiloeiro: {
     emoji: '🔨',
     label: 'Leiloeiro Oficial',

@@ -10,7 +10,7 @@ import { supabase } from '../utils/supabase';
 import { fmt } from '../utils/calculos';
 import { apiCall } from '../utils/apiCall';
 
-const ROLES_CONSULTOR = ['consultor', 'admin'];
+const ROLES_CONSULTOR = ['consultor', 'admin', 'afiliado'];
 
 function fmtData(d) {
   if (!d) return '—';
@@ -36,6 +36,9 @@ export default function Consultor() {
   const { user, role, loading: authLoading } = useAuth();
   const planosCtx = usePlanos();
   const podeVer = ROLES_CONSULTOR.includes(role);
+  // Afiliado: igual ao consultor em ter links e comissões, MAS sem o painel de
+  // acompanhamento do cliente (carteira/leads). Vê só material + prestação de contas.
+  const ehAfiliado = role === 'afiliado';
 
   const [perfil, setPerfil] = useState(null);
   const [carteira, setCarteira] = useState([]);
@@ -300,15 +303,18 @@ export default function Consultor() {
   return (
     <div style={{ maxWidth:1100, margin:'0 auto', padding:'24px 20px' }}>
       <div style={{ marginBottom:20 }}>
-        <h1 style={{ margin:0, fontSize:24, fontWeight:900, color:'#111111' }}>Painel do Consultor</h1>
-        <p style={{ margin:'4px 0 0', fontSize:13, color:'#64748b' }}>Indique clientes e ganhe comissões recorrentes enquanto eles forem pagantes.</p>
+        <h1 style={{ margin:0, fontSize:24, fontWeight:900, color:'#111111' }}>{ehAfiliado ? 'Painel do Afiliado' : 'Painel do Consultor'}</h1>
+        <p style={{ margin:'4px 0 0', fontSize:13, color:'#64748b' }}>{ehAfiliado ? 'Divulgue seus links e ganhe comissão sobre as vendas que vierem por eles.' : 'Indique clientes e ganhe comissões recorrentes enquanto eles forem pagantes.'}</p>
       </div>
 
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:10, marginBottom:20 }}>
         {[
-          { l:'Clientes na carteira', v: carteira.length, c:'#0D63DB', bg:'#eff6ff', icon:Users, onClick:()=>{ setFiltroCarteira('todos'); setAba('carteira'); } },
-          { l:'Clientes pagantes', v: clientesPagantes, c:'#8b5cf6', bg:'#ede9fe', icon:TrendingUp, onClick:()=>{ setFiltroCarteira('pagantes'); setAba('carteira'); } },
+          // Afiliado não tem acompanhamento de cliente: some carteira/pagantes.
+          ...(ehAfiliado ? [] : [
+            { l:'Clientes na carteira', v: carteira.length, c:'#0D63DB', bg:'#eff6ff', icon:Users, onClick:()=>{ setFiltroCarteira('todos'); setAba('carteira'); } },
+            { l:'Clientes pagantes', v: clientesPagantes, c:'#8b5cf6', bg:'#ede9fe', icon:TrendingUp, onClick:()=>{ setFiltroCarteira('pagantes'); setAba('carteira'); } },
+          ]),
           { l:'Comissão pendente', v:`R$ ${fmt(totalPendente)}`, c:'#f59e0b', bg:'#fffbeb', icon:Clock, onClick:()=>{ setFiltroComissao('pendente'); setAba('comissoes'); } },
           { l:'Comissão recebida', v:`R$ ${fmt(totalPago)}`, c:'#10b981', bg:'#f0fdf4', icon:CheckCircle2, onClick:()=>{ setFiltroComissao('pago'); setAba('comissoes'); } },
         ].map(k=>(
@@ -328,8 +334,8 @@ export default function Consultor() {
       {/* Tabs */}
       <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0', flexWrap:'wrap' }}>
         {tabBtn('material', '🔗 Material de Divulgação')}
-        {tabBtn('carteira', `👥 Carteira (${carteira.length})`)}
-        {tabBtn('comissoes', `💰 Comissões (${comissoes.length})`)}
+        {!ehAfiliado && tabBtn('carteira', `👥 Carteira (${carteira.length})`)}
+        {tabBtn('comissoes', ehAfiliado ? `💰 Prestação de contas (${comissoes.length})` : `💰 Comissões (${comissoes.length})`)}
       </div>
 
       <div style={{ background:'white', borderRadius:'0 12px 12px 12px', border:'1px solid #e2e8f0', borderTop:'none', padding:'20px' }}>

@@ -12,7 +12,7 @@ const FEEDBACK_KEY = 'tsn_feedback_email';
 // Papéis REAIS do sistema (planos_config + papéis de equipe/leiloeiro).
 // 'top1' foi removido (Investidor Pro é 'top2'); 'leiloeiro' incluído (portal do parceiro).
 const ROLES_DISPONIVEIS = [
-  'admin','explorador','top2','assessorado','clube','consultor','analista','advogado','leiloeiro',
+  'admin','explorador','top2','assessorado','clube','consultor','afiliado','analista','advogado','leiloeiro',
 ];
 
 // ─── styles ──────────────────────────────────────────────────────────────────
@@ -689,7 +689,7 @@ function UsuariosTab() {
     return (u.nome || '').toLowerCase().includes(q) || (cpfMasc[u.id] || '').includes(q) || (u.role || '').toLowerCase().includes(q) || labelRole(u.role).toLowerCase().includes(q);
   });
 
-  const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', analista: '#f59e0b', advogado: '#dc2626', leiloeiro: '#ea580c' };
+  const ROLE_COLORS = { admin: '#7c3aed', explorador: '#64748b', top2: '#7c3aed', assessorado: '#d97706', clube: '#059669', consultor: '#0891b2', afiliado: '#db2777', analista: '#f59e0b', advogado: '#dc2626', leiloeiro: '#ea580c' };
   const fmtData = v => v ? new Date(v).toLocaleDateString('pt-BR') : '—';
 
   return (
@@ -777,6 +777,22 @@ function UsuariosTab() {
                                   style={{ padding: '5px 10px', background: '#f0fdf4', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#059669', cursor: 'pointer' }}
                                   onClick={() => abrirExito(u)} title="% de êxito individual deste membro (o admin recebe o saldo)">
                                   💰 Êxito
+                                </button>
+                              )}
+                              {['consultor','afiliado'].includes(u.role) && (
+                                <button
+                                  style={{ padding: '5px 10px', background: '#fce7f3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#db2777', cursor: 'pointer' }}
+                                  title="% de comissão sobre as vendas que vierem pelo link deste consultor/afiliado"
+                                  onClick={async () => {
+                                    const { data } = await supabase.from('perfis').select('comissao_afiliado_pct').eq('id', u.id).single();
+                                    const atual = data?.comissao_afiliado_pct ?? 0;
+                                    const v = window.prompt(`Comissão de ${u.nome || 'membro'} sobre as vendas que vierem pelo link dele (%):`, String(atual));
+                                    if (v === null) return;
+                                    const pct = Math.max(0, Math.min(100, Number(String(v).replace(',', '.')) || 0));
+                                    const { error } = await supabase.from('perfis').update({ comissao_afiliado_pct: pct }).eq('id', u.id);
+                                    window.alert(error ? ('Erro: ' + error.message) : `Comissão definida em ${pct.toLocaleString('pt-BR')}%.`);
+                                  }}>
+                                  🔗 Comissão
                                 </button>
                               )}
                             </div>
@@ -6781,6 +6797,7 @@ function EquipeTab() {
     { label: '🔍 Convidar Analista',   roles: ['analista'],  bg: '#0D63DB' },
     { label: '⚖️ Convidar Advogado',   roles: ['advogado'],  bg: '#7c3aed' },
     { label: '🤝 Convidar Consultor',  roles: ['consultor'], bg: '#059669' },
+    { label: '📣 Convidar Afiliado',   roles: ['afiliado'],  bg: '#db2777' },
     { label: '🔨 Convidar Leiloeiro',  roles: ['leiloeiro'], bg: '#ea580c' },
   ];
 
