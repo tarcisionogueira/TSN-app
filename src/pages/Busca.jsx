@@ -216,13 +216,33 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       // painel "Ver lista" (estilo Google) — evita os controles ficarem escondidos.
       leafletRef.current = L.map(mapContainerRef.current, { center: [-15.8, -47.9], zoom: 5, zoomControl: false });
       L.control.zoom({ position: 'bottomright' }).addTo(leafletRef.current);
-      // CARTO basemaps (permite uso por apps; o tile.openstreetmap.org bloqueia
-      // tráfego de aplicativo em produção -> mapa cinza/"falhado").
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-        subdomains: 'abcd',
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
-        maxZoom: 19,
-      }).addTo(leafletRef.current);
+      // Basemap com FALLBACK automático. O tile.openstreetmap.org já bloqueava
+      // tráfego de app em produção; o CARTO no-token passou a limitar/bloquear do
+      // mesmo jeito -> mapa em branco. Em vez de depender de um só provedor, se o
+      // primário acumular erros de tile (bloqueio), troca sozinho para o próximo.
+      const BASEMAPS = [
+        { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+          opts: { subdomains: 'abcd', maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' } },
+        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+          opts: { maxZoom: 16, attribution: 'Tiles © Esri' } },
+      ];
+      let baseIdx = 0, tileErros = 0;
+      const montarBase = () => {
+        const b = BASEMAPS[baseIdx];
+        const layer = L.tileLayer(b.url, b.opts);
+        tileErros = 0;
+        layer.on('tileerror', () => {
+          tileErros += 1;
+          // Vários erros seguidos = provedor bloqueado → cai para o próximo basemap.
+          if (tileErros >= 6 && baseIdx < BASEMAPS.length - 1) {
+            baseIdx += 1;
+            try { leafletRef.current.removeLayer(layer); } catch { /* */ }
+            montarBase();
+          }
+        });
+        layer.addTo(leafletRef.current);
+      };
+      montarBase();
       // Cluster agrupa os marcadores (evita travar com milhares de pins). Se o
       // plugin não estiver disponível, cai para um layerGroup simples — assim o
       // mapa SEMPRE fica pronto e centraliza, mesmo sem clusterização.
