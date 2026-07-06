@@ -211,7 +211,7 @@ export default function Calculadora() {
   const nomeTabela = tabela === 'sac' ? 'SAC' : tabela === 'price' ? 'PRICE' : 'Hipoteca';
 
   const linkAfiliado = codigoRef
-    ? `${window.location.origin}${window.location.pathname}#/calculadora?ref=${codigoRef}`
+    ? `${window.location.origin}/calculadora?ref=${codigoRef}`
     : '';
 
   const copiarLink = () => {

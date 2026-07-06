@@ -105,7 +105,7 @@ export default function CompletarCadastro() {
 
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#475569', lineHeight: 1.5, cursor: 'pointer' }}>
             <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop: 3, flexShrink: 0 }} />
-            <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB', fontWeight: 600 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB', fontWeight: 600 }}>Política de Privacidade</a>.</span>
+            <span>Li e aceito os <a href="/termos" target="_blank" style={{ color: '#0D63DB', fontWeight: 600 }}>Termos de Uso</a> e a <a href="/privacidade" target="_blank" style={{ color: '#0D63DB', fontWeight: 600 }}>Política de Privacidade</a>.</span>
           </label>
 
           {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}

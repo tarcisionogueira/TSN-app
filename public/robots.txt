@@ -1,9 +1,9 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /#/admin
-Disallow: /#/painel
-Disallow: /#/checkout
-Disallow: /#/convite-equipe
+Disallow: /admin
+Disallow: /painel
+Disallow: /checkout
+Disallow: /convite-equipe
 
 Sitemap: https://bidprobrasil.com.br/sitemap.xml

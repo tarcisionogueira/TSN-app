@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { trackPageView } from './utils/gtag';
 import { supabase } from './utils/supabase';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
@@ -131,7 +131,7 @@ function PopupInadimplente({ dias }) {
               ? 'Seu acesso foi reduzido ao plano gratuito. Regularize o pagamento para restaurar seu plano.'
               : 'Existe uma cobrança em aberto na sua conta. Regularize para manter acesso completo.'}
           </div>
-          <a href="/#/planos"
+          <a href="/planos"
             style={{ display: 'inline-block', marginTop: 10, padding: '7px 16px', background: 'white', color: critico ? '#7f1d1d' : '#78350f', borderRadius: 8, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
             Regularizar pagamento
           </a>
@@ -252,7 +252,7 @@ function MainLayout() {
 export default function App() {
   return (
     <AuthProvider>
-      <HashRouter>
+      <BrowserRouter>
         <RouteTracker />
         <PlanosProvider>
         <AnalisesProvider>
@@ -275,7 +275,7 @@ export default function App() {
         </Routes>
         </AnalisesProvider>
         </PlanosProvider>
-      </HashRouter>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

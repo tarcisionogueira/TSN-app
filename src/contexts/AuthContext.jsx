@@ -142,8 +142,8 @@ export function AuthProvider({ children }) {
         const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
         if (oauthDest) {
           sessionStorage.removeItem('tsn_oauth_redirect');
-          if (window.location.hash.replace(/^#/, '') !== oauthDest) {
-            window.location.hash = oauthDest;
+          if ((window.location.pathname + window.location.search) !== oauthDest) {
+            window.location.assign(oauthDest);
           }
         }
       }

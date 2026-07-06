@@ -164,7 +164,7 @@ export default function Consultor() {
   };
 
   const copiarConvite = (codigo) => {
-    navigator.clipboard.writeText(`${window.location.origin}/#/convite/${codigo}`);
+    navigator.clipboard.writeText(`${window.location.origin}/convite/${codigo}`);
     setCopiandoConvite(codigo);
     setTimeout(() => setCopiandoConvite(''), 2000);
   };
@@ -230,8 +230,8 @@ export default function Consultor() {
     return p?.comissao_pct != null ? Number(p.comissao_pct) : pct;
   }
 
-  const linkBase = codigo ? `${origin}/#/login?ref=${codigo}` : '';
-  const linkPlanos = codigo ? `${origin}/#/planos?ref=${codigo}` : '';
+  const linkBase = codigo ? `${origin}/login?ref=${codigo}` : '';
+  const linkPlanos = codigo ? `${origin}/planos?ref=${codigo}` : '';
 
   // Comissões: totais
   const totalPendente = comissoes.filter(c=>c.status==='pendente').reduce((s,c)=>s+Number(c.valor_comissao),0);
@@ -359,21 +359,21 @@ export default function Consultor() {
                         emoji: '🧮',
                         label: 'Calculadora de Lances',
                         sub: 'Ferramenta gratuita · com chamada para a plataforma',
-                        url: `${origin}/#/calculadora${codigo?`?ref=${codigo}`:''}`,
+                        url: `${origin}/calculadora${codigo?`?ref=${codigo}`:''}`,
                         comissao: null,
                       },
                       {
                         emoji: '🎁',
                         label: 'Assinatura Explorador',
                         sub: 'Acesso gratuito · sem cartão',
-                        url: `${origin}/#/checkout?plano=explorador${codigo?`&ref=${codigo}`:''}`,
+                        url: `${origin}/checkout?plano=explorador${codigo?`&ref=${codigo}`:''}`,
                         comissao: null,
                       },
                       {
                         emoji: '⭐',
                         label: `Assinatura ${pNome('top2')}`,
                         sub: planosCtx?.top2 ? `${fmtPreco(planosCtx.top2.preco)}/mês` : 'R$ 49,90/mês',
-                        url: `${origin}/#/checkout?plano=top2${codigo?`&ref=${codigo}`:''}`,
+                        url: `${origin}/checkout?plano=top2${codigo?`&ref=${codigo}`:''}`,
                         comissao: comissaoDePlano('top2'),
                         recorrente: true,
                       },
@@ -383,7 +383,7 @@ export default function Consultor() {
                         sub: planosCtx?.assessorado
                           ? `${fmtPreco(planosCtx.assessorado.preco)} em 12× · ${fmtPreco(planosCtx.assessorado.precoVista || planosCtx.assessorado.preco * 12 * 0.8)} à vista`
                           : 'R$ 6.000 parcelado · R$ 5.000 à vista',
-                        url: `${origin}/#/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
+                        url: `${origin}/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
                         comissao: comissaoDePlano('assessorado'),
                         recorrente: false,
                       },
@@ -393,7 +393,7 @@ export default function Consultor() {
                         sub: planosCtx?.clube
                           ? `${fmtPreco(planosCtx.clube.preco)} em 12× · ${fmtPreco(planosCtx.clube.precoVista || planosCtx.clube.preco * 12 * 0.8)} à vista`
                           : 'R$ 60.000/ano · R$ 48.000 à vista',
-                        url: `${origin}/#/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
+                        url: `${origin}/checkout?plano=clube${codigo?`&ref=${codigo}`:''}`,
                         comissao: comissaoDePlano('clube'),
                         recorrente: false,
                       },
@@ -401,7 +401,7 @@ export default function Consultor() {
                         emoji: c.emoji||'🎓',
                         label: c.titulo,
                         sub: `Curso${Number(c.preco)>0?` · R$ ${Number(c.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`:'· Incluído na assinatura'}`,
-                        url: `${origin}/#/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`,
+                        url: `${origin}/p/curso/${c.id}${codigo?`?ref=${codigo}`:''}`,
                         comissao: c.comissao_pct != null ? Number(c.comissao_pct) : pct,
                         recorrente: false,
                       })),
@@ -409,7 +409,7 @@ export default function Consultor() {
                         emoji: '📖',
                         label: e.titulo,
                         sub: `eBook${Number(e.preco)>0?` · R$ ${Number(e.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`:'· Incluído na assinatura'}`,
-                        url: `${origin}/#/p/ebook/${e.id}${codigo?`?ref=${codigo}`:''}`,
+                        url: `${origin}/p/ebook/${e.id}${codigo?`?ref=${codigo}`:''}`,
                         comissao: e.comissao_pct != null ? Number(e.comissao_pct) : pct,
                         recorrente: false,
                       })),
@@ -417,7 +417,7 @@ export default function Consultor() {
                         emoji: s.tipo==='ebook'?'📖':s.tipo==='curso'?'🎓':s.tipo==='calculadora'?'🧮':'🎁',
                         label: s.nome,
                         sub: `${s.tipo||'Conteúdo'} · Acesso gratuito`,
-                        url: `${origin}/#/p/captura/${s.id}`,
+                        url: `${origin}/p/captura/${s.id}`,
                         comissao: null,
                       })),
                     ].map((item,i)=>(

@@ -962,7 +962,7 @@ export default function Caso() {
     const detalhes = [
       `📋 Imóvel: ${endereco}`,
       linkLeilao ? `🔗 Link do leilão: ${linkLeilao}` : '',
-      `📁 Caso BidPro: ${window.location.origin}/#/caso/${caso?.id}`,
+      `📁 Caso BidPro: ${window.location.origin}/caso/${caso?.id}`,
     ].filter(Boolean).join('\n');
 
     const params = new URLSearchParams({

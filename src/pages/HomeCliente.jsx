@@ -48,7 +48,7 @@ export default function HomeCliente() {
   }, [effectiveUserId, info.limite]);
 
   const restantes = info.limite != null ? Math.max(0, info.limite - usadas) : null;
-  const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/planos?ref=${effectiveUserId || ''}`;
+  const linkIndicacao = `${window.location.origin}/planos?ref=${effectiveUserId || ''}`;
   const copiarLink = () => { navigator.clipboard?.writeText(linkIndicacao); setCopiado(true); setTimeout(() => setCopiado(false), 2000); };
 
   const Acao = ({ Icon, titulo, desc, cor, onClick }) => (

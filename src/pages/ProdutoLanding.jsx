@@ -130,7 +130,7 @@ function CapturaLanding({ id }) {
           <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.6, marginBottom: 32 }}>
             Olá, <strong style={{ color: '#e2e8f0' }}>{form.nome.split(' ')[0]}</strong>! {msg}
           </p>
-          <a href="/#/buscar"
+          <a href="/buscar"
             style={{ display: 'inline-block', padding: '14px 36px', background: '#059669', color: 'white', borderRadius: 12, fontWeight: 800, fontSize: 16, textDecoration: 'none', marginBottom: 16 }}>
             Acessar a plataforma →
           </a>
@@ -407,8 +407,8 @@ export default function ProdutoLanding() {
 
   const isPlano = produto.tipo === 'plano';
   const checkoutPath = isPlano
-    ? `/#/checkout?plano=${produto.key}&ref=${ref}`
-    : `/#/checkout?curso=${produto.id}&ref=${ref}`;
+    ? `/checkout?plano=${produto.key}&ref=${ref}`
+    : `/checkout?curso=${produto.id}&ref=${ref}`;
   const loginPath = isPlano
     ? `/login?plano=${produto.key}&ref=${ref}`
     : `/login?curso=${produto.id}&ref=${ref}`;

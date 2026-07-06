@@ -2,6 +2,11 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <!-- Compatibilidade: links antigos "#/rota" (HashRouter) → history mode "/rota".
+         Roda antes do app; NÃO toca no hash do OAuth (#access_token...) do Supabase. -->
+    <script>
+      (function () { var h = window.location.hash; if (h.indexOf('#/') === 0) { window.history.replaceState(null, '', h.slice(1)); } })();
+    </script>
     <!-- Favicon (tile PRETO com o "B"). O Google exibe o favicon no resultado de
          busca, mas costuma NÃO renderizar SVG puro — por isso servimos PNGs 48/96/192
          (o que o Google prefere) além do SVG para navegadores modernos. -->
@@ -64,7 +69,7 @@
             "@type": "SearchAction",
             "target": {
               "@type": "EntryPoint",
-              "urlTemplate": "https://bidprobrasil.com.br/#/buscar?q={search_term_string}"
+              "urlTemplate": "https://bidprobrasil.com.br/buscar?q={search_term_string}"
             },
             "query-input": "required name=search_term_string"
           }
@@ -82,6 +87,17 @@
       gtag('js', new Date());
       gtag('config', 'G-5YNHQB5F81');
       gtag('config', 'AW-16850175262');
+    </script>
+    <!-- Meta Pixel (Facebook/Instagram Ads). Fica INERTE até você colar o ID do
+         Pixel (Meta Events Manager) no lugar de 000000000000000 — sem erro no console. -->
+    <script>
+      (function () {
+        var META_PIXEL_ID = '000000000000000'; // ← cole aqui o ID do seu Pixel
+        if (META_PIXEL_ID === '000000000000000') return;
+        !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', META_PIXEL_ID);
+        fbq('track', 'PageView');
+      })();
     </script>
   </head>
   <body>

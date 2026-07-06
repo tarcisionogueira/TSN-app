@@ -18,7 +18,7 @@ export default function Login() {
   const pNome = (key) => planosCtx?.[key]?.nome || { top2: 'Investidor Pro', assessorado: 'Assessoria', clube: 'Leilão Club', explorador: 'Explorador' }[key] || key;
   const nav = useNavigate();
   const loc = useLocation();
-  // HashRouter coloca query params dentro do hash, ex: /#/login?ref=ABC
+  // HashRouter coloca query params dentro do hash, ex: /login?ref=ABC
   // useLocation().search parseia corretamente dentro do hash
   const params = new URLSearchParams(loc.search);
   const planoEscolhido = params.get('plano');
@@ -117,7 +117,7 @@ export default function Login() {
     setErro(''); setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(emailRecuperar, {
-        redirectTo: `${window.location.origin}/#/redefinir-senha`,
+        redirectTo: `${window.location.origin}/redefinir-senha`,
       });
       if (error) throw error;
       setModo('recuperar_sucesso');
@@ -264,7 +264,7 @@ export default function Login() {
       });
       if (error) throw error;
       trackCadastro(form.email);
-      // Preserva o plano na URL de confirmação de email (HashRouter usa /#/)
+      // Preserva o plano na URL de confirmação de email (HashRouter usa /)
       if (planoEscolhido) {
         sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
       }
@@ -463,7 +463,7 @@ export default function Login() {
                 <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)}
                   style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: 'pointer', accentColor: '#0D63DB' }} />
                 <span>
-                  Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB', fontWeight: 700 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB', fontWeight: 700 }}>Política de Privacidade</a>, e autorizo o tratamento dos meus dados conforme a LGPD.
+                  Li e aceito os <a href="/termos" target="_blank" style={{ color: '#0D63DB', fontWeight: 700 }}>Termos de Uso</a> e a <a href="/privacidade" target="_blank" style={{ color: '#0D63DB', fontWeight: 700 }}>Política de Privacidade</a>, e autorizo o tratamento dos meus dados conforme a LGPD.
                 </span>
               </label>
               {/* Aviso CPF já cadastrado */}

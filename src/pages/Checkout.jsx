@@ -334,7 +334,7 @@ export default function Checkout() {
                 </div>
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10 }}>
                   <input type="checkbox" checked={su.aceite} onChange={e => setSu(p => ({ ...p, aceite: e.target.checked }))} style={{ marginTop: 2, flexShrink: 0 }} />
-                  <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
+                  <span>Li e aceito os <a href="/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
                 </label>
                 {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 10 }}>{suErro}</div>}
                 <button onClick={criarContaGratis} disabled={suLoading} style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -1096,7 +1096,7 @@ export default function Checkout() {
                   </div>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
                     <input type="checkbox" checked={su.aceite} onChange={e => setSu(p => ({ ...p, aceite: e.target.checked }))} style={{ marginTop: 2, flexShrink: 0 }} />
-                    <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
+                    <span>Li e aceito os <a href="/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
                   </label>
                   {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>}
                   <button onClick={planoKey === 'top2' ? irParaPagamento : criarContaInline} disabled={suLoading}
@@ -1188,7 +1188,7 @@ export default function Checkout() {
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 12 }}>
                   <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
                   <span>
-                    Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a>.{' '}
+                    Li e aceito os <a href="/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a>.{' '}
                     {planoKey === 'assessorado'
                       ? `Estou ciente de que este é um serviço de assessoria ${modalidade === 'vista' ? 'pago à vista' : 'parcelado em até 12×'}. O acesso à assessoria é ativado após confirmação do pagamento.`
                       : temToggleAnual && modalidade === 'anual'

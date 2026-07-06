@@ -1076,8 +1076,8 @@ function ContratoModal({ chave, planos, onClose }) {
       }
       if (saved) {
         setContratoExistente(saved);
-        const base = window.location.href.split('#')[0];
-        setLinkGerado(`${base}#/c/${saved.token}`);
+        const base = window.location.origin;
+        setLinkGerado(`${base}/c/${saved.token}`);
         setEtapa('aprovado');
       }
     } catch { alert('Erro ao salvar contrato.'); }
@@ -1211,9 +1211,9 @@ function ContratoModal({ chave, planos, onClose }) {
                   <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:6 }}>LINK PARA O CLIENTE ASSINAR</div>
                   <div style={{ display:'flex', gap:8 }}>
                     <div style={{ flex:1, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#0D63DB', wordBreak:'break-all' }}>
-                      {linkGerado || `${window.location.href.split('#')[0]}#/c/${contratoExistente?.token}`}
+                      {linkGerado || `${window.location.origin}/c/${contratoExistente?.token}`}
                     </div>
-                    <button onClick={() => { const l = linkGerado || `${window.location.href.split('#')[0]}#/c/${contratoExistente?.token}`; navigator.clipboard.writeText(l); setCopiado(true); setTimeout(()=>setCopiado(false),2000); }}
+                    <button onClick={() => { const l = linkGerado || `${window.location.origin}/c/${contratoExistente?.token}`; navigator.clipboard.writeText(l); setCopiado(true); setTimeout(()=>setCopiado(false),2000); }}
                       style={{ padding:'9px 14px', background:copiado?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                       {copiado ? '✓ Copiado' : '📋 Copiar'}
                     </button>
@@ -2211,8 +2211,8 @@ function ContratosTab() {
     }).select().single();
     setSavingLink(false);
     if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
-    const base = window.location.href.split('#')[0];
-    setLinkGerado(`${base}#/c/${data.token}`);
+    const base = window.location.origin;
+    setLinkGerado(`${base}/c/${data.token}`);
     setStep(3);
     await load();
   }
@@ -2267,7 +2267,7 @@ function ContratosTab() {
                 <tbody>
                   {contratosLink.map(cl => {
                     const [lbl, cor] = ST_LINK[cl.status] || ST_LINK.aguardando;
-                    const linkUrl = `${window.location.href.split('#')[0]}#/c/${cl.token}`;
+                    const linkUrl = `${window.location.origin}/c/${cl.token}`;
                     const sig = cl.dados_signatario;
                     const nomeContratado = sig ? (sig.nome || sig.razao_social || '—') : (cl.status === 'aguardando' ? 'Aguardando preenchimento' : '—');
                     return (
@@ -2693,7 +2693,7 @@ function PromoTab() {
 
   const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', beneficios: l.beneficios || '', ativo: l.ativo }); setEditId(l.id); };
   const toggleAtivo = async (l) => { await supabase.from('links_promo').update({ ativo: !l.ativo }).eq('id', l.id); await carregar(); };
-  const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${cod}`);
+  const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}/promo/${cod}`);
 
   return (
     <div>
@@ -2742,7 +2742,7 @@ function PromoTab() {
             : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {links.map(l => {
-                  const linkUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${l.codigo}`;
+                  const linkUrl = `${window.location.origin}/promo/${l.codigo}`;
                   const desconto = l.desconto_pct > 0 ? `${Number(l.desconto_pct).toFixed(2)}% off` : l.desconto_valor > 0 ? `R$ ${Number(l.desconto_valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} off` : 'sem desconto';
                   return (
                     <div key={l.id} style={{ padding: '14px 16px', border: `1px solid ${l.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, background: l.ativo ? 'white' : '#fff5f5' }}>
@@ -2805,7 +2805,7 @@ function ConvitesTab() {
   };
 
   const copiar = (codigo) => {
-    navigator.clipboard.writeText(`${window.location.origin}/#/convite/${codigo}`);
+    navigator.clipboard.writeText(`${window.location.origin}/convite/${codigo}`);
     setCopiado(codigo);
     setTimeout(() => setCopiado(''), 2000);
   };
@@ -3763,7 +3763,7 @@ function DashboardTab() {
               const mpIndispon = !!mpSaldo?.error;
               const total = asaasDisp + (mpIndispon ? 0 : mpDisp);
               return (
-                <a href="/#/admin/financeiro" style={{ textDecoration: 'none' }}>
+                <a href="/admin/financeiro" style={{ textDecoration: 'none' }}>
                   <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', borderRadius: 12, padding: '16px 18px', marginBottom: 12, color: 'white', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Saldo disponível (Asaas + Mercado Pago)</span>
@@ -3800,7 +3800,7 @@ function DashboardTab() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>Dados direto da API Asaas · atualizado agora</div>
-                  <a href="/#/admin/financeiro" style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', textDecoration: 'none' }}>Ver detalhes →</a>
+                  <a href="/admin/financeiro" style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', textDecoration: 'none' }}>Ver detalhes →</a>
                 </div>
               </>
             ) : null}
@@ -4604,7 +4604,7 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
   };
 
   const copiarLink = (token, key) => {
-    const url = `${window.location.origin}/#/leiloeiro/${token}`;
+    const url = `${window.location.origin}/leiloeiro/${token}`;
     navigator.clipboard.writeText(url);
     setCopiado(key);
     setTimeout(() => setCopiado(''), 1800);
@@ -5574,7 +5574,7 @@ function SdrTab() {
   async function toggleAtivo(prod) { await supabase.from('sdr_produtos').update({ ativo: !prod.ativo }).eq('id', prod.id); loadProdutos(); }
   async function deleteProduto(id) { if (!window.confirm('Excluir produto?')) return; await supabase.from('sdr_produtos').delete().eq('id', id); loadProdutos(); }
   async function updateLeadStatus(leadId, status) { await supabase.from('sdr_leads').update({ status }).eq('id', leadId); setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l)); }
-  function copyLink(prodId) { navigator.clipboard.writeText(`${window.location.origin}/#/p/captura/${prodId}`); setCopiado(prodId); setTimeout(() => setCopiado(''), 1800); }
+  function copyLink(prodId) { navigator.clipboard.writeText(`${window.location.origin}/p/captura/${prodId}`); setCopiado(prodId); setTimeout(() => setCopiado(''), 1800); }
   function exportCSV() {
     const filtered = leads.filter(l => (!filterProduto || l.produto_id === filterProduto) && (!filterStatus || l.status === filterStatus));
     const rows = [['Nome','WhatsApp','Email','Produto','Status','Data'], ...filtered.map(l => [l.nome, l.whatsapp, l.email||'', l.sdr_produtos?.nome||'', l.status, new Date(l.criado_em).toLocaleDateString('pt-BR')])];
@@ -5606,7 +5606,7 @@ function SdrTab() {
                 <td style={S.td}>{p.nome}</td>
                 <td style={S.td}><span style={{ background: '#f1f5f9', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}>{p.tipo}</span></td>
                 <td style={S.td}><button onClick={() => toggleAtivo(p)} style={{ ...S.badge(p.ativo), cursor: 'pointer', border: 'none' }}>{p.ativo ? 'Ativo' : 'Inativo'}</button></td>
-                <td style={S.td}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{window.location.origin}/#/p/captura/{p.id}</span><button onClick={() => copyLink(p.id)} style={{ ...S.btn('outline'), fontSize: 11, padding: '3px 8px' }}>{copiado === p.id ? 'Copiado!' : 'Copiar'}</button></div></td>
+                <td style={S.td}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{window.location.origin}/p/captura/{p.id}</span><button onClick={() => copyLink(p.id)} style={{ ...S.btn('outline'), fontSize: 11, padding: '3px 8px' }}>{copiado === p.id ? 'Copiado!' : 'Copiar'}</button></div></td>
                 <td style={S.td}><div style={{ display: 'flex', gap: 6 }}><button style={{ ...S.btn('outline'), fontSize: 12 }} onClick={() => setModalProduto({ ...p })}>Editar</button><button style={{ ...S.btn('danger'), fontSize: 12 }} onClick={() => deleteProduto(p.id)}>Excluir</button></div></td>
               </tr>
             ))}{produtos.length === 0 && <tr><td colSpan={5} style={{ ...S.td, color: '#94a3b8', textAlign: 'center', padding: 24 }}>Nenhum produto cadastrado.</td></tr>}</tbody>
@@ -6275,7 +6275,7 @@ function EquipeTab() {
       token, roles, criado_por: user.id,
       expira_em: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // validade 7 dias
     }).select().single();
-    const link = `${window.location.origin}/#/convite/${token}`;
+    const link = `${window.location.origin}/convite/${token}`;
     setLinkGerado({ token, link, roles });
     navigator.clipboard.writeText(link).catch(() => {});
     await carregarTudo();
@@ -6283,7 +6283,7 @@ function EquipeTab() {
   }
 
   function copiarLink(token) {
-    const link = `${window.location.origin}/#/convite/${token}`;
+    const link = `${window.location.origin}/convite/${token}`;
     navigator.clipboard.writeText(link);
     setCopiado(token);
     setTimeout(() => setCopiado(''), 2000);
