@@ -144,7 +144,7 @@ export default function Header() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [showTour, setShowTour] = useState(false);
 
-  const ROLES_CALC = ['top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
+  const ROLES_CALC = ['explorador', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
   const linksPublicos = [
     { path: '/', label: 'Home', icon: Home, tourId: 'home' },
     { path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' },
