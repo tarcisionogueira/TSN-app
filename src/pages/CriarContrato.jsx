@@ -32,7 +32,8 @@ const TIPOS_CONTRATO = [
   'Prestação de Serviços', 'Assessoria Jurídica', 'Consultoria Imobiliária',
   'Compra e Venda de Imóvel', 'Locação Residencial', 'Locação Comercial',
   'Parceria Comercial', 'Confidencialidade (NDA)', 'Honorários Advocatícios',
-  'Contrato de Representação', 'Termo de Compromisso', 'Outro',
+  'Contrato de Representação', 'Procuração / representação legal',
+  'Termo de Compromisso', 'Outro',
 ];
 
 export default function CriarContrato() {
@@ -72,13 +73,13 @@ export default function CriarContrato() {
       try {
         const [{ data: pl }, { data: cs }, { data: eb }] = await Promise.all([
           supabase.from('planos_config').select('plano_key, nome').eq('ativo', true).eq('cobrar', true),
-          supabase.from('cursos_admin').select('id, nome').eq('ativo', true),
-          supabase.from('ebooks_admin').select('id, nome').eq('ativo', true),
+          supabase.from('cursos_admin').select('id, titulo').eq('ativo', true),
+          supabase.from('ebooks_admin').select('id, titulo').eq('ativo', true),
         ]);
         const lista = [
           ...(pl || []).map(p => ({ tipo: 'plano', chave: p.plano_key, id: p.plano_key, nome: p.nome })),
-          ...(cs || []).map(c => ({ tipo: 'curso', chave: String(c.id), id: String(c.id), nome: c.nome })),
-          ...(eb || []).map(e => ({ tipo: 'ebook', chave: String(e.id), id: String(e.id), nome: e.nome })),
+          ...(cs || []).map(c => ({ tipo: 'curso', chave: String(c.id), id: String(c.id), nome: c.titulo })),
+          ...(eb || []).map(e => ({ tipo: 'ebook', chave: String(e.id), id: String(e.id), nome: e.titulo })),
         ];
         setProdutos(lista);
       } catch { /* dropdown fica vazio */ }
