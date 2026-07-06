@@ -2761,6 +2761,7 @@ function PromoTab() {
       exige_perguntas: !!form.exige_perguntas,
       perguntas: form.exige_perguntas ? perguntasValidas : [],
       ativo: form.ativo,
+      compartilhado: true, // promoções do admin ficam disponíveis p/ consultores e afiliados
       criado_por: user.id,
     };
     const { error } = editId

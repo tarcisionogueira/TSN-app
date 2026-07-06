@@ -64,11 +64,23 @@ export default async function handler(req, res) {
     return res.status(410).json({ error: 'Este link promocional expirou.' });
   }
 
-  // 2) Consultor dono = quem CRIOU o link, se for consultor ativo. Senão sem dono.
-  let consultorId = null;
+  // 2) Atribuição. Base: quem CRIOU o link, se for consultor ativo. Mas se veio um
+  //    ?ref (código de indicação de quem COMPARTILHOU a promoção), ele PREVALECE:
+  //    - consultor → vira o dono da carteira (cuida + comissão do consultor);
+  //    - afiliado  → NÃO cuida do cliente (vai para o admin), mas fica registrado
+  //      como quem indicou (comissão de afiliado é apurada pelo link/indicação).
+  let consultorId = null, afiliadoRefId = null;
   if (link.criado_por) {
     const [c] = await sb(`perfis?id=eq.${link.criado_por}&select=id,role,ativo`).then(r => r.json()).catch(() => []);
     if (c && c.role === 'consultor' && c.ativo !== false) consultorId = c.id;
+  }
+  const ref = String(b.ref || '').trim();
+  if (ref) {
+    const [rp] = await sb(`perfis?codigo_indicacao=eq.${encodeURIComponent(ref)}&select=id,role,ativo`).then(r => r.json()).catch(() => []);
+    if (rp && rp.ativo !== false) {
+      if (rp.role === 'consultor') consultorId = rp.id;
+      else if (rp.role === 'afiliado') { afiliadoRefId = rp.id; consultorId = null; }
+    }
   }
 
   // 3) Cria a conta já confirmada (acesso imediato). role explorador.
@@ -119,7 +131,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         promo_id: link.id, produto_id: null, nome, whatsapp, email: email || null,
         respostas, user_id: userId, consultor_id: consultorId,
-        origem: `Promoção ${codigo}`, status: 'novo',
+        origem: `Promoção ${codigo}${ref ? ` (ref: ${ref})` : ''}`, status: 'novo',
       }),
     });
   } catch { /* best-effort — a conta já foi criada */ }

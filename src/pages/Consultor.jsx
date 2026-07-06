@@ -79,7 +79,7 @@ export default function Consultor() {
         supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
         supabase.from('cursos_admin').select('id, titulo, subtitulo, preco, emoji, cor, comissao_pct').eq('ativo', true).order('ordem'),
         supabase.from('ebooks_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('criado_em', { ascending: false }),
-        supabase.from('links_promo').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
+        supabase.from('links_promo').select('*').eq('ativo', true).or(`compartilhado.eq.true,criado_por.eq.${user.id}`).order('criado_em', { ascending: false }),
         supabase.from('links_convite').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
         supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,comissao_pct').eq('ativo', true),
         supabase.from('sdr_produtos').select('id, nome, tipo').eq('ativo', true).order('criado_em', { ascending: false }),
@@ -424,6 +424,15 @@ export default function Consultor() {
                         label: s.nome,
                         sub: `${s.tipo||'Conteúdo'} · Acesso gratuito`,
                         url: `${origin}/#/p/captura/${s.id}`,
+                        comissao: null,
+                      })),
+                      // Promoções (do admin, compartilhadas) + as minhas. Cada um
+                      // compartilha com o seu ?ref= para a comissão vir para si.
+                      ...linksPromo.map(l=>({
+                        emoji: '🏷️',
+                        label: `Promoção ${l.codigo}`,
+                        sub: `${l.produto_tipo==='curso'?'Curso':l.produto_tipo==='ebook'?'E-book':'Plano'}${Number(l.desconto_pct)>0?` · ${Math.round(l.desconto_pct)}% off`:''}${l.exige_perguntas?' · com perguntas':''}`,
+                        url: `${origin}/#/promo/${l.codigo}${codigo?`?ref=${codigo}`:''}`,
                         comissao: null,
                       })),
                     ].map((item,i)=>(

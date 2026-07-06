@@ -90,11 +90,15 @@ export default function Promo() {
   const perguntas = Array.isArray(link.perguntas) ? link.perguntas.filter(p => p && String(p.texto || '').trim()) : [];
   // Gate: quando exige_perguntas, ninguém acessa sem responder (mesmo logado).
   const exigeGate = !!link.exige_perguntas && perguntas.length > 0;
+  // ?ref= = código de indicação de quem COMPARTILHOU (consultor/afiliado) — para a
+  // comissão ir para ele, não para quem criou a promoção.
+  const refParam = (() => { try { return new URLSearchParams(window.location.hash.split('?')[1] || '').get('ref') || ''; } catch { return ''; } })();
+  const refQS = refParam ? `&ref=${encodeURIComponent(refParam)}` : '';
 
   const seguirCheckout = () => {
     const dest = user
-      ? `/checkout?plano=${link.produto}&promo=${link.codigo}`
-      : `/login?plano=${link.produto}&promo=${link.codigo}`;
+      ? `/checkout?plano=${link.produto}&promo=${link.codigo}${refQS}`
+      : `/login?plano=${link.produto}&promo=${link.codigo}${refQS}`;
     nav(dest);
   };
 
@@ -121,7 +125,7 @@ export default function Promo() {
       const respArr = perguntas.map(p => ({ pergunta: p.texto, resposta: respostas[p.id] ?? '' }));
       const r = await fetch('/api/promo-capturar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo: link.codigo, nome: contato.nome, whatsapp: contato.whatsapp, email: contato.email, senha: contato.senha, respostas: respArr }),
+        body: JSON.stringify({ codigo: link.codigo, nome: contato.nome, whatsapp: contato.whatsapp, email: contato.email, senha: contato.senha, respostas: respArr, ref: refParam }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) throw new Error(data.error || 'Não foi possível enviar. Tente novamente.');
@@ -129,7 +133,7 @@ export default function Promo() {
       await supabase.auth.signInWithPassword({ email: contato.email.trim().toLowerCase(), password: contato.senha }).catch(() => {});
       // Plano pago → checkout com o desconto (a conta já existe/logada).
       // Curso/e-book → entra na plataforma com o acesso já concedido.
-      if (ehPlano) nav(`/checkout?plano=${link.produto}&promo=${link.codigo}`);
+      if (ehPlano) nav(`/checkout?plano=${link.produto}&promo=${link.codigo}${refQS}`);
       else { setSdrAberto(false); setConcluido(true); }
     } catch (e) { setErroSdr(e.message); setEnviandoSdr(false); }
   };
