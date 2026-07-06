@@ -664,11 +664,17 @@ function UsuariosTab() {
       const end = atribForm.endereco; const tipo = atribForm.tipo;
       const valorNum = Number(String(atribForm.valor || '').replace(/\./g, '').replace(',', '.')) || 0;
       setAtribUser(null);
-      // Amarração do arremate MANUAL: abre a análise deste arremate (chave = caso)
-      // para anexar TODOS os documentos e gerar os relatórios EM NOME DO cliente
-      // (entra em modo suporte para a tela refletir o status + paraUserId grava sob
-      // o cliente). Gratuito (atribuição administrativa), sem cobrar cota.
-      if (casoId && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nAbrir a análise deste arremate (como o cliente) para anexar documentos e gerar os relatórios?')) {
+      // Roteamento pós-arremate (decisão do dono): PRIMEIRO a tela de CONTRATO para
+      // gerar/vincular o contrato de assessoria deste arremate; depois a análise.
+      if (casoId && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nIr para a tela de CONTRATO para gerar o contrato de assessoria deste arremate?')) {
+        const valorFmt = valorNum ? valorNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'a definir';
+        const contexto = `Contrato de assessoria pós-arrematação. Cliente: ${alvoNome}. Imóvel: ${end || 'a definir'}. Valor arrematado: R$ ${valorFmt}. Modalidade: ${/judicial/i.test(tipo) ? 'judicial' : 'extrajudicial'}. Caso: ${casoId}.`;
+        navSup('/contratos/novo', { state: { contexto, casoId, clienteId: alvoId, clienteNome: alvoNome } });
+        return;
+      }
+      // Alternativa: abrir a análise deste arremate (chave = caso) para anexar os
+      // documentos e gerar os relatórios EM NOME DO cliente (modo suporte, gratuito).
+      if (casoId && window.confirm('Abrir a análise deste arremate (como o cliente) para anexar documentos e gerar os relatórios?')) {
         iniciarSuporte({ id: alvoId, nome: alvoNome, role: 'assessorado' });
         navSup('/analise', { state: { manual: true, paraUserId: alvoId, imovel: { id: casoId, endereco: end, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
       }
