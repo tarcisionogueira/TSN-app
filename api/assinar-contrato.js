@@ -29,7 +29,7 @@ export default async function handler(req) {
 
   let body;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers }); }
-  const { token, tipo_pessoa, dados, assinatura, docs_identidade } = body || {};
+  const { token, tipo_pessoa, dados, assinatura, docs_identidade, testemunha } = body || {};
   if (!token || !assinatura || !dados) {
     return new Response(JSON.stringify({ error: 'Dados de assinatura incompletos' }), { status: 400, headers });
   }
@@ -64,6 +64,13 @@ export default async function handler(req) {
       assinante_ip: ip,
       assinatura_hash: hash,
       docs_identidade: docs_identidade || null,
+      // Testemunha (quando o contrato exige assinatura de testemunha)
+      ...(testemunha && testemunha.assinatura ? {
+        nome_testemunha: String(testemunha.nome || '').slice(0, 160),
+        cpf_testemunha: String(testemunha.cpf || '').replace(/\D/g, '').slice(0, 11),
+        assinatura_testemunha: testemunha.assinatura,
+        testemunha_em: assinado_em,
+      } : {}),
     }),
   });
   if (!patch.ok) {

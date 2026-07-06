@@ -166,6 +166,8 @@ export default function ContratoLink() {
   const [aceite, setAceite] = useState(false);
   const [lgpdAceite, setLgpdAceite] = useState(false);
   const [imagensIdentidade, setImagensIdentidade] = useState({}); // { foto_doc: dataUrl, selfie: dataUrl, ... }
+  const [testemunha, setTestemunha] = useState({ nome: '', cpf: '' });
+  const [assinaturaTest, setAssinaturaTest] = useState(null); // dataURL da assinatura da testemunha
   const conteudoRef = useRef(null);
 
   const setImagem = useCallback((id, val) => {
@@ -174,7 +176,7 @@ export default function ContratoLink() {
 
   useEffect(() => {
     if (!token) return;
-    supabase.from('contratos_link').select('id, titulo, conteudo, arquivo_url, arquivo_nome, tipo_contrato, status, expira_em, kyc_incluido, kyc_fotos, verificacao_identidade, docs_extras_exigidos, arquivos_referencia')
+    supabase.from('contratos_link').select('id, titulo, conteudo, arquivo_url, arquivo_nome, tipo_contrato, status, expira_em, kyc_incluido, kyc_fotos, verificacao_identidade, docs_extras_exigidos, arquivos_referencia, requer_testemunha')
       .eq('token', token).single()
       .then(({ data, error }) => {
         if (error || !data) setErro('Contrato não encontrado ou link inválido.');
@@ -230,6 +232,11 @@ export default function ContratoLink() {
     for (const doc of extrasObrig) {
       if (!imagensIdentidade[doc]) { alert(`Envie: ${DOCS_LABELS[doc]}`); return; }
     }
+    // Testemunha (quando o contrato exige)
+    if (contrato?.requer_testemunha) {
+      if (!testemunha.nome.trim() || testemunha.cpf.replace(/\D/g, '').length !== 11) { alert('Informe o nome e o CPF da testemunha.'); return; }
+      if (!assinaturaTest) { alert('A testemunha precisa assinar no campo de assinatura da testemunha.'); return; }
+    }
 
     setEnviando(true);
     // Finaliza no servidor: IP, carimbo de tempo e hash (incluindo o conteúdo do
@@ -238,7 +245,8 @@ export default function ContratoLink() {
       const resp = await fetch('/api/assinar-contrato', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, tipo_pessoa: tipoPessoa, dados, assinatura, docs_identidade: imagensIdentidade }),
+        body: JSON.stringify({ token, tipo_pessoa: tipoPessoa, dados, assinatura, docs_identidade: imagensIdentidade,
+          testemunha: contrato?.requer_testemunha ? { nome: testemunha.nome.trim(), cpf: testemunha.cpf.replace(/\D/g, ''), assinatura: assinaturaTest } : null }),
       });
       const out = await resp.json().catch(() => ({}));
       if (!resp.ok || !out.ok) { alert('Erro ao assinar: ' + (out.error || 'tente novamente')); setEnviando(false); return; }
@@ -480,6 +488,20 @@ export default function ContratoLink() {
               <div style={{ marginBottom:18 }}>
                 <AssinaturaCanvas onChange={setAssinatura} />
               </div>
+
+              {/* Testemunha (quando o contrato exige) */}
+              {contrato?.requer_testemunha && (
+                <div style={{ marginBottom:18, padding:'14px 16px', border:'1px solid #334155', borderRadius:12, background:'#0f172a' }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:'#cbd5e1', marginBottom:10 }}>Assinatura da testemunha</div>
+                  <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:12 }}>
+                    <input value={testemunha.nome} onChange={e => setTestemunha(t => ({ ...t, nome: e.target.value }))} placeholder="Nome da testemunha"
+                      style={{ flex:2, minWidth:180, padding:'10px 12px', borderRadius:9, border:'1px solid #334155', background:'#1e293b', color:'#e2e8f0', fontSize:13 }} />
+                    <input value={testemunha.cpf} onChange={e => setTestemunha(t => ({ ...t, cpf: e.target.value }))} placeholder="CPF da testemunha" inputMode="numeric"
+                      style={{ flex:1, minWidth:140, padding:'10px 12px', borderRadius:9, border:'1px solid #334155', background:'#1e293b', color:'#e2e8f0', fontSize:13 }} />
+                  </div>
+                  <AssinaturaCanvas onChange={setAssinaturaTest} />
+                </div>
+              )}
 
               <label style={{ display:'flex', gap:10, alignItems:'flex-start', cursor:'pointer', fontSize:12.5, color:'#94a3b8', lineHeight:1.6, marginBottom:20 }}>
                 <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
