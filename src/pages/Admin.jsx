@@ -2920,6 +2920,16 @@ function diagnosticoCaptacao(atual, anterior) {
     });
   }
 
+  // Fallback: fonte marcada com atenção pelo próprio scraper, mas sem um padrão de
+  // campo reconhecido acima. Mostra o motivo que a coleta registrou (nunca deixa um
+  // badge ⚠️/✕ sem explicação).
+  if (!problemas.length && (atual.status === 'degradado' || atual.status === 'falhou')) {
+    problemas.push({
+      causa: atual.motivo ? String(atual.motivo) : 'A fonte foi marcada como degradada na última coleta (a validação de qualidade reprovou).',
+      acao: 'Rodar o diagnóstico da fonte na aba Fontes e conferir o scraper desta origem.',
+    });
+  }
+
   if (!problemas.length) return null;
   return { nivel: atual.status === 'degradado' ? 'degradado' : 'alerta', problemas };
 }
@@ -2929,14 +2939,22 @@ function diagnosticoCaptacao(atual, anterior) {
 // uma lista antiga (Santander/Rodobens/Sicoob) que não batia com as fontes reais.
 function ScrapersMonitor() {
   const [saude, setSaude] = useState({});
+  const [prev, setPrev] = useState({}); // coleta anterior por fonte (tendência do diagnóstico)
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from('fonte_saude').select('fonte,total,status,executado_em')
+    // Puxa os indicadores de qualidade e as 2 últimas coletas por fonte (a 2ª serve
+    // de base para o diagnóstico determinístico apontar regressão/tendência).
+    supabase.from('fonte_saude')
+      .select('fonte,total,status,valor_pct,uf_pct,link_pct,foto_pct,estrategia,motivo,executado_em')
+      .order('executado_em', { ascending: false }).limit(120)
       .then(({ data }) => {
-        const m = {};
-        (data || []).forEach(r => { if (!m[r.fonte] || new Date(r.executado_em) > new Date(m[r.fonte].executado_em)) m[r.fonte] = r; });
-        setSaude(m); setLoading(false);
+        const ult = {}, ant = {};
+        (data || []).forEach(l => {
+          if (!ult[l.fonte]) ult[l.fonte] = l;
+          else if (!ant[l.fonte]) ant[l.fonte] = l;
+        });
+        setSaude(ult); setPrev(ant); setLoading(false);
       });
   }, []);
 
@@ -2961,18 +2979,34 @@ function ScrapersMonitor() {
           {FONTES_LEILAO.map(f => {
             const s = saude[f.fonte];
             const e = estilo(s?.status);
+            const diag = diagnosticoCaptacao(s, prev[f.fonte]);
+            const dc = diag ? (diag.nivel === 'falhou' ? { bg: '#fef2f2', bd: '#fecaca', cor: '#b91c1c' } : { bg: '#fffbeb', bd: '#fde68a', cor: '#92400e' }) : null;
             return (
-              <div key={f.fonte} style={{ padding: '10px 12px', background: e.bg, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: f.cor, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{f.nome}</div>
-                    {s ? <div style={{ fontSize: 11, color: '#64748b' }}>
-                      {Number(s.total || 0).toLocaleString('pt-BR')} imóveis · {new Date(s.executado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    </div> : <div style={{ fontSize: 11, color: '#94a3b8' }}>Sem coleta registrada</div>}
+              <div key={f.fonte} style={{ padding: '10px 12px', background: e.bg, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: f.cor, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{f.nome}</div>
+                      {s ? <div style={{ fontSize: 11, color: '#64748b' }}>
+                        {Number(s.total || 0).toLocaleString('pt-BR')} imóveis · {new Date(s.executado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </div> : <div style={{ fontSize: 11, color: '#94a3b8' }}>Sem coleta registrada</div>}
+                    </div>
                   </div>
+                  <span style={{ fontSize: 16 }}>{e.icone}</span>
                 </div>
-                <span style={{ fontSize: 16 }}>{e.icone}</span>
+                {/* Diagnóstico determinístico (SEM IA): causa provável + próxima ação. */}
+                {diag && (
+                  <div style={{ background: dc.bg, border: `1px solid ${dc.bd}`, borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: dc.cor, marginBottom: 4 }}>🔧 Diagnóstico automático (sem IA)</div>
+                    {diag.problemas.slice(0, 3).map((p, i) => (
+                      <div key={i} style={{ fontSize: 10.5, color: dc.cor, lineHeight: 1.5, marginBottom: i < Math.min(diag.problemas.length, 3) - 1 ? 5 : 0 }}>
+                        <div><strong>Causa:</strong> {p.causa}</div>
+                        <div><strong>Ação:</strong> {p.acao}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
