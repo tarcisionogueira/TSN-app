@@ -4,6 +4,7 @@ import { Briefcase, Loader2, ShieldCheck } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
+import CidadeAutocomplete from '../components/CidadeAutocomplete';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -28,7 +29,7 @@ function cpfValido(cpf) {
 export default function CompletarCadastro() {
   const nav = useNavigate();
   const { user, setCadastroIncompleto } = useAuth();
-  const [form, setForm] = useState({ cpf: '', telefone: '', endereco: '' });
+  const [form, setForm] = useState({ cpf: '', telefone: '', cidade: '', uf: '' });
   const [aceite, setAceite] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
@@ -51,12 +52,20 @@ export default function CompletarCadastro() {
     if (!user?.id) { setErro('Sessão expirada. Entre novamente.'); return; }
     setLoading(true);
     try {
-      const { error } = await supabase.from('perfis').update({
+      // Cidade + UF resolvidos pelo autocomplete: gravam em endereco (exibição) E em
+      // cidades_interesse (o que a Busca usa nos filtros) — com a UF, os filtros não
+      // quebram mais por "cidade sem estado".
+      const patch = {
         telefone: form.telefone.replace(/\D/g, ''),
-        endereco: form.endereco || null,
+        endereco: form.cidade ? `${form.cidade}${form.uf ? ' - ' + form.uf : ''}` : null,
         lgpd_aceito: true,
         lgpd_data: new Date().toISOString(),
-      }).eq('id', user.id);
+      };
+      // Campos estruturados que a Busca lê primeiro (com a UF, o filtro da cidade
+      // do usuário funciona sem depender de parsear a string de endereço).
+      if (form.cidade) { patch.endereco_cidade = form.cidade; patch.endereco_uf = form.uf || null; }
+      if (form.cidade && form.uf) patch.cidades_interesse = [{ cidade: form.cidade, uf: form.uf, raio_km: 50 }];
+      const { error } = await supabase.from('perfis').update(patch).eq('id', user.id);
       if (error) throw error;
       // CPF vai pelo backend, que grava também o hash + a cifra (chave só existe lá).
       const rc = await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: form.cpf.replace(/\D/g, '') }) });
@@ -99,8 +108,10 @@ export default function CompletarCadastro() {
             <input value={form.telefone} onChange={e => setTel(e.target.value)} placeholder="(00) 00000-0000" inputMode="numeric" required style={inp} />
           </div>
           <div>
-            <label style={lbl}>Cidade / Endereço <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span></label>
-            <input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} placeholder="Cidade - UF" style={inp} />
+            <label style={lbl}>Cidade de interesse <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span></label>
+            <CidadeAutocomplete value={form.cidade} placeholder="Digite e selecione sua cidade…"
+              onSelect={({ cidade, uf }) => setForm(f => ({ ...f, cidade, uf }))} />
+            {form.cidade && !form.uf && <div style={{ fontSize: 11, color: '#d97706', marginTop: 4 }}>Selecione a cidade na lista para vincular o estado (UF).</div>}
           </div>
 
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#475569', lineHeight: 1.5, cursor: 'pointer' }}>

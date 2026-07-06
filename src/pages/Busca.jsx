@@ -6,7 +6,7 @@ import {
   ArrowRight, X,
 } from 'lucide-react';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
-import { buscarCidadesEstado, RAIOS_KM } from '../data/cidades';
+import { buscarCidadesEstado, buscarTodasCidades, RAIOS_KM } from '../data/cidades';
 import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadge } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
@@ -503,6 +503,18 @@ export default function Busca() {
           else cidade = String(data.endereco).trim(); // só cidade, sem UF
         }
       } catch {}
+      // Recupera a UF quando o cadastro guardou só a cidade (dados antigos, sem UF):
+      // resolve pela base do IBGE. Sem isto, o filtro fica sem estado e a busca trava
+      // com "Selecione um estado" (foi o que aconteceu com quem digitou só a cidade).
+      if (cidade && !uf) {
+        try {
+          const todas = await buscarTodasCidades();
+          const alvo = normCidade(cidade);
+          const hit = (todas || []).find(c => normCidade(String(c).split(' - ')[0]) === alvo);
+          const m = hit && String(hit).match(/-\s*([A-Za-z]{2})\s*$/);
+          if (m) uf = m[1].toUpperCase();
+        } catch {}
+      }
       // 2) Fallback: último alerta salvo (só quando não há endereço de residência)
       let alerta = null;
       if (!uf && !cidade) {
