@@ -315,8 +315,11 @@ export default function Analise() {
   const [externoEnviando, setExternoEnviando] = useState(false);
   const [externoNotificado, setExternoNotificado] = useState(false);
 
-  // Controle de abertura por seção
-  const [openSec, setOpenSec] = useState({ doc:true, dados:true, mercado:true, viabilidade:true, fluxo:true, laudo:true, matricula:true, cnj:true, guia:true, financiamento:true });
+  // Controle de abertura por seção. Os formulários MANUAIS do documental (Edital,
+  // Matrícula, CNJ) começam RECOLHIDOS: a análise é um clique (o servidor lê os
+  // documentos e consulta o CNJ sozinho); a digitação manual fica como opção
+  // avançada, sem poluir a tela.
+  const [openSec, setOpenSec] = useState({ doc:false, dados:true, mercado:true, viabilidade:true, fluxo:true, laudo:true, matricula:false, cnj:false, guia:true, financiamento:true });
   const toggleSec = (k) => setOpenSec(p => ({ ...p, [k]: !p[k] }));
   // Abre uma seção e rola até ela (usado pela barra lateral)
   const irPara = (k, id) => { setOpenSec(p => ({ ...p, [k]: true })); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); };
@@ -484,9 +487,18 @@ export default function Analise() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha no envio');
-      setDocsLeiloeiro(prev => [...prev.filter(x => x.tipo !== tipo), { id: data.anexo_id, tipo, nome: file.name, url: data.url_publica }]);
-      showMsg(`${tipo === 'matricula' ? 'Matrícula' : 'Edital'} enviado! Gerando a análise…`);
-      gerarRelDocumental();
+      const LBL = { matricula: 'Matrícula', edital: 'Edital', outro: 'Documento complementar' };
+      // Complementares ('outro') podem ser vários — acumula. Matrícula/edital são
+      // únicos — substitui o do mesmo tipo.
+      setDocsLeiloeiro(prev => [...prev.filter(x => tipo === 'outro' ? true : x.tipo !== tipo), { id: data.anexo_id, tipo, nome: file.name, url: data.url_publica }]);
+      if (tipo === 'outro') {
+        // Complementar não dispara a geração sozinho (o usuário pode anexar vários
+        // antes de gerar); entra na próxima análise pois o servidor lê todos os anexos.
+        showMsg('Documento complementar anexado.');
+      } else {
+        showMsg(`${LBL[tipo] || 'Documento'} enviado! Gerando a análise…`);
+        gerarRelDocumental();
+      }
     } catch (e) {
       showMsg(e.message || 'Erro ao enviar o documento.', 'error');
     } finally { setEnviandoAnexo(''); }
@@ -1176,34 +1188,53 @@ export default function Analise() {
           )}
 
           {/* Parecer documental gerado NO SERVIDOR (lê edital/matrícula/anexos + CNJ) */}
-          {relSel === 'documental' && parecerDocumental?.precisaDocumentos && (
-            <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:16, padding:'24px', display:'flex', flexDirection:'column', gap:12, alignItems:'flex-start' }}>
+          {relSel === 'documental' && parecerDocumental?.precisaDocumentos && (() => {
+            const temMat = docsLeiloeiro.some(x => x.tipo === 'matricula');
+            const temEdi = docsLeiloeiro.some(x => x.tipo === 'edital');
+            const complementares = docsLeiloeiro.filter(x => x.tipo === 'outro');
+            // Botão de anexo reaproveitável: vira selo verde quando o documento já
+            // foi enviado. Matrícula/edital anexados disparam a geração sozinhos.
+            const AnexoBtn = ({ tipo, cor, rotulo, ok }) => (
+              <label style={{ padding:'11px 18px', background: ok ? '#f0fdf4' : cor, color: ok ? '#15803d' : 'white', border: ok ? '1px solid #86efac' : 'none', borderRadius:10, fontWeight:800, fontSize:13.5, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: (enviandoAnexo && enviandoAnexo!==tipo) ? 0.6 : 1 }}>
+                {enviandoAnexo===tipo ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Enviando…</> : ok ? <>✓ {rotulo} anexado</> : <>📎 {rotulo}</>}
+                <input type="file" accept="application/pdf" disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f, tipo); }} style={{display:'none'}}/>
+              </label>
+            );
+            return (
+            <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:16, padding:'24px', display:'flex', flexDirection:'column', gap:14, alignItems:'flex-start' }}>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <FileText size={20} color="#c2410c"/>
                 <div style={{ fontSize:16, fontWeight:900, color:'#9a3412' }}>Anexe os documentos para gerar a análise</div>
               </div>
               <p style={{ fontSize:14, color:'#7c2d12', lineHeight:1.6, margin:0 }}>
-                {parecerDocumental.motivo || 'Para dar assertividade, a análise jurídica é gerada a partir dos documentos. Anexe ao menos a matrícula e o edital (PDF).'}
+                {parecerDocumental.motivo || 'A análise documental e jurídica é gerada com um clique a partir dos documentos. Anexe o edital e a matrícula (mínimo); se o leiloeiro ou o banco forneceu outros documentos, anexe também.'}
               </p>
-              {imovelInicial?.id ? (
+              {imovelInicial?.id ? (<>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
-                  <label style={{ padding:'11px 18px', background:'#c2410c', color:'white', borderRadius:10, fontWeight:800, fontSize:14, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: enviandoAnexo?0.7:1 }}>
-                    {enviandoAnexo==='matricula' ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Enviando…</> : <>📎 Enviar matrícula (PDF)</>}
-                    <input type="file" accept="application/pdf" disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f,'matricula'); }} style={{display:'none'}}/>
-                  </label>
-                  <label style={{ padding:'11px 18px', background:'#9a3412', color:'white', borderRadius:10, fontWeight:800, fontSize:14, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: enviandoAnexo?0.7:1 }}>
-                    {enviandoAnexo==='edital' ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Enviando…</> : <>📎 Enviar edital (PDF)</>}
-                    <input type="file" accept="application/pdf" disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f,'edital'); }} style={{display:'none'}}/>
-                  </label>
-                  <button onClick={()=>setModoManual(true)} style={{ padding:'11px 16px', background:'white', color:'#9a3412', border:'1px solid #fed7aa', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer' }}>ou colar o texto</button>
+                  <AnexoBtn tipo="edital"    cor="#9a3412" rotulo="Edital (PDF)"    ok={temEdi}/>
+                  <AnexoBtn tipo="matricula" cor="#c2410c" rotulo="Matrícula (PDF)" ok={temMat}/>
+                  <AnexoBtn tipo="outro"     cor="#b45309" rotulo="Documento complementar" ok={false}/>
                 </div>
-              ) : (
+                {complementares.length > 0 && (
+                  <div style={{ fontSize:12, color:'#7c2d12', lineHeight:1.5 }}>
+                    <strong>{complementares.length}</strong> complementar(es) anexado(s): {complementares.map(c=>c.nome).join(', ')}
+                  </div>
+                )}
+                {temMat && temEdi && (
+                  <button onClick={gerarRelDocumental} disabled={gerandoDocumental}
+                    style={{ padding:'12px 20px', background: gerandoDocumental?'#94a3b8':'#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor: gerandoDocumental?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+                    {gerandoDocumental ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando…</> : <><Sparkles size={15}/> Gerar análise documental + jurídica</>}
+                  </button>
+                )}
+                <button onClick={()=>setModoManual(true)} style={{ background:'none', border:'none', color:'#9a3412', fontSize:12.5, fontWeight:700, cursor:'pointer', textDecoration:'underline', padding:0 }}>ou colar o texto do documento</button>
+              </>) : (
                 <button onClick={()=>setModoManual(true)} style={{ padding:'11px 18px', background:'#c2410c', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer' }}>
                   📎 Anexar matrícula e edital
                 </button>
               )}
             </div>
-          )}
+            );
+          })()}
           {relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos && (
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'20px 22px', display:'flex', flexDirection:'column', gap:14 }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
