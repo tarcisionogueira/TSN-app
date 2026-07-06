@@ -31,6 +31,21 @@ export default async function handler(req, res) {
   const corteSemData = new Date(Date.now() - DIAS_SEM_DATA * 86400000).toISOString();
   const out = {};
 
+  // Recuperação de análises TRAVADAS: a função de geração (maxDuration 5 min) pode
+  // morrer sem gravar o resultado, deixando a linha em 'gerando' e o app girando.
+  // Após 15 min, marca como 'erro' para o usuário poder gerar de novo. Backstop do
+  // banco — o app já se recupera sozinho na tela (STALE_GERANDO_MS no contexto).
+  const corteGerando = new Date(Date.now() - 15 * 60000).toISOString();
+  for (const tabela of ['analises_mercado', 'analises_documental', 'analises_laudo']) {
+    try {
+      const rg = await sb(`${tabela}?status=eq.gerando&updated_at=lt.${corteGerando}&select=id`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'erro', erro: 'Geração excedeu o tempo limite (função encerrada). Gere novamente.', updated_at: new Date().toISOString() }),
+      });
+      out[`${tabela}_destravadas`] = rg.ok ? ((await rg.json().catch(() => [])).length || 0) : 0;
+    } catch { out[`${tabela}_destravadas`] = 0; }
+  }
+
   // Mesma regra para a mercadológica E a documental: 15 dias após o leilão sem
   // arrematar → apaga; sem data → fallback de 60 dias por idade. Arrematado nunca apaga.
   for (const tabela of ['analises_mercado', 'analises_documental']) {

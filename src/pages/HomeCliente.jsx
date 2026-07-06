@@ -7,7 +7,7 @@ import TriagemPerfil from '../components/TriagemPerfil';
 
 // Rótulo e configuração da home por plano (usa o role EFETIVO — respeita o modo suporte).
 const PLANO_INFO = {
-  explorador:        { nome: 'Explorador',           limite: 5,  cor: '#64748b', indica: false },
+  explorador:        { nome: 'Explorador',           limite: 3,  cor: '#64748b', indica: false },
   top2:              { nome: 'Investidor Pro',       limite: 15, cor: '#0D63DB', indica: true  },
   top2_anual:        { nome: 'Investidor Pro',       limite: 15, cor: '#0D63DB', indica: true  },
   assessorado:       { nome: 'Assessorado',          limite: 15, cor: '#d97706', indica: false },

@@ -108,7 +108,7 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
 // só o admin é ilimitado. Equipe (analista/advogado) NÃO gera relatórios (só
 // recebe/visualiza demandas) → sem entrada aqui = limite 0.
 const LIMITE_POR_ROLE = {
-  explorador: 5, consultor: 5,
+  explorador: 3, consultor: 5,
   top2: 15, top2_anual: 15,
   assessorado: 15, assessorado_anual: 15,
   clube: 15, clube_anual: 15,

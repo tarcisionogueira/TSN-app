@@ -811,7 +811,11 @@ export default function ImovelDetalhe() {
   const imgDetalheSrc = imgCandidates[imgIdx] || null;
   // Quem pode SOLICITAR análise. Investidor Pro (top2/top2_anual) e Leilão Club
   // pagam por análises (a cota mensal — ex.: 15/mês — é aplicada no servidor).
-  const PLANOS_ANALISE = ['admin', 'analista', 'assessorado', 'clube', 'top2', 'top2_anual'];
+  // Explorador e consultor TÊM análise mercadológica (limite_ia > 0): devem ver o
+  // botão "Solicitar Análise" normal. O bloqueio por cota/plano acontece na tela de
+  // análises (a documental é gated lá; a mercadológica cobra a cota e, esgotada,
+  // direciona ao upgrade) — não mais como "Fazer upgrade para analisar" já no imóvel.
+  const PLANOS_ANALISE = ['admin', 'analista', 'assessorado', 'clube', 'top2', 'top2_anual', 'explorador', 'consultor'];
   const podeFazerAnalise = PLANOS_ANALISE.includes(role);
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
   const precoM2 = imovel.areaM2 > 0 && imovel.valorMinimo ? imovel.valorMinimo / imovel.areaM2 : null;

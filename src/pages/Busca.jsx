@@ -428,7 +428,7 @@ export default function Busca() {
   // Limite mensal de relatórios por plano (para o selo de disponibilidade na busca).
   // Espelha limite_ia (banco) / LIMITE_POR_ROLE (Analise.jsx). Admin fica de fora (sem selo = ilimitado).
   const LIMITE_ANALISES = {
-    explorador: 5, consultor: 5,
+    explorador: 3, consultor: 5,
     top2: 15, top2_anual: 15,
     assessorado: 15, assessorado_anual: 15,
     clube: 15, clube_anual: 15,

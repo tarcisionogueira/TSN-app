@@ -16,12 +16,27 @@ const LS_KEY_LAUDO = 'bidpro_analises_laudo_v1';
 const MAX = 12;
 
 function loadCache(key) { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } }
-const rowToEntry = (r) => ({
-  imovelId: r.imovel_id, titulo: r.titulo, cidade: r.cidade, estado: r.estado,
-  imovel: r.imovel || null, status: r.status, result: r.result || null, erro: r.erro || null,
-  startedAt: r.created_at ? Date.parse(r.created_at) : Date.now(),
-  updatedAt: r.updated_at ? Date.parse(r.updated_at) : Date.now(),
-});
+
+// A função serverless de geração tem maxDuration de 5 min. Se ela morrer (timeout
+// da Vercel, OOM, deploy no meio) sem gravar 'concluida'/'erro', a linha fica em
+// 'gerando' PARA SEMPRE e o app gira o loader eternamente. Após esta folga,
+// tratamos como falha: o card volta a permitir "Gerar" (o cron limpa a linha no
+// banco). Assim um relatório NUNCA trava a tela.
+const STALE_GERANDO_MS = 9 * 60 * 1000;
+const rowToEntry = (r) => {
+  const updatedAt = r.updated_at ? Date.parse(r.updated_at) : Date.now();
+  let status = r.status, erro = r.erro || null;
+  if (status === 'gerando' && (Date.now() - updatedAt) > STALE_GERANDO_MS) {
+    status = 'erro';
+    erro = erro || 'A geração excedeu o tempo limite. Gere novamente.';
+  }
+  return {
+    imovelId: r.imovel_id, titulo: r.titulo, cidade: r.cidade, estado: r.estado,
+    imovel: r.imovel || null, status, result: r.result || null, erro,
+    startedAt: r.created_at ? Date.parse(r.created_at) : Date.now(),
+    updatedAt,
+  };
+};
 
 export function AnalisesProvider({ children }) {
   // No modo suporte (admin visualizando a conta de um cliente), lê/gera pelo
