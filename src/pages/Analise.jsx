@@ -18,6 +18,7 @@ import { supabase } from '../utils/supabase';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import RiscoJuridico from '../components/RiscoJuridico';
 import { gerarPDF } from '../components/RelatorioPDF';
+import { gerarLaudoPDF } from '../components/LaudoPDF';
 import { apiCall } from '../utils/apiCall';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
@@ -1459,6 +1460,10 @@ export default function Analise() {
                     <div style={{ fontSize:13, color:'#334155', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{String(L.parecer).replace(/§\s*SEÇÃO:/g, '\n§ ').trim()}</div>
                   </div>
                 )}
+                <button onClick={() => gerarLaudoPDF({ imovel: d, laudo: L })}
+                  style={{ marginTop:16, width:'100%', padding:'13px', background:'#111827', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  <Printer size={16}/> Baixar Parecer Final em PDF
+                </button>
               </div>
             );
           })()}
