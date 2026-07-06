@@ -1153,16 +1153,21 @@ export default function Busca() {
                         value={buscaCidade}
                         onChange={e=>{ setBuscaCidade(e.target.value); setDropdownIndex(-1); }}
                         onKeyDown={handleKeyDown}
-                        placeholder={!filtros.estado ? 'Selecione um estado primeiro' : cidadesCarregando ? 'Carregando cidades...' : 'Buscar cidade (opcional)...'}
+                        placeholder={!filtros.estado ? 'Selecione um estado primeiro' : cidadesCarregando ? 'Carregando cidades...' : raioAtivo ? 'Trocar a cidade central do raio...' : 'Buscar cidade (opcional)...'}
                         disabled={!filtros.estado || cidadesCarregando}
                         style={{ ...inp, marginBottom:4 }}
                         autoComplete="off"
                       />
+                      {raioAtivo && (
+                        <div style={{ fontSize:10, color:'#64748b', marginBottom:4, lineHeight:1.4 }}>
+                          No modo <strong>raio</strong> a busca usa <strong>uma cidade só</strong> (o centro). Escolher outra troca o centro. Para filtrar <strong>várias cidades</strong>, desligue o raio.
+                        </div>
+                      )}
                       {filtros.estado && buscaCidade.length >= 1 && (
                         <div style={{ maxHeight:160, overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:8, background:'white' }}>
                           {cidadesFiltradas.map((c, idx) => (
                             <button key={c}
-                              onClick={()=>{ up('cidades', [...filtros.cidades, c]); setBuscaCidade(''); setDropdownIndex(-1); }}
+                              onClick={()=>{ up('cidades', raioAtivo ? [c] : [...filtros.cidades, c]); setBuscaCidade(''); setDropdownIndex(-1); if (raioAtivo) geocodificarCidade(c, filtros.estado); }}
                               style={{ width:'100%', padding:'7px 12px', border:'none', background: idx === dropdownIndex ? '#eff6ff' : 'none', textAlign:'left', cursor:'pointer', fontSize:12, color: idx === dropdownIndex ? '#084BA6' : '#334155', borderBottom:'1px solid #f1f5f9', fontWeight: idx === dropdownIndex ? 700 : 400 }}
                               onMouseEnter={e=>{ setDropdownIndex(idx); e.currentTarget.style.background='#eff6ff'; }}
                               onMouseLeave={e=>{ if (dropdownIndex !== idx) e.currentTarget.style.background='none'; }}>

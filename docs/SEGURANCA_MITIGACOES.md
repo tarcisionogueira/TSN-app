@@ -35,8 +35,19 @@ aparecendo).
 
 ---
 
-## NÃO são mitigados (bugs reais — devem continuar sendo reportados)
-- **Sub-precificação no checkout (EM ABERTO — depende de decisão do dono):** `api/mp-checkout.js` aceita `valor` do corpo do cliente e o webhook mapeia o plano por **valor**, então em tese dá para pagar um valor baixo e reivindicar um role de tier superior. **Não corrigido ainda** porque `assessorado` é `parcelado_fixo` (12×) e um pagamento de ~R$500 pode ser uma **parcela legítima** — um guard rígido de preço quebraria o parcelamento. Correto: definir o modelo (o role é concedido na 1ª parcela? o acesso é proporcional ao pago?) e então validar `valor` contra `planos_config` ou conceder acesso só após o total quitado.
+## Decisão do dono sobre o checkout (2026-07-06) — acesso na 1ª parcela é INTENCIONAL
+Modelo confirmado (preços reais — a tabela `planos_config` é a fonte da verdade; o
+`PLANOS_CONFIG` hardcoded em `api/mp.js` está DESATUALIZADO e deve passar a LER do banco):
+- **Assessoria:** R$ 6.000 em até **12× de R$ 500**, OU **R$ 4.800 à vista**. Sem recorrência.
+- **Leilão Club:** R$ 60.000 em até **12× de R$ 5.000**, OU **R$ 48.000 à vista**, OU recorrência.
+- **Investidor Pro / Leilão Club:** podem ser **recorrência** (monitorar parcela mês a mês; em inadimplência, rebaixar para explorador). À vista libera por **12 meses**.
+
+Consequências para a "sub-precificação": **não** é um bug a bloquear — o acesso é liberado a cada
+pagamento válido (inclusive a 1ª parcela), por decisão de negócio. O guard correto NÃO é exigir o
+valor cheio; é validar que `valor` é um **valor válido do plano** (parcela, à vista ou total) e
+**monitorar as parcelas na tela do Financeiro** (adimplência/inadimplência) — trabalho FUTURO,
+junto da revisão da tela de contratos. Enquanto isso, corrigir os preços do `mp.js` (que estão em
+R$ 5.000 para assessoria e club) para os valores acima, ou lê-los de `planos_config`.
 
 ## Achados de segurança já RESOLVIDOS (versionados)
 - **RLS de `perfis` sem `WITH CHECK` por coluna** — RESOLVIDO: o trigger `proteger_campos_sensiveis_perfil` (a barreira contra auto-escalada de `role`) foi **versionado** em `supabase/migrations/proteger_campos_sensiveis_perfil.sql` (antes só existia em produção via MCP). Um reprovisionamento a partir do repo não perde mais a proteção.
