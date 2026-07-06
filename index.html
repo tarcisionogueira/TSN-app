@@ -2,16 +2,20 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <!-- Favicon (tile preto com o "B"). O Google exibe ESTE mesmo arquivo no
-         resultado de busca — precisa ser quadrado e acessível (é /favicon.svg). -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
-    <link rel="shortcut icon" href="/favicon.svg?v=3" />
-    <link rel="mask-icon" href="/favicon.svg?v=3" color="#111111" />
-    <link rel="apple-touch-icon" href="/favicon.svg?v=3" />
+    <!-- Favicon (tile PRETO com o "B"). O Google exibe o favicon no resultado de
+         busca, mas costuma NÃO renderizar SVG puro — por isso servimos PNGs 48/96/192
+         (o que o Google prefere) além do SVG para navegadores modernos. -->
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png?v=4" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png?v=4" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png?v=4" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=4" />
+    <link rel="shortcut icon" href="/favicon-48.png?v=4" />
+    <link rel="mask-icon" href="/favicon.svg?v=4" color="#111111" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4" />
     <meta name="theme-color" content="#111111" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BidPro Brasil — Leilão de Imóveis com Segurança e Assessoria</title>
-    <meta name="description" content="Arremate imóveis de leilão com segurança e facilidade: leiloeiros credenciados, análise jurídica e de viabilidade por IA e assessoria completa em todo o Brasil." />
+    <title>Imóveis de Leilão com até 50% de desconto — BidPro Brasil</title>
+    <meta name="description" content="Imóveis de leilão em todo o Brasil, com até 50% abaixo do mercado. Análise jurídica e de viabilidade por IA + assessoria para arrematar com segurança. Comece grátis." />
     <meta name="keywords" content="leilão de imóveis, imóveis de leilão, arrematação de imóveis, leilão judicial, leilão extrajudicial, leiloeiro credenciado, análise jurídica de leilão, assessoria em leilão" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="author" content="BidPro Brasil" />
@@ -21,14 +25,17 @@
     <meta property="og:site_name" content="BidPro Brasil" />
     <meta property="og:locale" content="pt_BR" />
     <meta property="og:url" content="https://bidprobrasil.com.br" />
-    <meta property="og:title" content="BidPro Brasil — Leilão de Imóveis com Segurança e Assessoria" />
-    <meta property="og:description" content="Arremate com confiança: leiloeiros credenciados, análise jurídica e de viabilidade por IA e assessoria especializada. Busca fácil por tipo, cidade, valor e data." />
-    <meta property="og:image" content="https://bidprobrasil.com.br/og-image.png" />
+    <meta property="og:title" content="Imóveis de Leilão com até 50% de desconto — BidPro Brasil" />
+    <meta property="og:description" content="Imóveis de leilão em todo o Brasil com até 50% abaixo do mercado. Análise jurídica e de viabilidade por IA + assessoria para arrematar com segurança." />
+    <meta property="og:image" content="https://bidprobrasil.com.br/og-image.png?v=4" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="BidPro Brasil — imóveis de leilão com segurança e desconto" />
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="BidPro Brasil — Leilão de Imóveis com Segurança e Assessoria" />
-    <meta name="twitter:description" content="Arremate imóveis de leilão com segurança e facilidade: leiloeiros credenciados, análise por IA e assessoria completa em todo o Brasil." />
-    <meta name="twitter:image" content="https://bidprobrasil.com.br/og-image.png" />
+    <meta name="twitter:title" content="Imóveis de Leilão com até 50% de desconto — BidPro Brasil" />
+    <meta name="twitter:description" content="Imóveis de leilão em todo o Brasil com até 50% abaixo do mercado. Análise por IA + assessoria para arrematar com segurança." />
+    <meta name="twitter:image" content="https://bidprobrasil.com.br/og-image.png?v=4" />
     <!-- Dados estruturados: reforça a marca e o posicionamento (confiança/segurança)
          no Google e reduz a reescrita automática do título/descrição. -->
     <script type="application/ld+json">
@@ -40,9 +47,11 @@
           "@id": "https://bidprobrasil.com.br/#organizacao",
           "name": "BidPro Brasil",
           "url": "https://bidprobrasil.com.br",
-          "logo": "https://bidprobrasil.com.br/og-image.png",
+          "logo": "https://bidprobrasil.com.br/favicon-512.png",
+          "image": "https://bidprobrasil.com.br/og-image.png",
           "description": "Plataforma de leilão de imóveis com leiloeiros credenciados, análise jurídica e de viabilidade por IA e assessoria especializada para arrematar com segurança.",
-          "areaServed": "BR"
+          "areaServed": "BR",
+          "sameAs": ["https://www.instagram.com/bidprobrasil"]
         },
         {
           "@type": "WebSite",
