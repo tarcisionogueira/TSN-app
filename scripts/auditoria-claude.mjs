@@ -15,6 +15,13 @@ const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const MODEL        = process.env.AUDIT_MODEL || 'claude-sonnet-4-6';
 const COMMIT_SHA   = process.env.GITHUB_SHA || null;
 
+// Mitigações conhecidas / riscos aceitos: injetadas no prompt para o modelo NÃO
+// re-classificar como crítico o que o time já revisou (webhook MP reconferido via
+// API, VITE_ público, selfie fail-safe-para-revisão…). O runner faz checkout do
+// repo, então o arquivo está em disco. Sem o arquivo, segue sem mitigações.
+let MITIGACOES = '';
+try { MITIGACOES = readFileSync('docs/SEGURANCA_MITIGACOES.md', 'utf8').slice(0, 12000); } catch { /* opcional */ }
+
 if (!CLAUDE_KEY) { console.error('CLAUDE_KEY ausente'); process.exit(1); }
 if (!SUPABASE_URL || !SERVICE_KEY) { console.error('Supabase ausente'); process.exit(1); }
 
@@ -100,16 +107,26 @@ async function claude(system, user, maxTokens = 8000) {
 
 const SISTEMA = `Você é um auditor sênior de engenharia e segurança da BidPro Brasil (plataforma de leilões imobiliários: React + Vite no front, funções serverless Vercel em Node/Edge, Supabase Postgres com RLS, pagamentos Asaas/Mercado Pago, e-mail Resend, IA Claude+Gemini).
 Audite o CÓDIGO fornecido com foco em: (1) segurança de dados (autenticação/autorização, RLS, vazamento de segredos, injeção, verificação de webhooks, CORS, exposição de PII), (2) fluxos de API (validação de entrada, tratamento de erro, idempotência, rate-limit, timeouts), (3) funcionalidades (bugs, condições de corrida, casos de borda).
-Seja concreto e conservador: só reporte o que o código realmente mostra. Priorize por severidade e risco real. Para cada achado, proponha a correção de forma acionável.`;
+Seja concreto e conservador: só reporte o que o código realmente mostra. Priorize por severidade e risco real. Para cada achado, proponha a correção de forma acionável.
+
+REGRAS DE CALIBRAÇÃO (aplique ANTES de atribuir severidade — o objetivo é ASSERTIVIDADE, não alarme):
+1. CONTROLES COMPENSATÓRIOS: antes de reportar, verifique se OUTRO trecho do fluxo já fecha o risco. Se houver, rebaixe (ou não reporte) e cite-o em "controle_compensatorio". Ex.: um webhook sem HMAC mas que RECONFERE cada evento na API do provedor (com nosso token) NÃO é forjável — a fonte de verdade é o provedor.
+2. "critica"/"alta" SÓ com CAMINHO DE EXPLORAÇÃO CONCRETO E ACIONÁVEL (quem explora, como, e o impacto direto). Sem caminho concreto → no máximo "media".
+3. Separe HARDENING / defesa-em-profundidade (melhoria desejável, sem exploração concreta) de VULNERABILIDADE EXPLORÁVEL. Hardening é "baixa"/"media", nunca "critica".
+4. NÃO sinalize como vulnerabilidade estes padrões INTENCIONAIS desta plataforma: (a) variáveis VITE_* são PÚBLICAS por design e a chave anon do Supabase é protegida por RLS — não é "credencial vazada"; (b) FAIL-SAFE PARA REVISÃO MANUAL: verificação automática que, ao falhar por erro técnico/falta de chave, apenas ADIA para conferência humana SEM conceder acesso/role/plano não é "bypass"; (c) RECONFERÊNCIA VIA API DO PROVEDOR (Mercado Pago/Asaas) é a fonte de verdade do pagamento.
+5. Se o próprio comentário do código explica que o comportamento é intencional e descreve o controle compensatório, respeite-o (no máximo sugira hardening como "baixa").`;
 
 function promptLote(arquivos) {
   const corpo = arquivos.map((a) => `\n===== ARQUIVO: ${a.path} =====\n${a.txt}`).join('\n');
   return `Audite os arquivos abaixo. Responda APENAS este JSON (sem markdown):
-{"achados":[{"categoria":"seguranca|api|funcionalidade|dados","severidade":"critica|alta|media|baixa","area":"resumo curto","arquivo":"caminho","linha":0,"descricao":"o problema, objetivo","correcao":"como corrigir (código/passo)","tipo":"auto|manual|externo"}]}
+{"achados":[{"categoria":"seguranca|api|funcionalidade|dados","severidade":"critica|alta|media|baixa","area":"resumo curto","arquivo":"caminho","linha":0,"descricao":"o problema, objetivo","caminho_exploracao":"passo a passo concreto de como seria explorado (quem, como, impacto), ou vazio se não houver","controle_compensatorio":"controle existente no código que já mitiga, se houver","correcao":"como corrigir (código/passo)","tipo":"auto|manual|externo"}]}
 - tipo=auto: corrigível no código deste repositório (vira PR).
 - tipo=manual: exige decisão/config sua (ex.: girar um segredo, ajustar painel).
 - tipo=externo: depende de serviço externo (ex.: configurar webhook no provedor).
-Seja OBJETIVO: descricao e correcao curtas (1-2 frases). Reporte no máximo os 10 achados MAIS RELEVANTES desta resposta (prioridade a crítica/alta). Se não houver achados relevantes, retorne {"achados":[]}.
+Seja OBJETIVO: descricao e correcao curtas (1-2 frases). Só marque "critica"/"alta" com "caminho_exploracao" concreto E sem "controle_compensatorio" que já feche o risco; achados de hardening/defesa-em-profundidade sem exploração concreta → "baixa"/"media". Reporte no máximo os 10 achados MAIS RELEVANTES. Se não houver achados relevantes, retorne {"achados":[]}.${MITIGACOES ? `
+
+MITIGAÇÕES CONHECIDAS / RISCOS ACEITOS (já revisados pelo time — se um achado for exatamente um destes padrões, NÃO reporte como crítica/alta: rebaixe para "baixa" ou omita. Não confundir com os bugs reais listados ao fim do documento, que DEVEM continuar sendo reportados):
+${MITIGACOES}` : ''}
 ${corpo}`;
 }
 
@@ -126,6 +143,24 @@ async function main() {
     if (j?.achados?.length) achados.push(...j.achados);
     else console.log(`    (lote ${i + 1}: ${j ? '0 achados' : 'resposta não parseável'})`);
   }
+
+  // Guardrail DETERMINÍSTICO contra alarme falso: um achado crítico/alto que o
+  // PRÓPRIO modelo marcou com um controle compensatório E sem caminho de exploração
+  // concreto não é um crítico real (é hardening/defesa-em-profundidade) — rebaixa
+  // para "media". Isso trava a fonte recorrente de "saúde=vermelho" indevido sem
+  // esconder achados reais (que têm caminho_exploracao preenchido).
+  let rebaixados = 0;
+  for (const a of achados) {
+    if (a.severidade !== 'critica' && a.severidade !== 'alta') continue;
+    const temMitig = a.controle_compensatorio && String(a.controle_compensatorio).trim().length > 3;
+    const semCaminho = !a.caminho_exploracao || String(a.caminho_exploracao).trim().length < 5;
+    if (temMitig && semCaminho) {
+      a.severidade_original = a.severidade; a.severidade = 'media';
+      a.rebaixado_motivo = 'controle compensatório presente e sem caminho de exploração concreto';
+      rebaixados++;
+    }
+  }
+  if (rebaixados) console.log(`  ${rebaixados} achado(s) crítico/alto rebaixado(s) para média (controle compensatório, sem exploração concreta).`);
 
   // Ordena por severidade e limita para o relatório não explodir.
   const ordem = { critica: 0, alta: 1, media: 2, baixa: 3 };
