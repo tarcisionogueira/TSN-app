@@ -14,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
 import ScoreRisco from '../components/ScoreRisco';
 import { scoreBidPro, scoreLabel } from '../utils/score';
+import { fotoCandidatos } from '../utils/foto';
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -122,26 +123,8 @@ function svgPin(cor) {
 // "Embu-Guaçu" = "Embu Guacu" = "embuguacu", "Sant'Ana" = "Santana", etc.
 const normCidade = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 
-// Candidatos de foto para o card da busca, em ordem de preferência. Igual ao
-// detalhe do imóvel: o HOTLINK DIRETO funciona no navegador do usuário (IP
-// residencial), enquanto o /api/img-proxy roda na Vercel e é bloqueado por
-// vários hosts de leiloeiro (ex.: ms.sbwebservices.net → 403). Por isso a foto
-// aparecia no detalhe mas não no card. Tentamos: 1) foto direta; 2) padrão Caixa
-// por id; 3) proxy (fallback p/ fontes que bloqueiam hotlink por referer).
-const fotoCandidatos = (im) => {
-  const foto = im.foto;
-  const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
-  const caixaUrl = isCef && im.fonteId
-    ? `https://venda-imoveis.caixa.gov.br/fotos/F${String(im.fonteId).replace(/^(caixa_|cef_)/, '')}21.jpg`
-    : null;
-  // Já hospedado por nós (supabase) ou caminho local: usa direto, sem fallback.
-  if (foto && (foto.includes('supabase.co') || foto.startsWith('/'))) return [foto];
-  const cands = [];
-  if (foto && /^https?:\/\//.test(foto)) cands.push(foto);                 // 1) hotlink direto
-  if (caixaUrl) cands.push(caixaUrl);                                       // 2) padrão de foto da Caixa
-  if (!isCef && foto && /^https?:\/\//.test(foto)) cands.push(`/api/img-proxy?url=${encodeURIComponent(foto)}`); // 3) proxy
-  return cands;
-};
+// Candidatos de foto do card: regra única em utils/foto.js (compartilhada com o
+// detalhe do imóvel e os "imóveis semelhantes", para as cópias não divergirem).
 
 // ─── Filtros de imóveis — FONTE ÚNICA (regra absoluta) ────────────────────────
 // REGRA: todo filtro da Busca deve ser aplicado em TODOS os caminhos de consulta,
