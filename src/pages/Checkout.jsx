@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { trackCheckoutIniciado } from '../utils/gtag';
+import { trackCheckoutIniciado, trackPlanContratado } from '../utils/gtag';
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
@@ -111,6 +111,7 @@ export default function Checkout() {
   const [contaCriada, setContaCriada] = useState(false);
   const pollingRef = React.useRef(null);
   const jaConfirmouRef = React.useRef(false);
+  const conversaoDisparadaRef = React.useRef(false); // evita disparo duplicado da conversão de plano (Google Ads)
   const assinandoRef = React.useRef(false); // trava anti-duplo-clique na assinatura
   const cancelouAnterioresRef = React.useRef(false); // idempotência do cancelamento de assinaturas anteriores
 
@@ -648,6 +649,15 @@ export default function Checkout() {
 
   const confirmarPagamento = async () => {
     setPago(true);
+    // Conversão de assinatura paga (Google Ads). Este é o único ponto onde o
+    // pagamento é efetivamente confirmado (redirect MP, polling Asaas ou onPago do
+    // cartão), então é aqui que a conversão de plano deve disparar. Só planos pagos
+    // passam por aqui (o Explorador grátis usa criarContaGratis). Guardado por preço
+    // > 0 e por jaConfirmouRef (evita disparo duplicado).
+    if (!conversaoDisparadaRef.current && (plano?.preco || 0) > 0) {
+      conversaoDisparadaRef.current = true;
+      try { trackPlanContratado(plano?.nome || planoKey, Number(plano?.preco) || 0); } catch (_) {}
+    }
     // Registra o aceite dos termos SOMENTE quando o pagamento é efetivado — antes
     // era gravado a cada clique em "Ir para Pagamento" (mesmo em checkout abandonado),
     // gerando aceites sem transação. O aceite agora é prova do pagamento concluído.
