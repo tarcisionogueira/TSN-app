@@ -2,9 +2,13 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '../utils/supabase';
 import { useNavigate } from 'react-router-dom';
 
-// CARTO basemaps: permite uso por apps (o tile.openstreetmap.org bloqueia em produção).
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+// Basemaps com FALLBACK: o tile.openstreetmap.org bloqueia app em produção e o CARTO
+// no-token passou a limitar do mesmo jeito — se o primário falhar, cai para o Esri.
 const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>';
+const BASEMAPS = [
+  { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', opts: { subdomains: 'abcd', attribution: ATTRIBUTION, maxZoom: 19 } },
+  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', opts: { attribution: 'Tiles © Esri', maxZoom: 16 } },
+];
 
 // Limite de imóveis carregados por bbox conforme zoom
 function limitePorZoom(z) {
@@ -160,7 +164,22 @@ export default function MapaImoveis() {
         zoomControl: true,
       });
 
-      L.tileLayer(TILE_URL, { subdomains: 'abcd', attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map);
+      let baseIdx = 0, tileErros = 0;
+      const montarBase = () => {
+        const b = BASEMAPS[baseIdx];
+        const layer = L.tileLayer(b.url, b.opts);
+        tileErros = 0;
+        layer.on('tileerror', () => {
+          tileErros += 1;
+          if (tileErros >= 6 && baseIdx < BASEMAPS.length - 1) {
+            baseIdx += 1;
+            try { map.removeLayer(layer); } catch { /* */ }
+            montarBase();
+          }
+        });
+        layer.addTo(map);
+      };
+      montarBase();
 
       // Cluster com estilo personalizado
       const cluster = L.markerClusterGroup({

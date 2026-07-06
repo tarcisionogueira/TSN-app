@@ -250,7 +250,16 @@ export default async function handler(req, res) {
 
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
+  // DEADLINE interno < maxDuration (300s). Sem isto, se a pesquisa de mercado (web
+  // search, até 6 buscas) + o parecer passarem de 5 min, a Vercel MATA a função no
+  // meio e o catch abaixo NUNCA roda — a linha fica presa em 'gerando' para sempre
+  // (foi o que travou o relatório do Igor). Com o deadline, perdemos a corrida ANTES
+  // do corte e gravamos 'erro' com mensagem clara, para o cliente poder tentar de novo.
+  const DEADLINE_MS = 255000;
+  const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), DEADLINE_MS));
+
   try {
+    const { result, valorMercado } = await Promise.race([prazo, (async () => {
     // 1) Mercado — reaproveita pesquisa recente do mesmo imóvel (se houver), senão busca.
     let mercado, reaproveitado = false;
     const recente = await mercadoRecente(String(imovelId));
@@ -260,7 +269,7 @@ export default async function handler(req, res) {
     } else {
       const mData = await anthropic({
         model: MODEL, max_tokens: 8000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
         system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
         messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
       }, true);
@@ -322,7 +331,10 @@ export default async function handler(req, res) {
     const AVISO_MERCADO = '§ SEÇÃO: LEMBRETE E PRÓXIMO PASSO\nEsta análise mercadológica é gerada com apoio de inteligência artificial e tem caráter informativo — pode conter imprecisões e não substitui a verificação presencial. Antes de decidir, recomendamos VISITAR o imóvel pessoalmente ou AGENDAR com um corretor de confiança para conhecer um imóvel similar na região, confirmando estado de conservação, localização e o valor praticado no mercado.';
     if (parecer) parecer += `\n\n${AVISO_MERCADO}`;
 
-    const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
+      const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
+      return { result, valorMercado };
+    })()]);
+
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
 
     // Realimenta o SCORE do imóvel com o veredito REAL desta análise (valor de
@@ -356,12 +368,16 @@ export default async function handler(req, res) {
     } catch { /* realimentação do score é best-effort */ }
     res.status(200).json({ ok: true, result, cota });
   } catch (e) {
-    await upsertAnalise({ ...base, status: 'erro', erro: String(e?.message || e) });
+    const timeout = String(e?.message) === 'tempo_limite';
+    const msg = timeout
+      ? 'A pesquisa de mercado demorou mais que o tempo limite do servidor. Costuma ser temporário: tente gerar novamente.'
+      : String(e?.message || e);
+    await upsertAnalise({ ...base, status: 'erro', erro: msg });
     // Estorna a cota consumida (não cobra por análise que falhou; evita cobrança
     // dupla na re-tentativa, já que 'erro' não conta como concluída em isNovo).
     if (cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
     }
-    res.status(500).json({ error: 'Falha ao gerar a análise', detalhe: String(e?.message || e) });
+    res.status(timeout ? 504 : 500).json({ error: timeout ? 'Tempo limite ao gerar a análise' : 'Falha ao gerar a análise', detalhe: msg });
   }
 }

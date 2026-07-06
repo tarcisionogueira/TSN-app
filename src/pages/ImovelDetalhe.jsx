@@ -102,7 +102,29 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
     import('leaflet').then(({ default: L }) => {
       if (cancel || !ref.current || mapRef.current) return;
       const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], zoomBase);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      // Basemap com FALLBACK automático: o tile.openstreetmap.org BLOQUEIA tráfego
+      // de app em produção (mapa em branco) — por isso usamos CARTO e, se ele também
+      // acumular erros de tile (bloqueio), o mapa cai sozinho para o Esri.
+      const BASEMAPS = [
+        { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', opts: { subdomains: 'abcd', maxZoom: 19 } },
+        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', opts: { maxZoom: 16 } },
+      ];
+      let baseIdx = 0, tileErros = 0;
+      const montarBase = () => {
+        const b = BASEMAPS[baseIdx];
+        const layer = L.tileLayer(b.url, b.opts);
+        tileErros = 0;
+        layer.on('tileerror', () => {
+          tileErros += 1;
+          if (tileErros >= 6 && baseIdx < BASEMAPS.length - 1) {
+            baseIdx += 1;
+            try { map.removeLayer(layer); } catch { /* */ }
+            montarBase();
+          }
+        });
+        layer.addTo(map);
+      };
+      montarBase();
       // Imóvel: pino exato (endereço/rua) OU círculo de área aproximada (bairro/cidade)
       if (aproximado && raioM) {
         L.circle([lat, lng], { radius: raioM, color: '#0D63DB', weight: 1, fillColor: '#0D63DB', fillOpacity: 0.12 })
