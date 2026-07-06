@@ -2677,32 +2677,10 @@ function ContratosTab() {
 }
 
 // ─── Aba Promoções ────────────────────────────────────────────────────────────
-const defaultPromo = () => ({ codigo: '', produto: 'top2', descricao_condicoes: '', desconto_pct: '', desconto_valor: '', beneficios: '', carencia_dias: '', beneficio_validade_dias: '', validade_ate: '', perguntas: [], ativo: true });
+const defaultPromo = () => ({ codigo: '', produto_tipo: 'plano', produto: 'top2', produto_ref_id: '', desconto_pct: '', validade_ate: '', desconto_validade_ate: '', exige_perguntas: false, perguntas: [], ativo: true });
 
-function buildProdutosPromo(planos) {
-  const fmt = (v, d = 2) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })}`;
-  if (!planos) return [
-    { key: 'top2', label: 'Investidor Pro — R$ 49,90/mês' },
-    { key: 'assessorado', label: 'Assessoria — R$ 500/mês × 12' },
-    { key: 'assessorado_vista', label: 'Assessoria À Vista' },
-    { key: 'clube', label: 'Leilão Club — R$ 5.000/mês × 12' },
-    { key: 'clube_vista', label: 'Leilão Club À Vista' },
-  ];
-  const result = [];
-  ['top2', 'assessorado', 'clube'].forEach(key => {
-    const p = planos[key];
-    if (!p || p.ativo === false) return;
-    const ehDozeMeses = key === 'assessorado' || key === 'clube';
-    const label = ehDozeMeses
-      ? `${p.nome} — ${fmt(p.preco / 12)}/mês × 12 (total ${fmt(p.preco)})`
-      : `${p.nome} — ${fmt(p.preco)}/mês`;
-    result.push({ key, label });
-    if (!p.assinatura && p.precoVista) {
-      result.push({ key: `${key}_vista`, label: `${p.nome} À Vista — ${fmt(p.precoVista)} (${p.desconto_vista_pct || 20}% off)` });
-    }
-  });
-  return result;
-}
+const PROMO_STEPS = ['Produto', 'Validade do link', 'Desconto', 'Perguntas (SDR)', 'Revisar e criar'];
+const novoCodigo = () => { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; return Array.from({ length: 8 }, () => c[Math.floor(Math.random() * c.length)]).join(''); };
 
 function PromoTab() {
   const { user } = useAuth();
@@ -2710,211 +2688,313 @@ function PromoTab() {
   const PRODUTOS_PROMO = buildProdutosPromo(planosCtx);
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cursos, setCursos] = useState([]);
+  const [ebooks, setEbooks] = useState([]);
   const [form, setForm] = useState(defaultPromo());
   const [editId, setEditId] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState('');
+  const [wizard, setWizard] = useState(false);
+  const [step, setStep] = useState(0);
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('links_promo').select('*, perfis(nome)').order('criado_em', { ascending: false });
-    setLinks(data || []);
+    const [{ data: lk }, { data: cs }, { data: eb }] = await Promise.all([
+      supabase.from('links_promo').select('*, perfis(nome)').order('criado_em', { ascending: false }),
+      supabase.from('cursos_admin').select('id, titulo').eq('ativo', true).order('titulo'),
+      supabase.from('ebooks_admin').select('id, titulo').eq('ativo', true).order('titulo'),
+    ]);
+    setLinks(lk || []); setCursos(cs || []); setEbooks(eb || []);
     setLoading(false);
   }, []);
-
   useEffect(() => { carregar(); }, [carregar]);
 
   const up = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const gerarCodigo = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const cod = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-    up('codigo', cod);
+  const abrirCriar = () => { setForm({ ...defaultPromo(), codigo: novoCodigo() }); setEditId(null); setStep(0); setMsg(''); setWizard(true); };
+  const fechar = () => { setWizard(false); setEditId(null); setForm(defaultPromo()); setStep(0); };
+
+  const itemLabel = () => {
+    if (form.produto_tipo === 'plano') return PRODUTOS_PROMO.find(p => p.key === form.produto)?.label || form.produto;
+    if (form.produto_tipo === 'curso') return cursos.find(c => String(c.id) === String(form.produto_ref_id))?.titulo || '(selecione)';
+    return ebooks.find(e => String(e.id) === String(form.produto_ref_id))?.titulo || '(selecione)';
+  };
+  const produtoOk = form.produto_tipo === 'plano' ? !!form.produto : !!form.produto_ref_id;
+  const perguntasValidas = (form.perguntas || []).filter(p => p && String(p.texto || '').trim());
+
+  const podeAvancar = () => {
+    if (step === 0) return produtoOk;
+    if (step === 3 && form.exige_perguntas) return perguntasValidas.length > 0;
+    return true;
   };
 
   const salvar = async () => {
     if (!form.codigo.trim()) { setMsg('Informe o código.'); return; }
+    if (!produtoOk) { setMsg('Selecione o produto.'); setStep(0); return; }
+    if (form.exige_perguntas && perguntasValidas.length === 0) { setMsg('Adicione ao menos uma pergunta ou desmarque o SDR.'); setStep(3); return; }
     setSalvando(true); setMsg('');
     const payload = {
       codigo: form.codigo.trim().toUpperCase(),
-      produto: form.produto,
-      descricao_condicoes: form.descricao_condicoes,
-      desconto_pct: Number(form.desconto_pct) || 0,
-      desconto_valor: Number(form.desconto_valor) || 0,
-      beneficios: form.beneficios || null,
-      carencia_dias: form.carencia_dias === '' ? null : Number(form.carencia_dias),
-      beneficio_validade_dias: form.beneficio_validade_dias === '' ? null : Number(form.beneficio_validade_dias),
+      produto_tipo: form.produto_tipo,
+      produto: form.produto_tipo === 'plano' ? form.produto : form.produto_tipo,
+      produto_ref_id: form.produto_tipo === 'plano' ? null : (form.produto_ref_id || null),
+      desconto_pct: Math.max(0, Math.min(100, Number(form.desconto_pct) || 0)),
+      desconto_valor: 0,
       validade_ate: form.validade_ate ? new Date(form.validade_ate).toISOString() : null,
-      // Só perguntas com texto preenchido (descarta linhas vazias do editor).
-      perguntas: (form.perguntas || []).filter(p => p && String(p.texto || '').trim()),
+      desconto_validade_ate: form.desconto_validade_ate ? new Date(form.desconto_validade_ate).toISOString() : null,
+      exige_perguntas: !!form.exige_perguntas,
+      perguntas: form.exige_perguntas ? perguntasValidas : [],
       ativo: form.ativo,
       criado_por: user.id,
     };
     const { error } = editId
       ? await supabase.from('links_promo').update(payload).eq('id', editId)
       : await supabase.from('links_promo').insert(payload);
-    if (error) { setMsg('Erro: ' + error.message); }
-    else { setMsg(editId ? 'Atualizado!' : 'Link criado!'); setForm(defaultPromo()); setEditId(null); await carregar(); }
-    setSalvando(false);
+    if (error) { setMsg('Erro: ' + error.message); setSalvando(false); return; }
+    setSalvando(false); fechar(); await carregar();
   };
 
-  const editar = (l) => { setForm({ codigo: l.codigo, produto: l.produto, descricao_condicoes: l.descricao_condicoes || '', desconto_pct: l.desconto_pct || '', desconto_valor: l.desconto_valor || '', beneficios: l.beneficios || '', carencia_dias: l.carencia_dias ?? '', beneficio_validade_dias: l.beneficio_validade_dias ?? '', validade_ate: l.validade_ate ? String(l.validade_ate).slice(0, 10) : '', perguntas: Array.isArray(l.perguntas) ? l.perguntas : [], ativo: l.ativo }); setEditId(l.id); };
+  const editar = (l) => {
+    setForm({
+      codigo: l.codigo,
+      produto_tipo: l.produto_tipo || 'plano',
+      produto: (!l.produto_tipo || l.produto_tipo === 'plano') ? (l.produto || 'top2') : 'top2',
+      produto_ref_id: l.produto_ref_id || '',
+      desconto_pct: l.desconto_pct || '',
+      validade_ate: l.validade_ate ? String(l.validade_ate).slice(0, 10) : '',
+      desconto_validade_ate: l.desconto_validade_ate ? String(l.desconto_validade_ate).slice(0, 10) : '',
+      exige_perguntas: !!l.exige_perguntas,
+      perguntas: Array.isArray(l.perguntas) ? l.perguntas : [],
+      ativo: l.ativo,
+    });
+    setEditId(l.id); setStep(0); setMsg(''); setWizard(true);
+  };
   const toggleAtivo = async (l) => { await supabase.from('links_promo').update({ ativo: !l.ativo }).eq('id', l.id); await carregar(); };
   const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${cod}`);
 
+  const tipoLabel = (t) => t === 'curso' ? 'Curso' : t === 'ebook' ? 'E-book' : 'Plano';
+  const nomeDoLink = (l) => {
+    if (!l.produto_tipo || l.produto_tipo === 'plano') return PRODUTOS_PROMO.find(p => p.key === l.produto)?.label || l.produto;
+    if (l.produto_tipo === 'curso') return cursos.find(c => String(c.id) === String(l.produto_ref_id))?.titulo || 'Curso';
+    return ebooks.find(e => String(e.id) === String(l.produto_ref_id))?.titulo || 'E-book';
+  };
+
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: '0 0 20px' }}>Links Promocionais</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, alignItems: 'start' }}>
-        {/* Formulário */}
-        <div style={S.card}>
-          <div style={{ fontWeight: 800, color: '#111111', marginBottom: 16 }}>{editId ? 'Editar link' : 'Novo link promocional'}</div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            <input value={form.codigo} onChange={e => up('codigo', e.target.value.toUpperCase())} placeholder="CÓDIGO (ex: BIDPRO30)" style={{ ...S.input, flex: 1, fontFamily: 'monospace', fontWeight: 700 }} maxLength={12} />
-            <button onClick={gerarCodigo} style={{ padding: '0 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' }}>Gerar</button>
-          </div>
-          <select value={form.produto} onChange={e => up('produto', e.target.value)} style={{ ...S.input, marginBottom: 14 }}>
-            {PRODUTOS_PROMO.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-          </select>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>DESCONTO %</label>
-              <input type="number" value={form.desconto_pct} onChange={e => up('desconto_pct', e.target.value)} placeholder="ex: 30" style={S.input} min="0" max="100" />
-            </div>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>DESCONTO R$</label>
-              <InputBRL value={form.desconto_valor} onChange={v => up('desconto_valor', v)} style={S.input} />
-            </div>
-          </div>
-          <textarea value={form.descricao_condicoes} onChange={e => up('descricao_condicoes', e.target.value)}
-            placeholder="Condições promocionais (ex: '30% de desconto no primeiro mês para novos alunos')"
-            rows={3} style={{ ...S.input, resize: 'vertical', marginBottom: 14 }} />
-          <textarea value={form.beneficios} onChange={e => up('beneficios', e.target.value)}
-            placeholder="Benefícios incluídos (ex: 'Acesso a todos os cursos gravados + eBooks exclusivos')"
-            rows={2} style={{ ...S.input, resize: 'vertical', marginBottom: 14 }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Promoções &amp; SDR</h2>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Um link só: escolha o produto/curso/e-book, o desconto e (opcional) as perguntas de qualificação. Os leads caem na carteira do consultor.</div>
+        </div>
+        <button onClick={abrirCriar} style={S.btn('primary')}>+ Criar link</button>
+      </div>
 
-          {/* Benefício: carência + validade do benefício + validade do link */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 6 }}>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>CARÊNCIA (dias)</label>
-              <input type="number" min="0" value={form.carencia_dias} onChange={e => up('carencia_dias', e.target.value)} placeholder="ex: 30 (1º mês grátis)" style={S.input} />
-            </div>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>VALIDADE DO BENEFÍCIO (dias)</label>
-              <input type="number" min="0" value={form.beneficio_validade_dias} onChange={e => up('beneficio_validade_dias', e.target.value)} placeholder="ex: 90" style={S.input} />
-            </div>
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>VALIDADE DO LINK (até)</label>
-            <input type="date" value={form.validade_ate} onChange={e => up('validade_ate', e.target.value)} style={S.input} />
-          </div>
-
-          {/* Perguntas de qualificação (SDR) — respostas viram lead para o consultor */}
-          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14, marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#111111' }}>Perguntas de qualificação (SDR)</div>
-              <button type="button" onClick={() => up('perguntas', [...(form.perguntas || []), { id: Date.now(), texto: '', tipo: 'texto', opcoes: '' }])}
-                style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}>+ Adicionar pergunta</button>
-            </div>
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
-              💡 Na página do link, as perguntas aparecem <strong>uma por vez</strong>. O visitante também informa nome, WhatsApp e e-mail. As respostas viram um <strong>lead para um consultor</strong>, e aí ele segue para o checkout com o desconto.
-            </div>
-            {(form.perguntas || []).length === 0 && (
-              <div style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', padding: '8px 0' }}>Sem perguntas: o link vai direto ao checkout com o desconto (sem etapa SDR).</div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(form.perguntas || []).map((p, i) => (
-                <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10 }}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1 }}>
-                      <input style={{ ...S.input, marginBottom: 6 }} value={p.texto} placeholder={`Pergunta ${i + 1}`}
-                        onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, texto: e.target.value } : q))} />
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <select style={{ ...S.input, width: 130, fontSize: 12 }} value={p.tipo}
-                          onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, tipo: e.target.value } : q))}>
-                          <option value="texto">Texto livre</option>
-                          <option value="multipla">Múltipla escolha</option>
-                          <option value="sim_nao">Sim / Não</option>
-                        </select>
-                        {p.tipo === 'multipla' && (
-                          <input style={{ ...S.input, flex: 1, fontSize: 12 }} value={p.opcoes || ''} placeholder="Opções separadas por vírgula"
-                            onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, opcoes: e.target.value } : q))} />
-                        )}
+      {/* Lista */}
+      <div style={S.card}>
+        {loading ? <p style={{ color: '#94a3b8' }}>Carregando…</p>
+          : links.length === 0 ? <p style={{ color: '#94a3b8' }}>Nenhum link criado ainda. Clique em “Criar link”.</p>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {links.map(l => {
+                const linkUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${l.codigo}`;
+                const desc = l.desconto_pct > 0 ? `${Number(l.desconto_pct).toFixed(0)}% off` : 'sem desconto';
+                return (
+                  <div key={l.id} style={{ padding: '14px 16px', border: `1px solid ${l.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, background: l.ativo ? 'white' : '#fff5f5' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                      <div>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 15, color: '#111111', marginRight: 10 }}>{l.codigo}</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: 20, marginRight: 6 }}>{tipoLabel(l.produto_tipo)}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>{nomeDoLink(l)}</span>
+                        <span style={{ fontSize: 12, color: '#059669', fontWeight: 700, marginLeft: 8 }}>{desc}</span>
+                        {!l.ativo && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>INATIVO</span>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => copiarLink(l.codigo)} style={{ padding: '5px 10px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#475569', cursor: 'pointer' }}>Copiar link</button>
+                        <button onClick={() => editar(l)} style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}>Editar</button>
+                        <button onClick={() => toggleAtivo(l)} style={{ padding: '5px 10px', background: l.ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: l.ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}>{l.ativo ? 'Desativar' : 'Ativar'}</button>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <button type="button" disabled={i === 0} onClick={() => up('perguntas', (() => { const a = [...form.perguntas]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; })())}
-                        style={{ padding: '3px 8px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, color: '#475569', cursor: i === 0 ? 'default' : 'pointer', opacity: i === 0 ? 0.4 : 1 }}>↑</button>
-                      <button type="button" disabled={i === (form.perguntas || []).length - 1} onClick={() => up('perguntas', (() => { const a = [...form.perguntas]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; })())}
-                        style={{ padding: '3px 8px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, color: '#475569', cursor: 'pointer' }}>↓</button>
-                      <button type="button" onClick={() => up('perguntas', form.perguntas.filter((_, j) => j !== i))}
-                        style={{ padding: '3px 8px', background: '#fee2e2', border: 'none', borderRadius: 6, fontSize: 11, color: '#dc2626', cursor: 'pointer' }}>✕</button>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {l.validade_ate && <span style={{ fontSize: 10, fontWeight: 700, background: '#fef9c3', color: '#a16207', padding: '2px 8px', borderRadius: 20 }}>Link até {new Date(l.validade_ate).toLocaleDateString('pt-BR')}</span>}
+                      {l.desconto_validade_ate && <span style={{ fontSize: 10, fontWeight: 700, background: '#f0fdf4', color: '#15803d', padding: '2px 8px', borderRadius: 20 }}>Desconto até {new Date(l.desconto_validade_ate).toLocaleDateString('pt-BR')}</span>}
+                      {l.exige_perguntas && Array.isArray(l.perguntas) && l.perguntas.length > 0 && <span style={{ fontSize: 10, fontWeight: 700, background: '#f5f3ff', color: '#6d28d9', padding: '2px 8px', borderRadius: 20 }}>SDR obrigatório · {l.perguntas.length} pergunta(s)</span>}
                     </div>
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', wordBreak: 'break-all' }}>{linkUrl}</div>
+                    {l.perfis?.nome && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Criado por: {l.perfis.nome}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )
+        }
+      </div>
+
+      {/* WIZARD */}
+      {wizard && (
+        <div style={S.overlay} onClick={(e) => { if (e.target === e.currentTarget && !salvando) fechar(); }}>
+          <div style={{ ...S.modal, maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: '#111' }}>{editId ? 'Editar link' : 'Novo link'}</div>
+              <button onClick={fechar} style={{ background: 'none', border: 'none', fontSize: 18, color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', marginBottom: 10 }}>Passo {step + 1} de {PROMO_STEPS.length}: {PROMO_STEPS[step]}</div>
+            <div style={{ display: 'flex', gap: 5, marginBottom: 18 }}>
+              {PROMO_STEPS.map((_, i) => <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i <= step ? '#0D63DB' : '#e2e8f0' }} />)}
+            </div>
+
+            {/* STEP 0 — Produto */}
+            {step === 0 && (
+              <div>
+                <label style={S.label}>1. O que este link entrega?</label>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  {[['plano', 'Plano'], ['curso', 'Curso'], ['ebook', 'E-book']].map(([t, lbl]) => (
+                    <button key={t} onClick={() => up('produto_tipo', t)}
+                      style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${form.produto_tipo === t ? '#0D63DB' : '#e2e8f0'}`, background: form.produto_tipo === t ? '#eff6ff' : 'white', color: '#111', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{lbl}</button>
+                  ))}
+                </div>
+                {form.produto_tipo === 'plano' ? (
+                  <select value={form.produto} onChange={e => up('produto', e.target.value)} style={S.input}>
+                    {PRODUTOS_PROMO.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                ) : form.produto_tipo === 'curso' ? (
+                  <select value={form.produto_ref_id} onChange={e => up('produto_ref_id', e.target.value)} style={S.input}>
+                    <option value="">Selecione o curso…</option>
+                    {cursos.map(c => <option key={c.id} value={c.id}>{c.titulo}</option>)}
+                  </select>
+                ) : (
+                  <select value={form.produto_ref_id} onChange={e => up('produto_ref_id', e.target.value)} style={S.input}>
+                    <option value="">Selecione o e-book…</option>
+                    {ebooks.map(e2 => <option key={e2.id} value={e2.id}>{e2.titulo}</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* STEP 1 — Validade do link */}
+            {step === 1 && (
+              <div>
+                <label style={S.label}>2. Até quando este link fica ativo?</label>
+                <input type="date" value={form.validade_ate} onChange={e => up('validade_ate', e.target.value)} style={S.input} />
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>Depois desta data o link para de funcionar. Deixe em branco para não expirar.</div>
+              </div>
+            )}
+
+            {/* STEP 2 — Desconto */}
+            {step === 2 && (
+              <div>
+                <label style={S.label}>3. Desconto do benefício (0 a 100%)</label>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 6 }}>
+                  <input type="range" min="0" max="100" step="1" value={Number(form.desconto_pct) || 0} onChange={e => up('desconto_pct', e.target.value)} style={{ flex: 1 }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="number" min="0" max="100" value={form.desconto_pct} onChange={e => up('desconto_pct', e.target.value)} style={{ ...S.input, width: 70, textAlign: 'right' }} />
+                    <span style={{ fontWeight: 800, color: '#111' }}>%</span>
                   </div>
                 </div>
-              ))}
+                <div style={{ borderTop: '1px solid #f1f5f9', margin: '14px 0 12px' }} />
+                <label style={S.label}>Validade do desconto (pode ser diferente da validade do link)</label>
+                <input type="date" value={form.desconto_validade_ate} onChange={e => up('desconto_validade_ate', e.target.value)} style={S.input} />
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>Depois desta data o link ainda abre, mas sem o desconto. Deixe em branco para o desconto valer enquanto o link estiver ativo.</div>
+              </div>
+            )}
+
+            {/* STEP 3 — Perguntas SDR */}
+            {step === 3 && (
+              <div>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 4 }}>
+                  <input type="checkbox" checked={form.exige_perguntas} onChange={e => up('exige_perguntas', e.target.checked)} style={{ marginTop: 3 }} />
+                  <span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>Exigir perguntas de qualificação (SDR)</span>
+                    <span style={{ display: 'block', fontSize: 12, color: '#64748b', marginTop: 2 }}>Se marcado, ao abrir o link a pessoa <strong>responde as perguntas (uma por vez)</strong> para ter acesso ao {form.produto_tipo === 'plano' ? 'plano' : form.produto_tipo === 'curso' ? 'curso' : 'e-book'} nas condições definidas. As respostas viram um lead para o consultor.</span>
+                  </span>
+                </label>
+
+                {form.exige_perguntas && (
+                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14, marginTop: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#111' }}>Perguntas</div>
+                      <button type="button" onClick={() => up('perguntas', [...(form.perguntas || []), { id: Date.now(), texto: '', tipo: 'texto', opcoes: '' }])}
+                        style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}>+ Adicionar pergunta</button>
+                    </div>
+                    {(form.perguntas || []).length === 0 && <div style={{ color: '#94a3b8', fontSize: 12, padding: '4px 0' }}>Adicione ao menos uma pergunta.</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {(form.perguntas || []).map((p, i) => (
+                        <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10 }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                            <div style={{ flex: 1 }}>
+                              <input style={{ ...S.input, marginBottom: 6 }} value={p.texto} placeholder={`Pergunta ${i + 1}`}
+                                onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, texto: e.target.value } : q))} />
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <select style={{ ...S.input, width: 130, fontSize: 12 }} value={p.tipo}
+                                  onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, tipo: e.target.value } : q))}>
+                                  <option value="texto">Texto livre</option>
+                                  <option value="multipla">Múltipla escolha</option>
+                                  <option value="sim_nao">Sim / Não</option>
+                                </select>
+                                {p.tipo === 'multipla' && (
+                                  <input style={{ ...S.input, flex: 1, fontSize: 12 }} value={p.opcoes || ''} placeholder="Opções separadas por vírgula"
+                                    onChange={e => up('perguntas', form.perguntas.map((q, j) => j === i ? { ...q, opcoes: e.target.value } : q))} />
+                                )}
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => up('perguntas', form.perguntas.filter((_, j) => j !== i))}
+                              style={{ padding: '3px 8px', background: '#fee2e2', border: 'none', borderRadius: 6, fontSize: 11, color: '#dc2626', cursor: 'pointer' }}>✕</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP 4 — Revisar e criar */}
+            {step === 4 && (
+              <div>
+                <label style={S.label}>Código do link</label>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  <input value={form.codigo} onChange={e => up('codigo', e.target.value.toUpperCase())} placeholder="CÓDIGO" style={{ ...S.input, flex: 1, fontFamily: 'monospace', fontWeight: 700 }} maxLength={12} />
+                  <button onClick={() => up('codigo', novoCodigo())} style={{ padding: '0 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer' }}>Gerar</button>
+                </div>
+                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#334155', lineHeight: 1.8 }}>
+                  <div><strong>Entrega:</strong> {tipoLabelFn(form.produto_tipo)} — {itemLabel()}</div>
+                  <div><strong>Validade do link:</strong> {form.validade_ate ? new Date(form.validade_ate).toLocaleDateString('pt-BR') : 'sem expiração'}</div>
+                  <div><strong>Desconto:</strong> {Number(form.desconto_pct) > 0 ? `${Number(form.desconto_pct)}%` : 'nenhum'}{form.desconto_validade_ate ? ` (até ${new Date(form.desconto_validade_ate).toLocaleDateString('pt-BR')})` : ''}</div>
+                  <div><strong>Perguntas SDR:</strong> {form.exige_perguntas ? `obrigatórias — ${perguntasValidas.length} pergunta(s)` : 'não'}</div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', marginTop: 14, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.ativo} onChange={e => up('ativo', e.target.checked)} /> Ativar o link ao criar
+                </label>
+              </div>
+            )}
+
+            {msg && <div style={{ marginTop: 14, padding: '8px 12px', background: msg.startsWith('Erro') ? '#fee2e2' : '#fef9c3', color: msg.startsWith('Erro') ? '#dc2626' : '#a16207', borderRadius: 8, fontSize: 12, fontWeight: 700 }}>{msg}</div>}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
+              <button onClick={() => step === 0 ? fechar() : setStep(s => s - 1)} disabled={salvando}
+                style={{ padding: '11px 18px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                {step === 0 ? 'Cancelar' : 'Voltar'}
+              </button>
+              {step < PROMO_STEPS.length - 1 ? (
+                <button onClick={() => setStep(s => s + 1)} disabled={!podeAvancar()}
+                  style={{ flex: 1, padding: '11px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: podeAvancar() ? 1 : 0.5 }}>
+                  Próximo
+                </button>
+              ) : (
+                <button onClick={salvar} disabled={salvando}
+                  style={{ flex: 1, padding: '11px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: salvando ? 0.6 : 1 }}>
+                  {salvando ? 'Salvando…' : editId ? 'Salvar alterações' : 'Criar link'}
+                </button>
+              )}
             </div>
           </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', marginBottom: 14, cursor: 'pointer' }}>
-            <input type="checkbox" checked={form.ativo} onChange={e => up('ativo', e.target.checked)} /> Link ativo
-          </label>
-          {msg && <div style={{ padding: '8px 12px', background: msg.startsWith('Erro') ? '#fee2e2' : '#dcfce7', color: msg.startsWith('Erro') ? '#dc2626' : '#166534', borderRadius: 8, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>{msg}</div>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={salvar} disabled={salvando} style={S.btn('primary')}>{salvando ? 'Salvando…' : editId ? 'Atualizar' : 'Criar link'}</button>
-            {editId && <button onClick={() => { setForm(defaultPromo()); setEditId(null); }} style={S.btn('outline')}>Cancelar</button>}
-          </div>
         </div>
-
-        {/* Lista */}
-        <div style={S.card}>
-          {loading ? <p style={{ color: '#94a3b8' }}>Carregando…</p>
-            : links.length === 0 ? <p style={{ color: '#94a3b8' }}>Nenhum link criado ainda.</p>
-            : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {links.map(l => {
-                  const linkUrl = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${l.codigo}`;
-                  const desconto = l.desconto_pct > 0 ? `${Number(l.desconto_pct).toFixed(2)}% off` : l.desconto_valor > 0 ? `R$ ${Number(l.desconto_valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} off` : 'sem desconto';
-                  return (
-                    <div key={l.id} style={{ padding: '14px 16px', border: `1px solid ${l.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, background: l.ativo ? 'white' : '#fff5f5' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-                        <div>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 15, color: '#111111', marginRight: 10 }}>{l.codigo}</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>{PRODUTOS_PROMO.find(p => p.key === l.produto)?.label || l.produto}</span>
-                          <span style={{ fontSize: 12, color: '#059669', fontWeight: 700, marginLeft: 8 }}>{desconto}</span>
-                          {!l.ativo && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, marginLeft: 8 }}>INATIVO</span>}
-                        </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => copiarLink(l.codigo)} style={{ padding: '5px 10px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#475569', cursor: 'pointer' }}>Copiar link</button>
-                          <button onClick={() => editar(l)} style={{ padding: '5px 10px', background: '#eff6ff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#0D63DB', cursor: 'pointer' }}>Editar</button>
-                          <button onClick={() => toggleAtivo(l)} style={{ padding: '5px 10px', background: l.ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: l.ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}>{l.ativo ? 'Desativar' : 'Ativar'}</button>
-                        </div>
-                      </div>
-                      {l.descricao_condicoes && <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>📋 {l.descricao_condicoes}</div>}
-                      {l.beneficios && <div style={{ fontSize: 11, color: '#059669', marginTop: 4 }}>✅ {l.beneficios}</div>}
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-                        {l.carencia_dias > 0 && <span style={{ fontSize: 10, fontWeight: 700, background: '#f0fdf4', color: '#15803d', padding: '2px 8px', borderRadius: 20 }}>Carência {l.carencia_dias}d</span>}
-                        {l.beneficio_validade_dias > 0 && <span style={{ fontSize: 10, fontWeight: 700, background: '#eff6ff', color: '#084BA6', padding: '2px 8px', borderRadius: 20 }}>Benefício {l.beneficio_validade_dias}d</span>}
-                        {l.validade_ate && <span style={{ fontSize: 10, fontWeight: 700, background: '#fef9c3', color: '#a16207', padding: '2px 8px', borderRadius: 20 }}>Link até {new Date(l.validade_ate).toLocaleDateString('pt-BR')}</span>}
-                        {Array.isArray(l.perguntas) && l.perguntas.length > 0 && <span style={{ fontSize: 10, fontWeight: 700, background: '#f5f3ff', color: '#6d28d9', padding: '2px 8px', borderRadius: 20 }}>SDR · {l.perguntas.length} pergunta(s)</span>}
-                      </div>
-                      <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', wordBreak: 'break-all' }}>{linkUrl}</div>
-                      {l.perfis?.nome && <div style={{ marginTop: 4, fontSize: 11, color: '#94a3b8' }}>Criado por: {l.perfis.nome}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            )
-          }
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONVITES TAB
-// ═══════════════════════════════════════════════════════════════════════════════
+function tipoLabelFn(t) { return t === 'curso' ? 'Curso' : t === 'ebook' ? 'E-book' : 'Plano'; }
+
 function ConvitesTab() {
   const { user } = useAuth();
   const [convites, setConvites] = useState([]);
