@@ -111,32 +111,48 @@ function PopupBonusAnalises({ userId, onFechar }) {
   );
 }
 
-function PopupInadimplente({ dias }) {
-  const [fechado, setFechado] = React.useState(false);
-  if (fechado) return null;
+// Popup de inadimplência: avisa que a cobrança falhou e pede regularização. Regra
+// (decisão do dono): aparece UMA VEZ POR ACESSO e no máximo em 15 acessos — depois
+// para de incomodar. O contador zera quando o usuário regulariza (ver MainLayout).
+const INAD_AVISOS_KEY = 'bidpro_inad_avisos';   // total de acessos em que já avisamos
+const INAD_SESSAO_KEY = 'bidpro_inad_sessao';   // já avisamos nesta sessão/acesso?
+const INAD_MAX_AVISOS = 15;
 
-  const diasRestantes = Math.max(0, 5 - dias);
+function PopupInadimplente({ dias }) {
+  const [mostrar, setMostrar] = React.useState(false);
+  React.useEffect(() => {
+    // Uma vez por acesso: se já mostramos nesta sessão, não repete ao navegar.
+    let jaNestaSessao = false;
+    try { jaNestaSessao = sessionStorage.getItem(INAD_SESSAO_KEY) === '1'; } catch {}
+    if (jaNestaSessao) return;
+    let contador = 0;
+    try { contador = parseInt(localStorage.getItem(INAD_AVISOS_KEY) || '0', 10) || 0; } catch {}
+    if (contador >= INAD_MAX_AVISOS) return; // já avisamos 15 acessos — não incomoda mais
+    try { sessionStorage.setItem(INAD_SESSAO_KEY, '1'); } catch {}
+    try { localStorage.setItem(INAD_AVISOS_KEY, String(contador + 1)); } catch {}
+    setMostrar(true);
+  }, []);
+
+  if (!mostrar) return null;
   const critico = dias >= 5;
 
   return (
-    <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, maxWidth: 480, width: 'calc(100% - 32px)' }}>
-      <div style={{ background: critico ? '#7f1d1d' : '#78350f', color: 'white', borderRadius: 14, padding: '16px 20px', boxShadow: '0 12px 40px rgba(0,0,0,0.4)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-        <div style={{ fontSize: 28, flexShrink: 0 }}>{critico ? '🚫' : '⚠️'}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>
-            {critico ? 'Acesso reduzido por inadimplência' : `Pagamento em aberto — ${diasRestantes} dia${diasRestantes !== 1 ? 's' : ''} para regularizar`}
-          </div>
-          <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>
-            {critico
-              ? 'Seu acesso foi reduzido ao plano gratuito. Regularize o pagamento para restaurar seu plano.'
-              : 'Existe uma cobrança em aberto na sua conta. Regularize para manter acesso completo.'}
-          </div>
-          <a href="/#/planos"
-            style={{ display: 'inline-block', marginTop: 10, padding: '7px 16px', background: 'white', color: critico ? '#7f1d1d' : '#78350f', borderRadius: 8, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={e => { if (e.target === e.currentTarget) setMostrar(false); }}>
+      <div style={{ background: 'white', borderRadius: 18, padding: '28px 26px', width: '100%', maxWidth: 440, boxShadow: '0 24px 60px rgba(0,0,0,0.35)', textAlign: 'center' }}>
+        <div style={{ fontSize: 44, marginBottom: 8 }}>{critico ? '🚫' : '⚠️'}</div>
+        <div style={{ fontWeight: 900, fontSize: 19, color: '#111', marginBottom: 8 }}>Não conseguimos processar a cobrança</div>
+        <div style={{ fontSize: 14, color: '#475569', lineHeight: 1.6, marginBottom: 20 }}>
+          A cobrança da sua assinatura não foi aprovada. Regularize o pagamento para manter seu acesso.
+          {critico && <><br /><strong style={{ color: '#b91c1c' }}>Seu acesso foi reduzido ao plano gratuito até a regularização.</strong></>}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => setMostrar(false)} style={{ flex: 1, padding: '12px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Agora não</button>
+          <a href="/#/planos" onClick={() => setMostrar(false)}
+            style={{ flex: 2, padding: '12px', background: '#0D63DB', color: 'white', borderRadius: 10, fontWeight: 800, fontSize: 14, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             Regularizar pagamento
           </a>
         </div>
-        <button onClick={() => setFechado(true)} style={{ background: 'none', border: 'none', color: 'white', fontSize: 18, cursor: 'pointer', opacity: 0.7, padding: 0, flexShrink: 0 }}>✕</button>
       </div>
     </div>
   );
@@ -191,6 +207,14 @@ function MainLayout() {
         if (data?.bonus_mercado > 0 && !data?.bonus_exibido) setShowBonus(true);
       });
   }, [isLoggedIn, role, user?.id]);
+
+  // Regularizou (não está mais inadimplente): zera o contador de avisos, para uma
+  // futura inadimplência recomeçar os 15 acessos do zero.
+  useEffect(() => {
+    if (isLoggedIn && inadimplenteDias === 0) {
+      try { localStorage.removeItem('bidpro_inad_avisos'); sessionStorage.removeItem('bidpro_inad_sessao'); } catch {}
+    }
+  }, [isLoggedIn, inadimplenteDias]);
 
   if (isLoggedIn && !loading && !ativo) return <ContaInativa />;
   if (isLoggedIn && !loading) {
