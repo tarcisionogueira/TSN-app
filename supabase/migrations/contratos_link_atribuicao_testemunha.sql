@@ -23,3 +23,5 @@ ALTER TABLE contratos_link
 
 CREATE INDEX IF NOT EXISTS idx_contratos_link_plano ON contratos_link(plano_key) WHERE plano_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_contratos_link_grupo ON contratos_link(contrato_grupo_id) WHERE contrato_grupo_id IS NOT NULL;
+
+ALTER TABLE contratos_link ADD COLUMN IF NOT EXISTS requer_testemunha boolean DEFAULT false;

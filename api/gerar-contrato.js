@@ -101,6 +101,7 @@ export default async function handler(req, res) {
         docs_extras_exigidos: docsExtrasExigidos || [],
         arquivos_referencia: arquivosReferencia || [],
         gerado_por_ia: !!geradoPorIA,
+        requer_testemunha: !!requerTestemunha,
         // Atribuição a um plano/produto (por CHAVE, não mais por título).
         plano_key: planoKey ? sanitizeText(planoKey, 60) : null,
         produto_tipo: produtoTipo ? sanitizeText(produtoTipo, 20) : null,

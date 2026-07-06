@@ -1288,6 +1288,23 @@ function ConfigTab() {
   const [salvandoTudo, setSalvandoTudo] = useState(false);
   const [tudoSalvo, setTudoSalvo] = useState(false);
   const [contratoAberto, setContratoAberto] = useState(null);
+  // Contratos ATRIBUÍDOS por produto (só exibir/visualizar aqui; a criação é na
+  // tela de Contratos). Mapa: 'plano:<key>' | '<tipo>:<id>' → { token, status, titulo }.
+  const [contratosAtrib, setContratosAtrib] = useState({});
+  useEffect(() => {
+    supabase.from('contratos_link')
+      .select('plano_key, produto_tipo, produto_id, token, status, titulo, criado_em')
+      .not('status', 'eq', 'cancelado')
+      .order('criado_em', { ascending: false })
+      .then(({ data }) => {
+        const m = {};
+        for (const c of (data || [])) {
+          const chave = c.plano_key ? `plano:${c.plano_key}` : (c.produto_tipo && c.produto_id ? `${c.produto_tipo}:${c.produto_id}` : null);
+          if (chave && !m[chave]) m[chave] = { token: c.token, status: c.status, titulo: c.titulo };
+        }
+        setContratosAtrib(m);
+      });
+  }, []);
   // planos kept for ContratoModal compatibility
   const [planos, setPlanos] = useState([]);
   const [planosLoading, setPlanosLoading] = useState(true);
@@ -1718,22 +1735,23 @@ function ConfigTab() {
                       style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
                   </div>
 
-                  {/* Col 7: Contrato */}
+                  {/* Col 7: Contrato — só EXIBE/VISUALIZA o contrato atribuído pela
+                      tela de Contratos (a criação não acontece mais aqui). */}
                   <div>
-                    <button
-                      onClick={() => {
-                        if (r._tipo === 'plano') setContratoAberto(r._id);
-                        else setContratoAberto(`${r._tipo}:${r._id}:${r.nome}`);
-                      }}
-                      style={{
-                        padding: '6px 10px',
-                        background: r.requer_contrato ? '#0D63DB' : '#f8fafc',
-                        color: r.requer_contrato ? '#fff' : '#374151',
-                        border: r.requer_contrato ? 'none' : '1px solid #e2e8f0',
-                        borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%',
-                      }}>
-                      📄 Contrato
-                    </button>
+                    {(() => {
+                      const chave = r._tipo === 'plano' ? `plano:${r._id}` : `${r._tipo}:${r._id}`;
+                      const ct = contratosAtrib[chave];
+                      if (ct) {
+                        return (
+                          <a href={`/#/c/${ct.token}`} target="_blank" rel="noreferrer"
+                            title={ct.titulo || 'Ver contrato atribuído'}
+                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '6px 10px', background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%', textDecoration: 'none' }}>
+                            ✓ Ver contrato
+                          </a>
+                        );
+                      }
+                      return <span style={{ display: 'inline-block', padding: '6px 10px', fontSize: 11, color: '#94a3b8', fontWeight: 600, textAlign: 'center', width: '100%' }}>Sem contrato</span>;
+                    })()}
                   </div>
                 </div>
               );
