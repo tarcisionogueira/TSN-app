@@ -2872,6 +2872,58 @@ const FONTES_LEILAO = [
   // monitor diário para não gerar falso-alarme — não são fontes de cron diário.
 ];
 
+// Diagnóstico DETERMINÍSTICO da captação (SEM IA): cruza os indicadores da última
+// coleta (fonte_saude) com a coleta anterior e aponta a CAUSA provável + a PRÓXIMA
+// AÇÃO de scraping. É a parte "aprende / busca soluções de scraping" do monitor,
+// resolvida por regra (o dono decidiu que captação NÃO é função de IA). Retorna
+// null quando está tudo bem. Cada problema: { causa, acao }.
+function diagnosticoCaptacao(atual, anterior) {
+  if (!atual) return null;
+  const pct = (v) => Math.round((Number(v) || 0) * 100);
+  const totalAtual = Number(atual.total) || 0;
+  const totalAnt = anterior ? (Number(anterior.total) || 0) : null;
+  const problemas = [];
+
+  // 1) Coleta zerada / falha total → bloqueio provável (prioridade máxima).
+  if (atual.status === 'falhou' || totalAtual === 0) {
+    problemas.push({
+      causa: 'Coleta zerada. Provável bloqueio, mudança de fingerprint/user-agent ou site fora do ar.',
+      acao: 'Rodar o diagnóstico da fonte; se persistir, coletar via Bright Data (IP residencial) ou revisar o seletor da lista.',
+    });
+    return { nivel: 'falhou', problemas };
+  }
+
+  // 2) Queda de volume relevante frente à coleta anterior → seletor de listagem/paginação mudou.
+  if (totalAnt != null && totalAnt >= 20 && totalAtual < totalAnt * 0.5) {
+    const queda = Math.round((1 - totalAtual / totalAnt) * 100);
+    problemas.push({
+      causa: `Volume caiu ${queda}% frente à coleta anterior (${totalAnt.toLocaleString('pt-BR')} → ${totalAtual.toLocaleString('pt-BR')}).`,
+      acao: 'Conferir o seletor da lista de lotes e a paginação; o layout da fonte pode ter mudado.',
+    });
+  }
+
+  // 3) Campo faltando em massa → o parsing daquele campo específico quebrou.
+  const campos = [
+    { k: 'valor_pct', lim: 40, nome: 'valor',          dica: 'parsing de preço' },
+    { k: 'uf_pct',    lim: 60, nome: 'UF/endereço',    dica: 'parsing de endereço/UF' },
+    { k: 'link_pct',  lim: 30, nome: 'link do edital', dica: 'seletor do edital' },
+    { k: 'foto_pct',  lim: 30, nome: 'foto',           dica: 'seletor de imagem/CDN' },
+  ];
+  for (const c of campos) {
+    const p = pct(atual[c.k]);
+    if (p >= c.lim) continue;
+    const antP = anterior ? pct(anterior[c.k]) : null;
+    const caiu = antP != null && (antP - p) >= 25;
+    problemas.push({
+      causa: `${c.nome} presente em só ${p}% dos lotes${caiu ? ` (era ${antP}%)` : ''}.`,
+      acao: `Revisar o ${c.dica} do scraper desta fonte.`,
+    });
+  }
+
+  if (!problemas.length) return null;
+  return { nivel: atual.status === 'degradado' ? 'degradado' : 'alerta', problemas };
+}
+
 // Monitor de coleta — usa a MESMA fonte de verdade da aba Scrapers (tabela
 // fonte_saude, keyed em MAIÚSCULAS por FONTES_LEILAO). Antes lia scrapers_log com
 // uma lista antiga (Santander/Rodobens/Sicoob) que não batia com as fontes reais.
@@ -4732,6 +4784,7 @@ function ScrapersTab() {
   const toggleExpandir = (aba) => setEstadosExpandidos(e => ({ ...e, [aba]: !e[aba] }));
   const [leiloeiroContagem, setLeiloeiroContagem] = useState({}); // fonte → total imóveis no banco
   const [fonteSaude, setFonteSaude] = useState({}); // fonte → última linha de fonte_saude (qualidade)
+  const [fonteSaudePrev, setFonteSaudePrev] = useState({}); // fonte → PENÚLTIMA coleta (para tendência/regressão)
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
   const [geocPendentes, setGeocPendentes] = useState({});
   const [geocUltimoRefresh, setGeocUltimoRefresh] = useState(null);
@@ -4783,12 +4836,17 @@ function ScrapersTab() {
     });
     // Saúde/qualidade: última execução por fonte (monitor de regressão)
     supabase.from('fonte_saude')
-      .select('fonte,total,status,valor_pct,uf_pct,link_pct,foto_pct,estrategia,executado_em')
-      .order('executado_em', { ascending: false }).limit(80)
+      .select('fonte,total,status,valor_pct,uf_pct,link_pct,foto_pct,estrategia,motivo,executado_em')
+      .order('executado_em', { ascending: false }).limit(120)
       .then(({ data }) => {
-        const ult = {};
-        (data || []).forEach(l => { if (!ult[l.fonte]) ult[l.fonte] = l; });
-        setFonteSaude(ult);
+        const ult = {}, prev = {};
+        // Dados vêm do mais recente ao mais antigo: 1ª ocorrência = última coleta,
+        // 2ª = coleta anterior (base da tendência do diagnóstico determinístico).
+        (data || []).forEach(l => {
+          if (!ult[l.fonte]) ult[l.fonte] = l;
+          else if (!prev[l.fonte]) prev[l.fonte] = l;
+        });
+        setFonteSaude(ult); setFonteSaudePrev(prev);
       });
   }, []);
 
@@ -5333,6 +5391,25 @@ function ScrapersTab() {
                       {quando && <div style={{ color: '#94a3b8' }}>última coleta {quando}{sa.estrategia ? ` · ${sa.estrategia}` : ''}</div>}
                     </div>
                   )}
+                  {/* Diagnóstico determinístico (SEM IA): causa provável + próxima ação
+                      de scraping, cruzando a última coleta com a anterior. */}
+                  {(() => {
+                    const diag = s.tipo === 'scraper' ? diagnosticoCaptacao(sa, fonteSaudePrev[s.fonte]) : null;
+                    if (!diag) return null;
+                    const c = diag.nivel === 'falhou' ? { bg: '#fef2f2', bd: '#fecaca', cor: '#b91c1c' } : { bg: '#fffbeb', bd: '#fde68a', cor: '#92400e' };
+                    const lista = diag.problemas.slice(0, 3);
+                    return (
+                      <div style={{ background: c.bg, border: `1px solid ${c.bd}`, borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
+                        <div style={{ fontSize: 9.5, fontWeight: 800, color: c.cor, marginBottom: 4 }}>🔧 Diagnóstico automático (sem IA)</div>
+                        {lista.map((p, i) => (
+                          <div key={i} style={{ fontSize: 9.5, color: c.cor, lineHeight: 1.5, marginBottom: i < lista.length - 1 ? 5 : 0 }}>
+                            <div><strong>Causa:</strong> {p.causa}</div>
+                            <div><strong>Ação:</strong> {p.acao}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => rodarSysDebug(debugKey)} disabled={sysDebugRodando[debugKey]}
                       style={{ padding: '4px 10px', borderRadius: 6, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
