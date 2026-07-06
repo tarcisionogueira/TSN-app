@@ -1,6 +1,6 @@
 const GA4_ID = 'G-5YNHQB5F81';
 const AW_ID = 'AW-16850175262';
-const CONV_PLANO = `${AW_ID}/7658576769`; // TODO: confirmar rótulo real da conversão "Assinatura" no Google Ads
+const CONV_PLANO = `${AW_ID}/73k7CIG38sMcEJ6K5eI-`; // conversão "Plano Contratado BidPro" (categoria Assinatura)
 const CONV_CADASTRO = `${AW_ID}/ODg0CIfDvMscEJ6K5el-`; // conversão "Cadastro concluído" (categoria Inscrição)
 
 function gtag(...args) {
