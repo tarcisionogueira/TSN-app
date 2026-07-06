@@ -3740,7 +3740,7 @@ function DashboardTab() {
   const diagnosticos = {
     'Supabase — conexão': { causa: 'Banco de dados inacessível ou credenciais inválidas.', acoes: ['Verificar SUPABASE_SERVICE_KEY no Vercel', 'Checar status em status.supabase.com', 'Verificar se o projeto Supabase está ativo'] },
     'Supabase — chamados presos': { causa: 'Existem chamados de suporte abertos há mais de 7 dias sem resolução.', acoes: ['Acessar aba Suporte no Admin', 'Filtrar chamados por status "aberto" mais antigos', 'Atribuir ou finalizar manualmente'] },
-    'SDR — leads sem consultor': { causa: 'Leads novos aguardam atribuição de consultor há mais de 3 dias.', acoes: ['Acessar aba SDR no Admin', 'Filtrar leads sem consultor', 'Atribuir manualmente a um consultor disponível'] },
+    'Comercial — clientes sem consultor': { causa: 'Clientes novos aguardam atribuição de consultor há mais de 3 dias.', acoes: ['Acessar aba Comercial no Admin', 'Filtrar por “Sem consultor”', 'Atribuir manualmente a um consultor disponível'] },
     'Daily.co — API': { causa: 'API de videochamadas não está respondendo.', acoes: ['Verificar DAILY_API_KEY no Vercel', 'Checar status em status.daily.co', 'Confirmar que a chave não expirou'] },
     'Claude — API': { causa: 'API da Anthropic não está respondendo.', acoes: ['Verificar CLAUDE_KEY no Vercel', 'Checar status em status.anthropic.com', 'Confirmar que há créditos na conta Anthropic'] },
     'API interna — /api/system-status': { causa: 'O próprio servidor da aplicação não está respondendo.', acoes: ['Verificar deployments no Vercel', 'Checar logs de erro no Vercel → Logs', 'Fazer redeploy se necessário'] },
@@ -3762,7 +3762,7 @@ function DashboardTab() {
         setAcaoStatus(s => ({ ...s, [label]: 'ok — executado' }));
       } else if (acao === 'ver_leads_sem_consultor') {
         window.location.hash = '/admin';
-        setAcaoStatus(s => ({ ...s, [label]: 'ok — navegando para SDR' }));
+        setAcaoStatus(s => ({ ...s, [label]: 'ok — navegando para Comercial' }));
       }
     } catch(e) {
       setAcaoStatus(s => ({ ...s, [label]: `erro — ${e.message}` }));
@@ -3800,7 +3800,7 @@ function DashboardTab() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {(hcLast.itens || []).filter(i => i.status !== 'ok').map((item, j) => {
               const diag = diagnosticos[item.nome] || { causa: item.detalhe, acoes: [] };
-              const labelAcao = item.nome === 'Supabase — chamados presos' ? 'liberar_chamados_presos' : item.nome === 'SDR — leads sem consultor' ? 'ver_leads_sem_consultor' : null;
+              const labelAcao = item.nome === 'Supabase — chamados presos' ? 'liberar_chamados_presos' : item.nome === 'Comercial — clientes sem consultor' ? 'ver_leads_sem_consultor' : null;
               return (
                 <div key={j} style={{ background: '#0f172a', borderRadius: 8, padding: '10px 14px', minWidth: 220, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -5871,6 +5871,134 @@ function ScrapersTab() {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════════════
+// COMERCIAL TAB — painel do comercial: todos os clientes (pagantes e não), por
+// consultor, com atribuição. Substitui a antiga aba SDR.
+// ═══════════════════════════════════════════════════════════════════════════════
+const CLIENT_ROLES = ['explorador', 'top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+const PLANO_NOME = { explorador: 'Explorador', top2: 'Investidor Pro', top2_anual: 'Investidor Pro (anual)', assessorado: 'Assessorado', assessorado_anual: 'Assessorado (anual)', clube: 'Leilão Club', clube_anual: 'Leilão Club (anual)' };
+
+function ComercialTab() {
+  const [clientes, setClientes] = useState([]);
+  const [consultores, setConsultores] = useState([]);
+  const [leadsMap, setLeadsMap] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [filtro, setFiltro] = useState('todos'); // 'todos' | 'sem' | consultorId
+  const [busca, setBusca] = useState('');
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    const [{ data: cl }, { data: cons }, { data: leads }] = await Promise.all([
+      supabase.from('perfis').select('id, nome, role, plano, telefone, indicado_por, created_at, inadimplente_desde').in('role', CLIENT_ROLES).order('created_at', { ascending: false }),
+      supabase.from('perfis').select('id, nome').eq('role', 'consultor').order('nome'),
+      supabase.from('sdr_leads').select('user_id, origem').not('user_id', 'is', null),
+    ]);
+    setClientes(cl || []); setConsultores(cons || []);
+    const m = {}; (leads || []).forEach(l => { if (l.user_id && !m[l.user_id]) m[l.user_id] = l.origem; });
+    setLeadsMap(m);
+    setLoading(false);
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const atribuir = async (clienteId, consultorId) => {
+    await supabase.from('perfis').update({ indicado_por: consultorId || null }).eq('id', clienteId);
+    setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, indicado_por: consultorId || null } : c));
+  };
+
+  const ehPagante = (c) => c.role && c.role !== 'explorador';
+  const total = clientes.length;
+  const pagantes = clientes.filter(ehPagante).length;
+  const semCons = clientes.filter(c => !c.indicado_por).length;
+  const inadimplentes = clientes.filter(c => c.inadimplente_desde).length;
+
+  const porConsultor = consultores.map(co => {
+    const meus = clientes.filter(c => c.indicado_por === co.id);
+    return { ...co, total: meus.length, pagantes: meus.filter(ehPagante).length };
+  });
+
+  const filtrados = clientes.filter(c => {
+    if (filtro === 'sem' && c.indicado_por) return false;
+    if (filtro !== 'todos' && filtro !== 'sem' && c.indicado_por !== filtro) return false;
+    if (busca && !`${c.nome || ''} ${c.telefone || ''}`.toLowerCase().includes(busca.toLowerCase())) return false;
+    return true;
+  });
+
+  const card = (label, value, cor) => (
+    <div style={{ background: '#fff', border: `2px solid ${cor}`, borderRadius: 12, padding: '10px 18px', minWidth: 120 }}>
+      <div style={{ fontSize: 22, fontWeight: 900, color: cor }}>{value}</div>
+      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: '0 0 4px' }}>Comercial</h2>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18 }}>Todos os clientes (pagantes e não pagantes), por consultor. Quem entrou por link de consultor já vem vinculado; os demais aparecem em “sem consultor” para você atribuir.</div>
+
+      {/* Resumo */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+        {card('Clientes', total, '#111111')}
+        {card('Pagantes', pagantes, '#059669')}
+        {card('Não pagantes', total - pagantes, '#0D63DB')}
+        {card('Sem consultor', semCons, semCons > 0 ? '#d97706' : '#94a3b8')}
+        {card('Inadimplentes', inadimplentes, inadimplentes > 0 ? '#dc2626' : '#94a3b8')}
+      </div>
+
+      {/* Consultores (clicáveis para filtrar) */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+        <button onClick={() => setFiltro('todos')} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${filtro === 'todos' ? '#0D63DB' : '#e2e8f0'}`, background: filtro === 'todos' ? '#eff6ff' : '#fff', fontSize: 12, fontWeight: 700, color: '#111', cursor: 'pointer' }}>Todos ({total})</button>
+        <button onClick={() => setFiltro('sem')} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${filtro === 'sem' ? '#d97706' : '#e2e8f0'}`, background: filtro === 'sem' ? '#fffbeb' : '#fff', fontSize: 12, fontWeight: 700, color: '#92400e', cursor: 'pointer' }}>Sem consultor ({semCons})</button>
+        {porConsultor.map(co => (
+          <button key={co.id} onClick={() => setFiltro(co.id)} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${filtro === co.id ? '#059669' : '#e2e8f0'}`, background: filtro === co.id ? '#f0fdf4' : '#fff', fontSize: 12, fontWeight: 700, color: '#111', cursor: 'pointer' }}>
+            🤝 {co.nome} <span style={{ color: '#64748b', fontWeight: 600 }}>({co.total} · {co.pagantes} pag.)</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Busca */}
+      <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome ou WhatsApp…" style={{ ...S.input, maxWidth: 320, marginBottom: 14 }} />
+
+      {/* Tabela */}
+      <div style={{ ...S.card, borderRadius: 14, overflowX: 'auto' }}>
+        {loading ? <p style={{ color: '#94a3b8' }}>Carregando…</p>
+          : filtrados.length === 0 ? <p style={{ color: '#94a3b8' }}>Nenhum cliente neste filtro.</p>
+          : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 11 }}>
+                  <th style={S.td}>Cliente</th><th style={S.td}>WhatsApp</th><th style={S.td}>Plano</th><th style={S.td}>Origem</th><th style={S.td}>Consultor</th><th style={S.td}>Entrou</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtrados.map(c => (
+                  <tr key={c.id}>
+                    <td style={S.td}>{c.nome || '—'}</td>
+                    <td style={S.td}>{c.telefone ? <a href={`https://wa.me/55${c.telefone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: '#059669', fontWeight: 700, textDecoration: 'none' }}>{c.telefone}</a> : '—'}</td>
+                    <td style={S.td}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: c.inadimplente_desde ? '#fee2e2' : ehPagante(c) ? '#dcfce7' : '#f1f5f9', color: c.inadimplente_desde ? '#dc2626' : ehPagante(c) ? '#166534' : '#475569' }}>
+                        {c.inadimplente_desde ? 'Inadimplente' : (PLANO_NOME[c.role] || c.role)}
+                      </span>
+                    </td>
+                    <td style={S.td}>{leadsMap[c.id] || <span style={{ color: '#cbd5e1' }}>orgânico</span>}</td>
+                    <td style={S.td}>
+                      <select value={c.indicado_por || ''} onChange={e => atribuir(c.id, e.target.value)}
+                        style={{ padding: '4px 8px', borderRadius: 6, border: `1px solid ${c.indicado_por ? '#e2e8f0' : '#f59e0b'}`, fontSize: 12, background: c.indicado_por ? '#fff' : '#fffbeb', color: '#111', cursor: 'pointer' }}>
+                        <option value="">Sem consultor</option>
+                        {consultores.map(co => <option key={co.id} value={co.id}>{co.nome}</option>)}
+                      </select>
+                    </td>
+                    <td style={S.td}>{c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        }
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // SDR TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 const STATUS_COLORS = { novo: '#f59e0b', contatado: '#3b82f6', qualificado: '#8b5cf6', convertido: '#10b981', perdido: '#94a3b8' };
@@ -7754,12 +7882,12 @@ function CentralEquipeTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Central da Equipe', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'SDR / Leads', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Prestação de contas', 'Configurações'];
+const TABS = ['Dashboard', 'Central da Equipe', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Comercial', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Prestação de contas', 'Configurações'];
 
 // Menus agrupados por área — navegação mais fácil que a lista corrida de abas.
 const GRUPOS_ADMIN = [
   { nome: 'Início',              tabs: ['Dashboard'] },
-  { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'SDR / Leads', 'Contratos'] },
+  { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'Comercial', 'Contratos'] },
   { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
   { nome: 'Equipe',              tabs: ['Central da Equipe', 'Equipe', 'Agenda'] },
   { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ'] },
@@ -8367,7 +8495,7 @@ export default function Admin() {
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Tour'           && <TourTab />}
-        {tab === 'SDR / Leads'    && <SdrTab />}
+        {tab === 'Comercial'      && <ComercialTab />}
         {tab === 'Equipe'         && <EquipeTab />}
         {tab === 'Agenda'         && <AgendaTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}

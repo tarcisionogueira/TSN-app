@@ -115,8 +115,8 @@ export default async function handler(req) {
     return { status: 'aviso', detalhe: `${presos.length} chamado(s) preso(s) — falha ao fechar automaticamente` };
   }));
 
-  // ── 4. Supabase: leads SDR sem consultor há >3 dias ──
-  itens.push(await check('SDR — leads sem consultor', async () => {
+  // ── 4. Supabase: clientes/leads sem consultor há >3 dias ──
+  itens.push(await check('Comercial — clientes sem consultor', async () => {
     const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
     const r = await sb(`sdr_leads?select=count&consultor_id=is.null&status=eq.novo&criado_em=lt.${limite}`, { headers: { Prefer: 'count=exact' } });
     const count = parseInt(r.headers?.get?.('content-range')?.split('/')?.[1] || '0');

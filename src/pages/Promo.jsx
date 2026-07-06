@@ -26,7 +26,7 @@ export default function Promo() {
   const [sdrAberto, setSdrAberto] = useState(false);
   const [passo, setPasso] = useState(0);
   const [respostas, setRespostas] = useState({});
-  const [contato, setContato] = useState({ nome: '', whatsapp: '', email: '' });
+  const [contato, setContato] = useState({ nome: '', whatsapp: '', email: '', senha: '' });
   const [enviandoSdr, setEnviandoSdr] = useState(false);
   const [erroSdr, setErroSdr] = useState('');
   const [concluido, setConcluido] = useState(false);
@@ -114,18 +114,22 @@ export default function Promo() {
     if (!contato.nome.trim() || contato.whatsapp.replace(/\D/g, '').length < 10) {
       setErroSdr('Preencha nome e um WhatsApp válido (com DDD).'); return;
     }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contato.email.trim())) { setErroSdr('Informe um e-mail válido.'); return; }
+    if (contato.senha.length < 6) { setErroSdr('Crie uma senha de ao menos 6 caracteres.'); return; }
     setEnviandoSdr(true); setErroSdr('');
     try {
       const respArr = perguntas.map(p => ({ pergunta: p.texto, resposta: respostas[p.id] ?? '' }));
       const r = await fetch('/api/promo-capturar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo: link.codigo, nome: contato.nome, whatsapp: contato.whatsapp, email: contato.email, respostas: respArr }),
+        body: JSON.stringify({ codigo: link.codigo, nome: contato.nome, whatsapp: contato.whatsapp, email: contato.email, senha: contato.senha, respostas: respArr }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) throw new Error(data.error || 'Não foi possível enviar. Tente novamente.');
-      // Plano (pago): segue para o checkout com o desconto. Curso/e-book (conteúdo):
-      // registra o lead e confirma — o consultor libera o acesso e faz contato.
-      if (ehPlano) seguirCheckout();
+      // Conta criada e acesso liberado (sem passar por consultor). Faz login já.
+      await supabase.auth.signInWithPassword({ email: contato.email.trim().toLowerCase(), password: contato.senha }).catch(() => {});
+      // Plano pago → checkout com o desconto (a conta já existe/logada).
+      // Curso/e-book → entra na plataforma com o acesso já concedido.
+      if (ehPlano) nav(`/checkout?plano=${link.produto}&promo=${link.codigo}`);
       else { setSdrAberto(false); setConcluido(true); }
     } catch (e) { setErroSdr(e.message); setEnviandoSdr(false); }
   };
@@ -167,12 +171,13 @@ export default function Promo() {
               </>
             ) : (
               <>
-                <div style={{ fontSize: 19, fontWeight: 800, color: '#111', marginBottom: 4 }}>Quase lá! Como falamos com você?</div>
-                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18 }}>Um consultor pode te ajudar a garantir a melhor condição.</div>
+                <div style={{ fontSize: 19, fontWeight: 800, color: '#111', marginBottom: 4 }}>Crie seu acesso</div>
+                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18 }}>Sua conta é criada na hora e o acesso é liberado automaticamente.</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <input value={contato.nome} onChange={e => setContato(c => ({ ...c, nome: e.target.value }))} placeholder="Seu nome" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
                   <input value={contato.whatsapp} onChange={e => setContato(c => ({ ...c, whatsapp: e.target.value }))} placeholder="WhatsApp (com DDD)" inputMode="tel" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
-                  <input value={contato.email} onChange={e => setContato(c => ({ ...c, email: e.target.value }))} placeholder="E-mail (opcional)" inputMode="email" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
+                  <input value={contato.email} onChange={e => setContato(c => ({ ...c, email: e.target.value }))} placeholder="E-mail" inputMode="email" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
+                  <input value={contato.senha} onChange={e => setContato(c => ({ ...c, senha: e.target.value }))} placeholder="Crie uma senha (mín. 6)" type="password" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
                 </div>
               </>
             )}
@@ -204,12 +209,12 @@ export default function Promo() {
   if (concluido) return (
     <div style={{ minHeight: '100vh', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, maxWidth: 460, padding: '36px 30px', textAlign: 'center', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
-        <div style={{ fontSize: 52, marginBottom: 12 }}>✅</div>
-        <h2 style={{ color: '#111', margin: '0 0 8px' }}>Respostas recebidas!</h2>
+        <div style={{ fontSize: 52, marginBottom: 12 }}>🎉</div>
+        <h2 style={{ color: '#111', margin: '0 0 8px' }}>Acesso liberado!</h2>
         <p style={{ color: '#64748b', lineHeight: 1.6, marginBottom: 22 }}>
-          Obrigado{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}! Um consultor vai liberar o seu acesso{tituloConteudo ? ` a "${tituloConteudo}"` : ''} e falar com você pelo WhatsApp em instantes.
+          Pronto{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}! Sua conta foi criada e o seu acesso{tituloConteudo ? ` a "${tituloConteudo}"` : ''} já está liberado.
         </p>
-        <button onClick={() => nav('/login')} style={{ padding: '12px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}>Entrar na plataforma</button>
+        <button onClick={() => nav('/membros')} style={{ padding: '12px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}>Acessar agora</button>
       </div>
     </div>
   );
