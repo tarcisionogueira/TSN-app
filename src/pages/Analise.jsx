@@ -2411,7 +2411,7 @@ export default function Analise() {
       </Section>
 
       {/* ── ETAPA 6: LAUDO DE VIABILIDADE ── */}
-      <Section id="sec-laudo" step="6" title="Laudo de Viabilidade e Defesa da Arrematação" icon={Award} color="#111111" open={openSec.laudo} onToggle={()=>toggleSec('laudo')}
+      <Section id="sec-laudo" step="6" title="Parecer Executivo (Mercadológico + Viabilidade)" icon={Award} color="#111111" open={openSec.laudo} onToggle={()=>toggleSec('laudo')}
         badge={parecer ? 'Gerado' : 'Gere o parecer executivo'}>
         <div style={{ display:'flex', flexDirection:'column', gap:14, paddingTop:14 }}>
           <div style={{ display:'flex', gap:10, alignItems:'flex-start', background:'#f8fafc', borderRadius:12, padding:'14px 16px' }}>
