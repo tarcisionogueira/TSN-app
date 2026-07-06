@@ -8,6 +8,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
+import { vasculharDocumentos } from '../api/_doc-scan.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -1423,6 +1424,51 @@ async function relatorioCapitacao() {
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 
+// Enriquecimento GENÉRICO de documentos por lote (serve para QUALQUER leiloeiro).
+// Roda no NAVEGADOR REAL (renderiza JS), então captura Edital / Matrícula / Laudo
+// de Avaliação / Modelo de Proposta que o fetch simples do on-demand não enxerga
+// (páginas de detalhe com documentos montados por JavaScript). Os links entram em
+// `anexos` (jsonb) — NÃO mexemos em link_edital (que continua sendo a página do
+// lote para o botão "Acessar leiloeiro"); só preenchemos link_matricula se vazio.
+// Bounded por cap + deadline: preenche progressivamente entre as execuções diárias
+// (mesmo ritmo do CEF). NUNCA lança — enriquece em memória; se um lote falhar, ele
+// segue com o que já tinha e o scrape/salvamento continua normalmente.
+async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineMs = 8 * 60 * 1000 } = {}) {
+  const alvos = (imoveis || []).filter(im => {
+    const url = im.url_lote || im.link_edital;
+    const jaTem = im.link_matricula || (Array.isArray(im.anexos) && im.anexos.length);
+    return url && /^https?:\/\//.test(url) && !jaTem;
+  }).slice(0, cap);
+  if (!alvos.length) return 0;
+
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const fim = Date.now() + deadlineMs;
+  let enr = 0;
+  try {
+    for (const im of alvos) {
+      if (Date.now() > fim) { console.log('    Documentos: deadline atingido — resto fica p/ a próxima execução'); break; }
+      const url = im.url_lote || im.link_edital;
+      try {
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+        const html = await page.content(); // DOM RENDERIZADO (docs montados por JS aparecem aqui)
+        const docs = vasculharDocumentos(html, url, im.link_foto || null);
+        const achouAlgo = docs.matricula || docs.laudo || (Array.isArray(docs.anexos) && docs.anexos.length);
+        if (achouAlgo) {
+          if (!im.url_lote) im.url_lote = url;          // preserva a página do lote
+          if (Array.isArray(docs.anexos) && docs.anexos.length) im.anexos = docs.anexos; // inclui edital/matrícula/laudo/proposta
+          if (docs.matricula && !im.link_matricula) im.link_matricula = docs.matricula;
+          if (docs.regras && !im.link_regras_venda) im.link_regras_venda = docs.regras;
+          enr++;
+        }
+      } catch { /* lote a lote; nunca derruba o scrape */ }
+    }
+  } finally { await page.close().catch(() => {}); }
+  console.log(`    📄 Documentos: ${enr}/${alvos.length} lotes enriquecidos (edital/matrícula/laudo/proposta).`);
+  return enr;
+}
+
 async function main() {
   console.log(`\n🏠 Scraper Puppeteer — ${new Date().toISOString()}\n`);
 
@@ -1439,6 +1485,10 @@ async function main() {
     {
       const runStart = new Date().toISOString();
       const imoveis = await scraperMegaLeiloes(browser);
+      // Captura os documentos (edital/matrícula/laudo/proposta) da página de detalhe —
+      // renderiza JS, então pega o que o on-demand (fetch simples) não vê. Bounded.
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 150 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Mega falhou (segue sem): ${e.message.slice(0, 80)}`); }
       // salva em lotes de 500 para não estourar payload
       for (let i = 0; i < imoveis.length; i += 500) {
         await salvarImoveis(imoveis.slice(i, i + 500), `Mega ${i + 1}-${Math.min(i + 500, imoveis.length)}`);

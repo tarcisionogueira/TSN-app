@@ -8,7 +8,7 @@
  * nome do arquivo e no texto da âncora. Assim novos leiloeiros já saem cobertos.
  *
  * Entrada: html bruto + a URL base (para resolver caminhos relativos).
- * Saída: { matricula, edital, regras, foto, anexos:[{nome,url,tipo}] }.
+ * Saída: { matricula, edital, regras, laudo, foto, anexos:[{nome,url,tipo}] }.
  */
 
 // Hosts de ruído (analytics, consentimento, fontes, mapas) — nunca são documento.
@@ -16,17 +16,23 @@ const HOST_RUIDO = /(google-analytics|googletagmanager|gstatic|googleapis|cookie
 // Extensões de documento que nos interessam.
 const RE_DOC_EXT = /\.(pdf|docx?|xlsx?|odt|rtf)(?:[?#]|$)/i;
 const RE_IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)(?:[?#]|$)/i;
-// Palavras-chave de documento no caminho/nome/âncora.
+// Palavras-chave de documento no caminho/nome/âncora. laudo (avaliação) e proposta
+// viraram tipos PRÓPRIOS: o laudo de avaliação traz o valor oficial e impacta o
+// mercadológico; o modelo de proposta é o documento de venda parcelada.
 const KW = {
   matricula: /matr[ií]cul/i,
   edital: /edital/i,
+  laudo: /laudo|avalia[çc][ãa]o/i,
+  proposta: /proposta|modelo\s*de\s*proposta/i,
   regras: /regras|condi[cç][oõ]es|como\s*comprar|comocomprar/i,
-  anexo: /laudo|[oô]nus|certid|processo|anexo|documento|avalia|memorial|contrato|escritura|d[eé]bito|iptu|condom[ií]nio|leil[aã]o|pe[cç]a/i,
+  anexo: /[oô]nus|certid|processo|anexo|documento|memorial|contrato|escritura|d[eé]bito|iptu|condom[ií]nio|leil[aã]o|pe[cç]a/i,
 };
 
 function classificar(texto) {
   if (KW.matricula.test(texto)) return 'matricula';
   if (KW.edital.test(texto)) return 'edital';
+  if (KW.laudo.test(texto)) return 'laudo';
+  if (KW.proposta.test(texto)) return 'proposta';
   if (KW.regras.test(texto)) return 'regras';
   return 'anexo';
 }
@@ -52,7 +58,7 @@ function ehDocumento(url, label) {
   const alvo = `${url} ${label || ''}`;
   // Sem extensão de arquivo: só aceita se a URL/âncora cita explicitamente um doc
   // E aponta para um recurso (evita capturar a própria página do anúncio).
-  return /matr[ií]cul|edital|laudo|certid|\/docs?\/|\/documento|\/arquivo|\/anexo|\/download|blob\.core|amazonaws|storage|\/file/i.test(alvo);
+  return /matr[ií]cul|edital|laudo|avalia|proposta|certid|\/docs?\/|\/documento|\/arquivo|\/anexo|\/download|blob\.core|amazonaws|storage|\/file/i.test(alvo);
 }
 
 /**
@@ -62,7 +68,7 @@ function ehDocumento(url, label) {
  * @param {string} fotoAtual  foto já conhecida (não sobrescreve se já houver)
  */
 export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
-  const out = { matricula: null, edital: null, regras: null, foto: fotoAtual || null, anexos: [] };
+  const out = { matricula: null, edital: null, regras: null, laudo: null, foto: fotoAtual || null, anexos: [] };
   if (!html) return out;
 
   // 1) Mapa href→texto-da-âncora (texto ajuda a classificar quando a URL é opaca).
@@ -110,10 +116,11 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
     if (tipo === 'matricula' && !out.matricula) out.matricula = abs;
     if (tipo === 'edital' && !out.edital) out.edital = abs;
     if (tipo === 'regras' && !out.regras) out.regras = abs;
+    if (tipo === 'laudo' && !out.laudo) out.laudo = abs;
   }
 
-  // Ordena: matrícula, edital, regras, demais — e limita para não explodir.
-  const ordem = { matricula: 0, edital: 1, regras: 2, anexo: 3 };
+  // Ordena: matrícula, edital, laudo, regras, proposta, demais — e limita.
+  const ordem = { matricula: 0, edital: 1, laudo: 2, regras: 3, proposta: 4, anexo: 5 };
   out.anexos.sort((x, y) => (ordem[x.tipo] - ordem[y.tipo]));
   out.anexos = out.anexos.slice(0, 25);
   return out;
