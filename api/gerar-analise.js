@@ -6,6 +6,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
+import { calcularMetricasCenario } from '../src/utils/calculos.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -281,6 +282,12 @@ export default async function handler(req, res) {
     // 2) Laudo (parecer). Carrega os docs do lote para o parecer poder dizer se os
     // débitos informados já constam na documentação (ou apontar onde buscar).
     let parecer = '';
+    // Métricas financeiras REcalculadas no servidor com o valor de mercado que
+    // ACABOU de ser pesquisado. O cliente envia um snapshot tirado ANTES da
+    // pesquisa (valorMercado ainda 0), então usá-lo geraria um parecer "inviável"
+    // enquanto a tela (que recalcula ao vivo) mostra "viável". Recalcular aqui
+    // elimina essa contradição. Fallback: o snapshot do cliente.
+    let metricasFinais = parecerInputs?.metricas || {};
     if (parecerInputs?.d) {
       try {
         let docs = null;
@@ -294,7 +301,14 @@ export default async function handler(req, res) {
           const [p] = await (await sb(`perfis?id=eq.${ownerId}&select=perfil_investidor&limit=1`)).json();
           perfilInvestidor = p?.perfil_investidor || null;
         } catch { /* sem perfil → parecer padrão pelo objetivoCompra */ }
-        const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor };
+        const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, valorLocacao: valorLocacao || parecerInputs.d.valorLocacao, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor };
+        // Recalcula as métricas com o valorMercado fresco (mesmo cálculo da tela,
+        // src/utils/calculos.js) para o parecer e o veredito baterem com a Etapa 4.
+        const isAVista = parecerInputs.cenario === 'À Vista' || !!pInp.somenteAVista;
+        try {
+          const m = calcularMetricasCenario(pInp, Number(pInp.valorArrematacao) || 0, isAVista);
+          if (m && isFinite(m.roi)) metricasFinais = m;
+        } catch { /* mantém o snapshot do cliente se o recálculo falhar */ }
         // APRENDIZADO: correções que analistas fizeram em avaliações anteriores
         // (via transcrição de reunião → mercado_aprendizado) voltam ao prompt. No-op
         // enquanto não houver lições; fica mais assertivo com o uso.
@@ -311,7 +325,7 @@ export default async function handler(req, res) {
         const pData = await anthropic({
           model: MODEL, max_tokens: 8000,
           system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado,
-          messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs) }],
+          messages: [{ role: 'user', content: promptParecer(pInp, metricasFinais, mercado, docs) }],
         }, false);
         parecer = extractText(pData);
       } catch { /* laudo é complementar */ }
@@ -329,7 +343,7 @@ export default async function handler(req, res) {
     // mercado estimado + viabilidade por ROI), para o card não mostrar "boa nota"
     // num imóvel que a análise reprovou. Best-effort (não bloqueia a resposta).
     try {
-      const roi = Number(parecerInputs?.metricas?.roi);
+      const roi = Number(metricasFinais?.roi);
       const usoProprio = parecerInputs?.d?.objetivoCompra === 'uso_proprio';
       // Meta de viabilidade: 30% de ROI para investimento; para uso próprio a
       // régua é a economia (qualquer desconto real relevante já vale).

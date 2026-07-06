@@ -585,11 +585,13 @@ export default function Analise() {
     try {
       const res = await analisarMercado({
         endereco: d.endereco||d.cidade, tipoImovel: d.tipo,
-        areaM2: d.areaM2, cidade: d.cidade, estado: d.estado,
+        areaM2: d.areaM2 || d.areaTerrenoM2, cidade: d.cidade, estado: d.estado,
         nomeCondominio: d.nomeCondominio||'',
       });
       setMercado(res);
-      if (res?.precoMedioM2 && d.areaM2) up('valorMercado', Math.round(res.precoMedioM2*d.areaM2*0.9));
+      // Terrenos/lotes têm a área em areaTerrenoM2 (areaM2 fica 0) — sem o fallback
+      // o valorMercado ficava 0 e a viabilidade saía negativa por engano.
+      { const areaVal = d.areaM2 || d.areaTerrenoM2; if (res?.precoMedioM2 && areaVal) up('valorMercado', Math.round(res.precoMedioM2*areaVal*0.9)); }
       if (res?.aluguelMedio) up('valorLocacao', Math.round(res.aluguelMedio));
       setOpenSec(p => ({ ...p, mercado:true, viabilidade:true }));
       showMsg('Avaliação mercadológica concluída!');
@@ -620,7 +622,7 @@ export default function Analise() {
     const dSnap = { ...d };
     const mercadoInputs = {
       endereco: dSnap.endereco || dSnap.cidade, tipoImovel: dSnap.tipo,
-      areaM2: dSnap.areaM2, cidade: dSnap.cidade, estado: dSnap.estado,
+      areaM2: dSnap.areaM2 || dSnap.areaTerrenoM2, cidade: dSnap.cidade, estado: dSnap.estado,
       nomeCondominio: dSnap.nomeCondominio || '',
     };
     const parecerInputs = { d: dSnap, metricas, teto, cenario: isAVista ? 'À Vista' : 'Alavancado' };
