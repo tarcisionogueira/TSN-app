@@ -55,10 +55,10 @@ async function mercadoRecente(imovelId) {
   return row?.result?.mercado ? { mercado: row.result.mercado, em: row.updated_at } : null;
 }
 
-async function anthropic(payload, useSearch) {
+async function anthropic(payload, useSearch, fetchOpts) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
-  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) });
+  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) }, fetchOpts);
   return r.json();
 }
 
@@ -255,7 +255,7 @@ export default async function handler(req, res) {
   // meio e o catch abaixo NUNCA roda — a linha fica presa em 'gerando' para sempre
   // (foi o que travou o relatório do Igor). Com o deadline, perdemos a corrida ANTES
   // do corte e gravamos 'erro' com mensagem clara, para o cliente poder tentar de novo.
-  const DEADLINE_MS = 255000;
+  const DEADLINE_MS = 270000; // < maxDuration 300s, com folga p/ gravar 'erro' e responder
   const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), DEADLINE_MS));
 
   try {
@@ -267,12 +267,17 @@ export default async function handler(req, res) {
       mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
       reaproveitado = true;
     } else {
+      // A busca de mercado (web search) é a etapa lenta. O timeout PADRÃO do
+      // anthropicFetch é 120s — CURTO DEMAIS para 5 buscas + geração: a chamada
+      // abortava aos 120s e re-tentava, sem NUNCA concluir (era o motivo do erro
+      // recorrente). Aqui damos uma janela real de ~200s numa tentativa só, dentro
+      // do deadline de 270s (a etapa do parecer, curta, cabe no resto).
       const mData = await anthropic({
         model: MODEL, max_tokens: 8000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
         messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
-      }, true);
+      }, true, { retries: 1, timeoutMs: 200000 });
       mercado = parseJSON(extractText(mData)) || {};
       mercado.precoMedioM2 = mercado.consolidado?.precoMedioM2 || mercado.nivel2?.precoMedioM2 || 0;
       mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
@@ -321,7 +326,7 @@ export default async function handler(req, res) {
           model: MODEL, max_tokens: 8000,
           system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado,
           messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs) }],
-        }, false);
+        }, false, { retries: 1, timeoutMs: 55000 });
         parecer = extractText(pData);
       } catch { /* laudo é complementar */ }
     }
