@@ -160,31 +160,9 @@ export default function Header() {
     ? [linksPublicos[0], ...linksPrivados, linksPublicos[2]]
     : linksPublicos;
 
-  // Auto-inicia tour para membros não-admin: até 3x por mês, cooldown de 24h
-  React.useEffect(() => {
-    if (!user || role === 'admin') return;
-    const agora = Date.now();
-    const mesAtual = new Date().toISOString().slice(0, 7);
-    const tourMesKey  = 'tsn_tour_mes';
-    const tourCountKey = 'tsn_tour_count';
-    const tourLastKey  = 'tsn_tour_last';
-    const savedMes   = localStorage.getItem(tourMesKey);
-    const savedCount = parseInt(localStorage.getItem(tourCountKey) || '0', 10);
-    const savedLast  = parseInt(localStorage.getItem(tourLastKey) || '0', 10);
-    // Reinicia contador no início de cada mês
-    const countAtual = savedMes === mesAtual ? savedCount : 0;
-    if (savedMes !== mesAtual) localStorage.setItem(tourMesKey, mesAtual);
-    const COOLDOWN = 24 * 60 * 60 * 1000;
-    if (countAtual < 3 && (agora - savedLast) >= COOLDOWN) {
-      const timer = setTimeout(() => {
-        setShowTour(true);
-        localStorage.setItem(tourCountKey, String(countAtual + 1));
-        localStorage.setItem(tourLastKey, String(agora));
-        localStorage.setItem(tourMesKey, mesAtual);
-      }, 1400);
-      return () => clearTimeout(timer);
-    }
-  }, [user, role]);
+  // Tour guiado de "primeiros passos" removido a pedido do dono — no lugar entrará
+  // um vídeo. O componente TourGuiado e o gatilho manual (evento 'tsn:open-tour')
+  // continuam disponíveis; só o auto-start após o cadastro foi desativado.
 
   const active = (p) => loc.pathname === p;
 
