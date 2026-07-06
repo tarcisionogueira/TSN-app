@@ -119,9 +119,9 @@ function parseJSON(text) {
   if (obj) { try { return JSON.parse(obj[0]); } catch {} }
   return null;
 }
-async function anthropic(payload) {
+async function anthropic(payload, fetchOpts) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
-  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) });
+  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) }, fetchOpts);
   return r.json();
 }
 
@@ -320,8 +320,17 @@ export default async function handler(req, res) {
   const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, inputs: body.inputs || null, data_leilao: dataLeilao };
   await upsertDoc({ ...base, status: 'gerando', erro: null, result: null });
 
-  const deadline = Date.now() + 250000;
+  // Orçamento da fase de COLETA (leitura de docs + CNJ): capado em 165s para SOBRAR
+  // tempo para a IA (extração) + consultas de fontes + gravação, tudo dentro do
+  // maxDuration de 300s. Antes eram 250s aqui e a chamada de IA depois estourava.
+  const deadline = Date.now() + 165000;
+  // DEADLINE HARD do handler inteiro (< maxDuration 300s): se qualquer etapa travar/
+  // re-tentar além disso, perdemos a corrida e gravamos 'erro' — a linha NUNCA fica
+  // presa em 'gerando' (mesmo problema que travou o mercadológico do Igor).
+  const DEADLINE_MS = 285000;
+  const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), DEADLINE_MS));
   try {
+    const result = await Promise.race([prazo, (async () => {
     // 1) Reúne os documentos: edital, matrícula e até 2 anexos relevantes.
     const anexos = Array.isArray(row?.anexos) ? row.anexos : [];
     const urls = [];
@@ -387,13 +396,21 @@ export default async function handler(req, res) {
     // documental para um parecer. Pede/obtém os documentos.
     const temTextoColado = !!(body?.textoEdital || body?.textoMatricula);
     if (lidos.length === 0 && !temTextoColado) {
-      return res.status(200).json({ ok: true, result: {
+      // Sem documento legível: persiste como CONCLUÍDA com precisaDocumentos (antes
+      // não gravava nada e a linha ficava presa em 'gerando' num reload) e DEVOLVE a
+      // cota — pedir anexos não é uma análise de fato.
+      const semDocs = {
         precisaDocumentos: true,
         documentosLidos: [],
         motivo: urls.length
           ? 'Os documentos deste lote existem, mas a fonte (Caixa) não liberou a leitura automática agora. Vamos tentar de novo em segundo plano; você também pode anexar a matrícula e o edital (PDF) para gerar a análise na hora.'
           : 'Este lote ainda não tem documentos vinculados. Anexe a matrícula e o edital (PDF) para gerar a análise.',
-      } });
+      };
+      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs });
+      if (cota && cota.ok && cota.tipo) {
+        try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
+      }
+      return semDocs;
     }
 
     // 2) Consulta o CNJ (quando há processo e UF). Modalidade judicial prioriza.
@@ -435,7 +452,7 @@ export default async function handler(req, res) {
       model: MODEL, max_tokens: 6000,
       system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
       messages: [{ role: 'user', content }],
-    });
+    }, { retries: 1, timeoutMs: 110000 });
     const parsed = parseJSON(extractText(data)) || {};
 
     // SALVAGUARDA anti-alarmismo (reforça o prompt): ausência de informação e itens
@@ -633,13 +650,18 @@ export default async function handler(req, res) {
       }
     } catch { /* não bloqueia o laudo */ }
 
+    return result;
+    })()]);
+
     res.status(200).json({ ok: true, result });
   } catch (e) {
-    await upsertDoc({ ...base, status: 'erro', erro: String(e?.message || e) });
+    const timeout = String(e?.message) === 'tempo_limite';
+    const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.' : String(e?.message || e);
+    await upsertDoc({ ...base, status: 'erro', erro: msg });
     // Estorna a cota consumida (não cobra por análise que falhou).
     if (cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
     }
-    res.status(500).json({ error: 'Falha ao gerar a análise documental', detalhe: String(e?.message || e) });
+    res.status(timeout ? 504 : 500).json({ error: timeout ? 'Tempo limite ao gerar a análise documental' : 'Falha ao gerar a análise documental', detalhe: msg });
   }
 }

@@ -8,7 +8,7 @@
 // web_search nem Bright Data — apenas LÊ os resultados dos outros dois relatórios
 // e faz UMA passada de IA de síntese. Assim o 3º documento é barato e não drena
 // cota de scraping/pesquisa. Espelha a mecânica de gerar-analise/gerar-documental.
-export const config = { runtime: 'nodejs', maxDuration: 120 };
+export const config = { runtime: 'nodejs', maxDuration: 180 };
 
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
@@ -45,9 +45,9 @@ function parseJSON(text) {
   if (obj) { try { return JSON.parse(obj[0]); } catch {} }
   return null;
 }
-async function anthropic(payload) {
+async function anthropic(payload, fetchOpts) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
-  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) });
+  const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) }, fetchOpts);
   return r.json();
 }
 async function ultimoConcluido(tabela, userId, imovelId) {
@@ -184,7 +184,14 @@ export default async function handler(req, res) {
   const baseRow = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, data_leilao: dataLeilao };
   await upsertLaudo({ ...baseRow, status: 'gerando', erro: null, result: null });
 
+  // DEADLINE interno < maxDuration (180s): garante gravar 'erro' antes de a Vercel
+  // matar a função. Sem isto, se a chamada de IA travar/re-tentar além do limite, a
+  // função morre no meio e a linha fica presa em 'gerando' para sempre.
+  const DEADLINE_MS = 160000;
+  const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), DEADLINE_MS));
+
   try {
+    const result = await Promise.race([prazo, (async () => {
     const resMerc = resumoMercado(mRow.result);
     const resDoc = resumoDocumental(dRow.result);
 
@@ -205,7 +212,7 @@ export default async function handler(req, res) {
       model: MODEL, max_tokens: 4000,
       system: 'Você é o gestor sênior de decisão da BidPro Brasil. Emite o parecer final de viabilidade consolidando o relatório mercadológico/financeiro e o documental/jurídico. Pondera as duas visões, não as refaz. Honesto e objetivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Retorne apenas JSON válido.' + aprendizados,
       messages: [{ role: 'user', content: promptDefesa(im, resMerc, resDoc) }],
-    });
+    }, { retries: 1, timeoutMs: 120000 });
     const parsed = parseJSON(extractText(data)) || {};
 
     const AVISO = '\n\n§ SEÇÃO: LEMBRETE\nEste laudo de viabilidade é um parecer consolidado gerado com apoio de inteligência artificial a partir dos dois relatórios anteriores — tem caráter de apoio à decisão e não substitui a análise de um profissional nem a verificação presencial. Recomendamos agendar a reunião com um analista para validar o veredito antes de qualquer lance.';
@@ -228,10 +235,15 @@ export default async function handler(req, res) {
       baseadoEm: { mercadoEm: mRow.updated_at, documentalEm: dRow.updated_at },
       geradoEm: new Date().toISOString(),
     };
+    return result;
+    })()]);
+
     await upsertLaudo({ ...baseRow, status: 'concluida', erro: null, result });
     res.status(200).json({ ok: true, result });
   } catch (e) {
-    await upsertLaudo({ ...baseRow, status: 'erro', erro: String(e?.message || e) });
-    res.status(500).json({ error: 'Falha ao gerar o laudo de viabilidade', detalhe: String(e?.message || e) });
+    const timeout = String(e?.message) === 'tempo_limite';
+    const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.' : String(e?.message || e);
+    await upsertLaudo({ ...baseRow, status: 'erro', erro: msg });
+    res.status(timeout ? 504 : 500).json({ error: timeout ? 'Tempo limite ao gerar o laudo' : 'Falha ao gerar o laudo de viabilidade', detalhe: msg });
   }
 }
