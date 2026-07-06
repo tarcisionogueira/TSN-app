@@ -4,6 +4,7 @@ import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import { extrairDadosDocumento } from '../utils/claude';
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -503,6 +504,32 @@ function UsuariosTab() {
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
   const [atribUser, setAtribUser] = useState(null);   // usuário recebendo a atribuição de arremate
   const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial' });
+  const [atribExtraindo, setAtribExtraindo] = useState('');   // '' | 'lendo' | 'ok' | 'erro'
+  const [atribDoc, setAtribDoc] = useState(null);             // { nome } do anexo lido
+
+  // Inclusão por ANEXO: em vez de digitar, o admin sobe o edital/matrícula do
+  // arremate e a IA extrai endereço, valor e tipo (revisáveis). Usa a mesma
+  // extração da tela de análise (extrairDadosDocumento).
+  const extrairArremateDoc = async (file) => {
+    if (!file) return;
+    if (file.type !== 'application/pdf') { alert('Envie o documento em PDF.'); return; }
+    setAtribExtraindo('lendo'); setAtribDoc({ nome: file.name });
+    try {
+      const buf = await file.arrayBuffer();
+      let bin = ''; const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      const b64 = btoa(bin);
+      const ext = await extrairDadosDocumento('', b64);
+      if (!ext) throw new Error('sem dados');
+      const local = [ext.cidade, ext.estado].filter(Boolean).join('/');
+      const endereco = [ext.endereco, local].filter(Boolean).join(', ') || atribForm.endereco;
+      const valorNum = ext.valorArrematacao || ext.lanceMinimo || ext.valorMinimo || ext.valorAvaliacao || 0;
+      const valor = valorNum ? Number(valorNum).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : atribForm.valor;
+      const tipo = /judicial/i.test(ext.modalidade || '') && !/extra/i.test(ext.modalidade || '') ? 'judicial' : (/extra/i.test(ext.modalidade || '') ? 'extrajudicial' : atribForm.tipo);
+      setAtribForm(p => ({ ...p, endereco, valor, tipo }));
+      setAtribExtraindo('ok');
+    } catch { setAtribExtraindo('erro'); }
+  };
   const [atribLoad, setAtribLoad] = useState(false);
   const [exito, setExito] = useState(null); // editor do % de êxito INDIVIDUAL do membro da equipe
 
@@ -734,7 +761,7 @@ function UsuariosTab() {
                               {u.role !== 'assessorado' && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#fef9c3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#a16207', cursor: 'pointer' }}
-                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial' }); }}
+                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial' }); setAtribExtraindo(''); setAtribDoc(null); }}
                                   title="Atribuir uma arrematação a este usuário e torná-lo Assessorado (habilita o acompanhamento e os lançamentos)">
                                   🏷 Atribuir arremate
                                 </button>
@@ -768,6 +795,17 @@ function UsuariosTab() {
               Cria o acompanhamento (arrematado) para <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> e o promove a <b>Assessorado</b> imediatamente — habilita os lançamentos financeiros e os indicadores.
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Inclusão por anexo: a IA extrai endereço/valor/tipo do edital ou matrícula */}
+              <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6 }}>📎 Incluir pelo documento (recomendado)</div>
+                <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5, marginBottom: 10 }}>Suba o edital ou a matrícula (PDF) do arremate — a IA preenche o endereço, o valor e o tipo abaixo (você revisa antes de confirmar).</div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: atribExtraindo === 'lendo' ? '#e2e8f0' : '#0D63DB', color: atribExtraindo === 'lendo' ? '#94a3b8' : 'white', borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: atribExtraindo === 'lendo' ? 'default' : 'pointer' }}>
+                  {atribExtraindo === 'lendo' ? '⏳ Extraindo…' : '📎 Anexar edital/matrícula (PDF)'}
+                  <input type="file" accept="application/pdf" disabled={atribExtraindo === 'lendo'} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; extrairArremateDoc(f); }} style={{ display: 'none' }} />
+                </label>
+                {atribExtraindo === 'ok' && <div style={{ fontSize: 11, color: '#15803d', fontWeight: 700, marginTop: 8 }}>✓ Extraído de {atribDoc?.nome}. Revise os campos abaixo.</div>}
+                {atribExtraindo === 'erro' && <div style={{ fontSize: 11, color: '#b91c1c', fontWeight: 700, marginTop: 8 }}>Não consegui ler o documento. Preencha manualmente abaixo.</div>}
+              </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Imóvel (endereço)</label>
                 <input value={atribForm.endereco} onChange={e => setAtribForm(p => ({ ...p, endereco: e.target.value }))} placeholder="Rua, nº, cidade/UF" style={S.input} />
