@@ -36,5 +36,7 @@ aparecendo).
 ---
 
 ## NÃO são mitigados (bugs reais — devem continuar sendo reportados)
-- **Sub-precificação no checkout:** `api/mp-checkout.js` aceita `valor`/`descricao` do corpo do cliente sem conferir contra o preço de lista do servidor; o webhook mapeia o plano por **valor**, então um valor menor pode conceder um role de tier superior. Corrigir validando `valor === PLANOS_CONFIG[planoId].valor` no servidor.
-- **RLS de `perfis` sem `WITH CHECK` por coluna:** a única barreira contra auto-escalada de `role` é o trigger `proteger_campos_sensiveis_perfil`, que **não está versionado** no repo. Versionar o trigger e/ou adicionar `WITH CHECK` de coluna.
+- **Sub-precificação no checkout (EM ABERTO — depende de decisão do dono):** `api/mp-checkout.js` aceita `valor` do corpo do cliente e o webhook mapeia o plano por **valor**, então em tese dá para pagar um valor baixo e reivindicar um role de tier superior. **Não corrigido ainda** porque `assessorado` é `parcelado_fixo` (12×) e um pagamento de ~R$500 pode ser uma **parcela legítima** — um guard rígido de preço quebraria o parcelamento. Correto: definir o modelo (o role é concedido na 1ª parcela? o acesso é proporcional ao pago?) e então validar `valor` contra `planos_config` ou conceder acesso só após o total quitado.
+
+## Achados de segurança já RESOLVIDOS (versionados)
+- **RLS de `perfis` sem `WITH CHECK` por coluna** — RESOLVIDO: o trigger `proteger_campos_sensiveis_perfil` (a barreira contra auto-escalada de `role`) foi **versionado** em `supabase/migrations/proteger_campos_sensiveis_perfil.sql` (antes só existia em produção via MCP). Um reprovisionamento a partir do repo não perde mais a proteção.
