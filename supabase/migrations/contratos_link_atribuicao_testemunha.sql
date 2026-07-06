@@ -15,6 +15,11 @@ ALTER TABLE contratos_link
   ADD COLUMN IF NOT EXISTS nome_testemunha text,
   ADD COLUMN IF NOT EXISTS cpf_testemunha text,
   ADD COLUMN IF NOT EXISTS assinatura_testemunha text,
-  ADD COLUMN IF NOT EXISTS testemunha_em timestamptz;
+  ADD COLUMN IF NOT EXISTS testemunha_em timestamptz,
+  -- Multi-signatário: um LINK POR ASSINANTE (cada parte assina o seu). As linhas
+  -- do MESMO contrato compartilham este grupo (mesmo conteúdo/plano, tokens/emails
+  -- diferentes). Todos recebem por e-mail e podem compartilhar o link.
+  ADD COLUMN IF NOT EXISTS contrato_grupo_id uuid;
 
 CREATE INDEX IF NOT EXISTS idx_contratos_link_plano ON contratos_link(plano_key) WHERE plano_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_contratos_link_grupo ON contratos_link(contrato_grupo_id) WHERE contrato_grupo_id IS NOT NULL;

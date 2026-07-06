@@ -51,10 +51,39 @@ export default function CriarContrato() {
 
   // Campos comuns
   const [titulo, setTitulo] = useState(_preState.titulo || '');
-  const [emailAssinante, setEmailAssinante] = useState(_preState.emailAssinante || '');
+  // Um LINK POR ASSINANTE: cada parte recebe por e-mail e pode compartilhar o link.
+  const [signatarios, setSignatarios] = useState([{ nome: _preState.clienteNome || '', email: _preState.emailAssinante || '' }]);
   const [tipoContrato, setTipoContrato] = useState(_tipoInicial);
   const [verificacao, setVerificacao] = useState('nenhuma');
   const [docsExtras, setDocsExtras] = useState([]); // ids dos docs extras exigidos
+  const [requerTestemunha, setRequerTestemunha] = useState(false); // exige assinatura de testemunha
+  // Atribuição a um plano/produto (opcional)
+  const [produtos, setProdutos] = useState([]);   // [{ chave, tipo, id, nome }]
+  const [produtoSel, setProdutoSel] = useState(''); // "tipo:chave"
+  const [linksGerados, setLinksGerados] = useState([]); // resultado: [{nome,email,url}]
+
+  const addSignatario = () => setSignatarios(s => s.length < 10 ? [...s, { nome: '', email: '' }] : s);
+  const setSign = (i, campo, v) => setSignatarios(s => s.map((x, j) => j === i ? { ...x, [campo]: v } : x));
+  const rmSignatario = (i) => setSignatarios(s => s.length > 1 ? s.filter((_, j) => j !== i) : s);
+
+  // Carrega planos/cursos/ebooks ativos para o dropdown de atribuição.
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: pl }, { data: cs }, { data: eb }] = await Promise.all([
+          supabase.from('planos_config').select('plano_key, nome').eq('ativo', true).eq('cobrar', true),
+          supabase.from('cursos_admin').select('id, nome').eq('ativo', true),
+          supabase.from('ebooks_admin').select('id, nome').eq('ativo', true),
+        ]);
+        const lista = [
+          ...(pl || []).map(p => ({ tipo: 'plano', chave: p.plano_key, id: p.plano_key, nome: p.nome })),
+          ...(cs || []).map(c => ({ tipo: 'curso', chave: String(c.id), id: String(c.id), nome: c.nome })),
+          ...(eb || []).map(e => ({ tipo: 'ebook', chave: String(e.id), id: String(e.id), nome: e.nome })),
+        ];
+        setProdutos(lista);
+      } catch { /* dropdown fica vazio */ }
+    })();
+  }, []);
 
   // Modo assinar: arquivo PDF/Word/imagem
   const [arquivoDoc, setArquivoDoc] = useState(null); // File
@@ -126,14 +155,16 @@ export default function CriarContrato() {
     setGerandoIA(true); setErro('');
     try {
       const sess = (await supabase.auth.getSession()).data.session;
-      const r = await fetch('/api/gerar-contrato', {
+      // /api/gerar-contrato-ia devolve { ok, contrato } (o /api/gerar-contrato
+      // devolve { conteudo } — o modo IA lia o campo errado e vinha vazio).
+      const r = await fetch('/api/gerar-contrato-ia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess?.access_token}` },
-        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partesAdicionais: partesInfo }),
+        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo }),
       });
       const data = await r.json();
       if (!r.ok || !data.ok) throw new Error(data.error || 'Erro ao gerar');
-      setContratoGerado(data.contrato);
+      setContratoGerado(data.contrato || data.conteudo || '');
       setPasso('revisao');
     } catch (e) {
       setErro(e.message);
@@ -145,7 +176,8 @@ export default function CriarContrato() {
   const enviarContrato = async () => {
     setErro('');
     if (!titulo.trim()) { setErro('Informe o título do contrato.'); return; }
-    if (!emailAssinante.trim()) { setErro('Informe o e-mail do assinante.'); return; }
+    const signValidos = signatarios.filter(s => /\S+@\S+\.\S+/.test(s.email.trim()));
+    if (!signValidos.length) { setErro('Informe ao menos um assinante com e-mail válido.'); return; }
     if (modo === 'assinar' && !arquivoUrl) { setErro('Aguarde o upload do arquivo ou selecione um arquivo.'); return; }
     if (modo === 'gerar' && !contratoGerado) { setErro('Gere o contrato antes de enviar.'); return; }
 
@@ -164,19 +196,24 @@ export default function CriarContrato() {
         }
       }
 
+      const prod = produtos.find(p => `${p.tipo}:${p.chave}` === produtoSel) || null;
       const body = {
         titulo,
-        tipoContrato,
-        emailAssinante: emailAssinante.trim(),
+        tipo: tipoContrato,
+        signatarios: signValidos.map(s => ({ nome: s.nome.trim(), email: s.email.trim() })),
         verificacaoIdentidade: verificacao,
         docsExtrasExigidos: docsExtras,
         arquivosReferencia: refs,
         geradoPorIA: modo === 'gerar',
-        // Modo assinar: arquivo
+        requerTestemunha,
+        // Atribuição a um plano/produto (opcional)
+        planoKey: prod?.tipo === 'plano' ? prod.chave : null,
+        produtoTipo: prod?.tipo || null,
+        produtoId: prod?.id || null,
+        // Modo assinar: arquivo. Modo gerar: texto.
         arquivoUrl: modo === 'assinar' ? arquivoUrl : null,
         arquivoNome: modo === 'assinar' ? arquivoDoc?.name : null,
-        // Modo gerar: texto
-        conteudo: modo === 'gerar' ? contratoGerado : null,
+        conteudo: modo === 'gerar' ? contratoGerado : `Documento anexo: ${arquivoDoc?.name || 'contrato'}`,
       };
 
       const r = await fetch('/api/gerar-contrato', {
@@ -186,6 +223,7 @@ export default function CriarContrato() {
       });
       const data = await r.json();
       if (!r.ok || !data.ok) throw new Error(data.error || 'Erro ao enviar');
+      setLinksGerados(Array.isArray(data.links) ? data.links : []);
       setPasso('enviado');
     } catch (e) {
       setErro(e.message);
@@ -220,8 +258,8 @@ export default function CriarContrato() {
       {passo === 'modo' && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
           {[
-            { id: 'assinar', icon: FileText, cor: '#0D63DB', titulo: 'Assinar documento', desc: 'Envie um PDF, Word ou imagem. O signatário visualiza, preenche os dados e assina eletronicamente.' },
-            { id: 'gerar',   icon: Sparkles, cor: '#6366f1', titulo: 'Gerar contrato com IA', desc: 'Descreva o que precisa. A IA gera o contrato com linguagem jurídica, LGPD e Lei Anticorrupção.' },
+            { id: 'assinar', icon: FileText, cor: '#0D63DB', titulo: 'Assinar documento pronto', desc: 'Já tem o documento? Envie o PDF/Word/imagem, informe as partes e envie para assinar (com ou sem foto).' },
+            { id: 'gerar',   icon: Sparkles, cor: '#6366f1', titulo: 'Criar documento com IA', desc: 'A IA cria o contrato; você pode anexar documentos para ela extrair as informações (com ou sem foto).' },
           ].map(op => (
             <button key={op.id} onClick={() => { setModo(op.id); setPasso('detalhes'); }}
               style={{ padding: '24px 20px', background: 'white', border: `2px solid ${op.cor}20`, borderRadius: 14, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
@@ -255,8 +293,28 @@ export default function CriarContrato() {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={S.label}>E-mail do signatário *</label>
-              <input style={S.input} type="email" value={emailAssinante} onChange={e => setEmailAssinante(e.target.value)} placeholder="email@exemplo.com" />
+              <label style={S.label}>Assinantes (partes) *</label>
+              <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '0 0 8px' }}>Cada assinante recebe o contrato por e-mail com o seu próprio link para assinar (e pode compartilhá-lo).</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {signatarios.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input style={{ ...S.input, flex: 1 }} value={s.nome} onChange={e => setSign(i, 'nome', e.target.value)} placeholder="Nome (opcional)" />
+                    <input style={{ ...S.input, flex: 1.4 }} type="email" value={s.email} onChange={e => setSign(i, 'email', e.target.value)} placeholder="email@exemplo.com" />
+                    {signatarios.length > 1 && <button onClick={() => rmSignatario(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}><X size={16} /></button>}
+                  </div>
+                ))}
+              </div>
+              {signatarios.length < 10 && <button onClick={addSignatario} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}><UserCheck size={13} /> Adicionar assinante</button>}
+            </div>
+
+            {/* Atribuir a um plano/produto (opcional) */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={S.label}>Atribuir a um plano/produto (opcional)</label>
+              <select style={S.input} value={produtoSel} onChange={e => setProdutoSel(e.target.value)}>
+                <option value="">Não vincular a nenhum produto</option>
+                {produtos.map(p => <option key={`${p.tipo}:${p.chave}`} value={`${p.tipo}:${p.chave}`}>{({ plano: 'Plano', curso: 'Curso', ebook: 'eBook' }[p.tipo] || p.tipo)} — {p.nome}</option>)}
+              </select>
+              <p style={{ fontSize: 11, color: '#94a3b8', margin: '6px 0 0' }}>Vinculado, aparece como "contrato atribuído" na tela de Produtos (Admin), para consulta.</p>
             </div>
 
             {/* Modo assinar: upload do arquivo */}
@@ -338,7 +396,7 @@ export default function CriarContrato() {
             <button onClick={() => {
               setErro('');
               if (!titulo.trim()) { setErro('Informe o título.'); return; }
-              if (!emailAssinante.trim()) { setErro('Informe o e-mail do signatário.'); return; }
+              if (!signatarios.some(s => /\S+@\S+\.\S+/.test(s.email.trim()))) { setErro('Informe ao menos um assinante com e-mail válido.'); return; }
               if (modo === 'assinar' && !arquivoDoc) { setErro('Selecione o arquivo do documento.'); return; }
               if (modo === 'assinar' && !arquivoUrl && !arquivoUploading) { setErro('Aguarde o upload concluir.'); return; }
               setPasso('identidade');
@@ -381,6 +439,15 @@ export default function CriarContrato() {
               ))}
             </div>
 
+            {/* Testemunha */}
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '12px 14px', borderRadius: 10, border: `1px solid ${requerTestemunha ? '#0D63DB' : '#e2e8f0'}`, background: requerTestemunha ? '#eff6ff' : '#f8fafc', marginTop: 16 }}>
+              <input type="checkbox" checked={requerTestemunha} onChange={e => setRequerTestemunha(e.target.checked)} style={{ marginTop: 2 }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Exigir assinatura de testemunha</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Na assinatura, será solicitado o nome, CPF e a assinatura de uma testemunha.</div>
+              </div>
+            </label>
+
             <p style={{ fontSize: 11, color: '#94a3b8', margin: '14px 0 0', lineHeight: 1.6 }}>
               Capturas e uploads são armazenados no Supabase Storage com acesso restrito. Nenhum dado biométrico é processado por terceiros.
             </p>
@@ -410,7 +477,9 @@ export default function CriarContrato() {
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
               <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#eff6ff', color: '#0D63DB', borderRadius: 20 }}>{tipoContrato}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#f0fdf4', color: '#059669', borderRadius: 20 }}>Para: {emailAssinante}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#f0fdf4', color: '#059669', borderRadius: 20 }}>{signatarios.filter(s => s.email.trim()).length} assinante(s)</span>
+              {requerTestemunha && <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#eff6ff', color: '#0D63DB', borderRadius: 20 }}>Com testemunha</span>}
+              {produtoSel && <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#f3e8ff', color: '#6d28d9', borderRadius: 20 }}>Vinculado a produto</span>}
               <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#fef3c7', color: '#92400e', borderRadius: 20 }}>{VERIFICACOES.find(v => v.id === verificacao)?.label}</span>
               {docsExtras.length > 0 && <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#f3e8ff', color: '#6d28d9', borderRadius: 20 }}>{docsExtras.length} doc(s) extra(s)</span>}
               {modo === 'gerar' && <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#f3e8ff', color: '#6d28d9', borderRadius: 20 }}>Gerado por IA</span>}
@@ -456,11 +525,24 @@ export default function CriarContrato() {
         <div style={{ textAlign: 'center', padding: '40px 20px' }}>
           <CheckCircle2 size={52} color="#059669" style={{ margin: '0 auto 16px' }} />
           <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 8px' }}>Contrato enviado!</h2>
-          <p style={{ color: '#64748b', margin: '0 0 24px', fontSize: 14, lineHeight: 1.6 }}>
-            O signatário receberá o link para visualizar o documento, enviar os documentos de identidade e assinar eletronicamente.
+          <p style={{ color: '#64748b', margin: '0 0 20px', fontSize: 14, lineHeight: 1.6 }}>
+            Cada assinante recebeu o contrato por e-mail com o seu link. Você também pode copiar e compartilhar os links abaixo.
           </p>
+          {linksGerados.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 520, margin: '0 auto 24px', textAlign: 'left' }}>
+              {linksGerados.map((l, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{l.nome || l.email}</div>
+                    <div style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url}</div>
+                  </div>
+                  <button onClick={() => { navigator.clipboard?.writeText(l.url); }} style={{ padding: '7px 12px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Copiar link</button>
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => { setPasso('modo'); setModo(null); setTitulo(''); setEmailAssinante(''); setArquivoDoc(null); setArquivoUrl(''); setDescricaoIA(''); setContratoGerado(''); setArquivosRef([]); setVerificacao('nenhuma'); setDocsExtras([]); setErro(''); }} style={S.btn()}>
+            <button onClick={() => { setPasso('modo'); setModo(null); setTitulo(''); setSignatarios([{ nome: '', email: '' }]); setArquivoDoc(null); setArquivoUrl(''); setDescricaoIA(''); setContratoGerado(''); setArquivosRef([]); setVerificacao('nenhuma'); setDocsExtras([]); setRequerTestemunha(false); setProdutoSel(''); setLinksGerados([]); setErro(''); }} style={S.btn()}>
               Criar outro contrato
             </button>
             <button onClick={() => nav('/contratos')} style={{ ...S.btn('#f1f5f9'), color: '#475569' }}>Ver contratos</button>

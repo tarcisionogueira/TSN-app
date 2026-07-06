@@ -5,6 +5,8 @@ import { auditLog } from './_audit.js';
 import { anthropicFetch } from './_claude.js';
 import { sanitizeText, sanitizeName } from './_sanitize.js';
 import { alertarErro } from './_error-alert.js';
+import { enviarEmail } from './_email.js';
+import { randomUUID } from 'node:crypto';
 
 // Dados fixos da empresa contratante
 const EMPRESA = {
@@ -61,14 +63,32 @@ export default async function handler(req, res) {
     descricao: descricaoRaw, tipo, titulo: tituloRaw, arquivos = [], respostas,
     // Novo fluxo CriarContrato
     conteudo: conteudoDireto, emailAssinante, verificacaoIdentidade, arquivosReferencia, geradoPorIA,
+    // Reformulação: multi-signatário + atribuição a plano/produto + testemunha + partes
+    signatarios, planoKey, produtoTipo, produtoId, partes, requerTestemunha,
   } = req.body || {};
+
+  // Normaliza a lista de signatários: um LINK POR ASSINANTE (cada um assina o seu).
+  // Aceita o formato novo (signatarios: [{nome,email}]) e o antigo (emailAssinante).
+  const listaSign = (Array.isArray(signatarios) && signatarios.length
+    ? signatarios
+    : (emailAssinante ? [{ email: emailAssinante }] : []))
+    .map(s => ({ nome: sanitizeText(s?.nome || '', 120) || null, email: sanitizeText(s?.email || '', 200) }))
+    .filter(s => /\S+@\S+\.\S+/.test(s.email))
+    .slice(0, 10);
+
   // Fluxo direto: conteúdo já pronto (assinar documento existente ou contrato gerado pela IA no frontend)
-  if (conteudoDireto && emailAssinante) {
+  if (conteudoDireto && listaSign.length) {
     try {
       const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
       const tituloFinal = sanitizeText(tituloRaw, 200) || 'Contrato';
       const { arquivoUrl, arquivoNome, docsExtrasExigidos } = req.body || {};
-    const { data, error } = await supabase.from('contratos_link').insert({
+      const grupoId = randomUUID();
+      const origin = req.headers.origin || `https://${req.headers.host}`;
+      const partesLimpa = Array.isArray(partes)
+        ? partes.map(p => ({ nome: sanitizeText(p?.nome || '', 160), qualificacao: sanitizeText(p?.qualificacao || '', 200) })).filter(p => p.nome).slice(0, 10)
+        : null;
+
+      const base = {
         titulo: tituloFinal,
         conteudo: conteudoDireto ? sanitizeText(conteudoDireto, 20000) : null,
         arquivo_url: arquivoUrl || null,
@@ -77,15 +97,41 @@ export default async function handler(req, res) {
         status: 'aguardando_assinatura',
         requer_assinatura: true,
         criado_por: user.id,
-        assinante_email: sanitizeText(emailAssinante, 200),
         verificacao_identidade: verificacaoIdentidade || 'nenhuma',
         docs_extras_exigidos: docsExtrasExigidos || [],
         arquivos_referencia: arquivosReferencia || [],
         gerado_por_ia: !!geradoPorIA,
-      }).select('token').single();
-      if (error || !data) return res.status(500).json({ error: 'Erro ao salvar contrato' });
-      await auditLog({ acao: 'contrato_criado', user_id: user.id, ip, detalhes: { titulo: tituloFinal, email: emailAssinante, verificacao: verificacaoIdentidade }, sucesso: true });
-      return res.status(200).json({ ok: true, token: data.token });
+        // Atribuição a um plano/produto (por CHAVE, não mais por título).
+        plano_key: planoKey ? sanitizeText(planoKey, 60) : null,
+        produto_tipo: produtoTipo ? sanitizeText(produtoTipo, 20) : null,
+        produto_id: produtoId ? sanitizeText(produtoId, 60) : null,
+        partes: partesLimpa,
+        contrato_grupo_id: grupoId,
+      };
+
+      // Uma linha (token/link) por signatário.
+      const rows = listaSign.map(s => ({ ...base, assinante_email: s.email }));
+      const { data, error } = await supabase.from('contratos_link').insert(rows).select('token, assinante_email');
+      if (error || !data?.length) return res.status(500).json({ error: 'Erro ao salvar contrato' });
+
+      // Casa cada token com o nome/email e envia o link por e-mail a cada parte.
+      const links = data.map(row => {
+        const nome = listaSign.find(s => s.email === row.assinante_email)?.nome || null;
+        return { nome, email: row.assinante_email, token: row.token, url: `${origin}#/c/${row.token}` };
+      });
+      await Promise.all(links.map(l =>
+        enviarEmail({
+          to: l.email,
+          subject: `Contrato para assinatura: ${tituloFinal}`,
+          html: `<p>Olá${l.nome ? ' ' + l.nome : ''}!</p><p>Você tem um contrato para revisar e assinar: <strong>${tituloFinal}</strong>.</p>
+                 <p><a href="${l.url}" style="display:inline-block;padding:11px 20px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Abrir e assinar</a></p>
+                 <p>Ou copie o link: ${l.url}</p><p>BidPro Brasil</p>`,
+        }).catch(() => {})
+      ));
+
+      await auditLog({ acao: 'contrato_criado', user_id: user.id, ip, detalhes: { titulo: tituloFinal, signatarios: links.length, plano: planoKey || null, verificacao: verificacaoIdentidade }, sucesso: true });
+      // Compat: mantém `token` (1º) e adiciona `links` (todos os assinantes).
+      return res.status(200).json({ ok: true, token: links[0]?.token, grupo_id: grupoId, links });
     } catch (e) {
       console.error('[gerar-contrato direto]', e.message);
       return res.status(500).json({ error: 'Erro interno' });
