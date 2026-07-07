@@ -223,7 +223,6 @@ export default function Calculadora() {
   // inquilino à parte (não saem da renda do dono). O total que o inquilino paga é o
   // aluguel + IPTU + condomínio.
   const rendaLiquidaMensal = vAluguel;
-  const totalCobradoInquilino = vAluguel + carregoMensal;
   // Capital de aquisição (sem o carrego do flip, que aqui é custo recorrente do hold).
   const capitalAquisicao = Math.max(0, m.capitalMobilizado - m.custoCarrrego);
   const yieldLiquidoAnual = capitalAquisicao > 0 ? (rendaLiquidaMensal * 12 / capitalAquisicao) * 100 : 0;
@@ -355,8 +354,11 @@ export default function Calculadora() {
             {!isAluguel && <Campo label="Prazo p/ revenda" value={prazoVenda} onChange={setPrazoVenda} suffix="meses" />}
             <Campo label="Débitos assumidos" value={debitos} onChange={setDebitos} prefix="R$" placeholder="0" />
             <Campo label="Reforma / desocupação" value={reforma} onChange={setReforma} prefix="R$" placeholder="0" />
-            <Campo label="IPTU mensal" value={iptuMensal} onChange={setIptuMensal} prefix="R$" placeholder="0" />
-            <Campo label="Condomínio mensal" value={condominioMensal} onChange={setCondominioMensal} prefix="R$" placeholder="0" />
+            {/* IPTU e condomínio mensais só no objetivo REVENDER (custo de carrego
+                enquanto revende). No aluguel são pagos pelo inquilino → indiferentes
+                para o dono neste cálculo preliminar. */}
+            {!isAluguel && <Campo label="IPTU mensal" value={iptuMensal} onChange={setIptuMensal} prefix="R$" placeholder="0" />}
+            {!isAluguel && <Campo label="Condomínio mensal" value={condominioMensal} onChange={setCondominioMensal} prefix="R$" placeholder="0" />}
           </div>
 
           {isAluguel && (
@@ -459,9 +461,7 @@ export default function Calculadora() {
               </div>
               <Linha label="Desconto sobre a avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 2) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
               <Linha label="Total investido" valor={`R$ ${fmt(capitalAquisicao, 2)}`} sublabel="Arremate + custos do leilão + dívidas/reforma" destaque />
-              <Linha label="Aluguel (livre para você)" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} destaque cor="#059669" sublabel="O que fica com você por mês" />
-              <Linha label="IPTU + condomínio (pagos pelo inquilino)" valor={carregoMensal > 0 ? `R$ ${fmt(carregoMensal, 2)}` : 'R$ 0,00'} sublabel="Cobrados à parte, não saem da sua renda" />
-              <Linha label="Total cobrado do inquilino" valor={`R$ ${fmt(totalCobradoInquilino, 2)}`} sublabel="Aluguel + IPTU + condomínio" />
+              <Linha label="Aluguel por mês (livre para você)" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} destaque cor="#059669" sublabel="IPTU e condomínio ficam com o inquilino" />
               <div style={{ marginTop: 4 }} />
               <Linha label="Rendimento por ano" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel="Aluguel de 12 meses dividido pelo total investido" />
               <Linha label="Tempo p/ o aluguel pagar o que investiu" valor={paybackMesesAluguel ? `${Math.ceil(paybackMesesAluguel)} meses (~${(paybackMesesAluguel / 12).toFixed(1)} anos)` : '—'} />
