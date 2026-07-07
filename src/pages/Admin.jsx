@@ -4618,12 +4618,16 @@ function SystemStatusCard() {
     }
     setCpfMigrando(false);
   };
+  // Grupos por FUNÇÃO DE NEGÓCIO + IMPACTO — dá para varrer o painel pelo que
+  // importa (o que derruba o sistema, o que afeta receita, o que traz cliente).
   const GRUPOS = {
-    geral:  { label: 'Geral', items: ['baseUrl', 'cron'] },
-    email:  { label: 'Alertas por Email', items: ['email', 'from'] },
-    banco:  { label: 'Banco de Dados', items: ['svcKey'] },
-    ads:    { label: 'Anúncios', items: ['googleAds', 'meta'] },
-    agenda: { label: 'Agenda Google', items: ['gcalClient', 'gcalConectada'] },
+    nucleo:      { label: '🧩 Núcleo (crítico)',            cor: '#dc2626', items: ['svcKey', 'baseUrl', 'cron'] },
+    receita:     { label: '💰 Receita & Pagamentos',       cor: '#059669', items: ['asaas', 'mp', 'mpHook', 'pagarme'] },
+    aquisicao:   { label: '📈 Aquisição (trazer clientes)', cor: '#7c3aed', items: ['rastreio', 'metaPixel', 'googleAds', 'meta'] },
+    comunicacao: { label: '✉️ Comunicação',                 cor: '#0D63DB', items: ['email', 'from'] },
+    ia:          { label: '🤖 Inteligência (IA)',           cor: '#0891b2', items: ['claude', 'gemini'] },
+    operacao:    { label: '⚙️ Operação',                    cor: '#64748b', items: ['video', 'coleta', 'onr'] },
+    agenda:      { label: '📅 Agenda Google',               cor: '#f59e0b', items: ['gcalClient', 'gcalConectada'] },
   };
   const DOMINIO_PENDENTE = [
     { label: 'Definir nome e domínio da plataforma', desc: 'Necessário para email remetente e URL pública.' },
@@ -4631,9 +4635,12 @@ function SystemStatusCard() {
     { label: 'APP_FROM_EMAIL no Vercel', desc: 'Ex: "BidPro Brasil <alertas@seudominio.com.br>"' },
     { label: 'APP_BASE_URL no Vercel', desc: 'Ex: "https://seudominio.com.br"' },
   ];
+  // % configurado conta só o OBRIGATÓRIO (itens opcionais — ex.: API avançada de
+  // anúncios, cartório — não penalizam a saúde do sistema).
   const envItems = status ? Object.values(status).filter(v => v && typeof v.ok === 'boolean' && v.label) : [];
-  const totalOk = envItems.filter(v => v.ok).length;
-  const total = envItems.length;
+  const obrigatorios = envItems.filter(v => !v.opcional);
+  const totalOk = obrigatorios.filter(v => v.ok).length;
+  const total = obrigatorios.length;
   const saude = total > 0 ? Math.round(totalOk / total * 100) : 0;
   const bd = status?.brightdata;
   return (
@@ -4641,7 +4648,7 @@ function SystemStatusCard() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <div style={{ fontWeight: 800, fontSize: 16, color: '#111111' }}>Configurações & Saúde do Sistema</div>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Variáveis de ambiente e integrações pendentes</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Por função e impacto: núcleo, receita, aquisição, comunicação, IA e operação</div>
         </div>
         {!loading && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 28, fontWeight: 900, color: saude >= 80 ? '#059669' : saude >= 50 ? '#f59e0b' : '#dc2626' }}>{saude}%</div><div style={{ fontSize: 11, color: '#94a3b8' }}>configurado</div></div>}
       </div>
@@ -4663,18 +4670,29 @@ function SystemStatusCard() {
       })()}
       {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Verificando…</div> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 20 }}>
-          {Object.entries(GRUPOS).map(([key, grupo]) => (
-            <div key={key} style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{grupo.label}</div>
+          {Object.entries(GRUPOS).map(([key, grupo]) => {
+            const itens = grupo.items.map(k => status?.[k]).filter(Boolean);
+            const obrig = itens.filter(i => !i.opcional);
+            const okCount = obrig.filter(i => i.ok).length;
+            const grupoOk = obrig.length === 0 || okCount === obrig.length;
+            return (
+            <div key={key} style={{ border: '1px solid #f1f5f9', borderLeft: `3px solid ${grupo.cor}`, borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: grupo.cor, textTransform: 'uppercase', letterSpacing: 0.4 }}>{grupo.label}</div>
+                {obrig.length > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: grupoOk ? '#166534' : '#b45309', background: grupoOk ? '#dcfce7' : '#fef3c7', borderRadius: 6, padding: '1px 7px', flexShrink: 0 }}>{okCount}/{obrig.length}</span>}
+              </div>
               {grupo.items.map(itemKey => { const item = status?.[itemKey]; if (!item) return null; return (
                 <div key={itemKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: item.ok ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0, fontWeight: 700, color: item.ok ? '#166534' : '#dc2626' }}>{item.ok ? '✓' : '✗'}</div>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: item.ok ? '#dcfce7' : item.opcional ? '#f1f5f9' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0, fontWeight: 700, color: item.ok ? '#166534' : item.opcional ? '#94a3b8' : '#dc2626' }}>{item.ok ? '✓' : item.opcional ? '–' : '✗'}</div>
                   <span style={{ fontSize: 13, color: item.ok ? '#111111' : '#94a3b8', flex: 1 }}>{item.label}</span>
-                  {!item.ok && <span style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', borderRadius: 6, padding: '1px 6px', fontWeight: 700 }}>Pendente</span>}
+                  {!item.ok && (item.opcional
+                    ? <span style={{ fontSize: 10, background: '#f1f5f9', color: '#64748b', borderRadius: 6, padding: '1px 6px', fontWeight: 700 }}>Opcional</span>
+                    : <span style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', borderRadius: 6, padding: '1px 6px', fontWeight: 700 }}>Pendente</span>)}
                 </div>
               ); })}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {!loading && (
@@ -4729,17 +4747,6 @@ function SystemStatusCard() {
             <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 12px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a' }}>
               <span style={{ fontSize: 14, flexShrink: 0 }}>📋</span>
               <div><div style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>{item.label}</div><div style={{ fontSize: 11, color: '#b45309', marginTop: 2, lineHeight: 1.4 }}>{item.desc}</div></div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#8b5cf6', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>🔮 Integrações futuras</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {[['Google Ads','GOOGLE_ADS_*'],['Meta Ads','META_ACCESS_TOKEN'],['RI Digital','RI_DIGITAL_KEY']].map(([nome, env]) => (
-            <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#e2e8f0' }} />
-              <div><div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{nome}</div><div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{env}</div></div>
             </div>
           ))}
         </div>

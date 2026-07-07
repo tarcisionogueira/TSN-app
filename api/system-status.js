@@ -10,16 +10,40 @@ export default async function handler(req) {
   if (role !== 'admin') return forbidden();
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' } });
 
+  // Organizado por FUNÇÃO DE NEGÓCIO + IMPACTO (para gerir com eficiência):
+  //   grupo   → em que parte do sistema o item atua
+  //   impacto → 'critico' (sistema cai) | 'receita' (afeta faturamento) |
+  //             'crescimento' (aquisição de clientes) | 'operacional' (funções do dia a dia)
+  //   opcional→ pendência que NÃO trava operação (ex.: API avançada de anúncios)
   const status = {
-    email:    { ok: !!process.env.RESEND_API_KEY,          label: 'Resend API Key',        grupo: 'email' },
-    from:     { ok: !!process.env.APP_FROM_EMAIL,           label: 'Email remetente',        grupo: 'email' },
-    baseUrl:  { ok: !!process.env.APP_BASE_URL,             label: 'URL do app',             grupo: 'geral' },
-    cron:     { ok: !!process.env.CRON_SECRET,              label: 'Cron Secret',            grupo: 'geral' },
-    svcKey:   { ok: !!process.env.SUPABASE_SERVICE_KEY,     label: 'Supabase Service Key',   grupo: 'banco'  },
-    googleAds:{ ok: !!process.env.GOOGLE_ADS_DEVELOPER_TOKEN, label: 'Google Ads API',       grupo: 'ads'   },
-    meta:     { ok: !!process.env.META_ACCESS_TOKEN,        label: 'Meta Ads API',           grupo: 'ads'   },
-    gcalClient:  { ok: !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET), label: 'Google OAuth (client)', grupo: 'agenda' },
-    gcalConectada:{ ok: !!process.env.GOOGLE_OAUTH_REFRESH_TOKEN, label: 'Agenda Google conectada', grupo: 'agenda' },
+    // ── Núcleo — sem isto, o sistema não roda ────────────────────────────────
+    svcKey:   { ok: !!process.env.SUPABASE_SERVICE_KEY,    label: 'Banco de dados (Supabase)', grupo: 'nucleo', impacto: 'critico' },
+    baseUrl:  { ok: !!process.env.APP_BASE_URL,            label: 'URL do app',                grupo: 'nucleo', impacto: 'critico' },
+    cron:     { ok: !!process.env.CRON_SECRET,             label: 'Automações (Cron)',         grupo: 'nucleo', impacto: 'critico' },
+    // ── Receita & Pagamentos ─────────────────────────────────────────────────
+    asaas:    { ok: !!process.env.ASAAS_API_KEY,           label: 'Asaas (cobrança)',          grupo: 'receita', impacto: 'receita' },
+    mp:       { ok: !!process.env.MP_ACCESS_TOKEN,         label: 'Mercado Pago',              grupo: 'receita', impacto: 'receita' },
+    mpHook:   { ok: !!process.env.MP_WEBHOOK_SECRET,       label: 'Mercado Pago — webhook seguro', grupo: 'receita', impacto: 'receita' },
+    pagarme:  { ok: !!process.env.PAGARME_WEBHOOK_SECRET,  label: 'Pagar.me — webhook',        grupo: 'receita', impacto: 'receita' },
+    // ── Aquisição — trazer pessoas para a plataforma ─────────────────────────
+    // Rastreamento (GA4 + tag do Google Ads) já vive no index.html, não em env.
+    rastreio: { ok: true,                                   label: 'Rastreamento Google (GA4 + Ads)', grupo: 'aquisicao', impacto: 'crescimento' },
+    metaPixel:{ ok: !!process.env.META_PIXEL_ID,           label: 'Pixel do Meta (Facebook/Instagram)', grupo: 'aquisicao', impacto: 'crescimento' },
+    googleAds:{ ok: !!process.env.GOOGLE_ADS_DEVELOPER_TOKEN, label: 'Google Ads — API (opcional)', grupo: 'aquisicao', impacto: 'crescimento', opcional: true },
+    meta:     { ok: !!process.env.META_ACCESS_TOKEN,       label: 'Meta — API/Conversões (opcional)', grupo: 'aquisicao', impacto: 'crescimento', opcional: true },
+    // ── Comunicação ──────────────────────────────────────────────────────────
+    email:    { ok: !!process.env.RESEND_API_KEY,          label: 'E-mail (Resend)',           grupo: 'comunicacao', impacto: 'operacional' },
+    from:     { ok: !!process.env.APP_FROM_EMAIL,          label: 'E-mail remetente',          grupo: 'comunicacao', impacto: 'operacional' },
+    // ── Inteligência (IA) ────────────────────────────────────────────────────
+    claude:   { ok: !!process.env.CLAUDE_KEY,              label: 'Claude (relatórios)',       grupo: 'ia', impacto: 'operacional' },
+    gemini:   { ok: !!process.env.GEMINI_API_KEY,          label: 'Gemini (diagnóstico diário)', grupo: 'ia', impacto: 'operacional' },
+    // ── Operação (conteúdo e serviços) ───────────────────────────────────────
+    video:    { ok: !!process.env.DAILY_API_KEY,           label: 'Vídeo (Daily.co)',          grupo: 'operacao', impacto: 'operacional' },
+    coleta:   { ok: !!process.env.BRIGHTDATA_API_TOKEN,    label: 'Coleta de lotes (Bright Data)', grupo: 'operacao', impacto: 'operacional' },
+    onr:      { ok: !!(process.env.ONR_EMAIL && process.env.ONR_SENHA), label: 'Cartório (ONR / RI Digital)', grupo: 'operacao', impacto: 'operacional', opcional: true },
+    // ── Agenda ───────────────────────────────────────────────────────────────
+    gcalClient:  { ok: !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET), label: 'Google OAuth (client)', grupo: 'agenda', impacto: 'operacional' },
+    gcalConectada:{ ok: !!process.env.GOOGLE_OAUTH_REFRESH_TOKEN, label: 'Agenda Google conectada', grupo: 'agenda', impacto: 'operacional' },
   };
 
   // Consumo Bright Data da semana corrente (para o mostrador do dashboard).
