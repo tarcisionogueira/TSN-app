@@ -74,21 +74,28 @@ Redes: **@bidprobrasil** (Instagram, YouTube, Facebook, LinkedIn).
 
 ---
 
-## 6. Arquivos da marca no projeto (PENDENTE)
+## 6. Arquivos da marca no projeto
 
-O logo é aplicado por um único componente/arquivo — trocar aqui reflete em TODAS as
-telas:
+O logo é aplicado por um único conjunto de arquivos — trocar o "B" aqui reflete em
+TODAS as telas:
 
-- `public/logo.svg` — lockup horizontal (ícone + wordmark) usado no `Header`.
+- `public/logo.svg` — lockup horizontal (ícone + wordmark "BidPro Brasil") usado no `Header`.
 - `src/components/LogoB.jsx` — só o "B" (dentro do quadrado azul), usado em
   Checkout, Footer, Convite, Completar Cadastro, Redefinir Senha.
 - `public/favicon.svg` + `favicon-*.png` — ícone da aba/app.
 
-⚠️ **Ação necessária do dono da marca:** enviar o **vetor oficial isolado** do logo
-(`.svg` de preferência — ou PNG transparente em alta do "B" e do lockup). Com ele:
-1. Substituo `public/logo.svg` pelo lockup oficial.
-2. Aponto `LogoB.jsx` e o favicon para o "B" oficial.
-3. Todas as telas passam a exibir a marca correta automaticamente.
+O "B" atual é **geométrico e limpo** (uma silhueta sólida + duas contra-formas),
+reconstruído a partir do código da marca — não é mais o traçado "à mão". As três
+peças usam exatamente a mesma geometria (viewBox `0 0 48 48`), então ficam nítidas
+em qualquer tamanho, do favicon (16px) ao lockup do header.
 
-Enquanto o vetor oficial não é anexado, o "B" no app é uma **aproximação
-provisória** e não representa a marca final.
+### Se houver um vetor oficial isolado do "B"
+
+Basta enviar o **`.svg` isolado do "B"** (só o "B", com as cores da marca — de
+preferência o vetor original, não um traço preto do brandbook inteiro). Com ele eu:
+1. Substituo a geometria do "B" em `LogoB.jsx`, `logo.svg` e `favicon.svg`.
+2. Todas as telas passam a exibir o vetor oficial automaticamente.
+
+> Observação: o arquivo `.svg` do brandbook que veio como **traço monocromático da
+> página inteira** (mockups, swatches e wordmark fundidos em `fill="#000000"`) não
+> serve como ícone — por isso o "B" foi reconstruído limpo seguindo este código.
