@@ -59,6 +59,14 @@ export default async function handler(req, res) {
   if (!user) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (req.method !== 'POST') return res.status(405).end();
 
+  // Gate de role no servidor: gerar/enviar contrato é só da equipe. Espelha
+  // api/gerar-contrato-ia.js e a rota do front (App.jsx roles admin/consultor/
+  // analista/advogado). O endpoint usa service key e cria vínculo jurídico —
+  // então valida aqui, não confia só no gate do front.
+  const ROLES_STAFF = ['admin', 'consultor', 'analista', 'advogado'];
+  const role = await getUserRole(req);
+  if (!ROLES_STAFF.includes(role)) { res.status(403).json({ error: 'Apenas a equipe pode gerar contratos.' }); return; }
+
   const {
     descricao: descricaoRaw, tipo, titulo: tituloRaw, arquivos = [], respostas,
     // Novo fluxo CriarContrato

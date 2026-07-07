@@ -10,7 +10,10 @@ function sbFetch(path, opts = {}) {
   });
 }
 
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+// CORS restrito ao domínio da aplicação (o front chama same-origin). Evita
+// wildcard num endpoint que escreve com service key.
+const ALLOW_ORIGIN = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+const CORS = { 'Access-Control-Allow-Origin': ALLOW_ORIGIN, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
 const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { 'Content-Type': 'application/json', ...CORS } });
 
 export default async function handler(req) {
