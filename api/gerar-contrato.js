@@ -52,7 +52,7 @@ const PADROES = {
 
 export default async function handler(req, res) {
   const ip = getIP(req);
-  const rl = checkRateLimit(`gerar-contrato:${ip}`, 10, 60_000);
+  const rl = await checkRateLimit(`gerar-contrato:${ip}`, 10, 60_000);
   if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
 
   const user = await getUser(req);

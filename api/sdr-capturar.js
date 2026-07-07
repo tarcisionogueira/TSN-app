@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).json({ error: 'Configuração ausente' });
 
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  if (!checkRateLimit(`sdr-capturar:${ip}`, 6, 60_000).ok) {
+  if (!(await checkRateLimit(`sdr-capturar:${ip}`, 6, 60_000)).ok) {
     return res.status(429).json({ error: 'Muitas tentativas. Aguarde um instante e tente de novo.' });
   }
 

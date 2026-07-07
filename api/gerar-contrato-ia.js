@@ -29,7 +29,7 @@ export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const ip = getIP(req);
-  const rl = checkRateLimit(`gerar-contrato-ia:${ip}`, 5, 60_000);
+  const rl = await checkRateLimit(`gerar-contrato-ia:${ip}`, 5, 60_000);
   if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const user = await getUser(req);

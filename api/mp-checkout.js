@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const ip = getIP(req);
-  const rl = checkRateLimit(`mp-checkout:${ip}`, 10, 60_000);
+  const rl = await checkRateLimit(`mp-checkout:${ip}`, 10, 60_000);
   if (!rl.ok) return res.status(429).json({ error: 'Muitas tentativas. Aguarde.' });
 
   const user = await getUser(req);

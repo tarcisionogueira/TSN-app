@@ -20,7 +20,7 @@ export default async function handler(req) {
   if (req.method !== 'POST') return new Response(JSON.stringify({ ok: false, mensagem: 'Método não permitido.' }), { status: 405 });
 
   const ip = getIP(req);
-  const rl = checkRateLimit(`validar-selfie:${ip}`, 10, 5 * 60 * 1000);
+  const rl = await checkRateLimit(`validar-selfie:${ip}`, 10, 5 * 60 * 1000);
   if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const user = await getUser(req);

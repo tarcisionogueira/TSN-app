@@ -16,7 +16,7 @@ export default async function handler(req) {
   if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 });
 
   const ip = getIP(req);
-  const rl = checkRateLimit(`lgpd-exportar:${ip}`, 5, 60 * 60 * 1000);
+  const rl = await checkRateLimit(`lgpd-exportar:${ip}`, 5, 60 * 60 * 1000);
   if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const user = await getUser(req);

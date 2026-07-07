@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  const rl = checkRateLimit(`claude:${ip}`, 30, 60_000);
+  const rl = await checkRateLimit(`claude:${ip}`, 30, 60_000);
   if (!rl.ok) return res.status(429).json({ error: 'Muitas requisições. Aguarde alguns segundos.' });
 
   const user = await getUser(req);

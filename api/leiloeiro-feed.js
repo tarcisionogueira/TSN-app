@@ -28,7 +28,7 @@ export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
 
   const ip = getIP(req);
-  const rlIp = checkRateLimit(`leiloeiro-feed:ip:${ip}`, 30, 60_000);
+  const rlIp = await checkRateLimit(`leiloeiro-feed:ip:${ip}`, 30, 60_000);
   if (!rlIp.ok) return rateLimitedResponse(rlIp.resetAt);
 
   // Valida token Bearer — formato estrito (evita injeção no filtro PostgREST).
@@ -43,7 +43,7 @@ export default async function handler(req) {
 
   const parceiro = lista[0];
 
-  const rlToken = checkRateLimit(`leiloeiro-feed:token:${parceiro.id}`, 60, 60_000);
+  const rlToken = await checkRateLimit(`leiloeiro-feed:token:${parceiro.id}`, 60, 60_000);
   if (!rlToken.ok) return rateLimitedResponse(rlToken.resetAt);
 
   const fonte = `parceiro_${parceiro.id}`;

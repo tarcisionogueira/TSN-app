@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   }
 
   const ip = getIP(req);
-  const rl = checkRateLimit(`calcular-score:${ip}`, 20, 60_000);
+  const rl = await checkRateLimit(`calcular-score:${ip}`, 20, 60_000);
   if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
 
   // ── 1. Autenticação ────────────────────────────────────────────────────────
