@@ -91,6 +91,25 @@ export async function getUserRoleById(userId) {
   }
 }
 
+/** Busca o customer id do Asaas do usuário (UUID) — usa service key. Retorna null
+ *  se o usuário ainda não tem cadastro de cobrança (ex.: antes do 1º pagamento). */
+export async function getAsaasIdById(userId) {
+  if (!userId) return null;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  if (!SERVICE_KEY) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${userId}&select=asaas_id`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.[0]?.asaas_id || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Valida CRON_SECRET para endpoints chamados pelo Vercel Cron.
  * Vercel envia: Authorization: Bearer <CRON_SECRET>

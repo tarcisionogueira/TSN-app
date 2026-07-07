@@ -1,24 +1,11 @@
 import { apiCall } from './apiCall';
-// Cliente Claude — suporta dev (VITE_CLAUDE_KEY) e produção (/api/claude via Vercel)
-const DEV_KEY = import.meta.env.VITE_CLAUDE_KEY;
+// Cliente Claude — SEMPRE via Edge Function /api/claude (chave server-side, segura).
+// Removido o caminho com VITE_CLAUDE_KEY: nenhum segredo é referenciado por
+// import.meta.env no cliente, então nenhuma chave da Anthropic vai para o bundle.
 const MODEL = 'claude-sonnet-4-6';
 const MODEL_FAST = 'claude-haiku-4-5';
 
 async function callAPI(payload, useSearch = false) {
-  if (DEV_KEY) {
-    // Modo dev: chama Anthropic diretamente (aceita CORS)
-    const headers = {
-      'x-api-key': DEV_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    };
-    if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', headers, body: JSON.stringify(payload),
-    });
-    return r.json();
-  }
-  // Produção: via Edge Function (seguro)
   const r = await apiCall('/api/claude', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

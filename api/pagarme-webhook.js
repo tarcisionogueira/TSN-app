@@ -15,18 +15,29 @@ import {
   processarConfirmado,
   processarVencido,
   processarRecusado,
+  eventoJaProcessado,
 } from './_webhook-core.js';
 
-function verificarAssinatura(req) {
+// O HMAC (X-Hub-Signature) é calculado pelo Pagar.me sobre os BYTES CRUS do corpo.
+// Desligamos o bodyParser da Vercel para conferir sobre o mesmo payload — senão o
+// JSON.stringify(req.body) re-serializa e a assinatura nunca bate.
+export const config = { api: { bodyParser: false } };
+
+async function lerRawBody(req) {
+  let data = '';
+  for await (const chunk of req) data += chunk;
+  return data;
+}
+
+function verificarAssinatura(req, raw) {
   const secret = process.env.PAGARME_WEBHOOK_SECRET;
   if (!secret) { console.error('[pagarme] PAGARME_WEBHOOK_SECRET não configurado — todos os webhooks serão rejeitados. Configure no painel Pagar.me.'); return false; }
 
   // Pagar.me envia HMAC-SHA256 no header X-Hub-Signature
   const signature = req.headers['x-hub-signature'] || '';
-  const body = JSON.stringify(req.body);
   const expected = 'sha256=' + crypto
     .createHmac('sha256', secret)
-    .update(body)
+    .update(raw)
     .digest('hex');
 
   const sigBuf = Buffer.from(signature);
@@ -87,14 +98,23 @@ function normalizarEvento(event) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  if (!verificarAssinatura(req)) {
+  const raw = await lerRawBody(req);
+  if (!verificarAssinatura(req, raw)) {
     console.warn('[pagarme] assinatura inválida');
     return res.status(401).json({ error: 'Não autorizado' });
   }
 
-  const normalizado = normalizarEvento(req.body);
+  let evento;
+  try { evento = JSON.parse(raw); } catch { return res.status(400).json({ error: 'JSON inválido' }); }
+
+  const normalizado = normalizarEvento(evento);
   if (!normalizado) {
-    return res.status(200).json({ ok: true, ignored: req.body?.type });
+    return res.status(200).json({ ok: true, ignored: evento?.type });
+  }
+
+  // Idempotência: entregas concorrentes/repetidas do mesmo evento não creditam 2x.
+  if (await eventoJaProcessado({ gateway: 'pagarme', gatewayPaymentId: normalizado.gatewayPaymentId, evento: normalizado.acao })) {
+    return res.status(200).json({ ok: true, duplicado: true });
   }
 
   const contexto = { gateway: 'pagarme', ...normalizado };

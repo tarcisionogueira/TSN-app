@@ -77,7 +77,7 @@ const PASSO_SELFIE_ROSTO = {
   label: 'Tire uma selfie — só o rosto, frente para a câmera',
   tipo: 'foto',
   instrucao: 'Olhe diretamente para a câmera. Boa iluminação, sem óculos escuros ou bonés.',
-  validacao_prompt: 'Esta imagem tem um rosto humano nítido e frontal, sem obstruções? Responda JSON: {"ok": true/false, "motivo": ""}',
+  validacao_tipo: 'rosto',
 };
 
 const PASSO_DOC = {
@@ -85,7 +85,7 @@ const PASSO_DOC = {
   label: 'Fotografe seu documento — RG ou CNH (frente)',
   tipo: 'foto',
   instrucao: 'Coloque o documento em superfície plana com boa iluminação. Deve estar completamente visível e legível.',
-  validacao_prompt: 'Esta imagem mostra um documento de identidade brasileiro (RG ou CNH) com nome e CPF legíveis? Responda JSON: {"ok": true/false, "motivo": "", "nome_detectado": "", "cpf_detectado": ""}',
+  validacao_tipo: 'documento',
 };
 
 const PASSO_SELFIE_DOC = {
@@ -93,7 +93,7 @@ const PASSO_SELFIE_DOC = {
   label: 'Selfie segurando o documento ao lado do rosto',
   tipo: 'foto',
   instrucao: 'Segure o documento aberto ao lado do rosto. Ambos devem estar nítidos e visíveis.',
-  validacao_prompt: 'Esta imagem mostra simultaneamente um rosto humano E um documento de identidade? Responda JSON: {"ok": true/false, "motivo": ""}',
+  validacao_tipo: 'ambos',
 };
 
 const PASSO_SENHA    = { key: 'senha',           label: 'Crie uma senha de acesso',               tipo: 'password', placeholder: 'Mínimo 8 caracteres' };
@@ -107,7 +107,7 @@ function maskTel(v) {
 }
 
 // ─── Componente de Foto KYC ───────────────────────────────────────────────────
-function PastoFoto({ cor, instrucao, validacao_prompt, onCapturada }) {
+function PastoFoto({ cor, instrucao, validacaoTipo, onCapturada }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -172,7 +172,7 @@ function PastoFoto({ cor, instrucao, validacao_prompt, onCapturada }) {
       const res = await apiCall('/api/validar-selfie', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imagem: dataUrl, validacao_prompt }),
+        body: JSON.stringify({ imagem: dataUrl, tipo: validacaoTipo }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -525,7 +525,7 @@ export default function ConviteEquipe() {
             <PastoFoto
               cor={cfg.cor}
               instrucao={passo.instrucao}
-              validacao_prompt={passo.validacao_prompt}
+              validacaoTipo={passo.validacao_tipo}
               onCapturada={(url) => setVal(passo.key, url)}
             />
           )}

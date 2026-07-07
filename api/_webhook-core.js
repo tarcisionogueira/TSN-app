@@ -259,7 +259,12 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
             .maybeSingle();
 
           if (!existente) {
-            await supabase.from('comissoes').insert({
+            // O índice único idx_comissoes_gateway_payment garante que só UMA
+            // execução vence este INSERT sob corrida (2 entregas concorrentes do
+            // webhook). Capturamos o erro e só creditamos o saldo se a comissão foi
+            // de fato inserida — senão haveria double-credit (saldo_lancamentos não
+            // tem constraint única).
+            const { error: cErr } = await supabase.from('comissoes').insert({
               beneficiario_id:  beneficiarioId,
               cliente_id:       cliente.id,
               tipo:             'afiliado',
@@ -274,11 +279,13 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
               gateway,
             });
             // Credita o saldo unificado (razão saldo_lancamentos) — fonte do saque
-            await supabase.from('saldo_lancamentos').insert({
-              user_id: beneficiarioId, tipo: 'comissao_venda', valor: valorComissao,
-              origem_tipo: 'assinatura', origem_id: gatewayPaymentId,
-              descricao: `Comissão recorrente — ${mapeado.plano} (${pct.toFixed(2)}%)`, status: 'disponivel',
-            });
+            if (!cErr) {
+              await supabase.from('saldo_lancamentos').insert({
+                user_id: beneficiarioId, tipo: 'comissao_venda', valor: valorComissao,
+                origem_tipo: 'assinatura', origem_id: gatewayPaymentId,
+                descricao: `Comissão recorrente — ${mapeado.plano} (${pct.toFixed(2)}%)`, status: 'disponivel',
+              });
+            }
           }
         }
       }

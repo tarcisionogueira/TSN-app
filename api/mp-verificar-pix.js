@@ -35,6 +35,11 @@ export default async function handler(req, res) {
       });
       if (!mpRes.ok) return res.status(502).json({ error: 'Erro ao consultar MP' });
       const data = await mpRes.json();
+      // Ownership: o pagamento tem que ser do próprio usuário (metadata.user_id é
+      // gravado no mp-checkout). Sem isso, um paymentId de terceiro confirmaria.
+      if (String(data.metadata?.user_id || '') !== String(user.id)) {
+        return res.json({ confirmado: false, status: 'pending', naoPertence: true });
+      }
       const confirmado = STATUS_APROVADO.has(data.status);
       return res.json({
         confirmado,
@@ -56,8 +61,11 @@ export default async function handler(req, res) {
     const valorEsperado = Number(valor);
     const pagamento = (results || []).find(p => {
       const valorBate = Math.abs(p.transaction_amount - valorEsperado) < 0.02;
-      const refBate = !referencia || p.external_reference === referencia || p.metadata?.referencia === referencia;
-      return valorBate && refBate;
+      // Vincula ao usuário autenticado via metadata.user_id (setado no mp-checkout).
+      // Remove o antigo match por valor puro (`!referencia`), que confirmava o PIX
+      // de outro usuário com o mesmo valor.
+      const donoBate = String(p.metadata?.user_id || '') === String(user.id);
+      return valorBate && donoBate;
     });
 
     return res.json({

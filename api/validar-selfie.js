@@ -1,11 +1,20 @@
 // POST /api/validar-selfie
-// Recebe { imagem: "data:image/...", validacao_prompt?: string }
-// Verifica com Claude Vision conforme o prompt fornecido, ou faz verificação genérica
+// Recebe { imagem: "data:image/...", tipo?: 'rosto'|'documento'|'ambos' }
+// Verifica com Claude Vision usando um prompt DEFINIDO NO SERVIDOR (allowlist por
+// `tipo`) — nunca texto livre do cliente (evita prompt injection). Fail-closed:
+// sem key ou em erro técnico NÃO aprova sozinho, marca para revisão manual.
 
 export const config = { runtime: 'edge' };
-import { getUser, getUserRole, unauthorized, forbidden } from './_auth.js';
+import { getUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { anthropicFetch } from './_claude.js';
+
+// Prompts fixos por tipo de checagem KYC (o cliente só escolhe o `tipo`).
+const PROMPTS = {
+  rosto: 'Esta imagem tem um rosto humano nítido e frontal, sem obstruções? Responda SOMENTE JSON: {"ok": true/false, "motivo": ""}',
+  documento: 'Esta imagem mostra um documento de identidade brasileiro (RG ou CNH) com nome e CPF legíveis? Responda SOMENTE JSON: {"ok": true/false, "motivo": "", "nome_detectado": "", "cpf_detectado": ""}',
+  ambos: 'Esta imagem mostra simultaneamente um rosto humano E um documento de identidade? Responda SOMENTE JSON: {"ok": true/false, "motivo": ""}',
+};
 
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response(JSON.stringify({ ok: false, mensagem: 'Método não permitido.' }), { status: 405 });
@@ -22,24 +31,25 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ ok: false, mensagem: 'JSON inválido.' }), { status: 400 });
   }
 
-  const { imagem, validacao_prompt } = body;
+  const { imagem, tipo } = body;
   if (!imagem || !imagem.startsWith('data:image/')) {
     return new Response(JSON.stringify({ ok: false, mensagem: 'Imagem inválida.' }), { status: 400 });
   }
 
-  const claudeKey = process.env.CLAUDE_KEY || process.env.VITE_CLAUDE_KEY;
+  const claudeKey = process.env.CLAUDE_KEY;
   if (!claudeKey) {
-    // Sem key, aceita a foto para não bloquear o cadastro
-    return new Response(JSON.stringify({ ok: true, mensagem: 'Foto recebida. Verificação será feita pela equipe.' }), { status: 200 });
+    // Fail-closed: sem key NÃO aprova sozinho — vai para revisão manual da equipe.
+    return new Response(JSON.stringify({ ok: false, mensagem: 'Foto recebida. A verificação será feita pela equipe.' }), { status: 200 });
   }
 
   // Extrai base64
   const base64 = imagem.split(',')[1];
   const mediaType = imagem.match(/data:(image\/\w+);/)?.[1] || 'image/jpeg';
 
-  // Monta o prompt: usa o fornecido ou cai no genérico
-  const promptText = validacao_prompt
-    ? `${validacao_prompt}\n\nResponda SOMENTE com o JSON, sem texto adicional.`
+  // Prompt SEMPRE do servidor (allowlist por `tipo`). Nunca concatena texto do cliente.
+  const usaTipo = typeof tipo === 'string' && !!PROMPTS[tipo];
+  const promptText = usaTipo
+    ? `${PROMPTS[tipo]}\n\nResponda SOMENTE com o JSON, sem texto adicional.`
     : `Analise esta imagem e responda APENAS com JSON no formato:
 {"rosto_visivel": true/false, "documento_visivel": true/false, "aprovado": true/false, "motivo": "texto curto"}
 
@@ -84,8 +94,8 @@ Responda SOMENTE com o JSON, sem texto adicional.`;
     let parsed;
     try { parsed = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { parsed = {}; }
 
-    // Se veio validacao_prompt, usa campo "ok" diretamente
-    if (validacao_prompt) {
+    // Checagem por tipo — usa campo "ok" diretamente
+    if (usaTipo) {
       if (parsed.ok === true) {
         return new Response(JSON.stringify({
           ok: true,
@@ -116,10 +126,10 @@ Responda SOMENTE com o JSON, sem texto adicional.`;
       }), { status: 200 });
     }
   } catch (err) {
-    // Em caso de falha técnica, não bloqueia o cadastro
+    // Fail-closed: falha técnica NÃO aprova automaticamente — vai para revisão manual.
     return new Response(JSON.stringify({
-      ok: true,
-      mensagem: 'Foto recebida. Verificação será realizada pela equipe.',
+      ok: false,
+      mensagem: 'Foto recebida. A verificação será realizada pela equipe.',
     }), { status: 200 });
   }
 }

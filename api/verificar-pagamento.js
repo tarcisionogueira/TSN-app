@@ -1,4 +1,4 @@
-import { getUser } from './_auth.js';
+import { getUser, getAsaasIdById } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 // Verifica com o Asaas se a assinatura/cobrança avulsa foi paga.
@@ -35,15 +35,27 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'subscriptionId ou paymentId obrigatório' });
   }
 
+  // Ownership: o customer do pagamento/assinatura tem que ser o do próprio usuário
+  // (evita IDOR — ler/confirmar cobrança de terceiro por ID). Só dá pra checar
+  // quando o usuário já tem asaas_id (gravado pelo webhook após o 1º pagamento);
+  // no 1º checkout ele ainda é null e o webhook é quem ativa o plano (bound à
+  // metadata do próprio pagamento), então aí seguimos sem bloquear.
+  const asaasId = await getAsaasIdById(user.id);
+
   try {
     if (paymentId) {
       const p = await asaasGet(`/payments/${paymentId}`);
+      if (asaasId && p.customer !== asaasId) return res.status(403).json({ error: 'Acesso negado' });
       const confirmado = STATUS_PAGO.has(p.status);
       auditLog({ acao: 'verificar_pagamento', user_id: user.id, ip, detalhes: { paymentId, status: p.status }, sucesso: true });
       return res.json({ confirmado, status: p.status, dueDate: p.dueDate });
     }
 
-    // Assinatura recorrente — busca a primeira cobrança da assinatura
+    // Assinatura recorrente — valida o dono e busca a primeira cobrança
+    if (asaasId) {
+      const sub = await asaasGet(`/subscriptions/${subscriptionId}`);
+      if (sub.customer !== asaasId) return res.status(403).json({ error: 'Acesso negado' });
+    }
     const data = await asaasGet(`/payments?subscription=${subscriptionId}&limit=10`);
     const pagamentos = data.data || [];
     // Considera confirmado se qualquer cobrança foi paga

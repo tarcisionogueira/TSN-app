@@ -12,6 +12,12 @@ async function sbGet(path) {
   return r.json();
 }
 
+// Minimização de PII: mascara CPF e telefone no texto livre das conversas antes de
+// mandar para a IA (o admin ainda vê nome/status pelos campos estruturados).
+const redigirPII = (t) => String(t || '')
+  .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[CPF]')
+  .replace(/\b(?:\+?55\s?)?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}\b/g, '[TEL]');
+
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
@@ -51,13 +57,13 @@ export default async function handler(req) {
       // Conversa específica
       const msgs = await sbGet(`chamados_mensagens?chamado_id=eq.${chamado_id}&order=criado_em.asc&select=autor_tipo,autor_nome,conteudo,criado_em`);
       const chamado = await sbGet(`chamados?id=eq.${chamado_id}&select=user_email,user_nome,titulo,status,criado_em`);
-      contextoBlocos.push(`## Conversa #${chamado_id.slice(0,8).toUpperCase()}\nCliente: ${chamado[0]?.user_nome || chamado[0]?.user_email || '?'}\nStatus: ${chamado[0]?.status}\n\n${msgs.map(m => `[${new Date(m.criado_em).toLocaleString('pt-BR')}] ${m.autor_tipo === 'cliente' ? 'Cliente' : 'Assistente'}: ${m.conteudo}`).join('\n')}`);
+      contextoBlocos.push(`## Conversa #${chamado_id.slice(0,8).toUpperCase()}\nCliente: ${chamado[0]?.user_nome || chamado[0]?.user_email || '?'}\nStatus: ${chamado[0]?.status}\n\n${msgs.map(m => `[${new Date(m.criado_em).toLocaleString('pt-BR')}] ${m.autor_tipo === 'cliente' ? 'Cliente' : 'Assistente'}: ${redigirPII(m.conteudo)}`).join('\n')}`);
     } else if (usuario_id && isUUID(usuario_id)) {
       // Todos os chamados de um usuário
       const chamados = await sbGet(`chamados?user_id=eq.${usuario_id}&order=criado_em.desc&limit=10&select=id,titulo,status,criado_em,user_nome`);
       const detalhes = await Promise.all(chamados.slice(0, 3).map(async c => {
         const msgs = await sbGet(`chamados_mensagens?chamado_id=eq.${c.id}&order=criado_em.asc&select=autor_tipo,conteudo&limit=20`);
-        return `### Chamado "${c.titulo}" (${c.status})\n${msgs.map(m => `${m.autor_tipo === 'cliente' ? 'Cliente' : 'Assistente'}: ${m.conteudo}`).join('\n')}`;
+        return `### Chamado "${c.titulo}" (${c.status})\n${msgs.map(m => `${m.autor_tipo === 'cliente' ? 'Cliente' : 'Assistente'}: ${redigirPII(m.conteudo)}`).join('\n')}`;
       }));
       contextoBlocos.push(`## Histórico do usuário ${chamados[0]?.user_nome || usuario_id}\n${detalhes.join('\n\n')}`);
     } else {
@@ -87,7 +93,10 @@ ${gerar_relatorio ? 'O administrador solicitou um RELATÓRIO FORMAL. Estruture a
 Seja preciso, direto e use os dados disponíveis. NUNCA invente dados que não estejam no contexto.`;
 
   const messages = [
-    ...historico.map(m => ({ role: m.role, content: m.content })),
+    // Whitelist de role + content string truncado (evita injeção via histórico forjado).
+    ...historico
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .map(m => ({ role: m.role, content: m.content.slice(0, 2000) })),
     { role: 'user', content: contextoStr ? `${contextoStr}\n\n---\nPergunta: ${mensagem}` : mensagem },
   ];
 

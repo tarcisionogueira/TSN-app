@@ -20,6 +20,9 @@ const LOTE = Number(process.env.PROXIMIDADES_LOTE || 12);
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...opts,
+    // Timeout p/ não travar o cron numa conexão pendurada ao Supabase (Overpass já
+    // tem AbortSignal.timeout em _proximidades.js).
+    signal: opts.signal || AbortSignal.timeout(15000),
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
