@@ -1037,6 +1037,7 @@ export default function Analise() {
               {[
                 { k:'mercado', label:'Mercadológico + Viabilidade', ok: relMercadoGerado },
                 { k:'documental', label:'Documental + Processo', ok: relDocumentalGerado },
+                { k:'laudo', label:'Laudo de Viabilidade', ok: relLaudoGerado },
               ].map(it => (
                 // Não clicável até o relatório ser gerado (geração é pelos cards do centro).
                 <button key={it.k} disabled={!it.ok} onClick={() => { if (it.ok) setRelSel(it.k); }}
