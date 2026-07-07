@@ -2485,62 +2485,7 @@ export default function Analise() {
         </div>
       </Section>
 
-      {/* ── ETAPA 6: LAUDO DE VIABILIDADE ── */}
-      <Section id="sec-laudo" step="6" title="Laudo de Viabilidade e Defesa da Arrematação" icon={Award} color="#111111" open={openSec.laudo} onToggle={()=>toggleSec('laudo')}
-        badge={parecer ? 'Gerado' : 'Gere o parecer executivo'}>
-        <div style={{ display:'flex', flexDirection:'column', gap:14, paddingTop:14 }}>
-          <div style={{ display:'flex', gap:10, alignItems:'flex-start', background:'#f8fafc', borderRadius:12, padding:'14px 16px' }}>
-            <Sparkles size={16} color="#6366f1" style={{flexShrink:0,marginTop:1}}/>
-            <div style={{ fontSize:12, color:'#334155', lineHeight:1.7 }}>
-              O laudo é gerado automaticamente junto com o relatório <strong>Mercadológico + Viabilidade</strong> (lá em cima), com base em todos os dados, avaliação de mercado e riscos jurídicos. Inclui <strong>posicionamento estratégico, defesa da arrematação, análise de rentabilidade e conclusão da gestão</strong>. Para atualizá-lo, regere o relatório Mercadológico.
-            </div>
-          </div>
-
-          {loadParecer && (
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'14px', color:'#6366f1', fontWeight:700, fontSize:13 }}>
-              <Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Gerando laudo executivo...
-            </div>
-          )}
-          {!parecer && !loadParecer && (
-            <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'8px 0' }}>
-              O laudo aparece aqui depois de gerar o relatório Mercadológico + Viabilidade.
-            </div>
-          )}
-
-          {parecer && (
-            <>
-              <div style={{ background:'#111111', borderRadius:12, padding:'20px 22px' }}>
-                {parecer.split('§ SEÇÃO:').filter(Boolean).map((sec, i) => {
-                  const [titulo, ...corpo] = sec.split('\n');
-                  return (
-                    <div key={i} style={{ marginBottom: i < 3 ? 22 : 0 }}>
-                      <div style={{ fontSize:11, fontWeight:800, color:'#34d399', textTransform:'uppercase', letterSpacing:1, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ background:'#111111', borderRadius:6, padding:'2px 8px' }}>§ {titulo.trim()}</span>
-                      </div>
-                      <p style={{ margin:0, fontSize:13, lineHeight:1.9, color:'#cbd5e1', whiteSpace:'pre-wrap' }}>{corpo.join('\n').trim()}</p>
-                    </div>
-                  );
-                })}
-              </div>
-              <button onClick={imprimirPDF}
-                style={{ width:'100%', padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-                <Printer size={16}/> Exportar Laudo Completo em PDF
-              </button>
-              {user && !['analista','advogado','consultor','admin'].includes(role) && (
-                <button onClick={solicitarAnalista} disabled={solicitando || solicitado}
-                  style={{ width:'100%', padding:'13px', background: solicitado ? '#10b981' : '#111111', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor: solicitado ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, opacity: solicitando ? 0.7 : 1 }}>
-                  {solicitando
-                    ? <><Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Enviando...</>
-                    : solicitado
-                    ? <><CheckCircle2 size={16}/> Solicitação enviada! Nossa equipe entrará em contato.</>
-                    : <><MessageCircle size={16}/> Solicitar Revisão com Especialista</>
-                  }
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </Section>
+      {/* Laudo/defesa (texto longo) saiu daqui: agora é o 3º relatório (Laudo de Viabilidade). O Mercadológico fica só com os números. */}
 
       {/* PRÓXIMO PASSO, destaque ao fim do Mercadológico: seguir para o Documental */}
       <div style={{ background:'#fff7ed', border:'2px solid #fdba74', borderRadius:16, padding:'18px 20px', display:'flex', gap:14, alignItems:'flex-start' }}>

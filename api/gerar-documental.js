@@ -173,10 +173,18 @@ async function lerDoc(url, deadline) {
   try { doc = await extrair(await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(12000) })); } catch { doc = null; }
   if (doc) { console.log(`[lerDoc] direto OK (${doc.kind}) ${url}`); return doc; }
   if (Date.now() > deadline) return null;
+  // Bright Data: manda cabeçalhos que a Caixa espera (senão devolve HTML de negação
+  // em vez do PDF). Loga o status para diagnóstico (token x bloqueio da fonte).
+  const ehCaixaUrl = /venda-imoveis\.caixa\.gov\.br/i.test(url);
+  const bdHeaders = ehCaixaUrl
+    ? { 'User-Agent': UA, Referer: 'https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp', Accept: 'application/pdf,application/octet-stream,*/*' }
+    : { 'User-Agent': UA, Accept: '*/*' };
   try {
-    const bd = await fetchViaBrightData(url);
+    const bd = await fetchViaBrightData(url, { headers: bdHeaders });
+    if (bd) console.log(`[lerDoc] brightdata resp status=${bd.status} ct=${bd.headers.get('content-type') || ''} ${url}`);
+    else console.log(`[lerDoc] brightdata indisponível (token/zone ausente ou teto) ${url}`);
     doc = await extrair(bd);
-  } catch { doc = null; }
+  } catch (e) { console.warn(`[lerDoc] brightdata erro ${e?.message} ${url}`); doc = null; }
   console.log(`[lerDoc] brightdata ${doc ? 'OK ('+doc.kind+')' : 'FALHOU'} ${url}`);
   return doc;
 }
