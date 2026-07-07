@@ -106,11 +106,20 @@ export default async function handler(req) {
   // 'regras_venda'/'outro' aceitam múltiplos arquivos → sempre insere novo.
   let anterior = null;
   if (TIPOS_UNICOS.includes(tipo)) {
-    const jaRes = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovel_id)}&tipo=eq.${encodeURIComponent(tipo)}&select=id,storage_path&limit=1`);
+    const jaRes = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovel_id)}&tipo=eq.${encodeURIComponent(tipo)}&select=id,storage_path,role_criador&limit=1`);
     if (jaRes.ok) {
       const [e] = await jaRes.json().catch(() => []);
       if (e) anterior = e;
     }
+  }
+
+  // Anti-poisoning: um documento (matrícula/edital) já enviado pela EQUIPE não pode
+  // ser sobrescrito por um usuário não-staff. Uploads NOVOS (sem anterior) e a
+  // substituição de docs enviados por não-staff continuam abertos — o cliente
+  // precisa poder anexar o documento do lote que está analisando.
+  const ehStaff = ROLES_STAFF.includes(perfil.role);
+  if (anterior && ROLES_STAFF.includes(anterior.role_criador) && !ehStaff) {
+    return json({ error: 'Este documento já foi validado pela equipe. Fale com a equipe para substituí-lo.' }, 403);
   }
 
   // Sobe o novo arquivo

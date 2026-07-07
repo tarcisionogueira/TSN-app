@@ -52,10 +52,11 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Não autorizado' });
   }
   if (sig === 'sem_secret') {
-    // Sem MP_WEBHOOK_SECRET ainda: não bloqueia. Cada evento é reconferido na API
-    // do MP com o nosso token (busca preapproval/payment por id), então não há como
-    // um terceiro forjar ativação. Configure o secret p/ verificação criptográfica.
-    console.warn('[mp-webhook] MP_WEBHOOK_SECRET ausente — processando com verificação via API do MP');
+    // Fail-closed: o MP_WEBHOOK_SECRET ESTÁ configurado em produção, então esta
+    // condição só ocorre se a env for removida — aí bloqueamos em vez de aceitar
+    // eventos não assinados.
+    console.error('[mp-webhook] MP_WEBHOOK_SECRET ausente — bloqueando (401)');
+    return res.status(401).json({ error: 'Não autorizado' });
   }
 
   const tipo = req.body?.type || req.body?.action || '';

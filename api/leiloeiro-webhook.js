@@ -2,9 +2,9 @@
  * POST /api/leiloeiro-webhook
  * Recebe lotes de leiloeiros parceiros via API key.
  *
- * Headers: X-Leiloeiro-Key: <chave gerada no portal>
+ * Headers: X-Leiloeiro-Key: <chave gerada no portal>  (GET e POST)
  * Actions: upsert_lote, fechar_lote
- * GET    : listar_lotes (com ?key=<chave>)
+ * GET    : listar_lotes (chave SEMPRE no header X-Leiloeiro-Key, nunca na URL)
  */
 
 export const config = { runtime: 'edge' };
@@ -40,10 +40,11 @@ async function resolverLeiloeiro(key) {
 export default async function handler(req) {
   const { searchParams } = new URL(req.url);
 
-  // GET: listar lotes
+  // GET: listar lotes — chave SÓ no header (nunca ?key= na URL, que vaza em
+  // logs/CDN/Referer). Parceiros que pollavam via ?key= devem migrar para o header.
   if (req.method === 'GET') {
-    const key = searchParams.get('key') || req.headers.get('x-leiloeiro-key') || '';
-    if (!key) return json({ error: 'Chave não informada' }, 401);
+    const key = req.headers.get('x-leiloeiro-key') || '';
+    if (!key) return json({ error: 'Header X-Leiloeiro-Key obrigatório' }, 401);
     const leiloeiro = await resolverLeiloeiro(key);
     if (!leiloeiro) return json({ error: 'Chave inválida ou conta inativa' }, 401);
     // Lotes ficam no catálogo único imoveis_leilao (fonte=webhook_<id>) para
