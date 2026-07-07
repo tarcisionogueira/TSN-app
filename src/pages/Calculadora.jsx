@@ -149,6 +149,10 @@ export default function Calculadora() {
   // quer ver yield e renda mensal, não o lucro de revenda.
   const [objetivo, setObjetivo] = useState(/aluguel|locac/i.test(imPre?.objetivo || '') ? 'aluguel' : 'revenda');
   const [aluguel, setAluguel] = useState(imPre?.valorLocacao ? String(imPre.valorLocacao) : '');
+  // Aluguel esperado sugerido = 0,5% do valor de mercado (regra de bolso do setor,
+  // "renda livre ao arrematante"), EDITÁVEL: só auto-preenche enquanto o usuário
+  // não digitar um valor próprio. Se veio pré-preenchido do imóvel, já conta como editado.
+  const [aluguelEditado, setAluguelEditado] = useState(!!imPre?.valorLocacao);
   const [horizonteAnos, setHorizonteAnos] = useState(5);
   const [metaYield, setMetaYield] = useState(8); // meta de yield líquido a.a. (aluguel)
 
@@ -172,6 +176,14 @@ export default function Calculadora() {
       setCet(15);
     }
   }, [origem]);
+
+  // Aluguel esperado sugerido = 0,5% do valor de mercado (referência do setor).
+  // Só auto-preenche enquanto o usuário não digitar um valor próprio (editável).
+  useEffect(() => {
+    if (aluguelEditado) return;
+    const m = Number(mercado) || 0;
+    setAluguel(m > 0 ? String(Math.round(m * 0.005)) : '');
+  }, [mercado, aluguelEditado]);
 
   const isAVista = pagamento === 'a_vista';
 
@@ -340,7 +352,13 @@ export default function Calculadora() {
 
           {isAluguel && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
-              <Campo label="Aluguel mensal esperado" value={aluguel} onChange={setAluguel} prefix="R$" placeholder="0" />
+              <div>
+                <Campo label="Aluguel mensal esperado" value={aluguel} onChange={(v) => { setAluguel(v); setAluguelEditado(true); }} prefix="R$" placeholder="0" />
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>
+                  Sugestão: <strong>0,5% do valor de mercado</strong> (referência do setor){!aluguelEditado && Number(mercado) > 0 ? ' — editável' : ''}.
+                  {aluguelEditado && <button type="button" onClick={() => setAluguelEditado(false)} style={{ marginLeft: 4, background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 10, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>usar 0,5%</button>}
+                </div>
+              </div>
               <Campo label="Horizonte de projeção" value={horizonteAnos} onChange={setHorizonteAnos} suffix="anos" />
             </div>
           )}
