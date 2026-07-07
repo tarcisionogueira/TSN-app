@@ -44,7 +44,17 @@ function verificarAssinatura(req) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+  // Health-check: abrir a URL no navegador (GET) confirma que a função está viva
+  // e acessível pelo domínio. Se aqui responde 200 JSON, o webhook existe e o
+  // problema (quando houver) está na assinatura/eventos, não no deploy/roteamento.
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    return res.status(200).json({ ok: true, service: 'mp-webhook', hint: 'Endpoint ativo. O Mercado Pago envia POST assinado aqui.' });
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+
+  // Log de entrada: torna cada entrega do MP visível nos logs da Vercel
+  // (antes, retornos silenciosos com 200 não geravam nenhuma linha de log).
+  console.log('[mp-webhook] recebido', { type: req.body?.type, action: req.body?.action, dataId: req.body?.data?.id });
 
   const sig = verificarAssinatura(req);
   if (sig === 'invalida') {
