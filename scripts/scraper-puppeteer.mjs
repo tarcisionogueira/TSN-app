@@ -27,13 +27,23 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 
+// Mesma regra canônica de api/_tipo.js (inline: roda em GitHub Actions). Inclui
+// 'rural' (fazenda/sítio/chácara) e industrial→'comercial', senão essas
+// tipologias caem em 'imovel' e o filtro de tipo da Busca não as isola.
 function normalizarTipo(tipo) {
   if (!tipo) return 'imovel';
-  const t = tipo.toLowerCase();
-  if (t.includes('apart') || t.includes('apto')) return 'apartamento';
-  if (t.includes('casa') || t.includes('resid')) return 'casa';
-  if (t.includes('terreno') || t.includes('lote') || t.includes('area')) return 'terreno';
-  if (t.includes('comerci') || t.includes('sala') || t.includes('loja') || t.includes('galpao') || t.includes('galpão')) return 'comercial';
+  const t = String(tipo).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (t.includes('rural') || t.includes('fazenda') || t.includes('sitio') ||
+      t.includes('chacara') || t.includes('agricol') || t.includes('agropecu') ||
+      t.includes('pecuari') || t.includes('haras') || t.includes('lavoura')) return 'rural';
+  if (t.includes('apart') || t.includes('apto') || t.includes('flat') ||
+      t.includes('kitnet') || t.includes('studio') || t.includes('cobertura')) return 'apartamento';
+  if (t.includes('casa') || t.includes('sobrado') || t.includes('resid')) return 'casa';
+  if (t.includes('terreno') || t.includes('lote') || t.includes('gleba') || t.includes('area')) return 'terreno';
+  if (t.includes('comerc') || t.includes('sala') || t.includes('loja') || t.includes('galp') ||
+      t.includes('barrac') || t.includes('industr') || t.includes('armazem') ||
+      t.includes('deposito') || t.includes('predio') || t.includes('escritorio') ||
+      t.includes('conjunto') || t.includes('ponto') || t.includes('hotel') || t.includes('pousada')) return 'comercial';
   return 'imovel';
 }
 

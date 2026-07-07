@@ -14,6 +14,8 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
+import { normalizarTipo } from './_tipo.js';
+
 import { fetchViaBrightData, brightDataDisponivel } from './_brightdata.js';
 import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
 
@@ -63,16 +65,8 @@ function parseNum(v) {
   return isNaN(n) ? 0 : n;
 }
 
-function normalizarTipo(t) {
-  if (!t) return 'imovel';
-  const s = String(t).toLowerCase();
-  if (s.includes('apart') || s.includes('apto')) return 'apartamento';
-  if (s.includes('casa') || s.includes('sobrado')) return 'casa';
-  if (s.includes('terreno') || s.includes('lote') || s.includes('gleba')) return 'terreno';
-  if (s.includes('comerc') || s.includes('sala') || s.includes('loja') || s.includes('galp') || s.includes('predio')) return 'comercial';
-  if (s.includes('rural') || s.includes('sitio') || s.includes('fazenda') || s.includes('chacara')) return 'rural';
-  return 'imovel';
-}
+// Classificação de tipologia: fonte única em ./_tipo.js (mesma regra do webhook,
+// do feed de parceiros e dos scripts de coleta) — evita divergência entre caminhos.
 
 // Diagnóstico estrutural de uma resposta HTML (para reverse-engineer os seletores)
 function htmlDiag(text) {

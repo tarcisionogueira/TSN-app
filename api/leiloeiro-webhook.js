@@ -9,6 +9,8 @@
 
 export const config = { runtime: 'edge' };
 
+import { normalizarTipo } from './_tipo.js';
+
 const SUPABASE  = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SVC_KEY   = process.env.SUPABASE_SERVICE_KEY;
 
@@ -87,7 +89,9 @@ export default async function handler(req) {
         fonte_id:        `${fonte}_${String(lote.id_externo).slice(0, 200)}`,
         leiloeiro:       leiloeiro.nome ? String(leiloeiro.nome).slice(0, 200) : null,
         titulo:          lote.titulo ? String(lote.titulo).slice(0, 500) : null,
-        tipo:            lote.tipo ? String(lote.tipo).slice(0, 100) : null,
+        // Normaliza p/ o conjunto canônico — o parceiro pode mandar "Fazenda",
+        // "Galpão Industrial", "APTO" etc., que sem normalizar sumiriam da busca.
+        tipo:            normalizarTipo(lote.tipo),
         endereco:        lote.endereco ? String(lote.endereco).slice(0, 500) : null,
         cidade:          lote.cidade ? String(lote.cidade).slice(0, 100) : null,
         estado:          lote.estado ? String(lote.estado).slice(0, 2).toUpperCase() : null,

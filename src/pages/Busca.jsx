@@ -141,6 +141,11 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro) {
   if (f.valorMax) q = q.lte('valor_minimo', Number(String(f.valorMax).replace(/\D/g, '')));
   if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
   if (cidadesFiltro?.length) q = q.in('cidade_norm', cidadesFiltro.map(normCidade));
+  // Bairros: valores EXATOS do banco (vindos da própria listagem de bairros da
+  // cidade), então o `.in` casa sem depender de normalização no servidor. Só filtra
+  // fora do modo raio (no raio a área geográfica já delimita, e a lista de bairros é
+  // por cidade selecionada). Ignorado quando nenhuma cidade está selecionada.
+  if (f.bairros?.length && cidadesFiltro?.length) q = q.in('bairro', f.bairros);
   if (f.pagamento?.length > 0) {
     // 'financiado' e 'hipotecado' são a mesma forma_pagamento ('financiado' =
     // aceita parcelamento), separadas pela modalidade: financiado = parcelável
@@ -481,7 +486,7 @@ export default function Busca() {
       });
   }, [effectiveUserId, limiteAnalises]);
   const analisesRestantes = limiteAnalises != null ? Math.max(0, limiteAnalises - analisesUsadas) : null;
-  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0 };
+  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0 };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
     if (!_urlParams.estado) return null;
@@ -575,6 +580,13 @@ export default function Busca() {
   const [dropdownIndex, setDropdownIndex] = useState(-1);
   const [cidadesEstado, setCidadesEstado] = useState([]);
   const [cidadesCarregando, setCidadesCarregando] = useState(false);
+  // Bairros das cidades selecionadas (derivados dos imóveis REAIS no banco — só
+  // aparecem bairros que têm lote, o que aumenta a precisão da busca). Cada grupo
+  // agrega as variações de grafia do MESMO bairro (ex.: "Centro"/"CENTRO") sob um
+  // rótulo único; `valores` guarda as strings exatas do banco para o filtro casar.
+  const [bairrosGrupos, setBairrosGrupos] = useState([]); // [{ label, chave, valores[] }]
+  const [bairrosCarregando, setBairrosCarregando] = useState(false);
+  const [buscaBairro, setBuscaBairro] = useState('');
   const [resultados, setResultados] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
@@ -611,6 +623,55 @@ export default function Busca() {
     });
     return () => { cancelled = true; };
   }, [filtros.estado]);
+
+  // Bairros das cidades selecionadas — puxa os bairros REAIS dos imóveis ativos
+  // dessas cidades (só listamos bairro que tem lote). Agrupa por bairro normalizado
+  // para não repetir variações de grafia. Sem cidade selecionada → sem bairros
+  // (evita listar milhares de bairros do estado inteiro).
+  const cidadesKey = (filtros.cidades || []).join('|');
+  useEffect(() => {
+    const cidades = filtros.cidades || [];
+    if (!filtros.estado || cidades.length === 0) { setBairrosGrupos([]); return; }
+    let cancelled = false;
+    setBairrosCarregando(true);
+    (async () => {
+      try {
+        const { data } = await supabase.from('imoveis_leilao')
+          .select('bairro')
+          .eq('ativo', true).eq('estado', filtros.estado)
+          .in('cidade_norm', cidades.map(normCidade))
+          .not('bairro', 'is', null)
+          .limit(5000);
+        if (cancelled) return;
+        const mapa = new Map(); // chave normalizada → { label, chave, valores:Set }
+        for (const row of (data || [])) {
+          const raw = (row.bairro || '').trim();
+          if (!raw) continue;
+          const chave = normCidade(raw);
+          if (!chave) continue;
+          if (!mapa.has(chave)) mapa.set(chave, { label: raw, chave, valores: new Set() });
+          mapa.get(chave).valores.add(raw);
+        }
+        const grupos = [...mapa.values()]
+          .map(g => ({ label: g.label, chave: g.chave, valores: [...g.valores] }))
+          .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+        setBairrosGrupos(grupos);
+      } catch { if (!cancelled) setBairrosGrupos([]); }
+      finally { if (!cancelled) setBairrosCarregando(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [filtros.estado, cidadesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ao trocar de cidades, remove dos filtros os bairros que não existem mais na
+  // nova seleção (evita filtro fantasma que zera resultados sem o usuário perceber).
+  useEffect(() => {
+    const selecionados = filtros.bairros || [];
+    if (!selecionados.length) return;
+    if (bairrosCarregando) return;
+    const validos = new Set(bairrosGrupos.flatMap(g => g.valores));
+    const limpos = selecionados.filter(v => validos.has(v));
+    if (limpos.length !== selecionados.length) up('bairros', limpos);
+  }, [bairrosGrupos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ao trocar para mapa com cidade selecionada, geocodifica para auto-zoom
   useEffect(() => {
@@ -771,6 +832,9 @@ export default function Busca() {
     setRaioAtivo(next);
     if (next) {
       if (filtros.cidades.length > 1) up('cidades', [filtros.cidades[0]]);
+      // No modo raio a geografia vem do centro+raio; o filtro de bairros (por cidade)
+      // não se aplica e a RPC de raio não o considera → limpa para não ficar stale.
+      if ((filtros.bairros || []).length) up('bairros', []);
       const cidade = filtros.cidades[0] || filtros.cidades[0];
       if (cidade) geocodificarCidade(cidade, filtros.estado);
     } else {
@@ -1099,7 +1163,8 @@ export default function Busca() {
                     { val: 'apartamento', label: 'Apartamento' },
                     { val: 'casa', label: 'Casa' },
                     { val: 'terreno', label: 'Terreno' },
-                    { val: 'comercial', label: 'Comercial' },
+                    { val: 'comercial', label: 'Comercial/Industrial' },
+                    { val: 'rural', label: 'Rural/Fazenda' },
                   ].map(({ val, label }) => {
                     const ativo = filtros.tipos?.includes(val);
                     return (
@@ -1137,7 +1202,7 @@ export default function Busca() {
               </div>
               <div>
                 <label style={lbl}>Estado (UF) <span style={{ color:'#ef4444' }}>*</span></label>
-                <select value={filtros.estado} onChange={e=>{ up('estado',e.target.value); up('cidades',[]); setBuscaCidade(''); setErro(''); }} style={{ ...inp, borderColor: !filtros.estado ? '#fca5a5' : '#e2e8f0' }}>
+                <select value={filtros.estado} onChange={e=>{ up('estado',e.target.value); up('cidades',[]); up('bairros',[]); setBuscaCidade(''); setBuscaBairro(''); setErro(''); }} style={{ ...inp, borderColor: !filtros.estado ? '#fca5a5' : '#e2e8f0' }}>
                   <option value="">Todos</option>
                   {ESTADOS.map(e=><option key={e} value={e}>{e}</option>)}
                 </select>
@@ -1220,6 +1285,67 @@ export default function Busca() {
                   );
                 })()}
               </div>
+              {/* Bairros da(s) cidade(s) selecionada(s) — só fora do modo raio (no raio
+                   a geografia já é delimitada pelo centro + raio). Aumenta a precisão
+                   da busca para o investidor que foca em regiões específicas. */}
+              {!raioAtivo && filtros.cidades.length > 0 && (bairrosCarregando || bairrosGrupos.length > 0) && (() => {
+                const selecionados = filtros.bairros || [];
+                const isGrupoSel = (g) => g.valores.some(v => selecionados.includes(v));
+                const toggleGrupo = (g) => {
+                  const sel = isGrupoSel(g);
+                  const base = selecionados.filter(v => !g.valores.includes(v));
+                  up('bairros', sel ? base : [...base, ...g.valores]);
+                };
+                const buscaNorm = normCidade(buscaBairro);
+                const filtrados = buscaBairro
+                  ? bairrosGrupos.filter(g => g.chave.includes(buscaNorm))
+                  : bairrosGrupos;
+                const gruposSel = bairrosGrupos.filter(isGrupoSel);
+                return (
+                  <div>
+                    <label style={lbl}>Bairro(s), opcional</label>
+                    <div style={{ fontSize:10, color:'#94a3b8', marginBottom:6 }}>
+                      {bairrosCarregando ? 'Carregando bairros…' : `${bairrosGrupos.length} bairro(s) com imóveis nesta seleção`}
+                    </div>
+                    {gruposSel.length > 0 && (
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
+                        {gruposSel.map(g => (
+                          <span key={g.chave} style={{ display:'flex', alignItems:'center', gap:3, background:'#dcfce7', color:'#15803d', fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:20 }}>
+                            {g.label}
+                            <button onClick={() => toggleGrupo(g)}
+                              style={{ background:'none', border:'none', cursor:'pointer', color:'#15803d', padding:0, display:'flex' }}>
+                              <X size={10}/>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {bairrosGrupos.length > 6 && (
+                      <input
+                        value={buscaBairro}
+                        onChange={e => setBuscaBairro(e.target.value)}
+                        placeholder="Buscar bairro…"
+                        style={{ ...inp, marginBottom:6 }}
+                        autoComplete="off"
+                      />
+                    )}
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:4, maxHeight:132, overflowY:'auto' }}>
+                      {filtrados.map(g => {
+                        const ativo = isGrupoSel(g);
+                        return (
+                          <button key={g.chave} onClick={() => toggleGrupo(g)}
+                            style={{ padding:'4px 10px', borderRadius:20, border:`1px solid ${ativo ? '#16a34a' : '#e2e8f0'}`, background: ativo ? '#16a34a' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize:12, fontWeight: ativo ? 700 : 400, cursor:'pointer' }}>
+                            {g.label}
+                          </button>
+                        );
+                      })}
+                      {!bairrosCarregando && filtrados.length === 0 && (
+                        <div style={{ padding:'6px 2px', fontSize:11, color:'#94a3b8' }}>Nenhum bairro encontrado</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Radius search, toggle sempre visível */}
               <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:12 }}>
                 <label style={{ ...lbl, display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>

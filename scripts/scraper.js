@@ -1462,13 +1462,25 @@ function toTitleCase(str) {
   return str.toLowerCase().replace(/(?:^|\s|-)(\S)/g, c => c.toUpperCase());
 }
 
+// Mesma regra canônica de api/_tipo.js (mantida inline: este script roda em
+// GitHub Actions, onde importar de ../api pode não estar no bundle). Conjunto:
+// apartamento | casa | terreno | comercial | rural | imovel. 'rural' e 'comercial'
+// (que abrange indústria/galpão) precisam existir aqui senão fazenda/galpão
+// caem em 'imovel' e o filtro de tipo da Busca não os isola.
 function normalizarTipo(tipo) {
   if (!tipo) return 'imovel';
-  const t = tipo.toLowerCase();
-  if (t.includes('apart') || t.includes('apto')) return 'apartamento';
-  if (t.includes('casa') || t.includes('resid')) return 'casa';
-  if (t.includes('terreno') || t.includes('lote') || t.includes('area')) return 'terreno';
-  if (t.includes('comerci') || t.includes('sala') || t.includes('loja') || t.includes('galpao') || t.includes('galpão')) return 'comercial';
+  const t = String(tipo).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (t.includes('rural') || t.includes('fazenda') || t.includes('sitio') ||
+      t.includes('chacara') || t.includes('agricol') || t.includes('agropecu') ||
+      t.includes('pecuari') || t.includes('haras') || t.includes('lavoura')) return 'rural';
+  if (t.includes('apart') || t.includes('apto') || t.includes('flat') ||
+      t.includes('kitnet') || t.includes('studio') || t.includes('cobertura')) return 'apartamento';
+  if (t.includes('casa') || t.includes('sobrado') || t.includes('resid')) return 'casa';
+  if (t.includes('terreno') || t.includes('lote') || t.includes('gleba') || t.includes('area')) return 'terreno';
+  if (t.includes('comerc') || t.includes('sala') || t.includes('loja') || t.includes('galp') ||
+      t.includes('barrac') || t.includes('industr') || t.includes('armazem') ||
+      t.includes('deposito') || t.includes('predio') || t.includes('escritorio') ||
+      t.includes('conjunto') || t.includes('ponto') || t.includes('hotel') || t.includes('pousada')) return 'comercial';
   return 'imovel';
 }
 

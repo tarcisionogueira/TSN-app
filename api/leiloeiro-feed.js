@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { normalizarTipo } from './_tipo.js';
 
 const SB_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -73,7 +74,7 @@ export default async function handler(req) {
         leiloeiro: String(parceiro.nome || '').slice(0, 200),
         titulo: String(l.titulo || l.descricao || '').slice(0, 500),
         descricao: String(l.descricao || '').slice(0, 5000),
-        tipo: String(l.tipo || l.tipo_imovel || '').slice(0, 100),
+        tipo: normalizarTipo(l.tipo || l.tipo_imovel),
         endereco: String(l.endereco || '').slice(0, 500),
         bairro: String(l.bairro || '').slice(0, 200),
         cidade: String(l.cidade || l.municipio || '').slice(0, 100),

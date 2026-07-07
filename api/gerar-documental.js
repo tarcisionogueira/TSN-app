@@ -201,7 +201,11 @@ const promptDocumental = (im, temProc) => `Você é advogado especialista em lei
 
 ESCOPO: leitura dos documentos e situação processual. NÃO faça análise de mercado/preço/viabilidade financeira (isso é do relatório MERCADOLÓGICO).
 
-CRUZAMENTO DE DOCUMENTOS (assertividade): use TODOS os documentos anexados EM CONJUNTO, nunca isoladamente. Cruze as informações entre eles e aponte CONVERGÊNCIAS e DIVERGÊNCIAS relevantes (ex.: valor ou área do edital diferente da matrícula; ocupação declarada no edital que não bate com o registro; débito citado num documento e ausente no outro). Havendo divergência, indique qual fonte prevalece (em regra: a matrícula do cartório para a situação registrária; o edital para as condições da venda) e registre o conflito em "pontosAtencao" e "lacunas". Quanto mais documentos cruzados, mais assertivo o parecer.
+CRUZAMENTO DE DOCUMENTOS (assertividade — o objetivo é GARANTIR A SEGURANÇA DA ARREMATAÇÃO): use TODOS os documentos anexados EM CONJUNTO, nunca isoladamente. Analise CADA anexo individualmente e depois CRUZE as informações entre eles, apontando CONVERGÊNCIAS e DIVERGÊNCIAS relevantes (ex.: valor ou área do edital diferente da matrícula; ocupação declarada no edital que não bate com o registro; débito citado num documento e ausente no outro; parte/CPF do executado no auto de penhora diferente do proprietário da matrícula). Havendo divergência, indique qual fonte prevalece (em regra: a matrícula do cartório para a situação registrária; o edital para as condições da venda) e registre o conflito em "riscos" (severidade conforme as regras abaixo) e em "lacunas". Quanto mais documentos cruzados, mais assertivo o parecer.
+
+LEILÃO JUDICIAL COM MÚLTIPLOS ANEXOS (análise apurada): no leilão judicial é comum haver, além da matrícula e do edital, vários anexos — auto/laudo de AVALIAÇÃO, auto de PENHORA, DECISÃO/despacho que designou a hasta, certidões (ônus, distribuidores, negativas), ata da praça anterior, matrícula atualizada e petições. LEIA e CRUZE todos os que estiverem anexados. Verifique especificamente, para dar segurança à arrematação: (a) se o EXECUTADO/proprietário é o mesmo em matrícula, penhora e edital; (b) se o BEM penhorado/avaliado é exatamente o mesmo imóvel da matrícula (número, área, confrontações); (c) se há recurso/embargos ou ação anulatória do próprio leilão pendente; (d) se a penhora e as indisponibilidades estão averbadas e serão levantadas com a carta de arrematação; (e) se o valor da avaliação e o lance mínimo do edital são coerentes com o auto de avaliação. Sinalize QUALQUER incoerência entre os anexos. A AUSÊNCIA de um anexo esperado é DILIGÊNCIA PENDENTE (lacuna), não um bloqueio.
+
+NÃO CONFUNDA ITEM NORMAL DE LEILÃO COM IMPEDIMENTO: penhora/execução que originou a hasta, hipoteca, alienação fiduciária, indisponibilidades/bloqueios da execução e o status "ocupado" são ESPERADOS no leilão e a lei os resolve com a arrematação — NÃO os trate como impedimento à compra (siga as REGRAS ESTRITAS de classificação abaixo). O cruzamento serve para confirmar que esses itens se resolvem, não para reprovar a operação por causa deles.
 
 Avalie e descreva: ônus reais, gravames, hipotecas, penhoras, arrestos, indisponibilidades, usufruto, alienação fiduciária; ocupação (ocupado/desocupado/posseiro/locado) e quem responde pela desocupação; débitos discriminados (IPTU, condomínio, taxas) e DE QUEM é a responsabilidade após a arrematação (conforme o edital); condições do edital (forma de pagamento, prazos, comissão, AJG); restrições registrárias; e a situação do(s) processo(s).
 
@@ -363,8 +367,13 @@ export default async function handler(req, res) {
       const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url&limit=10`)).json();
       for (const a of (Array.isArray(manuais) ? manuais : [])) add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'));
     } catch { /* segue com os do lote */ }
-    // 2º: anexos capturados no scrape (jsonb do lote).
-    for (const a of anexos) { if (urls.length >= 7) break; add(a.url, a.nome || 'Anexo'); }
+    // 2º: anexos capturados no scrape (jsonb do lote). Leilão JUDICIAL costuma ter
+    // MUITOS anexos (auto de penhora/avaliação, laudo, decisão, certidões, ata) —
+    // ampliamos o teto de candidatos para não descartar peça relevante antes da
+    // leitura (a leitura em si continua limitada pelo cap + deadline abaixo).
+    const ehJudicial = /judicial/i.test(String(row?.modalidade || ''));
+    const capCandidatos = ehJudicial ? 16 : 7;
+    for (const a of anexos) { if (urls.length >= capCandidatos) break; add(a.url, a.nome || 'Anexo'); }
     // 3º: URLs do cliente + os PDFs estáticos da Caixa (fallback quando não há arquivo guardado).
     const cxFonte = { fonte: row?.fonte, estado: row?.estado || estado, fonteId: row?.fonte_id };
     add(body?.urlMatricula, 'Matrícula');
@@ -380,8 +389,11 @@ export default async function handler(req, res) {
     const cache = podeCache ? await mapaCache(String(imovelId)) : {};
     const blocos = [];
     const lidos = [];
+    // Cap de leitura adaptativo: judicial lê mais peças (até 8) para o cruzamento
+    // apurado exigido nesses casos; o deadline continua protegendo o tempo total.
+    const capLeitura = ehJudicial ? 8 : 6;
     for (const u of urls) {
-      if (blocos.length >= 6 || Date.now() > deadline) break; // limita custo/payload (deadline protege o tempo)
+      if (blocos.length >= capLeitura || Date.now() > deadline) break; // limita custo/payload (deadline protege o tempo)
       const tipoDoc = tipoDoRotulo(u.rotulo);
       let doc = null, deCache = false;
       // 1) Se já temos o PDF no bucket (manual do analista ou cache anterior), lê de lá.
