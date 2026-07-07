@@ -584,9 +584,12 @@ export default function Busca() {
   // aparecem bairros que têm lote, o que aumenta a precisão da busca). Cada grupo
   // agrega as variações de grafia do MESMO bairro (ex.: "Centro"/"CENTRO") sob um
   // rótulo único; `valores` guarda as strings exatas do banco para o filtro casar.
-  const [bairrosGrupos, setBairrosGrupos] = useState([]); // [{ label, chave, valores[] }]
+  const [bairrosGrupos, setBairrosGrupos] = useState([]); // [{ label, chave, valores[], count }]
   const [bairrosCarregando, setBairrosCarregando] = useState(false);
   const [buscaBairro, setBuscaBairro] = useState('');
+  // Quantitativo de imóveis ATIVOS por cidade (cidade_norm → total) do estado atual,
+  // para o selo ao navegar. Não impede selecionar cidade sem imóveis (monitoramento).
+  const [cidadeCounts, setCidadeCounts] = useState({});
   const [resultados, setResultados] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
@@ -621,6 +624,13 @@ export default function Busca() {
     buscarCidadesEstado(filtros.estado).then(lista => {
       if (!cancelled) { setCidadesEstado(lista); setCidadesCarregando(false); }
     });
+    // Quantitativo por cidade (uma chamada por estado) — só selo de visualização.
+    setCidadeCounts({});
+    supabase.rpc('contar_imoveis_por_cidade', { uf: filtros.estado }).then(({ data }) => {
+      if (cancelled || !Array.isArray(data)) return;
+      const m = {}; for (const r of data) if (r?.cidade_norm) m[r.cidade_norm] = Number(r.total) || 0;
+      setCidadeCounts(m);
+    });
     return () => { cancelled = true; };
   }, [filtros.estado]);
 
@@ -636,12 +646,16 @@ export default function Busca() {
     setBairrosCarregando(true);
     (async () => {
       try {
+        // Inclui bairros SEM imóvel ativo agora (lotes desativados/históricos) para
+        // que o investidor possa selecioná-los e SALVAR o filtro, recebendo as
+        // oportunidades por e-mail quando surgirem. `count` conta só os ativos.
         const { data } = await supabase.from('imoveis_leilao')
-          .select('bairro')
-          .eq('ativo', true).eq('estado', filtros.estado)
+          .select('bairro, ativo')
+          .eq('estado', filtros.estado)
           .in('cidade_norm', cidades.map(normCidade))
           .not('bairro', 'is', null)
-          .limit(5000);
+          .order('atualizado_em', { ascending: false })
+          .limit(6000);
         if (cancelled) return;
         const mapa = new Map(); // chave normalizada → { label, chave, valores:Set, count }
         for (const row of (data || [])) {
@@ -650,11 +664,12 @@ export default function Busca() {
           const chave = normCidade(raw);
           if (!chave) continue;
           if (!mapa.has(chave)) mapa.set(chave, { label: raw, chave, valores: new Set(), count: 0 });
-          const g = mapa.get(chave); g.valores.add(raw); g.count += 1;
+          const g = mapa.get(chave); g.valores.add(raw); if (row.ativo) g.count += 1;
         }
         const grupos = [...mapa.values()]
           .map(g => ({ label: g.label, chave: g.chave, valores: [...g.valores], count: g.count }))
-          // Mais imóveis primeiro (o investidor vê onde há mais oferta); empate por nome.
+          // Mais imóveis primeiro (onde há oferta); os zerados (monitoráveis) vão ao
+          // fim; empate por nome.
           .sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label, 'pt-BR'));
         setBairrosGrupos(grupos);
       } catch { if (!cancelled) setBairrosGrupos([]); }
@@ -1271,10 +1286,15 @@ export default function Busca() {
                           {cidadesFiltradas.map((c, idx) => (
                             <button key={c}
                               onClick={()=>{ up('cidades', raioAtivo ? [c] : [...filtros.cidades, c]); setBuscaCidade(''); setDropdownIndex(-1); if (raioAtivo) geocodificarCidade(c, filtros.estado); }}
-                              style={{ width:'100%', padding:'7px 12px', border:'none', background: idx === dropdownIndex ? '#eff6ff' : 'none', textAlign:'left', cursor:'pointer', fontSize:12, color: idx === dropdownIndex ? '#084BA6' : '#334155', borderBottom:'1px solid #f1f5f9', fontWeight: idx === dropdownIndex ? 700 : 400 }}
+                              style={{ width:'100%', padding:'7px 12px', border:'none', background: idx === dropdownIndex ? '#eff6ff' : 'none', textAlign:'left', cursor:'pointer', fontSize:12, color: idx === dropdownIndex ? '#084BA6' : '#334155', borderBottom:'1px solid #f1f5f9', fontWeight: idx === dropdownIndex ? 700 : 400, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}
                               onMouseEnter={e=>{ setDropdownIndex(idx); e.currentTarget.style.background='#eff6ff'; }}
                               onMouseLeave={e=>{ if (dropdownIndex !== idx) e.currentTarget.style.background='none'; }}>
-                              {c}
+                              <span>{c}</span>
+                              {(() => { const n = cidadeCounts[normCidade(c)]; return (
+                                <span style={{ fontSize:10, fontWeight:700, color: n ? '#16a34a' : '#94a3b8', background: n ? '#f0fdf4' : '#f1f5f9', borderRadius:12, padding:'1px 7px', flexShrink:0 }}>
+                                  {n ? `${n} imóveis` : 'monitorar'}
+                                </span>
+                              ); })()}
                             </button>
                           ))}
                           {cidadesFiltradas.length === 0 && (
@@ -1306,7 +1326,9 @@ export default function Busca() {
                   <div>
                     <label style={lbl}>Bairro(s), opcional</label>
                     <div style={{ fontSize:10, color:'#94a3b8', marginBottom:6 }}>
-                      {bairrosCarregando ? 'Carregando bairros…' : `${bairrosGrupos.length} bairro(s) com imóveis nesta seleção`}
+                      {bairrosCarregando
+                        ? 'Carregando bairros…'
+                        : `${bairrosGrupos.filter(g => g.count > 0).length} com imóveis agora · o número é a oferta atual. Bairro em 0 pode ser salvo para monitorar (avisamos por e-mail).`}
                     </div>
                     {gruposSel.length > 0 && (
                       <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
@@ -1336,7 +1358,7 @@ export default function Busca() {
                         return (
                           <button key={g.chave} onClick={() => toggleGrupo(g)}
                             style={{ padding:'4px 10px', borderRadius:20, border:`1px solid ${ativo ? '#16a34a' : '#e2e8f0'}`, background: ativo ? '#16a34a' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize:12, fontWeight: ativo ? 700 : 400, cursor:'pointer' }}>
-                            {g.label} <span style={{ opacity:0.7, fontWeight:700 }}>· {g.count}</span>
+                            {g.label} <span style={{ opacity:0.75, fontWeight:700 }}>{g.count > 0 ? `· ${g.count}` : '· monitorar'}</span>
                           </button>
                         );
                       })}

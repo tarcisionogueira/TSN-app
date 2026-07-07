@@ -69,14 +69,20 @@ export default async function handler(req) {
   const ids = perfis.map(p => p.id).filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '')));
   const inList = `(${ids.join(',')})`;
 
-  const [alertasArr, fsalvosArr, arremArr] = await Promise.all([
+  // Dedup: imóveis já enviados nos últimos 60 dias (mais antigos podem repetir).
+  const sessentaDias = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
+  const [alertasArr, fsalvosArr, arremArr, enviadosArr] = await Promise.all([
     sbGet(`alertas_email?user_id=in.${inList}&select=user_id,ativo,ultimo_envio,filtros,total_enviados`),
     sbGet(`filtros_salvos?user_id=in.${inList}&select=user_id,filtros,criado_em&order=criado_em.desc`),
     sbGet(`arrematacoes?user_id=in.${inList}&select=user_id,imovel_id`),
+    sbGet(`alertas_enviados?user_id=in.${inList}&enviado_em=gte.${sessentaDias}&select=user_id,imovel_id`),
   ]);
   const alertaMap = {}; for (const a of alertasArr || []) alertaMap[a.user_id] = a;
-  const filtroMap = {}; for (const f of fsalvosArr || []) if (!filtroMap[f.user_id]) filtroMap[f.user_id] = f.filtros; // 1º = mais recente
+  // TODOS os filtros salvos por usuário (mais recentes primeiro), até 6 — o e-mail
+  // distribui 80% das vagas entre eles (assertividade por perfil/praça).
+  const filtroListMap = {}; for (const f of fsalvosArr || []) { const l = (filtroListMap[f.user_id] = filtroListMap[f.user_id] || []); if (l.length < 6 && f.filtros) l.push(f.filtros); }
   const arremMap = {}; for (const a of arremArr || []) (arremMap[a.user_id] = arremMap[a.user_id] || []).push(a.imovel_id);
+  const enviadosMap = {}; for (const e of enviadosArr || []) (enviadosMap[e.user_id] = enviadosMap[e.user_id] || new Set()).add(e.imovel_id);
 
   // Tipos/estados dos imóveis já arrematados (para "similares")
   const arremImovelIds = [...new Set((arremArr || []).map(a => a.imovel_id).filter(Boolean))];
@@ -88,6 +94,30 @@ export default async function handler(req) {
 
   const fmtBRL = v => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
   const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : null;
+
+  // Normalização = cidade_norm do banco (minúsc., sem acento, sem espaço/pontuação).
+  const normCid = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+  const numOnly = (v) => Number(String(v ?? '').replace(/\D/g, '')) || 0;
+  // Monta as condições PostgREST de UM filtro salvo (tipo/modalidade/valor/desconto/
+  // bairros/cidades) — fiel ao que o cliente salvou na Busca.
+  const condFiltro = (f) => {
+    const p = [];
+    const tipos = Array.isArray(f.tipos) ? f.tipos.filter(Boolean) : [];
+    if (tipos.length) p.push(`tipo=in.(${[...tipos, 'imovel'].map(encodeURIComponent).join(',')})`);
+    const mods = Array.isArray(f.modalidades) ? f.modalidades.filter(Boolean) : [];
+    if (mods.length) p.push(`modalidade=in.(${mods.map(encodeURIComponent).join(',')})`);
+    if (f.valorMin) p.push(`valor_minimo=gte.${numOnly(f.valorMin)}`);
+    if (f.valorMax) p.push(`valor_minimo=lte.${numOnly(f.valorMax)}`);
+    if (f.descontoMin) p.push(`desconto_percentual=gte.${Number(f.descontoMin)}`);
+    const bairros = Array.isArray(f.bairros) ? f.bairros.filter(Boolean) : [];
+    if (bairros.length) p.push(`bairro=in.(${bairros.map(b => encodeURIComponent(`"${b}"`)).join(',')})`);
+    const cidades = Array.isArray(f.cidades) ? f.cidades.filter(Boolean) : [];
+    if (cidades.length) p.push(`cidade_norm=in.(${cidades.map(c => encodeURIComponent(normCid(c))).join(',')})`);
+    else if (f.estado) p.push(`estado=eq.${encodeURIComponent(f.estado)}`);
+    return p.length ? '&' + p.join('&') : '';
+  };
+  const buscarPorFiltro = (f, lim) => sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f)}&order=desconto_percentual.desc&limit=${lim}`);
+
   let enviados = 0;
   const isSegunda = new Date().getUTCDay() === 1; // 8h UTC de segunda = 5h BRT de segunda
 
@@ -109,55 +139,66 @@ export default async function handler(req) {
         }
       }
 
-      // Filtro salvo na busca = sinal EXPLÍCITO de interesse (perfil + praça). Se
-      // existir, o e-mail respeita esse perfil e não cai no fallback amplo.
-      const filtroSalvo = filtroMap[perfil.id] || null;
-      const filtros = filtroSalvo || a?.filtros || {};
-      const temPerfilExplicito = !!filtroSalvo;
-      const cidade = (filtros.cidades && filtros.cidades[0]) || perfil.endereco_cidade || '';
-      const uf = filtros.estado || perfil.endereco_uf || '';
+      // ── Seleção assertiva ────────────────────────────────────────────────
+      // Referência = CIDADE do usuário (filtro salvo ou cadastro), nunca o estado.
+      const savedFilters = filtroListMap[perfil.id] || [];
+      const temPerfil = savedFilters.length > 0;
+      const filtroBase = savedFilters[0] || a?.filtros || {};
+      const cidadesRef = (Array.isArray(filtroBase.cidades) && filtroBase.cidades.length)
+        ? filtroBase.cidades.filter(Boolean)
+        : [perfil.endereco_cidade].filter(Boolean);
+      const cidade = cidadesRef[0] || '';
+      const uf = filtroBase.estado || perfil.endereco_uf || '';
 
-      // Condições ASSERTIVAS do perfil salvo (tipo/valor/desconto/bairros), aplicadas
-      // nas consultas por nome de cidade — trazem só o que interessa ao cliente.
-      const fTipos = Array.isArray(filtros.tipos) ? filtros.tipos.filter(Boolean) : [];
-      const fBairros = Array.isArray(filtros.bairros) ? filtros.bairros.filter(Boolean) : [];
-      const numOnly = (v) => Number(String(v ?? '').replace(/\D/g, '')) || 0;
-      const cond = [
-        fTipos.length ? `&tipo=in.(${[...fTipos, 'imovel'].map(encodeURIComponent).join(',')})` : '',
-        filtros.valorMin ? `&valor_minimo=gte.${numOnly(filtros.valorMin)}` : '',
-        filtros.valorMax ? `&valor_minimo=lte.${numOnly(filtros.valorMax)}` : '',
-        filtros.descontoMin ? `&desconto_percentual=gte.${Number(filtros.descontoMin)}` : '',
-        fBairros.length ? `&bairro=in.(${fBairros.map(b => encodeURIComponent(`"${b}"`)).join(',')})` : '',
-      ].join('');
-
-      // Monta o pool de candidatos (dedup por id)
+      const enviadosSet = enviadosMap[perfil.id] || new Set();
+      const LIMITE = 12;
       const pool = new Map();
-      const add = (arr) => { for (const im of arr || []) if (im && im.id && !pool.has(im.id)) pool.set(im.id, im); };
+      const add = (im, isNovo) => { if (im && im.id && !pool.has(im.id)) pool.set(im.id, { im, isNovo }); };
+      // Prioriza NÃO-repetidos; só usa repetido quando falta novidade. Cada fonte já
+      // vem ordenada por maior desconto (os >40% lideram — é o que fecha 30% líquido).
+      const despejar = (lista, limite) => {
+        const arr = (lista || []).filter(im => im && im.id);
+        const frescos = arr.filter(im => !enviadosSet.has(im.id));
+        const repetidos = arr.filter(im => enviadosSet.has(im.id));
+        let n = 0;
+        for (const im of [...frescos, ...repetidos]) {
+          if (n >= limite || pool.size >= LIMITE) break;
+          if (!pool.has(im.id)) { add(im, !enviadosSet.has(im.id)); n++; }
+        }
+      };
 
-      // 1) Cidade por nome (pega até não-geocodificados), já filtrada pelo perfil.
-      if (cidade) add(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&cidade=ilike.*${encodeURIComponent(cidade)}*${cond}&order=desconto_percentual.desc&limit=20`));
-      // 2) Raio de 200km (centróide IBGE offline + PostGIS), respeitando tipo/valor/desconto.
-      const cen = centroide(cidade, uf);
-      if (cen) add(await rpc('buscar_por_raio_v2', {
-        lat: cen.lat, lng: cen.lng, raio_metros: 200000, lim: 40,
-        tipos_filtro: fTipos,
-        valor_min: filtros.valorMin ? numOnly(filtros.valorMin) : 0,
-        valor_max: filtros.valorMax ? numOnly(filtros.valorMax) : 9999999999,
-        desconto_min: filtros.descontoMin ? Number(filtros.descontoMin) : 0,
-      }));
-      // 3) Similares às arrematações do usuário (mesmo tipo/estado)
-      const meus = arremMap[perfil.id] || [];
-      const tipos = [...new Set(meus.map(i => arremInfo[i]?.tipo).filter(Boolean))];
-      for (const t of tipos.slice(0, 2)) add(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&order=desconto_percentual.desc&limit=8`));
-      // 4) Fallback amplo por estado: SÓ para quem não deu perfil explícito (senão
-      // mandaria imóvel fora do interesse). Sem match no perfil → não envia (o
-      // `if (!top.length) continue` abaixo cuida disso) — melhor que ser irrelevante.
-      if (pool.size === 0 && uf && !temPerfilExplicito) add(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&estado=eq.${uf}&order=desconto_percentual.desc&limit=20`));
+      // 1) 80% das vagas, DISTRIBUÍDAS entre os filtros salvos (independe da qtde).
+      if (temPerfil) {
+        const cota80 = Math.round(LIMITE * 0.8); // ~10 de 12
+        const porFiltro = Math.max(1, Math.ceil(cota80 / savedFilters.length));
+        for (const f of savedFilters) {
+          if (pool.size >= cota80) break;
+          despejar(await buscarPorFiltro(f, porFiltro * 4), porFiltro);
+        }
+      }
 
-      // Ordena por maior desconto e pega até 12
-      const top = [...pool.values()]
+      // 2) Complemento (20% + o que faltar) via RAIO da(s) cidade(s) de referência.
+      for (const cid of cidadesRef.slice(0, 3)) {
+        if (pool.size >= LIMITE) break;
+        const cen = centroide(cid, uf);
+        if (cen) despejar(await rpc('buscar_por_raio_v2', { lat: cen.lat, lng: cen.lng, raio_metros: 200000, lim: 40 }), LIMITE - pool.size);
+        if (pool.size < LIMITE) despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&cidade=ilike.*${encodeURIComponent(cid)}*&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
+      }
+
+      // 3) Similares às arrematações do usuário (mesmo tipo), se ainda faltar.
+      if (pool.size < LIMITE) {
+        const meus = arremMap[perfil.id] || [];
+        const tipos = [...new Set(meus.map(i => arremInfo[i]?.tipo).filter(Boolean))];
+        for (const t of tipos.slice(0, 2)) {
+          if (pool.size >= LIMITE) break;
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&order=desconto_percentual.desc&limit=8`), LIMITE - pool.size);
+        }
+      }
+
+      // Ordena por MAIOR desconto (os acima de 40% lideram) e pega até 12.
+      const top = [...pool.values()].map(v => v.im)
         .sort((x, y) => (Number(y.desconto_percentual) || 0) - (Number(x.desconto_percentual) || 0))
-        .slice(0, 12);
+        .slice(0, LIMITE);
       if (!top.length) continue;
 
       const local = [cidade, uf].filter(Boolean).join(' — ') || 'Brasil';
@@ -213,6 +254,16 @@ export default async function handler(req) {
           headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
           body: JSON.stringify({ user_id: perfil.id, ultimo_envio: new Date().toISOString(), total_enviados: (a?.total_enviados || 0) + 1 }),
         });
+        // Registra os imóveis enviados (dedup dos próximos envios; ignora repetidos).
+        if (!testeEmail) {
+          try {
+            await fetch(`${URL_}/rest/v1/alertas_enviados`, {
+              method: 'POST',
+              headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+              body: JSON.stringify(top.map(im => ({ user_id: perfil.id, imovel_id: im.id }))),
+            });
+          } catch { /* dedup é best-effort */ }
+        }
         enviados++;
       }
     } catch (e) {
