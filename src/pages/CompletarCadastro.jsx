@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, Loader2, ShieldCheck } from 'lucide-react';
+import LogoB from '../components/LogoB';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
@@ -88,7 +89,7 @@ export default function CompletarCadastro() {
       <div style={{ background: 'white', borderRadius: 20, padding: '40px 36px', width: '100%', maxWidth: 440, boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
           <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
-            <Briefcase size={20} color="white" />
+            <LogoB size={20} />
           </div>
           <div style={{ fontWeight: 900, fontSize: 16, color: '#111111' }}>BidPro Brasil</div>
         </div>

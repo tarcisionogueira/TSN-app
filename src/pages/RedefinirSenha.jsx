@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import LogoB from '../components/LogoB';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -67,7 +68,7 @@ export default function RedefinirSenha() {
         <button onClick={() => nav('/login')}
           style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
           <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
-            <Briefcase size={20} color="white" />
+            <LogoB size={20} />
           </div>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontWeight: 900, fontSize: 16, color: '#111111', letterSpacing: '-0.5px' }}>BidPro Brasil</div>

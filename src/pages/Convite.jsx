@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { UserPlus, AlertCircle, ShieldCheck, Users, ArrowRight, Briefcase } from 'lucide-react';
+import LogoB from '../components/LogoB';
 import { supabase } from '../utils/supabase';
 
 const ROLE_LABELS = {
@@ -119,7 +120,7 @@ export default function Convite() {
           </div>
 
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#7c3aed', color: 'white', fontSize: 13, fontWeight: 700, padding: '6px 16px', borderRadius: 20, marginBottom: 24 }}>
-            <Briefcase size={14} /> Convite de Equipe BidPro Brasil
+            <LogoB size={14} bg="#7c3aed" /> Convite de Equipe BidPro Brasil
           </div>
 
           <h1 style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: '0 0 12px', lineHeight: 1.2 }}>

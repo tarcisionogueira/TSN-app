@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { trackCheckoutIniciado } from '../utils/gtag';
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
+import LogoB from '../components/LogoB';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
@@ -772,7 +773,7 @@ export default function Checkout() {
         <div style={{ color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', padding: '4px 4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
             <div style={{ background: '#0D63DB', borderRadius: 10, padding: '8px 10px' }}>
-              <Briefcase size={20} color="white" />
+              <LogoB size={20} />
             </div>
             <div>
               <div style={{ fontWeight: 900, fontSize: 18 }}>BIDPRO BRASIL</div>
