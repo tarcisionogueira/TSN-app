@@ -201,6 +201,8 @@ const promptDocumental = (im, temProc) => `Você é advogado especialista em lei
 
 ESCOPO: leitura dos documentos e situação processual. NÃO faça análise de mercado/preço/viabilidade financeira (isso é do relatório MERCADOLÓGICO).
 
+CRUZAMENTO DE DOCUMENTOS (assertividade): use TODOS os documentos anexados EM CONJUNTO, nunca isoladamente. Cruze as informações entre eles e aponte CONVERGÊNCIAS e DIVERGÊNCIAS relevantes (ex.: valor ou área do edital diferente da matrícula; ocupação declarada no edital que não bate com o registro; débito citado num documento e ausente no outro). Havendo divergência, indique qual fonte prevalece (em regra: a matrícula do cartório para a situação registrária; o edital para as condições da venda) e registre o conflito em "pontosAtencao" e "lacunas". Quanto mais documentos cruzados, mais assertivo o parecer.
+
 Avalie e descreva: ônus reais, gravames, hipotecas, penhoras, arrestos, indisponibilidades, usufruto, alienação fiduciária; ocupação (ocupado/desocupado/posseiro/locado) e quem responde pela desocupação; débitos discriminados (IPTU, condomínio, taxas) e DE QUEM é a responsabilidade após a arrematação (conforme o edital); condições do edital (forma de pagamento, prazos, comissão, AJG); restrições registrárias; e a situação do(s) processo(s).
 
 REGISTRO DO IMÓVEL: extraia do CABEÇALHO da matrícula o CARTÓRIO/SERVENTIA de Registro de Imóveis (com o número do Ofício, ex.: "1º Ofício de Registro de Imóveis"), a COMARCA/município do registro e o número da MATRÍCULA. Esses dados constam no topo de toda matrícula. Preencha "cartorio", "comarca" e "numeroMatricula" em "extracao" quando constarem; se não houver matrícula legível, deixe vazio (não invente).
@@ -379,7 +381,7 @@ export default async function handler(req, res) {
     const blocos = [];
     const lidos = [];
     for (const u of urls) {
-      if (blocos.length >= 4 || Date.now() > deadline) break; // limita custo/payload
+      if (blocos.length >= 6 || Date.now() > deadline) break; // limita custo/payload (deadline protege o tempo)
       const tipoDoc = tipoDoRotulo(u.rotulo);
       let doc = null, deCache = false;
       // 1) Se já temos o PDF no bucket (manual do analista ou cache anterior), lê de lá.

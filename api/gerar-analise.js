@@ -71,6 +71,15 @@ ${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
 REGRA OBRIGATÓRIA — MESMO TIPO: considere SOMENTE imóveis do MESMO TIPO (${tipoImovel}).
 Descarte qualquer amostra de tipo diferente. Compare sempre ${tipoImovel} com ${tipoImovel}.
 
+MÉTODO DE AVALIAÇÃO POR TIPO (aplique o adequado ao tipo "${tipoImovel}"):
+- Residencial (casa, apartamento): preço por m² de área privativa/construída, mesmo padrão e região.
+- Terreno/lote: preço por m² de TERRENO (nunca de construção).
+- Comercial (sala, loja, conjunto): preço por m² comercial na mesma vocação/região.
+- Galpão/industrial: preço por m² de área CONSTRUÍDA, considerando pé-direito, docas e localização logística; use comparáveis de galpões, jamais residenciais.
+- Rural (fazenda, sítio, chácara): avalie por HECTARE (não por m² de construção), considerando aptidão do solo (lavoura/pasto), recursos hídricos, benfeitorias e acesso; use comparáveis RURAIS da região.
+- Atípico/outros (posto, hotel, imóvel especial, terreno de marinha): o mercado comparável é RASO. Busque o tipo específico; se não houver ao menos 3 a 4 amostras coerentes, diga EXPLICITAMENTE que a estimativa é apenas INDICATIVA, alargue a faixa (precoMinM2/precoMaxM2) e recomende laudo de avaliação presencial. NUNCA force uma média residencial de m² num imóvel atípico ou rural.
+Se o tipo exigir outra unidade que não o m² de construção (ex.: rural por hectare, terreno por m² de lote), use essa unidade em precoMedioM2 e EXPLIQUE a unidade adotada em "comentario".
+
 REGRA OBRIGATÓRIA — NADA DE LEILÃO NA AMOSTRA: descarte QUALQUER anúncio de leilão, praça,
 hasta pública, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou
 imóvel retomado. Esses preços ficam 30–60% abaixo do mercado e CONTAMINAM a média e o mínimo
