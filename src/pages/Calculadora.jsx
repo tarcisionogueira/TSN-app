@@ -177,13 +177,13 @@ export default function Calculadora() {
     }
   }, [origem]);
 
-  // Aluguel esperado sugerido = 12% ao ano do valor de mercado (1% ao mês —
-  // referência do setor). Só auto-preenche enquanto o usuário não digitar um
-  // valor próprio (editável).
+  // Aluguel esperado sugerido = 0,5% do valor de mercado por mês (referência do
+  // setor). É o aluguel LIVRE do dono: IPTU e condomínio são cobrados do inquilino
+  // à parte. Só auto-preenche enquanto o usuário não digitar um valor próprio.
   useEffect(() => {
     if (aluguelEditado) return;
     const m = Number(mercado) || 0;
-    setAluguel(m > 0 ? String(Math.round(m * 0.12 / 12)) : '');
+    setAluguel(m > 0 ? String(Math.round(m * 0.005)) : '');
   }, [mercado, aluguelEditado]);
 
   const isAVista = pagamento === 'a_vista';
@@ -219,14 +219,18 @@ export default function Calculadora() {
   const isAluguel = objetivo === 'aluguel';
   const vAluguel = Number(aluguel) || 0;
   const carregoMensal = (Number(iptuMensal) || 0) + (Number(condominioMensal) || 0);
-  const rendaLiquidaMensal = vAluguel - carregoMensal;
+  // Aluguel LIVRE: o dono recebe o aluguel cheio; IPTU e condomínio são cobrados do
+  // inquilino à parte (não saem da renda do dono). O total que o inquilino paga é o
+  // aluguel + IPTU + condomínio.
+  const rendaLiquidaMensal = vAluguel;
+  const totalCobradoInquilino = vAluguel + carregoMensal;
   // Capital de aquisição (sem o carrego do flip, que aqui é custo recorrente do hold).
   const capitalAquisicao = Math.max(0, m.capitalMobilizado - m.custoCarrrego);
-  const yieldBrutoAnual = capitalAquisicao > 0 ? (vAluguel * 12 / capitalAquisicao) * 100 : 0;
   const yieldLiquidoAnual = capitalAquisicao > 0 ? (rendaLiquidaMensal * 12 / capitalAquisicao) * 100 : 0;
   const paybackMesesAluguel = rendaLiquidaMensal > 0 ? capitalAquisicao / rendaLiquidaMensal : null;
-  // Fluxo hold (aluguel líquido + venda ao fim do horizonte) → TIR e múltiplo.
-  const fl = useMemo(() => fluxoLocacao({ ...inputs }, (Number(horizonteAnos) || 1) * 12), [inputs, horizonteAnos]);
+  // Fluxo hold → TIR e múltiplo. IPTU/condomínio ZERADOS aqui: são pagos pelo
+  // inquilino, então o caixa do dono é só o aluguel (+ venda ao fim do horizonte).
+  const fl = useMemo(() => fluxoLocacao({ ...inputs, iptuMensal: 0, condominioMensal: 0 }, (Number(horizonteAnos) || 1) * 12), [inputs, horizonteAnos]);
   const tirAluguel = useMemo(() => calcularTIR(fl.fluxos), [fl]);
   const retornoTotalAluguel = fl.fluxos.reduce((s, f) => s + (f > 0 ? f : 0), 0);
   const multiploAluguel = fl.capital > 0 ? retornoTotalAluguel / fl.capital : null;
@@ -360,8 +364,8 @@ export default function Calculadora() {
               <div>
                 <Campo label="Aluguel mensal esperado" value={aluguel} onChange={(v) => { setAluguel(v); setAluguelEditado(true); }} prefix="R$" placeholder="0" />
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>
-                  Sugestão: <strong>12% ao ano do valor de mercado</strong> (1% ao mês, referência do setor){!aluguelEditado && Number(mercado) > 0 ? ' — pode editar' : ''}.
-                  {aluguelEditado && <button type="button" onClick={() => setAluguelEditado(false)} style={{ marginLeft: 4, background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 10, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>usar 12% ao ano</button>}
+                  Sugestão: <strong>0,5% do valor de mercado por mês</strong> (aluguel livre; IPTU e condomínio são pagos pelo inquilino){!aluguelEditado && Number(mercado) > 0 ? ' — pode editar' : ''}.
+                  {aluguelEditado && <button type="button" onClick={() => setAluguelEditado(false)} style={{ marginLeft: 4, background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 10, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>usar 0,5%</button>}
                 </div>
               </div>
               <Campo label="Horizonte de projeção" value={horizonteAnos} onChange={setHorizonteAnos} suffix="anos" />
@@ -455,12 +459,11 @@ export default function Calculadora() {
               </div>
               <Linha label="Desconto sobre a avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 2) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
               <Linha label="Total investido" valor={`R$ ${fmt(capitalAquisicao, 2)}`} sublabel="Arremate + custos do leilão + dívidas/reforma" destaque />
-              <Linha label="Aluguel por mês" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} />
-              <Linha label="IPTU + condomínio (por mês)" valor={carregoMensal > 0 ? `– R$ ${fmt(carregoMensal, 2)}` : 'R$ 0,00'} cor={carregoMensal > 0 ? '#dc2626' : undefined} />
-              <Linha label="Sobra por mês (aluguel menos custos)" valor={`R$ ${fmt(rendaLiquidaMensal, 2)}`} destaque cor={rendaLiquidaMensal >= 0 ? '#059669' : '#dc2626'} />
+              <Linha label="Aluguel (livre para você)" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} destaque cor="#059669" sublabel="O que fica com você por mês" />
+              <Linha label="IPTU + condomínio (pagos pelo inquilino)" valor={carregoMensal > 0 ? `R$ ${fmt(carregoMensal, 2)}` : 'R$ 0,00'} sublabel="Cobrados à parte, não saem da sua renda" />
+              <Linha label="Total cobrado do inquilino" valor={`R$ ${fmt(totalCobradoInquilino, 2)}`} sublabel="Aluguel + IPTU + condomínio" />
               <div style={{ marginTop: 4 }} />
-              <Linha label="Rendimento por ano (antes dos custos)" valor={fmtPct(yieldBrutoAnual, 2)} sublabel="Aluguel de 12 meses dividido pelo total investido" />
-              <Linha label="Rendimento por ano (depois dos custos)" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel="Já descontando IPTU e condomínio" />
+              <Linha label="Rendimento por ano" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel="Aluguel de 12 meses dividido pelo total investido" />
               <Linha label="Tempo p/ o aluguel pagar o que investiu" valor={paybackMesesAluguel ? `${Math.ceil(paybackMesesAluguel)} meses (~${(paybackMesesAluguel / 12).toFixed(1)} anos)` : '—'} />
               <div style={{ margin: '10px 0 4px', padding: '12px 14px', background: '#f5f3ff', borderRadius: 10, border: '1px solid #ddd6fe' }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Ganho total em {horizonteAnos} anos (aluguel + venda no final)</div>
@@ -472,7 +475,7 @@ export default function Calculadora() {
                   <span style={{ fontSize: 13, color: '#6d28d9', fontWeight: 600 }}>Quantas vezes o dinheiro volta</span>
                   <span style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>{multiploAluguel != null ? `${multiploAluguel.toFixed(2)}x` : '—'}</span>
                 </div>
-                <div style={{ fontSize: 10.5, color: '#7c3aed', marginTop: 8, lineHeight: 1.5 }}>Considera a venda no final por 90% do valor de mercado (já descontando comissão e Imposto de Renda). A conta de manter alugado não usa financiamento.</div>
+                <div style={{ fontSize: 10.5, color: '#7c3aed', marginTop: 8, lineHeight: 1.5 }}>IPTU e condomínio são pagos pelo inquilino. Considera a venda no final por 90% do valor de mercado (já descontando comissão e Imposto de Renda). A conta de manter alugado não usa financiamento.</div>
               </div>
               <div style={{ marginTop: 10, padding: '10px 12px', background: '#fef9c3', borderRadius: 8, display: 'flex', gap: 8 }}>
                 <Info size={14} color="#a16207" style={{ flexShrink: 0, marginTop: 1 }} />
