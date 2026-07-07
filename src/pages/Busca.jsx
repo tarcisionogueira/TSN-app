@@ -220,11 +220,13 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       // tráfego de app em produção; o CARTO no-token passou a limitar/bloquear do
       // mesmo jeito -> mapa em branco. Em vez de depender de um só provedor, se o
       // primário acumular erros de tile (bloqueio), troca sozinho para o próximo.
+      // Esri PRIMÁRIO (token-free, confiável). O CARTO no-token passou a devolver
+      // tile em branco com 200 (sem erro) → mapa vazio e o fallback nunca disparava.
       const BASEMAPS = [
+        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+          opts: { maxZoom: 19, attribution: 'Tiles © Esri' } },
         { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
           opts: { subdomains: 'abcd', maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' } },
-        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-          opts: { maxZoom: 16, attribution: 'Tiles © Esri' } },
       ];
       let baseIdx = 0, tileErros = 0;
       const montarBase = () => {

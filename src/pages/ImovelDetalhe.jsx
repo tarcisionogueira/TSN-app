@@ -105,9 +105,12 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
       // Basemap com FALLBACK automático: o tile.openstreetmap.org BLOQUEIA tráfego
       // de app em produção (mapa em branco) — por isso usamos CARTO e, se ele também
       // acumular erros de tile (bloqueio), o mapa cai sozinho para o Esri.
+      // Esri PRIMÁRIO (token-free e confiável). O CARTO no-token passou a devolver
+      // tile em branco com HTTP 200 (sem erro), então o mapa ficava vazio e o
+      // fallback por 'tileerror' nunca disparava. CARTO fica só como reserva.
       const BASEMAPS = [
+        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', opts: { maxZoom: 19 } },
         { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', opts: { subdomains: 'abcd', maxZoom: 19 } },
-        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', opts: { maxZoom: 16 } },
       ];
       let baseIdx = 0, tileErros = 0;
       const montarBase = () => {

@@ -6,8 +6,8 @@ import { useNavigate } from 'react-router-dom';
 // no-token passou a limitar do mesmo jeito — se o primário falhar, cai para o Esri.
 const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>';
 const BASEMAPS = [
+  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', opts: { attribution: 'Tiles © Esri', maxZoom: 19 } },
   { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', opts: { subdomains: 'abcd', attribution: ATTRIBUTION, maxZoom: 19 } },
-  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', opts: { attribution: 'Tiles © Esri', maxZoom: 16 } },
 ];
 
 // Limite de imóveis carregados por bbox conforme zoom
