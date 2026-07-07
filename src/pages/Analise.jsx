@@ -303,6 +303,11 @@ export default function Analise() {
   const relDocumentalGerado = docEntry?.status === 'concluida';
   const [parecerDocumental, setParecerDocumental] = useState(null); // resultado do servidor
   const [docMsg, setDocMsg] = useState('');
+  // Auto-poll da captura de documentos (leiloeiro integrado): quando o servidor está
+  // baixando os PDFs, re-gera sozinho até ler — sem o usuário clicar de novo.
+  const [preparandoDocs, setPreparandoDocs] = useState(false);
+  const capturaPollRef = React.useRef({ n: 0, timer: null });
+  React.useEffect(() => () => clearTimeout(capturaPollRef.current.timer), []);
   // Estado do workflow analista → jurídico (sessão)
   const [reuniaoSolicitada, setReuniaoSolicitada] = useState(false);
   const [reuniaoRealizada, setReuniaoRealizada] = useState(false);
@@ -673,8 +678,11 @@ export default function Analise() {
   // CNJ NO SERVIDOR. O usuário pode FECHAR a aba — continua e grava no banco; o
   // resultado é aplicado de volta pelo efeito abaixo. Texto/processo colados na
   // tela (staff/inclusão manual) são enviados como reforço.
-  const gerarRelDocumental = () => {
+  const gerarRelDocumental = (auto) => {
     if (gerandoDocumental) return;
+    // Ação manual do usuário (não é o auto-poll da captura) → zera o contador de
+    // tentativas para uma nova rodada completa de espera pela captura.
+    if (auto !== true) { capturaPollRef.current.n = 0; clearTimeout(capturaPollRef.current.timer); setPreparandoDocs(false); }
     setDocMsg('');
     // Limpa o resultado anterior (ex.: "precisa documentos") para a tela mostrar
     // "Gerando…" como no mercadológico, e não a tela antiga de anexos na hora.
@@ -728,10 +736,26 @@ export default function Analise() {
     if (r.precisaDocumentos) {
       setParecerDocumental(r);
       setDocMsg(r.motivo || 'Anexe a matrícula e o edital (PDF) para gerar a análise documental.');
-      showMsg('Anexe a matrícula e o edital para gerar a análise.', 'error');
-      setRelSel('documental'); // precisa de anexo → abre a tela dedicada de upload
+      setRelSel('documental');
+      // Leiloeiro integrado baixando os documentos → re-gera sozinho (até ~2 min).
+      // A captura foi disparada na hora pelo servidor; só esperamos ela chegar.
+      if (r.emCaptura && capturaPollRef.current.n < 5) {
+        capturaPollRef.current.n += 1;
+        setPreparandoDocs(true);
+        showMsg('Preparando os documentos… a análise sai sozinha em cerca de 1 minuto.');
+        clearTimeout(capturaPollRef.current.timer);
+        capturaPollRef.current.timer = setTimeout(() => { gerarRelDocumental(true); }, 25000);
+      } else {
+        setPreparandoDocs(false);
+        capturaPollRef.current.n = 0;
+        showMsg('Anexe a matrícula e o edital para gerar a análise.', 'error');
+      }
       return;
     }
+    // Leu os documentos: encerra qualquer poll de captura em andamento.
+    setPreparandoDocs(false);
+    capturaPollRef.current.n = 0;
+    clearTimeout(capturaPollRef.current.timer);
     setParecerDocumental(r);
     // Preenche os riscos do imóvel a partir do que a IA encontrou nos documentos.
     if (Array.isArray(r.riscos) && r.riscos.length) {
@@ -1205,8 +1229,18 @@ export default function Analise() {
             </div>
           )}
 
+          {/* Captura de documentos em andamento (leiloeiro integrado) → a análise
+              sai sozinha quando os PDFs chegarem; não pedimos anexo manual aqui. */}
+          {relSel === 'documental' && parecerDocumental?.precisaDocumentos && preparandoDocs && (
+            <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:16, padding:'28px 22px', display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center' }}>
+              <Loader2 size={28} color="#c2410c" style={{ animation:'spin 1s linear infinite' }}/>
+              <div style={{ fontSize:15, fontWeight:800, color:'#9a3412' }}>Preparando os documentos…</div>
+              <div style={{ fontSize:13, color:'#7c2d12', lineHeight:1.6, maxWidth:460 }}>Estamos baixando o edital e a matrícula direto do leiloeiro integrado. Leva cerca de 1 minuto e a análise é gerada sozinha, sem você precisar clicar. Se preferir, você pode anexar os PDFs manualmente abaixo.</div>
+            </div>
+          )}
+
           {/* Parecer documental gerado NO SERVIDOR (lê edital/matrícula/anexos + CNJ) */}
-          {relSel === 'documental' && parecerDocumental?.precisaDocumentos && (() => {
+          {relSel === 'documental' && parecerDocumental?.precisaDocumentos && !preparandoDocs && (() => {
             const temMat = docsLeiloeiro.some(x => x.tipo === 'matricula');
             const temEdi = docsLeiloeiro.some(x => x.tipo === 'edital');
             const complementares = docsLeiloeiro.filter(x => x.tipo === 'outro');

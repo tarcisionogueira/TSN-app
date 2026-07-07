@@ -143,6 +143,22 @@ function caixaRegrasVendaUrl({ fonte } = {}) {
   return 'https://venda-imoveis.caixa.gov.br/editais/regras-VOL/comocomprar.pdf';
 }
 
+// Dispara JÁ a Action de captura (em vez de esperar o cron de 10/15 min). Assim a
+// captura por navegador roda em ~1 min e a próxima geração lê os documentos.
+// Fire-and-forget: nunca bloqueia nem falha a resposta.
+async function dispararCaptura(arquivoWorkflow) {
+  const token = process.env.GITHUB_ACTIONS_TOKEN;
+  if (!token) return false;
+  try {
+    const r = await fetch(`https://api.github.com/repos/tarcisionogueira/TSN-app/actions/workflows/${arquivoWorkflow}/dispatches`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main' }),
+    });
+    return r.ok;
+  } catch { return false; }
+}
+
 // Lê um documento do lote: PDF → base64 (bloco document); HTML/texto → texto
 // limpo. Tenta fetch direto e cai no Bright Data quando o host bloqueia o servidor.
 async function lerDoc(url, deadline) {
@@ -442,6 +458,8 @@ export default async function handler(req, res) {
               body: JSON.stringify({ imovel_id: String(imovelId), hdniip, status: 'pendente' }),
             });
             enfileirado = true;
+            // Dispara a captura AGORA (não espera o cron de 10 min).
+            await dispararCaptura('matricula-cef.yml');
           } catch { /* segue com a mensagem */ }
         }
       } else if (temPaginaLote) {
@@ -453,6 +471,7 @@ export default async function handler(req, res) {
             body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }),
           });
           enfileirado = true;
+          await dispararCaptura('captura-documentos.yml'); // dispara agora
         } catch { /* segue com a mensagem */ }
       }
       const semDocs = {
@@ -461,7 +480,7 @@ export default async function handler(req, res) {
         emCaptura: enfileirado,
         documentosLidos: [],
         motivo: enfileirado
-          ? `Estamos baixando os documentos automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''} (leiloeiro integrado). Isso leva alguns minutos. Volte e gere de novo em instantes, ou anexe a matrícula e o edital (PDF) se quiser a análise na hora.`
+          ? `Estamos baixando os documentos automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''} (leiloeiro integrado). Leva cerca de 1 minuto — a análise é gerada sozinha assim que os documentos chegarem. Se preferir na hora, anexe a matrícula e o edital (PDF).`
           : (urls.length
             ? 'Os documentos deste lote existem, mas a fonte não liberou a leitura automática agora. Anexe a matrícula e o edital (PDF) para gerar a análise na hora.'
             : 'Este lote ainda não tem documentos vinculados. Anexe a matrícula e o edital (PDF) para gerar a análise.'),
