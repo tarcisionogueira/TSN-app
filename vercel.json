@@ -36,7 +36,7 @@
     { "path": "/api/limpar-analises-cron",    "schedule": "0 4 * * *"    },
     { "path": "/api/limpar-imoveis-stale-cron","schedule": "0 5 * * *"    },
     { "path": "/api/enriquecer-proximidades", "schedule": "*/15 * * * *" },
-    { "path": "/api/reconciliar-assinaturas-cron", "schedule": "30 6 * * *"   },
+    { "path": "/api/reconciliar-assinaturas-cron", "schedule": "30 * * * *"   },
     { "path": "/api/cancelar-nao-pagos-cron",     "schedule": "0 */6 * * *"  },
     { "path": "/api/monitor-fontes-cron",         "schedule": "0 11 * * *"   },
     { "path": "/api/laudo-retry-cron",            "schedule": "0 */2 * * *"  },
