@@ -205,6 +205,8 @@ Avalie e descreva: ônus reais, gravames, hipotecas, penhoras, arrestos, indispo
 
 REGISTRO DO IMÓVEL: extraia do CABEÇALHO da matrícula o CARTÓRIO/SERVENTIA de Registro de Imóveis (com o número do Ofício, ex.: "1º Ofício de Registro de Imóveis"), a COMARCA/município do registro e o número da MATRÍCULA. Esses dados constam no topo de toda matrícula. Preencha "cartorio", "comarca" e "numeroMatricula" em "extracao" quando constarem; se não houver matrícula legível, deixe vazio (não invente).
 
+IDENTIFICAÇÃO DO PROPRIETÁRIO/DEVEDOR (CRÍTICO — é o que dispara as consultas de certidões): a matrícula SEMPRE qualifica as partes. Todo registro de aquisição (R-) e as averbações trazem o NOME e o CPF (pessoa física) ou CNPJ (pessoa jurídica) do proprietário/ex-mutuário/devedor. VARRA a matrícula inteira (todos os R- e Av-) e o edital, e EXTRAIA em "executadoNome" o nome e em "executadoDoc" o CPF/CNPJ (SÓ DÍGITOS) do PROPRIETÁRIO ATUAL / executado / ex-mutuário. Em leilão EXTRAJUDICIAL da Caixa (alienação fiduciária, Lei 9.514), é o EX-MUTUÁRIO cujo imóvel foi consolidado em favor do credor — o CPF dele consta na qualificação do contrato/registro. Se houver vários proprietários na cadeia, use o do ATUAL executado/devedor. NÃO deixe "executadoDoc" vazio se houver QUALQUER CPF/CNPJ de proprietário/devedor legível nos documentos; só deixe vazio se realmente não constar em nenhum lugar.
+
 DADOS-CHAVE DA MATRÍCULA (quando constarem — preencha em "extracao"; se não constar, deixe vazio, NÃO invente):
 - "dataConsolidacao": data da CONSOLIDAÇÃO DA PROPRIEDADE em nome do credor fiduciário (típico de alienação fiduciária/Lei 9.514, na averbação "Av-"), formato AAAA-MM-DD. É determinante para os prazos do ex-mutuário — capture se houver.
 - "indisponibilidadePenhora": há INDISPONIBILIDADE, PENHORA, ARRESTO ou bloqueio ATIVO na matrícula? Responda "sim", "nao" ou "nao_consta".
@@ -247,7 +249,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário, se constar)", "executadoDoc": "(CPF ou CNPJ do executado/devedor, só dígitos, se constar)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "raioX": {
     "cadeiaDominial": [{"ato":"","data":"AAAA-MM-DD","evento":"","parte":""}],
     "certidoesRecomendadas": [{"nome":"","orgao":"","online":false,"motivo":""}],
@@ -525,7 +527,22 @@ export default async function handler(req, res) {
     const ex = parsed.extracao || {};
     const execDoc = String(ex.executadoDoc || '').replace(/\D/g, '');
     const docOk = execDoc.length === 11 || execDoc.length === 14;
-    const procFontes = procNum || ex.numeroProcesso || null;
+    const execNome = String(ex.executadoNome || '').trim();
+
+    // Se não localizamos processo por NÚMERO, busca no CNJ pelo NOME da parte
+    // (executado/devedor/ex-mutuário/proprietário extraído dos documentos). Muitos
+    // leilões — sobretudo extrajudiciais da Caixa — não trazem o nº do processo, mas
+    // trazem o nome do devedor na matrícula; assim ainda encontramos execuções contra
+    // ele (fraude à execução, outras penhoras) que o nº sozinho não acharia.
+    let cnjViaNome = false;
+    if ((!cnj || !cnj.total) && execNome.length >= 6 && im.estado) {
+      try {
+        const porNome = await buscarProcessosCNJ({ nome_parte: execNome, uf: im.estado });
+        cnjViaNome = true;
+        if (porNome && porNome.total) cnj = porNome;
+      } catch { /* CNJ por nome é best-effort */ }
+    }
+    const procFontes = procNum || ex.numeroProcesso || (cnj?.processos?.[0]?.numero) || null;
     let fontesTxt = '', fontesExternas = null;
     try {
       const [djen, cndt, cnib, prot, cert] = await Promise.all([
@@ -542,7 +559,7 @@ export default async function handler(req, res) {
       if (cnib?.ok) linhas.push(`• Indisponibilidade de bens (CNIB): ${cnib.resumo}`);
       if (prot?.ok) linhas.push(`• Protestos (CENPROT): ${prot.resumo}`);
       if (cert?.resumo) linhas.push(`• Certidões fiscais (Receita/PGFN/FGTS): ${cert.resumo}`);
-      if (!docOk && !procFontes) linhas.push('• Não foi possível identificar CPF/CNPJ do executado nem nº do processo nos documentos — consultas externas não realizadas.');
+      if (!docOk) linhas.push(`• CPF/CNPJ do executado/proprietário não localizado nos documentos${execNome ? ` (parte: ${execNome})` : ''} — certidões por documento (CNDT/CNIB/CENPROT/fiscais) não realizadas. Obtenha a matrícula atualizada com a qualificação completa das partes.`);
       if (linhas.length) fontesTxt = `\n\n§ SEÇÃO: CERTIDÕES E FONTES EXTERNAS\n\n${linhas.join('\n')}\n\nConsultas públicas automáticas — confirme em certidão oficial atualizada antes do lance.`;
     } catch { /* fontes externas nunca derrubam o laudo */ }
 
@@ -562,8 +579,11 @@ export default async function handler(req, res) {
           ? `${lidos.length} documento(s) lido(s): ${lidos.map(l => l.rotulo).join(', ')}`
           : (urls.length ? 'Documentos localizados, mas a fonte não liberou a leitura agora — nova tentativa em breve.' : 'Nenhum documento vinculado ao lote.') },
       { label: 'Processo judicial (CNJ/DataJud)',
-        status: cnj ? 'feito' : (procFontes ? 'pendente' : 'na'),
-        detalhe: cnj ? `${cnj.total ?? 0} processo(s) · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}` : (procFontes ? 'Aguardando o DataJud (pode ter lag).' : 'Sem nº de processo para consultar.') },
+        status: (cnj && cnj.total) ? 'feito' : (procFontes ? 'pendente' : 'na'),
+        detalhe: (cnj && cnj.total)
+          ? `${cnj.total} processo(s)${cnjViaNome ? ' (busca pelo nome da parte)' : ''} · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}`
+          : (procFontes ? 'Aguardando o DataJud (pode ter lag).'
+            : (cnjViaNome ? `Nenhum processo localizado no CNJ para "${execNome}".` : 'Sem nº de processo nem nome da parte nos documentos para consultar.')) },
       stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.'),
       stItem('Débitos trabalhistas (CNDT/BNDT)', fx.cndt, 'Sem CPF/CNPJ do executado nos documentos.'),
       stItem('Indisponibilidade de bens (CNIB)', fx.cnib, 'Sem CPF/CNPJ do executado nos documentos.'),

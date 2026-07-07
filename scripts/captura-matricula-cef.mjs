@@ -77,15 +77,46 @@ async function processar(page, item) {
     : null;
   if (matri) { await salvarAnexo(item.imovel_id, matri, 'matricula', 'Matrícula (CEF, automática).pdf'); capturados.push('matricula'); }
 
-  // 2) Edital (se houver link real)
+  // 2) Edital direto (quando o link_edital já é um PDF externo/real).
   if (ehUrl(imovel?.link_edital)) {
     const ed = await capturarUrl(page, imovel.link_edital).catch(() => null);
     if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
   }
-  // 3) Regra de venda online (se houver link real) — quando não há edital
-  if (ehUrl(imovel?.link_regras_venda)) {
-    const rg = await capturarUrl(page, imovel.link_regras_venda).catch(() => null);
-    if (rg) { await salvarAnexo(item.imovel_id, rg, 'regras_venda', 'Regras de venda online (CEF, automático).pdf'); capturados.push('regras_venda'); }
+
+  // 3) Página de DETALHE da Caixa (detalhe-imovel.asp): é onde ficam o EDITAL em PDF
+  //    e as CONDIÇÕES DE VENDA (modalidade, valores, forma de pagamento, ocupação).
+  //    Antes o script pulava isso porque a `ehUrl` rejeita a detalhe-imovel.asp —
+  //    então o edital/regras nunca eram capturados e a análise só via a matrícula.
+  const detalheUrl = num
+    ? `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=${num}`
+    : (imovel?.link_regras_venda || imovel?.link_edital || null);
+  if (detalheUrl) {
+    try {
+      const resp = await page.goto(detalheUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      if (resp && resp.status() < 400) {
+        await new Promise(r => setTimeout(r, 1200));
+        // 3a) Edital em PDF linkado na página (se ainda não capturado).
+        if (!capturados.includes('edital')) {
+          const editalPdf = await page.evaluate(() => {
+            const as = Array.from(document.querySelectorAll('a[href]'));
+            const hit = as.find(a => /\.pdf(\?|#|$)/i.test(a.href) && /edital/i.test(`${a.href} ${a.textContent || ''}`))
+                     || as.find(a => /\.pdf(\?|#|$)/i.test(a.href));
+            return hit ? hit.href : null;
+          });
+          if (editalPdf) {
+            const ed = await capturarUrl(page, editalPdf).catch(() => null);
+            if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
+            await page.goto(detalheUrl, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+            await new Promise(r => setTimeout(r, 600));
+          }
+        }
+        // 3b) Condições de venda: imprime a própria página de detalhe como PDF.
+        if (!capturados.includes('regras_venda')) {
+          const cond = Buffer.from(await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' } }));
+          if (cond.length > 2000) { await salvarAnexo(item.imovel_id, cond, 'regras_venda', 'Condições de venda (CEF, automático).pdf'); capturados.push('regras_venda'); }
+        }
+      }
+    } catch { /* segue com o que já capturou */ }
   }
 
   if (!capturados.length) throw new Error('nenhum_documento_capturado');
