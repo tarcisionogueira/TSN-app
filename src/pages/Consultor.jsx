@@ -35,10 +35,18 @@ export default function Consultor() {
   const nav = useNavigate();
   const { user, role, loading: authLoading } = useAuth();
   const planosCtx = usePlanos();
-  const podeVer = ROLES_CONSULTOR.includes(role);
-  // Afiliado: igual ao consultor em ter links e comissões, MAS sem o painel de
-  // acompanhamento do cliente (carteira/leads). Vê só material + prestação de contas.
-  const ehAfiliado = role === 'afiliado';
+  // "Vender" pode ser uma CAPACIDADE (vendedor_tipo) por cima de qualquer papel —
+  // um cliente pagante mantém o plano e ainda vende. Autoriza por papel OU capacidade.
+  const [vendedorTipo, setVendedorTipo] = useState(null);
+  const podeVer = ROLES_CONSULTOR.includes(role) || !!vendedorTipo;
+  // Afiliado (sem acompanhamento do cliente): tier afiliado e NÃO consultor/admin.
+  const ehAfiliado = !(role === 'consultor' || role === 'admin' || vendedorTipo === 'consultor') && (role === 'afiliado' || vendedorTipo === 'afiliado');
+
+  useEffect(() => {
+    if (!user) { setVendedorTipo(null); return; }
+    supabase.from('perfis').select('vendedor_tipo').eq('id', user.id).single()
+      .then(({ data }) => setVendedorTipo(data?.vendedor_tipo || null));
+  }, [user]);
 
   const [perfil, setPerfil] = useState(null);
   const [carteira, setCarteira] = useState([]);

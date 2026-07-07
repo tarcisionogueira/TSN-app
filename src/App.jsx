@@ -22,6 +22,7 @@ import MinhasAnalises from './pages/MinhasAnalises';
 import HomeCliente from './pages/HomeCliente';
 import Painel from './pages/Painel';
 import Consultor from './pages/Consultor';
+import AtivarVendedor from './pages/AtivarVendedor';
 import Contratos from './pages/Contratos';
 import Calculadora from './pages/Calculadora';
 import Membros from './pages/Membros';
@@ -244,8 +245,11 @@ function MainLayout() {
           <Route path="/caso" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/caso/:id" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
-          <Route path="/consultor" element={<PrivateRoute roles={['consultor','admin','afiliado']}><Consultor /></PrivateRoute>} />
-          <Route path="/afiliado" element={<PrivateRoute roles={['afiliado','admin']}><Consultor /></PrivateRoute>} />
+          {/* Sem gate por papel: a capacidade de vender pode estar em qualquer papel
+              (cliente pagante ou equipe). O componente autoriza por papel OU vendedor_tipo. */}
+          <Route path="/consultor" element={<PrivateRoute><Consultor /></PrivateRoute>} />
+          <Route path="/afiliado" element={<PrivateRoute><Consultor /></PrivateRoute>} />
+          <Route path="/ativar-vendedor/:token" element={<AtivarVendedor />} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
           <Route path="/contratos/novo" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><CriarContrato /></PrivateRoute>} />
           <Route path="/contratos/templates" element={<PrivateRoute roles={['admin']}><ContratosTemplates /></PrivateRoute>} />

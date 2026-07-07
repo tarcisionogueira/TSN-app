@@ -796,6 +796,25 @@ function UsuariosTab() {
                                   🔗 Comissão
                                 </button>
                               )}
+                              {u.role !== 'admin' && (
+                                <button
+                                  style={{ padding: '5px 10px', background: '#fdf2f8', border: '1px solid #fbcfe8', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#db2777', cursor: 'pointer' }}
+                                  title="Habilita a capacidade de vender nesta conta (mantém o plano/função). Cliente pagante continua cliente e também ganha comissão."
+                                  onClick={async () => {
+                                    const tipo = window.prompt('Habilitar venda como? Digite "afiliado" (só comissão) ou "consultor" (com carteira):', 'afiliado');
+                                    if (tipo === null) return;
+                                    const t = tipo.trim().toLowerCase() === 'consultor' ? 'consultor' : 'afiliado';
+                                    const v = window.prompt(`Comissão de ${u.nome || 'membro'} sobre as vendas pelo link dele (%):`, '10');
+                                    if (v === null) return;
+                                    const pct = Math.max(0, Math.min(100, Number(String(v).replace(',', '.')) || 0));
+                                    let codigo = null;
+                                    try { const { data } = await supabase.rpc('gerar_codigo_indicacao', { p_id: u.id }); codigo = data; } catch { /* segue */ }
+                                    const { error } = await supabase.from('perfis').update({ vendedor_tipo: t, comissao_afiliado_pct: pct, comissionamento_bloqueado: false }).eq('id', u.id);
+                                    window.alert(error ? ('Erro: ' + error.message) : `Venda habilitada como ${t} (${pct}%)${codigo ? `, código ${codigo}` : ''}. A pessoa mantém o plano/função atual.`);
+                                  }}>
+                                  📣 Habilitar venda
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>
@@ -6839,6 +6858,25 @@ function EquipeTab() {
           style={{ padding: '9px 18px', background: '#6b7280', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: gerandoConvite ? 0.7 : 1 }}
           onClick={() => setModalMulti(true)}>
           👤 Multi-função
+        </button>
+        <button
+          style={{ padding: '9px 18px', background: '#db2777', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          title="Link para HABILITAR VENDA numa conta que já existe (cliente ou equipe). Quem abre logado passa a vender e mantém o plano/função."
+          onClick={async () => {
+            const tipo = window.prompt('Link de venda para: "afiliado" (só comissão) ou "consultor" (com carteira)?', 'afiliado');
+            if (tipo === null) return;
+            const t = tipo.trim().toLowerCase() === 'consultor' ? 'consultor' : 'afiliado';
+            const v = window.prompt('Comissão % sobre as vendas que vierem pelo link:', '10');
+            if (v === null) return;
+            const pct = Math.max(0, Math.min(100, Number(String(v).replace(',', '.')) || 0));
+            const token = crypto.randomUUID();
+            const { error } = await supabase.from('convites_vendedor').insert({ token, tipo: t, comissao_pct: pct, criado_por: user.id, expira_em: new Date(Date.now() + 90 * 864e5).toISOString() });
+            if (error) { window.alert('Erro: ' + error.message); return; }
+            const link = `${window.location.origin}/#/ativar-vendedor/${token}`;
+            navigator.clipboard.writeText(link).catch(() => {});
+            window.alert(`Link de venda (${t}, ${pct}%) criado e copiado:\n\n${link}\n\nEnvie para o cliente/equipe. Quem abrir logado passa a vender mantendo o plano/função.`);
+          }}>
+          📣 Link de venda
         </button>
       </div>
 
