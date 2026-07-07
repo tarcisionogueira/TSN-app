@@ -115,9 +115,9 @@ export default function Comissoes() {
   // Saldo disponível p/ saque vem da API unificada (/api/saque)
   const totalDisponivel = saldoApi;
 
-  // Agrupamento por gateway
+  // Agrupamento por gateway (usa a coluna real; fallback p/ linhas antigas)
   const porGateway = comissoes.reduce((acc, c) => {
-    const g = c.asaas_payment_id?.startsWith('pay_') ? 'pagarme' : 'asaas';
+    const g = c.gateway || (c.asaas_payment_id ? 'asaas' : 'mercadopago');
     if (!acc[g]) acc[g] = { total: 0, qtd: 0 };
     acc[g].total += Number(c.valor_comissao);
     acc[g].qtd++;
@@ -257,7 +257,7 @@ export default function Comissoes() {
                 {Object.entries(porGateway).map(([g, d]) => (
                   <div key={g} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#f8fafc', borderRadius: 8 }}>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', textTransform: 'capitalize' }}>{g}</div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#111111' }}>{g === 'asaas' ? 'Asaas' : g === 'mercadopago' ? 'Mercado Pago' : g}</div>
                       <div style={{ fontSize: 12, color: '#64748b' }}>{d.qtd} venda{d.qtd !== 1 ? 's' : ''}</div>
                     </div>
                     <div style={{ fontSize: 16, fontWeight: 900, color: '#0D63DB' }}>{fmt(d.total)}</div>
@@ -286,14 +286,14 @@ export default function Comissoes() {
                   </thead>
                   <tbody>
                     {comissoes.map(c => {
-                      // Detecta gateway pela estrutura do payment_id
-                      const gw = c.asaas_payment_id
-                        ? (c.asaas_payment_id.startsWith('pay_') ? 'pagarme' : 'asaas')
-                        : null;
-                      const cfg = gw ? (cfinConfig[gw] || {}) : {};
+                      // Gateway pela coluna real (mercadopago | asaas); fallback p/ antigos.
+                      const gw = c.gateway || (c.asaas_payment_id ? 'asaas' : 'mercadopago');
+                      // config_financeira usa a chave 'mp' para o Mercado Pago.
+                      const cfgKey = gw === 'asaas' ? 'asaas' : 'mp';
+                      const cfg = cfinConfig[cfgKey] || {};
                       const taxaCredito = Number(cfg.taxa_credito_pct || 0);
                       const taxaAntecip = cfg.antecipacao_ativa ? Number(cfg.antecipacao_pct_mes || 0) : 0;
-                      const prazo = cfg.prazo_recebimento_dias || (gw === 'pagarme' ? 30 : 32);
+                      const prazo = cfg.prazo_recebimento_dias || (gw === 'asaas' ? 32 : 30);
 
                       // Taxas aplicadas sobre a comissão bruta
                       const comissaoBruta = Number(c.valor_comissao);
@@ -308,7 +308,7 @@ export default function Comissoes() {
                         <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmtData(c.created_at)}</td>
                           <td style={{ padding: '8px 10px', color: '#111111', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.referencia || c.origem}</td>
-                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{gw || '—'}</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{gw === 'asaas' ? 'Asaas' : gw === 'mercadopago' ? 'Mercado Pago' : (gw || '—')}</td>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmt(c.valor_base)}</td>
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{Number(c.percentual).toFixed(2)}%</td>
                           <td style={{ padding: '8px 10px', fontWeight: 600, color: '#111111', whiteSpace: 'nowrap' }}>{fmt(comissaoBruta)}</td>
@@ -334,7 +334,7 @@ export default function Comissoes() {
                 <div style={{ marginTop: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 11, color: '#64748b', lineHeight: 1.7 }}>
                   <strong style={{ color: '#334155' }}>Legenda:</strong><br/>
                   <strong>Taxa crédito</strong> = MDR do gateway aplicado sobre a comissão bruta (configurável em Admin → Configurações).<br/>
-                  <strong>Taxa antecipação</strong> = custo de antecipar o recebível antes do prazo padrão (Asaas D+32 · Pagar.me D+30). Ativa quando habilitada no admin.<br/>
+                  <strong>Taxa antecipação</strong> = custo de antecipar o recebível antes do prazo padrão (Asaas D+32 · Mercado Pago D+30). Ativa quando habilitada no admin.<br/>
                   <strong>Comissão líquida</strong> = valor estimado após descontar as taxas. Valores reais podem variar por contrato.
                 </div>
               </div>

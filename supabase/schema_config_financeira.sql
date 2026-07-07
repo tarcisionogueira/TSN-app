@@ -1,6 +1,6 @@
 -- Configuração financeira por gateway (taxas de cartão e antecipação)
 CREATE TABLE IF NOT EXISTS public.config_financeira (
-  gateway          text PRIMARY KEY,  -- 'asaas' | 'pagarme'
+  gateway          text PRIMARY KEY,  -- 'mp' (Mercado Pago, principal) | 'asaas' (backup)
   taxa_credito_pct numeric(5,3) DEFAULT 0,    -- MDR cartão crédito (ex: 2.49)
   taxa_debito_pct  numeric(5,3) DEFAULT 0,    -- MDR cartão débito
   antecipacao_ativa boolean DEFAULT false,
@@ -31,6 +31,6 @@ END $$;
 -- Dados iniciais
 INSERT INTO public.config_financeira (gateway, taxa_credito_pct, prazo_recebimento_dias)
 VALUES
-  ('asaas',   2.49, 32),
-  ('pagarme', 2.49, 30)
+  ('mp',    0.00, 30),   -- Mercado Pago (principal) — ajuste a MDR no Admin
+  ('asaas', 2.49, 32)    -- Asaas (backup de cobrança)
 ON CONFLICT (gateway) DO NOTHING;

@@ -4415,18 +4415,18 @@ function DashboardTab() {
             },
           },
           {
-            nome: 'Asaas', categoria: 'Gateway de Pagamento',
-            veredicto: dados.mrr >= 5000 ? 'PLANEJAR MIGRAÇÃO' : 'MANTER (temporário)',
-            cor: dados.mrr >= 5000 ? '#dc2626' : '#d97706',
+            nome: 'Mercado Pago + Asaas', categoria: 'Gateway de Pagamento',
+            veredicto: 'ATIVO (MP principal · Asaas backup)',
+            cor: '#059669',
             icone: '💳',
-            justificativa: 'O modelo de consultores vendendo planos, cursos, ebooks e assessorias exige split automático por venda com múltiplos recebedores (subconta por consultor). O Asaas tem split básico, mas não foi projetado para marketplace com recorrência + avulso simultâneos. A migração deve ser planejada antes de ativar a rede de consultores em escala.',
-            gatilhoTroca: 'Antes de ativar consultores vendendo em escala (independente do MRR)',
+            justificativa: 'Cobrança com Mercado Pago como gateway PRINCIPAL e Asaas como BACKUP (redundância: se um recusar/falhar, o outro assume). Cobre recorrência (planos) e avulso (cursos, assessoria). Pagar.me foi descartado.',
+            gatilhoTroca: 'Ativar o split de marketplace do MP antes de escalar a rede de consultores',
             atingiuGatilho: dados.mrr >= 5000,
             alternativa: {
-              nome: 'Pagar.me (Stone Group) — Marketplace nativo',
-              motivo: 'Líder BR para modelo marketplace com split. Cada consultor ganha uma subconta automática; o split por venda (% BidPro Brasil + % consultor) é configurado por transação. Suporta recorrência (planos) e avulso (cursos, ebooks, assessoria) no mesmo contrato. PIX ~0,99%, cartão ~2,99%, BRL nativo, sem dólar. API REST moderna com webhooks e relatório de repasses por recebedor. — Cielo: válida para grandes varejistas com POS físico e faturamento >R$500k/mês (taxas negociadas), mas foco enterprise com API mais antiga e complexidade extra sem ganho para SaaS online. — EFÍ: menor taxa PIX (0,3%) mas split menos maduro para marketplace multi-produto. — Stripe: descartado (PIX a 2,9% + USD).',
-              custo: '0,99% PIX · 2,99% cartão · BRL',
-              url: 'pagar.me',
+              nome: 'Split nativo do Mercado Pago (marketplace)',
+              motivo: 'Para a rede de consultores vendendo planos/cursos/assessorias em escala, o split automático por venda (parte BidPro + parte do consultor, com repasse por recebedor) é feito pelo PRÓPRIO Mercado Pago, via marketplace/split por transação. É a evolução do gateway atual, sem trocar de provedor. Planeje a ativação do split antes de abrir vendas de consultores em volume.',
+              custo: 'Taxas padrão do Mercado Pago · BRL',
+              url: 'mercadopago.com.br',
             },
           },
           {
@@ -4508,8 +4508,8 @@ function DashboardTab() {
             {
               gatilho: 'Antes de escalar rede de consultores',
               atingido: dados.mrr >= 5000,
-              titulo: 'Migrar gateway para Pagar.me (marketplace)',
-              desc: 'O modelo de consultores vendendo planos, cursos e assessorias exige split automático por venda com subconta por consultor. Pagar.me é o líder BR para isso: split % por transação, recorrência + avulso, relatório de repasse por recebedor. PIX 0,99%, cartão 2,99%, BRL. Planeje a migração antes de ativar vendas em escala — a integração leva ~2 semanas de desenvolvimento.',
+              titulo: 'Ativar split de marketplace no Mercado Pago',
+              desc: 'O modelo de consultores vendendo planos, cursos e assessorias exige split automático por venda (parte BidPro + parte do consultor). O próprio Mercado Pago (gateway principal) faz isso via marketplace/split por transação, com repasse por recebedor — sem trocar de provedor. Planeje a ativação do split antes de abrir vendas de consultores em volume.',
               cor: '#d97706', icone: '💳',
             },
             {

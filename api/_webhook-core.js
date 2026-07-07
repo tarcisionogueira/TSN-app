@@ -1,7 +1,7 @@
 /**
  * _webhook-core.js
  * Lógica de negócio compartilhada entre todos os gateways de pagamento.
- * Asaas e Pagar.me normalizam seus eventos para o formato abaixo
+ * Mercado Pago e Asaas normalizam seus eventos para o formato abaixo
  * e chamam processarPagamentoConfirmado / processarPagamentoVencido / etc.
  *
  * Formato normalizado:
