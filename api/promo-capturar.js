@@ -103,19 +103,28 @@ export default async function handler(req, res) {
     }
   }
 
-  // 4) Perfil: garante telefone e o vínculo com o consultor (carteira). Não
-  //    sobrescreve indicado_por de quem já tinha dono (só preenche se estava vazio).
+  // VENDEDOR que ganha comissão sobre este cliente: consultor (que também cuida) ou
+  // afiliado (só comissão). indicado_por = só o consultor (carteira/care).
+  const sellerId = consultorId || afiliadoRefId;
+
+  // 4) Perfil: telefone, care (indicado_por = consultor) e comissão (comissionado_por
+  //    = vendedor). Não sobrescreve quem já tinha dono (só preenche se vazio).
   if (userId) {
     try {
       await sb('perfis?on_conflict=id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ id: userId, nome, telefone: whatsapp, role: 'explorador', indicado_por: consultorId, lgpd_aceito: true, lgpd_data: meta.lgpd_data }),
+        body: JSON.stringify({ id: userId, nome, telefone: whatsapp, role: 'explorador', indicado_por: consultorId, comissionado_por: sellerId, lgpd_aceito: true, lgpd_data: meta.lgpd_data }),
       });
     } catch { /* best-effort */ }
-  } else if (jaExistia && consultorId) {
-    // Conta pré-existente e sem consultor: adota o consultor do link (só se vazio).
-    try { await sb(`perfis?email=eq.${encodeURIComponent(email)}&indicado_por=is.null`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ indicado_por: consultorId }) }); } catch { /* best-effort */ }
+  } else if (jaExistia && sellerId) {
+    // Conta pré-existente e sem vendedor: adota o do link (só se estava vazio).
+    try { await sb(`perfis?email=eq.${encodeURIComponent(email)}&comissionado_por=is.null`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ...(consultorId ? { indicado_por: consultorId } : {}), comissionado_por: sellerId }) }); } catch { /* best-effort */ }
+  }
+
+  // Marca a última indicação do vendedor (regra dos 3 meses sem indicar).
+  if (sellerId) {
+    try { await sb(`perfis?id=eq.${sellerId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ultima_indicacao_em: new Date().toISOString() }) }); } catch { /* best-effort */ }
   }
 
   // 5) Lead para monitoramento.

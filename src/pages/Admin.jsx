@@ -611,7 +611,8 @@ function UsuariosTab() {
   async function toggleAtivo(u) {
     const estaAtivo = u.ativo !== false;
     if (estaAtivo) {
-      await supabase.from('perfis').update({ ativo: false, role_anterior: u.role }).eq('id', u.id);
+      // Desativar um vendedor faz perder o comissionamento DE VEZ (não volta ao reativar).
+      await supabase.from('perfis').update({ ativo: false, role_anterior: u.role, comissionamento_bloqueado: true }).eq('id', u.id);
       setUsers(users.map(x => x.id === u.id ? { ...x, ativo: false, role_anterior: u.role } : x));
     } else {
       const roleRestaurado = u.role_anterior || u.role;

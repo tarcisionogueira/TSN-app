@@ -81,7 +81,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
     const campo = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';
     const { data } = await supabase
       .from('perfis')
-      .select('id, indicado_por, role, role_anterior, inadimplente_desde')
+      .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde')
       .eq(campo, gatewayCustomerId)
       .maybeSingle();
     if (data) return data;
@@ -93,7 +93,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
     if (userId) {
       const { data } = await supabase
         .from('perfis')
-        .select('id, indicado_por, role, role_anterior, inadimplente_desde')
+        .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde')
         .eq('id', userId)
         .maybeSingle();
       if (data) return data;
@@ -218,18 +218,34 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
     }
   }
 
-  // Comissão de afiliado
-  if (cliente.indicado_por && mapeado && gatewayPaymentId) {
+  // Comissão RECORRENTE do vendedor (consultor OU afiliado), sobre a MENSALIDADE.
+  // Beneficiário = comissionado_por (afiliado/consultor); cai em indicado_por para
+  // compatibilidade com indicações antigas. Recorrente: uma comissão por pagamento
+  // (dedupe por gateway_payment_id). Upgrade sobe o valor sozinho (é % do valor pago).
+  const beneficiarioId = cliente.comissionado_por || cliente.indicado_por;
+  if (beneficiarioId && mapeado && gatewayPaymentId) {
     try {
       const { data: consultor } = await supabase
         .from('perfis')
-        .select('comissao_afiliado_pct, role, ativo')
-        .eq('id', cliente.indicado_por)
+        .select('comissao_afiliado_pct, role, ativo, comissionamento_bloqueado, ultima_indicacao_em')
+        .eq('id', beneficiarioId)
         .single();
 
-      // Comissão fixa de indicação: consultor, analista e advogado podem indicar
-      if (['consultor', 'analista', 'advogado'].includes(consultor?.role) && consultor?.ativo !== false) {
-        const pct = Number(consultor.comissao_afiliado_pct || 0);
+      // Regras de PERDA (decisão do dono): conta desativada OU já bloqueada = perde de
+      // vez (não volta se reativar). Sem indicação nova por ~3 meses = perde também.
+      let bloqueado = !!consultor?.comissionamento_bloqueado || consultor?.ativo === false;
+      if (!bloqueado && consultor?.ultima_indicacao_em) {
+        const diasSemIndicar = (Date.now() - new Date(consultor.ultima_indicacao_em).getTime()) / 86400000;
+        if (diasSemIndicar > 92) {
+          bloqueado = true;
+          await supabase.from('perfis').update({ comissionamento_bloqueado: true }).eq('id', beneficiarioId);
+        }
+      }
+
+      // Qualquer vendedor habilitado com % > 0 e não bloqueado. NÃO paga sobre êxito
+      // de arrematação — só sobre a assinatura (regra: "não agora").
+      if (!bloqueado) {
+        const pct = Number(consultor?.comissao_afiliado_pct || 0);
         if (pct > 0) {
           const valorComissao = Number((valor * pct / 100).toFixed(2));
           const { data: existente } = await supabase
@@ -241,7 +257,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
 
           if (!existente) {
             await supabase.from('comissoes').insert({
-              beneficiario_id:  cliente.indicado_por,
+              beneficiario_id:  beneficiarioId,
               cliente_id:       cliente.id,
               tipo:             'afiliado',
               origem:           'assinatura',
@@ -256,16 +272,16 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
             });
             // Credita o saldo unificado (razão saldo_lancamentos) — fonte do saque
             await supabase.from('saldo_lancamentos').insert({
-              user_id: cliente.indicado_por, tipo: 'comissao_venda', valor: valorComissao,
+              user_id: beneficiarioId, tipo: 'comissao_venda', valor: valorComissao,
               origem_tipo: 'assinatura', origem_id: gatewayPaymentId,
-              descricao: `Comissão de afiliado — ${mapeado.plano} (${pct.toFixed(2)}%)`, status: 'disponivel',
+              descricao: `Comissão recorrente — ${mapeado.plano} (${pct.toFixed(2)}%)`, status: 'disponivel',
             });
           }
         }
       }
     } catch (e) {
       console.error(`[${gateway}] comissao:`, e.message);
-      alertarErro(`[${gateway}] Falha ao registrar comissão de afiliado: ${e.message}`, { cliente_id: cliente?.id, indicado_por: cliente?.indicado_por }).catch(() => {});
+      alertarErro(`[${gateway}] Falha ao registrar comissão: ${e.message}`, { cliente_id: cliente?.id, beneficiario_id: beneficiarioId }).catch(() => {});
     }
   }
 
