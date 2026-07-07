@@ -361,7 +361,7 @@ export default function Calculadora() {
                 <Campo label="Aluguel mensal esperado" value={aluguel} onChange={(v) => { setAluguel(v); setAluguelEditado(true); }} prefix="R$" placeholder="0" />
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>
                   Sugestão: <strong>12% ao ano do valor de mercado</strong> (1% ao mês, referência do setor){!aluguelEditado && Number(mercado) > 0 ? ' — pode editar' : ''}.
-                  {aluguelEditado && <button type="button" onClick={() => setAluguelEditado(false)} style={{ marginLeft: 4, background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 10, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>usar 12% a.a.</button>}
+                  {aluguelEditado && <button type="button" onClick={() => setAluguelEditado(false)} style={{ marginLeft: 4, background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 10, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>usar 12% ao ano</button>}
                 </div>
               </div>
               <Campo label="Horizonte de projeção" value={horizonteAnos} onChange={setHorizonteAnos} suffix="anos" />
@@ -412,8 +412,8 @@ export default function Calculadora() {
           {!arremInformado && (
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
               {isAluguel
-                ? <Campo label="Meta de yield líquido (a.a.) para o teto de lance" value={metaYield} onChange={setMetaYield} suffix="%" />
-                : <Campo label="Meta de retorno (ROI) para o teto de lance" value={metaRoi} onChange={setMetaRoi} suffix="%" />}
+                ? <Campo label="Rendimento por ano que você quer (para calcular o teto de lance)" value={metaYield} onChange={setMetaYield} suffix="%" />
+                : <Campo label="Retorno que você quer (para calcular o teto de lance)" value={metaRoi} onChange={setMetaRoi} suffix="%" />}
             </div>
           )}
         </div>
@@ -428,7 +428,7 @@ export default function Calculadora() {
             // Teto se calcula a partir do valor de mercado (+ aluguel, no caso de
             // locação); não precisa do valor de arrematação.
             const temDadosTeto = isAluguel ? (vMerc > 0 && vAluguel > 0) : vMerc > 0;
-            const metaTxt = isAluguel ? `yield líquido de ${fmtPct(metaYield, 2)} a.a.` : `ROI de ${fmtPct(metaRoi, 2)}`;
+            const metaTxt = isAluguel ? `rendimento de ${fmtPct(metaYield, 2)} ao ano` : `retorno de ${fmtPct(metaRoi, 2)}`;
             return (
             <div style={{ background: temDadosTeto ? 'linear-gradient(135deg,#1e3a8a,#0D63DB)' : '#f1f5f9', borderRadius: 16, padding: 22, color: temDadosTeto ? 'white' : '#94a3b8' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -453,31 +453,31 @@ export default function Calculadora() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#111111', marginBottom: 14 }}>
                 <TrendingUp size={16} color="#7c3aed" /> Projeção de aluguel (renda + valorização)
               </div>
-              <Linha label="Desconto sobre avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 2) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
-              <Linha label="Capital de aquisição" valor={`R$ ${fmt(capitalAquisicao, 2)}`} sublabel="Arremate + custos do leilão + débitos/reforma" destaque />
-              <Linha label="Aluguel mensal" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} />
-              <Linha label="IPTU + condomínio (mensal)" valor={carregoMensal > 0 ? `– R$ ${fmt(carregoMensal, 2)}` : 'R$ 0,00'} cor={carregoMensal > 0 ? '#dc2626' : undefined} />
-              <Linha label="Renda líquida mensal" valor={`R$ ${fmt(rendaLiquidaMensal, 2)}`} destaque cor={rendaLiquidaMensal >= 0 ? '#059669' : '#dc2626'} />
+              <Linha label="Desconto sobre a avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 2) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
+              <Linha label="Total investido" valor={`R$ ${fmt(capitalAquisicao, 2)}`} sublabel="Arremate + custos do leilão + dívidas/reforma" destaque />
+              <Linha label="Aluguel por mês" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} />
+              <Linha label="IPTU + condomínio (por mês)" valor={carregoMensal > 0 ? `– R$ ${fmt(carregoMensal, 2)}` : 'R$ 0,00'} cor={carregoMensal > 0 ? '#dc2626' : undefined} />
+              <Linha label="Sobra por mês (aluguel menos custos)" valor={`R$ ${fmt(rendaLiquidaMensal, 2)}`} destaque cor={rendaLiquidaMensal >= 0 ? '#059669' : '#dc2626'} />
               <div style={{ marginTop: 4 }} />
-              <Linha label="Yield bruto (a.a.)" valor={fmtPct(yieldBrutoAnual, 2)} sublabel="Aluguel anual ÷ capital de aquisição" />
-              <Linha label="Yield líquido (a.a.)" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel="Após IPTU + condomínio" />
-              <Linha label="Payback só com aluguel" valor={paybackMesesAluguel ? `${Math.ceil(paybackMesesAluguel)} meses (~${(paybackMesesAluguel / 12).toFixed(1)} anos)` : '—'} sublabel="Tempo p/ o aluguel devolver o capital" />
+              <Linha label="Rendimento por ano (antes dos custos)" valor={fmtPct(yieldBrutoAnual, 2)} sublabel="Aluguel de 12 meses dividido pelo total investido" />
+              <Linha label="Rendimento por ano (depois dos custos)" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel="Já descontando IPTU e condomínio" />
+              <Linha label="Tempo p/ o aluguel pagar o que investiu" valor={paybackMesesAluguel ? `${Math.ceil(paybackMesesAluguel)} meses (~${(paybackMesesAluguel / 12).toFixed(1)} anos)` : '—'} />
               <div style={{ margin: '10px 0 4px', padding: '12px 14px', background: '#f5f3ff', borderRadius: 10, border: '1px solid #ddd6fe' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Retorno total em {horizonteAnos} anos (aluguel + venda ao fim)</div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Ganho total em {horizonteAnos} anos (aluguel + venda no final)</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, color: '#6d28d9', fontWeight: 600 }}>TIR (a.a.)</span>
+                  <span style={{ fontSize: 13, color: '#6d28d9', fontWeight: 600 }}>Retorno por ano</span>
                   <span style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>{tirAluguel != null ? fmtPct(tirAluguel, 2) : '—'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: '#6d28d9', fontWeight: 600 }}>Múltiplo sobre o capital</span>
+                  <span style={{ fontSize: 13, color: '#6d28d9', fontWeight: 600 }}>Quantas vezes o dinheiro volta</span>
                   <span style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>{multiploAluguel != null ? `${multiploAluguel.toFixed(2)}x` : '—'}</span>
                 </div>
-                <div style={{ fontSize: 10.5, color: '#7c3aed', marginTop: 8, lineHeight: 1.5 }}>Considera venda ao fim do horizonte a 90% do valor de mercado (líquido de comissão e IR). Sem financiamento na projeção do hold.</div>
+                <div style={{ fontSize: 10.5, color: '#7c3aed', marginTop: 8, lineHeight: 1.5 }}>Considera a venda no final por 90% do valor de mercado (já descontando comissão e Imposto de Renda). A conta de manter alugado não usa financiamento.</div>
               </div>
               <div style={{ marginTop: 10, padding: '10px 12px', background: '#fef9c3', borderRadius: 8, display: 'flex', gap: 8 }}>
                 <Info size={14} color="#a16207" style={{ flexShrink: 0, marginTop: 1 }} />
                 <p style={{ fontSize: 11, color: '#a16207', margin: 0, lineHeight: 1.5 }}>
-                  <strong>Estimativa conservadora.</strong> Não inclui vacância, reajuste do aluguel nem valorização acima da inflação. Consulte nosso analista para o detalhamento.
+                  <strong>Estimativa conservadora.</strong> Não considera meses sem inquilino, reajuste do aluguel nem valorização acima da inflação. Fale com nosso analista para o detalhamento.
                 </p>
               </div>
             </div>
@@ -497,9 +497,9 @@ export default function Calculadora() {
                 valor={`R$ ${fmt(custosLeilao, 2)}`}
                 sublabel="Comissão do leiloeiro + honorários + ITBI e registro"
               />
-              {m.debitos > 0 && <Linha label="Débitos assumidos" valor={`R$ ${fmt(m.debitos, 2)}`} />}
+              {m.debitos > 0 && <Linha label="Dívidas assumidas" valor={`R$ ${fmt(m.debitos, 2)}`} />}
               {m.manutencao > 0 && <Linha label="Reforma estimada" valor={`R$ ${fmt(m.manutencao, 2)}`} />}
-              {m.custoCarrrego > 0 && <Linha label="Carrego (IPTU + cond.)" valor={`R$ ${fmt(m.custoCarrrego, 2)}`} />}
+              {m.custoCarrrego > 0 && <Linha label="Custos até vender (IPTU + condomínio)" valor={`R$ ${fmt(m.custoCarrrego, 2)}`} />}
 
               {/* Necessidade de caixa, o que precisa ter disponível */}
               <div style={{ margin: '12px 0 4px', padding: '12px 14px', background: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -524,18 +524,18 @@ export default function Calculadora() {
                   <Linha
                     label={origem === 'judicial' ? 'Parcela (CPC 895)' : `Parcela (${nomeTabela})`}
                     valor={`R$ ${fmt(m.parcelaMedia, 2)}`} />
-                  <Linha label="Saldo p/ quitação" valor={`R$ ${fmt(m.saldoDevedor, 2)}`} sublabel={origem === 'judicial' ? 'Saldo restante das parcelas' : 'Saldo devedor ao vender'} />
+                  <Linha label="Saldo para quitar" valor={`R$ ${fmt(m.saldoDevedor, 2)}`} sublabel={origem === 'judicial' ? 'Parcelas que ainda faltam pagar' : 'Quanto falta pagar ao vender'} />
                 </>
               )}
 
               <div style={{ marginTop: 4 }} />
-              <Linha label="Capital mobilizado" valor={`R$ ${fmt(m.capitalMobilizado, 2)}`} destaque />
+              <Linha label="Total investido" valor={`R$ ${fmt(m.capitalMobilizado, 2)}`} destaque />
               <Linha label="Valor de venda estimado" valor={`R$ ${fmt(m.valorRef, 2)}`} sublabel="90% do valor de mercado (conservador)" cor="#0D63DB" />
-              <Linha label="Comissão de venda (corretagem)" valor={`– R$ ${fmt(m.comissao, 2)}`} sublabel="5% sobre a venda" cor="#dc2626" />
-              <Linha label="Imposto sobre o ganho (IR 15%)" valor={`– R$ ${fmt(m.ir, 2)}`} sublabel="15% sobre o ganho de capital" cor="#dc2626" />
-              <Linha label="Entrada no caixa (venda)" valor={`R$ ${fmt(entradaCaixa, 2)}`} destaque cor="#0D63DB" />
-              <Linha label="Lucro líquido" valor={`R$ ${fmt(m.lucro, 2)}`} destaque cor={m.lucro >= 0 ? '#059669' : '#dc2626'} />
-              <Linha label="ROI / ROE" valor={fmtPct(m.roi, 2)} destaque cor={m.roi >= 0 ? '#059669' : '#dc2626'} />
+              <Linha label="Comissão da corretagem na venda" valor={`– R$ ${fmt(m.comissao, 2)}`} sublabel="5% sobre a venda" cor="#dc2626" />
+              <Linha label="Imposto de Renda sobre o lucro (15%)" valor={`– R$ ${fmt(m.ir, 2)}`} sublabel="15% sobre o ganho na venda" cor="#dc2626" />
+              <Linha label="Dinheiro recebido na venda" valor={`R$ ${fmt(entradaCaixa, 2)}`} destaque cor="#0D63DB" />
+              <Linha label="Lucro (já com todos os custos)" valor={`R$ ${fmt(m.lucro, 2)}`} destaque cor={m.lucro >= 0 ? '#059669' : '#dc2626'} />
+              <Linha label="Retorno sobre o valor investido" valor={fmtPct(m.roi, 2)} destaque cor={m.roi >= 0 ? '#059669' : '#dc2626'} />
 
               {/* Aviso conservador */}
               <div style={{ marginTop: 14, padding: '10px 12px', background: '#fef9c3', borderRadius: 8, display: 'flex', gap: 8 }}>
