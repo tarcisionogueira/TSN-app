@@ -676,6 +676,10 @@ export default function Analise() {
   const gerarRelDocumental = () => {
     if (gerandoDocumental) return;
     setDocMsg('');
+    // Limpa o resultado anterior (ex.: "precisa documentos") para a tela mostrar
+    // "Gerando…" como no mercadológico, e não a tela antiga de anexos na hora.
+    setParecerDocumental(null);
+    aplicadoDocRef.current = null;
     // Resolve as URLs REAIS dos documentos (mesma lógica da barra lateral): para a
     // Caixa, o PDF estático da matrícula/regras — não a página .asp do banco. Sem
     // isto o servidor chegava sem documento legível e o laudo saía bloqueado.
