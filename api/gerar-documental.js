@@ -255,7 +255,9 @@ CRUZAMENTO DE DOCUMENTOS (assertividade — o objetivo é GARANTIR A SEGURANÇA 
 
 LEILÃO JUDICIAL COM MÚLTIPLOS ANEXOS (análise apurada): no leilão judicial é comum haver, além da matrícula e do edital, vários anexos — auto/laudo de AVALIAÇÃO, auto de PENHORA, DECISÃO/despacho que designou a hasta, certidões (ônus, distribuidores, negativas), ata da praça anterior, matrícula atualizada e petições. LEIA e CRUZE todos os que estiverem anexados. Verifique especificamente, para dar segurança à arrematação: (a) se o EXECUTADO/proprietário é o mesmo em matrícula, penhora e edital; (b) se o BEM penhorado/avaliado é exatamente o mesmo imóvel da matrícula (número, área, confrontações); (c) se há recurso/embargos ou ação anulatória do próprio leilão pendente; (d) se a penhora e as indisponibilidades estão averbadas e serão levantadas com a carta de arrematação; (e) se o valor da avaliação e o lance mínimo do edital são coerentes com o auto de avaliação. Sinalize QUALQUER incoerência entre os anexos. A AUSÊNCIA de um anexo esperado é DILIGÊNCIA PENDENTE (lacuna), não um bloqueio.
 
-NÃO CONFUNDA ITEM NORMAL DE LEILÃO COM IMPEDIMENTO: penhora/execução que originou a hasta, hipoteca, alienação fiduciária, indisponibilidades/bloqueios da execução e o status "ocupado" são ESPERADOS no leilão e a lei os resolve com a arrematação — NÃO os trate como impedimento à compra (siga as REGRAS ESTRITAS de classificação abaixo). O cruzamento serve para confirmar que esses itens se resolvem, não para reprovar a operação por causa deles.
+LEILÃO EXTRAJUDICIAL (Lei 9.514/97, alienação fiduciária — típico Caixa/bancos): aqui NÃO há processo judicial prévio, então a segurança depende de verificar CONTESTAÇÕES do ex-mutuário e o estado dos gravames. Avalie e destaque, sempre em linguagem para leigos: (a) EX-MUTUÁRIO ACIONOU O BANCO/CREDOR? Verifique, pelo nome do ex-mutuário no CNJ (andamentos consultados), se há AÇÃO contra o credor fiduciário questionando a consolidação da propriedade ou o leilão — ação ANULATÓRIA/DECLARATÓRIA, REVISIONAL do contrato, CONSIGNAÇÃO em pagamento (tentativa de quitar a dívida) ou pedido de LIMINAR suspendendo a venda. Uma ação dessas EM CURSO, sobretudo com liminar, é risco relevante (a arrematação pode ser suspensa/anulada) — classifique conforme o risco concreto e explique o que significa. Se NÃO localizar ação, registre como diligência: "não localizamos ação do ex-mutuário contra o banco nas bases públicas, confirmar antes do lance". (b) OUTRAS PENHORAS/GRAVAMES na matrícula além da alienação fiduciária do leilão: há OUTRA penhora, arresto, indisponibilidade, hipoteca de terceiro ou usufruto? Para CADA uma, informe QUEM é o credor/beneficiário, se está ATIVA ou já baixada, e se será extinta com a arrematação ou se ACOMPANHA o imóvel (explique a diferença em palavras simples). (c) Prazos do ex-mutuário (purgação da mora / direito de preferência) e se já se esgotaram. Coloque cada verificação pendente em "lacunas" e cite na seção de situação registrária/processual do parecer.
+
+NÃO CONFUNDA ITEM NORMAL DE LEILÃO COM IMPEDIMENTO: penhora/execução que originou a hasta, hipoteca, alienação fiduciária, indisponibilidades/bloqueios da execução e o status "ocupado" são ESPERADOS no leilão e a lei os resolve com a arrematação — NÃO os trate como impedimento à compra (siga as REGRAS ESTRITAS de classificação abaixo). O cruzamento serve para confirmar que esses itens se resolvem, não para reprovar a operação por causa deles. ATENÇÃO à diferença: a penhora/alienação que ORIGINOU o leilão se resolve; mas OUTRA penhora de credor diverso, ou uma AÇÃO do executado/ex-mutuário questionando o próprio leilão, NÃO são rotina — são pontos de atenção reais a destacar.
 
 Avalie e descreva: ônus reais, gravames, hipotecas, penhoras, arrestos, indisponibilidades, usufruto, alienação fiduciária; ocupação (ocupado/desocupado/posseiro/locado) e quem responde pela desocupação; débitos discriminados (IPTU, condomínio, taxas) e DE QUEM é a responsabilidade após a arrematação (conforme o edital); condições do edital (forma de pagamento, prazos, comissão, AJG); restrições registrárias; e a situação do(s) processo(s).
 
@@ -564,12 +566,26 @@ export default async function handler(req, res) {
       }
     } catch { /* aprendizado é best-effort, nunca trava o parecer */ }
 
-    const data = await anthropic({
-      model: MODEL, max_tokens: 8000,
-      system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
-      messages: [{ role: 'user', content }],
-    }, { retries: 1, timeoutMs: 110000 });
-    const rawTxt = extractText(data);
+    // A chamada principal NUNCA pode derrubar o laudo. Em leilão JUDICIAL lemos até
+    // 8 anexos grandes → a chamada pode estourar o timeout e o AbortError ("This
+    // operation was aborted") vinha à tona, matando o relatório inteiro. Aqui ela é
+    // isolada: se falhar/expirar, seguimos com os FALLBACKS (extração focada de CPF,
+    // CNJ por processo/parte, certidões, parecer sintetizado) e emitimos um laudo
+    // preliminar útil — nunca um erro cru. O timeout é dimensionado pela folga
+    // restante (2 tentativas), deixando ~60s garantidos para os fallbacks rodarem.
+    const orcamentoIA = Math.max(40000, Math.floor((hardDeadline - Date.now() - 60000) / 2));
+    let data = null;
+    try {
+      data = await anthropic({
+        model: MODEL, max_tokens: 8000,
+        system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
+        messages: [{ role: 'user', content }],
+      }, { retries: 1, timeoutMs: orcamentoIA });
+    } catch (e) {
+      console.warn(`[documental] chamada principal indisponível (${e?.message}) — seguindo com extração focada + fallbacks`);
+      data = null;
+    }
+    const rawTxt = data ? extractText(data) : '';
     const parsed = parseJSON(rawTxt) || {};
     // Observabilidade: se a IA truncou (max_tokens) ou o parse não achou parecer,
     // registra — é o sintoma que fazia o laudo cair no texto "preliminar".
@@ -894,7 +910,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ ok: true, result });
   } catch (e) {
-    const timeout = String(e?.message) === 'tempo_limite';
+    const timeout = String(e?.message) === 'tempo_limite' || /abort|timed? *out|timeout/i.test(String(e?.message));
     const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.' : String(e?.message || e);
     await upsertDoc({ ...base, status: 'erro', erro: msg });
     // Estorna a cota consumida (não cobra por análise que falhou).
