@@ -16,7 +16,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
-import RiscoJuridico from '../components/RiscoJuridico';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { gerarLaudoPDF } from '../components/LaudoPDF';
 import { apiCall } from '../utils/apiCall';
@@ -2004,13 +2003,11 @@ export default function Analise() {
             </div>
           </div>
 
-          {/* Riscos e Observações */}
+          {/* Riscos jurídicos: NÃO se digita mais. A análise Documental + Processo lê
+              os documentos e consulta as integrações (CNJ + certidões) e preenche os
+              riscos sozinha — basta gerar o relatório. Mantemos só as notas de visita. */}
           <div>
-            <div style={{ fontSize:11, fontWeight:800, color:'#ef4444', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #fef2f2' }}>Riscos Jurídicos</div>
-            <RiscoJuridico riscos={d.riscos||[]} onChange={r=>up('riscos',r)}/>
-          </div>
-          <div>
-            <Field label="Observações / Notas de Visita" name="observacoes" value={d.observacoes||''} onChange={upN} type="textarea" rows={3} ph="Anotações de visita, pontos de atenção, potencial de negociação..."/>
+            <Field label="Observações / Notas de Visita (opcional)" name="observacoes" value={d.observacoes||''} onChange={upN} type="textarea" rows={3} ph="Anotações de visita, pontos de atenção, potencial de negociação..."/>
           </div>
           {/* Lançamentos financeiros NÃO pertencem à análise (que é de ORIENTAÇÃO).
               O lançamento real acontece no fluxo de ACOMPANHAMENTO pós-arrematação

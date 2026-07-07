@@ -231,20 +231,23 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
         .eq('id', beneficiarioId)
         .single();
 
-      // Regras de PERDA (decisão do dono): conta desativada OU já bloqueada = perde de
-      // vez (não volta se reativar). Sem indicação nova por ~3 meses = perde também.
-      let bloqueado = !!consultor?.comissionamento_bloqueado || consultor?.ativo === false;
+      // Regras de PERDA (decisão do dono):
+      //  - conta DESATIVADA = perde de vez, não volta se reativar (bloqueio global).
+      //  - 3 meses sem indicação nova = perde ESTE cliente e "recomeça do zero" com
+      //    futuras indicações (não é bloqueio global; só desanexa o cliente atual).
+      const bloqueado = !!consultor?.comissionamento_bloqueado || consultor?.ativo === false;
+      let desanexar = false;
       if (!bloqueado && consultor?.ultima_indicacao_em) {
         const diasSemIndicar = (Date.now() - new Date(consultor.ultima_indicacao_em).getTime()) / 86400000;
-        if (diasSemIndicar > 92) {
-          bloqueado = true;
-          await supabase.from('perfis').update({ comissionamento_bloqueado: true }).eq('id', beneficiarioId);
-        }
+        if (diasSemIndicar > 92) desanexar = true;
+      }
+      if (desanexar) {
+        await supabase.from('perfis').update({ comissionado_por: null }).eq('id', cliente.id);
       }
 
       // Qualquer vendedor habilitado com % > 0 e não bloqueado. NÃO paga sobre êxito
       // de arrematação — só sobre a assinatura (regra: "não agora").
-      if (!bloqueado) {
+      if (!bloqueado && !desanexar) {
         const pct = Number(consultor?.comissao_afiliado_pct || 0);
         if (pct > 0) {
           const valorComissao = Number((valor * pct / 100).toFixed(2));
