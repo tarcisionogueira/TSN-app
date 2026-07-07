@@ -32,8 +32,11 @@ function checkLocal(key, limit, windowMs) {
   return { ok: entry.count <= limit, remaining, resetAt: entry.resetAt };
 }
 
-const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL;
-const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+// Aceita tanto os nomes do Upstash (integração direta) quanto os do Vercel KV
+// (mesmo backend/REST compatível), pra funcionar independentemente de como o
+// Redis foi provisionado no Marketplace.
+const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL   || process.env.KV_REST_API_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 const REDIS_ON = !!(UPSTASH_URL && UPSTASH_TOKEN);
 
 // Fixed-window distribuído: INCR sempre; EXPIRE só na 1ª batida (flag NX = "só se
