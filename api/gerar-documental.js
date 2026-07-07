@@ -362,6 +362,9 @@ export default async function handler(req, res) {
   // tempo para a IA (extração) + consultas de fontes + gravação, tudo dentro do
   // maxDuration de 300s. Antes eram 250s aqui e a chamada de IA depois estourava.
   const deadline = Date.now() + 165000;
+  // Orçamento MAIOR para os fallbacks pós-extração (passe focado de CPF + CNJ por
+  // número/parte): são curtos e rodam DEPOIS da coleta; usam a folga até ~275s.
+  const hardDeadline = Date.now() + 275000;
   // DEADLINE HARD do handler inteiro (< maxDuration 300s): se qualquer etapa travar/
   // re-tentar além disso, perdemos a corrida e gravamos 'erro' — a linha NUNCA fica
   // presa em 'gerando' (mesmo problema que travou o mercadológico do Igor).
@@ -557,8 +560,8 @@ export default async function handler(req, res) {
     // (DJEN/Comunica CNJ), débitos trabalhistas (CNDT), protestos (CENPROT) e
     // certidões fiscais (Receita/PGFN/FGTS). Viram uma seção do laudo do cliente —
     // o mesmo conjunto que o fluxo de Caso já usava.
-    const ex = parsed.extracao || {};
-    const execDoc = String(ex.executadoDoc || '').replace(/\D/g, '');
+    const ex = parsed.extracao || (parsed.extracao = {});
+    let execDoc = String(ex.executadoDoc || '').replace(/\D/g, '');
     // Valida o dígito verificador antes de disparar as certidões: um número mal
     // lido (OCR) com 11/14 dígitos passaria no comprimento e geraria "nada consta"
     // FALSO. Só consulta CNDT/CNIB/CENPROT/fiscais com CPF/CNPJ realmente válido.
@@ -574,14 +577,50 @@ export default async function handler(req, res) {
       const dv = (base) => { let s = 0, p = base.length - 7; for (let i = 0; i < base.length; i++) { s += +base[i] * p--; if (p < 2) p = 9; } const r = s % 11; return r < 2 ? 0 : 11 - r; };
       return dv(c.slice(0, 12)) === +c[12] && dv(c.slice(0, 13)) === +c[13];
     };
-    const docOk = (execDoc.length === 11 && cpfValido(execDoc)) || (execDoc.length === 14 && cnpjValido(execDoc));
-    const execNome = String(ex.executadoNome || '').trim();
+    let docOk = (execDoc.length === 11 && cpfValido(execDoc)) || (execDoc.length === 14 && cnpjValido(execDoc));
+    let execNome = String(ex.executadoNome || '').trim();
+
+    // ── FALLBACK 1: PASSE DE EXTRAÇÃO FOCADO ───────────────────────────────────
+    // O passe geral (que produz o parecer inteiro) às vezes NÃO captura o CPF/nome/
+    // processo da matrícula — aí certidões e CNJ não rodam e o relatório sai "vazio".
+    // Quando não temos CPF válido e HÁ documentos lidos, roda um passe curto e focado
+    // SÓ nesses 3 campos, com os documentos de identificação (matrícula/edital), que
+    // costuma resgatar (menos distração + instrução p/ ler imagem escaneada).
+    if (!docOk && Date.now() < hardDeadline) {
+      const docsIdent = blocos.filter(b => b.type === 'document' || /matr[íi]cula|edital/i.test(b.title || ''));
+      if (docsIdent.length) {
+        try {
+          const fdata = await anthropic({
+            model: MODEL, max_tokens: 400,
+            system: 'Você é um EXTRATOR de dados de documentos de imóvel. Leia com MÁXIMA atenção, INCLUSIVE páginas escaneadas/em imagem. A matrícula SEMPRE qualifica as partes com CPF (pessoa física) ou CNPJ (pessoa jurídica) nos registros (R-) e averbações (Av-). Retorne SOMENTE JSON.',
+            messages: [{ role: 'user', content: [
+              ...docsIdent,
+              { type: 'text', text: 'Extraia dos documentos: o NOME e o CPF/CNPJ do PROPRIETÁRIO ATUAL / executado / devedor / ex-mutuário (varra TODOS os registros R- e averbações Av- da matrícula e também o edital) e o NÚMERO DO PROCESSO judicial (padrão CNJ), se houver. NÃO invente: se não achar, deixe vazio. Retorne SOMENTE: {"executadoNome":"","executadoDoc":"(só dígitos)","numeroProcesso":""}' },
+            ] }],
+          }, { retries: 1, timeoutMs: 60000 });
+          const fx2 = parseJSON(extractText(fdata)) || {};
+          const doc2 = String(fx2.executadoDoc || '').replace(/\D/g, '');
+          if (!execNome && fx2.executadoNome) { execNome = String(fx2.executadoNome).trim(); ex.executadoNome = execNome; }
+          if (!ex.numeroProcesso && fx2.numeroProcesso) ex.numeroProcesso = String(fx2.numeroProcesso).trim();
+          if ((doc2.length === 11 && cpfValido(doc2)) || (doc2.length === 14 && cnpjValido(doc2))) {
+            execDoc = doc2; ex.executadoDoc = doc2; docOk = true;
+          }
+        } catch { /* passe focado é best-effort, nunca trava o parecer */ }
+      }
+    }
 
     // Se não localizamos processo por NÚMERO, busca no CNJ pelo NOME da parte
     // (executado/devedor/ex-mutuário/proprietário extraído dos documentos). Muitos
     // leilões — sobretudo extrajudiciais da Caixa — não trazem o nº do processo, mas
     // trazem o nome do devedor na matrícula; assim ainda encontramos execuções contra
     // ele (fraude à execução, outras penhoras) que o nº sozinho não acharia.
+    // FALLBACK 2: nº de processo lido dos documentos (edital/matrícula) dispara a
+    // consulta CNJ por NÚMERO — a 1ª consulta (antes da IA) só via o nº do scraper.
+    const numExtr = String(ex.numeroProcesso || '').replace(/\D/g, '');
+    if ((!cnj || !cnj.total) && numExtr.length >= 15 && numExtr !== String(procNum || '').replace(/\D/g, '') && im.estado && Date.now() < hardDeadline) {
+      try { const porNum = await buscarProcessosCNJ({ numero_processo: ex.numeroProcesso, uf: im.estado }); if (porNum && porNum.total) cnj = porNum; }
+      catch { /* CNJ por número extraído é best-effort */ }
+    }
     let cnjViaNome = false;
     if ((!cnj || !cnj.total) && execNome.length >= 6 && im.estado) {
       try {
@@ -589,6 +628,23 @@ export default async function handler(req, res) {
         cnjViaNome = true;
         if (porNome && porNome.total) cnj = porNome;
       } catch { /* CNJ por nome é best-effort */ }
+    }
+
+    // FALLBACK 3: docs → CNJ → CPF da PARTE. Se ainda não temos CPF válido mas o
+    // processo achado qualifica o executado (polo passivo), usa o CPF/CNPJ dele para
+    // rodar as certidões. Só o POLO PASSIVO (executado/devedor) — nunca o exequente
+    // (banco/Caixa), senão consultaríamos as dívidas do credor por engano.
+    if (!docOk && cnj?.processos?.length) {
+      const partes = cnj.processos.flatMap(p => p.partes || []);
+      const passivo = partes.find(p => {
+        const d = String(p.documento || '').replace(/\D/g, '');
+        const okd = (d.length === 11 && cpfValido(d)) || (d.length === 14 && cnpjValido(d));
+        return okd && /passiv|execu|r[ée]u|devedor|requerid/i.test(String(p.tipo || ''));
+      });
+      if (passivo) {
+        execDoc = String(passivo.documento).replace(/\D/g, ''); ex.executadoDoc = execDoc; docOk = true;
+        if (!execNome && passivo.nome) { execNome = passivo.nome; ex.executadoNome = passivo.nome; }
+      }
     }
     const procFontes = procNum || ex.numeroProcesso || (cnj?.processos?.[0]?.numero) || null;
     let fontesTxt = '', fontesExternas = null;
@@ -607,7 +663,14 @@ export default async function handler(req, res) {
       if (cnib?.ok) linhas.push(`• Indisponibilidade de bens (CNIB): ${cnib.resumo}`);
       if (prot?.ok) linhas.push(`• Protestos (CENPROT): ${prot.resumo}`);
       if (cert?.resumo) linhas.push(`• Certidões fiscais (Receita/PGFN/FGTS): ${cert.resumo}`);
-      if (!docOk) linhas.push(`• CPF/CNPJ do executado/proprietário não localizado nos documentos${execNome ? ` (parte: ${execNome})` : ''} — certidões por documento (CNDT/CNIB/CENPROT/fiscais) não realizadas. Obtenha a matrícula atualizada com a qualificação completa das partes.`);
+      if (!docOk) {
+        // Diligência ACIONÁVEL: diz ONDE obter a matrícula com a qualificação (CPF).
+        const fc = row?.ficha_cef || {};
+        const ondeObter = (fc.oficio || fc.comarca || fc.matricula)
+          ? ` Obtenha a matrícula atualizada${fc.oficio ? ` no ${String(fc.oficio).replace(/^0+/, '') || fc.oficio}º Ofício de Registro de Imóveis` : ''}${fc.comarca ? ` da comarca de ${fc.comarca}` : ''}${fc.matricula ? `, matrícula nº ${fc.matricula}` : ''} — ela traz o CPF/CNPJ do proprietário/executado.`
+          : ' Obtenha a matrícula atualizada no Cartório de Registro de Imóveis com a qualificação completa das partes (CPF/CNPJ).';
+        linhas.push(`• CPF/CNPJ do executado/proprietário não localizado nos documentos${execNome ? ` (parte identificada: ${execNome})` : ''} — certidões por documento (CNDT/CNIB/CENPROT/fiscais) não realizadas.${ondeObter}`);
+      }
       if (linhas.length) fontesTxt = `\n\n§ SEÇÃO: CERTIDÕES E FONTES EXTERNAS\n\n${linhas.join('\n')}\n\nConsultas públicas automáticas — confirme em certidão oficial atualizada antes do lance.`;
     } catch { /* fontes externas nunca derrubam o laudo */ }
 
@@ -663,13 +726,33 @@ export default async function handler(req, res) {
       medios: rlist.filter(r => r?.severidade === 'alerta').length,
     };
 
+    // FALLBACK 4: NUNCA emitir parecer vazio. Se a IA não devolveu texto (JSON falhou
+    // ou veio curto), sintetiza um parecer preliminar determinístico com o que temos —
+    // documentos lidos, dados do registro e diligências pendentes — em vez de um card
+    // em branco que quebra a confiança do cliente.
+    let parecerBase = String(parsed.parecer || '').trim();
+    if (parecerBase.length < 120) {
+      const exx = parsed.extracao || {};
+      const docsNomes = lidos.map(l => l.rotulo).filter(Boolean).join(', ') || 'os documentos disponíveis';
+      const p = ['§ SEÇÃO: RESUMO', `Análise preliminar gerada a partir de ${docsNomes}.`];
+      if (exx.numeroMatricula || exx.cartorio || exx.comarca) {
+        p.push('§ SEÇÃO: REGISTRO DO IMÓVEL', `Matrícula ${exx.numeroMatricula || '(número a confirmar)'}${exx.cartorio ? `, ${exx.cartorio}` : ''}${exx.comarca ? `, comarca de ${exx.comarca}` : ''}.`);
+      }
+      p.push('§ SEÇÃO: DILIGÊNCIAS PENDENTES', !docOk
+        ? 'Não foi possível extrair o CPF/CNPJ do proprietário/executado dos documentos disponíveis, então as certidões pessoais (trabalhista, indisponibilidade, protestos e fiscais) ainda não foram feitas. Veja abaixo onde obter a matrícula com a qualificação das partes.'
+        : 'As consultas foram feitas com base no CPF/CNPJ identificado; confira os apontamentos na seção de certidões abaixo.');
+      p.push('Recomendamos revisar este caso com um analista antes de dar o lance.');
+      parecerBase = p.join('\n\n');
+    }
+
     const result = {
       extracao: parsed.extracao || null,
       riscos: parsed.riscos || [],
       pontosAtencao,
       lacunas: parsed.lacunas || [],
       nivelRisco: parsed.nivelRisco || (temProc ? cnj.parecer?.nivel : null) || 'amarelo',
-      parecer: (parsed.parecer || '') + fontesTxt + AVISO_DOCUMENTAL,
+      diligenciaPendente: !docOk,
+      parecer: parecerBase + fontesTxt + AVISO_DOCUMENTAL,
       cnj: cnj ? { total: cnj.total, parecer: cnj.parecer, processos: cnj.processos?.slice(0, 12) || [], tribunais: cnj.tribunais_consultados } : null,
       fontesExternas,
       documentosLidos: lidos,
