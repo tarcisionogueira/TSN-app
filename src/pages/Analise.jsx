@@ -703,7 +703,9 @@ export default function Analise() {
       { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId },
       payload
     );
-    setRelSel('documental');
+    // Gera IN-PLACE como o mercadológico: o card mostra "Gerando…" e o usuário
+    // fica no launcher. Não troca para a tela dedicada aqui — só quando o servidor
+    // pedir documentos (ver efeito abaixo), aí sim abre a tela de anexar.
   };
 
   // Aplica o resultado da documental gerada em segundo plano (riscos, extração,
@@ -727,6 +729,7 @@ export default function Analise() {
       setParecerDocumental(r);
       setDocMsg(r.motivo || 'Anexe a matrícula e o edital (PDF) para gerar a análise documental.');
       showMsg('Anexe a matrícula e o edital para gerar a análise.', 'error');
+      setRelSel('documental'); // precisa de anexo → abre a tela dedicada de upload
       return;
     }
     setParecerDocumental(r);
