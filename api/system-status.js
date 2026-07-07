@@ -24,7 +24,6 @@ export default async function handler(req) {
     asaas:    { ok: !!process.env.ASAAS_API_KEY,           label: 'Asaas (cobrança)',          grupo: 'receita', impacto: 'receita' },
     mp:       { ok: !!process.env.MP_ACCESS_TOKEN,         label: 'Mercado Pago',              grupo: 'receita', impacto: 'receita' },
     mpHook:   { ok: !!process.env.MP_WEBHOOK_SECRET,       label: 'Mercado Pago — webhook seguro', grupo: 'receita', impacto: 'receita' },
-    pagarme:  { ok: !!process.env.PAGARME_WEBHOOK_SECRET,  label: 'Pagar.me — webhook',        grupo: 'receita', impacto: 'receita' },
     // ── Aquisição — trazer pessoas para a plataforma ─────────────────────────
     // Rastreamento (GA4 + tag do Google Ads) já vive no index.html, não em env.
     rastreio: { ok: true,                                   label: 'Rastreamento Google (GA4 + Ads)', grupo: 'aquisicao', impacto: 'crescimento' },

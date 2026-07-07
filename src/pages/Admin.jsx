@@ -4622,7 +4622,7 @@ function SystemStatusCard() {
   // importa (o que derruba o sistema, o que afeta receita, o que traz cliente).
   const GRUPOS = {
     nucleo:      { label: '🧩 Núcleo (crítico)',            cor: '#dc2626', items: ['svcKey', 'baseUrl', 'cron'] },
-    receita:     { label: '💰 Receita & Pagamentos',       cor: '#059669', items: ['asaas', 'mp', 'mpHook', 'pagarme'] },
+    receita:     { label: '💰 Receita & Pagamentos',       cor: '#059669', items: ['asaas', 'mp', 'mpHook'] },
     aquisicao:   { label: '📈 Aquisição (trazer clientes)', cor: '#7c3aed', items: ['rastreio', 'metaPixel', 'googleAds', 'meta'] },
     comunicacao: { label: '✉️ Comunicação',                 cor: '#0D63DB', items: ['email', 'from'] },
     ia:          { label: '🤖 Inteligência (IA)',           cor: '#0891b2', items: ['claude', 'gemini'] },
