@@ -18,6 +18,8 @@ import { supabase } from '../utils/supabase';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { gerarLaudoPDF } from '../components/LaudoPDF';
+import { gerarDocumentalPDF } from '../components/DocumentalPDF';
+import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
@@ -866,7 +868,36 @@ export default function Analise() {
     carregarCota();
   };
 
-  const imprimirPDF = () => gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores });
+  // BidScore da aba documental: deriva a camada JURÍDICA do nível de risco +
+  // pontos de atenção (mesma fórmula do backend), o que funciona também para
+  // análises antigas (a coluna score_juridico quase não está preenchida). As demais
+  // camadas vêm dos campos do imóvel quando disponíveis.
+  const bidscoreDoc = (() => {
+    if (!parecerDocumental || parecerDocumental.precisaDocumentos) return null;
+    const pa = parecerDocumental.pontosAtencao || {};
+    const nr = parecerDocumental.nivelRisco;
+    const baseJur = nr === 'verde' ? 85 : nr === 'vermelho' ? 30 : 55;
+    const scoreJuridico = Math.max(0, Math.min(100, Math.round(baseJur - (pa.altos || 0) * 10 - (pa.medios || 0) * 4)));
+    const desc = d.valorAvaliacao > 0 ? (1 - d.valorArrematacao / d.valorAvaliacao) * 100 : (d.descontoPercentual ?? undefined);
+    return scoreBidPro({ desconto: desc, modalidade: d.modalidade, tipo: d.tipo, scoreLocalizacao: d.scoreLocalizacao, scoreJuridico, scoreFinanceiro: d.scoreFinanceiro, valorMercado: d.valorMercado, valorMinimo: d.valorArrematacao, analiseViavel: d.analiseViavel });
+  })();
+
+  // Exportação de PDF CONTEXTUAL: cada aba baixa o SEU relatório (antes o botão do
+  // topo sempre gerava o mercadológico, mesmo estando no documental).
+  const podeExportarPDF =
+    (relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos) ||
+    (relSel === 'laudo' && relLaudoGerado && !!laudoEntry?.result) ||
+    ((relSel === 'mercado' || relSel === null) && !!parecer);
+
+  const imprimirPDF = () => {
+    if (relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos) {
+      return gerarDocumentalPDF({ imovel: d, parecer: parecerDocumental, bidscore: bidscoreDoc });
+    }
+    if (relSel === 'laudo' && relLaudoGerado && laudoEntry?.result) {
+      return gerarLaudoPDF({ imovel: d, laudo: laudoEntry.result });
+    }
+    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores });
+  };
 
   const solicitarAnalista = async () => {
     if (!user || solicitando || solicitado) return;
@@ -916,7 +947,7 @@ export default function Analise() {
               <button onClick={salvar} style={{ padding:'8px 16px', background:saved?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, transition:'background 0.2s' }}>
                 {saved ? <><CheckCircle2 size={14}/> Salvo!</> : <><Save size={14}/> Salvar</>}
               </button>
-              {parecer && (
+              {podeExportarPDF && (
                 <button onClick={imprimirPDF} style={{ padding:'8px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                   <Printer size={14}/> PDF
                 </button>
@@ -1102,7 +1133,7 @@ export default function Analise() {
           {relSel !== null && (
             <div style={{ position:'sticky', top:0, zIndex:20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, background:'#f8fafc', padding:'10px 0', marginBottom:2 }}>
               <button onClick={() => setRelSel(null)} style={{ display:'flex', alignItems:'center', gap:6, background:'white', border:'1px solid #cbd5e1', borderRadius:10, padding:'9px 15px', fontSize:13, fontWeight:800, color:'#0D63DB', cursor:'pointer', boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }}>← Voltar / gerar outro relatório</button>
-              <button onClick={imprimirPDF} style={{ display:'flex', alignItems:'center', gap:6, background:'#0D63DB', border:'none', borderRadius:10, padding:'9px 15px', fontSize:13, fontWeight:700, color:'white', cursor:'pointer' }}><Printer size={14}/> PDF</button>
+              {podeExportarPDF && <button onClick={imprimirPDF} style={{ display:'flex', alignItems:'center', gap:6, background:'#0D63DB', border:'none', borderRadius:10, padding:'9px 15px', fontSize:13, fontWeight:700, color:'white', cursor:'pointer' }}><Printer size={14}/> PDF</button>}
             </div>
           )}
 
@@ -1301,6 +1332,35 @@ export default function Analise() {
                 )}
               </div>
 
+              {/* BidScore (0 a 10): potencial de oportunidade, com a camada jurídica
+                  desta análise já incorporada. */}
+              {bidscoreDoc && (() => {
+                const corCamada = (n) => n >= 7 ? '#16a34a' : n >= 4 ? '#d97706' : '#dc2626';
+                return (
+                  <div style={{ padding:'12px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <div style={{ width:46, height:46, borderRadius:11, background:bidscoreDoc.cor, color:'white', fontWeight:900, fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{bidscoreDoc.nota.toFixed(1)}</div>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:13.5, fontWeight:900, color:'#111' }}>BidScore</div>
+                        <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.3 }}>{scoreLabel(bidscoreDoc.base)}</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:6 }}>
+                      {bidscoreDoc.camadas.map(c => (
+                        <div key={c.key} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <div style={{ width:82, fontSize:11.5, fontWeight:700, color:'#475569', flexShrink:0 }}>{c.label}</div>
+                          <div style={{ flex:1, height:7, background:'#e2e8f0', borderRadius:20, overflow:'hidden' }}>
+                            <div style={{ width:`${c.nota*10}%`, height:'100%', background:corCamada(c.nota), borderRadius:20 }}/>
+                          </div>
+                          <div style={{ width:62, textAlign:'right', fontSize:11.5, color:'#64748b', flexShrink:0 }}>{c.nota.toFixed(1)} <span style={{ color:'#cbd5e1' }}>·{c.peso}%</span></div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop:8, fontSize:11, color:'#94a3b8', lineHeight:1.5 }}>Nota de 0 a 10 (triagem), média ponderada das camadas presentes. Não substitui o parecer do analista.</div>
+                  </div>
+                );
+              })()}
+
               {/* Resumo escaneável: pontos de atenção + dados-chave da matrícula */}
               {(() => {
                 const pa = parecerDocumental.pontosAtencao;
@@ -1367,7 +1427,7 @@ export default function Analise() {
                   </div>
                   {parecerDocumental.pendencias > 0 && (
                     <div style={{ marginTop:10, fontSize:11.5, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 11px', lineHeight:1.5 }}>
-                      Algumas fontes públicas estavam instáveis/em verificação no momento. Liberamos o relatório com o que já temos e ele é <strong>complementado automaticamente em até 48h</strong>, sem custo extra.
+                      Algumas consultas públicas não puderam ser concluídas automaticamente agora. Liberamos o relatório com o que já temos; confirme os itens pendentes na certidão oficial do órgão indicado antes do lance.
                     </div>
                   )}
                 </div>
@@ -1457,7 +1517,7 @@ export default function Analise() {
                 );
               })()}
               {parecerDocumental.parecer && (
-                <div style={{ fontSize:13.5, color:'#334155', lineHeight:1.75, whiteSpace:'pre-wrap' }}>
+                <div style={{ fontSize:15, color:'#1e293b', lineHeight:1.85, whiteSpace:'pre-wrap', fontWeight:400 }}>
                   {parecerDocumental.parecer.replace(/§\s*SEÇÃO:/g, '\n§ ').trim()}
                 </div>
               )}

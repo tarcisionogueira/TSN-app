@@ -1257,7 +1257,7 @@ export default function ImovelDetalhe() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 42, height: 42, borderRadius: 10, background: sb.cor, color: 'white', fontWeight: 900, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{sb.nota.toFixed(1)}</div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 800, color: '#111' }}>Score BidPro</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: '#111' }}>BidScore</div>
                         <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.3 }}>{scoreLabel(sb.base)}</div>
                       </div>
                     </div>

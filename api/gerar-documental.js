@@ -717,11 +717,15 @@ export default async function handler(req, res) {
     // Checklist de evolução: o que já foi consultado e o que ficou PENDENTE (fonte
     // instável/CAPTCHA) — deixa o relatório transparente e justifica o prazo p/ liberar.
     const fx = fontesExternas || {};
-    const stItem = (label, fonte, naMsg) => {
+    // Mensagem HONESTA por fonte: não afirmamos "CAPTCHA" nem prometemos retry
+    // automático que não está ligado no fluxo documental. Quando a consulta pública
+    // não sai, dizemos isso e apontamos ONDE confirmar manualmente.
+    const stItem = (label, fonte, naMsg, ondeConfirmar) => {
       if (!fonte) return { label, status: 'na', detalhe: naMsg };
       if (fonte.ok) return { label, status: 'feito', detalhe: fonte.resumo || fonte.situacao || 'Consultado' };
-      if (fonte.instavel) return { label, status: 'pendente', detalhe: 'Fonte instável/CAPTCHA no momento — nova tentativa automática em até 48h; o relatório será complementado.' };
-      return { label, status: 'na', detalhe: fonte.erro || 'Sem apontamento' };
+      const onde = ondeConfirmar ? ` Confirme manualmente em ${ondeConfirmar}.` : '';
+      if (fonte.instavel) return { label, status: 'pendente', detalhe: `Consulta automática indisponível no momento.${onde}` };
+      return { label, status: 'na', detalhe: `${fonte.erro || 'Não foi possível consultar automaticamente'}.${onde}` };
     };
     const checklist = [
       { label: 'Documentos do lote (matrícula/edital/regras)',
@@ -735,10 +739,10 @@ export default async function handler(req, res) {
           ? `${cnj.total} processo(s)${cnjViaNome ? ' (busca pelo nome da parte)' : ''} · ${(cnj.tribunais_consultados || []).join(', ') || 'tribunais consultados'}`
           : (procFontes ? 'Aguardando o DataJud (pode ter lag).'
             : (cnjViaNome ? `Nenhum processo localizado no CNJ para "${execNome}".` : 'Sem nº de processo nem nome da parte nos documentos para consultar.')) },
-      stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.'),
-      stItem('Débitos trabalhistas (CNDT/BNDT)', fx.cndt, 'Sem CPF/CNPJ do executado nos documentos.'),
-      stItem('Indisponibilidade de bens (CNIB)', fx.cnib, 'Sem CPF/CNPJ do executado nos documentos.'),
-      stItem('Protestos em cartório (CENPROT)', fx.protestos, 'Sem CPF/CNPJ do executado nos documentos.'),
+      stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.', 'comunica.pje.jus.br (Comunica CNJ) com o nº do processo'),
+      stItem('Débitos trabalhistas (CNDT/BNDT)', fx.cndt, 'Sem CPF/CNPJ do executado nos documentos.', 'cndt.tst.jus.br'),
+      stItem('Indisponibilidade de bens (CNIB)', fx.cnib, 'Sem CPF/CNPJ do executado nos documentos.', 'indisponibilidade.org.br'),
+      stItem('Protestos em cartório (CENPROT)', fx.protestos, 'Sem CPF/CNPJ do executado nos documentos.', 'o CENPROT do estado (ex.: protesto.com.br)'),
       { label: 'Certidões fiscais (Receita/PGFN/FGTS)',
         status: fx.certidoes?.resumo ? 'feito' : (docOk ? 'pendente' : 'na'),
         detalhe: fx.certidoes?.resumo || (docOk ? 'Aguardando as fontes fiscais.' : 'Sem CPF/CNPJ do executado nos documentos.') },
