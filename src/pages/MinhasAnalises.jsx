@@ -29,8 +29,15 @@ function fotoImovel(im) {
 // Tela inicial das Análises: lista de imóveis analisados (mercado + documental por
 // imóvel). Clicar num imóvel abre a análise específica dele (relatórios + agenda
 // com o analista). Substitui o antigo popup do topo por uma página navegável.
+const CHIP = {
+  verde:   { bg: '#dcfce7', c: '#15803d' },
+  ambar:   { bg: '#fef3c7', c: '#92400e' },
+  vermelho:{ bg: '#fee2e2', c: '#b91c1c' },
+  neutro:  { bg: '#f1f5f9', c: '#475569' },
+};
+
 export default function MinhasAnalises() {
-  const { analises, documentais, emAndamento, remover } = useAnalises();
+  const { analises, documentais, laudos, emAndamento, remover } = useAnalises();
   const { effectiveUserId } = useAuth();
   const nav = useNavigate();
   const isMobile = useIsMobile();
@@ -49,25 +56,54 @@ export default function MinhasAnalises() {
   }, [effectiveUserId]);
 
   const itens = React.useMemo(() => {
-    const rank = { gerando: 3, erro: 2, concluida: 1 };
     const by = {};
     const push = (a, tipo) => {
       if (!a?.imovelId) return;
-      const cur = by[a.imovelId];
-      const partes = { ...(cur?.partes || {}), [tipo]: a.status };
-      const venc = !cur || (rank[a.status] || 0) > (rank[cur.status] || 0) ? a : cur;
-      by[a.imovelId] = { ...venc, partes, updatedAt: Math.max(cur?.updatedAt || 0, a.updatedAt || 0) };
+      const it = by[a.imovelId] || (by[a.imovelId] = { imovelId: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado, imovel: a.imovel || null, updatedAt: 0, reports: {} });
+      it.reports[tipo] = { status: a.status, result: a.result || null, erro: a.erro || null };
+      it.updatedAt = Math.max(it.updatedAt, a.updatedAt || 0);
+      if (!it.titulo && a.titulo) it.titulo = a.titulo;
+      if (!it.imovel && a.imovel) it.imovel = a.imovel;
     };
     (analises || []).forEach(a => push(a, 'mercado'));
     (documentais || []).forEach(a => push(a, 'documental'));
+    (laudos || []).forEach(a => push(a, 'laudo'));
     return Object.values(by).sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0));
-  }, [analises, documentais]);
+  }, [analises, documentais, laudos]);
 
   const abrir = (a) => nav('/analise', { state: { imovel: a.imovel || { id: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado } } });
-  const statusInfo = (a) => {
-    if (a.status === 'gerando') return { Icon: Loader2, cor: '#0d9488', txt: 'Gerando…', spin: true };
-    if (a.status === 'erro') return { Icon: XCircle, cor: '#dc2626', txt: a.erro || 'Erro' };
-    return { Icon: CheckCircle2, cor: '#16a34a', txt: 'Pronta' };
+
+  // Status GERAL do imóvel na lista. Um documental "concluida" mas com
+  // result.precisaDocumentos ainda está capturando/preparando os documentos —
+  // NÃO é "Pronta" (era o que fazia a lista dizer Pronta e a tela abrir "carregando").
+  const statusGeral = (it) => {
+    const rs = Object.values(it.reports);
+    const anyGer = rs.some(r => r.status === 'gerando');
+    const docPrep = it.reports.documental?.status === 'concluida' && it.reports.documental.result?.precisaDocumentos;
+    if (anyGer) return { Icon: Loader2, cor: '#0d9488', txt: 'Gerando…', spin: true };
+    if (docPrep) return { Icon: Loader2, cor: '#b45309', txt: 'Preparando documentos…', spin: true };
+    const anyOk = rs.some(r => r.status === 'concluida');
+    const anyErr = rs.some(r => r.status === 'erro');
+    if (anyErr && !anyOk) return { Icon: XCircle, cor: '#dc2626', txt: 'Erro ao gerar' };
+    return null; // pronto: os chips por relatório mostram o veredito
+  };
+
+  // Chips de veredito por relatório: dá pra ver na lista o que tem potencial de evoluir.
+  const chipsDe = (it) => {
+    const rs = it.reports, out = [];
+    if (rs.mercado?.status === 'concluida') {
+      const v = it.imovel?.analise_viavel;
+      out.push(v === true ? { t: 'Mercado: viável', ...CHIP.verde } : v === false ? { t: 'Mercado: reprovado', ...CHIP.vermelho } : { t: 'Mercado ✓', ...CHIP.neutro });
+    }
+    if (rs.documental?.status === 'concluida' && !rs.documental.result?.precisaDocumentos) {
+      const nr = rs.documental.result?.nivelRisco;
+      out.push(nr === 'verde' ? { t: 'Jurídico: risco baixo', ...CHIP.verde } : nr === 'vermelho' ? { t: 'Jurídico: risco alto', ...CHIP.vermelho } : { t: 'Jurídico: risco médio', ...CHIP.ambar });
+    }
+    if (rs.laudo?.status === 'concluida' && rs.laudo.result?.veredito) {
+      const v = rs.laudo.result.veredito;
+      out.push(v === 'aprovado' ? { t: 'Laudo: aprovado', ...CHIP.verde } : v === 'reprovado' ? { t: 'Laudo: reprovado', ...CHIP.vermelho } : { t: 'Laudo: com ressalvas', ...CHIP.ambar });
+    }
+    return out;
   };
 
   const acao = (label, Icon, cor, onClick) => (
@@ -110,9 +146,9 @@ export default function MinhasAnalises() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {itens.map(a => {
-            const s = statusInfo(a);
+            const s = statusGeral(a);
+            const chips = chipsDe(a);
             const foto = fotoImovel(a.imovel);
-            const tags = Object.keys(a.partes || {});
             return (
               <div key={a.imovelId} onClick={() => abrir(a)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, cursor: 'pointer', transition: 'box-shadow .15s, border-color .15s' }}
@@ -126,12 +162,16 @@ export default function MinhasAnalises() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Imóvel'}</div>
                   <div style={{ fontSize: 12.5, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[a.cidade, a.estado].filter(Boolean).join(', ')}</div>
-                  <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 7, marginTop: 3 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <s.Icon size={12} color={s.cor} style={s.spin ? { animation: 'spin 1s linear infinite' } : undefined} />
-                      <span style={{ color: s.cor, fontWeight: 700 }}>{s.txt}</span>
-                    </span>
-                    {tags.length > 0 && <span style={{ color: '#94a3b8', fontWeight: 600 }}>· {tags.map(t => t === 'mercado' ? 'Mercado' : 'Documental').join(' + ')}</span>}
+                  <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                    {s && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <s.Icon size={12} color={s.cor} style={s.spin ? { animation: 'spin 1s linear infinite' } : undefined} />
+                        <span style={{ color: s.cor, fontWeight: 700 }}>{s.txt}</span>
+                      </span>
+                    )}
+                    {chips.map((c, i) => (
+                      <span key={i} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: c.bg, color: c.c }}>{c.t}</span>
+                    ))}
                   </div>
                 </div>
                 {casosPorImovel[String(a.imovelId)] && (
