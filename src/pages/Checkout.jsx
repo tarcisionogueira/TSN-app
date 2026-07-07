@@ -851,8 +851,8 @@ export default function Checkout() {
           {temModalidade && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
               {[
-                { key: 'mensal', label: planoKey === 'assessorado' ? 'Parcelado em até 12× no cartão' : '12× R$ 5.000 (total R$ 60.000)' },
-                { key: 'vista',  label: planoKey === 'assessorado' ? 'À vista R$ 4.800 (20% off · PIX ou cartão)' : 'À vista R$ 48.000 (20% off)' },
+                { key: 'mensal', label: 'Parcelado' },
+                { key: 'vista',  label: 'À vista' },
               ].map(({ key, label }) => (
                 <button key={key} onClick={() => setModalidade(key)}
                   style={{ flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
@@ -908,18 +908,42 @@ export default function Checkout() {
                 </>
               )}
             </div>
-          ) : (
+          ) : temModalidade ? (() => {
+            // Apresentação REATIVA ao toggle: parcelado mostra "12× R$ X"; à vista
+            // mostra o valor com desconto + PIX sem taxa e cartão à vista.
+            const fmtR = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const preco = Number(plano.preco) || 0;
+            const precoVista = Number(plano.precoVista) || 0;
+            const parcela = preco / 12;
+            const economia = preco - precoVista;
+            return (
+              <div style={{ marginBottom: 20 }}>
+                {modalidade === 'vista' ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                      <strong style={{ color: '#111111', fontSize: 32 }}>{fmtR(precoVista)}</strong>
+                      <span style={{ color: '#64748b', fontSize: 16, fontWeight: 600 }}>à vista</span>
+                      <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% OFF</span>
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
+                      No <strong>PIX (sem taxa)</strong> ou <strong>cartão de crédito à vista</strong>.{economia > 0 ? ` Economize ${fmtR(economia)} em relação ao parcelado.` : ''}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                      <strong style={{ color: '#111111', fontSize: 32 }}>12× {fmtR(parcela)}</strong>
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
+                      Total {fmtR(preco)} no cartão de crédito{planoKey === 'assessorado' ? ' · sem juros até 3×' : ''}.
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })() : (
             <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: 15 }}>
-              {temModalidade && modalidade === 'vista' ? (
-                <>
-                  <strong style={{ color: '#111111', fontSize: 28 }}>{plano.precoVistaLabel}</strong>
-                  {' '}à vista · sem renovação automática
-                </>
-              ) : (
-                <>
-                  <strong style={{ color: '#111111', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
-                </>
-              )}
+              <strong style={{ color: '#111111', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
             </p>
           )}
           {plano.honorarios && (
