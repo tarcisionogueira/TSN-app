@@ -6,7 +6,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
-import { consultarProximidades } from './_proximidades.js';
+import { consultarProximidades, haversine } from './_proximidades.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -25,9 +25,22 @@ export default async function handler(req) {
 
   const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=latitude,longitude,pontos_proximos,proximidades_em`)).json();
   if (!im) return json({ error: 'Imóvel não encontrado' }, 404);
-  if (im.pontos_proximos) return json({ pontos: im.pontos_proximos, cache: true });
 
   const lat = Number(im.latitude), lng = Number(im.longitude);
+
+  // Cache válido SÓ se foi calculado para as coordenadas ATUAIS. Se o imóvel foi
+  // re-geocodificado depois (ex.: centroide → endereço exato), os pontos guardados
+  // ficam a quilômetros do local certo: a distância recalculada (coord atual → ponto)
+  // não bate com o dist_m gravado. Nesse caso ignora o cache e recalcula no local certo.
+  // (Sintoma: todas as proximidades aparecendo ~10 km numa cidade densa.)
+  if (im.pontos_proximos && lat && lng) {
+    const pts = Object.values(im.pontos_proximos).filter(p => p && p.lat != null && p.lng != null);
+    const stale = pts.some(p => Math.abs(haversine(lat, lng, Number(p.lat), Number(p.lng)) - (Number(p.dist_m) || 0)) > 500);
+    if (!stale) return json({ pontos: im.pontos_proximos, cache: true });
+  } else if (im.pontos_proximos && (!lat || !lng)) {
+    return json({ pontos: im.pontos_proximos, cache: true });
+  }
+
   if (!lat || !lng) return json({ pontos: null, sem_coordenada: true });
 
   try {

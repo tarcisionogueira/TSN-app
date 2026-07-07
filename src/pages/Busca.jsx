@@ -1372,8 +1372,10 @@ export default function Busca() {
 
       </div>
 
-      {/* CONTEÚDO PRINCIPAL */}
-      <div style={{ display:'flex', flexDirection:'column', gap:14, overflow: (vista === 'mapa' || vista === 'ambos') ? 'hidden' : undefined, maxHeight: (vista === 'mapa' || vista === 'ambos') ? '100vh' : undefined }}>
+      {/* CONTEÚDO PRINCIPAL — sem overflow:hidden/maxHeight: os mapas já têm altura
+          própria (calc(100vh - …)), e o clip aqui impedia o header sticky de pinar
+          no modo mapa (o alternador Lista/Mapa sumia ao rolar). */}
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
         {/* Filtros Salvos */}
         {user?.id && (
