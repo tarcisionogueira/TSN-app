@@ -177,12 +177,13 @@ export default function Calculadora() {
     }
   }, [origem]);
 
-  // Aluguel esperado sugerido = 0,5% do valor de mercado (referência do setor).
-  // Só auto-preenche enquanto o usuário não digitar um valor próprio (editável).
+  // Aluguel esperado sugerido = 12% ao ano do valor de mercado (1% ao mês —
+  // referência do setor). Só auto-preenche enquanto o usuário não digitar um
+  // valor próprio (editável).
   useEffect(() => {
     if (aluguelEditado) return;
     const m = Number(mercado) || 0;
-    setAluguel(m > 0 ? String(Math.round(m * 0.005)) : '');
+    setAluguel(m > 0 ? String(Math.round(m * 0.12 / 12)) : '');
   }, [mercado, aluguelEditado]);
 
   const isAVista = pagamento === 'a_vista';
@@ -271,6 +272,10 @@ export default function Calculadora() {
   if (authLoading) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Carregando…</div>;
 
   const temDados = vArr > 0 && vMerc > 0;
+  // Com o valor de arrematação informado, o cliente quer ver o RETORNO daquele
+  // lance, não um teto/projeção de lance. O teto (quanto posso dar de lance) só
+  // faz sentido quando ainda NÃO se decidiu o valor da arrematação.
+  const arremInformado = vArr > 0;
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: '28px 20px' }}>
@@ -355,8 +360,8 @@ export default function Calculadora() {
               <div>
                 <Campo label="Aluguel mensal esperado" value={aluguel} onChange={(v) => { setAluguel(v); setAluguelEditado(true); }} prefix="R$" placeholder="0" />
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>
-                  Sugestão: <strong>0,5% do valor de mercado</strong> (referência do setor){!aluguelEditado && Number(mercado) > 0 ? ' — editável' : ''}.
-                  {aluguelEditado && <button type="button" onClick={() => setAluguelEditado(false)} style={{ marginLeft: 4, background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 10, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>usar 0,5%</button>}
+                  Sugestão: <strong>12% ao ano do valor de mercado</strong> (1% ao mês, referência do setor){!aluguelEditado && Number(mercado) > 0 ? ' — pode editar' : ''}.
+                  {aluguelEditado && <button type="button" onClick={() => setAluguelEditado(false)} style={{ marginLeft: 4, background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 10, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>usar 12% a.a.</button>}
                 </div>
               </div>
               <Campo label="Horizonte de projeção" value={horizonteAnos} onChange={setHorizonteAnos} suffix="anos" />
@@ -403,20 +408,26 @@ export default function Calculadora() {
             </div>
           )}
 
-          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
-            {isAluguel
-              ? <Campo label="Meta de yield líquido (a.a.) para o teto de lance" value={metaYield} onChange={setMetaYield} suffix="%" />
-              : <Campo label="Meta de retorno (ROI) para o teto de lance" value={metaRoi} onChange={setMetaRoi} suffix="%" />}
-          </div>
+          {/* Meta só serve ao teto de lance — some quando já há valor de arrematação. */}
+          {!arremInformado && (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+              {isAluguel
+                ? <Campo label="Meta de yield líquido (a.a.) para o teto de lance" value={metaYield} onChange={setMetaYield} suffix="%" />
+                : <Campo label="Meta de retorno (ROI) para o teto de lance" value={metaRoi} onChange={setMetaRoi} suffix="%" />}
+            </div>
+          )}
         </div>
 
         {/* ── Resultados ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Teto de lance — ROI (revenda) ou yield (aluguel) */}
-          {(() => {
+          {/* Teto de lance — SÓ quando ainda não há valor de arrematação. Com o
+              arremate informado, mostramos o retorno (cards abaixo), não o teto. */}
+          {!arremInformado && (() => {
             const tetoVal = isAluguel ? tetoAluguel : teto;
-            const temDadosTeto = isAluguel ? (temDados && vAluguel > 0) : temDados;
+            // Teto se calcula a partir do valor de mercado (+ aluguel, no caso de
+            // locação); não precisa do valor de arrematação.
+            const temDadosTeto = isAluguel ? (vMerc > 0 && vAluguel > 0) : vMerc > 0;
             const metaTxt = isAluguel ? `yield líquido de ${fmtPct(metaYield, 2)} a.a.` : `ROI de ${fmtPct(metaRoi, 2)}`;
             return (
             <div style={{ background: temDadosTeto ? 'linear-gradient(135deg,#1e3a8a,#0D63DB)' : '#f1f5f9', borderRadius: 16, padding: 22, color: temDadosTeto ? 'white' : '#94a3b8' }}>
@@ -427,9 +438,9 @@ export default function Calculadora() {
                 {!temDadosTeto ? '—' : tetoVal > 0 ? `R$ ${fmt(tetoVal, 2)}` : 'Meta inatingível'}
               </div>
               {!temDadosTeto
-                ? <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>Preencha <strong>Arrematação</strong>, <strong>Valor de mercado</strong>{isAluguel ? ' e o Aluguel mensal' : ''} para calcular.</div>
+                ? <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>Preencha o <strong>Valor de mercado</strong>{isAluguel ? ' e o Aluguel mensal' : ''} para ver quanto dá para dar de lance. Ou informe o <strong>Valor de arrematação</strong> para ver o retorno.</div>
                 : tetoVal > 0
-                  ? <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter {metaTxt} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}).</div>
+                  ? <div style={{ fontSize: 12, opacity: 0.85 }}>Maior lance que mantém {metaTxt} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}). Informe o Valor de arrematação para ver o retorno do seu lance.</div>
                   : <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>Nenhum lance atinge {metaTxt} com esses custos. Reduza a meta ou revise os parâmetros.</div>
               }
             </div>
