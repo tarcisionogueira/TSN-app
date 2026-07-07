@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Calculator, Gavel, TrendingUp, Target, Lock, Share2, Copy, Check, Info } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
-import { calcularMetricasCenario, calcularTetoLance, fmt, fmtPct } from '../utils/calculos';
+import { calcularMetricasCenario, calcularTetoLance, fluxoLocacao, calcularTIR, fmt, fmtPct } from '../utils/calculos';
 
 const ROLES_COM_ACESSO = ['top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
 
@@ -144,8 +144,13 @@ export default function Calculadora() {
   const [prazoMeses, setPrazoMeses] = useState(360);
   const [cet, setCet] = useState(15);   // 15% padrão, editável
   const [prazoVenda, setPrazoVenda] = useState(12);
-  const [metaRoi, setMetaRoi] = useState(30);  // 30% padrão
-  const [incrementoLance, setIncrementoLance] = useState(0); // incremento do edital (informado)
+  const [metaRoi, setMetaRoi] = useState(30);  // 30% padrão (revenda)
+  // Objetivo: revenda (flip) ou aluguel (hold + renda). Rafael/investidor que aluga
+  // quer ver yield e renda mensal, não o lucro de revenda.
+  const [objetivo, setObjetivo] = useState(/aluguel|locac/i.test(imPre?.objetivo || '') ? 'aluguel' : 'revenda');
+  const [aluguel, setAluguel] = useState(imPre?.valorLocacao ? String(imPre.valorLocacao) : '');
+  const [horizonteAnos, setHorizonteAnos] = useState(5);
+  const [metaYield, setMetaYield] = useState(8); // meta de yield líquido a.a. (aluguel)
 
   const [copiado, setCopiado] = useState(false);
   const [codigoRef, setCodigoRef] = useState('');
@@ -175,7 +180,8 @@ export default function Calculadora() {
     origem,
     tabelaAmortizacao: tabela,
     valorMercado: Number(mercado) || 0,
-    valorLocacao: 0,
+    valorArrematacao: Number(arrematacao) || 0,
+    valorLocacao: Number(aluguel) || 0,
     manutencaoEstimada: Number(reforma) || 0,
     debitosAssumidos: Number(debitos) || 0,
     iptuMensal: Number(iptuMensal) || 0,
@@ -187,7 +193,7 @@ export default function Calculadora() {
     prazoMeses: Number(prazoMeses) || 0,
     cetAnual: Number(cet) || 0,
     prazoVendaMeses: Number(prazoVenda) || 1,
-  }), [origem, tabela, mercado, reforma, debitos, iptuMensal, condominioMensal, sinal, prazoMeses, cet, prazoVenda, isAVista]);
+  }), [origem, tabela, mercado, arrematacao, aluguel, reforma, debitos, iptuMensal, condominioMensal, sinal, prazoMeses, cet, prazoVenda, isAVista]);
 
   const vArr = Number(arrematacao) || 0;
   const vMerc = Number(mercado) || 0;
@@ -195,6 +201,36 @@ export default function Calculadora() {
 
   const m = useMemo(() => calcularMetricasCenario(inputs, vArr, isAVista), [inputs, vArr, isAVista]);
   const teto = useMemo(() => calcularTetoLance(inputs, isAVista, Number(metaRoi) || 0, vMerc), [inputs, isAVista, metaRoi, vMerc]);
+
+  // ── Modo ALUGUEL (hold + renda) ──────────────────────────────────────────────
+  const isAluguel = objetivo === 'aluguel';
+  const vAluguel = Number(aluguel) || 0;
+  const carregoMensal = (Number(iptuMensal) || 0) + (Number(condominioMensal) || 0);
+  const rendaLiquidaMensal = vAluguel - carregoMensal;
+  // Capital de aquisição (sem o carrego do flip, que aqui é custo recorrente do hold).
+  const capitalAquisicao = Math.max(0, m.capitalMobilizado - m.custoCarrrego);
+  const yieldBrutoAnual = capitalAquisicao > 0 ? (vAluguel * 12 / capitalAquisicao) * 100 : 0;
+  const yieldLiquidoAnual = capitalAquisicao > 0 ? (rendaLiquidaMensal * 12 / capitalAquisicao) * 100 : 0;
+  const paybackMesesAluguel = rendaLiquidaMensal > 0 ? capitalAquisicao / rendaLiquidaMensal : null;
+  // Fluxo hold (aluguel líquido + venda ao fim do horizonte) → TIR e múltiplo.
+  const fl = useMemo(() => fluxoLocacao({ ...inputs }, (Number(horizonteAnos) || 1) * 12), [inputs, horizonteAnos]);
+  const tirAluguel = useMemo(() => calcularTIR(fl.fluxos), [fl]);
+  const retornoTotalAluguel = fl.fluxos.reduce((s, f) => s + (f > 0 ? f : 0), 0);
+  const multiploAluguel = fl.capital > 0 ? retornoTotalAluguel / fl.capital : null;
+  // Teto de lance p/ aluguel: maior arremate que mantém o yield líquido ≥ meta.
+  const tetoAluguel = useMemo(() => {
+    const rendaAnual = rendaLiquidaMensal * 12;
+    if (rendaAnual <= 0) return 0;
+    let low = 0, high = (vMerc || 0) * 1.5 || 1e9, t = 0;
+    for (let i = 0; i < 50; i++) {
+      const mid = (low + high) / 2;
+      const mm = calcularMetricasCenario(inputs, mid, isAVista);
+      const cap = Math.max(0, mm.capitalMobilizado - mm.custoCarrrego);
+      const y = cap > 0 ? (rendaAnual / cap) * 100 : 0;
+      if (y >= (Number(metaYield) || 0)) { t = mid; low = mid; } else { high = mid; }
+    }
+    return t;
+  }, [inputs, isAVista, rendaLiquidaMensal, vMerc, metaYield]);
 
   const descontoAvaliacao = vAval > 0 && vArr > 0 ? (1 - vArr / vAval) * 100 : 0;
 
@@ -256,6 +292,17 @@ export default function Calculadora() {
               </button>
             ))}
           </div>
+
+          {/* Objetivo: revender (flip) ou alugar (renda/hold) — muda toda a projeção */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            {[['revenda', '🔁 Revender'], ['aluguel', '🏠 Alugar']].map(([v, l]) => (
+              <button key={v} onClick={() => setObjetivo(v)}
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid', borderColor: objetivo === v ? '#7c3aed' : '#e2e8f0', background: objetivo === v ? '#f5f3ff' : 'white', color: objetivo === v ? '#7c3aed' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
           {origem === 'judicial' && pagamento === 'financiado' && (
             <div style={{ marginBottom: 14, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#084BA6', fontWeight: 600 }}>
               CPC Art. 895: 25% de entrada + 30 parcelas mensais. Correção monetária a critério judicial.
@@ -288,6 +335,13 @@ export default function Calculadora() {
             <Campo label="IPTU mensal" value={iptuMensal} onChange={setIptuMensal} prefix="R$" placeholder="0" />
             <Campo label="Condomínio mensal" value={condominioMensal} onChange={setCondominioMensal} prefix="R$" placeholder="0" />
           </div>
+
+          {isAluguel && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+              <Campo label="Aluguel mensal esperado" value={aluguel} onChange={setAluguel} prefix="R$" placeholder="0" />
+              <Campo label="Horizonte de projeção" value={horizonteAnos} onChange={setHorizonteAnos} suffix="anos" />
+            </div>
+          )}
 
           {/* Parcelamento / Financiamento */}
           {!isAVista && (
@@ -330,60 +384,76 @@ export default function Calculadora() {
           )}
 
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
-            <Campo label="Meta de retorno (ROI) para o teto de lance" value={metaRoi} onChange={setMetaRoi} suffix="%" />
+            {isAluguel
+              ? <Campo label="Meta de yield líquido (a.a.) para o teto de lance" value={metaYield} onChange={setMetaYield} suffix="%" />
+              : <Campo label="Meta de retorno (ROI) para o teto de lance" value={metaRoi} onChange={setMetaRoi} suffix="%" />}
           </div>
         </div>
 
         {/* ── Resultados ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Teto de lance */}
-          <div style={{ background: temDados ? 'linear-gradient(135deg,#1e3a8a,#0D63DB)' : '#f1f5f9', borderRadius: 16, padding: 22, color: temDados ? 'white' : '#94a3b8' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1 }}>
-              <Target size={15} /> Teto máximo de lance
+          {/* Teto de lance — ROI (revenda) ou yield (aluguel) */}
+          {(() => {
+            const tetoVal = isAluguel ? tetoAluguel : teto;
+            const temDadosTeto = isAluguel ? (temDados && vAluguel > 0) : temDados;
+            const metaTxt = isAluguel ? `yield líquido de ${fmtPct(metaYield, 2)} a.a.` : `ROI de ${fmtPct(metaRoi, 2)}`;
+            return (
+            <div style={{ background: temDadosTeto ? 'linear-gradient(135deg,#1e3a8a,#0D63DB)' : '#f1f5f9', borderRadius: 16, padding: 22, color: temDadosTeto ? 'white' : '#94a3b8' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1 }}>
+                <Target size={15} /> Teto máximo de lance
+              </div>
+              <div style={{ fontSize: temDadosTeto ? (tetoVal > 0 ? 32 : 20) : 22, fontWeight: 900, margin: '6px 0 2px' }}>
+                {!temDadosTeto ? '—' : tetoVal > 0 ? `R$ ${fmt(tetoVal, 2)}` : 'Meta inatingível'}
+              </div>
+              {!temDadosTeto
+                ? <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>Preencha <strong>Arrematação</strong>, <strong>Valor de mercado</strong>{isAluguel ? ' e o Aluguel mensal' : ''} para calcular.</div>
+                : tetoVal > 0
+                  ? <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter {metaTxt} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}).</div>
+                  : <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>Nenhum lance atinge {metaTxt} com esses custos. Reduza a meta ou revise os parâmetros.</div>
+              }
             </div>
-            <div style={{ fontSize: temDados ? (teto > 0 ? 32 : 20) : 22, fontWeight: 900, margin: '6px 0 2px' }}>
-              {!temDados ? '—' : teto > 0 ? `R$ ${fmt(teto, 2)}` : 'Meta inatingível'}
-            </div>
-            {!temDados
-              ? <div style={{ fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>Preencha <strong>Arrematação</strong> e <strong>Valor de mercado</strong> para calcular.</div>
-              : teto > 0
-                ? <div style={{ fontSize: 12, opacity: 0.85 }}>Para manter ROI de {fmtPct(metaRoi, 2)} ({isAVista ? 'à vista' : origem === 'judicial' ? 'CPC 895' : `financiado ${nomeTabela}`}).</div>
-                : <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>Nenhum lance atinge o ROI de {fmtPct(metaRoi, 2)} com esses custos. Reduza a meta ou revise os parâmetros.</div>
-            }
-          </div>
+            );
+          })()}
 
-          {/* Contador de lances, quantos lances cabem até o teto mantendo a meta.
-              O INCREMENTO vem do edital (informado pelo usuário), nunca chutamos,
-              para não orientar errado. Só aparece com teto válido acima do lance atual. */}
-          {temDados && teto > 0 && (
+          {/* Cenário ALUGUEL: renda mensal, yield e retorno total no horizonte */}
+          {temDados && isAluguel && (
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 22 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#111111', marginBottom: 6 }}>
-                <Target size={16} color="#059669" /> Quantos lances posso dar?
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#111111', marginBottom: 14 }}>
+                <TrendingUp size={16} color="#7c3aed" /> Projeção de aluguel (renda + valorização)
               </div>
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
-                Informe o <strong>incremento mínimo de lance do edital</strong>. Calculamos quantos lances você cobre a partir do lance atual sem passar do teto que mantém ROI de {fmtPct(metaRoi, 2)}.
+              <Linha label="Desconto sobre avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 2) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
+              <Linha label="Capital de aquisição" valor={`R$ ${fmt(capitalAquisicao, 2)}`} sublabel="Arremate + custos do leilão + débitos/reforma" destaque />
+              <Linha label="Aluguel mensal" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} />
+              <Linha label="IPTU + condomínio (mensal)" valor={carregoMensal > 0 ? `– R$ ${fmt(carregoMensal, 2)}` : 'R$ 0,00'} cor={carregoMensal > 0 ? '#dc2626' : undefined} />
+              <Linha label="Renda líquida mensal" valor={`R$ ${fmt(rendaLiquidaMensal, 2)}`} destaque cor={rendaLiquidaMensal >= 0 ? '#059669' : '#dc2626'} />
+              <div style={{ marginTop: 4 }} />
+              <Linha label="Yield bruto (a.a.)" valor={fmtPct(yieldBrutoAnual, 2)} sublabel="Aluguel anual ÷ capital de aquisição" />
+              <Linha label="Yield líquido (a.a.)" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel="Após IPTU + condomínio" />
+              <Linha label="Payback só com aluguel" valor={paybackMesesAluguel ? `${Math.ceil(paybackMesesAluguel)} meses (~${(paybackMesesAluguel / 12).toFixed(1)} anos)` : '—'} sublabel="Tempo p/ o aluguel devolver o capital" />
+              <div style={{ margin: '10px 0 4px', padding: '12px 14px', background: '#f5f3ff', borderRadius: 10, border: '1px solid #ddd6fe' }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Retorno total em {horizonteAnos} anos (aluguel + venda ao fim)</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: '#6d28d9', fontWeight: 600 }}>TIR (a.a.)</span>
+                  <span style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>{tirAluguel != null ? fmtPct(tirAluguel, 2) : '—'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: '#6d28d9', fontWeight: 600 }}>Múltiplo sobre o capital</span>
+                  <span style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>{multiploAluguel != null ? `${multiploAluguel.toFixed(2)}x` : '—'}</span>
+                </div>
+                <div style={{ fontSize: 10.5, color: '#7c3aed', marginTop: 8, lineHeight: 1.5 }}>Considera venda ao fim do horizonte a 90% do valor de mercado (líquido de comissão e IR). Sem financiamento na projeção do hold.</div>
               </div>
-              <Campo label="Incremento mínimo do edital" value={incrementoLance} onChange={setIncrementoLance} prefix="R$" />
-              {(() => {
-                const inc = Number(incrementoLance) || 0;
-                if (inc <= 0) return <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 10 }}>Informe o incremento para ver o número de lances.</div>;
-                if (teto <= vArr) return <div style={{ fontSize: 12.5, color: '#dc2626', marginTop: 10, fontWeight: 600 }}>O lance atual já está no teto (ou acima). Não há margem para subir mantendo a meta.</div>;
-                const nLances = Math.floor((teto - vArr) / inc);
-                return (
-                  <div style={{ marginTop: 12, padding: '14px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12 }}>
-                    <div style={{ fontSize: 28, fontWeight: 900, color: '#059669', lineHeight: 1 }}>{nLances} {nLances === 1 ? 'lance' : 'lances'}</div>
-                    <div style={{ fontSize: 12.5, color: '#166534', marginTop: 6, lineHeight: 1.5 }}>
-                      A partir de <strong>R$ {fmt(vArr, 2)}</strong> você pode dar até <strong>{nLances}</strong> {nLances === 1 ? 'lance' : 'lances'} de <strong>R$ {fmt(inc, 2)}</strong> e ainda manter ROI ≥ {fmtPct(metaRoi, 2)}. Acima de <strong>R$ {fmt(teto, 2)}</strong> a margem cai abaixo da meta.
-                    </div>
-                  </div>
-                );
-              })()}
+              <div style={{ marginTop: 10, padding: '10px 12px', background: '#fef9c3', borderRadius: 8, display: 'flex', gap: 8 }}>
+                <Info size={14} color="#a16207" style={{ flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 11, color: '#a16207', margin: 0, lineHeight: 1.5 }}>
+                  <strong>Estimativa conservadora.</strong> Não inclui vacância, reajuste do aluguel nem valorização acima da inflação. Consulte nosso analista para o detalhamento.
+                </p>
+              </div>
             </div>
           )}
 
-          {/* Cenário atual */}
-          {temDados && (
+          {/* Cenário atual (revenda) */}
+          {temDados && !isAluguel && (
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 22 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#111111', marginBottom: 14 }}>
                 <TrendingUp size={16} color="#0D63DB" /> Cenário no lance atual
