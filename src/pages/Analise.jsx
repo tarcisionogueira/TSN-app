@@ -2036,28 +2036,46 @@ export default function Analise() {
       {relSel === 'mercado' && (<>
 
       <div style={{ display:'flex', flexDirection:'column', gap:14, marginTop:14 }}>
-        {/* ── VALOR DE VENDA (topo): média do mercado + preço sugerido de venda ── */}
+        {/* ── VALORES DE REFERÊNCIA (topo): avaliação do leilão + lance mínimo da
+             praça + venda estimada no mercado. Os 3 números que o leigo compara. ── */}
         {(() => {
           const area = Number(d.areaM2) || Number(d.areaTerrenoM2) || 0;
           const pm2 = Number(mercado?.precoMedioM2) || 0;
           const valorMedia = pm2 && area ? Math.round(pm2 * area) : (Number(d.valorMercado) || 0);
           const sugerido = Number(d.valorMercado) || (valorMedia ? Math.round(valorMedia * 0.9) : 0);
-          if (!valorMedia && !sugerido) return null;
+          const vAval = Number(d.valorAvaliacao) || 0;
+          const vArr = Number(d.valorArrematacao) || 0;
+          if (!valorMedia && !sugerido && !vAval && !vArr) return null;
+          const descAval = vAval > 0 && vArr > 0 ? (1 - vArr / vAval) * 100 : 0;
+          const card = { background:'rgba(255,255,255,0.12)', borderRadius:12, padding:'12px 14px' };
+          const rot = { fontSize:10, opacity:0.85, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 };
+          const num = { fontSize:22, fontWeight:900 };
+          const sub = { fontSize:10, opacity:0.8, marginTop:2, lineHeight:1.4 };
           return (
             <div style={{ background:'linear-gradient(135deg,#0B48A6,#0D63DB)', borderRadius:16, padding: isMobile?'16px':'18px 22px', color:'white' }}>
-              <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85, marginBottom:10 }}>Valor de venda estimado</div>
-              <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:12 }}>
-                <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:12, padding:'12px 14px' }}>
-                  <div style={{ fontSize:10, opacity:0.85, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 }}>Valor de mercado (média)</div>
-                  <div style={{ fontSize:24, fontWeight:900 }}>R$ {fmt(valorMedia)}</div>
-                  <div style={{ fontSize:10, opacity:0.8, marginTop:2 }}>{pm2 && area ? `${fmt(pm2)}/m² × ${fmt(area)} m²` : 'com base na pesquisa de mercado'}</div>
+              <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85, marginBottom:10 }}>Valores de referência</div>
+              <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:12 }}>
+                <div style={card}>
+                  <div style={rot}>Avaliação do leilão</div>
+                  <div style={num}>{vAval>0 ? `R$ ${fmt(vAval)}` : '—'}</div>
+                  <div style={sub}>valor que o leilão atribuiu ao imóvel</div>
                 </div>
-                <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:12, padding:'12px 14px' }}>
-                  <div style={{ fontSize:10, opacity:0.85, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 }}>Preço sugerido de venda</div>
-                  <div style={{ fontSize:24, fontWeight:900, color:'#a7f3d0' }}>R$ {fmt(sugerido)}</div>
-                  <div style={{ fontSize:10, opacity:0.8, marginTop:2 }}>preço para revenda em prazo saudável (conservador)</div>
+                <div style={card}>
+                  <div style={rot}>Lance mínimo (praça atual)</div>
+                  <div style={num}>{vArr>0 ? `R$ ${fmt(vArr)}` : '—'}</div>
+                  <div style={sub}>{descAval>0 ? `${fmtPct(descAval)} abaixo da avaliação` : 'ponto de partida do lance'}</div>
+                </div>
+                <div style={{ ...card, background:'rgba(167,243,208,0.18)' }}>
+                  <div style={rot}>Venda estimada no mercado</div>
+                  <div style={{ ...num, color:'#a7f3d0' }}>{sugerido>0 ? `R$ ${fmt(sugerido)}` : '—'}</div>
+                  <div style={sub}>quanto tende a vender no mercado (conservador)</div>
                 </div>
               </div>
+              {valorMedia>0 && (
+                <div style={{ fontSize:10.5, opacity:0.8, marginTop:10, lineHeight:1.5 }}>
+                  Base de mercado: {pm2 && area ? `R$ ${fmt(pm2)}/m² × ${fmt(area)} m² = R$ ${fmt(valorMedia)}` : `R$ ${fmt(valorMedia)}`} (média dos anúncios). A venda estimada aplica uma margem conservadora para revenda em prazo saudável.
+                </div>
+              )}
             </div>
           );
         })()}

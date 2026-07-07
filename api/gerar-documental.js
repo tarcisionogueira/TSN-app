@@ -249,7 +249,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "raioX": {
     "cadeiaDominial": [{"ato":"","data":"AAAA-MM-DD","evento":"","parte":""}],
     "certidoesRecomendadas": [{"nome":"","orgao":"","online":false,"motivo":""}],
@@ -526,7 +526,22 @@ export default async function handler(req, res) {
     // o mesmo conjunto que o fluxo de Caso já usava.
     const ex = parsed.extracao || {};
     const execDoc = String(ex.executadoDoc || '').replace(/\D/g, '');
-    const docOk = execDoc.length === 11 || execDoc.length === 14;
+    // Valida o dígito verificador antes de disparar as certidões: um número mal
+    // lido (OCR) com 11/14 dígitos passaria no comprimento e geraria "nada consta"
+    // FALSO. Só consulta CNDT/CNIB/CENPROT/fiscais com CPF/CNPJ realmente válido.
+    const cpfValido = (c) => {
+      if (!/^\d{11}$/.test(c) || /^(\d)\1{10}$/.test(c)) return false;
+      let s = 0; for (let i = 0; i < 9; i++) s += +c[i] * (10 - i);
+      let d1 = (s * 10) % 11; if (d1 === 10) d1 = 0; if (d1 !== +c[9]) return false;
+      s = 0; for (let i = 0; i < 10; i++) s += +c[i] * (11 - i);
+      let d2 = (s * 10) % 11; if (d2 === 10) d2 = 0; return d2 === +c[10];
+    };
+    const cnpjValido = (c) => {
+      if (!/^\d{14}$/.test(c) || /^(\d)\1{13}$/.test(c)) return false;
+      const dv = (base) => { let s = 0, p = base.length - 7; for (let i = 0; i < base.length; i++) { s += +base[i] * p--; if (p < 2) p = 9; } const r = s % 11; return r < 2 ? 0 : 11 - r; };
+      return dv(c.slice(0, 12)) === +c[12] && dv(c.slice(0, 13)) === +c[13];
+    };
+    const docOk = (execDoc.length === 11 && cpfValido(execDoc)) || (execDoc.length === 14 && cnpjValido(execDoc));
     const execNome = String(ex.executadoNome || '').trim();
 
     // Se não localizamos processo por NÚMERO, busca no CNJ pelo NOME da parte

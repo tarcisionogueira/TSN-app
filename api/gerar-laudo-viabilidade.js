@@ -113,6 +113,7 @@ REGRAS:
 - Retorno abaixo de 30% (investimento) sem economia relevante = "reprovado".
 - Seja HONESTO e OBJETIVO. Se reprovado, seja curto e direto no porquê. Não invente dados que não estão nos relatórios; se algo é incerto, trate como condição/diligência.
 - Texto formal, simples, sem markdown/asteriscos e SEM travessão "—" (use vírgula, ponto ou dois-pontos; o travessão dá cara de texto de IA e reduz a confiança do cliente).
+- LINGUAGEM PARA LEIGO (obrigatório): escreva de forma que QUALQUER pessoa, sem formação jurídica ou financeira, entenda. Frases curtas. Sempre que um termo técnico for inevitável (ex.: propter rem, laudêmio, imissão de posse, usufruto, yield, ROI, TIR), explique em 3 a 6 palavras entre parênteses logo após o termo (ex.: "débitos propter rem (que seguem o imóvel, não a pessoa)"). Traduza percentuais em dinheiro sempre que ajudar. O cliente não é advogado nem economista.
 
 Retorne APENAS este JSON (sem markdown):
 {
@@ -235,6 +236,15 @@ export default async function handler(req, res) {
       baseadoEm: { mercadoEm: mRow.updated_at, documentalEm: dRow.updated_at },
       geradoEm: new Date().toISOString(),
     };
+    // Coerência determinística: um veredito "aprovado" NÃO pode conviver com um
+    // pedido de revisão do controle de qualidade (baixa confiança/contradição entre
+    // os relatórios). Nesse caso rebaixa para "condicional" e registra a condição.
+    if (result.veredito === 'aprovado' && result.controleQualidade?.recomendaRevisao) {
+      result.veredito = 'condicional';
+      if (!result.condicoes.length) {
+        result.condicoes = ['Revisar com um analista antes do lance: o controle de qualidade sinalizou baixa confiança ou contradição entre o relatório de mercado e o documental.'];
+      }
+    }
     return result;
     })()]);
 
