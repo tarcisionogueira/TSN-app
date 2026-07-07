@@ -7054,6 +7054,8 @@ function FinanceiroTab() {
   const [gwSaved,  setGwSaved]  = React.useState(false);
   const [mpSaldo,  setMpSaldo]  = React.useState(null);
   const [mpLoading, setMpLoading] = React.useState(true);
+  const [mpTx, setMpTx] = React.useState(null);      // transações reais do MP
+  const [mpTxLoading, setMpTxLoading] = React.useState(true);
 
   React.useEffect(() => {
     // Carrega config de gateway ativo
@@ -7061,10 +7063,13 @@ function FinanceiroTab() {
       const mp = data?.find(r => r.gateway === 'mp');
       if (mp) setGateway(mp.ativo ? 'mp' : 'asaas');
     });
-    // Saldo MP
+    // Saldo + transações reais do MP
     supabase.auth.getSession().then(({ data: { session } }) => {
-      fetch('/api/mp-admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` }, body: JSON.stringify({ action: 'saldo' }) })
+      const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` };
+      fetch('/api/mp-admin', { method: 'POST', headers: auth, body: JSON.stringify({ action: 'saldo' }) })
         .then(r => r.json()).then(d => setMpSaldo(d)).catch(() => setMpSaldo(null)).finally(() => setMpLoading(false));
+      fetch('/api/mp-admin', { method: 'POST', headers: auth, body: JSON.stringify({ action: 'transacoes', limit: 30 }) })
+        .then(r => r.json()).then(d => setMpTx(d)).catch(() => setMpTx(null)).finally(() => setMpTxLoading(false));
     });
   }, []);
 
@@ -7133,6 +7138,82 @@ function FinanceiroTab() {
           </div>
         ) : (
           <div style={{ color: '#94a3b8', fontSize: 13 }}>Configure MP_ACCESS_TOKEN no Vercel para ver o saldo.</div>
+        )}
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 12, lineHeight: 1.5 }}>
+          Se o MP não expõe o saldo pela API, use as <strong>transações reais</strong> abaixo — é o valor que de fato entrou.
+        </div>
+      </div>
+
+      {/* Transações reais do Mercado Pago — valor real da operação (bruto/taxa/líquido) */}
+      <div style={S2.card}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>Transações reais (Mercado Pago)</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Direto da API do MP — o valor efetivamente recebido, já descontada a taxa.</div>
+        {mpTxLoading ? (
+          <div style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</div>
+        ) : mpTx?.error ? (
+          <div style={{ color: '#dc2626', fontSize: 13 }}>⚠️ {mpTx.error}</div>
+        ) : mpTx?.transacoes ? (
+          <>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+              {[
+                { label: `Recebido (líquido) · ${mpTx.resumo?.qtdAprovados || 0} aprovadas`, value: fmtBRL(mpTx.resumo?.totalLiquido), cor: '#059669' },
+                { label: 'Bruto (aprovadas)', value: fmtBRL(mpTx.resumo?.totalBruto), cor: '#0D63DB' },
+                { label: 'Taxas MP', value: fmtBRL((mpTx.resumo?.totalBruto || 0) - (mpTx.resumo?.totalLiquido || 0)), cor: '#d97706' },
+              ].map(m => (
+                <div key={m.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 20px', minWidth: 150 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 4 }}>{m.label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: m.cor }}>{m.value}</div>
+                </div>
+              ))}
+            </div>
+            {mpTx.transacoes.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhuma transação encontrada no Mercado Pago ainda.</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Data</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Cliente / descrição</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'right' }}>Bruto</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'right' }}>Taxa</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'right' }}>Líquido</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mpTx.transacoes.map(t => {
+                      const stCor = t.status === 'approved' ? { background: '#dcfce7', color: '#166534' }
+                        : (t.status === 'rejected' || t.status === 'cancelled') ? { background: '#fee2e2', color: '#991b1b' }
+                        : { background: '#fef9c3', color: '#854d0e' };
+                      const stLabel = t.status === 'approved' ? 'aprovado'
+                        : t.status === 'rejected' ? 'recusado'
+                        : t.status === 'cancelled' ? 'cancelado'
+                        : t.status === 'refunded' ? 'estornado'
+                        : t.status === 'charged_back' ? 'chargeback'
+                        : (t.status || '—');
+                      const dt = t.data ? new Date(t.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+                      return (
+                        <tr key={t.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#475569' }}>{dt}</td>
+                          <td style={{ padding: '8px 10px', color: '#111' }}>
+                            <div>{t.email || '—'}</div>
+                            <div style={{ fontSize: 11, color: '#94a3b8' }}>{t.descricao || t.metodo || ''}{t.parcelas > 1 ? ` · ${t.parcelas}x` : ''}</div>
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#0D63DB' }}>{fmtBRL(t.bruto)}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', color: '#d97706' }}>{t.taxa != null ? `- ${fmtBRL(t.taxa)}` : '—'}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#059669' }}>{t.liquido != null ? fmtBRL(t.liquido) : '—'}</td>
+                          <td style={{ padding: '8px 10px' }}><span style={{ ...S2.badge(stCor) }}>{stLabel}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ color: '#94a3b8', fontSize: 13 }}>Não foi possível carregar as transações do Mercado Pago.</div>
         )}
       </div>
 

@@ -64,6 +64,48 @@ export default async function handler(req) {
       }
     }
 
+    if (body.action === 'transacoes') {
+      // Fonte de verdade REAL: pagamentos direto na API do MP (não o nosso banco).
+      // Mostra o valor da operação: bruto, taxa do MP e líquido efetivamente
+      // recebido — o número que de fato entra na conta.
+      const limit = Math.min(Number(body.limit) || 30, 50);
+      const search = await mpGet(`/v1/payments/search?sort=date_created&criteria=desc&limit=${limit}`);
+      const results = Array.isArray(search?.results) ? search.results : [];
+      const tx = results.map((p) => {
+        const bruto = Number(p.transaction_amount || 0);
+        const liquido = p.transaction_details?.net_received_amount != null
+          ? Number(p.transaction_details.net_received_amount)
+          : null;
+        const taxa = liquido != null
+          ? Math.max(0, Number((bruto - liquido).toFixed(2)))
+          : (Array.isArray(p.fee_details) ? p.fee_details.reduce((s, f) => s + Number(f.amount || 0), 0) : null);
+        return {
+          id: String(p.id),
+          status: p.status,
+          status_detail: p.status_detail || null,
+          bruto,
+          liquido,
+          taxa,
+          data: p.date_approved || p.date_created || null,
+          email: p.payer?.email || null,
+          descricao: p.description || '',
+          metodo: p.payment_method_id || null,
+          parcelas: p.installments || null,
+        };
+      });
+      const aprovados = tx.filter((t) => t.status === 'approved');
+      const totalBruto = aprovados.reduce((s, t) => s + t.bruto, 0);
+      const totalLiquido = aprovados.reduce((s, t) => s + (t.liquido ?? t.bruto), 0);
+      return new Response(JSON.stringify({
+        transacoes: tx,
+        resumo: {
+          qtdAprovados: aprovados.length,
+          totalBruto: Number(totalBruto.toFixed(2)),
+          totalLiquido: Number(totalLiquido.toFixed(2)),
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (body.action === 'pagamentos') {
       // Últimos pagamentos do Supabase
       const res = await fetch(
