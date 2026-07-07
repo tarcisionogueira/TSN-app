@@ -414,6 +414,8 @@ export default async function handler(req, res) {
       // que roda a cada 10 min baixa o PDF via navegador e guarda no storage; a
       // próxima geração lê de lá). Só cai no anexo manual se não for integrado.
       const ehCaixaFonte = /caixa|cef/i.test(row?.fonte || '');
+      // Tem página de lote de onde um navegador real consegue baixar os PDFs?
+      const temPaginaLote = /^https?:\/\//i.test(String(row?.link_edital || '')) || /^https?:\/\//i.test(String(row?.link_regras_venda || ''));
       let enfileirado = false;
       if (ehCaixaFonte) {
         const hdniip = (String(row?.link_matricula || '').match(/hdniip=(\d+)/) || [])[1] || String(row?.fonte_id || '').replace(/\D/g, '');
@@ -426,14 +428,24 @@ export default async function handler(req, res) {
             enfileirado = true;
           } catch { /* segue com a mensagem */ }
         }
+      } else if (temPaginaLote) {
+        // Demais leiloeiros integrados: enfileira a captura genérica por navegador
+        // real (job a cada 15 min abre a página do lote e baixa os PDFs para o storage).
+        try {
+          await sb('documentos_fila?on_conflict=imovel_id', {
+            method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+            body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }),
+          });
+          enfileirado = true;
+        } catch { /* segue com a mensagem */ }
       }
       const semDocs = {
         precisaDocumentos: true,
-        integrado: ehCaixaFonte,
+        integrado: ehCaixaFonte || temPaginaLote,
         emCaptura: enfileirado,
         documentosLidos: [],
         motivo: enfileirado
-          ? 'Estamos baixando os documentos direto da Caixa automaticamente (leiloeiro integrado). Isso leva alguns minutos. Volte e gere de novo em instantes, ou anexe a matrícula e o edital (PDF) se quiser a análise na hora.'
+          ? `Estamos baixando os documentos automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''} (leiloeiro integrado). Isso leva alguns minutos. Volte e gere de novo em instantes, ou anexe a matrícula e o edital (PDF) se quiser a análise na hora.`
           : (urls.length
             ? 'Os documentos deste lote existem, mas a fonte não liberou a leitura automática agora. Anexe a matrícula e o edital (PDF) para gerar a análise na hora.'
             : 'Este lote ainda não tem documentos vinculados. Anexe a matrícula e o edital (PDF) para gerar a análise.'),
