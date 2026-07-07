@@ -181,9 +181,15 @@ async function lerDoc(url, deadline) {
     : { 'User-Agent': UA, Accept: '*/*' };
   try {
     const bd = await fetchViaBrightData(url, { headers: bdHeaders });
-    if (bd) console.log(`[lerDoc] brightdata resp status=${bd.status} ct=${bd.headers.get('content-type') || ''} ${url}`);
-    else console.log(`[lerDoc] brightdata indisponível (token/zone ausente ou teto) ${url}`);
-    doc = await extrair(bd);
+    if (bd) {
+      const bdClone = bd.clone();
+      console.log(`[lerDoc] brightdata resp status=${bd.status} ct=${bd.headers.get('content-type') || ''} ${url}`);
+      doc = await extrair(bd);
+      if (!doc) {
+        const snippet = (await bdClone.text().catch(() => '')).slice(0, 300).replace(/\s+/g, ' ');
+        console.log(`[lerDoc] brightdata body[0..300]: ${snippet}`);
+      }
+    } else console.log(`[lerDoc] brightdata indisponível (token/zone ausente ou teto) ${url}`);
   } catch (e) { console.warn(`[lerDoc] brightdata erro ${e?.message} ${url}`); doc = null; }
   console.log(`[lerDoc] brightdata ${doc ? 'OK ('+doc.kind+')' : 'FALHOU'} ${url}`);
   return doc;
