@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 // no-token passou a limitar do mesmo jeito — se o primário falhar, cai para o Esri.
 const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>';
 const BASEMAPS = [
+  // Esri Light Gray Canvas (base limpa + rótulos) — visual agradável tipo Positron.
+  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', opts: { attribution: 'Tiles © Esri', maxNativeZoom: 16, maxZoom: 19 } },
   { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', opts: { attribution: 'Tiles © Esri', maxZoom: 19 } },
   { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', opts: { subdomains: 'abcd', attribution: ATTRIBUTION, maxZoom: 19 } },
 ];
@@ -164,20 +166,22 @@ export default function MapaImoveis() {
         zoomControl: true,
       });
 
-      let baseIdx = 0, tileErros = 0;
+      let baseIdx = 0, tileErros = 0, refLayer = null;
       const montarBase = () => {
         const b = BASEMAPS[baseIdx];
-        const layer = L.tileLayer(b.url, b.opts);
+        const layer = L.tileLayer(b.url, { ...b.opts, zIndex: 1 });
         tileErros = 0;
         layer.on('tileerror', () => {
           tileErros += 1;
           if (tileErros >= 6 && baseIdx < BASEMAPS.length - 1) {
             baseIdx += 1;
             try { map.removeLayer(layer); } catch { /* */ }
+            try { if (refLayer) { map.removeLayer(refLayer); refLayer = null; } } catch { /* */ }
             montarBase();
           }
         });
         layer.addTo(map);
+        if (b.labels) { refLayer = L.tileLayer(b.labels, { maxNativeZoom: 16, maxZoom: 19, zIndex: 2 }); refLayer.addTo(map); }
       };
       montarBase();
 

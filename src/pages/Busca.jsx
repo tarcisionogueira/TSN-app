@@ -223,15 +223,21 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       // Esri PRIMÁRIO (token-free, confiável). O CARTO no-token passou a devolver
       // tile em branco com 200 (sem erro) → mapa vazio e o fallback nunca disparava.
       const BASEMAPS = [
+        // Esri Light Gray Canvas: base clara/limpa (estilo Positron) + camada de
+        // rótulos (ruas/cidades). Token-free e confiável, bem mais agradável que o
+        // World_Street_Map (que tinha cara de mapa topográfico). Fallbacks abaixo.
+        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+          labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+          opts: { maxNativeZoom: 16, maxZoom: 19, attribution: 'Tiles © Esri' } },
         { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
           opts: { maxZoom: 19, attribution: 'Tiles © Esri' } },
         { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
           opts: { subdomains: 'abcd', maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' } },
       ];
-      let baseIdx = 0, tileErros = 0;
+      let baseIdx = 0, tileErros = 0, refLayer = null;
       const montarBase = () => {
         const b = BASEMAPS[baseIdx];
-        const layer = L.tileLayer(b.url, b.opts);
+        const layer = L.tileLayer(b.url, { ...b.opts, zIndex: 1 });
         tileErros = 0;
         layer.on('tileerror', () => {
           tileErros += 1;
@@ -239,10 +245,17 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           if (tileErros >= 6 && baseIdx < BASEMAPS.length - 1) {
             baseIdx += 1;
             try { leafletRef.current.removeLayer(layer); } catch { /* */ }
+            try { if (refLayer) { leafletRef.current.removeLayer(refLayer); refLayer = null; } } catch { /* */ }
             montarBase();
           }
         });
         layer.addTo(leafletRef.current);
+        // Camada de rótulos por cima da base (só o Light Gray tem). Pins ficam
+        // acima disto (markerPane), então continuam visíveis.
+        if (b.labels) {
+          refLayer = L.tileLayer(b.labels, { maxNativeZoom: 16, maxZoom: 19, zIndex: 2 });
+          refLayer.addTo(leafletRef.current);
+        }
       };
       montarBase();
       // Cluster agrupa os marcadores (evita travar com milhares de pins). Se o
@@ -1390,8 +1403,8 @@ export default function Busca() {
           </div>
         )}
 
-        {/* Header de resultados */}
-        <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 18px', marginBottom:12 }}>
+        {/* Header de resultados — sticky p/ o alternador Lista/Mapa não sumir ao rolar */}
+        <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 18px', marginBottom:12, position:'sticky', top:8, zIndex:30 }}>
           {/* Linha 1: título + visualização */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, marginBottom: buscaFeita && !loading ? 10 : 0 }}>
             <div>
