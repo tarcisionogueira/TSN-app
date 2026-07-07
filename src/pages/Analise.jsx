@@ -1546,7 +1546,7 @@ export default function Analise() {
             );
           })()}
 
-          {relSel === 'documental' && isStaffAnalise && (<>
+          {relSel === 'documental' && isStaffAnalise && modoManual && (<>
 
       {/* ── ETAPA 1: DOCUMENTO ── */}
       <Section id="sec-doc" step="1" title="Edital" icon={FileText} color="#0D63DB" open={openSec.doc} onToggle={()=>toggleSec('doc')} badge="Upload ou cole o texto">
@@ -1610,10 +1610,11 @@ export default function Analise() {
       )}
 
       </>)}
-      {/* Formulários manuais (CNJ, certidões, dados/custos editáveis) são ferramenta
-          da EQUIPE. O cliente clica "Gerar" e recebe o PARECER pronto (a IA já faz a
-          consulta CNJ e as certidões no servidor), sem tela intermediária. */}
-      {relSel === 'documental' && isStaffAnalise && (<>
+      {/* Formulários manuais (CNJ, certidões, dados/custos editáveis) só aparecem se a
+          equipe LIGAR "Incluir URL / arquivos" (modoManual) — para leiloeiro não
+          integrado ou refino. Por padrão é 1 clique: a IA lê os docs e consulta o CNJ
+          e as certidões no servidor, sem tela intermediária. */}
+      {relSel === 'documental' && isStaffAnalise && modoManual && (<>
 
       {/* ── ETAPA 1C: CONSULTA JURÍDICA CNJ, apenas roles com CNJ ── */}
       {!temCNJ && (

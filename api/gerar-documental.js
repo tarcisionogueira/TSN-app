@@ -345,14 +345,23 @@ export default async function handler(req, res) {
   const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), DEADLINE_MS));
   try {
     const result = await Promise.race([prazo, (async () => {
-    // 1) Reúne os documentos: edital, matrícula e até 2 anexos relevantes.
+    // 1) Reúne os documentos. ORDEM IMPORTA: os arquivos JÁ GUARDADos no nosso storage
+    //    (imovel_anexos — captura por navegador OU upload manual) vêm PRIMEIRO. São
+    //    URLs assinadas, de leitura direta e confiável. As URLs cruas da Caixa vêm por
+    //    último (falham por sessão e QUEIMAVAM o tempo da coleta antes de chegar no
+    //    arquivo que já temos — era por isso que pedia anexo mesmo com a matrícula pronta).
     const anexos = Array.isArray(row?.anexos) ? row.anexos : [];
     const urls = [];
-    // Links de PÁGINA do portal (não são o arquivo) — descarta para não gastar leitura.
     const ehPagina = (u) => /matricula\.asp|detalhe-imovel\.asp/i.test(u || '');
     const add = (u, rotulo) => { if (u && /^https?:\/\//.test(u) && !ehPagina(u) && !urls.find(x => x.url === u)) urls.push({ url: u, rotulo }); };
-    // 1º os PDFs estáticos da Caixa (a fonte real da matrícula/regras) — o link do
-    // banco costuma ser a página .asp, que não serve. Depois os links do lote.
+    // 1º: anexos guardados no storage (capturados por navegador ou enviados pela equipe).
+    try {
+      const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url&limit=10`)).json();
+      for (const a of (Array.isArray(manuais) ? manuais : [])) add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'));
+    } catch { /* segue com os do lote */ }
+    // 2º: anexos capturados no scrape (jsonb do lote).
+    for (const a of anexos) { if (urls.length >= 7) break; add(a.url, a.nome || 'Anexo'); }
+    // 3º: URLs do cliente + os PDFs estáticos da Caixa (fallback quando não há arquivo guardado).
     const cxFonte = { fonte: row?.fonte, estado: row?.estado || estado, fonteId: row?.fonte_id };
     add(body?.urlMatricula, 'Matrícula');
     add(caixaMatriculaUrl(cxFonte), 'Matrícula (Caixa)');
@@ -361,16 +370,6 @@ export default async function handler(req, res) {
     add(body?.urlRegras, 'Regras de venda');
     add(caixaRegrasVendaUrl(cxFonte), 'Regras de venda (Caixa)');
     add(row?.link_regras_venda, 'Regras de venda');
-    for (const a of anexos) { if (urls.length >= 5) break; add(a.url, a.nome || 'Anexo'); }
-    // Também os anexos enviados pela EQUIPE (tabela imovel_anexos) — senão uma
-    // matrícula/edital subida manualmente fica invisível para a IA documental.
-    try {
-      const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,nome,url&limit=10`)).json();
-      for (const a of (Array.isArray(manuais) ? manuais : [])) {
-        if (urls.length >= 7) break;
-        add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'));
-      }
-    } catch { /* sem anexos manuais → segue com os do lote */ }
 
     // Cache-first: documentos já armazenados deste imóvel (poupa Bright Data).
     const podeCache = isUuid(String(imovelId));
