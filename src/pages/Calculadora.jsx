@@ -348,7 +348,7 @@ export default function Calculadora() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <Campo label="Valor de arrematação" value={arrematacao} onChange={setArrematacao} prefix="R$" placeholder="0" />
             <Campo label="Valor de avaliação" value={avaliacao} onChange={setAvaliacao} prefix="R$" placeholder="0" />
-            <Campo label={isAluguel ? 'Valor de mercado (valor do ativo / venda no fim do horizonte)' : 'Valor de mercado (base da revenda)'} value={mercado} onChange={setMercado} prefix="R$" placeholder="0" />
+            <Campo label="Valor de mercado" value={mercado} onChange={setMercado} prefix="R$" placeholder="0" />
             {/* Prazo p/ revenda só faz sentido no objetivo REVENDER (no aluguel quem
                 define o horizonte é o campo "Horizonte de projeção"). */}
             {!isAluguel && <Campo label="Prazo p/ revenda" value={prazoVenda} onChange={setPrazoVenda} suffix="meses" />}
