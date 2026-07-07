@@ -2031,6 +2031,31 @@ export default function Analise() {
       {relSel === 'mercado' && (<>
 
       <div style={{ display:'flex', flexDirection:'column', gap:14, marginTop:14 }}>
+        {/* ── VALOR DE VENDA (topo): média do mercado + preço sugerido de venda ── */}
+        {(() => {
+          const area = Number(d.areaM2) || Number(d.areaTerrenoM2) || 0;
+          const pm2 = Number(mercado?.precoMedioM2) || 0;
+          const valorMedia = pm2 && area ? Math.round(pm2 * area) : (Number(d.valorMercado) || 0);
+          const sugerido = Number(d.valorMercado) || (valorMedia ? Math.round(valorMedia * 0.9) : 0);
+          if (!valorMedia && !sugerido) return null;
+          return (
+            <div style={{ background:'linear-gradient(135deg,#0B48A6,#0D63DB)', borderRadius:16, padding: isMobile?'16px':'18px 22px', color:'white' }}>
+              <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85, marginBottom:10 }}>Valor de venda estimado</div>
+              <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:12 }}>
+                <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:12, padding:'12px 14px' }}>
+                  <div style={{ fontSize:10, opacity:0.85, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 }}>Valor de mercado (média)</div>
+                  <div style={{ fontSize:24, fontWeight:900 }}>R$ {fmt(valorMedia)}</div>
+                  <div style={{ fontSize:10, opacity:0.8, marginTop:2 }}>{pm2 && area ? `${fmt(pm2)}/m² × ${fmt(area)} m²` : 'com base na pesquisa de mercado'}</div>
+                </div>
+                <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:12, padding:'12px 14px' }}>
+                  <div style={{ fontSize:10, opacity:0.85, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 }}>Preço sugerido de venda</div>
+                  <div style={{ fontSize:24, fontWeight:900, color:'#a7f3d0' }}>R$ {fmt(sugerido)}</div>
+                  <div style={{ fontSize:10, opacity:0.8, marginTop:2 }}>preço para revenda em prazo saudável (conservador)</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         {/* ── CAPA / RESUMO PARA LEIGOS: veredito + 3 números + próximo passo ── */}
         <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
