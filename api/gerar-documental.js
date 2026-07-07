@@ -109,6 +109,30 @@ function extractText(data) {
   if (!data?.content) return '';
   return data.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
 }
+// Fecha strings/colchetes/chaves abertos e limpa tokens pendentes no fim de um
+// JSON TRUNCADO. Crucial no documental: a resposta longa da IA às vezes estoura o
+// max_tokens e vem cortada; sem isto, o JSON incompleto era descartado (parsed={})
+// e o laudo REAL era perdido, caindo no texto "preliminar". Aqui recuperamos o
+// parecer e todos os campos que já haviam sido emitidos antes do corte.
+function fecharJSONtruncado(frag) {
+  let out = frag, inStr = false, esc = false;
+  const st = [];
+  for (let k = 0; k < out.length; k++) {
+    const ch = out[k];
+    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') st.push(ch === '{' ? '}' : ']');
+    else if (ch === '}' || ch === ']') st.pop();
+  }
+  if (inStr) out += '"';                 // fecha string aberta
+  out = out.replace(/\\+$/, '');         // barra de escape solta
+  out = out.replace(/[\s,]+$/, '');      // vírgula/espaço pendente
+  out = out.replace(/:\s*$/, ': null');  // "campo": <sem valor>
+  out = out.replace(/,\s*"[^"]*"\s*$/, ''); // ,"chaveIncompleta
+  out = out.replace(/[\s,]+$/, '');
+  while (st.length) out += st.pop();     // fecha ] e }
+  return out;
+}
 function parseJSON(text) {
   if (!text) return null;
   const clean = text.trim();
@@ -117,6 +141,16 @@ function parseJSON(text) {
   if (md) { try { return JSON.parse(md[1].trim()); } catch {} }
   const obj = clean.match(/\{[\s\S]*\}/);
   if (obj) { try { return JSON.parse(obj[0]); } catch {} }
+  // Recuperação de JSON truncado (resposta cortada no max_tokens).
+  const i = clean.indexOf('{');
+  if (i >= 0) {
+    const s = clean.slice(i).replace(/```/g, '');
+    try { return JSON.parse(fecharJSONtruncado(s)); } catch {}
+    for (const m of ['"', '}', ']']) {
+      const p = s.lastIndexOf(m);
+      if (p > 0) { try { return JSON.parse(fecharJSONtruncado(s.slice(0, p + 1))); } catch {} }
+    }
+  }
   return null;
 }
 async function anthropic(payload, fetchOpts) {
@@ -269,9 +303,13 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 6) DÉBITOS PROPTER REM × PESSOAIS: separe o que ACOMPANHA o imóvel (IPTU, condomínio, taxas) do que é pessoal do devedor. Estime o total que o ARREMATANTE assume em R$; se não der, marque aLevantar=true.
 7) CRONOGRAMA DO LEILÃO: 1ª e 2ª praça, prazo de pagamento e prazo de embargos/recursos, conforme o edital.
 
-Retorne APENAS este JSON (sem markdown):
+Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM ABAIXO — "extracao", "parecer" e "riscos" são os mais importantes e vêm PRIMEIRO; o "raioX" (enriquecimento) vem por último. Seja objetivo para o JSON caber na resposta:
 {
   "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. LINGUAGEM PARA LEIGO (obrigatório): escreva para QUALQUER pessoa sem formação jurídica entender; frases curtas e, sempre que usar um termo técnico inevitável (ex.: propter rem, usufruto, penhora, hipoteca, alienação fiduciária, imissão de posse, indisponibilidade), explique em 3 a 6 palavras entre parênteses o que significa. § SEÇÃO: SITUAÇÃO REGISTRÁRIA (matrícula/ônus/gravames); § SEÇÃO: OCUPAÇÃO E POSSE; § SEÇÃO: DÉBITOS E RESPONSABILIDADES (o que consta e o que precisa ser confirmado, com as referências); § SEÇÃO: CONDIÇÕES DO EDITAL; § SEÇÃO: SITUAÇÃO PROCESSUAL${temProc ? ' (com base no CNJ)' : ''}; § SEÇÃO: CONCLUSÃO E DILIGÊNCIAS RECOMENDADAS.",
+  "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
+  "nivelRisco": "verde|amarelo|vermelho",
+  "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "raioX": {
     "cadeiaDominial": [{"ato":"","data":"AAAA-MM-DD","evento":"","parte":""}],
     "certidoesRecomendadas": [{"nome":"","orgao":"","online":false,"motivo":""}],
@@ -280,11 +318,7 @@ Retorne APENAS este JSON (sem markdown):
     "direitoPreferencia": {"existe":false,"titulares":[]},
     "debitos": {"totalAssumidoArrematante":0,"propterRem":[],"pessoais":[],"aLevantar":true},
     "cronogramaLeilao": {"primeiraPraca":"","segundaPraca":"","prazoPagamento":"","prazoEmbargos":""}
-  },
-  "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
-  "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
-  "nivelRisco": "verde|amarelo|vermelho",
-  "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. LINGUAGEM PARA LEIGO (obrigatório): escreva para QUALQUER pessoa sem formação jurídica entender; frases curtas e, sempre que usar um termo técnico inevitável (ex.: propter rem, usufruto, penhora, hipoteca, alienação fiduciária, imissão de posse, indisponibilidade), explique em 3 a 6 palavras entre parênteses o que significa. § SEÇÃO: SITUAÇÃO REGISTRÁRIA (matrícula/ônus/gravames); § SEÇÃO: OCUPAÇÃO E POSSE; § SEÇÃO: DÉBITOS E RESPONSABILIDADES (o que consta e o que precisa ser confirmado, com as referências); § SEÇÃO: CONDIÇÕES DO EDITAL; § SEÇÃO: SITUAÇÃO PROCESSUAL${temProc ? ' (com base no CNJ)' : ''}; § SEÇÃO: CONCLUSÃO E DILIGÊNCIAS RECOMENDADAS."
+  }
 }`;
 
 export default async function handler(req, res) {
@@ -531,11 +565,17 @@ export default async function handler(req, res) {
     } catch { /* aprendizado é best-effort, nunca trava o parecer */ }
 
     const data = await anthropic({
-      model: MODEL, max_tokens: 6000,
+      model: MODEL, max_tokens: 8000,
       system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
       messages: [{ role: 'user', content }],
     }, { retries: 1, timeoutMs: 110000 });
-    const parsed = parseJSON(extractText(data)) || {};
+    const rawTxt = extractText(data);
+    const parsed = parseJSON(rawTxt) || {};
+    // Observabilidade: se a IA truncou (max_tokens) ou o parse não achou parecer,
+    // registra — é o sintoma que fazia o laudo cair no texto "preliminar".
+    if (data?.stop_reason === 'max_tokens' || (rawTxt && !parsed.parecer)) {
+      console.warn(`[documental] stop_reason=${data?.stop_reason || '?'} len=${rawTxt.length} parecer=${parsed.parecer ? 'ok' : 'VAZIO'} riscos=${Array.isArray(parsed.riscos) ? parsed.riscos.length : 'n/a'} lidos=${lidos.length}`);
+    }
 
     // SALVAGUARDA anti-alarmismo (reforça o prompt): ausência de informação e itens
     // ROTINEIROS de leilão (penhora/execução, hipoteca que se extingue, bloqueios
