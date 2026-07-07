@@ -643,18 +643,19 @@ export default function Busca() {
           .not('bairro', 'is', null)
           .limit(5000);
         if (cancelled) return;
-        const mapa = new Map(); // chave normalizada → { label, chave, valores:Set }
+        const mapa = new Map(); // chave normalizada → { label, chave, valores:Set, count }
         for (const row of (data || [])) {
           const raw = (row.bairro || '').trim();
           if (!raw) continue;
           const chave = normCidade(raw);
           if (!chave) continue;
-          if (!mapa.has(chave)) mapa.set(chave, { label: raw, chave, valores: new Set() });
-          mapa.get(chave).valores.add(raw);
+          if (!mapa.has(chave)) mapa.set(chave, { label: raw, chave, valores: new Set(), count: 0 });
+          const g = mapa.get(chave); g.valores.add(raw); g.count += 1;
         }
         const grupos = [...mapa.values()]
-          .map(g => ({ label: g.label, chave: g.chave, valores: [...g.valores] }))
-          .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+          .map(g => ({ label: g.label, chave: g.chave, valores: [...g.valores], count: g.count }))
+          // Mais imóveis primeiro (o investidor vê onde há mais oferta); empate por nome.
+          .sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label, 'pt-BR'));
         setBairrosGrupos(grupos);
       } catch { if (!cancelled) setBairrosGrupos([]); }
       finally { if (!cancelled) setBairrosCarregando(false); }
@@ -1335,7 +1336,7 @@ export default function Busca() {
                         return (
                           <button key={g.chave} onClick={() => toggleGrupo(g)}
                             style={{ padding:'4px 10px', borderRadius:20, border:`1px solid ${ativo ? '#16a34a' : '#e2e8f0'}`, background: ativo ? '#16a34a' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize:12, fontWeight: ativo ? 700 : 400, cursor:'pointer' }}>
-                            {g.label}
+                            {g.label} <span style={{ opacity:0.7, fontWeight:700 }}>· {g.count}</span>
                           </button>
                         );
                       })}

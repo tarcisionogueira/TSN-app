@@ -1,8 +1,15 @@
 /**
- * /api/enviar-alertas-cron — e-mail SEMANAL de oportunidades (segundas 8h).
- * Benefício de AMBOS os planos (Explorador e Investidor Pro): todo cliente recebe,
- * 1x/semana, ATÉ 12 oportunidades. Quem clicar em "cancelar" para de receber
- * (opt-out via alertas_email.ativo=false — LGPD/anti-spam).
+ * /api/enviar-alertas-cron — e-mail de oportunidades. Roda TODO DIA às 8h UTC.
+ * Cadência por usuário:
+ *   • 1º e-mail (boas-vindas): 24h após criar a conta, em QUALQUER dia — quem se
+ *     cadastra no meio da semana não fica sem oportunidade até a segunda seguinte.
+ *   • Recorrente: toda SEGUNDA-feira (com trava anti-reenvio de 7 dias).
+ * Benefício de AMBOS os planos (Explorador e Investidor Pro): ATÉ 12 oportunidades.
+ * Quem clicar em "cancelar" para de receber (opt-out via alertas_email.ativo=false).
+ *
+ * ASSERTIVIDADE (só oportunidades de interesse): quando o cliente tem filtro salvo
+ * na busca (praça/tipo/valor/desconto/bairros), o e-mail respeita ESSE perfil e NÃO
+ * cai no fallback amplo por estado — melhor não mandar do que mandar irrelevante.
  *
  * Seleção por usuário (ordem de interesse):
  *   1. Filtros salvos na busca (filtros_salvos) — sinal de interesse explícito.
@@ -56,7 +63,7 @@ export default async function handler(req) {
 
   // Destinatários: clientes com e-mail (batch). opt-out/último-envio via alertas_email.
   const filtroTeste = testeEmail ? `&email=eq.${encodeURIComponent(testeEmail)}` : '';
-  const perfis = await sbGet(`perfis?select=id,nome,email,endereco_cidade,endereco_uf&email=not.is.null&role=in.(${ROLES})${filtroTeste}&limit=1000`);
+  const perfis = await sbGet(`perfis?select=id,nome,email,endereco_cidade,endereco_uf,created_at&email=not.is.null&role=in.(${ROLES})${filtroTeste}&limit=1000`);
   if (!Array.isArray(perfis) || !perfis.length) return new Response(JSON.stringify({ ok: true, enviados: 0, total: 0 }), { headers: { 'Content-Type': 'application/json' } });
   // Só UUIDs válidos entram na lista in.(...) — defesa contra interpolação indevida.
   const ids = perfis.map(p => p.id).filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '')));
@@ -82,33 +89,70 @@ export default async function handler(req) {
   const fmtBRL = v => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
   const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : null;
   let enviados = 0;
+  const isSegunda = new Date().getUTCDay() === 1; // 8h UTC de segunda = 5h BRT de segunda
 
   for (const perfil of perfis) {
     try {
       const email = perfil.email; if (!email || !RESEND_KEY) continue;
       const a = alertaMap[perfil.id];
-      if (!testeEmail && a && a.ativo === false) continue;                          // descadastrado
-      if (!testeEmail && a && a.ultimo_envio && a.ultimo_envio > seteDias) continue; // já enviado esta semana
+      if (!testeEmail) {
+        if (a && a.ativo === false) continue;                       // opt-out (descadastrado)
+        const nunca = !a?.ultimo_envio;
+        if (nunca) {
+          // 1º e-mail: só depois de 24h da criação da conta (em qualquer dia).
+          const idadeMs = perfil.created_at ? (Date.now() - new Date(perfil.created_at).getTime()) : 0;
+          if (idadeMs < 24 * 3600 * 1000) continue;
+        } else {
+          // Recorrente: só às segundas, e não reenvia se já mandou nos últimos 7 dias.
+          if (!isSegunda) continue;
+          if (a.ultimo_envio > seteDias) continue;
+        }
+      }
 
-      const filtros = filtroMap[perfil.id] || a?.filtros || {};
+      // Filtro salvo na busca = sinal EXPLÍCITO de interesse (perfil + praça). Se
+      // existir, o e-mail respeita esse perfil e não cai no fallback amplo.
+      const filtroSalvo = filtroMap[perfil.id] || null;
+      const filtros = filtroSalvo || a?.filtros || {};
+      const temPerfilExplicito = !!filtroSalvo;
       const cidade = (filtros.cidades && filtros.cidades[0]) || perfil.endereco_cidade || '';
       const uf = filtros.estado || perfil.endereco_uf || '';
+
+      // Condições ASSERTIVAS do perfil salvo (tipo/valor/desconto/bairros), aplicadas
+      // nas consultas por nome de cidade — trazem só o que interessa ao cliente.
+      const fTipos = Array.isArray(filtros.tipos) ? filtros.tipos.filter(Boolean) : [];
+      const fBairros = Array.isArray(filtros.bairros) ? filtros.bairros.filter(Boolean) : [];
+      const numOnly = (v) => Number(String(v ?? '').replace(/\D/g, '')) || 0;
+      const cond = [
+        fTipos.length ? `&tipo=in.(${[...fTipos, 'imovel'].map(encodeURIComponent).join(',')})` : '',
+        filtros.valorMin ? `&valor_minimo=gte.${numOnly(filtros.valorMin)}` : '',
+        filtros.valorMax ? `&valor_minimo=lte.${numOnly(filtros.valorMax)}` : '',
+        filtros.descontoMin ? `&desconto_percentual=gte.${Number(filtros.descontoMin)}` : '',
+        fBairros.length ? `&bairro=in.(${fBairros.map(b => encodeURIComponent(`"${b}"`)).join(',')})` : '',
+      ].join('');
 
       // Monta o pool de candidatos (dedup por id)
       const pool = new Map();
       const add = (arr) => { for (const im of arr || []) if (im && im.id && !pool.has(im.id)) pool.set(im.id, im); };
 
-      // 1) Cidade por nome (pega até não-geocodificados)
-      if (cidade) add(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&cidade=ilike.*${encodeURIComponent(cidade)}*&order=desconto_percentual.desc&limit=20`));
-      // 2) Raio de 200km (centróide IBGE offline + PostGIS)
+      // 1) Cidade por nome (pega até não-geocodificados), já filtrada pelo perfil.
+      if (cidade) add(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&cidade=ilike.*${encodeURIComponent(cidade)}*${cond}&order=desconto_percentual.desc&limit=20`));
+      // 2) Raio de 200km (centróide IBGE offline + PostGIS), respeitando tipo/valor/desconto.
       const cen = centroide(cidade, uf);
-      if (cen) add(await rpc('buscar_por_raio_v2', { lat: cen.lat, lng: cen.lng, raio_metros: 200000, lim: 40 }));
+      if (cen) add(await rpc('buscar_por_raio_v2', {
+        lat: cen.lat, lng: cen.lng, raio_metros: 200000, lim: 40,
+        tipos_filtro: fTipos,
+        valor_min: filtros.valorMin ? numOnly(filtros.valorMin) : 0,
+        valor_max: filtros.valorMax ? numOnly(filtros.valorMax) : 9999999999,
+        desconto_min: filtros.descontoMin ? Number(filtros.descontoMin) : 0,
+      }));
       // 3) Similares às arrematações do usuário (mesmo tipo/estado)
       const meus = arremMap[perfil.id] || [];
       const tipos = [...new Set(meus.map(i => arremInfo[i]?.tipo).filter(Boolean))];
       for (const t of tipos.slice(0, 2)) add(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&order=desconto_percentual.desc&limit=8`));
-      // 4) Fallback: estado, se ainda vazio
-      if (pool.size === 0 && uf) add(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&estado=eq.${uf}&order=desconto_percentual.desc&limit=20`));
+      // 4) Fallback amplo por estado: SÓ para quem não deu perfil explícito (senão
+      // mandaria imóvel fora do interesse). Sem match no perfil → não envia (o
+      // `if (!top.length) continue` abaixo cuida disso) — melhor que ser irrelevante.
+      if (pool.size === 0 && uf && !temPerfilExplicito) add(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&estado=eq.${uf}&order=desconto_percentual.desc&limit=20`));
 
       // Ordena por maior desconto e pega até 12
       const top = [...pool.values()]
