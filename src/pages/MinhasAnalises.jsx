@@ -131,7 +131,7 @@ export default function MinhasAnalises() {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {acao('Buscar imóveis', Search, '#0D63DB', () => nav('/buscar'))}
         {acao('Incluir lote manual (URL/anexos)', Plus, '#7c3aed', () => nav('/analise', { state: { manual: true } }))}
-        {acao('Meus arrematados', Home, '#059669', () => nav('/painel', { state: { aba: 'arrematacoes' } }))}
+        {acao('Meus arrematados', Home, '#059669', () => nav('/arrematados'))}
       </div>
 
       {itens.length === 0 ? (

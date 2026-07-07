@@ -19,6 +19,7 @@ import Busca from './pages/Busca';
 import ImovelDetalhe from './pages/ImovelDetalhe';
 import Analise from './pages/Analise';
 import MinhasAnalises from './pages/MinhasAnalises';
+import Arrematados from './pages/Arrematados';
 import HomeCliente from './pages/HomeCliente';
 import Painel from './pages/Painel';
 import Consultor from './pages/Consultor';
@@ -242,6 +243,7 @@ function MainLayout() {
           <Route path="/mapa" element={<PrivateRoute><MapaImoveis /></PrivateRoute>} />
           <Route path="/analise" element={<PrivateRoute><Analise /></PrivateRoute>} />
           <Route path="/analises" element={<PrivateRoute><MinhasAnalises /></PrivateRoute>} />
+          <Route path="/arrematados" element={<PrivateRoute><Arrematados /></PrivateRoute>} />
           <Route path="/caso" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/caso/:id" element={<PrivateRoute><Caso /></PrivateRoute>} />
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
