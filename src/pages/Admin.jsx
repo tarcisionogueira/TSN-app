@@ -1045,7 +1045,7 @@ function UsuariosTab() {
 // CONTRATO MODAL — elaborar, visualizar, aprovar e editar com IA
 // ═══════════════════════════════════════════════════════════════════════════════
 const DESCRICOES_PADRAO = {
-  assessorado: 'Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.',
+  assessorado: 'Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses. Valor: R$500 em 12x (total R$6.000) ou R$4.800 à vista (20% de desconto) + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.',
   clube: 'Adesão ao Clube de Negócios BidPro Brasil: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.',
   consultor: 'Contratação de consultor/afiliado para divulgação dos serviços BidPro Brasil e captação de novos clientes. Remuneração por comissão conforme acordo. Vedada qualquer promessa de rentabilidade a terceiros. Prazo indeterminado, rescisão com aviso de 30 dias.',
   analista: 'Contratação de analista para elaboração de relatórios de viabilidade econômico-financeira e análise de editais. Remuneração por laudo emitido, a combinar. Sigilo total. Prazo indeterminado, rescisão com aviso de 30 dias.',
@@ -2230,7 +2230,7 @@ function ContratosTab() {
     if (key === 'assessorado') {
       setTitulo('Contrato de Assessoria para Aquisição de Imóvel em Leilão');
       setTipo('servico');
-      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses para conclusão da arrematação. Não inclui mentoria. Valor: R$500 em 12x (total R$6.000) ou R$5.000 à vista + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.');
+      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses para conclusão da arrematação. Não inclui mentoria. Valor: R$500 em 12x (total R$6.000) ou R$4.800 à vista (20% de desconto) + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.');
     } else if (key === 'clube') {
       setTitulo('Contrato de Adesão ao Clube de Negócios BidPro Brasil');
       setTipo('servico');

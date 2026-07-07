@@ -32,7 +32,7 @@ const PLANOS_FALLBACK = {
   clube:             { nome: 'Clube de Negócios (Mensal)',  valor: 5000.00,  ciclo: 'MONTHLY', maxPayments: undefined },
   clube_vista:       { nome: 'Clube de Negócios (À Vista)', valor: 48000.00, avulso: true },
   assessorado:       { nome: 'Assessorado (12× R$ 500)',   valor: 500.00,   ciclo: 'MONTHLY', maxPayments: 12 },
-  assessorado_vista: { nome: 'Assessorado (À Vista)',       valor: 5000.00,  avulso: true },
+  assessorado_vista: { nome: 'Assessorado (À Vista)',       valor: 4800.00,  avulso: true },
 };
 
 async function getPlanosConfig() {

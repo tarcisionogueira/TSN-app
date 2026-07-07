@@ -396,7 +396,7 @@ export default function Consultor() {
                         label: pNome('assessorado'),
                         sub: planosCtx?.assessorado
                           ? `${fmtPreco(planosCtx.assessorado.preco)} em 12× · ${fmtPreco(planosCtx.assessorado.precoVista || planosCtx.assessorado.preco * 12 * 0.8)} à vista`
-                          : 'R$ 6.000 parcelado · R$ 5.000 à vista',
+                          : 'R$ 6.000 parcelado · R$ 4.800 à vista',
                         url: `${origin}/#/checkout?plano=assessorado${codigo?`&ref=${codigo}`:''}`,
                         comissao: comissaoDePlano('assessorado'),
                         recorrente: false,

@@ -66,8 +66,10 @@ export function mapearPlano(valor, descricao = '') {
   if (dentroFaixa(v, 48000, 100)) return { plano: 'clube', role: 'clube' };
   if (dentroFaixa(v, 60000, 200)) return { plano: 'clube', role: 'clube' };
 
-  // Assessoria — parcela mensal ou à vista
+  // Assessoria — parcela mensal (500), à vista (4800 = 6000 −20%) ou total (6000).
+  // Mantém 5000 por compatibilidade com cobranças à-vista antigas (valor anterior).
   if (dentroFaixa(v, 500))   return { plano: 'assessorado', role: 'assessorado' };
+  if (dentroFaixa(v, 4800))  return { plano: 'assessorado', role: 'assessorado' };
   if (dentroFaixa(v, 5000))  return { plano: 'assessorado', role: 'assessorado' };
   if (dentroFaixa(v, 6000, 60)) return { plano: 'assessorado', role: 'assessorado' };
 
