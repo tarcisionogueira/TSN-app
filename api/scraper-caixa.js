@@ -335,6 +335,19 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ⚠️ ENDPOINT DESATIVADO (legado). Este scraper mapeia o CSV da Caixa por ÍNDICE
+  // FIXO de coluna — a Caixa mudou o layout e isso corrompeu ~91% do acervo
+  // (modalidade=descrição etc.). Além disso gravava fonte='caixa'/'caixa_<n>',
+  // divergente do canônico 'CEF'/'cef_<n>' usado em produção. O scraper vivo é
+  // scripts/scraper.js (mapeia por NOME de coluna), disparado pelo GitHub Action
+  // scraper.yml via /api/trigger-scraper (botão do Admin). Mantido só para
+  // referência; NÃO deve gravar no catálogo. Para reativar, migrar o parsing para
+  // nomes de coluna e a nomenclatura para 'CEF'.
+  return res.status(410).json({
+    error: 'Scraper CEF legado desativado. Use /api/trigger-scraper (scripts/scraper.js).',
+    canonical: 'scripts/scraper.js',
+  });
+
   // Protege contra chamadas externas não autorizadas.
   // Aceita: (1) CRON_SECRET via x-cron-secret header ou Authorization: Bearer, (2) JWT de admin.
   const cronSecret = process.env.CRON_SECRET;

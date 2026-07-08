@@ -10,6 +10,7 @@
 export const config = { runtime: 'edge' };
 
 import { normalizarTipo } from './_tipo.js';
+import { normalizarModalidade } from './_modalidade.js';
 
 const SUPABASE  = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SVC_KEY   = process.env.SUPABASE_SERVICE_KEY;
@@ -100,7 +101,9 @@ export default async function handler(req) {
         desconto_percentual: desconto,
         area_m2:         lote.area_m2         ? Number(lote.area_m2)         : null,
         data_leilao:     lote.data_leilao ? String(lote.data_leilao).slice(0, 40) : null,
-        modalidade:      lote.modalidade ? String(lote.modalidade).slice(0, 100) : null,
+        // Normaliza ao conjunto canônico (venda_direta/licitacao_aberta/judicial/
+        // extrajudicial) — parceiro pode mandar "Judicial"/"Leilão Extrajudicial" cru.
+        modalidade:      normalizarModalidade(lote.modalidade),
         url_lote:        lote.url_lote ? String(lote.url_lote).slice(0, 1000) : null,
         descricao:       lote.descricao ? String(lote.descricao).slice(0, 5000) : null,
         ativo:           true,

@@ -217,7 +217,10 @@ function normalizarModalidadeCEF(modalidade) {
   if (/(^|[^\d])1.{0,3}(leil|praca)/.test(m) || m.includes('primeiro')) return 'primeiro_leilao';
   if (/(^|[^\d])2.{0,3}(leil|praca)/.test(m) || m.includes('segundo')) return 'segundo_leilao';
   if (m.includes('unica') && m.includes('praca')) return 'primeiro_leilao'; // praça única é datada
-  if (m.includes('leil') || m.includes('praca')) return 'judicial';
+  // Leilão/praça genérico da Caixa é EXTRAJUDICIAL (SFI/alienação fiduciária, Lei 9.514).
+  // A Caixa NUNCA vende em modalidade judicial — antes isto virava 'judicial' por engano
+  // e classificava ~4,5 mil lotes errado (o "executado" é o ex-mutuário, não há processo).
+  if (m.includes('leil') || m.includes('praca')) return 'extrajudicial';
   // Fallback: nunca descarta — preserva como extrajudicial (aparece no site)
   return 'extrajudicial';
 }

@@ -2,6 +2,7 @@ export const config = { runtime: 'edge' };
 
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { normalizarTipo } from './_tipo.js';
+import { normalizarModalidade } from './_modalidade.js';
 
 const SB_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -83,7 +84,7 @@ export default async function handler(req) {
         valor_avaliacao: av,
         valor_minimo: mn,
         desconto_percentual: desconto,
-        modalidade: String(l.modalidade || '').slice(0, 100),
+        modalidade: normalizarModalidade(l.modalidade),
         data_leilao: l.data_leilao ? String(l.data_leilao).slice(0, 40) : null,
         url_lote: String(l.link || l.url || '').slice(0, 1000),
         link_foto: fotos[0] ? String(fotos[0]).slice(0, 1000) : null,

@@ -16,12 +16,18 @@ const TRIBUNAL_ESTADUAL = {
 };
 const TRF_MAP = {
   AC: 'trf1', AM: 'trf1', AP: 'trf1', BA: 'trf1', DF: 'trf1',
-  GO: 'trf1', MA: 'trf1', MG: 'trf1', MT: 'trf1', PA: 'trf1',
+  GO: 'trf1', MA: 'trf1', MT: 'trf1', PA: 'trf1',
   PI: 'trf1', RO: 'trf1', RR: 'trf1', TO: 'trf1',
   ES: 'trf2', RJ: 'trf2',
   MS: 'trf3', SP: 'trf3',
   PR: 'trf4', RS: 'trf4', SC: 'trf4',
   AL: 'trf5', CE: 'trf5', PB: 'trf5', PE: 'trf5', RN: 'trf5', SE: 'trf5',
+  // TRF6 (instalado em 2022) tem jurisdição sobre Minas Gerais. Antes MG caía em
+  // trf1 e os processos federais de MG não eram encontrados. Processos antigos de
+  // MG ainda podem estar na base do trf1 → a busca por UF de MG consulta os dois
+  // (ver buscarProcessosCNJ). api_publica_trf6 existe no DataJud; se falhar, cai
+  // no tratamento de erro por-tribunal sem quebrar a consulta.
+  MG: 'trf6',
 };
 
 const RISCOS_MAP = [
@@ -176,7 +182,10 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
     return { processos: [], total: 0, tribunais_consultados: [], erros: ['informe numero_processo ou nome_parte'], parecer: gerarParecerRisco([]) };
   }
 
-  const tribunais = nacional ? TODOS_TRIBUNAIS : [estadual, trf, 'stj'].filter(Boolean);
+  // Por UF: TJ da UF + TRF da região + STJ. MG também consulta o trf1 (base legada
+  // anterior ao TRF6). No modo nacional TODOS_TRIBUNAIS já cobre trf1..trf6.
+  const trfLegado = ufUp === 'MG' ? 'trf1' : null;
+  const tribunais = nacional ? TODOS_TRIBUNAIS : [estadual, trf, trfLegado, 'stj'].filter(Boolean);
   // Em modo nacional são ~36 tribunais — roda em lotes para não estourar conexões.
   const resultados = [];
   const LOTE = 8;
