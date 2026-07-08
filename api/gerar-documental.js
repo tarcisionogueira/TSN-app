@@ -327,17 +327,29 @@ Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM AB
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-  const user = await getUser(req);
-  if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
-  // Análise documental e jurídica NÃO pertence ao Explorador (só a partir do
-  // Investidor Pro). Bloqueia no servidor — à prova de burla pela API.
-  try {
-    const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
-    if (!perfil || perfil.role === 'explorador' || perfil.role == null) {
-      res.status(402).json({ error: 'A análise documental e jurídica está disponível a partir do plano Investidor Pro.', upgrade: true });
-      return;
-    }
-  } catch { /* se a checagem falhar, não trava quem tem direito */ }
+
+  // RETENTATIVA AUTOMÁTICA (documental-retry-cron): reprocessa laudos que saíram
+  // PRELIMINARES, de hora em hora até 48h, dando ao Claude um novo ciclo com
+  // orçamento fresco. Autentica pelo CRON_SECRET (não passa por getUser nem cota).
+  const isCron = !!process.env.CRON_SECRET && req.headers['x-cron-secret'] === process.env.CRON_SECRET;
+
+  let user;
+  if (isCron) {
+    if (!req.body?.paraUserId) { res.status(400).json({ error: 'paraUserId obrigatório no cron' }); return; }
+    user = { id: String(req.body.paraUserId) };
+  } else {
+    user = await getUser(req);
+    if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
+    // Análise documental e jurídica NÃO pertence ao Explorador (só a partir do
+    // Investidor Pro). Bloqueia no servidor — à prova de burla pela API.
+    try {
+      const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
+      if (!perfil || perfil.role === 'explorador' || perfil.role == null) {
+        res.status(402).json({ error: 'A análise documental e jurídica está disponível a partir do plano Investidor Pro.', upgrade: true });
+        return;
+      }
+    } catch { /* se a checagem falhar, não trava quem tem direito */ }
+  }
   if (!CLAUDE_KEY) { res.status(500).json({ error: 'CLAUDE_KEY ausente' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 
