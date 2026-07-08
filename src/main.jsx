@@ -15,6 +15,18 @@ if (import.meta.env.PROD) {
 class RootErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(e) { return { error: e }; }
+  componentDidMount() {
+    // Recupera-se ao navegar: sem isto, um erro numa tela deixa o usuário PRESO no
+    // fallback (nem "voltar" sai). Ao mudar de rota (voltar/avançar/hash), zera o erro
+    // para a nova tela tentar renderizar.
+    this._reset = () => { if (this.state.error) this.setState({ error: null }); };
+    window.addEventListener('popstate', this._reset);
+    window.addEventListener('hashchange', this._reset);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('popstate', this._reset);
+    window.removeEventListener('hashchange', this._reset);
+  }
   componentDidCatch(error, info) {
     // Registra o erro no servidor (Runtime Logs da Vercel) p/ diagnóstico — em
     // produção o boundary não mostra o stack ao usuário, então sem isso ficamos cegos.

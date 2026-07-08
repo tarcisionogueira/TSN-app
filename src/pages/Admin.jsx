@@ -2713,6 +2713,17 @@ function ContratosTab() {
 }
 
 // ─── Aba Promoções ────────────────────────────────────────────────────────────
+// Produtos (planos pagos) que um link de promoção pode ofertar. Deriva o nome do
+// PlanosContext quando já carregou; cai num rótulo estático se ainda for null.
+// (A ausência desta função causava "buildProdutosPromo is not defined" ao abrir a aba.)
+function buildProdutosPromo(planosCtx) {
+  const LABELS = { top2: 'Investidor Pro', assessorado: 'Assessoria', clube: 'Leilão Club' };
+  return ['top2', 'assessorado', 'clube'].map((key) => ({
+    key,
+    label: planosCtx?.[key]?.nome || LABELS[key] || key,
+  }));
+}
+
 const defaultPromo = () => ({ codigo: '', produto_tipo: 'plano', produto: 'top2', produto_ref_id: '', desconto_pct: '', validade_ate: '', desconto_validade_ate: '', exige_perguntas: false, perguntas: [], ativo: true });
 
 const PROMO_STEPS = ['Produto', 'Validade do link', 'Desconto', 'Perguntas (SDR)', 'Revisar e criar'];
