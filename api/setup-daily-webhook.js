@@ -11,7 +11,11 @@ export default async function handler(req) {
   }
 
   const DAILY_KEY = process.env.DAILY_API_KEY;
-  const BASE_URL = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
+  // SEMPRE www: o apex bidprobrasil.com.br responde 308 e o Daily (como o Mercado
+  // Pago) NÃO segue redirect → o webhook nunca seria entregue e as tabelas de
+  // aprendizado ficariam vazias. Normaliza qualquer apex para www.
+  const RAW_BASE = process.env.APP_BASE_URL || 'https://www.bidprobrasil.com.br';
+  const BASE_URL = RAW_BASE.replace(/:\/\/(www\.)?bidprobrasil\.com\.br/, '://www.bidprobrasil.com.br');
 
   if (!DAILY_KEY) return new Response(JSON.stringify({ error: 'DAILY_API_KEY não configurada' }), { status: 500 });
 
