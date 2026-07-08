@@ -892,7 +892,7 @@ export default function Analise() {
     if (!parecerDocumental || parecerDocumental.precisaDocumentos) return null;
     // Preliminar = a IA não conseguiu ler os documentos por completo desta vez. NÃO
     // damos veredito confiante — sinalizamos que a leitura precisa ser refeita/revisada.
-    if (parecerDocumental.preliminar) return { txt: 'ANÁLISE PRELIMINAR', sub: 'Não foi possível concluir a leitura automática agora — anexe a matrícula/edital em PDF ou revise com um analista', bg: '#e0e7ff', c: '#3730a3' };
+    if (parecerDocumental.preliminar) return { txt: 'ANÁLISE PRELIMINAR', sub: 'A fonte ficou indisponível agora e não deu para concluir a leitura. O sistema vai tentar de novo automaticamente (a cada hora, por até 48h). Se preferir, anexe a matrícula/edital em PDF para sair na hora.', bg: '#e0e7ff', c: '#3730a3' };
     const nr = parecerDocumental.nivelRisco;
     const pa = parecerDocumental.pontosAtencao || {};
     if (nr === 'vermelho' || (pa.altos || 0) > 0) return { txt: 'REPROVADO', sub: 'Alto risco jurídico — resolver os pontos antes de qualquer lance', bg: '#fee2e2', c: '#b91c1c' };
@@ -1444,12 +1444,14 @@ export default function Analise() {
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                     {parecerDocumental.checklist.map((c, i) => {
-                      const cor = c.status==='feito' ? '#16a34a' : c.status==='pendente' ? '#d97706' : '#94a3b8';
-                      const ic  = c.status==='feito' ? '✓' : c.status==='pendente' ? '⏳' : '—';
+                      const cor = c.status==='feito' ? '#16a34a' : c.status==='pendente' ? '#d97706' : c.status==='diligencia' ? '#2563eb' : '#94a3b8';
+                      const ic  = c.status==='feito' ? '✓' : c.status==='pendente' ? '⏳' : c.status==='diligencia' ? '📌' : '—';
                       // Chip de CONEXÃO/diagnóstico por fonte: deixa claro se a fonte
-                      // respondeu, ficou indisponível agora, ou não havia dado para consultar.
+                      // respondeu, ficou indisponível agora, exige diligência manual, ou
+                      // não havia dado para consultar.
                       const conn = c.status==='feito' ? { t:'conectado', bg:'#dcfce7', c:'#15803d' }
                         : c.status==='pendente' ? { t:'indisponível agora', bg:'#fef3c7', c:'#92400e' }
+                        : c.status==='diligencia' ? { t:'confirme na fonte', bg:'#dbeafe', c:'#1e40af' }
                         : { t:'sem dado p/ consultar', bg:'#f1f5f9', c:'#64748b' };
                       return (
                         <div key={i} style={{ display:'flex', gap:9, alignItems:'flex-start' }}>

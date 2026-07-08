@@ -758,6 +758,9 @@ export default async function handler(req, res) {
       if (!fonte) return { label, status: 'na', detalhe: naMsg };
       if (fonte.ok) return { label, status: 'feito', detalhe: fonte.resumo || fonte.situacao || 'Consultado' };
       const onde = ondeConfirmar ? ` Confirme manualmente em ${ondeConfirmar}.` : '';
+      // Fonte com captcha/sem consulta automática confiável → DILIGÊNCIA (o erro já
+      // traz a orientação de onde confirmar). Não é "instável" nem "sem dado".
+      if (fonte.diligencia) return { label, status: 'diligencia', detalhe: fonte.erro || `Consulta manual recomendada.${onde}` };
       if (fonte.instavel) return { label, status: 'pendente', detalhe: `Consulta automática indisponível no momento.${onde}` };
       return { label, status: 'na', detalhe: `${fonte.erro || 'Não foi possível consultar automaticamente'}.${onde}` };
     };

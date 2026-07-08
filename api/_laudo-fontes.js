@@ -77,31 +77,13 @@ export async function consultarCNDT(doc) {
 export async function consultarCNIB(doc) {
   const d = soDigitos(doc);
   if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };
-  const url = `https://www.indisponibilidade.org.br/consulta?documento=${d}`;
-  try {
-    const bd = await fetchViaBrightData(url, { headers: { 'User-Agent': UA, Accept: 'application/json,text/html', Referer: 'https://www.indisponibilidade.org.br/' } });
-    if (!bd) return { ok: false, instavel: true, erro: 'Bright Data indisponível/teto' };
-    const txt = await bd.text().catch(() => '');
-    if (!txt) return { ok: false, instavel: true, erro: 'sem resposta' };
-    // Tenta JSON (API interna) e, senão, marcadores no HTML.
-    let qtd = null;
-    try { const j = JSON.parse(txt); const arr = j?.ordens || j?.indisponibilidades || j?.registros || j?.data || []; qtd = Array.isArray(arr) ? arr.length : null; } catch { /* HTML */ }
-    if (qtd == null) {
-      if (/nenhuma\s+indisponibilidade|n[ãa]o\s+(constam?|foram\s+encontrad|h[áa])\b.*indisponibil|sem\s+(registro|indisponibil)|nada\s+consta/i.test(txt)) qtd = 0;
-      else if (/ordem\s+de\s+indisponibilidade|indisponibilidade\s+ativa|bens?\s+indispon[íi]ve|constam?\s+indisponibil/i.test(txt)) qtd = 1;
-      else if (/captcha|recaptcha/i.test(txt)) return { ok: false, instavel: true, erro: 'captcha não resolvido' };
-      else return { ok: false, instavel: true, erro: 'resposta não reconhecida' };
-    }
-    return {
-      ok: true, instavel: false,
-      resumo: qtd > 0
-        ? `⚠️ Indisponibilidade de bens ENCONTRADA (${qtd === 1 ? '1 ou mais registros' : qtd + ' registros'}) — bloqueia/atrasa o registro; checar antes de arrematar`
-        : 'Sem indisponibilidade de bens (CNIB)',
-      dados: { total: qtd, tem_indisponibilidade: qtd > 0 },
-    };
-  } catch (e) {
-    return { ok: false, instavel: true, erro: String(e.message).slice(0, 120) };
-  }
+  // O portal da CNIB (indisponibilidade.org.br) é uma SPA protegida por reCAPTCHA:
+  // exige o token do captcha + POST. Um GET simples nunca traz o resultado (só o
+  // "esqueleto" da página). Em vez de gastar requisição do Bright Data e prometer
+  // um retry que não resolve, marcamos como DILIGÊNCIA e o arrematante confirma na
+  // fonte oficial. Automação real exige Bright Data Web Unlocker (JS+captcha) ou
+  // uma API paga de certidões (ver roadmap) — plugável aqui quando decidido.
+  return { ok: false, instavel: false, diligencia: true, erro: 'Consulta automática indisponível nesta fonte (portal com captcha). Confirme em indisponibilidade.org.br com o CPF/CNPJ do executado.' };
 }
 
 // ── CENPROT — Protestos em cartório (nacional) ─────────────────────────────────
@@ -110,26 +92,9 @@ export async function consultarCNIB(doc) {
 export async function consultarProtestos(doc) {
   const d = soDigitos(doc);
   if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };
-  const url = `https://resolve.cenprot.org.br/app/public/search?documento=${d}`;
-  try {
-    const bd = await fetchViaBrightData(url, { headers: { 'User-Agent': UA, Accept: 'application/json,text/html' } });
-    if (!bd) return { ok: false, instavel: true, erro: 'Bright Data indisponível/teto' };
-    const txt = await bd.text().catch(() => '');
-    if (!txt) return { ok: false, instavel: true, erro: 'sem resposta' };
-    // A API interna do CENPROT costuma responder JSON com a lista de protestos.
-    let qtd = null;
-    try { const j = JSON.parse(txt); const arr = j?.cartorios || j?.protestos || j?.data || []; qtd = Array.isArray(arr) ? arr.length : null; } catch { /* HTML */ }
-    if (qtd == null) {
-      if (/nenhum\s+protesto|n[ãa]o\s+constam|sem\s+protesto/i.test(txt)) qtd = 0;
-      else if (/captcha|recaptcha/i.test(txt)) return { ok: false, instavel: true, erro: 'captcha não resolvido' };
-      else return { ok: false, instavel: true, erro: 'resposta não reconhecida' };
-    }
-    return {
-      ok: true, instavel: false,
-      resumo: qtd > 0 ? `⚠️ ${qtd} protesto(s) encontrado(s)` : 'Sem protestos',
-      dados: { total: qtd },
-    };
-  } catch (e) {
-    return { ok: false, instavel: true, erro: String(e.message).slice(0, 120) };
-  }
+  // O CENPROT (resolve.cenprot.org.br) é uma SPA com captcha: o GET público só
+  // devolve o app, não a lista de protestos. Mesma decisão da CNIB: marcamos como
+  // DILIGÊNCIA em vez de fingir tentativa. (Automação real: Bright Data Web
+  // Unlocker ou API paga de certidões — plugável aqui.)
+  return { ok: false, instavel: false, diligencia: true, erro: 'Consulta automática indisponível nesta fonte (portal com captcha). Confirme no CENPROT (resolve.cenprot.org.br) com o CPF/CNPJ do executado.' };
 }
