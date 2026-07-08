@@ -23,6 +23,16 @@ export async function geminiFetch(options, { timeoutMs = 15000 } = {}) {
   if (tools) return null;                 // sem tools/web_search no Gemini aqui
   if (!Array.isArray(messages)) return null;
 
+  // CRÍTICO: este fallback só encaminha TEXTO (toText abaixo descarta blocos
+  // 'document'/'image'). Se a chamada carrega PDFs (matrícula, edital) e caíssemos
+  // aqui, o Gemini "analisaria" SEM os documentos e devolveria um parecer cego —
+  // foi o que fazia o laudo sair "sem ler os documentos". Então RECUSAMOS
+  // (null): leitura de documentos é EXCLUSIVA do Claude. anthropicFetch então
+  // propaga a falha e o gerar-documental trata com o fallback honesto (preliminar),
+  // nunca com uma leitura inventada.
+  const temAnexo = messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b && (b.type === 'document' || b.type === 'image')));
+  if (temAnexo) return null;
+
   const toText = (content) => {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {

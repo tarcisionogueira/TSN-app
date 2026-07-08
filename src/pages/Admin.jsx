@@ -7182,7 +7182,10 @@ function FinanceiroTab() {
                 </div>
               ))}
             </div>
-            {mpTx.transacoes.length === 0 ? (
+            {/* Oculta as validações de cartão de R$ 0,00 (o MP cria uma por assinatura
+                — apareciam como uma 2ª linha "duplicada" do mesmo cliente). */}
+            {(() => { const _visiveis = mpTx.transacoes.filter(t => Number(t.bruto) > 0); return (
+            _visiveis.length === 0 ? (
               <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhuma transação encontrada no Mercado Pago ainda.</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
@@ -7198,7 +7201,7 @@ function FinanceiroTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {mpTx.transacoes.map(t => {
+                    {_visiveis.map(t => {
                       const stCor = t.status === 'approved' ? { background: '#dcfce7', color: '#166534' }
                         : (t.status === 'rejected' || t.status === 'cancelled') ? { background: '#fee2e2', color: '#991b1b' }
                         : { background: '#fef9c3', color: '#854d0e' };
@@ -7226,7 +7229,7 @@ function FinanceiroTab() {
                   </tbody>
                 </table>
               </div>
-            )}
+            )); })()}
           </>
         ) : (
           <div style={{ color: '#94a3b8', fontSize: 13 }}>Não foi possível carregar as transações do Mercado Pago.</div>
