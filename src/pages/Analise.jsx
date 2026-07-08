@@ -1462,6 +1462,9 @@ export default function Analise() {
                               <span style={{ fontSize:10, fontWeight:800, padding:'1px 7px', borderRadius:20, background:conn.bg, color:conn.c }}>{conn.t}</span>
                             </div>
                             <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.5 }}>{c.detalhe}</div>
+                            {c.comprovante && (
+                              <a href={c.comprovante} target="_blank" rel="noopener noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:3, fontSize:11, fontWeight:700, color:'#1e3a8a', textDecoration:'none' }}>📄 Ver comprovante da consulta</a>
+                            )}
                           </div>
                         </div>
                       );

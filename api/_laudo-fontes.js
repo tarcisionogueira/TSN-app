@@ -63,6 +63,7 @@ export async function consultarCNDT(doc) {
       ok: true, instavel: false,
       resumo: positiva ? '⚠️ CNDT POSITIVA — há débito trabalhista' : 'CNDT negativa (sem débito trabalhista)',
       dados: { situacao: positiva ? 'positiva' : 'negativa', tem_debito: positiva },
+      comprovanteHtml: txt, // certidão bruta → o laudo salva e linka como comprovante
     };
   } catch (e) {
     return { ok: false, instavel: true, erro: String(e.message).slice(0, 120) };
@@ -100,6 +101,7 @@ export async function consultarCNIB(doc) {
       ok: true, instavel: false,
       resumo: qtd > 0 ? `⚠️ Indisponibilidade de bens ENCONTRADA (${qtd} registro(s)) — bloqueia/atrasa o registro; checar antes de arrematar` : 'Sem indisponibilidade de bens (CNIB)',
       dados: { total: qtd, tem_indisponibilidade: qtd > 0 },
+      comprovanteHtml: txt,
     };
   } catch (e) { console.warn(`[CNIB] erro ${e?.message}`); return diligenciaCNIB(); }
 }
@@ -132,6 +134,7 @@ export async function consultarProtestos(doc) {
       ok: true, instavel: false,
       resumo: qtd > 0 ? `⚠️ ${qtd} protesto(s) encontrado(s)` : 'Sem protestos (CENPROT)',
       dados: { total: qtd },
+      comprovanteHtml: txt,
     };
   } catch (e) { console.warn(`[CENPROT] erro ${e?.message}`); return diligenciaCENPROT(); }
 }

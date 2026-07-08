@@ -105,6 +105,24 @@ async function salvarDocBucket(imovelId, tipo, rotulo, origemUrl, base64, dataLe
   } catch { /* cache best-effort */ }
 }
 
+// Salva o COMPROVANTE (tela/impressão) de uma consulta de certidão no bucket e
+// devolve uma URL assinada — dá para o cliente/analista ABRIR a prova, em vez de
+// só um "sim/não". O HTML NÃO é guardado no result (evita inflar o JSONB).
+async function salvarComprovante(imovelId, chave, html) {
+  try {
+    const s = String(html || '');
+    if (s.length < 200) return null;
+    const buffer = Buffer.from(s.slice(0, 2_000_000), 'utf8'); // teto 2MB
+    const storagePath = `comprovantes/${imovelId}/${Date.now()}_${String(chave).replace(/[^a-z0-9]/gi, '')}.html`;
+    const up = await storage(`object/${BUCKET}/${storagePath}`, { method: 'POST', headers: { 'Content-Type': 'text/html; charset=utf-8', 'x-upsert': 'true' }, body: buffer });
+    if (!up.ok) return null;
+    const sg = await storage(`object/sign/${BUCKET}/${storagePath}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 180 }) });
+    if (!sg.ok) return null;
+    const { signedURL } = await sg.json().catch(() => ({}));
+    return signedURL ? `${SUPABASE_URL}/storage/v1${signedURL}` : null;
+  } catch { return null; }
+}
+
 function extractText(data) {
   if (!data?.content) return '';
   return data.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
@@ -731,6 +749,14 @@ export default async function handler(req, res) {
         docOk ? consultarCertidoesFiscais(execDoc).catch(() => null) : null,
       ]);
       fontesExternas = { djen, cndt, cnib, protestos: prot, certidoes: cert };
+      // Comprovantes: salva o HTML/tela capturado de cada fonte e guarda só a URL
+      // (a prova que o cliente pode abrir). Nunca deixa o HTML cru no result.
+      for (const f of Object.values(fontesExternas)) {
+        if (f && f.comprovanteHtml) {
+          try { const cu = await salvarComprovante(String(imovelId), (f === cndt ? 'cndt' : f === cnib ? 'cnib' : f === prot ? 'cenprot' : f === cert ? 'fiscais' : 'fonte'), f.comprovanteHtml); if (cu) f.comprovanteUrl = cu; } catch { /* best-effort */ }
+          delete f.comprovanteHtml;
+        }
+      }
       const linhas = [];
       if (djen?.ok) linhas.push(`• Andamentos (DJEN/Comunica CNJ): ${djen.resumo}`);
       if (cndt?.ok) linhas.push(`• Débitos trabalhistas (CNDT): ${cndt.resumo}`);
@@ -756,7 +782,7 @@ export default async function handler(req, res) {
     // não sai, dizemos isso e apontamos ONDE confirmar manualmente.
     const stItem = (label, fonte, naMsg, ondeConfirmar) => {
       if (!fonte) return { label, status: 'na', detalhe: naMsg };
-      if (fonte.ok) return { label, status: 'feito', detalhe: fonte.resumo || fonte.situacao || 'Consultado' };
+      if (fonte.ok) return { label, status: 'feito', detalhe: fonte.resumo || fonte.situacao || 'Consultado', comprovante: fonte.comprovanteUrl || null };
       const onde = ondeConfirmar ? ` Confirme manualmente em ${ondeConfirmar}.` : '';
       // Fonte com captcha/sem consulta automática confiável → DILIGÊNCIA (o erro já
       // traz a orientação de onde confirmar). Não é "instável" nem "sem dado".
@@ -782,7 +808,8 @@ export default async function handler(req, res) {
       stItem('Protestos em cartório (CENPROT)', fx.protestos, 'Sem CPF/CNPJ do executado nos documentos.', 'o CENPROT do estado (ex.: protesto.com.br)'),
       { label: 'Certidões fiscais (Receita/PGFN/FGTS)',
         status: fx.certidoes?.resumo ? 'feito' : (docOk ? 'pendente' : 'na'),
-        detalhe: fx.certidoes?.resumo || (docOk ? 'Aguardando as fontes fiscais.' : 'Sem CPF/CNPJ do executado nos documentos.') },
+        detalhe: fx.certidoes?.resumo || (docOk ? 'Aguardando as fontes fiscais.' : 'Sem CPF/CNPJ do executado nos documentos.'),
+        comprovante: fx.certidoes?.comprovanteUrl || null },
     ];
     const pendencias = checklist.filter(c => c.status === 'pendente').length;
 
