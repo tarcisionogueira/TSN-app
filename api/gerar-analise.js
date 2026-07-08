@@ -286,7 +286,7 @@ export default async function handler(req, res) {
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
         messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
-      }, true, { retries: 1, timeoutMs: 200000 });
+      }, true, { retries: 1, timeoutMs: 200000, noFallback: true });
       mercado = parseJSON(extractText(mData)) || {};
       mercado.precoMedioM2 = mercado.consolidado?.precoMedioM2 || mercado.nivel2?.precoMedioM2 || 0;
       mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
@@ -335,7 +335,7 @@ export default async function handler(req, res) {
           model: MODEL, max_tokens: 8000,
           system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado,
           messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs) }],
-        }, false, { retries: 1, timeoutMs: 55000 });
+        }, false, { retries: 1, timeoutMs: 55000, noFallback: true });
         parecer = extractText(pData);
       } catch { /* laudo é complementar */ }
     }

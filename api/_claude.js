@@ -10,7 +10,11 @@ export const URL_CLAUDE = 'https://api.anthropic.com/v1/messages';
 const RETRYABLE = new Set([429, 500, 502, 503, 529]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function anthropicFetch(options, { retries = 3, baseDelay = 800, timeoutMs = 120000 } = {}) {
+export async function anthropicFetch(options, { retries = 3, baseDelay = 800, timeoutMs = 120000, noFallback = false } = {}) {
+  // noFallback: NÚCLEO JURÍDICO (documental/mercadológico/laudo) roda SÓ no Claude.
+  // O Gemini não lê PDF aqui e é menos confiável para o parecer — melhor falhar e
+  // reprocessar (ciclo/retry) do que devolver um laudo pior. Gemini fica para o
+  // chat de dúvidas (não crítico).
   let lastRes; // último Response retornável (falha retryável exaurida)
   for (let tent = 0; tent <= retries; tent++) {
     // Timeout por tentativa: sem ele, uma conexão pendurada trava a chamada para
@@ -29,6 +33,7 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
       await sleep(espera);
     } catch (e) {
       if (tent === retries) { // rede caiu/timeout no último ataque → tenta fallback antes de propagar
+        if (noFallback) throw e; // Claude-only: propaga a falha (o caller reprocessa)
         const fb = await geminiFetch(options, { timeoutMs: 8000 });
         if (fb) return fb;
         throw e;
@@ -39,6 +44,7 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
     }
   }
   // Chegou aqui = falha retryável do Anthropic esgotou os retries → fallback Gemini.
+  if (noFallback) return lastRes; // Claude-only: devolve a resposta do Claude (ainda que 429/5xx)
   const fb = await geminiFetch(options, { timeoutMs: 8000 });
   return fb || lastRes;
 }

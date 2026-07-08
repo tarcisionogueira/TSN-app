@@ -586,7 +586,7 @@ export default async function handler(req, res) {
         model: MODEL, max_tokens: 7000,
         system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
         messages: [{ role: 'user', content }],
-      }, { retries: 0, timeoutMs: orcamentoIA });
+      }, { retries: 0, timeoutMs: orcamentoIA, noFallback: true });
     } catch (e) {
       console.warn(`[documental] chamada principal indisponível (${e?.message}) — seguindo com extração focada + fallbacks`);
       data = null;
@@ -659,7 +659,7 @@ export default async function handler(req, res) {
               ...docsIdent,
               { type: 'text', text: 'Identifique o PROPRIETÁRIO ATUAL / executado / ex-mutuário do imóvel (a pessoa cujo imóvel está sendo levado a leilão). Varra a matrícula do registro/averbação MAIS RECENTE para o mais antigo e pegue o dono ATUAL. NÃO confunda com a INCORPORADORA/CONSTRUTORA que aparece como primeira proprietária (R-1, quem construiu o prédio — em regra "... INCORPORADORA/CONSTRUTORA/EMPREENDIMENTOS/SPE" com CNPJ): essa NÃO é o executado, a menos que ainda seja a dona atual. Em alienação fiduciária da Caixa (Lei 9.514), o executado é o EX-MUTUÁRIO (pessoa física, CPF). Extraia o NOME e o CPF/CNPJ DESSE proprietário atual e o NÚMERO DO PROCESSO judicial (padrão CNJ), se houver. NÃO invente: se não achar com segurança, deixe vazio. Retorne SOMENTE: {"executadoNome":"","executadoDoc":"(só dígitos)","numeroProcesso":""}' },
             ] }],
-          }, { retries: 1, timeoutMs: 60000 });
+          }, { retries: 1, timeoutMs: 60000, noFallback: true });
           const fx2 = parseJSON(extractText(fdata)) || {};
           const doc2 = String(fx2.executadoDoc || '').replace(/\D/g, '');
           if (!execNome && fx2.executadoNome) { execNome = String(fx2.executadoNome).trim(); ex.executadoNome = execNome; }

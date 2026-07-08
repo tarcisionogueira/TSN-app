@@ -214,7 +214,7 @@ export default async function handler(req, res) {
       model: MODEL, max_tokens: 4000,
       system: 'Você é o gestor sênior de decisão da BidPro Brasil. Emite o parecer final de viabilidade consolidando o relatório mercadológico/financeiro e o documental/jurídico. Pondera as duas visões, não as refaz. Honesto e objetivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Retorne apenas JSON válido.' + aprendizados,
       messages: [{ role: 'user', content: promptDefesa(im, resMerc, resDoc) }],
-    }, { retries: 1, timeoutMs: 120000 });
+    }, { retries: 1, timeoutMs: 120000, noFallback: true });
     const parsed = parseJSON(extractText(data)) || {};
 
     const AVISO = '\n\n§ SEÇÃO: LEMBRETE\nEste laudo de viabilidade é um parecer consolidado gerado com apoio de inteligência artificial a partir dos dois relatórios anteriores — tem caráter de apoio à decisão e não substitui a análise de um profissional nem a verificação presencial. Recomendamos agendar a reunião com um analista para validar o veredito antes de qualquer lance.';
