@@ -163,11 +163,16 @@ export default function Login() {
       else if (planoPendente) dest = `/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`;
       else if (nextParam) dest = nextParam;
       if (dest) sessionStorage.setItem('tsn_oauth_redirect', dest);
+      // redirectTo = origem atual, mas força www no domínio de produção: o apex
+      // bidprobrasil.com.br responde 308 e o redirect do OAuth pode perder o token
+      // na volta (mesmo motivo dos webhooks). Em www/preview fica inalterado.
+      const redirectTo = window.location.origin.replace('://bidprobrasil.com.br', '://www.bidprobrasil.com.br');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        // Usa apenas a origem — o Supabase redireciona para a URL configurada em
-        // Authentication > URL Configuration > Site URL no painel do Supabase.
-        options: { redirectTo: window.location.origin },
+        // O destino final precisa estar na allowlist do Supabase (Authentication >
+        // URL Configuration > Redirect URLs) e o callback do Supabase, nas URIs
+        // autorizadas do OAuth client no Google Cloud.
+        options: { redirectTo },
       });
       if (error) throw error;
       // Em sucesso, o browser redireciona para o Google (não volta aqui).
