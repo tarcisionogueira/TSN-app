@@ -263,7 +263,9 @@ Avalie e descreva: ônus reais, gravames, hipotecas, penhoras, arrestos, indispo
 
 REGISTRO DO IMÓVEL: extraia do CABEÇALHO da matrícula o CARTÓRIO/SERVENTIA de Registro de Imóveis (com o número do Ofício, ex.: "1º Ofício de Registro de Imóveis"), a COMARCA/município do registro e o número da MATRÍCULA. Esses dados constam no topo de toda matrícula. Preencha "cartorio", "comarca" e "numeroMatricula" em "extracao" quando constarem; se não houver matrícula legível, deixe vazio (não invente).
 
-IDENTIFICAÇÃO DO PROPRIETÁRIO/DEVEDOR (CRÍTICO — é o que dispara as consultas de certidões): a matrícula SEMPRE qualifica as partes. Todo registro de aquisição (R-) e as averbações trazem o NOME e o CPF (pessoa física) ou CNPJ (pessoa jurídica) do proprietário/ex-mutuário/devedor. VARRA a matrícula inteira (todos os R- e Av-) e o edital, e EXTRAIA em "executadoNome" o nome e em "executadoDoc" o CPF/CNPJ (SÓ DÍGITOS) do PROPRIETÁRIO ATUAL / executado / ex-mutuário. Em leilão EXTRAJUDICIAL da Caixa (alienação fiduciária, Lei 9.514), é o EX-MUTUÁRIO cujo imóvel foi consolidado em favor do credor — o CPF dele consta na qualificação do contrato/registro. Se houver vários proprietários na cadeia, use o do ATUAL executado/devedor. NÃO deixe "executadoDoc" vazio se houver QUALQUER CPF/CNPJ de proprietário/devedor legível nos documentos; só deixe vazio se realmente não constar em nenhum lugar.
+IDENTIFICAÇÃO DO PROPRIETÁRIO/DEVEDOR (CRÍTICO — não podemos ERRAR a propriedade do imóvel executado; é o que dispara as consultas de certidões e é o núcleo do vício de propriedade): a matrícula SEMPRE qualifica as partes. VARRA a matrícula do FIM para o começo (do registro/averbação MAIS RECENTE para o mais antigo) e identifique quem é o PROPRIETÁRIO ATUAL / executado / ex-mutuário. EXTRAIA em "executadoNome" o nome e em "executadoDoc" o CPF/CNPJ (SÓ DÍGITOS) DESSA pessoa.
+ATENÇÃO — NÃO CONFUNDA com a INCORPORADORA/CONSTRUTORA: em prédios/condomínios, a primeira proprietária que aparece na matrícula (registro R-1, quem INCORPOROU/CONSTRUIU o empreendimento, tipicamente uma "... INCORPORADORA", "... CONSTRUTORA", "... EMPREENDIMENTOS", "... SPE" com CNPJ) É a proprietária ORIGINÁRIA e quase NUNCA é o executado. O executado é o ADQUIRENTE (comprador da unidade, em regra pessoa física com CPF) cujo imóvel foi retomado. Só use a incorporadora/construtora se ela AINDA for, comprovadamente, a proprietária ATUAL (nenhuma venda posterior na cadeia). Na dúvida entre a construtora (R-1) e um adquirente posterior, PREFIRA o adquirente mais recente.
+Em leilão EXTRAJUDICIAL da Caixa (alienação fiduciária, Lei 9.514), o executado é o EX-MUTUÁRIO/fiduciante (pessoa física, CPF) cujo imóvel foi consolidado em favor do credor — o CPF dele consta na qualificação do contrato/registro de alienação fiduciária. NÃO deixe "executadoDoc" vazio se houver o CPF/CNPJ do proprietário atual legível; só deixe vazio se realmente não constar. Se você tiver DÚVIDA sobre quem é o proprietário atual (cadeia ilegível/incompleta), registre isso como RISCO de "vício/incerteza de propriedade" (severidade "alerta") e como lacuna, em vez de chutar a incorporadora.
 
 DADOS-CHAVE DA MATRÍCULA (quando constarem — preencha em "extracao"; se não constar, deixe vazio, NÃO invente):
 - "dataConsolidacao": data da CONSOLIDAÇÃO DA PROPRIEDADE em nome do credor fiduciário (típico de alienação fiduciária/Lei 9.514, na averbação "Av-"), formato AAAA-MM-DD. É determinante para os prazos do ex-mutuário — capture se houver.
@@ -573,14 +575,18 @@ export default async function handler(req, res) {
     // CNJ por processo/parte, certidões, parecer sintetizado) e emitimos um laudo
     // preliminar útil — nunca um erro cru. O timeout é dimensionado pela folga
     // restante (2 tentativas), deixando ~60s garantidos para os fallbacks rodarem.
-    const orcamentoIA = Math.max(40000, Math.floor((hardDeadline - Date.now() - 60000) / 2));
+    // UMA tentativa LONGA em vez de duas curtas: as matrículas da Caixa são PDFs
+    // ESCANEADOS (visão) e demoram — com 2×100s ambas abortavam e o laudo caía no
+    // fallback ("Análise preliminar"). Damos quase todo o orçamento restante a uma
+    // única chamada (deixando ~45s p/ os fallbacks e a folga do deadline de 285s).
+    const orcamentoIA = Math.max(90000, hardDeadline - Date.now() - 45000);
     let data = null;
     try {
       data = await anthropic({
-        model: MODEL, max_tokens: 8000,
+        model: MODEL, max_tokens: 7000,
         system: 'Você é advogado especialista em leilões de imóveis. Análise documental e processual — sem análise de mercado/preço. Não invente dados ausentes: sinalize lacunas e onde confirmar. Retorne apenas JSON válido.' + aprendizados,
         messages: [{ role: 'user', content }],
-      }, { retries: 1, timeoutMs: orcamentoIA });
+      }, { retries: 0, timeoutMs: orcamentoIA });
     } catch (e) {
       console.warn(`[documental] chamada principal indisponível (${e?.message}) — seguindo com extração focada + fallbacks`);
       data = null;
@@ -648,10 +654,10 @@ export default async function handler(req, res) {
         try {
           const fdata = await anthropic({
             model: MODEL, max_tokens: 400,
-            system: 'Você é um EXTRATOR de dados de documentos de imóvel. Leia com MÁXIMA atenção, INCLUSIVE páginas escaneadas/em imagem. A matrícula SEMPRE qualifica as partes com CPF (pessoa física) ou CNPJ (pessoa jurídica) nos registros (R-) e averbações (Av-). Retorne SOMENTE JSON.',
+            system: 'Você é um EXTRATOR de dados de documentos de imóvel. Leia com MÁXIMA atenção, INCLUSIVE páginas escaneadas/em imagem. A matrícula qualifica as partes com CPF (pessoa física) ou CNPJ (pessoa jurídica) nos registros (R-) e averbações (Av-). Retorne SOMENTE JSON.',
             messages: [{ role: 'user', content: [
               ...docsIdent,
-              { type: 'text', text: 'Extraia dos documentos: o NOME e o CPF/CNPJ do PROPRIETÁRIO ATUAL / executado / devedor / ex-mutuário (varra TODOS os registros R- e averbações Av- da matrícula e também o edital) e o NÚMERO DO PROCESSO judicial (padrão CNJ), se houver. NÃO invente: se não achar, deixe vazio. Retorne SOMENTE: {"executadoNome":"","executadoDoc":"(só dígitos)","numeroProcesso":""}' },
+              { type: 'text', text: 'Identifique o PROPRIETÁRIO ATUAL / executado / ex-mutuário do imóvel (a pessoa cujo imóvel está sendo levado a leilão). Varra a matrícula do registro/averbação MAIS RECENTE para o mais antigo e pegue o dono ATUAL. NÃO confunda com a INCORPORADORA/CONSTRUTORA que aparece como primeira proprietária (R-1, quem construiu o prédio — em regra "... INCORPORADORA/CONSTRUTORA/EMPREENDIMENTOS/SPE" com CNPJ): essa NÃO é o executado, a menos que ainda seja a dona atual. Em alienação fiduciária da Caixa (Lei 9.514), o executado é o EX-MUTUÁRIO (pessoa física, CPF). Extraia o NOME e o CPF/CNPJ DESSE proprietário atual e o NÚMERO DO PROCESSO judicial (padrão CNJ), se houver. NÃO invente: se não achar com segurança, deixe vazio. Retorne SOMENTE: {"executadoNome":"","executadoDoc":"(só dígitos)","numeroProcesso":""}' },
             ] }],
           }, { retries: 1, timeoutMs: 60000 });
           const fx2 = parseJSON(extractText(fdata)) || {};
