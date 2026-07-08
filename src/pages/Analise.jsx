@@ -896,7 +896,7 @@ export default function Analise() {
     const nr = parecerDocumental.nivelRisco;
     const pa = parecerDocumental.pontosAtencao || {};
     if (nr === 'vermelho' || (pa.altos || 0) > 0) return { txt: 'REPROVADO', sub: 'Alto risco jurídico — resolver os pontos antes de qualquer lance', bg: '#fee2e2', c: '#b91c1c' };
-    if (nr === 'amarelo' || (pa.medios || 0) > 0) return { txt: 'APROVADO COM RESSALVAS', sub: 'Viável, com pontos a confirmar antes do lance', bg: '#fef3c7', c: '#92400e' };
+    if (nr === 'amarelo' || (pa.medios || 0) > 0) return { txt: 'APROVADO COM RESSALVAS', sub: 'Viável, com pontos a confirmar com o analista e jurídico', bg: '#fef3c7', c: '#92400e' };
     return { txt: 'APROVADO', sub: 'Sem impedimentos jurídicos identificados na documentação', bg: '#dcfce7', c: '#15803d' };
   })();
 
@@ -1451,7 +1451,7 @@ export default function Analise() {
                       // não havia dado para consultar.
                       const conn = c.status==='feito' ? { t:'conectado', bg:'#dcfce7', c:'#15803d' }
                         : c.status==='pendente' ? { t:'indisponível agora', bg:'#fef3c7', c:'#92400e' }
-                        : c.status==='diligencia' ? { t:'confirme na fonte', bg:'#dbeafe', c:'#1e40af' }
+                        : c.status==='diligencia' ? { t:'em validação (jurídico)', bg:'#dbeafe', c:'#1e40af' }
                         : { t:'sem dado p/ consultar', bg:'#f1f5f9', c:'#64748b' };
                       return (
                         <div key={i} style={{ display:'flex', gap:9, alignItems:'flex-start' }}>
@@ -1472,7 +1472,7 @@ export default function Analise() {
                   </div>
                   {parecerDocumental.pendencias > 0 && (
                     <div style={{ marginTop:10, fontSize:11.5, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 11px', lineHeight:1.5 }}>
-                      Algumas consultas públicas não puderam ser concluídas automaticamente agora. Liberamos o relatório com o que já temos; confirme os itens pendentes na certidão oficial do órgão indicado antes do lance.
+                      Algumas consultas públicas não retornaram de forma conclusiva automaticamente agora. Liberamos o relatório com o que já temos; os itens pendentes entram na validação do analista e do jurídico antes do lance (o sistema também reprocessa as fontes automaticamente).
                     </div>
                   )}
                 </div>

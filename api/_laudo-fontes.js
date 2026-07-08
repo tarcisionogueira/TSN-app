@@ -75,7 +75,7 @@ export async function consultarCNDT(doc) {
 // matrícula, ex.: AV-9/AV-16). CRÍTICO antes de arrematar — pode bloquear o
 // registro. Portal com captcha → tentativa via Bright Data; resposta não
 // reconhecida vira pendência 48h (NUNCA afirma "livre" no escuro).
-const diligenciaCNIB = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Consulta automática não conclusiva agora (portal com captcha). Confirme em indisponibilidade.org.br com o CPF/CNPJ do executado.' });
+const diligenciaCNIB = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Indisponibilidade de bens: consulta pública sem retorno automático conclusivo agora — a verificação entra na validação do analista e do jurídico antes do lance.' });
 export async function consultarCNIB(doc) {
   const d = soDigitos(doc);
   if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };
@@ -109,7 +109,7 @@ export async function consultarCNIB(doc) {
 // ── CENPROT — Protestos em cartório (nacional) ─────────────────────────────────
 // Protestos no CPF/CNPJ do vendedor → solvência. Portal com captcha/login →
 // tentativa via Bright Data; senão, pendência 48h.
-const diligenciaCENPROT = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Consulta automática não conclusiva agora (portal com captcha). Confirme no CENPROT (resolve.cenprot.org.br) com o CPF/CNPJ do executado.' });
+const diligenciaCENPROT = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Protestos em cartório: consulta pública sem retorno automático conclusivo agora — a verificação entra na validação do analista e do jurídico antes do lance.' });
 export async function consultarProtestos(doc) {
   const d = soDigitos(doc);
   if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };

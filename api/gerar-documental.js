@@ -780,15 +780,15 @@ export default async function handler(req, res) {
     // Mensagem HONESTA por fonte: não afirmamos "CAPTCHA" nem prometemos retry
     // automático que não está ligado no fluxo documental. Quando a consulta pública
     // não sai, dizemos isso e apontamos ONDE confirmar manualmente.
-    const stItem = (label, fonte, naMsg, ondeConfirmar) => {
+    // Mensagem HONESTA sem empurrar o cliente para o site do órgão: quando a fonte
+    // pública não conclui sozinha, a verificação entra na validação do analista/
+    // jurídico (nunca "consulte manualmente em X").
+    const stItem = (label, fonte, naMsg) => {
       if (!fonte) return { label, status: 'na', detalhe: naMsg };
       if (fonte.ok) return { label, status: 'feito', detalhe: fonte.resumo || fonte.situacao || 'Consultado', comprovante: fonte.comprovanteUrl || null };
-      const onde = ondeConfirmar ? ` Confirme manualmente em ${ondeConfirmar}.` : '';
-      // Fonte com captcha/sem consulta automática confiável → DILIGÊNCIA (o erro já
-      // traz a orientação de onde confirmar). Não é "instável" nem "sem dado".
-      if (fonte.diligencia) return { label, status: 'diligencia', detalhe: fonte.erro || `Consulta manual recomendada.${onde}` };
-      if (fonte.instavel) return { label, status: 'pendente', detalhe: `Consulta automática indisponível no momento.${onde}` };
-      return { label, status: 'na', detalhe: `${fonte.erro || 'Não foi possível consultar automaticamente'}.${onde}` };
+      if (fonte.diligencia) return { label, status: 'diligencia', detalhe: fonte.erro || 'Verificação incluída na validação do analista e do jurídico antes do lance.' };
+      if (fonte.instavel) return { label, status: 'pendente', detalhe: 'Fonte pública indisponível no momento — o sistema reprocessa automaticamente e o jurídico valida antes do lance.' };
+      return { label, status: 'na', detalhe: `${fonte.erro || 'Não foi possível consultar automaticamente'}.` };
     };
     const checklist = [
       { label: 'Documentos do lote (matrícula/edital/regras)',
