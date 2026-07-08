@@ -95,6 +95,24 @@ async function processar(page, item) {
       const resp = await page.goto(detalheUrl, { waitUntil: 'networkidle2', timeout: 30000 });
       if (resp && resp.status() < 400) {
         await new Promise(r => setTimeout(r, 1200));
+        // 3a-bis) MATRÍCULA em PDF linkada na página de detalhe (ROTA ALTERNATIVA):
+        //    a URL estática /editais/matricula/<UF>/<num>.pdf NÃO existe para muitos
+        //    lotes JUDICIAIS — nesses casos a matrícula fica como link na página do
+        //    imóvel. Sem esta rota, o lote judicial ficava sem a matrícula (só regras).
+        if (!capturados.includes('matricula')) {
+          const matriculaPdf = await page.evaluate(() => {
+            const as = Array.from(document.querySelectorAll('a[href]'));
+            const rotulada = as.find(a => /matr[íi]cula/i.test(`${a.href} ${a.textContent || ''}`) && /\.pdf(\?|#|$)/i.test(a.href))
+                          || as.find(a => /matr[íi]cula/i.test(`${a.textContent || ''}`) && /\.(pdf|asp)/i.test(a.href));
+            return rotulada ? rotulada.href : null;
+          });
+          if (matriculaPdf) {
+            const m2 = await capturarUrl(page, matriculaPdf).catch(() => null);
+            if (m2) { await salvarAnexo(item.imovel_id, m2, 'matricula', 'Matrícula (CEF, automática).pdf'); capturados.push('matricula'); }
+            await page.goto(detalheUrl, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+            await new Promise(r => setTimeout(r, 600));
+          }
+        }
         // 3a) Edital em PDF linkado na página (se ainda não capturado).
         if (!capturados.includes('edital')) {
           const editalPdf = await page.evaluate(() => {

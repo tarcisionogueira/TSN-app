@@ -7056,6 +7056,22 @@ function FinanceiroTab() {
   const [mpLoading, setMpLoading] = React.useState(true);
   const [mpTx, setMpTx] = React.useState(null);      // transações reais do MP
   const [mpTxLoading, setMpTxLoading] = React.useState(true);
+  const [chkEmail, setChkEmail] = React.useState('');
+  const [chkRes, setChkRes] = React.useState(null);
+  const [chkLoad, setChkLoad] = React.useState(false);
+
+  const verificarRecorrencia = async () => {
+    const email = chkEmail.trim();
+    if (!email) return;
+    setChkLoad(true); setChkRes(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/mp-admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` }, body: JSON.stringify({ action: 'assinatura_email', email }) });
+      const data = await res.json();
+      setChkRes(res.ok ? data : { error: data?.error || 'Falha' });
+    } catch { setChkRes({ error: 'Falha de conexão' }); }
+    setChkLoad(false);
+  };
 
   React.useEffect(() => {
     // Carrega config de gateway ativo
@@ -7214,6 +7230,41 @@ function FinanceiroTab() {
           </>
         ) : (
           <div style={{ color: '#94a3b8', fontSize: 13 }}>Não foi possível carregar as transações do Mercado Pago.</div>
+        )}
+      </div>
+
+      {/* Verificar recorrência de um assinante (preapproval do MP por e-mail) */}
+      <div style={S2.card}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>Verificar recorrência de um assinante</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Confirma no Mercado Pago se a assinatura vai continuar sendo cobrada (status, próxima cobrança e valor).</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input value={chkEmail} onChange={e => setChkEmail(e.target.value)} placeholder="e-mail do assinante" onKeyDown={e => e.key === 'Enter' && verificarRecorrencia()}
+            style={{ flex: 1, minWidth: 220, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none' }} />
+          <button onClick={verificarRecorrencia} disabled={chkLoad || !chkEmail.trim()} style={{ padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: chkLoad || !chkEmail.trim() ? 0.5 : 1 }}>
+            {chkLoad ? 'Verificando…' : 'Verificar'}
+          </button>
+        </div>
+        {chkRes && (
+          <div style={{ marginTop: 12 }}>
+            {chkRes.error ? (
+              <div style={{ color: '#dc2626', fontSize: 13 }}>⚠️ {chkRes.error}</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: chkRes.temRecorrenciaAtiva ? '#059669' : '#b45309', background: chkRes.temRecorrenciaAtiva ? '#ecfdf5' : '#fffbeb', border: `1px solid ${chkRes.temRecorrenciaAtiva ? '#a7f3d0' : '#fde68a'}`, borderRadius: 8, padding: '10px 12px' }}>
+                  {chkRes.temRecorrenciaAtiva ? '✅ ' : '⚠️ '}{chkRes.resumo}
+                </div>
+                {(chkRes.assinaturas || []).map(a => (
+                  <div key={a.id} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, color: '#475569', marginTop: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 8 }}>
+                    <span style={{ fontWeight: 700, color: a.status === 'authorized' ? '#059669' : a.status === 'cancelled' ? '#dc2626' : '#b45309' }}>{a.status}</span>
+                    <span>{a.reason || '—'}</span>
+                    {a.valor ? <span>R$ {a.valor.toFixed(2)}</span> : null}
+                    {a.frequencia ? <span>a cada {a.frequencia}</span> : null}
+                    {a.proximaCobranca ? <span>próx.: {String(a.proximaCobranca).slice(0, 10)}</span> : null}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
         )}
       </div>
 

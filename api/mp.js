@@ -65,7 +65,7 @@ async function mpPut(path, body) {
 const SB_URL = (process.env.VITE_SUPABASE_URL || '').trim();
 const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 
-async function ativarRoleInline(userId, planoKey) {
+async function ativarRoleInline(userId, planoKey, mpId) {
   if (!SB_URL || !SB_KEY || !userId || !planoKey) return { skipped: true };
   const res = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}`, {
     method: 'PATCH',
@@ -75,7 +75,11 @@ async function ativarRoleInline(userId, planoKey) {
       'Content-Type':  'application/json',
       Prefer:          'return=minimal',
     },
-    body: JSON.stringify({ role: planoKey, inadimplente_desde: null, role_anterior: null }),
+    // Grava o id do preapproval (mp_id): sem ele não dá para rastrear/gerenciar a
+    // recorrência por usuário nem cancelar pelo id (só por e-mail). plano_pago_em/
+    // ciclo marcam a assinatura ativa.
+    body: JSON.stringify({ role: planoKey, inadimplente_desde: null, role_anterior: null,
+      ...(mpId ? { mp_id: String(mpId), plano_pago_em: new Date().toISOString(), plano_ciclo: 'mensal' } : {}) }),
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
@@ -250,7 +254,7 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
   // webhook/reconciliação recupera): loga e segue.
   let ativado = false;
   if (sub.status === 'authorized') {
-    try { await ativarRoleInline(userId, planoKey); ativado = true; }
+    try { await ativarRoleInline(userId, planoKey, sub.id); ativado = true; }
     catch (e) { console.error('[mp] ativação inline falhou:', e.message); }
   }
   return { assinaturaId: sub.id, status: sub.status, ativado };

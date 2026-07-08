@@ -64,6 +64,37 @@ export default async function handler(req) {
       }
     }
 
+    if (body.action === 'assinatura_email') {
+      // Verifica a RECORRÊNCIA de um assinante: busca os preapprovals do MP pelo
+      // e-mail e devolve status, próxima cobrança e valor. Confirma se a assinatura
+      // vai continuar sendo cobrada (authorized) ou está pausada/cancelada.
+      const email = String(body.email || '').trim().toLowerCase();
+      if (!email) return new Response(JSON.stringify({ error: 'email obrigatório' }), { status: 400 });
+      let results = [];
+      try {
+        const r = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(email)}&sort=date_created:desc&limit=20`);
+        results = Array.isArray(r?.results) ? r.results : [];
+      } catch (e) { return new Response(JSON.stringify({ error: e.message }), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
+      const assinaturas = results.map((s) => ({
+        id: String(s.id),
+        status: s.status, // authorized (cobrando) | pending | paused | cancelled
+        reason: s.reason || null,
+        valor: Number(s.auto_recurring?.transaction_amount ?? 0),
+        frequencia: s.auto_recurring ? `${s.auto_recurring.frequency} ${s.auto_recurring.frequency_type}` : null,
+        proximaCobranca: s.next_payment_date || s.auto_recurring?.end_date || null,
+        criadaEm: s.date_created || null,
+      }));
+      const ativa = assinaturas.find((a) => a.status === 'authorized') || null;
+      return new Response(JSON.stringify({
+        email,
+        temRecorrenciaAtiva: !!ativa,
+        resumo: ativa
+          ? `Recorrência ATIVA de ${ativa.valor ? 'R$ ' + ativa.valor.toFixed(2) : '—'}${ativa.proximaCobranca ? `, próxima cobrança ${String(ativa.proximaCobranca).slice(0, 10)}` : ''}.`
+          : (assinaturas.length ? 'Há assinatura(s), mas NENHUMA ativa (pausada/cancelada) — não será cobrada.' : 'Nenhuma assinatura recorrente encontrada no Mercado Pago para este e-mail — pagamento foi avulso ou não há recorrência.'),
+        assinaturas,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (body.action === 'transacoes') {
       // Fonte de verdade REAL: pagamentos direto na API do MP (não o nosso banco).
       // Mostra o valor da operação: bruto, taxa do MP e líquido efetivamente
