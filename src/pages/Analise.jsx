@@ -302,7 +302,11 @@ export default function Analise() {
   // o "gerando"/"pronto" derivam do contexto (persistente, vale entre devices).
   const gerandoDocumental = docEntry?.status === 'gerando';
   const [relMercadoGerado, setRelMercadoGerado] = useState(false);
-  const relDocumentalGerado = docEntry?.status === 'concluida';
+  // "concluida" com precisaDocumentos NÃO é pronto — ainda está capturando/faltando
+  // documentos. Separar os dois estados evita a incoerência "Pronto na lista / abre
+  // Preparando ainda" (o mesmo status precisa valer em TODA a tela).
+  const relDocumentalPreparando = docEntry?.status === 'concluida' && !!docEntry?.result?.precisaDocumentos;
+  const relDocumentalGerado = docEntry?.status === 'concluida' && !docEntry?.result?.precisaDocumentos;
   const [parecerDocumental, setParecerDocumental] = useState(null); // resultado do servidor
   const [docMsg, setDocMsg] = useState('');
   // Auto-poll da captura de documentos (leiloeiro integrado): quando o servidor está
@@ -882,6 +886,17 @@ export default function Analise() {
     return scoreBidPro({ desconto: desc, modalidade: d.modalidade, tipo: d.tipo, scoreLocalizacao: d.scoreLocalizacao, scoreJuridico, scoreFinanceiro: d.scoreFinanceiro, valorMercado: d.valorMercado, valorMinimo: d.valorArrematacao, analiseViavel: d.analiseViavel });
   })();
 
+  // Veredito jurídico do documental para o CABEÇALHO (aprovado / com ressalvas /
+  // reprovado), derivado do nível de risco + pontos de atenção.
+  const vereditoDoc = (() => {
+    if (!parecerDocumental || parecerDocumental.precisaDocumentos) return null;
+    const nr = parecerDocumental.nivelRisco;
+    const pa = parecerDocumental.pontosAtencao || {};
+    if (nr === 'vermelho' || (pa.altos || 0) > 0) return { txt: 'REPROVADO', sub: 'Alto risco jurídico — resolver os pontos antes de qualquer lance', bg: '#fee2e2', c: '#b91c1c' };
+    if (nr === 'amarelo' || (pa.medios || 0) > 0) return { txt: 'APROVADO COM RESSALVAS', sub: 'Viável, com pontos a confirmar antes do lance', bg: '#fef3c7', c: '#92400e' };
+    return { txt: 'APROVADO', sub: 'Sem impedimentos jurídicos identificados na documentação', bg: '#dcfce7', c: '#15803d' };
+  })();
+
   // Exportação de PDF CONTEXTUAL: cada aba baixa o SEU relatório (antes o botão do
   // topo sempre gerava o mercadológico, mesmo estando no documental).
   const podeExportarPDF =
@@ -1093,19 +1108,22 @@ export default function Analise() {
             <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Relatórios</div>
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
               {[
-                { k:'mercado', label:'Mercadológico + Viabilidade', ok: relMercadoGerado },
-                { k:'documental', label:'Documental + Processo', ok: relDocumentalGerado },
-                { k:'laudo', label:'Laudo de Viabilidade', ok: relLaudoGerado },
-              ].map(it => (
-                // Não clicável até o relatório ser gerado (geração é pelos cards do centro).
-                <button key={it.k} disabled={!it.ok} onClick={() => { if (it.ok) setRelSel(it.k); }}
-                  title={it.ok ? '' : 'Gere o relatório no centro para abrir aqui'}
-                  style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', border:'none', background: relSel===it.k ? '#eff6ff' : 'none', borderRadius:8, cursor: it.ok?'pointer':'default', textAlign:'left', fontSize:13, fontWeight:600, color: it.ok ? '#334155' : '#cbd5e1' }}
-                  onMouseEnter={e=>{ if(it.ok && relSel!==it.k) e.currentTarget.style.background='#f8fafc'; }} onMouseLeave={e=>{ if(relSel!==it.k) e.currentTarget.style.background='none'; }}>
-                  <span style={{ width:18, height:18, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, background: it.ok ? '#dcfce7' : '#f1f5f9', color: it.ok ? '#15803d' : '#cbd5e1' }}>{it.ok ? '✓' : '·'}</span>
+                { k:'mercado', label:'Mercadológico + Viabilidade', ok: relMercadoGerado, busy: gerandoMercado },
+                { k:'documental', label:'Documental + Processo', ok: relDocumentalGerado, busy: gerandoDocumental || relDocumentalPreparando },
+                { k:'laudo', label:'Laudo de Viabilidade', ok: relLaudoGerado, busy: gerandoLaudo },
+              ].map(it => {
+                // Clicável quando pronto OU em andamento (para abrir e ver o status).
+                const clicavel = it.ok || it.busy;
+                return (
+                <button key={it.k} disabled={!clicavel} onClick={() => { if (clicavel) setRelSel(it.k); }}
+                  title={clicavel ? '' : 'Gere o relatório no centro para abrir aqui'}
+                  style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', border:'none', background: relSel===it.k ? '#eff6ff' : 'none', borderRadius:8, cursor: clicavel?'pointer':'default', textAlign:'left', fontSize:13, fontWeight:600, color: it.ok ? '#334155' : it.busy ? '#b45309' : '#cbd5e1' }}
+                  onMouseEnter={e=>{ if(clicavel && relSel!==it.k) e.currentTarget.style.background='#f8fafc'; }} onMouseLeave={e=>{ if(relSel!==it.k) e.currentTarget.style.background='none'; }}>
+                  <span style={{ width:18, height:18, borderRadius:'50%', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, background: it.ok ? '#dcfce7' : it.busy ? '#fef3c7' : '#f1f5f9', color: it.ok ? '#15803d' : it.busy ? '#b45309' : '#cbd5e1' }}>{it.ok ? '✓' : it.busy ? <Loader2 size={11} style={{ animation:'spin 1s linear infinite' }}/> : '·'}</span>
                   {it.label}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -1198,12 +1216,12 @@ export default function Analise() {
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
-                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
+                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
                   { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
                 ].map(c => {
-                  const travado = c.gerando || c.block || c.seqBloqueado || c.planoBloqueado;
+                  const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado;
                   return (
-                  <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white', opacity: c.seqBloqueado?0.7:1 }}>
+                  <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:c.preparando?'#fde68a':'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white', opacity: c.seqBloqueado?0.7:1 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                       <div style={{ width:40, height:40, borderRadius:10, background:c.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><c.Icon size={20} color={c.cor}/></div>
                       <div style={{ fontSize:14, fontWeight:800, color:'#111', lineHeight:1.25 }}><span style={{ color:c.cor }}>{c.ordem}.</span> {c.titulo}</div>
@@ -1217,18 +1235,21 @@ export default function Analise() {
                         </button>
                       ) : (
                         <button onClick={c.fn} disabled={travado}
-                          style={{ flex:1, padding:'10px', background: travado?'#cbd5e1':c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: travado?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                          style={{ flex:1, padding:'10px', background: travado?(c.preparando?'#d97706':'#cbd5e1'):c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: (travado && !c.preparando)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           {c.gerando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando...</>
+                            : c.preparando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Preparando documentos…</>
                             : c.block ? <><Lock size={14}/> Limite atingido</>
                             : c.seqBloqueado ? <><Lock size={14}/> Gere o 1º antes</>
                             : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}
                         </button>
                       )}
-                      {c.ok && <button onClick={()=>setRelSel(c.k)} style={{ padding:'10px 14px', background:'white', color:c.cor, border:`1px solid ${c.cor}`, borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer' }}>Abrir</button>}
+                      {(c.ok || c.preparando) && <button onClick={()=>setRelSel(c.k)} style={{ padding:'10px 14px', background:'white', color:c.cor, border:`1px solid ${c.cor}`, borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer' }}>Abrir</button>}
                     </div>
-                    {c.gerando && (
-                      <div style={{ fontSize:11, color:c.cor, lineHeight:1.4, textAlign:'center' }}>
-                        {c.k==='mercado'
+                    {(c.gerando || c.preparando) && (
+                      <div style={{ fontSize:11, color: c.preparando?'#b45309':c.cor, lineHeight:1.4, textAlign:'center' }}>
+                        {c.preparando
+                          ? 'Ainda buscando o edital/matrícula do lote pelas rotas automáticas. Se não chegarem, você pode anexar os PDFs manualmente ao abrir.'
+                          : c.k==='mercado'
                           ? 'Buscando preços de mercado em tempo real e montando a viabilidade, pode levar até ~2 min. Pode fechar a aba; continua no servidor.'
                           : 'Lendo edital/matrícula/anexos e consultando o processo no CNJ, roda no servidor; pode fechar a aba.'}
                       </div>
@@ -1243,10 +1264,18 @@ export default function Analise() {
 
           {/* ===== RELATÓRIO: ANÁLISE DOCUMENTAL + PROCESSO ===== */}
           {relSel === 'documental' && (
-            <div style={{ background:'linear-gradient(135deg,#0f172a,#1e3a8a)', borderRadius:16, padding:'18px 22px', color:'white' }}>
-              <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85 }}>Relatório · BidPro Brasil</div>
-              <div style={{ fontSize:18, fontWeight:900, marginTop:2 }}>Análise Documental e Processo</div>
-              <div style={{ fontSize:12, opacity:0.9, marginTop:4 }}>{d.nome||'Imóvel'}{[d.cidade,d.estado].filter(Boolean).length ? ` · ${[d.cidade,d.estado].filter(Boolean).join(', ')}` : ''}</div>
+            <div style={{ background:'linear-gradient(135deg,#0f172a,#1e3a8a)', borderRadius:16, padding:'18px 22px', color:'white', display:'flex', alignItems:'center', justifyContent:'space-between', gap:14, flexWrap:'wrap' }}>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85 }}>Relatório · BidPro Brasil</div>
+                <div style={{ fontSize:18, fontWeight:900, marginTop:2 }}>Análise Documental e Processo</div>
+                <div style={{ fontSize:12, opacity:0.9, marginTop:4 }}>{d.nome||'Imóvel'}{[d.cidade,d.estado].filter(Boolean).length ? ` · ${[d.cidade,d.estado].filter(Boolean).join(', ')}` : ''}</div>
+              </div>
+              {vereditoDoc && (
+                <div style={{ background:vereditoDoc.bg, color:vereditoDoc.c, borderRadius:12, padding:'10px 16px', textAlign:'right', flexShrink:0, maxWidth:280 }}>
+                  <div style={{ fontSize:15, fontWeight:900, letterSpacing:0.3 }}>{vereditoDoc.txt}</div>
+                  <div style={{ fontSize:10.5, fontWeight:600, marginTop:2, lineHeight:1.35, opacity:0.95 }}>{vereditoDoc.sub}</div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1414,11 +1443,19 @@ export default function Analise() {
                     {parecerDocumental.checklist.map((c, i) => {
                       const cor = c.status==='feito' ? '#16a34a' : c.status==='pendente' ? '#d97706' : '#94a3b8';
                       const ic  = c.status==='feito' ? '✓' : c.status==='pendente' ? '⏳' : '—';
+                      // Chip de CONEXÃO/diagnóstico por fonte: deixa claro se a fonte
+                      // respondeu, ficou indisponível agora, ou não havia dado para consultar.
+                      const conn = c.status==='feito' ? { t:'conectado', bg:'#dcfce7', c:'#15803d' }
+                        : c.status==='pendente' ? { t:'indisponível agora', bg:'#fef3c7', c:'#92400e' }
+                        : { t:'sem dado p/ consultar', bg:'#f1f5f9', c:'#64748b' };
                       return (
                         <div key={i} style={{ display:'flex', gap:9, alignItems:'flex-start' }}>
                           <span style={{ color:cor, fontWeight:900, fontSize:13, lineHeight:1.5, flexShrink:0, width:14, textAlign:'center' }}>{ic}</span>
-                          <div style={{ minWidth:0 }}>
-                            <div style={{ fontSize:12.5, fontWeight:700, color:'#111' }}>{c.label}</div>
+                          <div style={{ minWidth:0, flex:1 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                              <div style={{ fontSize:12.5, fontWeight:700, color:'#111' }}>{c.label}</div>
+                              <span style={{ fontSize:10, fontWeight:800, padding:'1px 7px', borderRadius:20, background:conn.bg, color:conn.c }}>{conn.t}</span>
+                            </div>
                             <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.5 }}>{c.detalhe}</div>
                           </div>
                         </div>
