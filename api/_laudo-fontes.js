@@ -74,27 +74,64 @@ export async function consultarCNDT(doc) {
 // matrícula, ex.: AV-9/AV-16). CRÍTICO antes de arrematar — pode bloquear o
 // registro. Portal com captcha → tentativa via Bright Data; resposta não
 // reconhecida vira pendência 48h (NUNCA afirma "livre" no escuro).
+const diligenciaCNIB = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Consulta automática não conclusiva agora (portal com captcha). Confirme em indisponibilidade.org.br com o CPF/CNPJ do executado.' });
 export async function consultarCNIB(doc) {
   const d = soDigitos(doc);
   if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };
-  // O portal da CNIB (indisponibilidade.org.br) é uma SPA protegida por reCAPTCHA:
-  // exige o token do captcha + POST. Um GET simples nunca traz o resultado (só o
-  // "esqueleto" da página). Em vez de gastar requisição do Bright Data e prometer
-  // um retry que não resolve, marcamos como DILIGÊNCIA e o arrematante confirma na
-  // fonte oficial. Automação real exige Bright Data Web Unlocker (JS+captcha) ou
-  // uma API paga de certidões (ver roadmap) — plugável aqui quando decidido.
-  return { ok: false, instavel: false, diligencia: true, erro: 'Consulta automática indisponível nesta fonte (portal com captcha). Confirme em indisponibilidade.org.br com o CPF/CNPJ do executado.' };
+  // CNIB (indisponibilidade.org.br): SPA com reCAPTCHA. O Bright Data Web Unlocker
+  // renderiza o JS e resolve o captcha; a página busca pelo ?documento= e mostra o
+  // resultado. Logamos a resposta crua para calibrar o parser (e caímos em
+  // diligência honesta se não reconhecer). Roda como fonte 'certidao'.
+  const url = `https://www.indisponibilidade.org.br/consulta?documento=${d}`;
+  try {
+    const bd = await fetchViaBrightData(url, { proposito: 'certidao', headers: { Accept: 'text/html,application/json', Referer: 'https://www.indisponibilidade.org.br/' } });
+    if (!bd || !bd.ok) { console.log(`[CNIB] unlocker sem resposta ok=${bd?.ok}`); return diligenciaCNIB(); }
+    const txt = await bd.text().catch(() => '');
+    console.log(`[CNIB] unlocker status=${bd.status} len=${txt.length} amostra="${txt.slice(0, 400).replace(/\s+/g, ' ')}"`);
+    if (!txt) return diligenciaCNIB();
+    let qtd = null;
+    try { const j = JSON.parse(txt); const arr = j?.ordens || j?.indisponibilidades || j?.registros || j?.data || j?.result || []; qtd = Array.isArray(arr) ? arr.length : (typeof j?.total === 'number' ? j.total : null); } catch { /* HTML */ }
+    if (qtd == null) {
+      if (/nenhuma\s+indisponibilidade|n[ãa]o\s+(constam?|foram\s+encontrad|h[áa])\b[^.]{0,40}indisponibil|sem\s+(registro|indisponibil)|nada\s+consta|nenhum\s+registro\s+encontrad/i.test(txt)) qtd = 0;
+      else if (/ordem\s+de\s+indisponibilidade|indisponibilidade\s+ativa|bens?\s+indispon[íi]ve|constam?\s+indisponibil/i.test(txt)) qtd = 1;
+    }
+    if (qtd == null) return diligenciaCNIB();
+    return {
+      ok: true, instavel: false,
+      resumo: qtd > 0 ? `⚠️ Indisponibilidade de bens ENCONTRADA (${qtd} registro(s)) — bloqueia/atrasa o registro; checar antes de arrematar` : 'Sem indisponibilidade de bens (CNIB)',
+      dados: { total: qtd, tem_indisponibilidade: qtd > 0 },
+    };
+  } catch (e) { console.warn(`[CNIB] erro ${e?.message}`); return diligenciaCNIB(); }
 }
 
 // ── CENPROT — Protestos em cartório (nacional) ─────────────────────────────────
 // Protestos no CPF/CNPJ do vendedor → solvência. Portal com captcha/login →
 // tentativa via Bright Data; senão, pendência 48h.
+const diligenciaCENPROT = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Consulta automática não conclusiva agora (portal com captcha). Confirme no CENPROT (resolve.cenprot.org.br) com o CPF/CNPJ do executado.' });
 export async function consultarProtestos(doc) {
   const d = soDigitos(doc);
   if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };
-  // O CENPROT (resolve.cenprot.org.br) é uma SPA com captcha: o GET público só
-  // devolve o app, não a lista de protestos. Mesma decisão da CNIB: marcamos como
-  // DILIGÊNCIA em vez de fingir tentativa. (Automação real: Bright Data Web
-  // Unlocker ou API paga de certidões — plugável aqui.)
-  return { ok: false, instavel: false, diligencia: true, erro: 'Consulta automática indisponível nesta fonte (portal com captcha). Confirme no CENPROT (resolve.cenprot.org.br) com o CPF/CNPJ do executado.' };
+  // CENPROT (resolve.cenprot.org.br): SPA com captcha. Via Web Unlocker (JS+captcha).
+  // A API interna costuma responder JSON com a lista de cartórios/protestos. Logamos
+  // a resposta crua para calibrar; diligência honesta se não reconhecer.
+  const url = `https://resolve.cenprot.org.br/app/public/search?documento=${d}`;
+  try {
+    const bd = await fetchViaBrightData(url, { proposito: 'certidao', headers: { Accept: 'application/json,text/html', Referer: 'https://resolve.cenprot.org.br/' } });
+    if (!bd || !bd.ok) { console.log(`[CENPROT] unlocker sem resposta ok=${bd?.ok}`); return diligenciaCENPROT(); }
+    const txt = await bd.text().catch(() => '');
+    console.log(`[CENPROT] unlocker status=${bd.status} len=${txt.length} amostra="${txt.slice(0, 400).replace(/\s+/g, ' ')}"`);
+    if (!txt) return diligenciaCENPROT();
+    let qtd = null;
+    try { const j = JSON.parse(txt); const arr = j?.cartorios || j?.protestos || j?.data || j?.result || j?.items || []; qtd = Array.isArray(arr) ? arr.length : (typeof j?.total === 'number' ? j.total : (typeof j?.qtdTitulos === 'number' ? j.qtdTitulos : null)); } catch { /* HTML */ }
+    if (qtd == null) {
+      if (/nenhum\s+protesto|n[ãa]o\s+(constam?|foram\s+encontrad)|sem\s+protesto|nada\s+consta|0\s+protesto/i.test(txt)) qtd = 0;
+      else if (/protesto\(s\)\s+encontrad|constam?\s+protesto|t[íi]tulo\(s\)\s+protestad/i.test(txt)) qtd = 1;
+    }
+    if (qtd == null) return diligenciaCENPROT();
+    return {
+      ok: true, instavel: false,
+      resumo: qtd > 0 ? `⚠️ ${qtd} protesto(s) encontrado(s)` : 'Sem protestos (CENPROT)',
+      dados: { total: qtd },
+    };
+  } catch (e) { console.warn(`[CENPROT] erro ${e?.message}`); return diligenciaCENPROT(); }
 }
