@@ -890,6 +890,9 @@ export default function Analise() {
   // reprovado), derivado do nível de risco + pontos de atenção.
   const vereditoDoc = (() => {
     if (!parecerDocumental || parecerDocumental.precisaDocumentos) return null;
+    // Preliminar = a IA não conseguiu ler os documentos por completo desta vez. NÃO
+    // damos veredito confiante — sinalizamos que a leitura precisa ser refeita/revisada.
+    if (parecerDocumental.preliminar) return { txt: 'ANÁLISE PRELIMINAR', sub: 'Não foi possível concluir a leitura automática agora — anexe a matrícula/edital em PDF ou revise com um analista', bg: '#e0e7ff', c: '#3730a3' };
     const nr = parecerDocumental.nivelRisco;
     const pa = parecerDocumental.pontosAtencao || {};
     if (nr === 'vermelho' || (pa.altos || 0) > 0) return { txt: 'REPROVADO', sub: 'Alto risco jurídico — resolver os pontos antes de qualquer lance', bg: '#fee2e2', c: '#b91c1c' };

@@ -796,6 +796,10 @@ export default async function handler(req, res) {
     // ou veio curto), sintetiza um parecer preliminar determinístico com o que temos —
     // documentos lidos, dados do registro e diligências pendentes — em vez de um card
     // em branco que quebra a confiança do cliente.
+    // PRELIMINAR = a IA não devolveu um parecer real (leitura não concluída / JSON
+    // vazio). Marcamos explicitamente para a tela mostrar "ANÁLISE PRELIMINAR" no
+    // lugar de um veredito confiante (aprovado/reprovado) que não temos base para dar.
+    const preliminar = String(parsed.parecer || '').trim().length < 120;
     let parecerBase = String(parsed.parecer || '').trim();
     if (parecerBase.length < 120) {
       const exx = parsed.extracao || {};
@@ -818,6 +822,7 @@ export default async function handler(req, res) {
       lacunas: parsed.lacunas || [],
       nivelRisco: parsed.nivelRisco || (temProc ? cnj.parecer?.nivel : null) || 'amarelo',
       diligenciaPendente: !docOk,
+      preliminar,
       parecer: parecerBase + fontesTxt + AVISO_DOCUMENTAL,
       cnj: cnj ? { total: cnj.total, parecer: cnj.parecer, processos: cnj.processos?.slice(0, 12) || [], tribunais: cnj.tribunais_consultados } : null,
       fontesExternas,
