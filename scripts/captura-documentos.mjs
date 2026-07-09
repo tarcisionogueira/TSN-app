@@ -41,13 +41,26 @@ async function salvarAnexo(imovelId, buffer, tipo, nome) {
 }
 
 async function baixarPdf(page, url) {
+  // Baixa via fetch DENTRO da página (usa a sessão/cookies já validados e evita o
+  // net::ERR_ABORTED que o page.goto() dá ao "navegar" para um PDF — o Chrome tenta
+  // BAIXAR o arquivo em vez de abrir, e o goto falhava mesmo com o PDF real).
   try {
-    const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-    if (!resp || resp.status() >= 400) return null;
-    const ct = (resp.headers()['content-type'] || '').toLowerCase();
-    if (!ct.includes('pdf')) return null;
-    const buf = Buffer.from(await resp.buffer());
-    return buf.length > 1500 ? buf : null;
+    const res = await page.evaluate(async (u) => {
+      try {
+        const r = await fetch(u, { credentials: 'include' });
+        if (!r.ok) return null;
+        const ct = (r.headers.get('content-type') || '').toLowerCase();
+        const bytes = new Uint8Array(await r.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return { ct, b64: btoa(bin), len: bytes.length };
+      } catch { return null; }
+    }, url);
+    if (!res || res.len < 1500) return null;
+    const buf = Buffer.from(res.b64, 'base64');
+    // Aceita application/pdf OU assinatura %PDF (CDNs às vezes mandam octet-stream).
+    const ehPdf = res.ct.includes('pdf') || buf.slice(0, 5).toString('latin1') === '%PDF-';
+    return ehPdf ? buf : null;
   } catch { return null; }
 }
 
