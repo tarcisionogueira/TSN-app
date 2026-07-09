@@ -83,23 +83,43 @@ async function processar(browser, item) {
   // Abre a página do lote (link_edital costuma ser a página; ou os links diretos).
   const paginaLote = ehUrl(im.link_edital) ? im.link_edital : (ehUrl(im.link_regras_venda) ? im.link_regras_venda : null);
   if (paginaLote) {
-    try { await page.goto(paginaLote, { waitUntil: 'networkidle2', timeout: 30000 }); await new Promise(r => setTimeout(r, 1500)); } catch { /* segue */ }
+    try {
+      await page.goto(paginaLote, { waitUntil: 'networkidle2', timeout: 45000 });
+      // Anti-bot (Cloudflare "just a moment"): espera o desafio JS resolver e o
+      // conteúdo real carregar, senão varremos a página de bloqueio (0 documentos).
+      await page.waitForFunction(() => {
+        const t = document.body?.innerText || '';
+        if (/just a moment|um momento|verificando|attention required|checking your browser/i.test(t)) return false;
+        return document.querySelectorAll('a[href]').length > 5;
+      }, { timeout: 12000 }).catch(() => {});
+      await new Promise(r => setTimeout(r, 1500));
+    } catch { /* segue */ }
   }
 
-  // 2) Links de PDF na página renderizada.
+  // 2) Links de PDF/documento na página renderizada (rótulo OU extensão).
   let linksPdf = [];
   try {
     linksPdf = await page.evaluate(() => Array.from(document.querySelectorAll('a[href]'))
       .map(a => ({ href: a.href, txt: (a.textContent || '').trim().slice(0, 80) }))
-      .filter(x => /\.pdf(\?|#|$)/i.test(x.href) || /edital|matr[ií]cula|laudo|documento|anexo/i.test(x.txt)));
+      .filter(x => /\.pdf(\?|#|$)/i.test(x.href) || /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(x.txt + ' ' + x.href)));
   } catch { /* sem links */ }
+
+  // DIAGNÓSTICO p/ calibrar leiloeiros anti-bot (aparece nos logs do GitHub Actions).
+  try {
+    const diag = await page.evaluate(() => ({ title: document.title.slice(0, 70), len: (document.body?.innerText || '').length }));
+    console.log(`[docs] ${item.imovel_id} ${im.fonte || ''}: title="${diag.title}" bodyLen=${diag.len} candidatos=${linksPdf.length} rede=${pdfsRede.length}${linksPdf.length ? ' :: ' + linksPdf.slice(0, 6).map(l => `${l.txt}->${l.href}`).join(' | ').slice(0, 500) : ''}`);
+  } catch { /* */ }
 
   // Guarda os PDFs que já vieram pela rede.
   for (const p of pdfsRede) { try { await salvar(p.buf, p.url, ''); } catch { /* */ } }
-  // Baixa os links de PDF encontrados (até 4 tipos).
+  // Baixa os candidatos: .pdf direto OU link ROTULADO como documento (mesmo sem a
+  // extensão .pdf — muitos leiloeiros servem o edital/matrícula por uma rota).
+  // baixarPdf só salva se a resposta for REALMENTE application/pdf (filtra HTML/rotas).
   for (const l of linksPdf) {
     if (salvos.size >= 4) break;
-    if (!/\.pdf(\?|#|$)/i.test(l.href)) continue;
+    const ehPdfHref = /\.pdf(\?|#|$)/i.test(l.href);
+    const ehDocTxt = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(l.txt + ' ' + l.href);
+    if (!ehPdfHref && !ehDocTxt) continue;
     const buf = await baixarPdf(page, l.href);
     if (buf) { try { await salvar(buf, l.href, l.txt); } catch { /* */ } }
   }
