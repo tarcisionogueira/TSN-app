@@ -28,16 +28,22 @@ function classificar(url, nome = '') {
   return 'outro';
 }
 
-async function salvarAnexo(imovelId, buffer, tipo, nome) {
-  const path = `casos/${imovelId}/${tipo}_auto_${Date.now()}.pdf`;
+async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0) {
+  const path = `casos/${imovelId}/${tipo}_auto_${Date.now()}_${idx}.pdf`;
   const up = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: 'application/pdf', upsert: true });
   if (up.error) throw new Error('upload: ' + up.error.message);
   const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
   const url = signed.data?.signedUrl || null;
   const row = { imovel_id: imovelId, tipo, nome, url, storage_path: path, tamanho_kb: Math.round(buffer.length / 1024), role_criador: 'sistema' };
-  const { data: existente } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('tipo', tipo).limit(1);
-  if (existente?.length) await supabase.from('imovel_anexos').update(row).eq('id', existente[0].id);
-  else await supabase.from('imovel_anexos').insert(row);
+  // Classificados (edital/matrícula/laudo/regras): 1 por tipo → atualiza o existente.
+  // 'outro' é GENÉRICO e pode haver VÁRIOS docs distintos do lote (edital+matrícula
+  // que não classificaram) — sempre INSERE, senão o 2º sobrescrevia o 1º e um doc
+  // sumia (era a causa de "edital não veio" no SUPERBID: baixado e descartado).
+  if (tipo !== 'outro') {
+    const { data: existente } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('tipo', tipo).limit(1);
+    if (existente?.length) { await supabase.from('imovel_anexos').update(row).eq('id', existente[0].id); return; }
+  }
+  await supabase.from('imovel_anexos').insert(row);
 }
 
 const ehPdfBuf = (buf, ct) => buf && buf.length > 1500 && ((ct || '').includes('pdf') || buf.slice(0, 5).toString('latin1') === '%PDF-');
@@ -92,12 +98,19 @@ async function processar(browser, item) {
   });
 
   const capturados = [];
-  const salvos = new Set();
+  const salvos = new Set();     // tipos CLASSIFICADOS já salvos (1 por tipo)
+  const urlsSalvas = new Set(); // evita baixar/salvar a MESMA URL duas vezes
+  let nOutro = 0;               // índice p/ vários 'outro' (paths únicos)
   const salvar = async (buf, url, nome) => {
+    if (urlsSalvas.has(url)) return;
     const tipo = classificar(url, nome);
-    if (salvos.has(tipo)) return; // um por tipo
-    await salvarAnexo(item.imovel_id, buf, tipo, nome || `${tipo}.pdf`);
-    salvos.add(tipo); capturados.push(tipo);
+    // Classificados: 1 por tipo. 'outro' é genérico → pode haver vários (edital +
+    // matrícula que não classificaram); cada um vira uma linha própria.
+    if (tipo !== 'outro' && salvos.has(tipo)) return;
+    await salvarAnexo(item.imovel_id, buf, tipo, nome || `${tipo}.pdf`, tipo === 'outro' ? ++nOutro : 0);
+    urlsSalvas.add(url);
+    if (tipo !== 'outro') salvos.add(tipo);
+    capturados.push(tipo);
   };
 
   // Abre a página do lote (link_edital costuma ser a página; ou os links diretos).
@@ -113,6 +126,30 @@ async function processar(browser, item) {
         return document.querySelectorAll('a[href]').length > 5;
       }, { timeout: 12000 }).catch(() => {});
       await new Promise(r => setTimeout(r, 1500));
+      // CONTRAMEDIDA (docs atrás de aba/acordeão): muitos leiloeiros — SUPERBID em
+      // especial — escondem edital/matrícula/anexos numa aba ("Documentos", "Edital
+      // e Regulamento", "Habilitação") ou num acordeão que só renderiza os links ao
+      // clicar. Aqui expandimos esses gatilhos (botões/abas/summary — NUNCA <a> que
+      // navega para outra página) e rolamos a página para disparar carregamento lazy.
+      try {
+        await page.evaluate(async () => {
+          const rx = /documento|edital|anexo|habilita|regulamento|matr[ií]cula|arquivo|download|leil[ãa]o|condi[çc]/i;
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const cliqueis = Array.from(document.querySelectorAll(
+            'button, summary, [role="tab"], [role="button"], [aria-controls], .tab, .accordion, .accordion-header, .nav-link, li[data-toggle], a[href="#"], a[href^="javascript"]'
+          ));
+          let cliques = 0;
+          for (const el of cliqueis) {
+            if (cliques >= 12) break;
+            const txt = (el.getAttribute('aria-label') || el.textContent || '').trim();
+            if (!rx.test(txt) || txt.length > 60) continue;
+            try { el.click(); cliques++; await sleep(400); } catch { /* */ }
+          }
+          // rola até o fim para carregar seções lazy
+          for (let y = 0; y < 4; y++) { window.scrollTo(0, document.body.scrollHeight * (y + 1) / 4); await sleep(300); }
+        });
+        await new Promise(r => setTimeout(r, 1200));
+      } catch { /* segue */ }
     } catch { /* segue */ }
   }
 
@@ -156,7 +193,7 @@ async function processar(browser, item) {
   // extensão .pdf — muitos leiloeiros servem o edital/matrícula por uma rota).
   // baixarPdf só salva se a resposta for REALMENTE application/pdf (filtra HTML/rotas).
   for (const l of linksPdf) {
-    if (salvos.size >= 4) break;
+    if (capturados.length >= 8) break; // teto de segurança (não só 4 tipos — vários 'outro')
     const alvo = l.txt + ' ' + (l.ctx || '') + ' ' + l.href;
     const ehPdfHref = /\.pdf(\?|#|$)/i.test(l.href);
     const ehDocTxt = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(alvo);
@@ -171,7 +208,7 @@ async function processar(browser, item) {
   }
   // Também os anexos que o scrape já tinha registrado como URL (baixa e guarda).
   for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) {
-    if (salvos.size >= 4) break;
+    if (capturados.length >= 8) break;
     if (!ehUrl(a?.url)) continue;
     const buf = await baixarPdf(page, a.url, paginaLote);
     if (buf) { try { await salvar(buf, a.url, a.nome || ''); } catch { /* */ } }

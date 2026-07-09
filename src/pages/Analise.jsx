@@ -1087,10 +1087,17 @@ export default function Analise() {
               // CONTRAMEDIDA (docs capturados que não classificaram): alguns leiloeiros
               // servem edital/matrícula por URLs OPACAS (hash, sem "edital"/"matric" no
               // nome — ex.: SUPERBID s.superbid.net/attachment/...pdf). O capturador
-              // salva como tipo 'outro'. Antes esses PDFs ficavam ESCONDIDOS e o
-              // edital/matrícula caíam no link "no site". Aqui listamos TODO anexo
-              // capturado que ainda não apareceu — nada fica atrás de um link do site.
+              // salva como tipo 'outro'. Antes esses PDFs ficavam ESCONDIDOS. Aqui
+              // listamos TODO PDF capturado que ainda não apareceu, com rótulo LIMPO
+              // (nunca a URL crua) — nada fica atrás de um link do site.
               const urlsMostradas = new Set(docsView.map(d => d.fileUrl).filter(Boolean));
+              // Rótulo humano: só usa o "nome" se for texto de verdade (não URL, path
+              // ou nome de arquivo tipo "1727787880704.pdf"); senão, rótulo genérico.
+              const nomeLimpo = (n) => {
+                const s = (n || '').trim();
+                if (!s || /https?:|\/|\.pdf$|^\d[\d._-]*$/i.test(s) || !/[a-zà-ú]{3}/i.test(s)) return null;
+                return s.slice(0, 48);
+              };
               const todosAnexos = [...docsLeiloeiro, ...anexosScrape];
               const extras = [];
               const vistos = new Set();
@@ -1100,26 +1107,43 @@ export default function Analise() {
                 // já contemplado pelos tópicos padrão? (evita duplicar laudo/edital/etc.)
                 if (topicos.includes(a.tipo) && docsView.find(d => d.t === a.tipo)?.fileUrl) continue;
                 vistos.add(u);
-                const rot = docMap[a.tipo] || (a.nome && !/^https?:/i.test(a.nome) ? a.nome : 'Documento do lote');
-                extras.push({ t: `extra_${extras.length}`, label: rot, url: u, fileUrl: u, viaPagina: false });
+                const rot = docMap[a.tipo] || nomeLimpo(a.nome) || `Documento do lote${extras.length ? ' ' + (extras.length + 1) : ''}`;
+                extras.push({ t: `extra_${extras.length}`, label: rot, url: u, fileUrl: u });
               }
-              const docsFinal = [...docsView, ...extras];
+              // Quando HÁ PDFs capturados sem classificação (extras), o "no site" por
+              // tópico vira enganoso: aparece "Matrícula → abre o site" AO LADO do PDF
+              // real. Nesses casos escondemos o fallback por tópico e oferecemos UM
+              // link único ao leiloeiro (para o que faltou, ex.: edital não coletado).
+              const temExtras = extras.length > 0;
+              const principais = docsView.filter(d => d.fileUrl || !temExtras);
+              const docsFinal = [...principais, ...extras];
               const algum = docsFinal.some(x => x.url);
+              // Faltou algum doc padrão (sem arquivo) e temos página do leiloeiro?
+              const faltando = docsView.some(d => !d.fileUrl);
               return (
                 <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                   {docsFinal.map(it => it.url ? (
                     <a key={it.t} href={it.url} target="_blank" rel="noreferrer"
-                      style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:8, textDecoration:'none', fontSize:13, fontWeight:600, color:'#0D63DB' }}
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:8, textDecoration:'none', fontSize:13, fontWeight:600, color:'#0D63DB', minWidth:0 }}
                       onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                      <FileText size={14}/> {it.label}
-                      {it.viaPagina && <span style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>no site</span>}
-                      <ExternalLink size={11} style={{ marginLeft:'auto' }}/>
+                      <FileText size={14} style={{ flexShrink:0 }}/>
+                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.label}</span>
+                      {it.viaPagina && <span style={{ fontSize:10, color:'#94a3b8', fontWeight:600, flexShrink:0 }}>no site</span>}
+                      <ExternalLink size={11} style={{ marginLeft:'auto', flexShrink:0 }}/>
                     </a>
                   ) : (
                     <div key={it.t} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', fontSize:13, fontWeight:600, color:'#94a3b8' }}>
-                      <FileText size={14}/> {it.label} <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700 }}>anexe acima ↑</span>
+                      <FileText size={14} style={{ flexShrink:0 }}/> <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.label}</span> <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, flexShrink:0 }}>anexe acima ↑</span>
                     </div>
                   ))}
+                  {/* Link único ao leiloeiro quando escondemos os "no site" por tópico */}
+                  {temExtras && faltando && paginaLeiloeiro && (
+                    <a href={paginaLeiloeiro} target="_blank" rel="noreferrer"
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:8, textDecoration:'none', fontSize:12, fontWeight:600, color:'#64748b' }}
+                      onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                      <ExternalLink size={13} style={{ flexShrink:0 }}/> Ver outros documentos no site do leiloeiro
+                    </a>
+                  )}
                   {!algum && <div style={{ fontSize:11, color:'#94a3b8', marginTop:4, lineHeight:1.4 }}>Sem anexos do leiloeiro para este imóvel.</div>}
                 </div>
               );
