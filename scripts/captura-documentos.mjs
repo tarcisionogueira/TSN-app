@@ -117,7 +117,12 @@ async function processar(browser, item) {
 }
 
 async function main() {
-  const { data: fila } = await supabase.from('documentos_fila').select('*').eq('status', 'pendente').order('criado_em', { ascending: true }).limit(LOTE);
+  // Processa PENDENTES e re-tenta ERROS transitórios (até 4 tentativas) — assim uma
+  // falha momentânea (fonte instável) não deixa o lote sem documentos para sempre.
+  const { data: fila } = await supabase.from('documentos_fila')
+    .select('*')
+    .or('status.eq.pendente,and(status.eq.erro,tentativas.lt.4)')
+    .order('criado_em', { ascending: true }).limit(LOTE);
   if (!fila?.length) { console.log('Fila vazia.'); return; }
   console.log(`Processando ${fila.length} imóvel(is)...`);
 

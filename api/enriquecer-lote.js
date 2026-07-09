@@ -175,6 +175,26 @@ export default async function handler(req, res) {
 
   const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
 
+  // CONTRAMEDIDA: se, mesmo após varrer o HTML, o lote continua SEM documento REAL
+  // (edital/matrícula/anexos em PDF) — típico de leiloeiro anti-bot/JS como a Mega,
+  // onde os PDFs só saem num NAVEGADOR real — enfileira a captura por navegador
+  // (documentos_fila; job a cada 15 min abre a página e baixa os PDFs). Assim, só de
+  // ABRIR o imóvel garantimos a busca dos documentos, sem depender de pedir a análise.
+  // link_edital costuma ser a PÁGINA do lote (não um PDF), por isso não conta como doc.
+  const anexosFinais = patch.anexos || im.anexos || [];
+  const temDocReal = (Array.isArray(anexosFinais) && anexosFinais.length > 0)
+    || /\.pdf(\?|#|$)/i.test(patch.link_matricula || im.link_matricula || '')
+    || /\.pdf(\?|#|$)/i.test(patch.link_regras_venda || im.link_regras_venda || '');
+  if (!temDocReal) {
+    try {
+      await sb('documentos_fila?on_conflict=imovel_id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        body: JSON.stringify({ imovel_id: String(id), status: 'pendente' }),
+      });
+    } catch { /* best-effort — não trava o enriquecimento */ }
+  }
+
   res.status(200).json({
     ok: up.ok, via, alterado: up.ok,
     encontrados: achado.anexos.length,
