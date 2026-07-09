@@ -118,6 +118,9 @@ const CRITERIOS = {
   SODRE:    { min: 10,  valor: 0.80, uf: 0.40, link: 0.9 },
   FRAZAO:   { min: 40,  valor: 0.85, uf: 0.55, link: 0.9 },
   LJUD:     { min: 200, valor: 0.85, uf: 0.55, link: 0.9 },
+  // Imóveis da União (SPU/SERPRO): inventário pequeno e sazonal por sala (o leilão
+  // pode ter poucas dezenas); min baixo para não marcar "degradado" à toa.
+  VENDASGOV:{ min: 3,   valor: 0.60, uf: 0.60, link: 0.9 },
   _default: { min: 10,  valor: 0.70, uf: 0.40, link: 0.8 },
 };
 
@@ -1414,6 +1417,120 @@ async function scraperLJUD_navegador(browser, endpoint) {
   return imoveis;
 }
 
+// ─── VENDASGOV — Imóveis da União (SPU / SERPRO) ──────────────────────────────
+// Portal público do governo federal (imoveis.vendasgov.serpro.gov.br) sobre uma
+// API REST pública. Estrutura confirmada por captura real (debug_fetch): a lista é
+//   GET /api/public/imoveis?size=&page=&sort=itens.edital.dtCertame,asc&sala={subtipo}
+// (dá 500 SEM params). O WAF do SERPRO bloqueia fetch de datacenter (403), então o
+// fetch roda DENTRO da página (TLS de Chrome real) — mesma tática do LJUD. Inventário
+// EXCLUSIVO (imóveis públicos da União/INSS/fundos), não duplica os leiloeiros.
+const VG_BASE = 'https://imoveis.vendasgov.serpro.gov.br';
+// Salas (subtipo) que carregam imóvel VENDÁVEL agora — de /api/salas. Fora: autorizados
+// e emProcesso (ainda não à venda), vendido (já vendido).
+const VG_SALAS = ['leilao', 'concorrencia', 'venda', 'pai', 'fundo'];
+
+function parseDataVG(s) {
+  if (!s || typeof s !== 'string') return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const ano = Number(m[1]);
+  if (ano < 2020 || ano > 2035) return null;
+  return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00-03:00`; // sessão em BRT
+}
+
+function mapImovelVG(it) {
+  const e = it.endereco || {};
+  const uf = String(e.estado || '').toUpperCase().slice(0, 2);
+  const cidade = toTitleCase(String(e.cidade || '').trim());
+  const valor = Number(it.valor) || 0;
+  // Foto de capa: o JSON traz src="/public/imoveis/{id}/fotos/{arquivo}"; a URL real
+  // é host + /api + src (espaços no nome do arquivo → encodeURI).
+  const fotos = Array.isArray(it.fotos) ? it.fotos : [];
+  const capa = fotos.find(f => f && f.capa) || fotos[0] || null;
+  const linkFoto = capa && capa.src ? `${VG_BASE}/api${encodeURI(capa.src)}` : null;
+  const salaSub = it.sala && it.sala.subtipo ? it.sala.subtipo : '';
+  // União: "leilao" = leilão administrativo (não judicial); demais = venda direta.
+  const modalidade = salaSub === 'leilao' ? 'extrajudicial' : 'venda_direta';
+  const orgao = (it.orgao && it.orgao.sigla) || (it.entidadeProprietaria && it.entidadeProprietaria.nome) || 'União';
+  // Página pública de detalhe do imóvel — alvo da captura multi-rota de documentos
+  // (edital/laudo/matrícula) feita pelo enriquecerDocumentosLote no navegador real.
+  const detalhe = `${VG_BASE}/imovel/${it.id}/${it.idItemEdital}`;
+  const endereco = String(e.completo || [e.logradouro, e.numero, e.bairro].filter(Boolean).join(', ')).slice(0, 500);
+  return {
+    fonte: 'VENDASGOV',
+    fonte_id: `vendasgov_${it.id}`,
+    titulo: [it.tipoImovel && it.tipoImovel.nome, cidade && uf ? `${cidade}/${uf}` : ''].filter(Boolean).join(' — ').slice(0, 180) || `Imóvel da União ${it.id}`,
+    tipo: normalizarTipo((it.tipoImovel && it.tipoImovel.nome) || ''),
+    modalidade,
+    estado: uf,
+    cidade,
+    bairro: String(e.bairro || '').slice(0, 200),
+    endereco,
+    cep: String(e.cep || '').replace(/\D/g, '').slice(0, 8) || null,
+    valor_avaliacao: 0, // a API não separa avaliação de valor de venda
+    valor_minimo: valor,
+    area_m2: 0,
+    descricao: [it.tipoImovel && it.tipoImovel.nome, endereco, `Órgão: ${orgao}`, salaSub === 'leilao' ? 'Leilão da União' : 'Venda direta da União'].filter(Boolean).join(' — ').slice(0, 500),
+    link_edital: detalhe,
+    url_lote: detalhe,
+    link_foto: linkFoto,
+    leiloeiro: `Imóveis da União — ${orgao}`.slice(0, 120),
+    data_leilao: parseDataVG(it.dataSessao),
+    forma_pagamento: 'a_vista',
+  };
+}
+
+async function scraperVendasGov(browser) {
+  console.log('  Imóveis da União (VendasGov/SPU) — API pública via navegador (TLS Chrome)...');
+  const page = await browser.newPage();
+  const bens = new Map();
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+    // Carrega a home para ganhar contexto/origin — o WAF barra navegação/fetch "cru".
+    await page.goto(`${VG_BASE}/leilao`, { waitUntil: 'networkidle2', timeout: 45000 });
+    await new Promise(r => setTimeout(r, 2000));
+
+    for (const sala of VG_SALAS) {
+      let totalPages = 1;
+      for (let pg = 0; pg < totalPages && pg < 80; pg++) {
+        const url = `${VG_BASE}/api/public/imoveis?size=48&page=${pg}&sort=itens.edital.dtCertame,asc&sala=${sala}`;
+        const data = await page.evaluate(async (u) => {
+          try {
+            const r = await fetch(u, { headers: { Accept: 'application/json' } });
+            if (!r.ok) return { __status: r.status };
+            return await r.json();
+          } catch (e) { return { __err: String((e && e.message) || e) }; }
+        }, url).catch(() => null);
+        const items = (data && Array.isArray(data.content)) ? data.content : [];
+        if (pg === 0) {
+          totalPages = Math.min(80, Number(data && data.totalPages) || 1);
+          console.log(`    VendasGov/${sala}: ${data && data.totalElements != null ? data.totalElements : '?'} imóveis em ${totalPages} página(s) [status=${data && data.__status ? data.__status : 200}]`);
+          if (!items.length) break;
+        }
+        if (!items.length) break;
+        for (const it of items) {
+          if (it && it.vendido) continue;             // pula já vendidos
+          const id = String(it && it.id != null ? it.id : '');
+          if (id && !bens.has(id)) bens.set(id, it);
+        }
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+  } finally { await page.close().catch(() => {}); }
+
+  const seen = new Set();
+  const imoveis = [];
+  for (const it of bens.values()) {
+    const row = mapImovelVG(it);
+    if (!row.valor_minimo || !row.estado || seen.has(row.fonte_id)) continue;
+    seen.add(row.fonte_id);
+    imoveis.push(row);
+  }
+  console.log(`    VendasGov: ${imoveis.length} imóveis mapeados (${bens.size} colhidos)`);
+  return imoveis;
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -1562,6 +1679,19 @@ async function main() {
       ]);
       total += await salvarEFinalizar(imoveis, 'LJUD');
       await registrarSaude('LJUD', imoveis, estrategia, validacao);
+    }
+
+    // 8. Imóveis da União (VendasGov / SPU-SERPRO) — API pública, inventário
+    // EXCLUSIVO (não duplica leiloeiros). Captura multi-rota de documentos: a foto
+    // (capa) vem direto da API; edital/laudo/matrícula são vasculhados na página de
+    // detalhe renderizada (enriquecerDocumentosLote), igual ao fluxo do Mega.
+    console.log('\n📋 Imóveis da União (VendasGov)...');
+    {
+      const imoveis = await scraperVendasGov(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos VendasGov falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'VENDASGOV');
+      await registrarSaude('VENDASGOV', imoveis, 'principal', validarColeta(imoveis, 'VENDASGOV'));
     }
 
   } finally {
