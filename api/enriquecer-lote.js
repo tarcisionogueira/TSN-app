@@ -135,6 +135,20 @@ export default async function handler(req, res) {
   const ehVendaDireta = /venda[_ ]?direta/i.test(im.modalidade || '');
   const precisaData = !im.data_leilao && !ehVendaDireta; // leilão de leiloeiro sem data → também busca
   const enriqRecente = im.enriquecido_em && (Date.now() - new Date(im.enriquecido_em).getTime() < 12 * 3600 * 1000);
+  // Enfileira a captura por navegador SEMPRE que ABREM um lote de leiloeiro sem
+  // documento REAL (PDF) — inclusive quando o scrape de HTML é pulado pelo throttle
+  // de 12h (era o buraco: um lote que falhou o scrape ficava travado sem captura).
+  // On-demand por interesse: só o que alguém abre entra na fila. Idempotente.
+  const temDocRealAgora = /\.pdf(\?|#|$)/i.test(im.link_matricula || '')
+    || /\.pdf(\?|#|$)/i.test(im.link_regras_venda || '')
+    || (Array.isArray(im.anexos) && im.anexos.length > 0);
+  const alvoLote = im.url_lote || im.link_edital;
+  if (!temDocRealAgora && /^https?:\/\//.test(String(alvoLote || ''))) {
+    try {
+      await sb('documentos_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(id), status: 'pendente' }) });
+    } catch { /* best-effort */ }
+  }
+
   // Pula só quando já tem tudo (docs E data) ou tentou há pouco (throttle de 12h).
   if (!forcar && ((temDocs && !precisaData) || enriqRecente)) {
     res.status(200).json({ ok: true, pulado: (temDocs && !precisaData) ? 'ja_completo' : 'tentado_recente', alterado: false, anexos: im.anexos || [] }); return;
@@ -174,26 +188,6 @@ export default async function handler(req, res) {
   }
 
   const up = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
-
-  // CONTRAMEDIDA: se, mesmo após varrer o HTML, o lote continua SEM documento REAL
-  // (edital/matrícula/anexos em PDF) — típico de leiloeiro anti-bot/JS como a Mega,
-  // onde os PDFs só saem num NAVEGADOR real — enfileira a captura por navegador
-  // (documentos_fila; job a cada 15 min abre a página e baixa os PDFs). Assim, só de
-  // ABRIR o imóvel garantimos a busca dos documentos, sem depender de pedir a análise.
-  // link_edital costuma ser a PÁGINA do lote (não um PDF), por isso não conta como doc.
-  const anexosFinais = patch.anexos || im.anexos || [];
-  const temDocReal = (Array.isArray(anexosFinais) && anexosFinais.length > 0)
-    || /\.pdf(\?|#|$)/i.test(patch.link_matricula || im.link_matricula || '')
-    || /\.pdf(\?|#|$)/i.test(patch.link_regras_venda || im.link_regras_venda || '');
-  if (!temDocReal) {
-    try {
-      await sb('documentos_fila?on_conflict=imovel_id', {
-        method: 'POST',
-        headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
-        body: JSON.stringify({ imovel_id: String(id), status: 'pendente' }),
-      });
-    } catch { /* best-effort — não trava o enriquecimento */ }
-  }
 
   res.status(200).json({
     ok: up.ok, via, alterado: up.ok,
