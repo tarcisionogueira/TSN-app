@@ -16,13 +16,29 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 4 — recon dos leiloeiros na fila (MGL, CCJ, Biasi, Destak) ===
+  // === Round 5 — fontes de BAIXA complexidade a integrar ===
   // Navegador real renderiza o SPA, intercepta as APIs XHR JSON e mede seletores
   // do DOM — base para escrever os parsers definitivos de cada um.
-  { fonte: 'MGL',    url: 'https://www.mgl.com.br/lotes/imoveis' },
-  { fonte: 'CCJ',    url: 'https://www.ccjleiloes.com.br/lotes' },
-  { fonte: 'BIASI',  url: 'https://www.biasileiloes.com.br/imoveis' },
-  { fonte: 'DESTAK', url: 'https://www.destakleiloes.com.br/proximos_leiloes/1/1/' },
+  //
+  // VendasGov (Imóveis da União / SPU-SERPRO): SPA sobre API pública /api/public.
+  // O WAF do SERPRO bloqueia fetch de datacenter (curl/Node dão 403), mas o
+  // fetch DENTRO da página (TLS de Chrome real) passa — mesma tática do LJUD.
+  // Passamos várias sondas de API porque a rota exata é desconhecida; a
+  // interceptação de XHR também captura a real automaticamente.
+  { fonte: 'VENDASGOV', url: 'https://imoveis.vendasgov.serpro.gov.br/leilao', inPageApis: [
+    'https://imoveis.vendasgov.serpro.gov.br/api/public/leiloes',
+    'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis',
+    'https://imoveis.vendasgov.serpro.gov.br/api/public/lotes',
+    'https://imoveis.vendasgov.serpro.gov.br/api/public/itens',
+    'https://imoveis.vendasgov.serpro.gov.br/api/public/editais',
+  ] },
+  // Leiloeiros individuais da cauda longa (padrão já dominado). URLs de listagem
+  // best-guess — a interceptação + domstats revelam a estrutura real mesmo se
+  // a rota redirecionar para a home.
+  { fonte: 'OESTE',   url: 'https://www.oesteleiloes.com.br/imoveis' },
+  { fonte: 'PESTANA', url: 'https://www.pestanaleiloes.com.br/lotes/imoveis' },
+  { fonte: 'VIP',     url: 'https://www.leilaovip.com.br/imoveis' },
+  { fonte: 'BIASI',   url: 'https://www.biasileiloes.com.br/imoveis' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
@@ -34,7 +50,7 @@ async function gravarDebug(fonte, url, status, contentType, conteudo) {
   else console.log(`  gravado ${fonte} (${txt.length} chars)`);
 }
 
-async function capturar(browser, { fonte, url, inPageApi }) {
+async function capturar(browser, { fonte, url, inPageApi, inPageApis }) {
   console.log(`\n=== ${fonte} → ${url}`);
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
@@ -59,17 +75,36 @@ async function capturar(browser, { fonte, url, inPageApi }) {
   }
   await new Promise(r => setTimeout(r, 6000));
 
-  // Fetch de API dentro do contexto da página (carrega Origin/Referer corretos —
-  // vários endpoints retornam 405 se acessados por navegação direta).
-  if (inPageApi) {
+  // Autoscroll: dispara lazy-load/paginação-ao-rolar de SPAs (o catálogo às vezes
+  // só busca a API quando a lista entra em viewport). Best-effort.
+  try {
+    await page.evaluate(async () => {
+      for (let i = 0; i < 6; i++) {
+        window.scrollTo(0, document.body.scrollHeight);
+        await new Promise(r => setTimeout(r, 800));
+      }
+      window.scrollTo(0, 0);
+    });
+    await new Promise(r => setTimeout(r, 2500));
+  } catch { /* ok */ }
+
+  // Fetch de API dentro do contexto da página (usa o TLS/fingerprint do Chrome real
+  // e carrega Origin/Referer corretos — vários endpoints/WAFs dão 403/405 a fetch
+  // de datacenter ou navegação direta). Aceita uma única (inPageApi) ou várias
+  // sondas (inPageApis) quando a rota exata ainda é desconhecida.
+  const apis = [...(inPageApis || []), ...(inPageApi ? [inPageApi] : [])];
+  for (let i = 0; i < apis.length; i++) {
+    const u = apis[i];
     try {
-      const apiTxt = await page.evaluate(async (u) => {
-        const r = await fetch(u, { headers: { 'Accept': 'application/json' }, credentials: 'include' });
-        return await r.text();
-      }, inPageApi);
-      await gravarDebug(`${fonte}-api`, inPageApi, 200, 'application/json', apiTxt);
-      console.log(`  inPageApi ${fonte}: ${String(apiTxt).length} chars`);
-    } catch (e) { console.log(`  inPageApi falhou: ${e.message.slice(0, 80)}`); }
+      const res = await page.evaluate(async (url) => {
+        try {
+          const r = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
+          return { status: r.status, ct: r.headers.get('content-type') || '', text: await r.text() };
+        } catch (e) { return { status: 0, ct: '', text: `__err: ${String((e && e.message) || e)}` }; }
+      }, u);
+      await gravarDebug(`${fonte}-api-${i + 1}`, u, res.status, res.ct || 'application/json', res.text);
+      console.log(`  inPageApi ${fonte} [${res.status}] ${String(res.text).length}b ${u.slice(0, 90)}`);
+    } catch (e) { console.log(`  inPageApi falhou (${u.slice(0, 60)}): ${e.message.slice(0, 60)}`); }
   }
 
   // DOM renderizado
