@@ -148,15 +148,19 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro) {
   // por cidade selecionada). Ignorado quando nenhuma cidade está selecionada.
   if (f.bairros?.length && cidadesFiltro?.length) q = q.in('bairro', f.bairros);
   if (f.pagamento?.length > 0) {
-    // 'financiado' e 'hipotecado' são a mesma forma_pagamento ('financiado' =
-    // aceita parcelamento), separadas pela modalidade: financiado = parcelável
-    // NÃO-judicial; hipotecado = parcelável judicial (art. 895). Mesma lógica da
-    // RPC buscar_por_raio_v2 — os dois caminhos precisam concordar.
+    // Buckets por MODALIDADE (mutuamente exclusivos), do jeito que o usuário pensa:
+    //  • hipotecado = leilão JUDICIAL (arrematação parcelável por art. 895 CPC — o
+    //    edital pode restringir, mas o padrão legal é permitir; NÃO é "à vista").
+    //    O scraper marca todo judicial como forma_pagamento='a_vista' (o parcelamento
+    //    só consta no edital), então aqui a chave é a MODALIDADE, não forma_pagamento.
+    //  • financiado = NÃO-judicial com forma_pagamento='financiado' (Caixa/venda direta).
+    //  • a_vista    = NÃO-judicial pago à vista.
+    // Mesma lógica da RPC buscar_por_raio_v2 — os dois caminhos precisam concordar.
     const canon = pagamentoParaCanon(f.pagamento); // ['a_vista'|'financiado'|'hipotecado']
     const ors = [];
-    if (canon.includes('a_vista'))    ors.push('forma_pagamento.eq.a_vista');
+    if (canon.includes('a_vista'))    ors.push('and(forma_pagamento.eq.a_vista,or(modalidade.neq.judicial,modalidade.is.null))');
     if (canon.includes('financiado')) ors.push('and(forma_pagamento.eq.financiado,or(modalidade.neq.judicial,modalidade.is.null))');
-    if (canon.includes('hipotecado')) ors.push('and(forma_pagamento.eq.financiado,modalidade.eq.judicial)');
+    if (canon.includes('hipotecado')) ors.push('or(modalidade.eq.judicial,forma_pagamento.eq.hipotecado)');
     if (ors.length) q = q.or(ors.join(','));
   }
   return q;

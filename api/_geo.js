@@ -263,7 +263,12 @@ export async function geocoderPago(enderecoCompleto) {
 export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1100 } = {}) {
   const { endereco, bairro, cidade, estado, cep } = im;
   const ufNome = UFS[String(estado || '').trim().toUpperCase()]?.nome || estado;
-  const aceita = (c) => (c && coordValida(c.lat, c.lng, estado, cidade) ? c : null);
+  // Tolerância ao centróide do município POR PRECISÃO. Antes era 80 km fixo — frouxo
+  // demais: um BAIRRO homônimo em OUTRO município (ex.: "Vila N. Sra. de Fátima" de
+  // São Vicente caindo a 55 km, perto de Barueri) passava e o imóvel aparecia na
+  // cidade errada. Providers precisos (Google) toleram mais (endereço real distante
+  // em município grande); as rotas gratuitas propensas a homônimo são apertadas.
+  const aceita = (c, maxKm = 40) => (c && coordValida(c.lat, c.lng, estado, cidade, maxKm) ? c : null);
   const pausa = () => (sleepMs > 0 ? sleep(sleepMs) : Promise.resolve());
 
   // Nível 0 — GOOGLE (mais preciso no Brasil). Endereço completo em texto; o Google
@@ -274,7 +279,7 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
     bairro, cidade, estado ? `${estado}` : '', cep ? `CEP ${cep}` : '', 'Brasil',
   ].filter(Boolean).join(', ');
   if (Date.now() < deadline) {
-    const g = aceita(await googleGeocode(enderecoGoogle));
+    const g = aceita(await googleGeocode(enderecoGoogle), 60); // Google é padrão-ouro: tolera endereço real distante
     if (g) return { ...g, cep: cep || null };
   }
 
@@ -282,7 +287,7 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
   // Sem a chave é no-op. Roda depois do Google e antes das rotas públicas do
   // Nominatim, pois quando ativo é mais confiável que os provedores gratuitos.
   if (Date.now() < deadline) {
-    const p = aceita(await geocoderPago(enderecoGoogle));
+    const p = aceita(await geocoderPago(enderecoGoogle), 55);
     if (p) return { ...p, cep: cep || null };
   }
 
@@ -340,9 +345,11 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
     }
   }
 
-  // Nível 2 — bairro.
+  // Nível 2 — bairro. APERTADO (25 km): é o nível mais propenso a homônimo em outro
+  // município (nome de bairro repete pelo Brasil). Fora de 25 km do centróide, é quase
+  // certo que casou no município errado → descarta e cai no centróide da cidade.
   if (bairro && bairro.trim() && Date.now() < deadline) {
-    const c = aceita(await nominatimEstruturado({ street: bairro, city: cidade, state: ufNome }));
+    const c = aceita(await nominatimEstruturado({ street: bairro, city: cidade, state: ufNome }), 25);
     if (c) return { ...c, nivel: 'bairro', cep: cepEnc };
     await pausa();
   }
