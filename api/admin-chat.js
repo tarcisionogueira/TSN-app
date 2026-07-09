@@ -51,7 +51,10 @@ export default async function handler(req) {
 
   // 2. Conversas de usuários — carrega com filtros
   if (filtro_chamados) {
-    const { usuario_id, chamado_id, ultimos_n = 5 } = filtro_chamados;
+    const { usuario_id, chamado_id } = filtro_chamados;
+    // Coerção a inteiro no intervalo [1,20] — evita string com caracteres extras
+    // (ex.: "20&order=role.desc") virar NaN ou parâmetro injetado na URL PostgREST.
+    const ultimos_n = Math.min(Math.max(1, parseInt(filtro_chamados.ultimos_n, 10) || 5), 20);
     let q;
     if (chamado_id && isUUID(chamado_id)) {
       // Conversa específica
@@ -68,7 +71,7 @@ export default async function handler(req) {
       contextoBlocos.push(`## Histórico do usuário ${chamados[0]?.user_nome || usuario_id}\n${detalhes.join('\n\n')}`);
     } else {
       // Últimos N chamados geral
-      const chamados = await sbGet(`chamados?order=criado_em.desc&limit=${Math.min(ultimos_n, 20)}&select=id,titulo,status,user_nome,user_email,criado_em`);
+      const chamados = await sbGet(`chamados?order=criado_em.desc&limit=${ultimos_n}&select=id,titulo,status,user_nome,user_email,criado_em`);
       contextoBlocos.push(`## Últimos ${chamados.length} atendimentos\n${chamados.map(c => `- #${c.id.slice(0,8).toUpperCase()} | ${c.user_nome || c.user_email} | "${c.titulo}" | ${c.status} | ${new Date(c.criado_em).toLocaleDateString('pt-BR')}`).join('\n')}`);
     }
   }

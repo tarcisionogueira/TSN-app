@@ -33,6 +33,11 @@ export default async function handler(req) {
   if (!token || !assinatura || !dados) {
     return new Response(JSON.stringify({ error: 'Dados de assinatura incompletos' }), { status: 400, headers });
   }
+  // Formato estrito do token (o default do banco é hex de 40 chars) — evita valores
+  // gigantes/caracteres inesperados injetados no filtro PostgREST deste endpoint público.
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(String(token))) {
+    return new Response(JSON.stringify({ error: 'Token inválido' }), { status: 400, headers });
+  }
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
 

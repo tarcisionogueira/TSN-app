@@ -35,14 +35,25 @@ function sb(path, opts = {}) {
   });
 }
 
-// Cancela a assinatura recorrente do MP (busca preapprovals autorizados do pagador).
-async function cancelarMP(email) {
-  if (!MP_TOKEN || !email) return 0;
+// Cancela a assinatura recorrente do MP.
+// Cancela pelo preapproval id do PRÓPRIO usuário (perfis.mp_id). Não usa o e-mail
+// como chave: e-mail pode ter homônimo/conta compartilhada no MP e cancelaria a
+// assinatura de um terceiro. No fallback (sem mp_id salvo) a busca por e-mail é
+// FILTRADA pelo external_reference `${userId}|plano`, garantindo o escopo do usuário.
+async function cancelarMP(mpId, email, userId) {
+  if (!MP_TOKEN) return 0;
   let cancelados = 0;
   try {
-    const r = await fetch(`${MP_URL}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
-    const d = await r.json().catch(() => null);
-    const ids = (d?.results || []).map(p => p.id).filter(Boolean);
+    let ids = [];
+    if (mpId) {
+      ids = [mpId];
+    } else if (email && userId) {
+      const r = await fetch(`${MP_URL}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
+      const d = await r.json().catch(() => null);
+      ids = (d?.results || [])
+        .filter(p => String(p.external_reference || '').split('|')[0] === userId)
+        .map(p => p.id).filter(Boolean);
+    }
     for (const id of ids) {
       const pr = await fetch(`${MP_URL}/preapproval/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${MP_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) });
       if (pr.ok) cancelados++;
@@ -86,7 +97,7 @@ export default async function handler(req, res) {
   const dentro7 = perfil.plano_pago_em && (Date.now() - new Date(perfil.plano_pago_em).getTime() <= JANELA_MS);
 
   // 1) Cancela a recorrência nos gateways (best-effort nos dois).
-  const cancelados = (await cancelarMP(email)) + (await cancelarAsaas(perfil.asaas_id));
+  const cancelados = (await cancelarMP(perfil.mp_id, email, user.id)) + (await cancelarAsaas(perfil.asaas_id));
 
   if (dentro7) {
     // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida).

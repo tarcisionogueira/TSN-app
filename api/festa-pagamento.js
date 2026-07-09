@@ -80,8 +80,10 @@ export default async function handler(req) {
       headers: {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
-        // Chave idempotente determinística: retry do mesmo pagamento não duplica cobrança.
-        'X-Idempotency-Key': `festa-${metodo}-${(payload?.payer?.email || '')}-${payload?.transaction_amount || 0}`,
+        // Cartão: token single-use garante idempotência. PIX: sem nonce, uma nova
+        // compra do mesmo valor/e-mail recai na anterior — adiciona componente único
+        // por tentativa (idempotencyKey do front, se enviado, ou timestamp).
+        'X-Idempotency-Key': `festa-${metodo}-${(payload?.payer?.email || '')}-${payload?.transaction_amount || 0}${payload.token ? '' : `-${String(body?.idempotencyKey || Date.now()).slice(0, 40)}`}`,
       },
       body: JSON.stringify(payload),
     });

@@ -55,14 +55,23 @@ export default async function handler(req, res) {
       payload.payment_method_id = dadosCartao.metodoPagamentoId;
     }
 
+    // Chave idempotente.
+    // - Cartão: o token é single-use → a chave determinística já impede duplicar a
+    //   cobrança num retry do MESMO token (double-submit).
+    // - PIX: sem nonce, uma NOVA tentativa do mesmo valor recai no pagamento anterior
+    //   (que pode ter expirado/sido cancelado), quebrando o fluxo do cliente. Por isso
+    //   a chave leva um componente único por tentativa (idempotencyKey do front, se
+    //   enviado, ou timestamp). PIX não gera cobrança automática — cada QR é pago à parte.
+    const idemBase = `tsn-${user.id}-${payload.token || 'pix'}-${payload.transaction_amount || 0}`;
+    const idemKey = payload.token
+      ? idemBase
+      : `${idemBase}-${String(req.body?.idempotencyKey || Date.now()).slice(0, 40)}`;
     const mpRes = await fetch(`${MP_BASE}/v1/payments`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
-        // Chave idempotente DETERMINÍSTICA: retry do mesmo pagamento não duplica
-        // cobrança (token de cartão é single-use; PIX dedupa por valor no intervalo).
-        'X-Idempotency-Key': `tsn-${user.id}-${payload.token || 'pix'}-${payload.transaction_amount || 0}`,
+        'X-Idempotency-Key': idemKey,
       },
       body: JSON.stringify(payload),
     });

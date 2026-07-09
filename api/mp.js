@@ -269,16 +269,20 @@ async function verificar({ paymentId, assinaturaId }) {
   return { tipo: 'pagamento', status: p.status, statusDetalhe: p.status_detail, dados: p };
 }
 
-async function cancelarAssinatura({ assinaturaId, email }) {
+async function cancelarAssinatura({ assinaturaId, email, userId }) {
   // Cancela a renovação automática. Se não vier o id da assinatura, busca os
-  // preapprovals ativos do pagador por e-mail (espelha o fluxo do Asaas).
+  // preapprovals ativos do pagador por e-mail — mas SEMPRE filtrando pelo
+  // external_reference `${userId}|plano` do usuário AUTENTICADO. Sem esse filtro,
+  // o `email` (vindo do body) permitiria cancelar a assinatura de um terceiro (IDOR).
   let ids = [];
   if (assinaturaId) {
     ids = [assinaturaId];
-  } else if (email) {
+  } else if (email && userId) {
     try {
       const r = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`);
-      ids = (r?.results || []).map(x => x.id).filter(Boolean);
+      ids = (r?.results || [])
+        .filter(x => String(x.external_reference || '').split('|')[0] === userId)
+        .map(x => x.id).filter(Boolean);
     } catch (_) { ids = []; }
   }
   if (!ids.length) return { ok: true, cancelados: 0, nenhuma: true };
