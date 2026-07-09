@@ -1488,8 +1488,15 @@ async function scraperVendasGov(browser) {
     await page.setUserAgent(USER_AGENT);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
     // Carrega a home para ganhar contexto/origin — o WAF barra navegação/fetch "cru".
-    await page.goto(`${VG_BASE}/leilao`, { waitUntil: 'networkidle2', timeout: 45000 });
-    await new Promise(r => setTimeout(r, 2000));
+    // domcontentloaded (não networkidle2): a SPA mantém long-polling e a rede nunca
+    // "assenta" → networkidle2 estourava 45s. Só precisamos estar NO domínio para o
+    // fetch da API (dentro da página) usar Origin/TLS corretos. Best-effort.
+    try {
+      await page.goto(`${VG_BASE}/leilao`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    } catch (e) {
+      console.log(`    VendasGov: goto /leilao demorou (${String(e.message).slice(0, 50)}) — seguindo`);
+    }
+    await new Promise(r => setTimeout(r, 2500));
 
     for (const sala of VG_SALAS) {
       let totalPages = 1;
@@ -1606,8 +1613,15 @@ async function main() {
 
   let total = 0;
 
+  // Filtro opcional de fontes (env SCRAPER_FONTES="VENDASGOV" ou "MEGA,SOLD").
+  // Vazio = roda todas. Útil para testar/reprocessar uma fonte isolada sem re-scrapear tudo.
+  const ONLY = String(process.env.SCRAPER_FONTES || '').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
+  const rodar = (f) => !ONLY.length || ONLY.includes(f);
+  if (ONLY.length) console.log(`⚙️  SCRAPER_FONTES ativo — rodando apenas: ${ONLY.join(', ')}\n`);
+
   try {
     // 1. Mega Leilões — varre TODAS as páginas (todos os estados), somente ativos
+    if (rodar('MEGA')) {
     console.log('📋 Mega Leilões...');
     {
       const runStart = new Date().toISOString();
@@ -1637,6 +1651,7 @@ async function main() {
       }
       await registrarSaude('MEGA', imoveis, 'principal', validarColeta(imoveis, 'MEGA'));
     }
+    }
 
     // Coleta + salva + registra saúde de uma fonte (validação de qualidade).
     const coletarFonte = async (fonte, fn) => {
@@ -1647,23 +1662,23 @@ async function main() {
 
     // 2. Superbid (portal 2) — API offers, todas as páginas, somente abertos
     console.log('\n📋 Superbid...');
-    await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }));
+    if (rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }));
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos
     console.log('\n📋 Sold Leilões...');
-    await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }));
+    if (rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }));
 
     // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos
     console.log('\n📋 PortalZuk (Zukerman)...');
-    await coletarFonte('ZUK', () => scraperPortalZuk(browser));
+    if (rodar('ZUK')) await coletarFonte('ZUK', () => scraperPortalZuk(browser));
 
     // 5. Sodré Santoro — API search-lots interceptada, somente ativos
     console.log('\n📋 Sodré Santoro...');
-    await coletarFonte('SODRE', () => scraperSodre(browser));
+    if (rodar('SODRE')) await coletarFonte('SODRE', () => scraperSodre(browser));
 
     // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis
     console.log('\n📋 Frazão Leilões...');
-    await coletarFonte('FRAZAO', () => scraperFrazao(browser));
+    if (rodar('FRAZAO')) await coletarFonte('FRAZAO', () => scraperFrazao(browser));
 
     // 7. Leilões Judiciais — REATIVADO via NAVEGADOR REAL (page.evaluate → TLS de
     // Chrome). Esteira multi-estratégia: tenta get-lotes (traz a DATA da praça) e,
@@ -1672,7 +1687,7 @@ async function main() {
     // (api/scraper-leiloeiros.js → coletarLJUD) fica de BACKUP, e é poupado quando
     // esta coleta mantém o LJUD fresco — controlando o custo.
     console.log('\n📋 Leilões Judiciais (portal nacional — navegador)...');
-    {
+    if (rodar('LJUD')) {
       const { imoveis, estrategia, validacao } = await coletarComEsteira('LJUD', [
         { nome: 'navegador-getlotes', fn: () => scraperLJUD_navegador(browser, 'get-lotes') },
         { nome: 'navegador-getbens',  fn: () => scraperLJUD_navegador(browser, 'get-bens-por-estados') },
@@ -1686,12 +1701,15 @@ async function main() {
     // (capa) vem direto da API; edital/laudo/matrícula são vasculhados na página de
     // detalhe renderizada (enriquecerDocumentosLote), igual ao fluxo do Mega.
     console.log('\n📋 Imóveis da União (VendasGov)...');
-    {
+    if (rodar('VENDASGOV')) try {
       const imoveis = await scraperVendasGov(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
       catch (e) { console.log(`  ⚠️ Enriquecimento de documentos VendasGov falhou (segue sem): ${e.message.slice(0, 80)}`); }
       total += await salvarEFinalizar(imoveis, 'VENDASGOV');
       await registrarSaude('VENDASGOV', imoveis, 'principal', validarColeta(imoveis, 'VENDASGOV'));
+    } catch (e) {
+      // Fonte nova nunca pode derrubar o job (as demais já salvaram acima).
+      console.log(`  ⚠️ VendasGov falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
   } finally {
