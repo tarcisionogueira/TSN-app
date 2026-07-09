@@ -66,6 +66,21 @@ export function extrairDataLeilao(html) {
   return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
 }
 
+// Extrai o VALOR DE AVALIAÇÃO da página do lote (leiloeiros mostram "Valor de
+// avaliação"/"Valor Avaliado"/"Avaliação: R$ ..."). Muitos leiloeiros não trazem a
+// avaliação na listagem em massa (ou mandam sentinela), então buscamos on-demand.
+export function extrairAvaliacao(html) {
+  if (!html) return null;
+  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  const re = /avalia[cç][aã]?[o]?\w*[^R$\d]{0,18}R?\$?\s*(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})/gi;
+  let m;
+  while ((m = re.exec(txt))) {
+    const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+    if (v && v >= 1000 && v < 100000000) return v; // 1º valor plausível ancorado em "avaliação"
+  }
+  return null;
+}
+
 // Lê cartório/ofício/comarca do CABEÇALHO da matrícula (PDF de texto). GRÁTIS:
 // download DIRETO apenas (nunca Bright Data — matrícula bloqueada por 403 fica
 // para o laudo documental, que já usa o proxy pago sob demanda). Devolve os
@@ -178,6 +193,19 @@ export default async function handler(req, res) {
   // Data do leilão do leiloeiro (mesma extração da CEF): só quando falta e não é venda direta.
   const dataLeilao = precisaData ? extrairDataLeilao(html) : null;
   if (dataLeilao) patch.data_leilao = dataLeilao;
+
+  // AVALIAÇÃO real da página do lote (quando não temos uma válida) — corrige o
+  // "100% abaixo da avaliação" sem valor e recalcula o desconto. O trigger do banco
+  // ainda valida (descarta sentinela). Vale p/ todos os leiloeiros.
+  const avalAtual = Number(im.valor_avaliacao) || 0;
+  const minAtual = Number(im.valor_minimo) || 0;
+  if (avalAtual <= 0) {
+    const aval = extrairAvaliacao(html);
+    if (aval && aval > minAtual) {
+      patch.valor_avaliacao = aval;
+      if (minAtual > 0) patch.desconto_percentual = Math.round((1 - minAtual / aval) * 100);
+    }
+  }
 
   // Matrícula recém-descoberta (PDF) e ainda sem cartório → lê o cabeçalho grátis.
   const matriculaUrlFinal = patch.link_matricula || im.link_matricula;
