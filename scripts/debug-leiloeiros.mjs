@@ -25,20 +25,26 @@ const ALVOS = [
   // fetch DENTRO da página (TLS de Chrome real) passa — mesma tática do LJUD.
   // Passamos várias sondas de API porque a rota exata é desconhecida; a
   // interceptação de XHR também captura a real automaticamente.
+  // Round 5b — endpoints REAIS descobertos na 1ª captura (via XHR interceptada).
+  // VendasGov: a lista é /api/public/imoveis?size=&page=&sort=itens.edital.dtCertame,asc&sala=leilao
+  // (dá 500 sem params). Fotos: /api/public/imoveis/{id}/miniaturas/{arquivo}. Ids de
+  // exemplo colhidos do DOM: 810000014, 707100133, 11300078.
   { fonte: 'VENDASGOV', url: 'https://imoveis.vendasgov.serpro.gov.br/leilao', inPageApis: [
-    'https://imoveis.vendasgov.serpro.gov.br/api/public/leiloes',
-    'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis',
-    'https://imoveis.vendasgov.serpro.gov.br/api/public/lotes',
-    'https://imoveis.vendasgov.serpro.gov.br/api/public/itens',
-    'https://imoveis.vendasgov.serpro.gov.br/api/public/editais',
+    'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis?size=48&page=0&sort=itens.edital.dtCertame,asc&sala=leilao',
+    'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis?size=48&page=0&sort=itens.edital.dtCertame,asc&sala=venda-direta',
+    'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis/810000014',
+    'https://imoveis.vendasgov.serpro.gov.br/api/salas?sort=ordem',
   ] },
-  // Leiloeiros individuais da cauda longa (padrão já dominado). URLs de listagem
-  // best-guess — a interceptação + domstats revelam a estrutura real mesmo se
-  // a rota redirecionar para a home.
-  { fonte: 'OESTE',   url: 'https://www.oesteleiloes.com.br/imoveis' },
+  // Leiloeiros — todos SPAs (recon de endpoint). Oeste é plataforma white-label
+  // (/app/home = config); sondar /app/* de catálogo. VIP: /imoveis deu 404 → tentar /lotes.
+  { fonte: 'OESTE', url: 'https://www.oesteleiloes.com.br/imoveis', inPageApis: [
+    'https://www.oesteleiloes.com.br/app/lotes',
+    'https://www.oesteleiloes.com.br/app/leiloes',
+    'https://www.oesteleiloes.com.br/app/produtos',
+    'https://www.oesteleiloes.com.br/app/imoveis',
+  ] },
+  { fonte: 'VIP',   url: 'https://www.leilaovip.com.br/lotes' },
   { fonte: 'PESTANA', url: 'https://www.pestanaleiloes.com.br/lotes/imoveis' },
-  { fonte: 'VIP',     url: 'https://www.leilaovip.com.br/imoveis' },
-  { fonte: 'BIASI',   url: 'https://www.biasileiloes.com.br/imoveis' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
