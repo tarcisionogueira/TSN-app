@@ -1,12 +1,13 @@
 name: Auditoria do Sistema (Claude)
 
 # Auditoria técnica pelo Claude: funcionalidades, fluxos de API e segurança dos
-# dados. Roda semanal (segunda 6h UTC) e sob demanda. Só LÊ o código e grava o
-# relatório em auditoria_sistema — não altera nada. As correções propostas nos
-# achados viram PR revisável quando aprovadas.
+# dados. Roda DIÁRIA (6h UTC) nesta fase de correções intensas e sob demanda. Só LÊ
+# o código e grava o relatório em auditoria_sistema — não altera nada. As correções
+# propostas nos achados viram PR revisável quando aprovadas.
+# TODO: quando o ritmo de mudanças baixar, voltar para semanal (cron '0 6 * * 1').
 on:
   schedule:
-    - cron: '0 6 * * 1'
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 jobs:
