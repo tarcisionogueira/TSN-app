@@ -117,11 +117,31 @@ async function processar(browser, item) {
   }
 
   // 2) Links de PDF/documento na página renderizada (rótulo OU extensão).
+  //    Além do texto do <a>, colhemos o CONTEXTO em volta (aria-label, title, e o
+  //    texto do bloco pai / cabeçalho anterior). CONTRAMEDIDA para leiloeiros que
+  //    servem edital/matrícula por URL OPACA (hash) com o texto do link = nome do
+  //    arquivo (ex.: SUPERBID): o rótulo "Edital"/"Matrícula" costuma estar na
+  //    seção/linha em volta, não no href — assim classificamos certo mesmo assim.
   let linksPdf = [];
   try {
     linksPdf = await page.evaluate(() => Array.from(document.querySelectorAll('a[href]'))
-      .map(a => ({ href: a.href, txt: (a.textContent || '').trim().slice(0, 80) }))
-      .filter(x => /\.pdf(\?|#|$)/i.test(x.href) || /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(x.txt + ' ' + x.href)));
+      .map(a => {
+        // Sobe até ~3 níveis pegando texto curto do contêiner (rótulo da seção).
+        let ctx = '';
+        let el = a;
+        for (let i = 0; i < 3 && el; i++) {
+          el = el.parentElement;
+          const t = (el?.getAttribute?.('aria-label') || el?.textContent || '').trim();
+          if (t && t.length < 140) ctx += ' ' + t;
+        }
+        const head = a.closest('section,li,tr,div')?.querySelector?.('h1,h2,h3,h4,strong,th,legend,label');
+        return {
+          href: a.href,
+          txt: (a.textContent || '').trim().slice(0, 80),
+          ctx: (`${a.getAttribute('aria-label') || ''} ${a.getAttribute('title') || ''} ${head?.textContent || ''} ${ctx}`).trim().slice(0, 160),
+        };
+      })
+      .filter(x => /\.pdf(\?|#|$)/i.test(x.href) || /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(x.txt + ' ' + x.ctx + ' ' + x.href)));
   } catch { /* sem links */ }
 
   // DIAGNÓSTICO p/ calibrar leiloeiros anti-bot (aparece nos logs do GitHub Actions).
@@ -137,7 +157,7 @@ async function processar(browser, item) {
   // baixarPdf só salva se a resposta for REALMENTE application/pdf (filtra HTML/rotas).
   for (const l of linksPdf) {
     if (salvos.size >= 4) break;
-    const alvo = l.txt + ' ' + l.href;
+    const alvo = l.txt + ' ' + (l.ctx || '') + ' ' + l.href;
     const ehPdfHref = /\.pdf(\?|#|$)/i.test(l.href);
     const ehDocTxt = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(alvo);
     // Ignora documentos GENÉRICOS do site (não são do lote): modelo de proposta,
@@ -145,7 +165,9 @@ async function processar(browser, item) {
     const ehGenerico = /modelo|proposta|como.?comprar|termos|pol[ií]tica|privacidade|cadastr|manual|passo.?a.?passo/i.test(alvo);
     if ((!ehPdfHref && !ehDocTxt) || ehGenerico) continue;
     const buf = await baixarPdf(page, l.href, paginaLote);
-    if (buf) { try { await salvar(buf, l.href, l.txt); } catch { /* */ } }
+    // Passa o CONTEXTO (rótulo da seção) além do texto do link para classificar
+    // certo mesmo quando a URL é opaca (hash sem "edital"/"matric").
+    if (buf) { try { await salvar(buf, l.href, `${l.txt} ${l.ctx || ''}`.trim()); } catch { /* */ } }
   }
   // Também os anexos que o scrape já tinha registrado como URL (baixa e guarda).
   for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) {

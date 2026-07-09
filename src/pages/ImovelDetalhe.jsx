@@ -792,8 +792,11 @@ export default function ImovelDetalhe() {
   useEffect(() => {
     if (!imovel?.id) return;
     let cancel = false;
+    // Inclui 'laudo' e 'outro': leiloeiros com URL OPACA (ex.: SUPERBID) têm o
+    // edital/matrícula salvos como 'outro' — sem isso o PDF capturado ficava
+    // invisível e o cliente só via o link do site. Mostramos TODO doc capturado.
     supabase.from('imovel_anexos').select('tipo,nome,url').eq('imovel_id', imovel.id)
-      .in('tipo', ['matricula', 'edital', 'regras_venda']).not('storage_path', 'is', null)
+      .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'outro']).not('storage_path', 'is', null)
       .then(({ data }) => { if (!cancel) setAnexosDocs(data || []); });
     return () => { cancel = true; };
   }, [imovel?.id]);
@@ -878,8 +881,12 @@ export default function ImovelDetalhe() {
   const urlsOficiais = new Set([matriculaUrl, regrasEditalUrl].filter(Boolean));
   const anexosLeiloeiro = (Array.isArray(imovel.anexos) ? imovel.anexos : [])
     .filter(a => a && a.url && !urlsOficiais.has(a.url));
-  const temCardDocumentos = !!matriculaUrl || !!regrasEditalUrl || temNumerosRef || anexosLeiloeiro.length > 0;
-  const TIPO_DOC_LABEL = { matricula: 'Matrícula', edital: 'Edital', regras: 'Regras de venda', anexo: 'Anexo' };
+  // Documentos capturados no nosso Storage (PDF assinado, alta qualidade) — a fonte
+  // mais confiável. Não repete os que já têm botão dedicado (matrícula/edital oficiais).
+  const anexosCapturados = (Array.isArray(anexosDocs) ? anexosDocs : [])
+    .filter(a => a && a.url && !urlsOficiais.has(a.url));
+  const temCardDocumentos = !!matriculaUrl || !!regrasEditalUrl || temNumerosRef || anexosLeiloeiro.length > 0 || anexosCapturados.length > 0;
+  const TIPO_DOC_LABEL = { matricula: 'Matrícula', edital: 'Edital', regras: 'Regras de venda', regras_venda: 'Regras de venda', laudo: 'Laudo de avaliação', outro: 'Documento', anexo: 'Anexo' };
 
   // Localização no Google: Street View por coordenadas (quando geocodificado) ou
   // busca pelo endereço. Sem chave de API — usa as URLs públicas do Google Maps.
@@ -1197,6 +1204,27 @@ export default function ImovelDetalhe() {
                         {regrasEhDocReal ? <ScrollText size={15} /> : <ExternalLink size={15} />} {regrasEditalLabel}
                       </a>
                     )}
+                  </div>
+                )}
+
+                {/* Documentos CAPTURADOS por nós (edital/matrícula/laudo baixados do
+                    leiloeiro e guardados no Storage — PDF assinado, alta qualidade).
+                    Cobre leiloeiros de URL opaca (SUPERBID etc.), cujo edital/matrícula
+                    entram como 'outro' — aqui abrem como arquivo, não como link do site. */}
+                {anexosCapturados.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Documentos do lote</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {anexosCapturados.map((a, i) => (
+                        <a key={`cap${i}`} href={a.url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#334155', fontSize: 13, textDecoration: 'none' }}>
+                          <FileText size={14} color="#15803d" style={{ flexShrink: 0 }} />
+                          <span style={{ flexShrink: 0, fontWeight: 700, fontSize: 11, color: '#15803d', background: '#dcfce7', padding: '1px 6px', borderRadius: 5 }}>{TIPO_DOC_LABEL[a.tipo] || 'Documento'}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nome || 'Documento'}</span>
+                          <ExternalLink size={12} color="#94a3b8" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
 

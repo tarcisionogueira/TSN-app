@@ -1082,12 +1082,32 @@ export default function Analise() {
                 }
                 // Edital/regra/matrícula sempre com destino: arquivo, senão a página do leiloeiro.
                 const url = fileUrl || paginaLeiloeiro;
-                return { t, label: docMap[t], url, viaPagina: !fileUrl && !!paginaLeiloeiro };
+                return { t, label: docMap[t], url, fileUrl, viaPagina: !fileUrl && !!paginaLeiloeiro };
               });
-              const algum = docsView.some(x => x.url);
+              // CONTRAMEDIDA (docs capturados que não classificaram): alguns leiloeiros
+              // servem edital/matrícula por URLs OPACAS (hash, sem "edital"/"matric" no
+              // nome — ex.: SUPERBID s.superbid.net/attachment/...pdf). O capturador
+              // salva como tipo 'outro'. Antes esses PDFs ficavam ESCONDIDOS e o
+              // edital/matrícula caíam no link "no site". Aqui listamos TODO anexo
+              // capturado que ainda não apareceu — nada fica atrás de um link do site.
+              const urlsMostradas = new Set(docsView.map(d => d.fileUrl).filter(Boolean));
+              const todosAnexos = [...docsLeiloeiro, ...anexosScrape];
+              const extras = [];
+              const vistos = new Set();
+              for (const a of todosAnexos) {
+                const u = (a?.url && /^https?:\/\//.test(a.url)) ? a.url : null;
+                if (!u || urlsMostradas.has(u) || vistos.has(u)) continue;
+                // já contemplado pelos tópicos padrão? (evita duplicar laudo/edital/etc.)
+                if (topicos.includes(a.tipo) && docsView.find(d => d.t === a.tipo)?.fileUrl) continue;
+                vistos.add(u);
+                const rot = docMap[a.tipo] || (a.nome && !/^https?:/i.test(a.nome) ? a.nome : 'Documento do lote');
+                extras.push({ t: `extra_${extras.length}`, label: rot, url: u, fileUrl: u, viaPagina: false });
+              }
+              const docsFinal = [...docsView, ...extras];
+              const algum = docsFinal.some(x => x.url);
               return (
                 <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                  {docsView.map(it => it.url ? (
+                  {docsFinal.map(it => it.url ? (
                     <a key={it.t} href={it.url} target="_blank" rel="noreferrer"
                       style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:8, textDecoration:'none', fontSize:13, fontWeight:600, color:'#0D63DB' }}
                       onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
