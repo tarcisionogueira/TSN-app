@@ -52,7 +52,13 @@ async function mercadoRecente(imovelId) {
   const r = await sb(`analises_mercado?imovel_id=eq.${encodeURIComponent(imovelId)}&status=eq.concluida&updated_at=gte.${desde}&select=result,updated_at&order=updated_at.desc&limit=1`);
   if (!r.ok) return null;
   const [row] = await r.json().catch(() => []);
-  return row?.result?.mercado ? { mercado: row.result.mercado, em: row.updated_at } : null;
+  const mkt = row?.result?.mercado;
+  // NÃO reaproveita pesquisa VAZIA (sem amostras nem preço): reusar um resultado
+  // ruim propagaria o "mercadológico sem amostras". Melhor refazer a busca.
+  if (mkt && (((mkt.vendas?.length || 0) + (mkt.locacoes?.length || 0)) > 0 || mkt.precoMedioM2 > 0)) {
+    return { mercado: mkt, em: row.updated_at };
+  }
+  return null;
 }
 
 async function anthropic(payload, useSearch, fetchOpts) {
@@ -281,20 +287,29 @@ export default async function handler(req, res) {
       // abortava aos 120s e re-tentava, sem NUNCA concluir (era o motivo do erro
       // recorrente). Aqui damos uma janela real de ~200s numa tentativa só, dentro
       // do deadline de 270s (a etapa do parecer, curta, cabe no resto).
-      const mData = await anthropic({
-        model: MODEL, max_tokens: 8000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
-        system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
-        messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
-      }, true, { retries: 1, timeoutMs: 200000, noFallback: true });
-      mercado = parseJSON(extractText(mData)) || {};
-      mercado.precoMedioM2 = mercado.consolidado?.precoMedioM2 || mercado.nivel2?.precoMedioM2 || 0;
-      mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
-      mercado.yieldBruto = mercado.consolidado?.yieldBruto || 0;
-      mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
-      mercado.vendas = mercado.nivel2?.vendas || [];
-      mercado.locacoes = mercado.nivel2?.locacoes || [];
-      mercado.pesquisaEm = new Date().toISOString();
+      const buscarMercado = async () => {
+        const mData = await anthropic({
+          model: MODEL, max_tokens: 8000,
+          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+          system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
+          messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
+        }, true, { retries: 1, timeoutMs: 200000, noFallback: true });
+        const m = parseJSON(extractText(mData)) || {};
+        m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;
+        m.aluguelMedio = m.consolidado?.aluguelMedio || 0;
+        m.yieldBruto = m.consolidado?.yieldBruto || 0;
+        m.yieldLiquido = m.consolidado?.yieldLiquido || 0;
+        m.vendas = m.nivel2?.vendas || [];
+        m.locacoes = m.nivel2?.locacoes || [];
+        m.pesquisaEm = new Date().toISOString();
+        return m;
+      };
+      const semAmostras = (m) => ((m.vendas?.length || 0) + (m.locacoes?.length || 0)) === 0 && !(m.precoMedioM2 > 0);
+      // Contramedida "mercadológico sem amostras": uma resposta VÁLIDA mas vazia (a
+      // busca web falhou/rate-limit) não pode virar relatório final. Uma resposta vazia
+      // costuma voltar rápido, então cabe UMA nova tentativa dentro do deadline.
+      mercado = await buscarMercado();
+      if (semAmostras(mercado)) mercado = await buscarMercado();
     }
 
     const areaM2 = Number(mercadoInputs.areaM2) || 0;

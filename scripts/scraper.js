@@ -111,6 +111,17 @@ function parseBRNumber(str) {
   return parseFloat(String(str).replace(/R\$\s*/g,'').replace(/\./g,'').replace(',','.').trim()) || 0;
 }
 
+// Avaliação-sentinela dos leiloeiros (ex.: Superbid manda referenceValue=999999999
+// ~R$1bi quando não há avaliação real) corrompe o desconto e o mercadológico.
+// Devolve 0 (desconhecida) para valores irreais; falso-positivo é desprezível
+// (nenhum lote de leilão vale ≥ R$100 mi, e razão avaliação/mínimo > 20 é absurda).
+function sanitizarAval(aval, minimo = 0) {
+  const a = Number(aval) || 0;
+  if (a <= 0 || a >= 100_000_000) return 0;
+  if (minimo > 0 && a / minimo > 20) return 0;
+  return a;
+}
+
 function parseCSVCaixa(buffer) {
   // Tenta latin-1 primeiro (formato histórico CEF), depois UTF-8
   let text = buffer.toString('latin1');
@@ -479,7 +490,7 @@ async function scraperSuperbid(pageNumber = 1) {
         cidade: cidadeNome,
         bairro: loc.neighborhood || '',
         endereco: loc.street || '',
-        valor_avaliacao: parseFloat(det.referenceValue || det.directSaleValue || 0),
+        valor_avaliacao: sanitizarAval(parseFloat(det.referenceValue || det.directSaleValue || 0), parseFloat(det.initialBidValue || det.currentMinBid || 0)),
         valor_minimo: parseFloat(det.initialBidValue || det.currentMinBid || 0),
         area_m2: area,
         descricao: (of.offerDescription || '').replace(/<[^>]+>/g, '').slice(0, 500),

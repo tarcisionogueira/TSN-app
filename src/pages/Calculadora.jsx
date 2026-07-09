@@ -462,6 +462,22 @@ export default function Calculadora() {
               <Linha label="Desconto sobre a avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 2) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
               <Linha label="Total investido" valor={`R$ ${fmt(capitalAquisicao, 2)}`} sublabel="Arremate + custos do leilão + dívidas/reforma" destaque />
               <Linha label="Aluguel por mês (livre para você)" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} destaque cor="#059669" sublabel="IPTU e condomínio ficam com o inquilino" />
+              {/* Fluxo de caixa mensal quando FINANCIA e ALUGA: a parcela precisa ser
+                  coberta pelo aluguel. Sem isto, o cliente não conseguia validar. */}
+              {!isAVista && (
+                <>
+                  <Linha label={origem === 'judicial' ? 'Parcela mensal (CPC 895)' : `Parcela mensal (${nomeTabela})`} valor={`R$ ${fmt(m.parcelaMedia, 2)}`} sublabel="Do financiamento/parcelamento do arremate" />
+                  <Linha
+                    label="O aluguel paga a parcela?"
+                    valor={vAluguel > 0
+                      ? (vAluguel >= m.parcelaMedia
+                          ? `Sim — sobra R$ ${fmt(vAluguel - m.parcelaMedia, 2)}/mês`
+                          : `Não — falta R$ ${fmt(m.parcelaMedia - vAluguel, 2)}/mês`)
+                      : '—'}
+                    destaque
+                    cor={vAluguel > 0 ? (vAluguel >= m.parcelaMedia ? '#059669' : '#dc2626') : undefined} />
+                </>
+              )}
               <div style={{ marginTop: 4 }} />
               <Linha label="Rendimento por ano" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel="Aluguel de 12 meses dividido pelo total investido" />
               <Linha label="Tempo p/ o aluguel pagar o que investiu" valor={paybackMesesAluguel ? `${Math.ceil(paybackMesesAluguel)} meses (~${(paybackMesesAluguel / 12).toFixed(1)} anos)` : '—'} />

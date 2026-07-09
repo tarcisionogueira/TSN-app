@@ -65,6 +65,15 @@ function parseNum(v) {
   return isNaN(n) ? 0 : n;
 }
 
+// Avaliação-sentinela dos leiloeiros (ex.: Superbid referenceValue=999999999 ~R$1bi
+// quando não há avaliação real) corromperia o desconto/mercadológico → 0 (desconhecida).
+function sanitizarAval(aval, minimo = 0) {
+  const a = Number(aval) || 0;
+  if (a <= 0 || a >= 100_000_000) return 0;
+  if (minimo > 0 && a / minimo > 20) return 0;
+  return a;
+}
+
 // Classificação de tipologia: fonte única em ./_tipo.js (mesma regra do webhook,
 // do feed de parceiros e dos scripts de coleta) — evita divergência entre caminhos.
 
@@ -168,7 +177,7 @@ async function coletarSuperbid(paginas, deadline) {
         modalidade: (of.auction?.subMarketplaces || []).some(s => s.desc === 'Judicial') ? 'judicial' : 'extrajudicial',
         estado: estUF, cidade: cidadeCompleta.replace(/\s*[-–]\s*[A-Z]{2}$/, '').trim(),
         bairro: loc.neighborhood || '', endereco: loc.street || '',
-        valor_avaliacao: parseNum(det.referenceValue || det.directSaleValue || of.referenceValue),
+        valor_avaliacao: sanitizarAval(parseNum(det.referenceValue || det.directSaleValue || of.referenceValue), vmin),
         valor_minimo: vmin,
         area_m2: parseNum(((of.offerDescription || '').match(/(\d+[.,]?\d*)\s*m2/i) || [])[1]),
         descricao: (of.offerDescription || '').replace(/<[^>]+>/g, '').slice(0, 500) || null,
