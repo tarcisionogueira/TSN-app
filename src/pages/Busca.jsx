@@ -1309,7 +1309,13 @@ export default function Busca() {
               {/* Bairros da(s) cidade(s) selecionada(s) — só fora do modo raio (no raio
                    a geografia já é delimitada pelo centro + raio). Aumenta a precisão
                    da busca para o investidor que foca em regiões específicas. */}
-              {!raioAtivo && filtros.cidades.length > 0 && (bairrosCarregando || bairrosGrupos.length > 0) && (() => {
+              {(() => {
+                // O bloco de bairros aparece/some conforme raio/cidade. Se ele for
+                // REMOVIDO do grid, os demais filtros se reempacotam e "pulam de lugar".
+                // Renderizamos SEMPRE um item de grid (placeholder vazio quando oculto)
+                // para o layout ficar estável ao ligar o raio ou trocar de cidade.
+                const mostrarBairros = !raioAtivo && filtros.cidades.length > 0 && (bairrosCarregando || bairrosGrupos.length > 0);
+                if (!mostrarBairros) return <div aria-hidden style={{ minWidth: 0 }} />;
                 const selecionados = filtros.bairros || [];
                 const isGrupoSel = (g) => g.valores.some(v => selecionados.includes(v));
                 const toggleGrupo = (g) => {

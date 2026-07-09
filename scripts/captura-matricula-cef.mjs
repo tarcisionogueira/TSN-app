@@ -102,8 +102,13 @@ async function processar(page, item) {
         if (!capturados.includes('matricula')) {
           const matriculaPdf = await page.evaluate(() => {
             const as = Array.from(document.querySelectorAll('a[href]'));
-            const rotulada = as.find(a => /matr[íi]cula/i.test(`${a.href} ${a.textContent || ''}`) && /\.pdf(\?|#|$)/i.test(a.href))
-                          || as.find(a => /matr[íi]cula/i.test(`${a.textContent || ''}`) && /\.(pdf|asp)/i.test(a.href));
+            const rot = a => `${a.href} ${a.textContent || ''}`;
+            // Detecção AMPLA (a matrícula da Caixa aparece com formatos variados de link):
+            const rotulada =
+                 as.find(a => /matr[íi]cula/i.test(rot(a)) && /\.pdf(\?|#|$)/i.test(a.href))       // PDF rotulado matrícula
+              || as.find(a => /\/matricula\//i.test(a.href) && /\.pdf(\?|#|$)/i.test(a.href))      // caminho /matricula/<uf>/<n>.pdf
+              || as.find(a => /matr[íi]cula/i.test(rot(a)) && /\.(pdf|asp)(\?|#|$)/i.test(a.href))  // .asp/.pdf rotulado
+              || as.find(a => /matr[íi]cula/i.test(a.textContent || '') && a.href);                 // qualquer link rotulado matrícula
             return rotulada ? rotulada.href : null;
           });
           if (matriculaPdf) {
@@ -155,9 +160,23 @@ async function main() {
     await supabase.from('cef_matricula_fila').update({ status: 'processando', tentativas: (item.tentativas || 0) + 1 }).eq('id', item.id);
     try {
       const docs = await processar(page, item);
-      await supabase.from('cef_matricula_fila').update({ status: 'ok', erro: null, processado_em: new Date().toISOString() }).eq('id', item.id);
+      const temMatricula = docs.includes('matricula');
+      const tent = (item.tentativas || 0) + 1;
+      if (temMatricula || tent >= 4) {
+        // Concluído: com a matrícula (ideal) OU após esgotar as tentativas de obtê-la
+        // (segue com edital/condições; a matrícula vira diligência do analista).
+        await supabase.from('cef_matricula_fila').update({
+          status: temMatricula ? 'ok' : 'parcial',
+          erro: temMatricula ? null : 'matricula nao localizada apos varias tentativas',
+          processado_em: new Date().toISOString(),
+        }).eq('id', item.id);
+      } else {
+        // Faltou a MATRÍCULA (documento central) → mantém PENDENTE para nova tentativa
+        // na próxima rodada do cron (10 min). Garante que não paramos sem a matrícula.
+        await supabase.from('cef_matricula_fila').update({ status: 'pendente', erro: `sem matricula (tentativa ${tent})` }).eq('id', item.id);
+      }
       ok++;
-      console.log(`✓ ${item.imovel_id}: ${docs.join(', ')}`);
+      console.log(`${temMatricula ? '✓' : '⟳'} ${item.imovel_id}: ${docs.join(', ') || 'nada'}${temMatricula ? '' : ` (sem matrícula, tent ${tent})`}`);
     } catch (e) {
       await supabase.from('cef_matricula_fila').update({ status: 'erro', erro: String(e.message).slice(0, 300), processado_em: new Date().toISOString() }).eq('id', item.id);
       erros++;

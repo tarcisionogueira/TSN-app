@@ -841,7 +841,36 @@ export default async function handler(req, res) {
     // PRELIMINAR = a IA não devolveu um parecer real (leitura não concluída / JSON
     // vazio). Marcamos explicitamente para a tela mostrar "ANÁLISE PRELIMINAR" no
     // lugar de um veredito confiante (aprovado/reprovado) que não temos base para dar.
-    const preliminar = String(parsed.parecer || '').trim().length < 120;
+    // Lote da Caixa cuja MATRÍCULA (documento central) não foi lida: um parecer da
+    // Caixa SEM a matrícula não é confiável. Marcamos PRELIMINAR (o cron horário
+    // re-gera) e garantimos a captura enfileirada (job a cada 10 min baixa a matrícula).
+    // Se a captura já ESGOTOU as tentativas ('parcial' = matrícula indisponível), não
+    // insistimos como preliminar — seguimos com o que há + diligência.
+    const ehCaixaDoc = /caixa|cef/i.test(row?.fonte || '');
+    const leuMatricula = lidos.some(l => tipoDoRotulo(l.rotulo) === 'matricula') || !!body?.textoMatricula;
+    let matriculaFaltaCaixa = false;
+    if (ehCaixaDoc && !leuMatricula) {
+      let filaStatus = null;
+      try {
+        const [f] = await (await sb(`cef_matricula_fila?imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=status&limit=1`)).json();
+        filaStatus = f?.status || null;
+      } catch { /* sem fila conhecida */ }
+      if (filaStatus !== 'parcial') {
+        matriculaFaltaCaixa = true;
+        const hdniip = (String(row?.link_matricula || '').match(/hdniip=(\d+)/) || [])[1] || String(row?.fonte_id || '').replace(/\D/g, '');
+        try {
+          if (!filaStatus && hdniip) {
+            await sb('cef_matricula_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), hdniip, status: 'pendente' }) });
+          } else if (filaStatus === 'ok') {
+            // Estava 'ok' sem matrícula (captura antiga só pegou regras/edital) →
+            // reabre p/ nova tentativa (mantém tentativas p/ convergir a 'parcial').
+            await sb(`cef_matricula_fila?imovel_id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'pendente' }) });
+          }
+        } catch { /* best-effort */ }
+      }
+    }
+
+    const preliminar = String(parsed.parecer || '').trim().length < 120 || matriculaFaltaCaixa;
     let parecerBase = String(parsed.parecer || '').trim();
     if (parecerBase.length < 120) {
       const exx = parsed.extracao || {};
