@@ -514,6 +514,64 @@ export default function Analise() {
     } finally { setEnviandoAnexo(''); }
   };
 
+  // Tela DEDICADA de "documento faltante": pede SÓ o que falta (matrícula e/ou
+  // edital/regras), mostra o link do leiloeiro para baixar, e deixa anexar outros
+  // documentos. Reaproveitada tanto quando NÃO há nada legível (precisaDocumentos)
+  // quanto quando a análise saiu mas faltou um documento central (ex.: SUPERBID
+  // com matrícula lida e edital ausente — pede só o edital).
+  const DOC_FALTA_LABEL = { matricula: 'Matrícula', edital: 'Edital', regras_venda: 'Regras de venda' };
+  const DocsFaltantesCard = ({ faltando = [], paginaLeiloeiro, motivo, compact = false }) => {
+    const faltam = [...new Set(faltando)].filter(t => DOC_FALTA_LABEL[t]);
+    if (!faltam.length && !compact) faltam.push('matricula', 'edital'); // fallback defensivo
+    const complementares = docsLeiloeiro.filter(x => x.tipo === 'outro');
+    const jaTem = (t) => docsLeiloeiro.some(x => x.tipo === t);
+    const listaTxt = faltam.map(t => DOC_FALTA_LABEL[t].toLowerCase()).join(' e ');
+    const AnexoBtn = ({ tipo, cor, rotulo, ok }) => (
+      <label style={{ padding:'11px 18px', background: ok ? '#f0fdf4' : cor, color: ok ? '#15803d' : 'white', border: ok ? '1px solid #86efac' : 'none', borderRadius:10, fontWeight:800, fontSize:13.5, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: (enviandoAnexo && enviandoAnexo!==tipo) ? 0.6 : 1 }}>
+        {enviandoAnexo===tipo ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Enviando…</> : ok ? <>✓ {rotulo} anexado</> : <>📎 {rotulo}</>}
+        <input type="file" accept="application/pdf" disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f, tipo); }} style={{display:'none'}}/>
+      </label>
+    );
+    const titulo = faltam.length === 1
+      ? `Falta ${DOC_FALTA_LABEL[faltam[0]].toLowerCase()} para concluir a análise`
+      : 'Faltam documentos para concluir a análise';
+    return (
+      <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:16, padding: compact ? '18px 20px' : '24px', display:'flex', flexDirection:'column', gap:13, alignItems:'flex-start' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <FileText size={compact?18:20} color="#c2410c"/>
+          <div style={{ fontSize: compact?15:16, fontWeight:900, color:'#9a3412' }}>{titulo}</div>
+        </div>
+        <p style={{ fontSize: compact?13:14, color:'#7c2d12', lineHeight:1.6, margin:0 }}>
+          {motivo || `Para a análise ficar completa, anexe ${listaTxt} em PDF. Você encontra ${faltam.length>1?'os documentos':'o documento'} na página do lote, no site do leiloeiro.`}
+        </p>
+        {paginaLeiloeiro && (
+          <a href={paginaLeiloeiro} target="_blank" rel="noreferrer"
+            style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'9px 15px', background:'white', border:'1px solid #fdba74', borderRadius:10, color:'#c2410c', fontWeight:800, fontSize:13, textDecoration:'none' }}>
+            <ExternalLink size={14}/> Abrir a página do lote no leiloeiro
+          </a>
+        )}
+        {imovelInicial?.id ? (<>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
+            {faltam.map(t => (
+              <AnexoBtn key={t} tipo={t} cor={t==='matricula'?'#c2410c':'#9a3412'} rotulo={`${DOC_FALTA_LABEL[t]} (PDF)`} ok={jaTem(t)}/>
+            ))}
+            <AnexoBtn tipo="outro" cor="#b45309" rotulo="Outro documento" ok={false}/>
+          </div>
+          {complementares.length > 0 && (
+            <div style={{ fontSize:12, color:'#7c2d12', lineHeight:1.5 }}>
+              <strong>{complementares.length}</strong> documento(s) complementar(es) anexado(s): {complementares.map(c=>c.nome).join(', ')}
+            </div>
+          )}
+          <button onClick={()=>setModoManual(true)} style={{ background:'none', border:'none', color:'#9a3412', fontSize:12.5, fontWeight:700, cursor:'pointer', textDecoration:'underline', padding:0 }}>ou colar o texto do documento</button>
+        </>) : (
+          <button onClick={()=>setModoManual(true)} style={{ padding:'11px 18px', background:'#c2410c', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer' }}>
+            📎 Anexar {listaTxt}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1347,53 +1405,18 @@ export default function Analise() {
           )}
 
           {/* Parecer documental gerado NO SERVIDOR (lê edital/matrícula/anexos + CNJ) */}
-          {relSel === 'documental' && parecerDocumental?.precisaDocumentos && !preparandoDocs && (() => {
-            const temMat = docsLeiloeiro.some(x => x.tipo === 'matricula');
-            const temEdi = docsLeiloeiro.some(x => x.tipo === 'edital');
-            const complementares = docsLeiloeiro.filter(x => x.tipo === 'outro');
-            // Botão de anexo reaproveitável: vira selo verde quando o documento já
-            // foi enviado. Matrícula/edital anexados disparam a geração sozinhos.
-            const AnexoBtn = ({ tipo, cor, rotulo, ok }) => (
-              <label style={{ padding:'11px 18px', background: ok ? '#f0fdf4' : cor, color: ok ? '#15803d' : 'white', border: ok ? '1px solid #86efac' : 'none', borderRadius:10, fontWeight:800, fontSize:13.5, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: (enviandoAnexo && enviandoAnexo!==tipo) ? 0.6 : 1 }}>
-                {enviandoAnexo===tipo ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Enviando…</> : ok ? <>✓ {rotulo} anexado</> : <>📎 {rotulo}</>}
-                <input type="file" accept="application/pdf" disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f, tipo); }} style={{display:'none'}}/>
-              </label>
-            );
-            return (
-            <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:16, padding:'24px', display:'flex', flexDirection:'column', gap:14, alignItems:'flex-start' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <FileText size={20} color="#c2410c"/>
-                <div style={{ fontSize:16, fontWeight:900, color:'#9a3412' }}>Anexe os documentos para gerar a análise</div>
-              </div>
-              <p style={{ fontSize:14, color:'#7c2d12', lineHeight:1.6, margin:0 }}>
-                {parecerDocumental.motivo || 'A análise documental e jurídica é gerada com um clique a partir dos documentos. Anexe o edital e a matrícula (mínimo); se o leiloeiro ou o banco forneceu outros documentos, anexe também.'}
-              </p>
-              {imovelInicial?.id ? (<>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
-                  <AnexoBtn tipo="edital"    cor="#9a3412" rotulo="Edital (PDF)"    ok={temEdi}/>
-                  <AnexoBtn tipo="matricula" cor="#c2410c" rotulo="Matrícula (PDF)" ok={temMat}/>
-                  <AnexoBtn tipo="outro"     cor="#b45309" rotulo="Documento complementar" ok={false}/>
-                </div>
-                {complementares.length > 0 && (
-                  <div style={{ fontSize:12, color:'#7c2d12', lineHeight:1.5 }}>
-                    <strong>{complementares.length}</strong> complementar(es) anexado(s): {complementares.map(c=>c.nome).join(', ')}
-                  </div>
-                )}
-                {temMat && temEdi && (
-                  <button onClick={gerarRelDocumental} disabled={gerandoDocumental}
-                    style={{ padding:'12px 20px', background: gerandoDocumental?'#94a3b8':'#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor: gerandoDocumental?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
-                    {gerandoDocumental ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando…</> : <><Sparkles size={15}/> Gerar análise documental + jurídica</>}
-                  </button>
-                )}
-                <button onClick={()=>setModoManual(true)} style={{ background:'none', border:'none', color:'#9a3412', fontSize:12.5, fontWeight:700, cursor:'pointer', textDecoration:'underline', padding:0 }}>ou colar o texto do documento</button>
-              </>) : (
-                <button onClick={()=>setModoManual(true)} style={{ padding:'11px 18px', background:'#c2410c', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer' }}>
-                  📎 Anexar matrícula e edital
-                </button>
-              )}
-            </div>
-            );
-          })()}
+          {relSel === 'documental' && parecerDocumental?.precisaDocumentos && !preparandoDocs && (
+            <DocsFaltantesCard
+              faltando={parecerDocumental.faltando || ['matricula','edital']}
+              paginaLeiloeiro={parecerDocumental.paginaLeiloeiro}
+              motivo={parecerDocumental.motivo}
+            />
+          )}
+          {/* Análise gerada, mas faltou um documento central (ex.: matrícula lida e
+              edital ausente): pede SÓ o que falta, sem refazer tudo. */}
+          {relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos && (parecerDocumental.faltando?.length > 0) && (
+            <DocsFaltantesCard compact faltando={parecerDocumental.faltando} paginaLeiloeiro={parecerDocumental.paginaLeiloeiro} />
+          )}
           {relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos && (
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding:'20px 22px', display:'flex', flexDirection:'column', gap:14 }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>

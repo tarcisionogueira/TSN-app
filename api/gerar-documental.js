@@ -331,6 +331,7 @@ Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM AB
   "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. LINGUAGEM PARA LEIGO (obrigatório): escreva para QUALQUER pessoa sem formação jurídica entender; frases curtas e, sempre que usar um termo técnico inevitável (ex.: propter rem, usufruto, penhora, hipoteca, alienação fiduciária, imissão de posse, indisponibilidade), explique em 3 a 6 palavras entre parênteses o que significa. § SEÇÃO: SITUAÇÃO REGISTRÁRIA (matrícula/ônus/gravames); § SEÇÃO: OCUPAÇÃO E POSSE; § SEÇÃO: DÉBITOS E RESPONSABILIDADES (o que consta e o que precisa ser confirmado, com as referências); § SEÇÃO: CONDIÇÕES DO EDITAL; § SEÇÃO: SITUAÇÃO PROCESSUAL${temProc ? ' (com base no CNJ)' : ''}; § SEÇÃO: CONCLUSÃO E DILIGÊNCIAS RECOMENDADAS.",
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "nivelRisco": "verde|amarelo|vermelho",
+  "documentosAnalisados": { "matricula": false, "edital": false, "laudo": false, "_obs": "marque TRUE apenas o documento que você DE FATO leu no conteúdo anexado: matrícula = certidão do registro de imóveis (cadeia dominial, registros R-/Av-); edital = edital/regulamento do leilão (condições, praças, comissão) OU, em venda direta, as regras da venda; laudo = laudo de avaliação. Não marque true por inferência — só se o documento estava entre os anexos lidos." },
   "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "raioX": {
     "cadeiaDominial": [{"ato":"","data":"AAAA-MM-DD","evento":"","parte":""}],
@@ -545,10 +546,14 @@ export default async function handler(req, res) {
           await dispararCaptura('captura-documentos.yml'); // dispara agora
         } catch { /* segue com a mensagem */ }
       }
+      const ehVendaDiretaSem = /venda_direta/i.test(String(row?.modalidade || ''));
       const semDocs = {
         precisaDocumentos: true,
         integrado: ehCaixaFonte || temPaginaLote,
         emCaptura: enfileirado,
+        // Nada legível → faltam os dois documentos centrais; a tela pede ambos + link.
+        faltando: ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital'],
+        paginaLeiloeiro: [row?.link_edital, row?.link_regras_venda].find(u => /^https?:\/\//i.test(u || '')) || null,
         documentosLidos: [],
         motivo: enfileirado
           ? `Estamos baixando os documentos automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''} (leiloeiro integrado). Leva cerca de 1 minuto — a análise é gerada sozinha assim que os documentos chegarem. Se preferir na hora, anexe a matrícula e o edital (PDF).`
@@ -886,10 +891,25 @@ export default async function handler(req, res) {
       parecerBase = p.join('\n\n');
     }
 
+    // DOCUMENTOS FALTANTES (para a tela pedir só o que falta). Usa a confirmação da
+    // IA (documentosAnalisados) — que reconhece o doc mesmo quando o tipo do anexo
+    // ficou 'outro' (URL opaca, ex.: SUPERBID) — combinada com o tipo já classificado.
+    const da = parsed.documentosAnalisados || {};
+    const isVendaDiretaDoc = /venda_direta/i.test(String(row?.modalidade || ''));
+    const leuEdital = !!da.edital || lidos.some(l => tipoDoRotulo(l.rotulo) === 'edital') || lidos.some(l => tipoDoRotulo(l.rotulo) === 'regras_venda') || !!body?.textoEdital;
+    const leuMatriculaFinal = !!da.matricula || leuMatricula;
+    const faltando = [];
+    if (!leuMatriculaFinal) faltando.push('matricula');
+    if (!leuEdital) faltando.push(isVendaDiretaDoc ? 'regras_venda' : 'edital');
+    // Link da página do lote no leiloeiro (para o cliente buscar o doc que falta).
+    const paginaLeiloeiro = [row?.link_edital, row?.link_regras_venda].find(u => /^https?:\/\//i.test(u || '')) || null;
+
     const result = {
       extracao: parsed.extracao || null,
       riscos: parsed.riscos || [],
       pontosAtencao,
+      faltando,
+      paginaLeiloeiro,
       lacunas: parsed.lacunas || [],
       nivelRisco: parsed.nivelRisco || (temProc ? cnj.parecer?.nivel : null) || 'amarelo',
       diligenciaPendente: !docOk,
