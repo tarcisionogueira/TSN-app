@@ -18,6 +18,17 @@ const LOTE = Number(process.env.DOCS_LOTE || 15);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ehUrl = v => typeof v === 'string' && /^https?:\/\//i.test(v);
+// Limpa o "nome" do doc: tira URLs/paths e ruído, deixa só texto humano curto
+// (senão o nome no banco virava a URL crua repetida — feio na tela).
+function limparNome(n) {
+  const s = (n || '')
+    .replace(/https?:\/\/\S+/gi, ' ')          // URLs absolutas
+    .replace(/[\w.-]+\/[\w./-]+\.pdf/gi, ' ')  // paths tipo imovel.ai/.../x.pdf
+    .replace(/\s+/g, ' ').trim();
+  // Deduplica palavras repetidas em sequência (o ctx às vezes repete o rótulo).
+  const uniq = [...new Set(s.split(' '))].join(' ');
+  return uniq.slice(0, 60);
+}
 // Classifica o documento pelo nome/URL para gravar o tipo certo.
 function classificar(url, nome = '') {
   const s = `${url} ${nome}`.toLowerCase();
@@ -133,16 +144,21 @@ async function processar(browser, item) {
       // navega para outra página) e rolamos a página para disparar carregamento lazy.
       try {
         await page.evaluate(async () => {
-          const rx = /documento|edital|anexo|habilita|regulamento|matr[ií]cula|arquivo|download|leil[ãa]o|condi[çc]/i;
+          // Só gatilhos claramente ligados a DOCUMENTOS DO LOTE. NÃO clicamos em
+          // nav/menu/footer (levava a PDFs corporativos — "Transparência Salarial",
+          // "Quem somos" — que não são do imóvel). Sem .nav-link / a[href=#].
+          const rx = /documento|edital|anexo|regulamento|matr[ií]cula|habilita[çc]/i;
           const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           const cliqueis = Array.from(document.querySelectorAll(
-            'button, summary, [role="tab"], [role="button"], [aria-controls], .tab, .accordion, .accordion-header, .nav-link, li[data-toggle], a[href="#"], a[href^="javascript"]'
+            'button, summary, [role="tab"], [aria-controls], .accordion-header, [data-toggle="collapse"]'
           ));
           let cliques = 0;
           for (const el of cliqueis) {
-            if (cliques >= 12) break;
+            if (cliques >= 8) break;
+            // Ignora gatilhos dentro de nav/header/footer.
+            if (el.closest('nav,header,footer,[role="navigation"]')) continue;
             const txt = (el.getAttribute('aria-label') || el.textContent || '').trim();
-            if (!rx.test(txt) || txt.length > 60) continue;
+            if (!rx.test(txt) || txt.length > 48) continue;
             try { el.click(); cliques++; await sleep(400); } catch { /* */ }
           }
           // rola até o fim para carregar seções lazy
@@ -176,9 +192,11 @@ async function processar(browser, item) {
           href: a.href,
           txt: (a.textContent || '').trim().slice(0, 80),
           ctx: (`${a.getAttribute('aria-label') || ''} ${a.getAttribute('title') || ''} ${head?.textContent || ''} ${ctx}`).trim().slice(0, 160),
+          // Link dentro de nav/header/footer → institucional (não é doc do lote).
+          nav: !!a.closest('nav,header,footer,[role="navigation"],[class*="footer"],[class*="menu"]'),
         };
       })
-      .filter(x => /\.pdf(\?|#|$)/i.test(x.href) || /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(x.txt + ' ' + x.ctx + ' ' + x.href)));
+      .filter(x => !x.nav && (/\.pdf(\?|#|$)/i.test(x.href) || /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(x.txt + ' ' + x.ctx + ' ' + x.href))));
   } catch { /* sem links */ }
 
   // DIAGNÓSTICO p/ calibrar leiloeiros anti-bot (aparece nos logs do GitHub Actions).
@@ -197,21 +215,23 @@ async function processar(browser, item) {
     const alvo = l.txt + ' ' + (l.ctx || '') + ' ' + l.href;
     const ehPdfHref = /\.pdf(\?|#|$)/i.test(l.href);
     const ehDocTxt = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(alvo);
-    // Ignora documentos GENÉRICOS do site (não são do lote): modelo de proposta,
-    // "como comprar", termos, cadastro, política — evita salvar lixo como "edital".
-    const ehGenerico = /modelo|proposta|como.?comprar|termos|pol[ií]tica|privacidade|cadastr|manual|passo.?a.?passo/i.test(alvo);
+    // Ignora documentos GENÉRICOS/INSTITUCIONAIS do site (não são do lote): modelo
+    // de proposta, "como comprar", termos, cadastro, e material CORPORATIVO do
+    // leiloeiro (relatório de transparência, igualdade salarial, quem somos,
+    // imprensa, investidores, carreira) — evita salvar lixo como "edital"/"outro".
+    const ehGenerico = /modelo|proposta|como.?comprar|termos|pol[ií]tica|privacidade|cadastr|manual|passo.?a.?passo|transpar[êe]ncia|igualdade.?salarial|quem.?somos|imprensa|investidor|carreira|institucional|c[óo]digo.?de.?[ée]tica|governan[çc]a/i.test(alvo);
     if ((!ehPdfHref && !ehDocTxt) || ehGenerico) continue;
     const buf = await baixarPdf(page, l.href, paginaLote);
     // Passa o CONTEXTO (rótulo da seção) além do texto do link para classificar
     // certo mesmo quando a URL é opaca (hash sem "edital"/"matric").
-    if (buf) { try { await salvar(buf, l.href, `${l.txt} ${l.ctx || ''}`.trim()); } catch { /* */ } }
+    if (buf) { try { await salvar(buf, l.href, limparNome(`${l.txt} ${l.ctx || ''}`)); } catch { /* */ } }
   }
   // Também os anexos que o scrape já tinha registrado como URL (baixa e guarda).
   for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) {
     if (capturados.length >= 8) break;
     if (!ehUrl(a?.url)) continue;
     const buf = await baixarPdf(page, a.url, paginaLote);
-    if (buf) { try { await salvar(buf, a.url, a.nome || ''); } catch { /* */ } }
+    if (buf) { try { await salvar(buf, a.url, limparNome(a.nome || '')); } catch { /* */ } }
   }
 
   await page.close();
