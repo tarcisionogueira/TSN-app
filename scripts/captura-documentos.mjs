@@ -40,10 +40,21 @@ async function salvarAnexo(imovelId, buffer, tipo, nome) {
   else await supabase.from('imovel_anexos').insert(row);
 }
 
-async function baixarPdf(page, url) {
-  // Baixa via fetch DENTRO da página (usa a sessão/cookies já validados e evita o
-  // net::ERR_ABORTED que o page.goto() dá ao "navegar" para um PDF — o Chrome tenta
-  // BAIXAR o arquivo em vez de abrir, e o goto falhava mesmo com o PDF real).
+const ehPdfBuf = (buf, ct) => buf && buf.length > 1500 && ((ct || '').includes('pdf') || buf.slice(0, 5).toString('latin1') === '%PDF-');
+
+async function baixarPdf(page, url, referer) {
+  // 1) Node fetch (SEM CORS) — funciona cross-origin, essencial para os PDFs que
+  //    ficam num CDN (ex.: cdn1.megaleiloes.com.br), onde o fetch da página é
+  //    bloqueado por CORS. page.goto() num PDF dá net::ERR_ABORTED, por isso não é usado.
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*', ...(referer ? { Referer: referer } : {}) }, redirect: 'follow', signal: AbortSignal.timeout(25000) });
+    if (r.ok) {
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (ehPdfBuf(buf, r.headers.get('content-type'))) return buf;
+    }
+  } catch { /* tenta pela página */ }
+  // 2) Fetch DENTRO da página (usa a sessão validada) — cobre PDFs same-origin que a
+  //    origem só serve com cookie/sessão.
   try {
     const res = await page.evaluate(async (u) => {
       try {
@@ -51,17 +62,13 @@ async function baixarPdf(page, url) {
         if (!r.ok) return null;
         const ct = (r.headers.get('content-type') || '').toLowerCase();
         const bytes = new Uint8Array(await r.arrayBuffer());
-        let bin = '';
-        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
         return { ct, b64: btoa(bin), len: bytes.length };
       } catch { return null; }
     }, url);
-    if (!res || res.len < 1500) return null;
-    const buf = Buffer.from(res.b64, 'base64');
-    // Aceita application/pdf OU assinatura %PDF (CDNs às vezes mandam octet-stream).
-    const ehPdf = res.ct.includes('pdf') || buf.slice(0, 5).toString('latin1') === '%PDF-';
-    return ehPdf ? buf : null;
-  } catch { return null; }
+    if (res && res.len >= 1500) { const buf = Buffer.from(res.b64, 'base64'); if (ehPdfBuf(buf, res.ct)) return buf; }
+  } catch { /* */ }
+  return null;
 }
 
 async function processar(browser, item) {
@@ -130,17 +137,21 @@ async function processar(browser, item) {
   // baixarPdf só salva se a resposta for REALMENTE application/pdf (filtra HTML/rotas).
   for (const l of linksPdf) {
     if (salvos.size >= 4) break;
+    const alvo = l.txt + ' ' + l.href;
     const ehPdfHref = /\.pdf(\?|#|$)/i.test(l.href);
-    const ehDocTxt = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(l.txt + ' ' + l.href);
-    if (!ehPdfHref && !ehDocTxt) continue;
-    const buf = await baixarPdf(page, l.href);
+    const ehDocTxt = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(alvo);
+    // Ignora documentos GENÉRICOS do site (não são do lote): modelo de proposta,
+    // "como comprar", termos, cadastro, política — evita salvar lixo como "edital".
+    const ehGenerico = /modelo|proposta|como.?comprar|termos|pol[ií]tica|privacidade|cadastr|manual|passo.?a.?passo/i.test(alvo);
+    if ((!ehPdfHref && !ehDocTxt) || ehGenerico) continue;
+    const buf = await baixarPdf(page, l.href, paginaLote);
     if (buf) { try { await salvar(buf, l.href, l.txt); } catch { /* */ } }
   }
   // Também os anexos que o scrape já tinha registrado como URL (baixa e guarda).
   for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) {
     if (salvos.size >= 4) break;
     if (!ehUrl(a?.url)) continue;
-    const buf = await baixarPdf(page, a.url);
+    const buf = await baixarPdf(page, a.url, paginaLote);
     if (buf) { try { await salvar(buf, a.url, a.nome || ''); } catch { /* */ } }
   }
 
