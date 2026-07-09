@@ -10,6 +10,18 @@ export const MODAL_LABEL = {
   extrajudicial: 'Extrajudicial',
 };
 
+// Converte uma data-only 'YYYY-MM-DD' em Date no fuso LOCAL (ao meio-dia, à prova de
+// deslocamento de fuso). CONTRAMEDIDA: new Date('2026-07-10') é meia-noite UTC e, em
+// fusos negativos (BRT, UTC-3), aparecia como 09/07 — a data do leilão saía UM DIA
+// antes. Use SEMPRE isto para datas de leilão (nunca new Date(str) cru).
+export function parseDataLocal(d) {
+  if (!d) return null;
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0);
+  const x = new Date(d);
+  return isNaN(x) ? null : x;
+}
+
 export function fmtData(d, modalidade) {
   if (!d) {
     // Venda direta é compra contínua (não tem data). Nos leilões/licitações da
@@ -19,8 +31,8 @@ export function fmtData(d, modalidade) {
     if (modalidade === 'licitacao_aberta') return 'Prazo no edital';
     return 'A confirmar no edital';
   }
-  const dt = new Date(d);
-  if (isNaN(dt)) return d;
+  const dt = parseDataLocal(d);
+  if (!dt) return d;
   return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 

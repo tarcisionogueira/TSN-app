@@ -10,6 +10,7 @@ import { buscarCidadesEstado, buscarTodasCidades, RAIOS_KM } from '../data/cidad
 import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadge } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import { parseDataLocal } from '../utils/format';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../utils/useIsMobile';
 import ScoreRisco from '../components/ScoreRisco';
@@ -35,8 +36,8 @@ const ROLES_ANALISE = ['top2','assessorado','clube','analista','advogado','admin
 
 function fmtData(d, modalidade) {
   if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : 'A confirmar no edital';
-  const dt = new Date(d);
-  if (isNaN(dt)) return d;
+  const dt = parseDataLocal(d); // fuso-safe: data-only não pode virar o dia anterior
+  if (!dt) return d;
   return dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
 }
 
@@ -44,8 +45,8 @@ function fmtData(d, modalidade) {
 // planejar num relance. Só p/ datas futuras; passado/sem data → null.
 function contagemLeilao(d) {
   if (!d) return null;
-  const dt = new Date(d);
-  if (isNaN(dt)) return null;
+  const dt = parseDataLocal(d); // fuso-safe: senão o countdown e o "já passou" saíam 1 dia deslocados
+  if (!dt) return null;
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const alvo = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
   const dias = Math.round((alvo - hoje) / 86400000);
