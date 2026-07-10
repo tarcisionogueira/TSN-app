@@ -1629,7 +1629,29 @@ function mapLotePestana(lote, leilao) {
   const foto = capaMedia ? `${PESTANA_GED}${encodeURIComponent(capaMedia)}?ims=fit-in/640x0` : null;
   const origem = String(bem.origem || '').toLowerCase();
   const modalidade = origem.includes('extra') ? 'extrajudicial' : origem.includes('judicial') ? 'judicial' : 'extrajudicial';
-  const edital = (Array.isArray(leilao.documentos) ? leilao.documentos.find(d => d && /edital/i.test(d.nome || '')) : null);
+  // DOCUMENTOS. O edital é do LEILÃO (um por leilão). Matrícula/laudo, quando
+  // existem, são do LOTE/BEM (por-imóvel): NUNCA usar um doc de leilão como
+  // matrícula, senão o mesmo arquivo grudaria em todos os lotes. Varremos os
+  // arrays disponíveis (nomes de campo variam), classificamos por palavra-chave e
+  // montamos os anexos para as IAs lerem e gerarem os relatórios.
+  const linkDoc = (d) => (d && (d.link || d.url || d.arquivo || d.media || d.caminho)) || null;
+  const classDoc = (nome) => {
+    const t = String(nome || '');
+    if (/matr[ií]cul/i.test(t)) return 'matricula';
+    if (/edital/i.test(t)) return 'edital';
+    if (/laudo|avalia[çc][ãa]o/i.test(t)) return 'laudo';
+    if (/proposta/i.test(t)) return 'proposta';
+    if (/regras|condi[cç][oõ]es/i.test(t)) return 'regras';
+    return 'anexo';
+  };
+  const mkDocs = (arr) => (Array.isArray(arr) ? arr : [])
+    .map(d => ({ nome: String((d && (d.nome || d.descricao)) || 'Documento').slice(0, 90), url: linkDoc(d), tipo: classDoc(d && (d.nome || d.descricao)) }))
+    .filter(d => d.url);
+  const docsLote = [...mkDocs(lote.documentos), ...mkDocs(bem.documentos), ...mkDocs(bem.anexos)]; // por-lote
+  const docsLeilao = mkDocs(leilao.documentos); // por-leilão (edital)
+  const anexos = [...docsLote, ...docsLeilao].filter((d, i, a) => a.findIndex(x => x.url === d.url) === i).slice(0, 25);
+  const primeiroDoc = (tipo, lista) => (lista.find(d => d.tipo === tipo) || {}).url || null;
+  const editalUrl = primeiroDoc('edital', anexos);
   const agenda = `${PESTANA_BASE}/agenda-de-leiloes/${leilao.id}`;
   return {
     fonte: 'PESTANA',
@@ -1645,7 +1667,10 @@ function mapLotePestana(lote, leilao) {
     valor_minimo: valor,
     area_m2: area,
     descricao: [desc, leilao.nome].filter(Boolean).join(' — ').slice(0, 500),
-    link_edital: (edital && edital.link) || agenda,
+    link_edital: editalUrl || agenda,
+    link_matricula: primeiroDoc('matricula', docsLote) || null, // só por-lote (nunca do leilão)
+    link_regras_venda: primeiroDoc('regras', anexos) || null,
+    anexos,
     url_lote: agenda,
     link_foto: foto,
     leiloeiro: String(leilao.leiloeiro || 'Pestana Leilões').slice(0, 120),
@@ -2459,13 +2484,16 @@ async function main() {
     if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
     if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
 
-    // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos
+    // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos.
+    // A página de detalhe do lote (link_edital) é server-rendered → enrich vasculha
+    // edital/matrícula/laudo para as IAs lerem e para o mapa exato (endereço da matrícula).
     console.log('\n📋 PortalZuk (Zukerman)...');
-    if (rodar('ZUK')) await coletarFonte('ZUK', () => scraperPortalZuk(browser));
+    if (rodar('ZUK')) await coletarFonte('ZUK', () => scraperPortalZuk(browser), { enrich: true, enrichCap: 120 });
 
-    // 5. Sodré Santoro — API search-lots interceptada, somente ativos
+    // 5. Sodré Santoro — API search-lots interceptada, somente ativos. Detalhe do
+    // lote (/imoveis/lote/{id}) server-rendered → enrich captura edital/matrícula/laudo.
     console.log('\n📋 Sodré Santoro...');
-    if (rodar('SODRE')) await coletarFonte('SODRE', () => scraperSodre(browser));
+    if (rodar('SODRE')) await coletarFonte('SODRE', () => scraperSodre(browser), { enrich: true, enrichCap: 120 });
 
     // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis. Detalhe
     // server-rendered → enriquecerDocumentosLote captura edital/matrícula/laudo.

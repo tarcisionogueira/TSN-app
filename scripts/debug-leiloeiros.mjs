@@ -16,17 +16,183 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 9 — página de leilão de imóvel do Biasi (server-rendered ASP.NET) ===
-  // A home revelou os leilões em /leilao/{id}/... e o endpoint /Home/GetLotesPorCidade
-  // (só cidades). Os lotes reais estão na página do leilão. Capturamos o leilão
-  // Santander 4295 (215 lotes) p/ ver se os lotes vêm no HTML e/ou por um GetLotes.
-  { fonte: 'BIASI', url: 'https://www.biasileiloes.com.br/leilao/4295/grande-leilao-de-imoveis-santander-215-oportunidades-em-diversos-estados-do-brasil-confira-e-aproveite', inPageApis: [
-    'https://www.biasileiloes.com.br/Home/GetLotes?leilaoId=4295',
-    'https://www.biasileiloes.com.br/Leilao/GetLotes?leilaoId=4295',
-    'https://www.biasileiloes.com.br/Leilao/GetLotes?id=4295',
-    'https://www.biasileiloes.com.br/Home/GetLotesPorLeilao?leilaoId=4295',
-  ] },
+  // Round 32 — Superbid (item 2): página de DETALHE da oferta. Interceptar o XHR JSON
+  // de detalhe que traz DOCUMENTOS (edital/matrícula/laudo) e o ENDEREÇO completo
+  // (para geo exata). SPA — os PDFs não estão no HTML; vêm por API.
+  { fonte: 'SBD1', url: 'https://www.superbid.net/oferta/4756704' },
+  { fonte: 'SBD2', url: 'https://www.superbid.net/oferta/4588831' },
 ];
+
+// Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
+// então dentro da página: (1) tenta INTROSPECTION do schema para achar o campo raiz
+// que lista lotes com filtro; (2) roda HomeBootstrap p/ pegar um slug de leilão real e
+// (3) navega ao detalhe do leilão para capturar a query de lotes que dispara lá.
+async function scanLeilotech(browser) {
+  console.log('🔎 Leilotech — capturando (via interceptação) a query de lotes do leilão...');
+  const base = 'https://oleiloes.com.br/';
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  // Casa requisição→resposta do GraphQL (a resposta não traz o operationName).
+  const reqByOrder = [];
+  const gql = [];
+  page.on('request', (req) => {
+    try { if (/\/go\/graphql/.test(req.url())) { let op = ''; try { op = (JSON.parse(req.postData()||'{}').operationName)||''; } catch {} reqByOrder.push(op); } } catch {}
+  });
+  page.on('response', async (resp) => {
+    try {
+      if (!/\/go\/graphql/.test(resp.url())) return;
+      const t = await resp.text();
+      const op = reqByOrder.shift() || '?';
+      gql.push({ op, len: t.length, json: t.slice(0, 60) === t.slice(0,60) && t[0] === '{' ? t : '(nao-json)', sample: t.slice(0, 400) });
+    } catch {}
+  });
+  const out = {};
+  try {
+    // 1) Home: a SPA dispara leiloesHome (passa pelo Cloudflare). Interceptamos.
+    await page.goto(base, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 5000));
+    for (let i = 0; i < 6; i++) { try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch {} await new Promise(r => setTimeout(r, 1200)); }
+
+    // Extrai leilões de imóveis (slug/categoria/lotesCount) da resposta interceptada.
+    const homeResp = gql.filter(g => g.op === 'HomeBootstrap' && g.json !== '(nao-json)').sort((a,b)=>b.len-a.len)[0];
+    let leiloes = [], itemsFull = [];
+    if (homeResp) {
+      try {
+        const j = JSON.parse(homeResp.json);
+        itemsFull = j?.data?.leiloesHome?.items || [];
+        leiloes = itemsFull.map(i => ({ slug: i.slug, cat: i.categoriaMascara, lotes: i.lotesCount, title: (i.title||'').slice(0,40) }));
+        out.pagination = j?.data?.leiloesHome?.pagination;
+        // Dump BRUTO do 1º item de imóvel — precisamos ver primaryLote (valores/foto).
+        const imv = itemsFull.find(i => /im[oó]vel/i.test(i.title||'') || /im[oó]vel/i.test(i.categoriaMascara||''));
+        out.rawImovelItem = JSON.stringify(imv || itemsFull[0] || null).slice(0, 2500);
+      } catch (e) { out.parseErr = String(e && e.message); }
+    }
+    out.leiloes = leiloes.slice(0, 12);
+
+    // 2) Abre o detalhe do 1º leilão (de preferência de imóveis) → SPA busca os lotes.
+    const alvo = leiloes.find(l => /im[oó]ve/i.test(l.cat || '')) || leiloes[0];
+    if (alvo?.slug) {
+      out.alvo = alvo;
+      gql.length = 0; reqByOrder.length = 0;
+      // tenta rotas prováveis de detalhe do leilão
+      for (const rota of [`leilao/${alvo.slug}`, `leiloes/${alvo.slug}`]) {
+        await page.goto(`${base}${rota}`, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+        await new Promise(r => setTimeout(r, 4000));
+        for (let i = 0; i < 5; i++) { try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch {} await new Promise(r => setTimeout(r, 1200)); }
+        if (gql.some(g => g.op !== 'Bootstrap' && g.op !== '?')) break;
+      }
+      out.detalheOps = gql.map(g => ({ op: g.op, len: g.len }));
+      // maior resposta não-Bootstrap = provavelmente os lotes
+      const loteResp = gql.filter(g => g.op !== 'Bootstrap' && g.json !== '(nao-json)').sort((a,b)=>b.len-a.len)[0];
+      if (loteResp) { out.loteOp = loteResp.op; out.loteSample = loteResp.sample; out.loteLen = loteResp.len; }
+    }
+  } catch (e) { out.erro = String(e && e.message); }
+  await gravarDebug('LT-SCHEMA', base, 200, 'application/json', JSON.stringify(out, null, 2));
+  console.log(`  leilões: ${out.leiloes?.length ?? 0}; alvo: ${out.alvo?.slug ?? 'n/a'}; loteOp: ${out.loteOp ?? 'n/a'}`);
+  await page.close();
+}
+
+// Diagnóstico VIP: pega os eventos da agenda e, para cada um, conta os cards de
+// anúncio via 3 métodos (DOM da detalhe / fetch /evento/lotes / fetch com header
+// XHR). Mostra POR QUE a coleta traz só 7 — quais eventos têm imóveis e qual
+// método realmente devolve os cards.
+async function scanVIP(browser) {
+  console.log('🔎 Diagnóstico Leilão VIP (contagem de anúncios por evento)...');
+  const VIP = 'https://www.leilaovip.com.br';
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const relatorio = { agenda: {}, eventos: [] };
+  try {
+    await page.goto(`${VIP}/agenda?segmento=Im%C3%B3veis`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await new Promise(r => setTimeout(r, 2500));
+    const info = await page.evaluate(() => {
+      const detalhes = new Set(), anuncioLinks = new Set();
+      document.querySelectorAll('a[href*="/evento/detalhes/"]').forEach(a => {
+        const m = (a.getAttribute('href') || '').match(/\/evento\/detalhes\/([^/?#]+)/); if (m) detalhes.add(m[1]);
+      });
+      document.querySelectorAll('a[href*="/evento/anuncio/"]').forEach(a => anuncioLinks.add(a.getAttribute('href')));
+      return {
+        nCardEvento: document.querySelectorAll('.card-evento').length,
+        nCardAnuncio: document.querySelectorAll('.card-anuncio').length,
+        nCard: document.querySelectorAll('[class*="card"]').length,
+        detalhes: [...detalhes], nAnuncioLinks: anuncioLinks.size,
+      };
+    });
+    relatorio.agenda = { nCardEvento: info.nCardEvento, nCardAnuncio: info.nCardAnuncio, nCard: info.nCard, nEventos: info.detalhes.length, nAnuncioLinks: info.nAnuncioLinks };
+
+    for (const ev of info.detalhes.slice(0, 8)) {
+      await page.goto(`${VIP}/evento/detalhes/${ev}`, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+      await new Promise(r => setTimeout(r, 1500));
+      const r = await page.evaluate(async (id) => {
+        const cnt = (html) => { try { return new DOMParser().parseFromString(html, 'text/html').querySelectorAll('.card-anuncio').length; } catch { return -1; } };
+        const domDetalhe = document.querySelectorAll('.card-anuncio').length;
+        let lotesPlain = { status: 0, cards: -1, len: 0 };
+        let lotesXhr = { status: 0, cards: -1, len: 0 };
+        try { const x = await fetch(`/evento/lotes/${id}`, { credentials: 'include' }); const t = await x.text(); lotesPlain = { status: x.status, cards: cnt(t), len: t.length }; } catch (e) { lotesPlain.err = String(e && e.message); }
+        try { const x = await fetch(`/evento/lotes/${id}`, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } }); const t = await x.text(); lotesXhr = { status: x.status, cards: cnt(t), len: t.length }; } catch (e) { lotesXhr.err = String(e && e.message); }
+        return { domDetalhe, lotesPlain, lotesXhr };
+      }, ev).catch((e) => ({ erro: String(e && e.message) }));
+      relatorio.eventos.push({ ev, ...r });
+    }
+  } catch (e) { relatorio.erro = String(e && e.message); }
+  await gravarDebug('VIP-DIAG', 'scan', 200, 'application/json', JSON.stringify(relatorio, null, 2));
+  console.log('  ', JSON.stringify(relatorio).slice(0, 400));
+  await page.close();
+}
+
+// Mede o VOLUME de imóveis por portal do Superbid e IDENTIFICA o leiloeiro/portal
+// via seoTitle+seoBreadcrumb. Depois testa SOBREPOSIÇÃO: pega o 1º offer de cada
+// sub-portal e verifica se ele TAMBÉM aparece no portal 2 (marketplace-mãe) — se
+// sim, plugar sub-portais só traz DUPLICADOS, não imóveis novos.
+async function scanSuperbidPortais(browser) {
+  console.log('🔎 Scan de portais do Superbid (volume + identidade + sobreposição)...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  try { await page.goto('https://www.superbid.net/', { waitUntil: 'domcontentloaded', timeout: 45000 }); } catch {}
+  await new Promise(r => setTimeout(r, 3000));
+  const res = await page.evaluate(async () => {
+    const base = 'https://offer-query.superbid.net/offers/';
+    const q = (portal, size, id) =>
+      `${base}?portalId=[${portal}]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=${size}&orderBy=endDate:asc`;
+    const out = [];
+    // 1) volume + identidade por portal
+    for (let portal = 1; portal <= 120; portal++) {
+      try {
+        const r = await fetch(q(portal, 1), { headers: { Accept: 'application/json' } });
+        if (!r.ok) continue;
+        const d = await r.json();
+        const total = d.total ?? d.totalElements ?? d.totalCount ?? null;
+        const first = (d.offers || d.content || d.results || d.items || [])[0] || null;
+        if ((total && total > 0) || first) {
+          out.push({
+            portal, total,
+            seoTitle: d.seoTitle || null,
+            seoBreadcrumb: JSON.stringify(d.seoBreadcrumb || null).slice(0, 300),
+            firstId: first?.id ?? null,
+          });
+        }
+      } catch (e) { /* portal inexistente */ }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    // 2) teste de sobreposição: os primeiros 100 ids do portal 2 (mãe) contêm os
+    //    firstId dos sub-portais? Se sim → sub-portais são subconjunto do portal 2.
+    let idsPortal2 = [];
+    try {
+      const r = await fetch(q(2, 100), { headers: { Accept: 'application/json' } });
+      const d = await r.json();
+      idsPortal2 = (d.offers || d.content || []).map(o => o.id);
+    } catch {}
+    const overlap = out
+      .filter(p => p.portal !== 2 && p.firstId)
+      .map(p => ({ portal: p.portal, firstId: p.firstId, noPortal2: idsPortal2.includes(p.firstId) }));
+    return { portais: out, idsPortal2Count: idsPortal2.length, overlap };
+  }).catch((e) => ({ erro: String(e && e.message || e) }));
+  await gravarDebug('SUPERBID-PORTAIS', 'scan-1-120+overlap', 200, 'application/json', JSON.stringify(res, null, 2));
+  console.log(`  resultado: ${JSON.stringify(res).slice(0, 200)}`);
+  await page.close();
+}
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
   const txt = String(conteudo || '').slice(0, 400000);
@@ -150,6 +316,7 @@ async function main() {
       try { await capturar(browser, alvo); }
       catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
     }
+    // scanLeilotech desativado (Leilotech já integrada). Roda só os ALVOS.
   } finally {
     await browser.close();
   }
