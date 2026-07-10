@@ -1,5 +1,6 @@
 import { alertarErro } from './_error-alert.js';
 import { isCronAuthorized } from './_auth.js';
+import { escapeHtml } from './_sanitize.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end();
@@ -74,7 +75,7 @@ export default async function handler(req, res) {
             ⚠️ ${v.tipo === 'Sinal' ? 'Sinal de entrada' : `Parcela ${v.parcela}/${fin.num_parcelas}`} vence hoje
           </div>
           <div style="font-size:22px;font-weight:800;color:#0f172a;margin:8px 0;">${fmtBRL(v.valor)}</div>
-          <div style="font-size:12px;color:#64748b;">${fin.imovel_nome || 'Imóvel'} · ${fmtData(v.data)}</div>
+          <div style="font-size:12px;color:#64748b;">${escapeHtml(fin.imovel_nome || 'Imóvel')} · ${fmtData(v.data)}</div>
         </div>`
       ).join('');
 

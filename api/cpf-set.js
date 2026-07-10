@@ -12,7 +12,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { getUser } from './_auth.js';
-import { hashCpf, encryptCpf, cpfCriptoAtivo } from './_cpf.js';
+import { hashCpf, encryptCpf, cpfCriptoAtivo, validarCPF } from './_cpf.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -39,7 +39,8 @@ export default async function handler(req, res) {
   if (!user?.id) return res.status(401).json({ error: 'Não autorizado' });
 
   const cpf = String(req.body?.cpf || '').replace(/\D/g, '');
-  if (cpf.length !== 11) return res.status(400).json({ error: 'CPF inválido (11 dígitos).' });
+  // Valida o dígito verificador (não só o comprimento) — barra CPFs fictícios.
+  if (!validarCPF(cpf)) return res.status(400).json({ error: 'CPF inválido.' });
 
   const [cpf_hash, cpf_enc] = cpfCriptoAtivo()
     ? await Promise.all([hashCpf(cpf), encryptCpf(cpf)])

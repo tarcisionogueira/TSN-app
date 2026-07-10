@@ -24,6 +24,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
+import { escapeHtml } from './_sanitize.js';
 import MUNICIPIOS from './_municipios.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 
@@ -215,8 +216,8 @@ export default async function handler(req) {
         <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">
           ${foto}
           <div style="padding:14px 16px;">
-            <a href="${url}" style="text-decoration:none;color:#0f172a;"><div style="font-size:14px;font-weight:700;margin-bottom:4px;">${im.titulo || im.endereco || 'Imóvel em leilão'}</div></a>
-            <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${im.cidade || ''}${im.estado ? ' — ' + im.estado : ''}</div>
+            <a href="${url}" style="text-decoration:none;color:#0f172a;"><div style="font-size:14px;font-weight:700;margin-bottom:4px;">${escapeHtml(im.titulo || im.endereco || 'Imóvel em leilão')}</div></a>
+            <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${escapeHtml(im.cidade || '')}${im.estado ? ' — ' + escapeHtml(im.estado) : ''}</div>
             <div style="margin-bottom:10px;">${descTag}${dataTag}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div><div style="font-size:11px;color:#94a3b8;">Lance mínimo</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${fmtBRL(im.valor_minimo)}</div></div>
@@ -236,7 +237,7 @@ export default async function handler(req) {
     </div>
   </a>
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-    <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a;">Olá${perfil.nome ? ', ' + perfil.nome.split(' ')[0] : ''}!</h2>
+    <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a;">Olá${perfil.nome ? ', ' + escapeHtml(perfil.nome.split(' ')[0]) : ''}!</h2>
     <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">Selecionamos <strong>${top.length} oportunidade${top.length > 1 ? 's' : ''}</strong> em <strong>${local}</strong> para você esta semana:</p>
     ${cards}
     <div style="text-align:center;margin-top:20px;"><a href="${BASE}/#/buscar" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">Ver todos os imóveis →</a></div>

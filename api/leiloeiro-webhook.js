@@ -46,6 +46,8 @@ export default async function handler(req) {
   // GET: listar lotes — chave SÓ no header (nunca ?key= na URL, que vaza em
   // logs/CDN/Referer). Parceiros que pollavam via ?key= devem migrar para o header.
   if (req.method === 'GET') {
+    // Nunca aceitar a chave na URL (?key=) — vazaria em logs/CDN/Referer.
+    if (searchParams.get('key')) return json({ error: 'Não envie a chave na URL. Use o header X-Leiloeiro-Key.' }, 400);
     const key = req.headers.get('x-leiloeiro-key') || '';
     if (!key) return json({ error: 'Header X-Leiloeiro-Key obrigatório' }, 401);
     const leiloeiro = await resolverLeiloeiro(key);

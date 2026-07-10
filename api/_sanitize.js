@@ -49,6 +49,20 @@ export function sanitizeEmail(value) {
 }
 
 /**
+ * Escapa texto para interpolação SEGURA em HTML (e-mails, templates). Neutraliza
+ * XSS quando dados do banco (nome, título, cidade…) entram no HTML de e-mail.
+ */
+export function escapeHtml(value) {
+  if (value == null) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Sanitiza número monetário: retorna float ou null.
  */
 export function sanitizeNumber(value, min = 0, max = 1_000_000_000) {

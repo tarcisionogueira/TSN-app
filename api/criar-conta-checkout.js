@@ -10,7 +10,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { checkRateLimit } from './_rate-limit.js';
-import { hashCpf, encryptCpf } from './_cpf.js';
+import { hashCpf, encryptCpf, validarCPF } from './_cpf.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -50,6 +50,8 @@ export default async function handler(req, res) {
   if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) {
     return res.status(400).json({ error: 'A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.' });
   }
+  // Se veio CPF, valida o dígito verificador (não persistir CPF fictício).
+  if (cpf && !validarCPF(cpf)) return res.status(400).json({ error: 'CPF inválido.' });
 
   // CPF NÃO vai para o metadata do Auth (só hash+cifra em perfis, abaixo).
   const meta = { nome, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString() };

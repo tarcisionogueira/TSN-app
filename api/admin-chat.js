@@ -58,12 +58,12 @@ export default async function handler(req) {
     let q;
     if (chamado_id && isUUID(chamado_id)) {
       // Conversa específica
-      const msgs = await sbGet(`chamados_mensagens?chamado_id=eq.${chamado_id}&order=criado_em.asc&select=autor_tipo,autor_nome,conteudo,criado_em`);
-      const chamado = await sbGet(`chamados?id=eq.${chamado_id}&select=user_email,user_nome,titulo,status,criado_em`);
+      const msgs = await sbGet(`chamados_mensagens?chamado_id=eq.${encodeURIComponent(chamado_id)}&order=criado_em.asc&select=autor_tipo,autor_nome,conteudo,criado_em`);
+      const chamado = await sbGet(`chamados?id=eq.${encodeURIComponent(chamado_id)}&select=user_email,user_nome,titulo,status,criado_em`);
       contextoBlocos.push(`## Conversa #${chamado_id.slice(0,8).toUpperCase()}\nCliente: ${chamado[0]?.user_nome || chamado[0]?.user_email || '?'}\nStatus: ${chamado[0]?.status}\n\n${msgs.map(m => `[${new Date(m.criado_em).toLocaleString('pt-BR')}] ${m.autor_tipo === 'cliente' ? 'Cliente' : 'Assistente'}: ${redigirPII(m.conteudo)}`).join('\n')}`);
     } else if (usuario_id && isUUID(usuario_id)) {
       // Todos os chamados de um usuário
-      const chamados = await sbGet(`chamados?user_id=eq.${usuario_id}&order=criado_em.desc&limit=10&select=id,titulo,status,criado_em,user_nome`);
+      const chamados = await sbGet(`chamados?user_id=eq.${encodeURIComponent(usuario_id)}&order=criado_em.desc&limit=10&select=id,titulo,status,criado_em,user_nome`);
       const detalhes = await Promise.all(chamados.slice(0, 3).map(async c => {
         const msgs = await sbGet(`chamados_mensagens?chamado_id=eq.${c.id}&order=criado_em.asc&select=autor_tipo,conteudo&limit=20`);
         return `### Chamado "${c.titulo}" (${c.status})\n${msgs.map(m => `${m.autor_tipo === 'cliente' ? 'Cliente' : 'Assistente'}: ${redigirPII(m.conteudo)}`).join('\n')}`;

@@ -56,6 +56,21 @@ export async function cpfDoRegistro(row) {
   return row.cpf ? soDigitos(row.cpf) : null;
 }
 
+// Valida CPF pelo algoritmo do dígito verificador (Receita Federal). Rejeita
+// comprimento ≠ 11, todos os dígitos iguais (000…, 111…) e DVs incorretos —
+// impede a persistência de CPFs fictícios/inválidos em contratos e cadastros.
+export function validarCPF(cpf) {
+  const d = soDigitos(cpf);
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+  const dv = (fatorInicial) => {
+    let soma = 0;
+    for (let i = 0; i < fatorInicial - 1; i++) soma += Number(d[i]) * (fatorInicial - i);
+    const resto = (soma * 10) % 11;
+    return resto === 10 ? 0 : resto;
+  };
+  return dv(10) === Number(d[9]) && dv(11) === Number(d[10]);
+}
+
 // Máscara para exibição (não revela o CPF cheio).
 export function maskCpf(cpf) {
   const d = soDigitos(cpf);
