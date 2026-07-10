@@ -12,7 +12,7 @@
  *   AMOSTRA_PARA_USER      user_id (perfil) sob o qual as análises são gravadas
  */
 
-const BASE = (process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+const BASE = (process.env.APP_BASE_URL || 'https://bidprobrasil.com.br').replace(/\/+$/, '');
 const CRON = process.env.CRON_SECRET || '';
 const IDS = String(process.env.AMOSTRA_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
 const PARA = String(process.env.AMOSTRA_PARA_USER || '').trim();
