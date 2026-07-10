@@ -132,6 +132,8 @@ const CRITERIOS = {
   LEILOTECH:{ min: 15,  valor: 0.70, uf: 0.45, link: 0.9 },
   // Suporte Leilões: plataforma white-label server-rendered (/buscador?categoria=2).
   SUPORTE:  { min: 10,  valor: 0.80, uf: 0.50, link: 0.9 },
+  // Grupo Lance: server-rendered, catálogo grande; cidade/UF fortes (card-locality).
+  GRUPOLANCE:{ min: 50, valor: 0.85, uf: 0.60, link: 0.9 },
   // Sub-portais da rede Superbid (inventário pequeno, leiloeiro real vem no campo
   // `store` de cada oferta). Portal 9 ~72, portal 21 ~39 imóveis abertos.
   SBID9:    { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
@@ -2209,6 +2211,110 @@ async function scraperSuporte(browser) {
   return todos;
 }
 
+// ─── GRUPO LANCE ──────────────────────────────────────────────────────────────
+// Leiloeiro grande (MG/nacional), server-rendered (Yii2, sem Cloudflare). Catálogo
+// de imóveis em /imoveis?page=N. Cada card é .card-item[data-key={id}] com:
+// a.card-title (título com área/endereço), .card-price (valor), a.card-locality
+// (Cidade, UF), a[href*="/leiloes/"] (modalidade), foto no background da a.card-image
+// (//cdn.grupolance.com.br/...). Detalhe server-rendered → docs via enriquecerDocumentosLote.
+const GL_BASE = 'https://www.grupolance.com.br';
+
+function mapLoteGrupoLance(l) {
+  if (!l || !l.id) return null;
+  const titulo = String(l.titulo || '').replace(/\s+/g, ' ').trim();
+  // "Cidade, UF" da card-locality; fallback: UF/cidade da URL /imoveis/{cat}/{uf}/{cidade}/...
+  let cidade = '', uf = '';
+  const lm = String(l.local || '').match(/^(.*?),\s*([A-Za-z]{2})\s*$/);
+  if (lm) { cidade = lm[1].trim(); uf = lm[2].toUpperCase(); }
+  const um = String(l.href || '').match(/\/imoveis\/[^/]+\/([a-z]{2})\/([^/]+)\//i);
+  if (!uf && um) uf = um[1].toUpperCase();
+  if (!cidade && um) cidade = toTitleCase(um[2].replace(/-/g, ' '));
+  const ext = extrairDaDescricao(titulo);
+  const foto = l.foto ? (l.foto.startsWith('//') ? `https:${l.foto}` : l.foto) : null;
+  const href = l.href ? (l.href.startsWith('http') ? l.href : `${GL_BASE}${l.href}`) : `${GL_BASE}/imoveis`;
+  return {
+    fonte: 'GRUPOLANCE',
+    fonte_id: `gl_${l.id}`,
+    titulo: (titulo || `Imóvel Grupo Lance ${l.id}`).slice(0, 180),
+    tipo: normalizarTipo(titulo),
+    modalidade: /judicial/i.test(l.modalidade || '') ? 'judicial' : 'extrajudicial',
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
+    cidade: cidade || '',
+    bairro: '',
+    endereco: '',
+    valor_avaliacao: 0,
+    valor_minimo: parseBRL(l.valor || ''),
+    area_m2: ext.area_m2 || 0,
+    ocupacao: ext.ocupacao || null,
+    descricao: titulo.slice(0, 500),
+    link_edital: href,
+    url_lote: href,
+    link_foto: (foto && /^https?:\/\//.test(foto)) ? foto : null,
+    leiloeiro: 'Grupo Lance',
+    data_leilao: null,
+    forma_pagamento: 'a_vista',
+  };
+}
+
+function grupoLanceParsePagina(page) {
+  return page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('.card-item[data-key]').forEach((c) => {
+      const id = c.getAttribute('data-key');
+      if (!id) return;
+      const t = c.querySelector('a.card-title');
+      const loc = c.querySelector('a.card-locality');
+      const modal = c.querySelector('.card-info a[href*="/leiloes/"]');
+      const img = c.querySelector('a.card-image');
+      const bg = img ? (img.getAttribute('style') || '') : '';
+      const foto = (bg.match(/url\(([^)'"]+)/) || [])[1] || null;
+      out.push({
+        id,
+        href: t ? (t.getAttribute('href') || '') : '',
+        titulo: (t?.getAttribute('title') || t?.textContent || '').trim(),
+        valor: (c.querySelector('.card-price')?.textContent || '').trim(),
+        local: (loc?.getAttribute('title') || loc?.textContent || '').trim(),
+        modalidade: (modal?.textContent || '').trim(),
+        foto,
+      });
+    });
+    return out;
+  }).catch(() => []);
+}
+
+async function scraperGrupoLance(browser) {
+  console.log('  Grupo Lance — server-rendered (/imoveis, paginado)...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const bens = new Map();
+  const DEADLINE = Date.now() + 7 * 60 * 1000;
+  try {
+    for (let p = 1; p <= 60; p++) {
+      if (Date.now() > DEADLINE) { console.log('    Grupo Lance: teto de tempo atingido'); break; }
+      const antes = bens.size;
+      try {
+        await page.goto(`${GL_BASE}/imoveis?page=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 900));
+      } catch { break; }
+      const lotes = await grupoLanceParsePagina(page);
+      for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
+      if (bens.size === antes) break; // página sem novidade → fim da paginação
+    }
+  } finally { await page.close().catch(() => {}); }
+
+  const imoveis = [];
+  const seen = new Set();
+  for (const l of bens.values()) {
+    const row = mapLoteGrupoLance(l);
+    if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
+    seen.add(row.fonte_id);
+    imoveis.push(row);
+  }
+  console.log(`    Grupo Lance: ${imoveis.length} imóveis mapeados (${bens.size} lotes)`);
+  return imoveis;
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -2457,6 +2563,20 @@ async function main() {
       await registrarSaude('SUPORTE', imoveis, 'principal', validarColeta(imoveis, 'SUPORTE'));
     } catch (e) {
       console.log(`  ⚠️ Suporte Leilões falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // 14. Grupo Lance — server-rendered (/imoveis). Foto do CDN; edital/matrícula/laudo
+    // na página de detalhe (server-rendered) → enriquecerDocumentosLote vasculha.
+    // Blindado: nunca derruba o job.
+    console.log('\n📋 Grupo Lance...');
+    if (rodar('GRUPOLANCE')) try {
+      const imoveis = await scraperGrupoLance(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 150 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Grupo Lance falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'GRUPOLANCE');
+      await registrarSaude('GRUPOLANCE', imoveis, 'principal', validarColeta(imoveis, 'GRUPOLANCE'));
+    } catch (e) {
+      console.log(`  ⚠️ Grupo Lance falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
   } finally {
