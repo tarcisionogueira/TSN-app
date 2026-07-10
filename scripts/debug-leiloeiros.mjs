@@ -16,39 +16,58 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 13 — sem captura de páginas; roda o SCAN de portais do Superbid (abaixo).
+  // Round 14 — sem captura de páginas; roda o SCAN de portais do Superbid (abaixo).
 ];
 
-// Mede o VOLUME de imóveis por portal do Superbid (cada portal = 1 leiloeiro na
-// plataforma). Usa a MESMA API pública do nosso scraper (offer-query.superbid.net),
-// pageSize=1 só para ler o total. Descobre quais portais têm imóveis + quantos, e
-// captura o 1º offer p/ identificar o leiloeiro. Base para plugar novos portais.
+// Mede o VOLUME de imóveis por portal do Superbid e IDENTIFICA o leiloeiro/portal
+// via seoTitle+seoBreadcrumb. Depois testa SOBREPOSIÇÃO: pega o 1º offer de cada
+// sub-portal e verifica se ele TAMBÉM aparece no portal 2 (marketplace-mãe) — se
+// sim, plugar sub-portais só traz DUPLICADOS, não imóveis novos.
 async function scanSuperbidPortais(browser) {
-  console.log('🔎 Scan de portais do Superbid (volume de imóveis por portal)...');
+  console.log('🔎 Scan de portais do Superbid (volume + identidade + sobreposição)...');
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   try { await page.goto('https://www.superbid.net/', { waitUntil: 'domcontentloaded', timeout: 45000 }); } catch {}
   await new Promise(r => setTimeout(r, 3000));
   const res = await page.evaluate(async () => {
+    const base = 'https://offer-query.superbid.net/offers/';
+    const q = (portal, size, id) =>
+      `${base}?portalId=[${portal}]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=${size}&orderBy=endDate:asc`;
     const out = [];
-    for (let portal = 1; portal <= 90; portal++) {
-      const url = `https://offer-query.superbid.net/offers/?portalId=[${portal}]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=1&orderBy=endDate:asc`;
+    // 1) volume + identidade por portal
+    for (let portal = 1; portal <= 120; portal++) {
       try {
-        const r = await fetch(url, { headers: { Accept: 'application/json' } });
+        const r = await fetch(q(portal, 1), { headers: { Accept: 'application/json' } });
         if (!r.ok) continue;
         const d = await r.json();
-        const total = d.totalElements ?? d.total ?? d.totalCount ?? d.paging?.totalRecords ?? d.pagination?.total ?? null;
+        const total = d.total ?? d.totalElements ?? d.totalCount ?? null;
         const first = (d.offers || d.content || d.results || d.items || [])[0] || null;
         if ((total && total > 0) || first) {
-          out.push({ portal, total, keys: Object.keys(d).slice(0, 8), amostra: first ? JSON.stringify(first).slice(0, 500) : null });
+          out.push({
+            portal, total,
+            seoTitle: d.seoTitle || null,
+            seoBreadcrumb: JSON.stringify(d.seoBreadcrumb || null).slice(0, 300),
+            firstId: first?.id ?? null,
+          });
         }
       } catch (e) { /* portal inexistente */ }
-      await new Promise(r => setTimeout(r, 60));
+      await new Promise(r => setTimeout(r, 50));
     }
-    return out;
+    // 2) teste de sobreposição: os primeiros 100 ids do portal 2 (mãe) contêm os
+    //    firstId dos sub-portais? Se sim → sub-portais são subconjunto do portal 2.
+    let idsPortal2 = [];
+    try {
+      const r = await fetch(q(2, 100), { headers: { Accept: 'application/json' } });
+      const d = await r.json();
+      idsPortal2 = (d.offers || d.content || []).map(o => o.id);
+    } catch {}
+    const overlap = out
+      .filter(p => p.portal !== 2 && p.firstId)
+      .map(p => ({ portal: p.portal, firstId: p.firstId, noPortal2: idsPortal2.includes(p.firstId) }));
+    return { portais: out, idsPortal2Count: idsPortal2.length, overlap };
   }).catch((e) => ({ erro: String(e && e.message || e) }));
-  await gravarDebug('SUPERBID-PORTAIS', 'scan-1-90', 200, 'application/json', JSON.stringify(res, null, 2));
-  console.log(`  portais com imóveis: ${Array.isArray(res) ? res.length : 'erro'}`);
+  await gravarDebug('SUPERBID-PORTAIS', 'scan-1-120+overlap', 200, 'application/json', JSON.stringify(res, null, 2));
+  console.log(`  resultado: ${JSON.stringify(res).slice(0, 200)}`);
   await page.close();
 }
 
