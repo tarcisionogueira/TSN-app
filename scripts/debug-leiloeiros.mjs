@@ -16,15 +16,57 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 17 — Leilão VIP: /agenda lista EVENTOS (leilões), server-rendered. Agora
-  // abrimos a página de detalhe de um evento (/evento/detalhes/{id}) para ver a
-  // estrutura dos LOTES/imóveis — HTML server-rendered ou grid AJAX. Sondamos rotas.
-  { fonte: 'VIP-EVENTO', url: 'https://www.leilaovip.com.br/evento/detalhes/100726afbra', inPageApis: [
-    'https://www.leilaovip.com.br/evento/lotes/100726afbra',
-    'https://www.leilaovip.com.br/lote/listar?evento=100726afbra',
-    'https://www.leilaovip.com.br/evento/getlotes?id=100726afbra',
-  ] },
+  // Round 18 — desativado; roda o scanVIP (diagnóstico por evento) no main().
 ];
+
+// Diagnóstico VIP: pega os eventos da agenda e, para cada um, conta os cards de
+// anúncio via 3 métodos (DOM da detalhe / fetch /evento/lotes / fetch com header
+// XHR). Mostra POR QUE a coleta traz só 7 — quais eventos têm imóveis e qual
+// método realmente devolve os cards.
+async function scanVIP(browser) {
+  console.log('🔎 Diagnóstico Leilão VIP (contagem de anúncios por evento)...');
+  const VIP = 'https://www.leilaovip.com.br';
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const relatorio = { agenda: {}, eventos: [] };
+  try {
+    await page.goto(`${VIP}/agenda?segmento=Im%C3%B3veis`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await new Promise(r => setTimeout(r, 2500));
+    const info = await page.evaluate(() => {
+      const detalhes = new Set(), anuncioLinks = new Set();
+      document.querySelectorAll('a[href*="/evento/detalhes/"]').forEach(a => {
+        const m = (a.getAttribute('href') || '').match(/\/evento\/detalhes\/([^/?#]+)/); if (m) detalhes.add(m[1]);
+      });
+      document.querySelectorAll('a[href*="/evento/anuncio/"]').forEach(a => anuncioLinks.add(a.getAttribute('href')));
+      return {
+        nCardEvento: document.querySelectorAll('.card-evento').length,
+        nCardAnuncio: document.querySelectorAll('.card-anuncio').length,
+        nCard: document.querySelectorAll('[class*="card"]').length,
+        detalhes: [...detalhes], nAnuncioLinks: anuncioLinks.size,
+      };
+    });
+    relatorio.agenda = { nCardEvento: info.nCardEvento, nCardAnuncio: info.nCardAnuncio, nCard: info.nCard, nEventos: info.detalhes.length, nAnuncioLinks: info.nAnuncioLinks };
+
+    for (const ev of info.detalhes.slice(0, 8)) {
+      await page.goto(`${VIP}/evento/detalhes/${ev}`, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+      await new Promise(r => setTimeout(r, 1500));
+      const r = await page.evaluate(async (id) => {
+        const cnt = (html) => { try { return new DOMParser().parseFromString(html, 'text/html').querySelectorAll('.card-anuncio').length; } catch { return -1; } };
+        const domDetalhe = document.querySelectorAll('.card-anuncio').length;
+        let lotesPlain = { status: 0, cards: -1, len: 0 };
+        let lotesXhr = { status: 0, cards: -1, len: 0 };
+        try { const x = await fetch(`/evento/lotes/${id}`, { credentials: 'include' }); const t = await x.text(); lotesPlain = { status: x.status, cards: cnt(t), len: t.length }; } catch (e) { lotesPlain.err = String(e && e.message); }
+        try { const x = await fetch(`/evento/lotes/${id}`, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } }); const t = await x.text(); lotesXhr = { status: x.status, cards: cnt(t), len: t.length }; } catch (e) { lotesXhr.err = String(e && e.message); }
+        return { domDetalhe, lotesPlain, lotesXhr };
+      }, ev).catch((e) => ({ erro: String(e && e.message) }));
+      relatorio.eventos.push({ ev, ...r });
+    }
+  } catch (e) { relatorio.erro = String(e && e.message); }
+  await gravarDebug('VIP-DIAG', 'scan', 200, 'application/json', JSON.stringify(relatorio, null, 2));
+  console.log('  ', JSON.stringify(relatorio).slice(0, 400));
+  await page.close();
+}
 
 // Mede o VOLUME de imóveis por portal do Superbid e IDENTIFICA o leiloeiro/portal
 // via seoTitle+seoBreadcrumb. Depois testa SOBREPOSIÇÃO: pega o 1º offer de cada
@@ -200,7 +242,7 @@ async function main() {
       try { await capturar(browser, alvo); }
       catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
     }
-    // scanSuperbidPortais desativado neste round (já mapeado). Reative se precisar.
+    try { await scanVIP(browser); } catch (e) { console.log(`  scanVIP erro: ${e.message.slice(0, 80)}`); }
   } finally {
     await browser.close();
   }
