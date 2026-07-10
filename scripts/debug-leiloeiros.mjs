@@ -16,17 +16,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 10 — viabilidade de novos alvos (nacional/banco) ===
-  // Recon de estrutura: intercepta XHR JSON (xhr-list = endpoint de dados), render
-  // (server-rendered?) e domstats (card + href). Define complexidade de cada.
-  // Marteleiro: meta-agregador (24k+ imóveis, mostra por-estado → backend estruturado).
-  { fonte: 'MARTELEIRO', url: 'https://marteleiro.com.br/imoveis' },
-  // MGL: leiloeiro nacional (rota /lotes/imoveis vista em recon anterior).
-  { fonte: 'MGL', url: 'https://www.mgl.com.br/lotes/imoveis' },
-  // Seu Imóvel BB (banco): rota de listagem incerta → home revela nav + endpoint.
-  { fonte: 'SEUIMOVELBB', url: 'https://www.seuimovelbb.com.br/' },
-  // Grupo Lance: rota incerta → home revela nav + endpoint de dados.
-  { fonte: 'GRUPOLANCE', url: 'https://www.grupolance.com.br/' },
+  // === Round 11 — catálogo do Seu Imóvel BB (achar paginação) ===
+  // A home é server-rendered; o catálogo fica em /catalogo/categoria/{...}. Capturamos
+  // o catálogo geral e uma categoria para ver o card + a paginação (?pagina=? / scroll).
+  { fonte: 'SEUIMOVELBB', url: 'https://www.seuimovelbb.com.br/catalogo' },
+  { fonte: 'SEUIMOVELBB-CAT', url: 'https://www.seuimovelbb.com.br/catalogo/categoria/urbanos' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
