@@ -14,6 +14,7 @@ import { anthropicFetch } from './_claude.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
+import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -327,7 +328,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM ABAIXO — "extracao", "parecer" e "riscos" são os mais importantes e vêm PRIMEIRO; o "raioX" (enriquecimento) vem por último. Seja objetivo para o JSON caber na resposta:
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. LINGUAGEM PARA LEIGO (obrigatório): escreva para QUALQUER pessoa sem formação jurídica entender; frases curtas e, sempre que usar um termo técnico inevitável (ex.: propter rem, usufruto, penhora, hipoteca, alienação fiduciária, imissão de posse, indisponibilidade), explique em 3 a 6 palavras entre parênteses o que significa. § SEÇÃO: SITUAÇÃO REGISTRÁRIA (matrícula/ônus/gravames); § SEÇÃO: OCUPAÇÃO E POSSE; § SEÇÃO: DÉBITOS E RESPONSABILIDADES (o que consta e o que precisa ser confirmado, com as referências); § SEÇÃO: CONDIÇÕES DO EDITAL; § SEÇÃO: SITUAÇÃO PROCESSUAL${temProc ? ' (com base no CNJ)' : ''}; § SEÇÃO: CONCLUSÃO E DILIGÊNCIAS RECOMENDADAS.",
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "nivelRisco": "verde|amarelo|vermelho",
@@ -1014,6 +1015,41 @@ export default async function handler(req, res) {
         });
       }
     } catch { /* não bloqueia o laudo */ }
+
+    // MAPA EXATO a partir da MATRÍCULA: o endereço exato do imóvel só consta na
+    // matrícula (o anúncio de leilão costuma trazer só cidade/UF). A IA já leu a
+    // matrícula para o laudo — aproveitamos o endereço extraído para: (1) gravar o
+    // endereço/bairro/CEP no imóvel; (2) geocodificar para nível 'endereço' (o pino
+    // exato no mapa). Best-effort: nunca bloqueia o laudo; se faltar tempo, só grava
+    // o endereço e o /geocodificar-imovel refina depois (ao abrir a tela).
+    try {
+      const ex = parsed.extracao || {};
+      const via = String(ex.enderecoImovel || '').replace(/\s+/g, ' ').trim();
+      const temVia = via.length > 5 && /(rua|r\.|av|avenida|travessa|tv\.|alameda|al\.|estrada|estr\.|rodovia|rod\.|pra[çc]a|largo|quadra|lote|via|rma)\b/i.test(via);
+      const atualSemNum = !(String(row?.endereco || '').match(/\d/));
+      if (temVia && atualSemNum) {
+        const [imGeo] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep&limit=1`)).json();
+        if (imGeo) {
+          const bairro = String(ex.bairroImovel || imGeo.bairro || '').trim();
+          const cep = (String(ex.cepImovel || '').replace(/\D/g, '').slice(0, 8)) || imGeo.cep || null;
+          // Grava já o endereço (mesmo sem recoordenar): enriquece o registro e permite
+          // o /geocodificar-imovel refinar depois se aqui faltar tempo.
+          const patch = { endereco: via, ...(bairro && !imGeo.bairro ? { bairro } : {}), ...(cep && !imGeo.cep ? { cep } : {}) };
+          const nivelAtual = imGeo.geocod_nivel || (imGeo.latitude ? 'cidade' : null);
+          // Geocodifica AQUI só se sobrar tempo com folga (senão o on-demand faz depois).
+          if (Date.now() < hardDeadline - 14000 && rankNivel(nivelAtual) < rankNivel('endereco')) {
+            let coords = null;
+            try { coords = await geocodificarCascata({ ...imGeo, endereco: via, bairro, cep }, { sleepMs: 0, deadline: Date.now() + 10000 }); } catch { /* */ }
+            if (coords && coordValida(coords.lat, coords.lng, imGeo.estado, imGeo.cidade) && rankNivel(coords.nivel) > rankNivel(nivelAtual)) {
+              Object.assign(patch, { latitude: coords.lat, longitude: coords.lng, geocod_nivel: coords.nivel, pontos_proximos: null, proximidades_em: null });
+            }
+          }
+          await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch),
+          });
+        }
+      }
+    } catch { /* geo pela matrícula é best-effort */ }
 
     // Raio-X jurídico COMPACTO na TELA DO IMÓVEL (selos + campos): persiste um
     // resumo do raioX no imóvel para a ficha exibir sem reabrir o laudo. Custo
