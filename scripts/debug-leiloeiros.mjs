@@ -16,12 +16,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 8 — HOME do VIP e Biasi p/ achar a rota real de imóveis ===
-  // /lotes|/lotes/imoveis deram 404 (rota errada). A home revela a navegação real
-  // (domstats/render) e dispara o endpoint de dados (xhr-list) — daí a rota certa.
-  // Oeste ficou de fora: API /app/* exige auth (403) → inviável via GET público.
-  { fonte: 'VIPHOME', url: 'https://www.leilaovip.com.br/' },
-  { fonte: 'BIASIHOME', url: 'https://www.biasileiloes.com.br/' },
+  // === Round 9 — página de leilão de imóvel do Biasi (server-rendered ASP.NET) ===
+  // A home revelou os leilões em /leilao/{id}/... e o endpoint /Home/GetLotesPorCidade
+  // (só cidades). Os lotes reais estão na página do leilão. Capturamos o leilão
+  // Santander 4295 (215 lotes) p/ ver se os lotes vêm no HTML e/ou por um GetLotes.
+  { fonte: 'BIASI', url: 'https://www.biasileiloes.com.br/leilao/4295/grande-leilao-de-imoveis-santander-215-oportunidades-em-diversos-estados-do-brasil-confira-e-aproveite', inPageApis: [
+    'https://www.biasileiloes.com.br/Home/GetLotes?leilaoId=4295',
+    'https://www.biasileiloes.com.br/Leilao/GetLotes?leilaoId=4295',
+    'https://www.biasileiloes.com.br/Leilao/GetLotes?id=4295',
+    'https://www.biasileiloes.com.br/Home/GetLotesPorLeilao?leilaoId=4295',
+  ] },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
