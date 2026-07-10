@@ -16,10 +16,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 31 — Grupo Lance: página de DETALHE do lote — quais documentos existem
-  // (matrícula? laudo? além do edital) e se ficam atrás de aba/accordion.
-  { fonte: 'GLD1', url: 'https://www.grupolance.com.br/imoveis/terrenos-e-lotes/rj/porto-real/terreno-at-3729m2-porto-real-rj-26056' },
-  { fonte: 'GLD2', url: 'https://www.grupolance.com.br/imoveis/terrenos-e-lotes/rn/mossoro/terreno-at-170796m2-margens-rn-015-mossoro-rn-28355' },
+  // Round 32 — Superbid (item 2): página de DETALHE da oferta. Interceptar o XHR JSON
+  // de detalhe que traz DOCUMENTOS (edital/matrícula/laudo) e o ENDEREÇO completo
+  // (para geo exata). SPA — os PDFs não estão no HTML; vêm por API.
+  { fonte: 'SBD1', url: 'https://www.superbid.net/oferta/4756704' },
+  { fonte: 'SBD2', url: 'https://www.superbid.net/oferta/4588831' },
 ];
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
