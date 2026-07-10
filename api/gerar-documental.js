@@ -449,11 +449,13 @@ export default async function handler(req, res) {
     const anexos = Array.isArray(row?.anexos) ? row.anexos : [];
     const urls = [];
     const ehPagina = (u) => /matricula\.asp|detalhe-imovel\.asp/i.test(u || '');
-    const add = (u, rotulo) => { if (u && /^https?:\/\//.test(u) && !ehPagina(u) && !urls.find(x => x.url === u)) urls.push({ url: u, rotulo }); };
+    // tipo: conhecido do anexo (a.tipo) OU inferido do rótulo. Alimenta o GATE que
+    // exige matrícula E edital (não basta um anexo genérico qualquer).
+    const add = (u, rotulo, tipo) => { if (u && /^https?:\/\//.test(u) && !ehPagina(u) && !urls.find(x => x.url === u)) urls.push({ url: u, rotulo, tipo: tipo || tipoDoRotulo(rotulo) }); };
     // 1º: anexos guardados no storage (capturados por navegador ou enviados pela equipe).
     try {
       const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url&limit=10`)).json();
-      for (const a of (Array.isArray(manuais) ? manuais : [])) add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'));
+      for (const a of (Array.isArray(manuais) ? manuais : [])) add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo);
     } catch { /* segue com os do lote */ }
     // 2º: anexos capturados no scrape (jsonb do lote). Leilão JUDICIAL costuma ter
     // MUITOS anexos (auto de penhora/avaliação, laudo, decisão, certidões, ata) —
@@ -461,7 +463,7 @@ export default async function handler(req, res) {
     // leitura (a leitura em si continua limitada pelo cap + deadline abaixo).
     const ehJudicial = /judicial/i.test(String(row?.modalidade || ''));
     const capCandidatos = ehJudicial ? 16 : 7;
-    for (const a of anexos) { if (urls.length >= capCandidatos) break; add(a.url, a.nome || 'Anexo'); }
+    for (const a of anexos) { if (urls.length >= capCandidatos) break; add(a.url, a.nome || 'Anexo', a.tipo); }
     // 3º: URLs do cliente + os PDFs estáticos da Caixa (fallback quando não há arquivo guardado).
     const cxFonte = { fonte: row?.fonte, estado: row?.estado || estado, fonteId: row?.fonte_id };
     add(body?.urlMatricula, 'Matrícula');
@@ -498,7 +500,7 @@ export default async function handler(req, res) {
         }
       }
       if (!doc) continue;
-      lidos.push({ rotulo: u.rotulo, url: u.url, kind: doc.kind, cache: deCache });
+      lidos.push({ rotulo: u.rotulo, url: u.url, kind: doc.kind, cache: deCache, tipo: u.tipo || tipoDoc });
       if (doc.kind === 'pdf') blocos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 }, title: u.rotulo });
       else blocos.push({ type: 'text', text: `=== ${u.rotulo} (${u.url}) ===\n${doc.text}` });
     }
@@ -506,19 +508,33 @@ export default async function handler(req, res) {
     if (body?.textoEdital) blocos.push({ type: 'text', text: `=== EDITAL (texto informado) ===\n${String(body.textoEdital).slice(0, 12000)}` });
     if (body?.textoMatricula) blocos.push({ type: 'text', text: `=== MATRÍCULA (texto informado) ===\n${String(body.textoMatricula).slice(0, 12000)}` });
 
-    // GATE: sem documento LEGÍVEL (nenhum lido e nenhum texto colado), NÃO gera um
-    // laudo de "não consta/bloqueante" — falta de leitura NÃO é risco jurídico, é
-    // diligência pendente (o laudo "operação suspensa" era falso e assustador).
-    // Vale MESMO quando há nº de processo: sem a matrícula/edital não há base
-    // documental para um parecer. Pede/obtém os documentos.
+    // GATE: a análise jurídica EXIGE a MATRÍCULA E o EDITAL (as duas peças centrais).
+    // Um anexo genérico ou só uma delas NÃO basta — sem a matrícula não há CPF do
+    // proprietário/executado nem cadeia/ônus; sem o edital não há as condições da venda.
+    // Se faltar QUALQUER uma, NÃO geramos o laudo (que sairia inconclusivo, "não
+    // identifiquei o CPF/não li o documento"): pedimos/obtemos APENAS a(s) que falta(m).
+    // Falta de leitura é diligência pendente, não risco jurídico.
+    const ehVendaDiretaSem = /venda_direta/i.test(String(row?.modalidade || ''));
+    const tipoLido = (l) => l.tipo || tipoDoRotulo(l.rotulo);
+    const temMatriculaPre = !!body?.textoMatricula || lidos.some(l => tipoLido(l) === 'matricula');
+    // Em venda direta o "edital" é o documento de REGRAS DA VENDA; nos demais, o edital.
+    const temEditalPre = !!body?.textoEdital || lidos.some(l => ['edital', 'regras_venda'].includes(tipoLido(l)));
+    const faltandoPre = [];
+    if (!temMatriculaPre) faltandoPre.push('matricula');
+    if (!temEditalPre) faltandoPre.push(ehVendaDiretaSem ? 'regras_venda' : 'edital');
+    // Só BLOQUEIA de saída quando NADA legível foi obtido (nem texto colado). Se lemos
+    // ALGUM documento, deixamos a IA processar: ela confirma em documentosAnalisados o
+    // que DE FATO leu (mais confiável que o tipo do anexo, que às vezes vem opaco), e o
+    // GATE PÓS-GERAÇÃO (abaixo) pede o que faltar. Assim não bloqueamos à toa uma
+    // matrícula presente mas mal-rotulada, nem geramos laudo sem os dois documentos.
     const temTextoColado = !!(body?.textoEdital || body?.textoMatricula);
     if (lidos.length === 0 && !temTextoColado) {
       // Leiloeiro INTEGRADO (Caixa): a matrícula/edital só saem por navegador real
       // (sessão). Em vez de pedir anexo manual, ENFILEIRA a captura automática (job
-      // que roda a cada 10 min baixa o PDF via navegador e guarda no storage; a
-      // próxima geração lê de lá). Só cai no anexo manual se não for integrado.
+      // que roda a cada 10-15 min baixa os PDFs via navegador e guarda no storage; a
+      // próxima geração lê de lá e completa o que falta). Só cai no anexo manual se
+      // não for integrado.
       const ehCaixaFonte = /caixa|cef/i.test(row?.fonte || '');
-      // Tem página de lote de onde um navegador real consegue baixar os PDFs?
       const temPaginaLote = /^https?:\/\//i.test(String(row?.link_edital || '')) || /^https?:\/\//i.test(String(row?.link_regras_venda || ''));
       let enfileirado = false;
       if (ehCaixaFonte) {
@@ -530,13 +546,10 @@ export default async function handler(req, res) {
               body: JSON.stringify({ imovel_id: String(imovelId), hdniip, status: 'pendente' }),
             });
             enfileirado = true;
-            // Dispara a captura AGORA (não espera o cron de 10 min).
-            await dispararCaptura('matricula-cef.yml');
+            await dispararCaptura('matricula-cef.yml'); // dispara agora (não espera o cron)
           } catch { /* segue com a mensagem */ }
         }
       } else if (temPaginaLote) {
-        // Demais leiloeiros integrados: enfileira a captura genérica por navegador
-        // real (job a cada 15 min abre a página do lote e baixa os PDFs para o storage).
         try {
           await sb('documentos_fila?on_conflict=imovel_id', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
@@ -546,20 +559,19 @@ export default async function handler(req, res) {
           await dispararCaptura('captura-documentos.yml'); // dispara agora
         } catch { /* segue com a mensagem */ }
       }
-      const ehVendaDiretaSem = /venda_direta/i.test(String(row?.modalidade || ''));
+      const nomeDoc = (t) => t === 'matricula' ? 'a matrícula' : t === 'regras_venda' ? 'as regras da venda' : 'o edital';
+      const faltaTxt = (faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital']).map(nomeDoc).join(' e ');
+      const jaTemTxt = lidos.length ? `Já temos ${lidos.map(l => l.rotulo).join(', ')}. ` : '';
       const semDocs = {
         precisaDocumentos: true,
         integrado: ehCaixaFonte || temPaginaLote,
         emCaptura: enfileirado,
-        // Nada legível → faltam os dois documentos centrais; a tela pede ambos + link.
-        faltando: ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital'],
+        faltando: faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital'],
         paginaLeiloeiro: [row?.link_edital, row?.link_regras_venda].find(u => /^https?:\/\//i.test(u || '')) || null,
-        documentosLidos: [],
+        documentosLidos: lidos.map(l => ({ rotulo: l.rotulo, tipo: tipoLido(l) })),
         motivo: enfileirado
-          ? `Estamos baixando os documentos automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''} (leiloeiro integrado). Leva cerca de 1 minuto — a análise é gerada sozinha assim que os documentos chegarem. Se preferir na hora, anexe a matrícula e o edital (PDF).`
-          : (urls.length
-            ? 'Os documentos deste lote existem, mas a fonte não liberou a leitura automática agora. Anexe a matrícula e o edital (PDF) para gerar a análise na hora.'
-            : 'Este lote ainda não tem documentos vinculados. Anexe a matrícula e o edital (PDF) para gerar a análise.'),
+          ? `A análise jurídica exige a matrícula e o edital. ${jaTemTxt}Estamos baixando ${faltaTxt} automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''} (leiloeiro integrado): leva cerca de 1 minuto e a análise é gerada sozinha assim que chegar. Se preferir na hora, anexe ${faltaTxt} (PDF).`
+          : `A análise jurídica exige a matrícula e o edital. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
       };
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs });
       if (cota && cota.ok && cota.tipo) {
@@ -852,7 +864,7 @@ export default async function handler(req, res) {
     // Se a captura já ESGOTOU as tentativas ('parcial' = matrícula indisponível), não
     // insistimos como preliminar — seguimos com o que há + diligência.
     const ehCaixaDoc = /caixa|cef/i.test(row?.fonte || '');
-    const leuMatricula = lidos.some(l => tipoDoRotulo(l.rotulo) === 'matricula') || !!body?.textoMatricula;
+    const leuMatricula = lidos.some(l => tipoLido(l) === 'matricula') || !!body?.textoMatricula;
     let matriculaFaltaCaixa = false;
     if (ehCaixaDoc && !leuMatricula) {
       let filaStatus = null;
@@ -896,13 +908,51 @@ export default async function handler(req, res) {
     // ficou 'outro' (URL opaca, ex.: SUPERBID) — combinada com o tipo já classificado.
     const da = parsed.documentosAnalisados || {};
     const isVendaDiretaDoc = /venda_direta/i.test(String(row?.modalidade || ''));
-    const leuEdital = !!da.edital || lidos.some(l => tipoDoRotulo(l.rotulo) === 'edital') || lidos.some(l => tipoDoRotulo(l.rotulo) === 'regras_venda') || !!body?.textoEdital;
+    const leuEdital = !!da.edital || lidos.some(l => ['edital', 'regras_venda'].includes(tipoLido(l))) || !!body?.textoEdital;
     const leuMatriculaFinal = !!da.matricula || leuMatricula;
     const faltando = [];
     if (!leuMatriculaFinal) faltando.push('matricula');
     if (!leuEdital) faltando.push(isVendaDiretaDoc ? 'regras_venda' : 'edital');
     // Link da página do lote no leiloeiro (para o cliente buscar o doc que falta).
     const paginaLeiloeiro = [row?.link_edital, row?.link_regras_venda].find(u => /^https?:\/\//i.test(u || '')) || null;
+
+    // TRAVA PÓS-GERAÇÃO: a análise jurídica SÓ é entregue com a MATRÍCULA e o EDITAL
+    // efetivamente LIDOS. Se a IA não confirmou a leitura de uma delas (nem por tipo do
+    // anexo), NÃO devolvemos um laudo inconclusivo ("não identifiquei o CPF/não li o
+    // documento"): pedimos APENAS a(s) que falta(m) e enfileiramos a captura automática.
+    if (faltando.length) {
+      const ehCaixaFonte = /caixa|cef/i.test(row?.fonte || '');
+      const temPaginaLote = /^https?:\/\//i.test(String(row?.link_edital || '')) || /^https?:\/\//i.test(String(row?.link_regras_venda || ''));
+      // A captura da matrícula Caixa já foi enfileirada acima (matriculaFaltaCaixa).
+      // Para os demais integrados, enfileira a captura genérica por navegador.
+      let enfileirado = matriculaFaltaCaixa;
+      if (!ehCaixaFonte && temPaginaLote) {
+        try {
+          await sb('documentos_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }) });
+          enfileirado = true;
+          await dispararCaptura('captura-documentos.yml');
+        } catch { /* segue com a mensagem */ }
+      }
+      const nomeDoc = (t) => t === 'matricula' ? 'a matrícula' : t === 'regras_venda' ? 'as regras da venda' : 'o edital';
+      const faltaTxt = faltando.map(nomeDoc).join(' e ');
+      const jaTemTxt = lidos.length ? `Já lemos ${lidos.map(l => l.rotulo).join(', ')}. ` : '';
+      const semDocs = {
+        precisaDocumentos: true,
+        integrado: ehCaixaFonte || temPaginaLote,
+        emCaptura: enfileirado,
+        faltando,
+        paginaLeiloeiro,
+        documentosLidos: lidos.map(l => ({ rotulo: l.rotulo, tipo: tipoLido(l) })),
+        motivo: enfileirado
+          ? `A análise jurídica só é gerada com a matrícula e o edital lidos. ${jaTemTxt}Estamos obtendo ${faltaTxt} automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''}: leva cerca de 1 minuto e a análise sai sozinha quando chegar. Se preferir na hora, anexe ${faltaTxt} (PDF).`
+          : `A análise jurídica só é gerada com a matrícula e o edital lidos. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
+      };
+      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs });
+      if (cota && cota.ok && cota.tipo) {
+        try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
+      }
+      return semDocs;
+    }
 
     const result = {
       extracao: parsed.extracao || null,
