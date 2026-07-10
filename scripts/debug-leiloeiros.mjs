@@ -16,15 +16,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 26 — SUPORTE LEILÕES (plataforma white-label server-rendered). Recon do
-  // catálogo de imóveis de um tenant (Gustavo Reis) p/ achar a rota de listagem,
-  // a estrutura do card (sl-leiloes-item) e se há API JSON por trás.
-  { fonte: 'GR-LEILOES', url: 'https://www.gustavoreisleiloes.com.br/leiloes', inPageApis: [
-    'https://www.gustavoreisleiloes.com.br/api/lotes?categoria=imoveis',
-    'https://www.gustavoreisleiloes.com.br/lotes?categoria=imoveis',
-  ] },
-  { fonte: 'GR-IMOVEIS', url: 'https://www.gustavoreisleiloes.com.br/imoveis' },
-  { fonte: 'GR-BUSCA',   url: 'https://www.gustavoreisleiloes.com.br/busca?categoria=imoveis' },
+  // Round 27 — Suporte Leilões: catálogo em /agenda (server-rendered). Captura a
+  // estrutura dos leilões/lotes e a rota de detalhe. + roster de tenants da plataforma.
+  { fonte: 'GR-AGENDA', url: 'https://www.gustavoreisleiloes.com.br/agenda' },
+  { fonte: 'GR-AGIMOVEL', url: 'https://www.gustavoreisleiloes.com.br/agenda?categoria=imoveis' },
+  { fonte: 'SL-CLIENTES', url: 'https://www.suporteleiloes.com/clientes' },
+  { fonte: 'SL-CASES', url: 'https://www.suporteleiloes.com/cases' },
 ];
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
