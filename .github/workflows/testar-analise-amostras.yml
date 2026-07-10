@@ -1,0 +1,30 @@
+name: QA — Testar análise documental (amostras)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'imovelIds separados por vírgula'
+        required: true
+      para_user:
+        description: 'user_id (perfil) sob o qual gravar as análises'
+        required: true
+
+jobs:
+  testar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rodar amostras
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          AMOSTRA_IDS: ${{ github.event.inputs.ids }}
+          AMOSTRA_PARA_USER: ${{ github.event.inputs.para_user }}
+        run: node scripts/testar-analise-amostras.mjs
