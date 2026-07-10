@@ -127,6 +127,9 @@ const CRITERIOS = {
   BIASI:    { min: 30,  valor: 0.85, uf: 0.55, link: 0.9 },
   // Leilão VIP: server-rendered; cidade/UF vêm limpos do .anc-local, valor e link fortes.
   VIP:      { min: 20,  valor: 0.85, uf: 0.55, link: 0.9 },
+  // Leilotech: plataforma white-label de vários leiloeiros (GraphQL). Cloudflare
+  // intermitente → volume varia; min baixo para não marcar degradado à toa.
+  LEILOTECH:{ min: 15,  valor: 0.70, uf: 0.45, link: 0.9 },
   // Sub-portais da rede Superbid (inventário pequeno, leiloeiro real vem no campo
   // `store` de cada oferta). Portal 9 ~72, portal 21 ~39 imóveis abertos.
   SBID9:    { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
@@ -1935,6 +1938,159 @@ async function scraperVIP(browser) {
   return imoveis;
 }
 
+// ─── LEILOTECH (plataforma white-label GraphQL — vários leiloeiros) ───────────
+// Leilotech é o "sistema operacional" de ~20 leiloeiros. Cada tenant é uma SPA V2
+// que consulta {dominio}/go/graphql. A query HomeBootstrap devolve leiloesHome
+// (leilões abertos, paginados) com primaryLote (imóvel: título, avaliação, lance,
+// coverImageUrl, location{city,uf}). A API fica atrás de Cloudflare com desafio de
+// bot: POST manual é barrado, mas as chamadas da PRÓPRIA SPA passam — então
+// INTERCEPTAMOS as respostas GraphQL (mesmo método do VendasGov). fonte única
+// 'LEILOTECH' com leiloeiro = nome do tenant (aparece no selo do card).
+const LEILOTECH_TENANTS = [
+  { domain: 'topoleiloes.com.br',        leiloeiro: 'Topo Leilões' },
+  { domain: 'oleiloes.com.br',           leiloeiro: 'O Leilões' },
+  { domain: 'spencerleiloes.com.br',     leiloeiro: 'Spencer Leilões' },
+  { domain: 'vasconcelosleiloes.com.br', leiloeiro: 'Vasconcelos Leilões' },
+  { domain: 'newtonleiloes.com.br',      leiloeiro: 'Newton Leilões' },
+  { domain: 'bringelleiloes.com.br',     leiloeiro: 'Bringel Leilões' },
+  { domain: 'alcanceleiloes.com.br',     leiloeiro: 'Alcance Leilões' },
+  { domain: 'tulioleiloes.com.br',       leiloeiro: 'Túlio Leilões' },
+  { domain: 'tesouroleiloes.com.br',     leiloeiro: 'Tesouro Leilões' },
+  { domain: 'rdleiloes.com.br',          leiloeiro: 'RD Leilões' },
+  { domain: 'vmleiloes.com.br',          leiloeiro: 'VM Leilões' },
+  { domain: 'abrantesleiloes.com',       leiloeiro: 'Abrantes Leilões' },
+  { domain: 'mariaclariceleiloes.com.br',leiloeiro: 'Maria Clarice Leilões' },
+  { domain: 'ksleiloes.com.br',          leiloeiro: 'KS Leilões' },
+  { domain: 'amleiloeiro.com.br',        leiloeiro: 'AM Leiloeiro' },
+  { domain: 'mozarmirandaleiloes.com.br',leiloeiro: 'Mozar Miranda Leilões' },
+  { domain: 'andredepaulaleiloes.com.br',leiloeiro: 'André de Paula Leilões' },
+  { domain: 'ferleiloes.com.br',         leiloeiro: 'Fer Leilões' },
+  { domain: 'alleiloes.com.br',          leiloeiro: 'AL Leilões' },
+];
+
+// Extrai um número de campos que podem vir número OU string BR OU objeto de valores.
+function ltNum(v) {
+  if (v == null) return 0;
+  if (typeof v === 'number') return v > 0 ? v : 0;
+  if (typeof v === 'string') return parseBRL(v);
+  if (typeof v === 'object') {
+    // valores costuma ser um objeto/array com o lance inicial/atual em algum campo.
+    for (const k of ['lanceInicial', 'inicial', 'minimo', 'valor', 'atual', 'value']) {
+      if (v[k] != null) { const n = ltNum(v[k]); if (n) return n; }
+    }
+    if (Array.isArray(v)) { for (const it of v) { const n = ltNum(it); if (n) return n; } }
+  }
+  return 0;
+}
+
+const LT_IMOVEL = /im[oó]vel|imob|apartament|\bcasa\b|terreno|\bl[oó]te\b|rural|urban|s[íi]tio|fazenda|ch[aá]cara|gale|sala comercial|comercial|pr[eé]dio|sobrado|cobertura|kitnet|flat|gleba|\bloja\b/i;
+
+function mapLoteLeilotech(lote, leilao, tenant) {
+  if (!lote) return null;
+  const loc = lote.location || {};
+  const titulo = String(lote.titulo || leilao.title || '').replace(/\s+/g, ' ').trim();
+  const ext = extrairDaDescricao(titulo);
+  const valorMin = ltNum(lote.lanceAtual) || ltNum(lote.valores) || ltNum(lote.avaliacao);
+  const valAval = ltNum(lote.avaliacao);
+  const foto = (lote.coverImageUrl && /^https?:\/\//.test(lote.coverImageUrl)) ? lote.coverImageUrl
+             : (lote.primeiraFoto?.url && /^https?:\/\//.test(lote.primeiraFoto.url) ? lote.primeiraFoto.url : null);
+  const tenantKey = tenant.domain.replace(/\..*/, '');
+  const slug = lote.slug ? `/${lote.slug}` : '';
+  const uf = String(loc.uf || '').toUpperCase().slice(0, 2);
+  const isRural = /rural|s[íi]tio|fazenda|ch[aá]cara|gleba/i.test(`${leilao.title||''} ${titulo}`);
+  return {
+    fonte: 'LEILOTECH',
+    fonte_id: `lt_${tenantKey}_${lote.id}`,
+    titulo: (titulo || `Imóvel ${tenant.leiloeiro}`).slice(0, 180),
+    tipo: normalizarTipo(isRural ? 'rural' : (lote.categoria?.nome || titulo)),
+    modalidade: /judicial/i.test(leilao.modalidade || leilao.tipo || '') ? 'judicial' : 'extrajudicial',
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
+    cidade: toTitleCase(loc.city || ''),
+    bairro: '',
+    endereco: '',
+    valor_avaliacao: valAval,
+    valor_minimo: valorMin,
+    area_m2: ext.area_m2 || 0,
+    ocupacao: ext.ocupacao || null,
+    descricao: titulo.slice(0, 500),
+    link_edital: `https://${tenant.domain}/lote/${lote.id}${slug}`,
+    url_lote: `https://${tenant.domain}/lote/${lote.id}${slug}`,
+    link_foto: foto,
+    leiloeiro: tenant.leiloeiro,
+    data_leilao: leilao.endsAt || leilao.startsAt || null,
+    forma_pagamento: 'a_vista',
+  };
+}
+
+// Coleta um tenant Leilotech interceptando as respostas GraphQL da própria SPA.
+async function scraperLeilotechTenant(browser, tenant) {
+  const base = `https://${tenant.domain}/`;
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const itens = new Map(); // leilaoId|loteId → { lote, leilao }
+  let amostraLogada = false;
+  page.on('response', async (resp) => {
+    try {
+      if (!/\/go\/graphql/.test(resp.url())) return;
+      const t = await resp.text();
+      if (t[0] !== '{') return;
+      const j = JSON.parse(t);
+      const lista = j?.data?.leiloesHome?.items;
+      if (!Array.isArray(lista)) return;
+      for (const leilao of lista) {
+        const lote = leilao.primaryLote;
+        if (!lote || !lote.id) continue;
+        if (!amostraLogada) { console.log(`    [${tenant.domain}] amostra primaryLote: ${JSON.stringify(lote).slice(0, 400)}`); amostraLogada = true; }
+        // só imóveis (título/categoria do leilão ou do lote)
+        const rotulo = `${leilao.title || ''} ${leilao.categoriaMascara || ''} ${lote.categoria?.nome || ''} ${lote.titulo || ''}`;
+        if (!LT_IMOVEL.test(rotulo)) continue;
+        itens.set(`${leilao.id}|${lote.id}`, { lote, leilao });
+      }
+    } catch { /* resposta não-JSON/parcial */ }
+  });
+
+  try {
+    // Cloudflare é intermitente: tenta carregar a home até a SPA disparar o GraphQL.
+    let ok = false;
+    for (let tentativa = 0; tentativa < 3 && !ok; tentativa++) {
+      try { await page.goto(base, { waitUntil: 'networkidle2', timeout: 45000 }); } catch { /* */ }
+      await new Promise(r => setTimeout(r, 4000));
+      // rola para paginar (leiloesHome pagina no scroll)
+      for (let s = 0; s < 12; s++) {
+        try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      if (itens.size > 0) ok = true;
+    }
+  } finally { await page.close().catch(() => {}); }
+
+  const imoveis = [];
+  const seen = new Set();
+  for (const { lote, leilao } of itens.values()) {
+    const row = mapLoteLeilotech(lote, leilao, tenant);
+    if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
+    seen.add(row.fonte_id);
+    imoveis.push(row);
+  }
+  console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${imoveis.length} imóveis (${itens.size} lotes de imóvel)`);
+  return imoveis;
+}
+
+async function scraperLeilotech(browser) {
+  console.log('  Leilotech — plataforma white-label (interceptando GraphQL de cada tenant)...');
+  const todos = [];
+  const vistos = new Set();
+  for (const tenant of LEILOTECH_TENANTS) {
+    try {
+      const imoveis = await scraperLeilotechTenant(browser, tenant);
+      for (const im of imoveis) { if (!vistos.has(im.fonte_id)) { vistos.add(im.fonte_id); todos.push(im); } }
+    } catch (e) { console.log(`    [${tenant.domain}] erro: ${String(e.message).slice(0, 80)}`); }
+  }
+  console.log(`    Leilotech: ${todos.length} imóveis de ${LEILOTECH_TENANTS.length} leiloeiros`);
+  return todos;
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -2155,6 +2311,20 @@ async function main() {
       await registrarSaude('VIP', imoveis, 'principal', validarColeta(imoveis, 'VIP'));
     } catch (e) {
       console.log(`  ⚠️ Leilão VIP falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // 12. Leilotech — plataforma white-label (~20 leiloeiros, GraphQL interceptado).
+    // Foto vem do coverImageUrl; edital/matrícula ficam na página do lote →
+    // enriquecerDocumentosLote vasculha. Blindado: nunca derruba o job.
+    console.log('\n📋 Leilotech (plataforma white-label)...');
+    if (rodar('LEILOTECH')) try {
+      const imoveis = await scraperLeilotech(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Leilotech falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'LEILOTECH');
+      await registrarSaude('LEILOTECH', imoveis, 'principal', validarColeta(imoveis, 'LEILOTECH'));
+    } catch (e) {
+      console.log(`  ⚠️ Leilotech falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
   } finally {
