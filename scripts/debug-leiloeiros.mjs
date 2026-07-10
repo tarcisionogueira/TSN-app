@@ -22,12 +22,16 @@ const ALVOS = [
   // id 5872 (Terrenos em Eldorado/RS), lotes [413987,413989,...]. Navegamos a
   // listagem de imóveis (intercepta o endpoint da lista + domstats com href do card)
   // e sondamos candidatos de detalhe do lote (host api.pestanaleiloes.com.br/sgl/v1).
-  { fonte: 'PESTANA', url: 'https://www.pestanaleiloes.com.br/lotes/imoveis', inPageApis: [
-    'https://api.pestanaleiloes.com.br/sgl/v1/lotes/413987',
-    'https://api.pestanaleiloes.com.br/sgl/v1/leiloes/5872/lotes',
-    'https://api.pestanaleiloes.com.br/sgl/v1/leiloes/5872',
-    'https://www.pestanaleiloes.com.br/api/v2/lote/413987',
-    'https://www.pestanaleiloes.com.br/api/v2/leilao/5872',
+  // Round 6b — o detalhe do lote vem por endpoint SAME-ORIGIN /api/v2/lote/* (o
+  // host api.pestanaleiloes.com.br/sgl/v1 dá CORS a partir do www). A página de um
+  // leilão (/agenda-de-leiloes/{id}) dispara o endpoint de LOTES por leilão que
+  // traz valor/tipo/foto. Navegamos um leilão de imóvel real (5872) e sondamos.
+  { fonte: 'PESTANA', url: 'https://www.pestanaleiloes.com.br/agenda-de-leiloes/5872?lotePage=1&loteQty=48', inPageApis: [
+    'https://www.pestanaleiloes.com.br/api/v2/lote/home',
+    'https://www.pestanaleiloes.com.br/api/v2/leilao/5872/lote',
+    'https://www.pestanaleiloes.com.br/api/v2/lote/leilao/5872',
+    'https://www.pestanaleiloes.com.br/api/v2/lote?leilao=5872&page=1&qtd=48',
+    'https://www.pestanaleiloes.com.br/api/v2/leilao/5872/lotes?page=1&qtd=48',
   ] },
 ];
 
