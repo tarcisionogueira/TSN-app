@@ -1879,45 +1879,44 @@ async function scraperVIP(browser) {
     } catch (e) { console.log(`    VIP agenda: ${String(e.message).slice(0, 50)}`); }
     console.log(`    VIP: ${eventos.length} eventos de imóveis na agenda`);
 
-    // 2) Cada evento: aquece a sessão visitando /evento/detalhes/{id} (o
-    //    /evento/lotes só devolve os cards com a sessão do site quente — provado
-    //    no recon) e então busca /evento/lotes/{id} in-page, que traz TODOS os
-    //    anúncios de uma vez. Fallback: parseia o DOM da própria página de detalhe.
+    // 2) Cada evento: abre /evento/detalhes/{id} e ROLA para o JS renderizar os
+    //    cards (Cloudflare Rocket Loader monta os anúncios no cliente — buscar o
+    //    HTML cru só traz os ~8 primeiros já prontos). Parseia o DOM VIVO, onde o
+    //    JS já preencheu link/título/valor/foto de todos os lotes carregados.
     for (const ev of eventos.slice(0, 80)) {
       if (Date.now() > DEADLINE) { console.log('    VIP: teto de tempo atingido'); break; }
       try {
-        await page.goto(`${VIP_BASE}/evento/detalhes/${encodeURIComponent(ev)}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        await new Promise(r => setTimeout(r, 800));
-        const anuncios = await page.evaluate(async (id) => {
-          const parse = (root) => {
-            const out = [];
-            root.querySelectorAll('.card-anuncio').forEach((c) => {
-              const a = c.querySelector('a[href*="/evento/anuncio/"]');
-              const href = a ? (a.getAttribute('href') || '') : '';
-              const mm = href.match(/-(\d+)(?:[/?#].*)?$/);
-              const aid = mm ? mm[1] : '';
-              if (!aid) return;
-              const img = c.querySelector('img.card-img-top, img');
-              out.push({
-                id: aid, href,
-                titulo: (c.querySelector('.anc-title h1, .anc-title')?.textContent || (img && img.getAttribute('alt')) || '').trim(),
-                local: (c.querySelector('.anc-local')?.textContent || '').trim(),
-                tipo: (c.querySelector('.anc-type')?.textContent || '').trim(),
-                valor: (c.querySelector('.valor-atual')?.textContent || '').trim(),
-                foto: img ? (img.getAttribute('src') || '') : '',
-              });
+        await page.goto(`${VIP_BASE}/evento/detalhes/${encodeURIComponent(ev)}`, { waitUntil: 'networkidle2', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 1500));
+        // Scroll infinito: carrega os lotes restantes. Para quando estabiliza.
+        let estavel = 0, prev = -1;
+        for (let s = 0; s < 20 && estavel < 3; s++) {
+          const n = await page.evaluate(() => document.querySelectorAll('.card-anuncio').length).catch(() => 0);
+          estavel = n > prev ? 0 : estavel + 1;
+          prev = n;
+          try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
+          await new Promise(r => setTimeout(r, 900));
+        }
+        const anuncios = await page.evaluate(() => {
+          const out = [];
+          document.querySelectorAll('.card-anuncio').forEach((c) => {
+            const a = c.querySelector('a[href*="/evento/anuncio/"]');
+            const href = a ? (a.getAttribute('href') || '') : '';
+            const mm = href.match(/-(\d+)(?:[/?#].*)?$/);
+            const aid = mm ? mm[1] : '';
+            if (!aid) return;
+            const img = c.querySelector('img.card-img-top, img');
+            out.push({
+              id: aid, href,
+              titulo: (c.querySelector('.anc-title h1, .anc-title')?.textContent || (img && img.getAttribute('alt')) || '').trim(),
+              local: (c.querySelector('.anc-local')?.textContent || '').trim(),
+              tipo: (c.querySelector('.anc-type')?.textContent || '').trim(),
+              valor: (c.querySelector('.valor-atual')?.textContent || '').trim(),
+              foto: img ? (img.getAttribute('src') || '') : '',
             });
-            return out;
-          };
-          try {
-            const r = await fetch(`/evento/lotes/${id}`, { headers: { Accept: 'text/html', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include' });
-            const html = await r.text();
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            const viaFetch = parse(doc);
-            if (viaFetch.length) return viaFetch;
-          } catch { /* cai pro DOM da página de detalhe */ }
-          return parse(document);
-        }, ev).catch(() => []);
+          });
+          return out;
+        }).catch(() => []);
         for (const an of anuncios) { if (an.id && !bens.has(an.id)) bens.set(an.id, an); }
       } catch { /* evento a evento; nunca derruba o scrape */ }
       await new Promise(r => setTimeout(r, 120));
