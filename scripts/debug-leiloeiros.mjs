@@ -25,54 +25,64 @@ const ALVOS = [
 // que lista lotes com filtro; (2) roda HomeBootstrap p/ pegar um slug de leilão real e
 // (3) navega ao detalhe do leilão para capturar a query de lotes que dispara lá.
 async function scanLeilotech(browser) {
-  console.log('🔎 Leilotech — descobrindo query de lotes (introspection + detalhe)...');
+  console.log('🔎 Leilotech — capturando (via interceptação) a query de lotes do leilão...');
   const base = 'https://oleiloes.com.br/';
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  // Casa requisição→resposta do GraphQL (a resposta não traz o operationName).
+  const reqByOrder = [];
   const gql = [];
   page.on('request', (req) => {
-    try { if (/\/go\/graphql/.test(req.url())) { const pd = req.postData() || ''; if (pd) gql.push({ dir: 'req', body: pd.slice(0, 3500) }); } } catch {}
+    try { if (/\/go\/graphql/.test(req.url())) { let op = ''; try { op = (JSON.parse(req.postData()||'{}').operationName)||''; } catch {} reqByOrder.push(op); } } catch {}
+  });
+  page.on('response', async (resp) => {
+    try {
+      if (!/\/go\/graphql/.test(resp.url())) return;
+      const t = await resp.text();
+      const op = reqByOrder.shift() || '?';
+      gql.push({ op, len: t.length, json: t.slice(0, 60) === t.slice(0,60) && t[0] === '{' ? t : '(nao-json)', sample: t.slice(0, 400) });
+    } catch {}
   });
   const out = {};
   try {
+    // 1) Home: a SPA dispara leiloesHome (passa pelo Cloudflare). Interceptamos.
     await page.goto(base, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
-    await new Promise(r => setTimeout(r, 4000));
+    await new Promise(r => setTimeout(r, 5000));
+    for (let i = 0; i < 6; i++) { try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch {} await new Promise(r => setTimeout(r, 1200)); }
 
-    // (1) Introspection: lista os campos raiz da Query (nome + args + tipo de retorno).
-    out.introspection = await page.evaluate(async () => {
-      const q = `query{__schema{queryType{fields{name args{name type{kind name ofType{kind name}}} type{kind name ofType{kind name ofType{kind name}}}}}}}`;
+    // Extrai leilões de imóveis (slug/categoria/lotesCount) da resposta interceptada.
+    const homeResp = gql.filter(g => g.op === 'HomeBootstrap' && g.json !== '(nao-json)').sort((a,b)=>b.len-a.len)[0];
+    let leiloes = [];
+    if (homeResp) {
       try {
-        const r = await fetch('/go/graphql', { method: 'POST', headers: { 'content-type': 'application/json', 'accept': 'application/json' }, credentials: 'include', body: JSON.stringify({ query: q }) });
-        const j = await r.json();
-        const fields = j?.data?.__schema?.queryType?.fields || [];
-        return { status: r.status, fields: fields.map(f => ({ name: f.name, args: (f.args || []).map(a => a.name) })) };
-      } catch (e) { return { err: String(e && e.message) }; }
-    }).catch((e) => ({ err: String(e && e.message) }));
+        const j = JSON.parse(homeResp.json);
+        leiloes = (j?.data?.leiloesHome?.items || []).map(i => ({ slug: i.slug, cat: i.categoriaMascara, lotes: i.lotesCount, title: (i.title||'').slice(0,40) }));
+        out.pagination = j?.data?.leiloesHome?.pagination;
+      } catch (e) { out.parseErr = String(e && e.message); }
+    }
+    out.leiloes = leiloes.slice(0, 12);
 
-    // (2) HomeBootstrap para obter um slug de leilão real.
-    out.slug = await page.evaluate(async () => {
-      const query = `query HomeBootstrap($page:Int=1,$perPage:Int){leiloesHome(page:$page,perPage:$perPage){items{id slug title categoriaMascara lotesCount __typename}pagination{total lastPage __typename}__typename}}`;
-      try {
-        const r = await fetch('/go/graphql', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'include', body: JSON.stringify({ operationName: 'HomeBootstrap', variables: { page: 1, perPage: 30 }, query }) });
-        const j = await r.json();
-        const items = j?.data?.leiloesHome?.items || [];
-        return { status: r.status, pagination: j?.data?.leiloesHome?.pagination, sample: items.slice(0, 8).map(i => ({ slug: i.slug, cat: i.categoriaMascara, lotes: i.lotesCount, title: (i.title||'').slice(0,40) })) };
-      } catch (e) { return { err: String(e && e.message) }; }
-    }).catch((e) => ({ err: String(e && e.message) }));
-
-    // (3) Navega ao detalhe do 1º leilão para capturar a query de lotes.
-    const slug = out.slug?.sample?.[0]?.slug;
-    if (slug) {
-      gql.length = 0; // limpa; queremos só o que dispara no detalhe
-      await page.goto(`${base}leilao/${slug}`, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
-      await new Promise(r => setTimeout(r, 4000));
-      for (let i = 0; i < 4; i++) { try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch {} await new Promise(r => setTimeout(r, 1200)); }
-      out.detalheQueries = gql.filter(g => g.dir === 'req').map(g => g.body);
+    // 2) Abre o detalhe do 1º leilão (de preferência de imóveis) → SPA busca os lotes.
+    const alvo = leiloes.find(l => /im[oó]ve/i.test(l.cat || '')) || leiloes[0];
+    if (alvo?.slug) {
+      out.alvo = alvo;
+      gql.length = 0; reqByOrder.length = 0;
+      // tenta rotas prováveis de detalhe do leilão
+      for (const rota of [`leilao/${alvo.slug}`, `leiloes/${alvo.slug}`]) {
+        await page.goto(`${base}${rota}`, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+        await new Promise(r => setTimeout(r, 4000));
+        for (let i = 0; i < 5; i++) { try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch {} await new Promise(r => setTimeout(r, 1200)); }
+        if (gql.some(g => g.op !== 'Bootstrap' && g.op !== '?')) break;
+      }
+      out.detalheOps = gql.map(g => ({ op: g.op, len: g.len }));
+      // maior resposta não-Bootstrap = provavelmente os lotes
+      const loteResp = gql.filter(g => g.op !== 'Bootstrap' && g.json !== '(nao-json)').sort((a,b)=>b.len-a.len)[0];
+      if (loteResp) { out.loteOp = loteResp.op; out.loteSample = loteResp.sample; out.loteLen = loteResp.len; }
     }
   } catch (e) { out.erro = String(e && e.message); }
   await gravarDebug('LT-SCHEMA', base, 200, 'application/json', JSON.stringify(out, null, 2));
-  console.log(`  introspection fields: ${out.introspection?.fields?.length ?? 'n/a'}; slug: ${out.slug?.sample?.[0]?.slug ?? 'n/a'}`);
+  console.log(`  leilões: ${out.leiloes?.length ?? 0}; alvo: ${out.alvo?.slug ?? 'n/a'}; loteOp: ${out.loteOp ?? 'n/a'}`);
   await page.close();
 }
 
