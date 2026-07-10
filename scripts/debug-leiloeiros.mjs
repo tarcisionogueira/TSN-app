@@ -16,18 +16,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 7 — viabilidade dos leiloeiros restantes (Oeste, VIP, Biasi) ===
-  // Navega a listagem de imóveis de cada um, intercepta os XHR JSON (xhr-list revela
-  // o endpoint de dados) + domstats (estrutura do card). Define se é integrável.
-  // Oeste: plataforma white-label (/app/*). Sondar candidatos de catálogo.
-  { fonte: 'OESTE', url: 'https://www.oesteleiloes.com.br/imoveis', inPageApis: [
-    'https://www.oesteleiloes.com.br/app/lote/busca',
-    'https://www.oesteleiloes.com.br/app/leilao/aberto',
-    'https://www.oesteleiloes.com.br/app/produto/busca',
-    'https://www.oesteleiloes.com.br/app/busca',
-  ] },
-  { fonte: 'VIP', url: 'https://www.leilaovip.com.br/lotes/imoveis' },
-  { fonte: 'BIASI', url: 'https://www.biasileiloes.com.br/lotes' },
+  // === Round 8 — HOME do VIP e Biasi p/ achar a rota real de imóveis ===
+  // /lotes|/lotes/imoveis deram 404 (rota errada). A home revela a navegação real
+  // (domstats/render) e dispara o endpoint de dados (xhr-list) — daí a rota certa.
+  // Oeste ficou de fora: API /app/* exige auth (403) → inviável via GET público.
+  { fonte: 'VIPHOME', url: 'https://www.leilaovip.com.br/' },
+  { fonte: 'BIASIHOME', url: 'https://www.biasileiloes.com.br/' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
