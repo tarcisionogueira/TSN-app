@@ -1567,15 +1567,27 @@ function parseDataPestana(s) {
   return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00-03:00`;
 }
 
-// Cidade/UF: primeiro dos campos do bem; senão extrai do texto ("… Cidade/UF …").
+// Cidade/UF: primeiro dos campos do bem; senão extrai do texto. O Pestana usa
+// tanto "Cidade/UF" (barra) quanto "… - Cidade - UF" (traço, UF no fim).
 function cidadeUfPestana(bem, desc) {
   let cidade = String((bem && bem.cidade && bem.cidade.name) || '').trim();
   let uf = String((bem && bem.estado && bem.estado.name) || '').trim().toUpperCase().slice(0, 2);
-  if (!cidade || !/^[A-Z]{2}$/.test(uf)) {
-    const m = String(desc || '').match(/([A-Za-zÀ-ÿ'.\- ]{2,40})\/([A-Z]{2})\b/);
-    if (m) { cidade = cidade || m[1].trim(); if (!/^[A-Z]{2}$/.test(uf)) uf = m[2]; }
+  const temUf = () => /^[A-Z]{2}$/.test(uf);
+  if (!cidade || !temUf()) {
+    const t = String(desc || '').trim();
+    let m = t.match(/([A-Za-zÀ-ÿ'.\- ]{2,40})\/([A-Z]{2})\b/); // "Cidade/UF"
+    if (m) { cidade = cidade || m[1].trim(); if (!temUf()) uf = m[2]; }
+    else {
+      const parts = t.split(/\s+-\s+/); // "Tipo - Cidade - UF"
+      const last = String(parts[parts.length - 1] || '').trim();
+      if (/^[A-Z]{2}$/.test(last)) {
+        if (!temUf()) uf = last;
+        const c = String(parts[parts.length - 2] || '').trim().replace(/\s+e\s+.*/i, ''); // "A e B" → A
+        if (!cidade && c) cidade = c;
+      }
+    }
   }
-  return { cidade, uf: /^[A-Z]{2}$/.test(uf) ? uf : '' };
+  return { cidade, uf: temUf() ? uf : '' };
 }
 
 function mapLotePestana(lote, leilao) {
@@ -1591,9 +1603,13 @@ function mapLotePestana(lote, leilao) {
     const mm = String((c && c.valor) || '').match(/([\d.,]+)\s*m²/);
     if (mm) { area = parseBRL(mm[1]); break; }
   }
-  // Foto: 1ª imagem do bem (arquivo → GED). Terrenos costumam não ter foto.
-  const img = Array.isArray(bem.imagens) && bem.imagens[0];
-  const foto = img ? (img.arquivo ? `${PESTANA_GED}${encodeURIComponent(img.arquivo)}` : (img.link || null)) : null;
+  // Foto: campo `media` do bem (imagemPrincipal ou 1ª de imagens) → GED redimensionado.
+  // Terrenos costumam não ter foto (imagens vazio) — fica null, sem inventar.
+  const imgs = Array.isArray(bem.imagens) ? bem.imagens : [];
+  const capaMedia = (bem.imagemPrincipal && bem.imagemPrincipal.media)
+    || ((imgs.find(i => i && i.destaque) || imgs[0] || {}).media)
+    || null;
+  const foto = capaMedia ? `${PESTANA_GED}${encodeURIComponent(capaMedia)}?ims=fit-in/640x0` : null;
   const origem = String(bem.origem || '').toLowerCase();
   const modalidade = origem.includes('extra') ? 'extrajudicial' : origem.includes('judicial') ? 'judicial' : 'extrajudicial';
   const edital = (Array.isArray(leilao.documentos) ? leilao.documentos.find(d => d && /edital/i.test(d.nome || '')) : null);
