@@ -16,16 +16,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 15 — Leilão VIP: achar a API do CATÁLOGO de imóveis (a home só tinha
-  // tracking + blob Azure). Testa a página de busca/imóveis e sonda rotas prováveis.
-  { fonte: 'VIP-CAT', url: 'https://www.leilaovip.com.br/busca/imoveis', inPageApis: [
-    'https://www.leilaovip.com.br/api/imoveis?pagina=1',
-    'https://www.leilaovip.com.br/api/lotes?categoria=imoveis&pagina=1',
-    'https://www.leilaovip.com.br/api/busca?categoria=imoveis',
-    'https://correios.vipleiloes.com.br/api/imoveis',
-    'https://www.leilaovip.com.br/imoveis/api/lotes',
+  // Round 16 — Leilão VIP: o catálogo é /agenda?segmento=Imóveis e usa DataTables
+  // (grid alimentado por AJAX JSON). Carregamos a página e interceptamos o XHR do
+  // DataTables (dispara sozinho). Também sondamos endpoints DataTables prováveis.
+  { fonte: 'VIP-AGENDA', url: 'https://www.leilaovip.com.br/agenda?segmento=Im%C3%B3veis', inPageApis: [
+    'https://www.leilaovip.com.br/agenda/listar?segmento=Im%C3%B3veis',
+    'https://www.leilaovip.com.br/agenda/getdados?segmento=Im%C3%B3veis',
+    'https://www.leilaovip.com.br/Agenda/Pesquisar?segmento=Im%C3%B3veis',
+    'https://www.leilaovip.com.br/agenda/index?segmento=Im%C3%B3veis&draw=1&start=0&length=50',
   ] },
-  { fonte: 'VIP-IMOVEIS', url: 'https://www.leilaovip.com.br/imoveis', inPageApis: [] },
 ];
 
 // Mede o VOLUME de imóveis por portal do Superbid e IDENTIFICA o leiloeiro/portal
