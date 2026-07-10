@@ -16,12 +16,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 30 — Grupo Lance: recon do catálogo de imóveis + detecção de plataforma
-  // (Leilotech/Suporte/bespoke) para viabilizar integração, de preferência via plataforma.
-  { fonte: 'GL-HOME',    url: 'https://www.grupolance.com.br/' },
-  { fonte: 'GL-IMOVEIS', url: 'https://www.grupolance.com.br/imoveis' },
-  { fonte: 'GL-BUSCA',   url: 'https://www.grupolance.com.br/buscador?categoria=2' },
-  { fonte: 'GL-CAT',     url: 'https://www.grupolance.com.br/categoria/imoveis' },
+  // Round 31 — Grupo Lance: página de DETALHE do lote — quais documentos existem
+  // (matrícula? laudo? além do edital) e se ficam atrás de aba/accordion.
+  { fonte: 'GLD1', url: 'https://www.grupolance.com.br/imoveis/terrenos-e-lotes/rj/porto-real/terreno-at-3729m2-porto-real-rj-26056' },
+  { fonte: 'GLD2', url: 'https://www.grupolance.com.br/imoveis/terrenos-e-lotes/rn/mossoro/terreno-at-170796m2-margens-rn-015-mossoro-rn-28355' },
 ];
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
