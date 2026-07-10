@@ -2294,7 +2294,7 @@ async function scraperGrupoLance(browser) {
       if (Date.now() > DEADLINE) { console.log('    Grupo Lance: teto de tempo atingido'); break; }
       const antes = bens.size;
       try {
-        await page.goto(`${GL_BASE}/imoveis?page=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.goto(`${GL_BASE}/imoveis?pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await new Promise(r => setTimeout(r, 900));
       } catch { break; }
       const lotes = await grupoLanceParsePagina(page);
