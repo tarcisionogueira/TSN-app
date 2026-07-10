@@ -1487,21 +1487,21 @@ async function scraperVendasGov(browser) {
   try {
     await page.setUserAgent(USER_AGENT);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-    // Precisamos apenas ESTAR no domínio para o fetch (dentro da página) passar pelo
-    // WAF do SERPRO com Origin/TLS corretos. waitUntil:'commit' resolve isso: dispara
-    // assim que a navegação é aceita (headers), sem esperar a SPA (que faz long-polling
-    // e nunca "assenta" — domcontentloaded/networkidle2 estouravam o timeout). Retry.
+    // O fetch da API (dentro da página) só passa DEPOIS que a SPA BOOTA — ela
+    // estabelece a sessão/cookies que liberam o /api/public. Provado no debug harness:
+    // o fetch só retornava JSON após ~6-8s de espera pós-goto (com menos, dá
+    // "Failed to fetch"). Então: domcontentloaded (com retry) + espera de boot.
     let onOrigin = false;
     for (let tent = 0; tent < 3 && !onOrigin; tent++) {
       try {
-        await page.goto(`${VG_BASE}/leilao`, { waitUntil: 'commit', timeout: 30000 });
-        onOrigin = String(page.url() || '').includes('vendasgov.serpro.gov.br');
+        await page.goto(`${VG_BASE}/leilao`, { waitUntil: 'domcontentloaded', timeout: 45000 });
       } catch (e) {
-        console.log(`    VendasGov: goto tentativa ${tent + 1} falhou (${String(e.message).slice(0, 40)})`);
+        console.log(`    VendasGov: goto tentativa ${tent + 1} (${String(e.message).slice(0, 40)})`);
       }
+      onOrigin = String(page.url() || '').includes('vendasgov.serpro.gov.br');
     }
-    await new Promise(r => setTimeout(r, 1500));
-    if (!onOrigin) console.log('    VendasGov: ⚠️ não confirmou o domínio — os fetches podem falhar no WAF');
+    if (!onOrigin) console.log('    VendasGov: ⚠️ não confirmou o domínio');
+    await new Promise(r => setTimeout(r, 7000)); // deixa a SPA bootar (sessão/cookies)
 
     for (const sala of VG_SALAS) {
       let totalPages = 1;
