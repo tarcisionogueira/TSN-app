@@ -1425,9 +1425,6 @@ async function scraperLJUD_navegador(browser, endpoint) {
 // fetch roda DENTRO da página (TLS de Chrome real) — mesma tática do LJUD. Inventário
 // EXCLUSIVO (imóveis públicos da União/INSS/fundos), não duplica os leiloeiros.
 const VG_BASE = 'https://imoveis.vendasgov.serpro.gov.br';
-// Salas (subtipo) que carregam imóvel VENDÁVEL agora — de /api/salas. Fora: autorizados
-// e emProcesso (ainda não à venda), vendido (já vendido).
-const VG_SALAS = ['leilao', 'concorrencia', 'venda', 'pai', 'fundo'];
 
 function parseDataVG(s) {
   if (!s || typeof s !== 'string') return null;
@@ -1480,65 +1477,56 @@ function mapImovelVG(it) {
   };
 }
 
+// Rotas da SPA por sala (de /api/salas) — cada uma faz o site chamar
+// /api/public/imoveis?...&sala=... que INTERCEPTAMOS.
+const VG_ROTAS = [
+  { sala: 'leilao', url: `${VG_BASE}/leilao` },
+  { sala: 'concorrencia', url: `${VG_BASE}/concorrencia` },
+  { sala: 'venda', url: `${VG_BASE}/venda` },
+  { sala: 'pai', url: `${VG_BASE}/imoveispublicos` },
+  { sala: 'fundo', url: `${VG_BASE}/fundos` },
+];
+
 async function scraperVendasGov(browser) {
-  console.log('  Imóveis da União (VendasGov/SPU) — API pública via navegador (TLS Chrome)...');
+  console.log('  Imóveis da União (VendasGov/SPU) — interceptando o XHR real do site...');
   const page = await browser.newPage();
   const bens = new Map();
+  // INTERCEPTAÇÃO: a SPA chama /api/public/imoveis com a sessão que o WAF aceita.
+  // Forçar o fetch por page.evaluate dava "Failed to fetch" (o WAF/sessão barra o
+  // fetch "manual"); ler a resposta REAL do site é o caminho provado (debug harness).
+  page.on('response', async (resp) => {
+    try {
+      if (!/\/api\/public\/imoveis(\?|$)/i.test(resp.url())) return;
+      const ct = resp.headers()['content-type'] || '';
+      if (!/json/i.test(ct)) return;
+      const j = await resp.json().catch(() => null);
+      const arr = j && Array.isArray(j.content) ? j.content : null;
+      if (!arr) return;
+      for (const it of arr) {
+        const id = String(it && it.id != null ? it.id : '');
+        if (id && !it.vendido && !bens.has(id)) bens.set(id, it);
+      }
+    } catch { /* ignore corpo indisponível */ }
+  });
+
   try {
     await page.setUserAgent(USER_AGENT);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-    // O fetch da API (dentro da página) só passa DEPOIS que a SPA BOOTA — ela
-    // estabelece a sessão/cookies que liberam o /api/public. Provado no debug harness:
-    // o fetch só retornava JSON após ~6-8s de espera pós-goto (com menos, dá
-    // "Failed to fetch"). Então: domcontentloaded (com retry) + espera de boot.
-    let onOrigin = false;
-    for (let tent = 0; tent < 3 && !onOrigin; tent++) {
-      try {
-        await page.goto(`${VG_BASE}/leilao`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      } catch (e) {
-        console.log(`    VendasGov: goto tentativa ${tent + 1} (${String(e.message).slice(0, 40)})`);
+    for (const { sala, url } of VG_ROTAS) {
+      const antes = bens.size;
+      try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }); }
+      catch (e) { console.log(`    VendasGov/${sala}: goto (${String(e.message).slice(0, 35)})`); }
+      await new Promise(r => setTimeout(r, 6000)); // SPA boota + carrega a 1ª página
+      // Rola para disparar a paginação por scroll (novos XHR interceptados).
+      // Para quando parar de crescer por 3 rolagens seguidas (teto 40).
+      let estavel = 0;
+      for (let s = 0; s < 40 && estavel < 3; s++) {
+        const n0 = bens.size;
+        try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
+        await new Promise(r => setTimeout(r, 1800));
+        estavel = bens.size > n0 ? 0 : estavel + 1;
       }
-      onOrigin = String(page.url() || '').includes('vendasgov.serpro.gov.br');
-    }
-    if (!onOrigin) console.log('    VendasGov: ⚠️ não confirmou o domínio');
-    await new Promise(r => setTimeout(r, 7000)); // deixa a SPA bootar (sessão/cookies)
-
-    for (const sala of VG_SALAS) {
-      let totalPages = 1;
-      for (let pg = 0; pg < totalPages && pg < 80; pg++) {
-        // sort por dataAtualizacao (campo que TODO imóvel tem). O sort original
-        // itens.edital.dtCertame é específico de leilão → nas salas de venda direta/
-        // concorrência/PAI/fundo (sem certame) a query descartava quase tudo.
-        const url = `${VG_BASE}/api/public/imoveis?size=100&page=${pg}&sort=dataAtualizacao,desc&sala=${sala}`;
-        // fetch com timeout (AbortController): sem isso, um WAF/rede pendurada custava
-        // ~3 min por sala. Detecta também resposta não-JSON (página de bloqueio do WAF).
-        const data = await page.evaluate(async (u) => {
-          try {
-            const ctrl = new AbortController();
-            const t = setTimeout(() => ctrl.abort(), 15000);
-            const r = await fetch(u, { headers: { Accept: 'application/json' }, signal: ctrl.signal });
-            clearTimeout(t);
-            if (!r.ok) return { __status: r.status };
-            const ct = r.headers.get('content-type') || '';
-            if (!/json/i.test(ct)) return { __nonjson: ct };
-            return await r.json();
-          } catch (e) { return { __err: String((e && e.message) || e) }; }
-        }, url).catch(() => null);
-        const items = (data && Array.isArray(data.content)) ? data.content : [];
-        if (pg === 0) {
-          totalPages = Math.min(80, Number(data && data.totalPages) || 1);
-          const diag = data && data.__err ? `err=${data.__err.slice(0, 30)}` : data && data.__nonjson ? `nonjson=${data.__nonjson}` : data && data.__status ? `http=${data.__status}` : 'ok';
-          console.log(`    VendasGov/${sala}: ${data && data.totalElements != null ? data.totalElements : '?'} imóveis em ${totalPages} página(s) [${diag}]`);
-          if (!items.length) break;
-        }
-        if (!items.length) break;
-        for (const it of items) {
-          if (it && it.vendido) continue;             // pula já vendidos
-          const id = String(it && it.id != null ? it.id : '');
-          if (id && !bens.has(id)) bens.set(id, it);
-        }
-        await new Promise(r => setTimeout(r, 150));
-      }
+      console.log(`    VendasGov/${sala}: +${bens.size - antes} (acumulado ${bens.size})`);
     }
   } finally { await page.close().catch(() => {}); }
 
