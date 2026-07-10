@@ -125,6 +125,8 @@ const CRITERIOS = {
   PESTANA:  { min: 15,  valor: 0.75, uf: 0.40, link: 0.85 },
   // Biasi: server-rendered; cidade/UF no título ("… - Cidade/UF"), valor e link fortes.
   BIASI:    { min: 30,  valor: 0.85, uf: 0.55, link: 0.9 },
+  // Leilão VIP: server-rendered; cidade/UF vêm limpos do .anc-local, valor e link fortes.
+  VIP:      { min: 20,  valor: 0.85, uf: 0.55, link: 0.9 },
   // Sub-portais da rede Superbid (inventário pequeno, leiloeiro real vem no campo
   // `store` de cada oferta). Portal 9 ~72, portal 21 ~39 imóveis abertos.
   SBID9:    { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
@@ -1811,6 +1813,131 @@ async function scraperBiasi(browser) {
   return imoveis;
 }
 
+// ─── LEILÃO VIP (VIP Leilões) ─────────────────────────────────────────────────
+// Server-rendered (.NET). Modelo em 2 níveis, confirmado por captura real:
+//   /agenda?segmento=Imóveis   → cards .card-evento com links /evento/detalhes/{id}
+//   /evento/lotes/{id}         → TODOS os anúncios (imóveis) do evento numa página
+//                                (cards .card-anuncio server-rendered).
+// Cada .card-anuncio: link /evento/anuncio/{slug}-{id}, foto (blob Azure direto),
+// .anc-local "Cidade - UF", .anc-type, .anc-title h1 (com área), .valor-atual (R$).
+const VIP_BASE = 'https://www.leilaovip.com.br';
+
+function mapAnuncioVIP(a) {
+  const titulo = String(a.titulo || '').replace(/\s+/g, ' ').trim();
+  const local = String(a.local || '').replace(/local:?/i, '').replace(/\s+/g, ' ').trim();
+  const lm = local.match(/^(.*?)\s*[-–]\s*([A-Za-z]{2})\s*$/);
+  const cidade = lm ? lm[1].trim() : local;
+  const uf = lm ? lm[2].toUpperCase() : '';
+  const ext = extrairDaDescricao(titulo);
+  const detalhe = a.href ? (a.href.startsWith('http') ? a.href : `${VIP_BASE}${a.href}`) : `${VIP_BASE}/agenda`;
+  return {
+    fonte: 'VIP',
+    fonte_id: `vip_${a.id}`,
+    titulo: (titulo || `Imóvel Leilão VIP ${a.id}`).slice(0, 180),
+    tipo: normalizarTipo(a.tipo || titulo),
+    modalidade: 'extrajudicial',
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
+    cidade: cidade ? toTitleCase(cidade) : '',
+    bairro: '',
+    endereco: '',
+    valor_avaliacao: 0,
+    valor_minimo: parseBRL(a.valor || ''),
+    area_m2: ext.area_m2 || 0,
+    ocupacao: ext.ocupacao || null,
+    descricao: titulo.slice(0, 500),
+    link_edital: detalhe,
+    url_lote: detalhe,
+    link_foto: a.foto && /^https?:\/\//.test(a.foto) ? a.foto : null,
+    leiloeiro: 'Leilão VIP',
+    data_leilao: null,
+    forma_pagamento: 'a_vista',
+  };
+}
+
+// Extrai os cards de anúncio (imóveis) do DOM da página atual.
+function vipParseAnuncios(page) {
+  return page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('.card-anuncio').forEach((c) => {
+      const a = c.querySelector('a[href*="/evento/anuncio/"]');
+      const href = a ? (a.getAttribute('href') || '') : '';
+      const mm = href.match(/-(\d+)(?:[/?#].*)?$/);
+      const id = mm ? mm[1] : '';
+      if (!id) return;
+      const img = c.querySelector('img.card-img-top, img');
+      out.push({
+        id,
+        href,
+        titulo: (c.querySelector('.anc-title h1, .anc-title')?.textContent || img?.getAttribute('alt') || '').trim(),
+        local: (c.querySelector('.anc-local')?.textContent || '').trim(),
+        tipo: (c.querySelector('.anc-type')?.textContent || '').trim(),
+        valor: (c.querySelector('.valor-atual')?.textContent || '').trim(),
+        foto: img ? (img.getAttribute('src') || '') : '',
+      });
+    });
+    return out;
+  }).catch(() => []);
+}
+
+async function scraperVIP(browser) {
+  console.log('  Leilão VIP — server-rendered (agenda → eventos → /evento/lotes)...');
+  const page = await browser.newPage();
+  const bens = new Map();
+  const DEADLINE = Date.now() + 7 * 60 * 1000;
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+
+    // 1) Eventos de imóveis na agenda (server-rendered): /evento/detalhes/{id}
+    let eventos = [];
+    try {
+      await page.goto(`${VIP_BASE}/agenda?segmento=Im%C3%B3veis`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await new Promise(r => setTimeout(r, 2500));
+      eventos = await page.evaluate(() => {
+        const set = new Set();
+        document.querySelectorAll('a[href*="/evento/detalhes/"]').forEach((a) => {
+          const mm = (a.getAttribute('href') || '').match(/\/evento\/detalhes\/([^/?#]+)/);
+          if (mm) set.add(mm[1]);
+        });
+        return [...set];
+      });
+    } catch (e) { console.log(`    VIP agenda: ${String(e.message).slice(0, 50)}`); }
+    console.log(`    VIP: ${eventos.length} eventos de imóveis na agenda`);
+
+    // 2) Cada evento: /evento/lotes/{id} traz todos os anúncios numa página. Rola
+    //    até estabilizar (alguns paginam por scroll). Teto de tempo global.
+    for (const ev of eventos.slice(0, 80)) {
+      if (Date.now() > DEADLINE) { console.log('    VIP: teto de tempo atingido'); break; }
+      try {
+        await page.goto(`${VIP_BASE}/evento/lotes/${encodeURIComponent(ev)}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 1200));
+        let estavel = 0, prev = -1;
+        for (let s = 0; s < 15 && estavel < 3; s++) {
+          const anuncios = await vipParseAnuncios(page);
+          for (const an of anuncios) { if (an.id && !bens.has(an.id)) bens.set(an.id, an); }
+          const nAtual = await page.evaluate(() => document.querySelectorAll('.card-anuncio').length).catch(() => 0);
+          estavel = nAtual > prev ? 0 : estavel + 1;
+          prev = nAtual;
+          try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } catch { /* evento a evento; nunca derruba o scrape */ }
+      await new Promise(r => setTimeout(r, 120));
+    }
+  } finally { await page.close().catch(() => {}); }
+
+  const seen = new Set();
+  const imoveis = [];
+  for (const a of bens.values()) {
+    const row = mapAnuncioVIP(a);
+    if (!row.valor_minimo || seen.has(row.fonte_id)) continue;
+    seen.add(row.fonte_id);
+    imoveis.push(row);
+  }
+  console.log(`    VIP: ${imoveis.length} imóveis mapeados (${bens.size} anúncios colhidos)`);
+  return imoveis;
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -2017,6 +2144,20 @@ async function main() {
       await registrarSaude('BIASI', imoveis, 'principal', validarColeta(imoveis, 'BIASI'));
     } catch (e) {
       console.log(`  ⚠️ Biasi falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // 11. Leilão VIP — server-rendered (agenda → /evento/lotes/{id}). Foto direto do
+    // blob Azure; edital/matrícula ficam na página do anúncio → enriquecerDocumentosLote
+    // as vasculha. Blindado: nunca derruba o job.
+    console.log('\n📋 Leilão VIP...');
+    if (rodar('VIP')) try {
+      const imoveis = await scraperVIP(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos VIP falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'VIP');
+      await registrarSaude('VIP', imoveis, 'principal', validarColeta(imoveis, 'VIP'));
+    } catch (e) {
+      console.log(`  ⚠️ Leilão VIP falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
   } finally {
