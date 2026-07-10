@@ -1947,14 +1947,25 @@ async function scraperVIP(browser) {
 // INTERCEPTAMOS as respostas GraphQL (mesmo método do VendasGov). fonte única
 // 'LEILOTECH' com leiloeiro = nome do tenant (aparece no selo do card).
 const LEILOTECH_TENANTS = [
-  { domain: 'topoleiloes.com.br',       leiloeiro: 'Topo Leilões' },
-  { domain: 'oleiloes.com.br',          leiloeiro: 'O Leilões' },
-  { domain: 'spencerleiloes.com.br',    leiloeiro: 'Spencer Leilões' },
-  { domain: 'vasconcelosleiloes.com.br',leiloeiro: 'Vasconcelos Leilões' },
-  { domain: 'newtonleiloes.com.br',     leiloeiro: 'Newton Leilões' },
-  { domain: 'bringelleiloes.com.br',    leiloeiro: 'Bringel Leilões' },
-  { domain: 'alcanceleiloes.com.br',    leiloeiro: 'Alcance Leilões' },
-  { domain: 'tulioleiloes.com.br',      leiloeiro: 'Túlio Leilões' },
+  { domain: 'topoleiloes.com.br',        leiloeiro: 'Topo Leilões' },
+  { domain: 'oleiloes.com.br',           leiloeiro: 'O Leilões' },
+  { domain: 'spencerleiloes.com.br',     leiloeiro: 'Spencer Leilões' },
+  { domain: 'vasconcelosleiloes.com.br', leiloeiro: 'Vasconcelos Leilões' },
+  { domain: 'newtonleiloes.com.br',      leiloeiro: 'Newton Leilões' },
+  { domain: 'bringelleiloes.com.br',     leiloeiro: 'Bringel Leilões' },
+  { domain: 'alcanceleiloes.com.br',     leiloeiro: 'Alcance Leilões' },
+  { domain: 'tulioleiloes.com.br',       leiloeiro: 'Túlio Leilões' },
+  { domain: 'tesouroleiloes.com.br',     leiloeiro: 'Tesouro Leilões' },
+  { domain: 'rdleiloes.com.br',          leiloeiro: 'RD Leilões' },
+  { domain: 'vmleiloes.com.br',          leiloeiro: 'VM Leilões' },
+  { domain: 'abrantesleiloes.com',       leiloeiro: 'Abrantes Leilões' },
+  { domain: 'mariaclariceleiloes.com.br',leiloeiro: 'Maria Clarice Leilões' },
+  { domain: 'ksleiloes.com.br',          leiloeiro: 'KS Leilões' },
+  { domain: 'amleiloeiro.com.br',        leiloeiro: 'AM Leiloeiro' },
+  { domain: 'mozarmirandaleiloes.com.br',leiloeiro: 'Mozar Miranda Leilões' },
+  { domain: 'andredepaulaleiloes.com.br',leiloeiro: 'André de Paula Leilões' },
+  { domain: 'ferleiloes.com.br',         leiloeiro: 'Fer Leilões' },
+  { domain: 'alleiloes.com.br',          leiloeiro: 'AL Leilões' },
 ];
 
 // Extrai um número de campos que podem vir número OU string BR OU objeto de valores.
