@@ -16,14 +16,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 28 — achar tenant LIMPO da Suporte Leilões (banco/falência/federal/TRT,
-  // NÃO PGFN). Recon do site da plataforma (roster) + candidatos imóvel-focados.
-  // Detecta fingerprint static.suporteleiloes.com.br e o tipo de estoque.
-  { fonte: 'SLHOME',  url: 'https://www.suporteleiloes.com/' },
-  { fonte: 'FIDALGO', url: 'https://www.fidalgoleiloes.com.br/' },
-  { fonte: 'LIDER',   url: 'https://www.liderleiloes.com.br/' },
-  { fonte: 'FRANCO',  url: 'https://www.francoleiloes.com.br/' },
-  { fonte: 'MILAN',   url: 'https://www.milanleiloes.com.br/' },
+  // Round 29 — catálogo do tenant limpo Líder Leilões (Suporte Leilões, template novo
+  // /buscador). Confirma tipo de estoque (banco/falência/federal, não PGFN) e a
+  // estrutura do card do lote para escrever o scraper.
+  { fonte: 'LID-BUSCA',  url: 'https://www.liderleiloes.com.br/buscador?categoria=1' },
+  { fonte: 'LID-BUSCA2', url: 'https://www.liderleiloes.com.br/buscador' },
+  { fonte: 'LID-EXTRA',  url: 'https://www.liderleiloes.com.br/leiloes-extrajudiciais' },
 ];
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
