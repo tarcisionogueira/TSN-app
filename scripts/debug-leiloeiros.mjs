@@ -16,13 +16,41 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 12 — listagem real do Marteleiro por estado ===
-  // Seu Imóvel BB saiu (Cloudflare; BD stateless não resolve — handoff). MGL saiu
-  // (Degrau/antiforgery). O /imoveis do Marteleiro era só índice por estado; a lista
-  // real é /imoveis/{uf}. Capturamos SP (2.287) e AC (22) p/ ver card, paginação e CF.
-  { fonte: 'MARTELEIRO-SP', url: 'https://marteleiro.com.br/imoveis/sp' },
-  { fonte: 'MARTELEIRO-AC', url: 'https://marteleiro.com.br/imoveis/ac' },
+  // Round 13 — sem captura de páginas; roda o SCAN de portais do Superbid (abaixo).
 ];
+
+// Mede o VOLUME de imóveis por portal do Superbid (cada portal = 1 leiloeiro na
+// plataforma). Usa a MESMA API pública do nosso scraper (offer-query.superbid.net),
+// pageSize=1 só para ler o total. Descobre quais portais têm imóveis + quantos, e
+// captura o 1º offer p/ identificar o leiloeiro. Base para plugar novos portais.
+async function scanSuperbidPortais(browser) {
+  console.log('🔎 Scan de portais do Superbid (volume de imóveis por portal)...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  try { await page.goto('https://www.superbid.net/', { waitUntil: 'domcontentloaded', timeout: 45000 }); } catch {}
+  await new Promise(r => setTimeout(r, 3000));
+  const res = await page.evaluate(async () => {
+    const out = [];
+    for (let portal = 1; portal <= 90; portal++) {
+      const url = `https://offer-query.superbid.net/offers/?portalId=[${portal}]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=1&pageSize=1&orderBy=endDate:asc`;
+      try {
+        const r = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!r.ok) continue;
+        const d = await r.json();
+        const total = d.totalElements ?? d.total ?? d.totalCount ?? d.paging?.totalRecords ?? d.pagination?.total ?? null;
+        const first = (d.offers || d.content || d.results || d.items || [])[0] || null;
+        if ((total && total > 0) || first) {
+          out.push({ portal, total, keys: Object.keys(d).slice(0, 8), amostra: first ? JSON.stringify(first).slice(0, 500) : null });
+        }
+      } catch (e) { /* portal inexistente */ }
+      await new Promise(r => setTimeout(r, 60));
+    }
+    return out;
+  }).catch((e) => ({ erro: String(e && e.message || e) }));
+  await gravarDebug('SUPERBID-PORTAIS', 'scan-1-90', 200, 'application/json', JSON.stringify(res, null, 2));
+  console.log(`  portais com imóveis: ${Array.isArray(res) ? res.length : 'erro'}`);
+  await page.close();
+}
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
   const txt = String(conteudo || '').slice(0, 400000);
@@ -146,6 +174,8 @@ async function main() {
       try { await capturar(browser, alvo); }
       catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
     }
+    try { await scanSuperbidPortais(browser); }
+    catch (e) { console.log(`  scan superbid erro: ${e.message.slice(0, 80)}`); }
   } finally {
     await browser.close();
   }
