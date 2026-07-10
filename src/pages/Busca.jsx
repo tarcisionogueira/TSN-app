@@ -1781,9 +1781,23 @@ export default function Busca() {
                         {sb.nota.toFixed(1)}
                       </div>
                     )}
-                    {(im.fonte==='CEF' || im.fonte==='caixa') && (
-                      <div style={{ position:'absolute', bottom:8, left:8, background:'#c2410c', color:'white', fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:8 }}>CAIXA</div>
-                    )}
+                    {/* Selo do leiloeiro: sinaliza quem conduz o leilão direto na foto.
+                        Caixa vira rótulo curto; nomes de leiloeiro (ex.: judiciais do
+                        LJUD) aparecem por extenso. Descarta valores com cara de código
+                        (ex.: script capturado por engano na coleta). */}
+                    {(() => {
+                      const isCaixa = im.fonte === 'CEF' || im.fonte === 'caixa';
+                      let nome = isCaixa ? 'Caixa' : String(im.leiloeiro || '').trim();
+                      if (/[{};=]|_0x|function\s*\(|=>/.test(nome)) nome = isCaixa ? 'Caixa' : '';
+                      if (!nome) return null;
+                      const label = nome.length > 24 ? nome.slice(0, 23).trimEnd() + '…' : nome;
+                      return (
+                        <div title={`Leiloeiro: ${nome}`}
+                          style={{ position:'absolute', bottom:8, left:8, maxWidth:'calc(100% - 16px)', background: isCaixa ? '#c2410c' : 'rgba(15,23,42,0.82)', color:'white', fontSize:9, fontWeight:800, padding:'2px 8px', borderRadius:8, display:'flex', alignItems:'center', gap:4, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+                          <span aria-hidden="true" style={{ fontSize:8 }}>🔨</span>{label}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Conteúdo */}
