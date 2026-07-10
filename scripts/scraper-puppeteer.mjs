@@ -2431,19 +2431,27 @@ async function main() {
     }
 
     // Coleta + salva + registra saúde de uma fonte (validação de qualidade).
-    const coletarFonte = async (fonte, fn) => {
+    // opts.enrich: roda enriquecerDocumentosLote antes de salvar (captura edital/
+    // matrícula/laudo da página do lote — para fontes cujo detalhe é server-rendered).
+    const coletarFonte = async (fonte, fn, opts = {}) => {
       const imoveis = (await fn()) || [];
+      if (opts.enrich) {
+        try { await enriquecerDocumentosLote(browser, imoveis, { cap: opts.enrichCap || 120 }); }
+        catch (e) { console.log(`  ⚠️ Enriquecimento de documentos ${fonte} falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      }
       total += await salvarEFinalizar(imoveis, fonte);
       await registrarSaude(fonte, imoveis, 'principal', validarColeta(imoveis, fonte));
     };
 
-    // 2. Superbid (portal 2) — API offers, todas as páginas, somente abertos
+    // 2. Superbid (portal 2) — API offers, todas as páginas, somente abertos. O
+    // detalhe da oferta (/oferta/{id}) é server-rendered com a seção "Documentação"
+    // (edital/matrícula/laudo) → enriquecerDocumentosLote os captura (progressivo).
     console.log('\n📋 Superbid...');
-    if (rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }));
+    if (rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }), { enrich: true, enrichCap: 150 });
 
-    // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos
+    // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
     console.log('\n📋 Sold Leilões...');
-    if (rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }));
+    if (rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }), { enrich: true, enrichCap: 120 });
 
     // 3b. Sub-portais da rede Superbid (mesma API, portalId diferente). Inventário
     // pequeno mas distinto do portal 2; leiloeiro real vem no campo `store`.
