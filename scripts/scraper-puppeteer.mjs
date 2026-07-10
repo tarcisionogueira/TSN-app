@@ -125,6 +125,10 @@ const CRITERIOS = {
   PESTANA:  { min: 15,  valor: 0.75, uf: 0.40, link: 0.85 },
   // Biasi: server-rendered; cidade/UF no título ("… - Cidade/UF"), valor e link fortes.
   BIASI:    { min: 30,  valor: 0.85, uf: 0.55, link: 0.9 },
+  // Sub-portais da rede Superbid (inventário pequeno, leiloeiro real vem no campo
+  // `store` de cada oferta). Portal 9 ~72, portal 21 ~39 imóveis abertos.
+  SBID9:    { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
+  SBID21:   { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
   _default: { min: 10,  valor: 0.70, uf: 0.40, link: 0.8 },
 };
 
@@ -528,7 +532,7 @@ async function scraperSold(browser, pageNum = 1) {
 // superbid.net). portalId 2 = Superbid, 15 = Sold. Chama a API pública de
 // offers direto do navegador: searchType=opened (só ativos), filtra imóveis,
 // pagina de 100 em 100 até acabar. Genérico por portal/fonte.
-async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix, baseSite }) {
+async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix, baseSite, storeAsLeiloeiro = false }) {
   console.log(`  ${leiloeiro} — API offers (portal ${portalId}, somente abertos)...`);
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
@@ -599,7 +603,9 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
         descricao: desc.replace(/<[^>]+>/g, '').slice(0, 500),
         link_edital: linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`),
         link_foto: p.thumbnailUrl || null,
-        leiloeiro,
+        // Sub-portais: o leiloeiro real é a "loja" (store) de cada oferta; cai no
+        // rótulo genérico da fonte se o campo vier vazio.
+        leiloeiro: (storeAsLeiloeiro && str(of.store)) ? str(of.store).slice(0, 120) : leiloeiro,
         data_leilao: of.endDate || of.endDateTime || null,
         forma_pagamento: 'a_vista',
       };
@@ -1934,6 +1940,12 @@ async function main() {
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos
     console.log('\n📋 Sold Leilões...');
     if (rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }));
+
+    // 3b. Sub-portais da rede Superbid (mesma API, portalId diferente). Inventário
+    // pequeno mas distinto do portal 2; leiloeiro real vem no campo `store`.
+    console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
+    if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
+    if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
 
     // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos
     console.log('\n📋 PortalZuk (Zukerman)...');
