@@ -16,23 +16,18 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 6 — recon do DETALHE DO LOTE do Pestana ===
-  // Já temos a lista (/api/v2/leilao: leilões com IDs de lotes + edital). Falta o
-  // endpoint que traz valor/tipo/endereço/fotos por LOTE. Leilão de imóvel real:
-  // id 5872 (Terrenos em Eldorado/RS), lotes [413987,413989,...]. Navegamos a
-  // listagem de imóveis (intercepta o endpoint da lista + domstats com href do card)
-  // e sondamos candidatos de detalhe do lote (host api.pestanaleiloes.com.br/sgl/v1).
-  // Round 6b — o detalhe do lote vem por endpoint SAME-ORIGIN /api/v2/lote/* (o
-  // host api.pestanaleiloes.com.br/sgl/v1 dá CORS a partir do www). A página de um
-  // leilão (/agenda-de-leiloes/{id}) dispara o endpoint de LOTES por leilão que
-  // traz valor/tipo/foto. Navegamos um leilão de imóvel real (5872) e sondamos.
-  { fonte: 'PESTANA', url: 'https://www.pestanaleiloes.com.br/agenda-de-leiloes/5872?lotePage=1&loteQty=48', inPageApis: [
-    'https://www.pestanaleiloes.com.br/api/v2/lote/home',
-    'https://www.pestanaleiloes.com.br/api/v2/leilao/5872/lote',
-    'https://www.pestanaleiloes.com.br/api/v2/lote/leilao/5872',
-    'https://www.pestanaleiloes.com.br/api/v2/lote?leilao=5872&page=1&qtd=48',
-    'https://www.pestanaleiloes.com.br/api/v2/leilao/5872/lotes?page=1&qtd=48',
+  // === Round 7 — viabilidade dos leiloeiros restantes (Oeste, VIP, Biasi) ===
+  // Navega a listagem de imóveis de cada um, intercepta os XHR JSON (xhr-list revela
+  // o endpoint de dados) + domstats (estrutura do card). Define se é integrável.
+  // Oeste: plataforma white-label (/app/*). Sondar candidatos de catálogo.
+  { fonte: 'OESTE', url: 'https://www.oesteleiloes.com.br/imoveis', inPageApis: [
+    'https://www.oesteleiloes.com.br/app/lote/busca',
+    'https://www.oesteleiloes.com.br/app/leilao/aberto',
+    'https://www.oesteleiloes.com.br/app/produto/busca',
+    'https://www.oesteleiloes.com.br/app/busca',
   ] },
+  { fonte: 'VIP', url: 'https://www.leilaovip.com.br/lotes/imoveis' },
+  { fonte: 'BIASI', url: 'https://www.biasileiloes.com.br/lotes' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
