@@ -1854,31 +1854,6 @@ function mapAnuncioVIP(a) {
   };
 }
 
-// Extrai os cards de anúncio (imóveis) do DOM da página atual.
-function vipParseAnuncios(page) {
-  return page.evaluate(() => {
-    const out = [];
-    document.querySelectorAll('.card-anuncio').forEach((c) => {
-      const a = c.querySelector('a[href*="/evento/anuncio/"]');
-      const href = a ? (a.getAttribute('href') || '') : '';
-      const mm = href.match(/-(\d+)(?:[/?#].*)?$/);
-      const id = mm ? mm[1] : '';
-      if (!id) return;
-      const img = c.querySelector('img.card-img-top, img');
-      out.push({
-        id,
-        href,
-        titulo: (c.querySelector('.anc-title h1, .anc-title')?.textContent || img?.getAttribute('alt') || '').trim(),
-        local: (c.querySelector('.anc-local')?.textContent || '').trim(),
-        tipo: (c.querySelector('.anc-type')?.textContent || '').trim(),
-        valor: (c.querySelector('.valor-atual')?.textContent || '').trim(),
-        foto: img ? (img.getAttribute('src') || '') : '',
-      });
-    });
-    return out;
-  }).catch(() => []);
-}
-
 async function scraperVIP(browser) {
   console.log('  Leilão VIP — server-rendered (agenda → eventos → /evento/lotes)...');
   const page = await browser.newPage();
@@ -1904,23 +1879,46 @@ async function scraperVIP(browser) {
     } catch (e) { console.log(`    VIP agenda: ${String(e.message).slice(0, 50)}`); }
     console.log(`    VIP: ${eventos.length} eventos de imóveis na agenda`);
 
-    // 2) Cada evento: /evento/lotes/{id} traz todos os anúncios numa página. Rola
-    //    até estabilizar (alguns paginam por scroll). Teto de tempo global.
+    // 2) Cada evento: aquece a sessão visitando /evento/detalhes/{id} (o
+    //    /evento/lotes só devolve os cards com a sessão do site quente — provado
+    //    no recon) e então busca /evento/lotes/{id} in-page, que traz TODOS os
+    //    anúncios de uma vez. Fallback: parseia o DOM da própria página de detalhe.
     for (const ev of eventos.slice(0, 80)) {
       if (Date.now() > DEADLINE) { console.log('    VIP: teto de tempo atingido'); break; }
       try {
-        await page.goto(`${VIP_BASE}/evento/lotes/${encodeURIComponent(ev)}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        await new Promise(r => setTimeout(r, 1200));
-        let estavel = 0, prev = -1;
-        for (let s = 0; s < 15 && estavel < 3; s++) {
-          const anuncios = await vipParseAnuncios(page);
-          for (const an of anuncios) { if (an.id && !bens.has(an.id)) bens.set(an.id, an); }
-          const nAtual = await page.evaluate(() => document.querySelectorAll('.card-anuncio').length).catch(() => 0);
-          estavel = nAtual > prev ? 0 : estavel + 1;
-          prev = nAtual;
-          try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
-          await new Promise(r => setTimeout(r, 1000));
-        }
+        await page.goto(`${VIP_BASE}/evento/detalhes/${encodeURIComponent(ev)}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 800));
+        const anuncios = await page.evaluate(async (id) => {
+          const parse = (root) => {
+            const out = [];
+            root.querySelectorAll('.card-anuncio').forEach((c) => {
+              const a = c.querySelector('a[href*="/evento/anuncio/"]');
+              const href = a ? (a.getAttribute('href') || '') : '';
+              const mm = href.match(/-(\d+)(?:[/?#].*)?$/);
+              const aid = mm ? mm[1] : '';
+              if (!aid) return;
+              const img = c.querySelector('img.card-img-top, img');
+              out.push({
+                id: aid, href,
+                titulo: (c.querySelector('.anc-title h1, .anc-title')?.textContent || (img && img.getAttribute('alt')) || '').trim(),
+                local: (c.querySelector('.anc-local')?.textContent || '').trim(),
+                tipo: (c.querySelector('.anc-type')?.textContent || '').trim(),
+                valor: (c.querySelector('.valor-atual')?.textContent || '').trim(),
+                foto: img ? (img.getAttribute('src') || '') : '',
+              });
+            });
+            return out;
+          };
+          try {
+            const r = await fetch(`/evento/lotes/${id}`, { headers: { Accept: 'text/html', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include' });
+            const html = await r.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const viaFetch = parse(doc);
+            if (viaFetch.length) return viaFetch;
+          } catch { /* cai pro DOM da página de detalhe */ }
+          return parse(document);
+        }, ev).catch(() => []);
+        for (const an of anuncios) { if (an.id && !bens.has(an.id)) bens.set(an.id, an); }
       } catch { /* evento a evento; nunca derruba o scrape */ }
       await new Promise(r => setTimeout(r, 120));
     }
