@@ -507,7 +507,10 @@ export default function Analise() {
         showMsg('Documento complementar anexado.');
       } else {
         showMsg(`${LBL[tipo] || 'Documento'} enviado! Gerando a análise…`);
-        gerarRelDocumental();
+        // bypassPreCheck: o doc acabou de subir (está no banco/imovel_anexos que o
+        // servidor lê); o docsLeiloeiro do closure ainda está desatualizado, então
+        // não deixamos a pré-checagem barrar de novo — o servidor já vê o anexo.
+        gerarRelDocumental(false, true);
       }
     } catch (e) {
       showMsg(e.message || 'Erro ao enviar o documento.', 'error');
@@ -742,7 +745,7 @@ export default function Analise() {
   // CNJ NO SERVIDOR. O usuário pode FECHAR a aba — continua e grava no banco; o
   // resultado é aplicado de volta pelo efeito abaixo. Texto/processo colados na
   // tela (staff/inclusão manual) são enviados como reforço.
-  const gerarRelDocumental = (auto) => {
+  const gerarRelDocumental = (auto, bypassPreCheck) => {
     if (gerandoDocumental) return;
     // Ação manual do usuário (não é o auto-poll da captura) → zera o contador de
     // tentativas para uma nova rodada completa de espera pela captura.
@@ -761,6 +764,38 @@ export default function Analise() {
       || (ehArq(anexoMat) ? anexoMat : null) || (ehArq(imovelInicial?.linkMatricula) ? imovelInicial.linkMatricula : null) || undefined;
     const urlRegras = caixaRegrasVendaUrl({ fonte: imovelInicial?.fonte })
       || (ehArq(imovelInicial?.linkRegrasVenda) ? imovelInicial.linkRegrasVenda : null) || undefined;
+
+    // PRÉ-CHECAGEM DE DOCUMENTOS (no próprio botão, antes de gerar):
+    // • matrícula + edital legíveis → gera direto (nada é pedido depois).
+    // • falta algo, mas o leiloeiro é integrado / tem página do lote → gera e deixa a
+    //   captura automática buscar (mostra "preparando", sem pedir ao cliente).
+    // • falta algo e NÃO dá pra baixar sozinho → pede o documento AGORA, sem gastar a
+    //   análise nem fazer o cliente esperar o servidor só para então pedir o anexo.
+    const ehVendaDiretaDoc = /venda_direta/i.test(String(imovelInicial?.modalidade || ''));
+    const temMatriculaDoc = !!(urlMatricula || textoMatricula.trim());
+    const temEditalDoc = !!(ehArq(imovelInicial?.linkEdital) || urlRegras || urlEdital.trim() || textoDoc.trim()
+      || docsLeiloeiro.some(x => x.tipo === 'edital' || x.tipo === 'regras'));
+    const ehCaixaDoc = /caixa|cef/i.test(String(imovelInicial?.fonte || ''));
+    // A MATRÍCULA só é baixada sozinha na Caixa (PDF estático). Nos demais leiloeiros
+    // ela quase nunca é hospedada — então, faltando, pede logo. O EDITAL costuma estar
+    // na página do lote → é auto-capturável em quem tem página.
+    const matriculaAutoCap = ehCaixaDoc;
+    const editalAutoCap = ehCaixaDoc || ehArq(imovelInicial?.linkEdital) || ehArq(imovelInicial?.linkRegrasVenda);
+    const faltando = [];
+    if (!temMatriculaDoc && !matriculaAutoCap) faltando.push('matricula');
+    if (!temEditalDoc && !editalAutoCap) faltando.push(ehVendaDiretaDoc ? 'regras_venda' : 'edital');
+    if (auto !== true && !bypassPreCheck && faltando.length) {
+      const labelDoc = { matricula: 'a matrícula', edital: 'o edital', regras_venda: 'as regras da venda' };
+      const faltaTxt = faltando.map(t => labelDoc[t]).join(' e ');
+      setParecerDocumental({
+        precisaDocumentos: true, faltando,
+        paginaLeiloeiro: (ehArq(imovelInicial?.linkEdital) ? imovelInicial.linkEdital : null),
+        motivo: `A análise jurídica precisa da matrícula e do edital. Anexe ${faltaTxt} (PDF) para gerar a análise.`,
+      });
+      setRelSel('documental');
+      return; // pede o anexo já — não chama o servidor nem consome a análise
+    }
+
     const payload = {
       urlEdital: (ehArq(imovelInicial?.linkEdital) ? imovelInicial.linkEdital : (urlEdital || '')).trim() || undefined,
       urlMatricula,
