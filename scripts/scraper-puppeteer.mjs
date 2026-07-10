@@ -123,6 +123,8 @@ const CRITERIOS = {
   VENDASGOV:{ min: 3,   valor: 0.60, uf: 0.60, link: 0.9 },
   // Pestana: cidade/UF às vezes só no texto da descrição (uf mais frouxo).
   PESTANA:  { min: 15,  valor: 0.75, uf: 0.40, link: 0.85 },
+  // Biasi: server-rendered; cidade/UF no título ("… - Cidade/UF"), valor e link fortes.
+  BIASI:    { min: 30,  valor: 0.85, uf: 0.55, link: 0.9 },
   _default: { min: 10,  valor: 0.70, uf: 0.40, link: 0.8 },
 };
 
@@ -1681,6 +1683,128 @@ async function scraperPestana(browser) {
   return imoveis;
 }
 
+// ─── BIASI LEILÕES ────────────────────────────────────────────────────────────
+// Server-rendered ASP.NET, SEM API JSON (todos os GetLotes dão 404). Os leilões de
+// imóvel estão na home (/leilao/{id}/…); cada página do leilão traz até 48 cards no
+// HTML (#leilao-lista-lote total/limit) com paginação por JavaScript (sem ?page).
+// Estrutura do card confirmada por captura real (debug_fetch):
+//   a.leilao-lote[data-id] href=/sale/detail?id=X · .card-title="Lote em … - Cidade/UF"
+//   · .card-img-cover bg=cdn-biasi.blueintra.com/images/lot/… · "R$ …" (Valor Inicial)
+// Estratégia: navegador real — parseia o DOM de cada página e CLICA na paginação
+// (a click dispara o AJAX do próprio site, com a sessão certa).
+const BIASI_BASE = 'https://www.biasileiloes.com.br';
+
+function mapLoteBiasi(l) {
+  const title = String(l.title || '').replace(/\s+/g, ' ').trim();
+  let cidade = '', uf = '';
+  const m = title.match(/([A-Za-zÀ-ÿ'.\- ]{2,40})\/([A-Z]{2})\b/); // "… - Cidade/UF"
+  if (m) { cidade = m[1].trim(); uf = m[2]; }
+  const valor = parseBRL(l.price || '');
+  const foto = l.img && /^https?:\/\//.test(l.img) ? l.img : null;
+  const detalhe = `${BIASI_BASE}/sale/detail?id=${l.id}`;
+  return {
+    fonte: 'BIASI',
+    fonte_id: `biasi_${l.id}`,
+    titulo: (title || `Lote ${l.id}`).slice(0, 180),
+    tipo: normalizarTipo(title),
+    modalidade: 'extrajudicial',
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
+    cidade: cidade ? toTitleCase(cidade) : '',
+    bairro: '',
+    endereco: '',
+    valor_avaliacao: 0,
+    valor_minimo: valor,
+    area_m2: 0,
+    descricao: title.slice(0, 500),
+    link_edital: detalhe,
+    url_lote: detalhe,
+    link_foto: foto,
+    leiloeiro: 'Biasi Leilões',
+    data_leilao: null,
+    forma_pagamento: 'a_vista',
+  };
+}
+
+// Extrai os cards de lote do DOM da página atual do leilão.
+function biasiParsePagina(page) {
+  return page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('#leilao-lista-lote a.leilao-lote').forEach((a) => {
+      const id = a.getAttribute('data-id');
+      if (!id) return;
+      const title = (a.querySelector('.card-title')?.textContent || '').replace(/\s+/g, ' ').trim();
+      const pm = (a.textContent || '').match(/R\$\s*([\d.]+,\d{2})/);
+      const cover = a.querySelector('.card-img-cover');
+      const bg = cover ? (cover.getAttribute('style') || '') : '';
+      const img = (bg.match(/url\(([^)'"]+)/) || [])[1] || null;
+      out.push({ id, title, price: pm ? pm[1] : null, img });
+    });
+    return out;
+  }).catch(() => []);
+}
+
+async function scraperBiasi(browser) {
+  console.log('  Biasi Leilões — server-rendered (home → leilões → páginas de lotes)...');
+  const page = await browser.newPage();
+  const bens = new Map();
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+
+    // 1) Leilões (de imóvel) listados na home: links /leilao/{id}/…
+    let auctions = [];
+    try {
+      await page.goto(`${BIASI_BASE}/`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await new Promise(r => setTimeout(r, 2500));
+      auctions = await page.evaluate(() => {
+        const map = new Map();
+        document.querySelectorAll('a[href*="/leilao/"]').forEach((a) => {
+          const h = a.getAttribute('href') || '';
+          const mm = h.match(/\/leilao\/(\d+)\//);
+          if (mm) map.set(mm[1], h.startsWith('http') ? h : `https://www.biasileiloes.com.br${h}`);
+        });
+        return [...map.values()];
+      });
+    } catch (e) { console.log(`    Biasi home: ${String(e.message).slice(0, 50)}`); }
+    console.log(`    Biasi: ${auctions.length} leilões na home`);
+
+    // 2) Cada leilão: parseia a 1ª página e clica na paginação p/ as demais.
+    for (const url of auctions) {
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 1500));
+        const meta = await page.evaluate(() => {
+          const el = document.getElementById('leilao-lista-lote');
+          return { total: Number((el && el.getAttribute('total')) || 0), limit: Number((el && el.getAttribute('limit')) || 48) };
+        }).catch(() => ({ total: 0, limit: 48 }));
+        const pages = meta.limit ? Math.min(20, Math.max(1, Math.ceil((meta.total || 0) / meta.limit))) : 1;
+        for (let p = 1; p <= pages; p++) {
+          if (p > 1) {
+            const clicked = await page.evaluate((idx) => {
+              const link = document.querySelector(`.nav-paging a[index="${idx}"]`);
+              if (link) { link.click(); return true; }
+              return false;
+            }, p).catch(() => false);
+            if (!clicked) break;
+            await new Promise(r => setTimeout(r, 2200)); // espera o AJAX re-renderizar
+          }
+          const lotes = await biasiParsePagina(page);
+          for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
+        }
+      } catch { /* leilão a leilão; nunca derruba o scrape */ }
+      await new Promise(r => setTimeout(r, 150));
+    }
+  } finally { await page.close().catch(() => {}); }
+
+  const imoveis = [];
+  for (const l of bens.values()) {
+    const row = mapLoteBiasi(l);
+    if (row && row.valor_minimo) imoveis.push(row);
+  }
+  console.log(`    Biasi: ${imoveis.length} imóveis mapeados (${bens.size} lotes colhidos)`);
+  return imoveis;
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -1867,6 +1991,20 @@ async function main() {
       await registrarSaude('PESTANA', imoveis, 'principal', validarColeta(imoveis, 'PESTANA'));
     } catch (e) {
       console.log(`  ⚠️ Pestana falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // 10. Biasi Leilões — server-rendered (crawler HTML c/ paginação por clique).
+    // Foto vem do card; edital/matrícula ficam na página /sale/detail (server-rendered)
+    // → enriquecerDocumentosLote as vasculha. Blindado: nunca derruba o job.
+    console.log('\n📋 Biasi Leilões...');
+    if (rodar('BIASI')) try {
+      const imoveis = await scraperBiasi(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Biasi falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'BIASI');
+      await registrarSaude('BIASI', imoveis, 'principal', validarColeta(imoveis, 'BIASI'));
+    } catch (e) {
+      console.log(`  ⚠️ Biasi falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
   } finally {
