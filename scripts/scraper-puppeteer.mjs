@@ -121,6 +121,8 @@ const CRITERIOS = {
   // Imóveis da União (SPU/SERPRO): inventário pequeno e sazonal por sala (o leilão
   // pode ter poucas dezenas); min baixo para não marcar "degradado" à toa.
   VENDASGOV:{ min: 3,   valor: 0.60, uf: 0.60, link: 0.9 },
+  // Pestana: cidade/UF às vezes só no texto da descrição (uf mais frouxo).
+  PESTANA:  { min: 15,  valor: 0.75, uf: 0.40, link: 0.85 },
   _default: { min: 10,  valor: 0.70, uf: 0.40, link: 0.8 },
 };
 
@@ -1542,6 +1544,127 @@ async function scraperVendasGov(browser) {
   return imoveis;
 }
 
+// ─── PESTANA LEILÕES ──────────────────────────────────────────────────────────
+// Grande leiloeiro (líder no Sul). API JSON same-origin (o page.evaluate fetch passa,
+// sem WAF). Modelo em 2 níveis, confirmado por captura real (debug_fetch):
+//   /api/v2/leilao                      → todos os leilões (com documentos[]=Edital,
+//                                          subTipoBens, data, leiloeiro, lotes[])
+//   /api/v2/lote?leilao={id}&page&qtd   → lotes do leilão (lanceMinimo, descricao,
+//                                          situacaoId, bens[].tipoBem/subTipoBem/origem/
+//                                          imagens/caracteristicas)
+// Fotos: ged.pestanaleiloes.com.br/ged/{arquivo}. Filtramos SÓ imóveis (tipoBem 462)
+// e lotes DISPONÍVEIS (situacaoId=1) — o portal mistura veículos e lotes encerrados.
+const PESTANA_BASE = 'https://www.pestanaleiloes.com.br';
+const PESTANA_GED = 'https://ged.pestanaleiloes.com.br/ged/';
+const PESTANA_TIPOBEM_IMOVEL = 462;
+
+function parseDataPestana(s) {
+  if (!s || typeof s !== 'string') return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const ano = Number(m[1]);
+  if (ano < 2020 || ano > 2035) return null;
+  return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00-03:00`;
+}
+
+// Cidade/UF: primeiro dos campos do bem; senão extrai do texto ("… Cidade/UF …").
+function cidadeUfPestana(bem, desc) {
+  let cidade = String((bem && bem.cidade && bem.cidade.name) || '').trim();
+  let uf = String((bem && bem.estado && bem.estado.name) || '').trim().toUpperCase().slice(0, 2);
+  if (!cidade || !/^[A-Z]{2}$/.test(uf)) {
+    const m = String(desc || '').match(/([A-Za-zÀ-ÿ'.\- ]{2,40})\/([A-Z]{2})\b/);
+    if (m) { cidade = cidade || m[1].trim(); if (!/^[A-Z]{2}$/.test(uf)) uf = m[2]; }
+  }
+  return { cidade, uf: /^[A-Z]{2}$/.test(uf) ? uf : '' };
+}
+
+function mapLotePestana(lote, leilao) {
+  const bens = Array.isArray(lote.bens) ? lote.bens : [];
+  const bem = bens.find(b => b && b.tipoBem && Number(b.tipoBem.id) === PESTANA_TIPOBEM_IMOVEL);
+  if (!bem) return null; // não é imóvel (veículo/outros)
+  const valor = Number(lote.lanceMinimo || lote.valorInicial || lote.valorFiltro || 0) || 0;
+  const desc = String(lote.descricao || bem.descricao || '').replace(/\s+/g, ' ').trim();
+  const { cidade, uf } = cidadeUfPestana(bem, desc);
+  // Área a partir das características ("893,46m²").
+  let area = 0;
+  for (const c of (bem.caracteristicas || [])) {
+    const mm = String((c && c.valor) || '').match(/([\d.,]+)\s*m²/);
+    if (mm) { area = parseBRL(mm[1]); break; }
+  }
+  // Foto: 1ª imagem do bem (arquivo → GED). Terrenos costumam não ter foto.
+  const img = Array.isArray(bem.imagens) && bem.imagens[0];
+  const foto = img ? (img.arquivo ? `${PESTANA_GED}${encodeURIComponent(img.arquivo)}` : (img.link || null)) : null;
+  const origem = String(bem.origem || '').toLowerCase();
+  const modalidade = origem.includes('extra') ? 'extrajudicial' : origem.includes('judicial') ? 'judicial' : 'extrajudicial';
+  const edital = (Array.isArray(leilao.documentos) ? leilao.documentos.find(d => d && /edital/i.test(d.nome || '')) : null);
+  const agenda = `${PESTANA_BASE}/agenda-de-leiloes/${leilao.id}`;
+  return {
+    fonte: 'PESTANA',
+    fonte_id: `pestana_${lote.id}`,
+    titulo: (desc || `Lote ${lote.numero || lote.id}`).slice(0, 180),
+    tipo: normalizarTipo((bem.subTipoBem && bem.subTipoBem.nome) || desc),
+    modalidade,
+    estado: uf,
+    cidade: cidade ? toTitleCase(cidade) : '',
+    bairro: '',
+    endereco: '',
+    valor_avaliacao: 0,
+    valor_minimo: valor,
+    area_m2: area,
+    descricao: [desc, leilao.nome].filter(Boolean).join(' — ').slice(0, 500),
+    link_edital: (edital && edital.link) || agenda,
+    url_lote: agenda,
+    link_foto: foto,
+    leiloeiro: String(leilao.leiloeiro || 'Pestana Leilões').slice(0, 120),
+    data_leilao: parseDataPestana(leilao.data),
+    forma_pagamento: 'a_vista',
+  };
+}
+
+async function scraperPestana(browser) {
+  console.log('  Pestana Leilões — API /api/v2 same-origin (leilão → lotes)...');
+  const page = await browser.newPage();
+  const imoveis = [];
+  const seen = new Set();
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+    try { await page.goto(`${PESTANA_BASE}/lotes/imoveis`, { waitUntil: 'domcontentloaded', timeout: 45000 }); }
+    catch (e) { console.log(`    Pestana: goto (${String(e.message).slice(0, 35)})`); }
+    await new Promise(r => setTimeout(r, 4000)); // boot
+
+    // 1) Todos os leilões.
+    const leiloes = await page.evaluate(async () => {
+      try { const r = await fetch('/api/v2/leilao', { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : null; }
+      catch (e) { return null; }
+    }).catch(() => null);
+    if (!Array.isArray(leiloes)) { console.log('    Pestana: /api/v2/leilao não retornou lista'); return []; }
+
+    // 2) Só leilões que contêm IMÓVEIS (subTipoBens com tipoBem 462).
+    const imovLeiloes = leiloes.filter(l => Array.isArray(l.subTipoBens) && l.subTipoBens.some(s => Number(s.tipoBem) === PESTANA_TIPOBEM_IMOVEL));
+    console.log(`    Pestana: ${imovLeiloes.length}/${leiloes.length} leilões com imóveis`);
+
+    // 3) Lotes por leilão (fetch same-origin dentro da página).
+    for (const leilao of imovLeiloes) {
+      const lotes = await page.evaluate(async (id) => {
+        try { const r = await fetch(`/api/v2/lote?leilao=${id}&page=1&qtd=300`, { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : null; }
+        catch (e) { return null; }
+      }, leilao.id).catch(() => null);
+      if (!Array.isArray(lotes)) continue;
+      for (const lote of lotes) {
+        if (lote && lote.situacaoId != null && Number(lote.situacaoId) !== 1) continue; // só Disponível
+        const row = mapLotePestana(lote, leilao);
+        if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
+        seen.add(row.fonte_id);
+        imoveis.push(row);
+      }
+      await new Promise(r => setTimeout(r, 120));
+    }
+  } finally { await page.close().catch(() => {}); }
+  console.log(`    Pestana: ${imoveis.length} imóveis mapeados`);
+  return imoveis;
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -1716,6 +1839,18 @@ async function main() {
     } catch (e) {
       // Fonte nova nunca pode derrubar o job (as demais já salvaram acima).
       console.log(`  ⚠️ VendasGov falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // 9. Pestana Leilões — API /api/v2 (leilão → lotes), só imóveis disponíveis.
+    // Foto direto do GED; edital direto do documentos[]. Doc-enrich não roda aqui
+    // (o edital já vem no JSON). Blindado: nunca derruba o job.
+    console.log('\n📋 Pestana Leilões...');
+    if (rodar('PESTANA')) try {
+      const imoveis = await scraperPestana(browser);
+      total += await salvarEFinalizar(imoveis, 'PESTANA');
+      await registrarSaude('PESTANA', imoveis, 'principal', validarColeta(imoveis, 'PESTANA'));
+    } catch (e) {
+      console.log(`  ⚠️ Pestana falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
   } finally {
