@@ -16,14 +16,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 16 — Leilão VIP: o catálogo é /agenda?segmento=Imóveis e usa DataTables
-  // (grid alimentado por AJAX JSON). Carregamos a página e interceptamos o XHR do
-  // DataTables (dispara sozinho). Também sondamos endpoints DataTables prováveis.
-  { fonte: 'VIP-AGENDA', url: 'https://www.leilaovip.com.br/agenda?segmento=Im%C3%B3veis', inPageApis: [
-    'https://www.leilaovip.com.br/agenda/listar?segmento=Im%C3%B3veis',
-    'https://www.leilaovip.com.br/agenda/getdados?segmento=Im%C3%B3veis',
-    'https://www.leilaovip.com.br/Agenda/Pesquisar?segmento=Im%C3%B3veis',
-    'https://www.leilaovip.com.br/agenda/index?segmento=Im%C3%B3veis&draw=1&start=0&length=50',
+  // Round 17 — Leilão VIP: /agenda lista EVENTOS (leilões), server-rendered. Agora
+  // abrimos a página de detalhe de um evento (/evento/detalhes/{id}) para ver a
+  // estrutura dos LOTES/imóveis — HTML server-rendered ou grid AJAX. Sondamos rotas.
+  { fonte: 'VIP-EVENTO', url: 'https://www.leilaovip.com.br/evento/detalhes/100726afbra', inPageApis: [
+    'https://www.leilaovip.com.br/evento/lotes/100726afbra',
+    'https://www.leilaovip.com.br/lote/listar?evento=100726afbra',
+    'https://www.leilaovip.com.br/evento/getlotes?id=100726afbra',
   ] },
 ];
 
