@@ -16,14 +16,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 25 — leiloeiros credenciados em TRTs, que NÃO estão no LJUD. Classifica
-  // plataforma (Leilotech? bespoke? server-rendered?) e estrutura do catálogo.
-  { fonte: 'GUSTAVOREIS', url: 'https://www.gustavoreisleiloes.com.br/' },  // RJ (TRT1/2)
-  { fonte: 'CALIL',       url: 'https://www.calilleiloes.com.br/' },        // Campinas (TRT15)
-  { fonte: 'HASTA',       url: 'https://www.hastaleiloes.com.br/' },        // BA (TRT5)
-  { fonte: 'CCJ',         url: 'https://www.ccjleiloes.com.br/' },          // BA (TRT5)
-  { fonte: 'FINATTO',     url: 'https://www.finattoleiloes.com.br/' },      // RS (TRT4)
-  { fonte: 'SINDILEIRS',  url: 'https://www.sindileirs.com.br/' },          // RS (TRT4 unificado)
+  // Round 26 — SUPORTE LEILÕES (plataforma white-label server-rendered). Recon do
+  // catálogo de imóveis de um tenant (Gustavo Reis) p/ achar a rota de listagem,
+  // a estrutura do card (sl-leiloes-item) e se há API JSON por trás.
+  { fonte: 'GR-LEILOES', url: 'https://www.gustavoreisleiloes.com.br/leiloes', inPageApis: [
+    'https://www.gustavoreisleiloes.com.br/api/lotes?categoria=imoveis',
+    'https://www.gustavoreisleiloes.com.br/lotes?categoria=imoveis',
+  ] },
+  { fonte: 'GR-IMOVEIS', url: 'https://www.gustavoreisleiloes.com.br/imoveis' },
+  { fonte: 'GR-BUSCA',   url: 'https://www.gustavoreisleiloes.com.br/busca?categoria=imoveis' },
 ];
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
