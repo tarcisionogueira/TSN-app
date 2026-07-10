@@ -16,8 +16,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 21 — desativado; roda scanLeilotech (captura os corpos das requisições
-  // GraphQL de lotes na home de um tenant Leilotech).
+  // Round 25 — leiloeiros credenciados em TRTs, que NÃO estão no LJUD. Classifica
+  // plataforma (Leilotech? bespoke? server-rendered?) e estrutura do catálogo.
+  { fonte: 'GUSTAVOREIS', url: 'https://www.gustavoreisleiloes.com.br/' },  // RJ (TRT1/2)
+  { fonte: 'CALIL',       url: 'https://www.calilleiloes.com.br/' },        // Campinas (TRT15)
+  { fonte: 'HASTA',       url: 'https://www.hastaleiloes.com.br/' },        // BA (TRT5)
+  { fonte: 'CCJ',         url: 'https://www.ccjleiloes.com.br/' },          // BA (TRT5)
+  { fonte: 'FINATTO',     url: 'https://www.finattoleiloes.com.br/' },      // RS (TRT4)
+  { fonte: 'SINDILEIRS',  url: 'https://www.sindileirs.com.br/' },          // RS (TRT4 unificado)
 ];
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
@@ -313,7 +319,7 @@ async function main() {
       try { await capturar(browser, alvo); }
       catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
     }
-    try { await scanLeilotech(browser); } catch (e) { console.log(`  scanLeilotech erro: ${e.message.slice(0, 80)}`); }
+    // scanLeilotech desativado (Leilotech já integrada). Roda só os ALVOS.
   } finally {
     await browser.close();
   }
