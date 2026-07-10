@@ -1501,7 +1501,10 @@ async function scraperVendasGov(browser) {
     for (const sala of VG_SALAS) {
       let totalPages = 1;
       for (let pg = 0; pg < totalPages && pg < 80; pg++) {
-        const url = `${VG_BASE}/api/public/imoveis?size=48&page=${pg}&sort=itens.edital.dtCertame,asc&sala=${sala}`;
+        // sort por dataAtualizacao (campo que TODO imóvel tem). O sort original
+        // itens.edital.dtCertame é específico de leilão → nas salas de venda direta/
+        // concorrência/PAI/fundo (sem certame) a query descartava quase tudo.
+        const url = `${VG_BASE}/api/public/imoveis?size=100&page=${pg}&sort=dataAtualizacao,desc&sala=${sala}`;
         const data = await page.evaluate(async (u) => {
           try {
             const r = await fetch(u, { headers: { Accept: 'application/json' } });
