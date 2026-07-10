@@ -16,16 +16,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 9 — página de leilão de imóvel do Biasi (server-rendered ASP.NET) ===
-  // A home revelou os leilões em /leilao/{id}/... e o endpoint /Home/GetLotesPorCidade
-  // (só cidades). Os lotes reais estão na página do leilão. Capturamos o leilão
-  // Santander 4295 (215 lotes) p/ ver se os lotes vêm no HTML e/ou por um GetLotes.
-  { fonte: 'BIASI', url: 'https://www.biasileiloes.com.br/leilao/4295/grande-leilao-de-imoveis-santander-215-oportunidades-em-diversos-estados-do-brasil-confira-e-aproveite', inPageApis: [
-    'https://www.biasileiloes.com.br/Home/GetLotes?leilaoId=4295',
-    'https://www.biasileiloes.com.br/Leilao/GetLotes?leilaoId=4295',
-    'https://www.biasileiloes.com.br/Leilao/GetLotes?id=4295',
-    'https://www.biasileiloes.com.br/Home/GetLotesPorLeilao?leilaoId=4295',
-  ] },
+  // === Round 10 — viabilidade de novos alvos (nacional/banco) ===
+  // Recon de estrutura: intercepta XHR JSON (xhr-list = endpoint de dados), render
+  // (server-rendered?) e domstats (card + href). Define complexidade de cada.
+  // Marteleiro: meta-agregador (24k+ imóveis, mostra por-estado → backend estruturado).
+  { fonte: 'MARTELEIRO', url: 'https://marteleiro.com.br/imoveis' },
+  // MGL: leiloeiro nacional (rota /lotes/imoveis vista em recon anterior).
+  { fonte: 'MGL', url: 'https://www.mgl.com.br/lotes/imoveis' },
+  // Seu Imóvel BB (banco): rota de listagem incerta → home revela nav + endpoint.
+  { fonte: 'SEUIMOVELBB', url: 'https://www.seuimovelbb.com.br/' },
+  // Grupo Lance: rota incerta → home revela nav + endpoint de dados.
+  { fonte: 'GRUPOLANCE', url: 'https://www.grupolance.com.br/' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
