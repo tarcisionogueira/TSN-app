@@ -16,7 +16,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 14 — sem captura de páginas; roda o SCAN de portais do Superbid (abaixo).
+  // Round 15 — Leilão VIP: achar a API do CATÁLOGO de imóveis (a home só tinha
+  // tracking + blob Azure). Testa a página de busca/imóveis e sonda rotas prováveis.
+  { fonte: 'VIP-CAT', url: 'https://www.leilaovip.com.br/busca/imoveis', inPageApis: [
+    'https://www.leilaovip.com.br/api/imoveis?pagina=1',
+    'https://www.leilaovip.com.br/api/lotes?categoria=imoveis&pagina=1',
+    'https://www.leilaovip.com.br/api/busca?categoria=imoveis',
+    'https://correios.vipleiloes.com.br/api/imoveis',
+    'https://www.leilaovip.com.br/imoveis/api/lotes',
+  ] },
+  { fonte: 'VIP-IMOVEIS', url: 'https://www.leilaovip.com.br/imoveis', inPageApis: [] },
 ];
 
 // Mede o VOLUME de imóveis por portal do Superbid e IDENTIFICA o leiloeiro/portal
@@ -193,8 +202,7 @@ async function main() {
       try { await capturar(browser, alvo); }
       catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
     }
-    try { await scanSuperbidPortais(browser); }
-    catch (e) { console.log(`  scan superbid erro: ${e.message.slice(0, 80)}`); }
+    // scanSuperbidPortais desativado neste round (já mapeado). Reative se precisar.
   } finally {
     await browser.close();
   }
