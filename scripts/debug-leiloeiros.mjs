@@ -16,12 +16,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 27 — Suporte Leilões: catálogo em /agenda (server-rendered). Captura a
-  // estrutura dos leilões/lotes e a rota de detalhe. + roster de tenants da plataforma.
-  { fonte: 'GR-AGENDA', url: 'https://www.gustavoreisleiloes.com.br/agenda' },
-  { fonte: 'GR-AGIMOVEL', url: 'https://www.gustavoreisleiloes.com.br/agenda?categoria=imoveis' },
-  { fonte: 'SL-CLIENTES', url: 'https://www.suporteleiloes.com/clientes' },
-  { fonte: 'SL-CASES', url: 'https://www.suporteleiloes.com/cases' },
+  // Round 28 — achar tenant LIMPO da Suporte Leilões (banco/falência/federal/TRT,
+  // NÃO PGFN). Recon do site da plataforma (roster) + candidatos imóvel-focados.
+  // Detecta fingerprint static.suporteleiloes.com.br e o tipo de estoque.
+  { fonte: 'SLHOME',  url: 'https://www.suporteleiloes.com/' },
+  { fonte: 'FIDALGO', url: 'https://www.fidalgoleiloes.com.br/' },
+  { fonte: 'LIDER',   url: 'https://www.liderleiloes.com.br/' },
+  { fonte: 'FRANCO',  url: 'https://www.francoleiloes.com.br/' },
+  { fonte: 'MILAN',   url: 'https://www.milanleiloes.com.br/' },
 ];
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
