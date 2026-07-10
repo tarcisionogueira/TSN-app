@@ -16,35 +16,19 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 5 — fontes de BAIXA complexidade a integrar ===
-  // Navegador real renderiza o SPA, intercepta as APIs XHR JSON e mede seletores
-  // do DOM — base para escrever os parsers definitivos de cada um.
-  //
-  // VendasGov (Imóveis da União / SPU-SERPRO): SPA sobre API pública /api/public.
-  // O WAF do SERPRO bloqueia fetch de datacenter (curl/Node dão 403), mas o
-  // fetch DENTRO da página (TLS de Chrome real) passa — mesma tática do LJUD.
-  // Passamos várias sondas de API porque a rota exata é desconhecida; a
-  // interceptação de XHR também captura a real automaticamente.
-  // Round 5b — endpoints REAIS descobertos na 1ª captura (via XHR interceptada).
-  // VendasGov: a lista é /api/public/imoveis?size=&page=&sort=itens.edital.dtCertame,asc&sala=leilao
-  // (dá 500 sem params). Fotos: /api/public/imoveis/{id}/miniaturas/{arquivo}. Ids de
-  // exemplo colhidos do DOM: 810000014, 707100133, 11300078.
-  { fonte: 'VENDASGOV', url: 'https://imoveis.vendasgov.serpro.gov.br/leilao', inPageApis: [
-    'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis?size=48&page=0&sort=itens.edital.dtCertame,asc&sala=leilao',
-    'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis?size=48&page=0&sort=itens.edital.dtCertame,asc&sala=venda-direta',
-    'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis/810000014',
-    'https://imoveis.vendasgov.serpro.gov.br/api/salas?sort=ordem',
+  // === Round 6 — recon do DETALHE DO LOTE do Pestana ===
+  // Já temos a lista (/api/v2/leilao: leilões com IDs de lotes + edital). Falta o
+  // endpoint que traz valor/tipo/endereço/fotos por LOTE. Leilão de imóvel real:
+  // id 5872 (Terrenos em Eldorado/RS), lotes [413987,413989,...]. Navegamos a
+  // listagem de imóveis (intercepta o endpoint da lista + domstats com href do card)
+  // e sondamos candidatos de detalhe do lote (host api.pestanaleiloes.com.br/sgl/v1).
+  { fonte: 'PESTANA', url: 'https://www.pestanaleiloes.com.br/lotes/imoveis', inPageApis: [
+    'https://api.pestanaleiloes.com.br/sgl/v1/lotes/413987',
+    'https://api.pestanaleiloes.com.br/sgl/v1/leiloes/5872/lotes',
+    'https://api.pestanaleiloes.com.br/sgl/v1/leiloes/5872',
+    'https://www.pestanaleiloes.com.br/api/v2/lote/413987',
+    'https://www.pestanaleiloes.com.br/api/v2/leilao/5872',
   ] },
-  // Leiloeiros — todos SPAs (recon de endpoint). Oeste é plataforma white-label
-  // (/app/home = config); sondar /app/* de catálogo. VIP: /imoveis deu 404 → tentar /lotes.
-  { fonte: 'OESTE', url: 'https://www.oesteleiloes.com.br/imoveis', inPageApis: [
-    'https://www.oesteleiloes.com.br/app/lotes',
-    'https://www.oesteleiloes.com.br/app/leiloes',
-    'https://www.oesteleiloes.com.br/app/produtos',
-    'https://www.oesteleiloes.com.br/app/imoveis',
-  ] },
-  { fonte: 'VIP',   url: 'https://www.leilaovip.com.br/lotes' },
-  { fonte: 'PESTANA', url: 'https://www.pestanaleiloes.com.br/lotes/imoveis' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
