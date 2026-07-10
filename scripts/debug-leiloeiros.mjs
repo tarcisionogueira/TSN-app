@@ -20,47 +20,60 @@ const ALVOS = [
   // GraphQL de lotes na home de um tenant Leilotech).
 ];
 
-// Captura a QUERY GraphQL de lotes da Leilotech: navega a home de um tenant, hooka
-// REQUISIÇÃO e RESPOSTA de /go/graphql, rola para disparar as queries, e grava cada
-// par (operationName + query + variables + tamanho da resposta). Base para escrever
-// o scraper genérico que roda em TODOS os ~20 leiloeiros da plataforma.
+// Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
+// então dentro da página: (1) tenta INTROSPECTION do schema para achar o campo raiz
+// que lista lotes com filtro; (2) roda HomeBootstrap p/ pegar um slug de leilão real e
+// (3) navega ao detalhe do leilão para capturar a query de lotes que dispara lá.
 async function scanLeilotech(browser) {
-  console.log('🔎 Leilotech — capturando queries GraphQL de lotes...');
-  const tenants = ['https://topoleiloes.com.br/', 'https://oleiloes.com.br/'];
-  for (const base of tenants) {
-    const nome = base.replace(/^https?:\/\//, '').replace(/[^a-z0-9]/gi, '').slice(0, 14).toUpperCase();
-    const page = await browser.newPage();
-    await page.setUserAgent(USER_AGENT);
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-    const gql = [];
-    page.on('request', (req) => {
+  console.log('🔎 Leilotech — descobrindo query de lotes (introspection + detalhe)...');
+  const base = 'https://oleiloes.com.br/';
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const gql = [];
+  page.on('request', (req) => {
+    try { if (/\/go\/graphql/.test(req.url())) { const pd = req.postData() || ''; if (pd) gql.push({ dir: 'req', body: pd.slice(0, 3500) }); } } catch {}
+  });
+  const out = {};
+  try {
+    await page.goto(base, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 4000));
+
+    // (1) Introspection: lista os campos raiz da Query (nome + args + tipo de retorno).
+    out.introspection = await page.evaluate(async () => {
+      const q = `query{__schema{queryType{fields{name args{name type{kind name ofType{kind name}}} type{kind name ofType{kind name ofType{kind name}}}}}}}`;
       try {
-        if (!/\/go\/graphql/.test(req.url())) return;
-        const pd = req.postData() || '';
-        if (pd) gql.push({ dir: 'req', body: pd.slice(0, 4000) });
-      } catch {}
-    });
-    page.on('response', async (resp) => {
+        const r = await fetch('/go/graphql', { method: 'POST', headers: { 'content-type': 'application/json', 'accept': 'application/json' }, credentials: 'include', body: JSON.stringify({ query: q }) });
+        const j = await r.json();
+        const fields = j?.data?.__schema?.queryType?.fields || [];
+        return { status: r.status, fields: fields.map(f => ({ name: f.name, args: (f.args || []).map(a => a.name) })) };
+      } catch (e) { return { err: String(e && e.message) }; }
+    }).catch((e) => ({ err: String(e && e.message) }));
+
+    // (2) HomeBootstrap para obter um slug de leilão real.
+    out.slug = await page.evaluate(async () => {
+      const query = `query HomeBootstrap($page:Int=1,$perPage:Int){leiloesHome(page:$page,perPage:$perPage){items{id slug title categoriaMascara lotesCount __typename}pagination{total lastPage __typename}__typename}}`;
       try {
-        if (!/\/go\/graphql/.test(resp.url())) return;
-        const t = await resp.text();
-        gql.push({ dir: 'resp', status: resp.status(), len: t.length, sample: t.slice(0, 600) });
-      } catch {}
-    });
-    try {
-      await page.goto(base, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+        const r = await fetch('/go/graphql', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'include', body: JSON.stringify({ operationName: 'HomeBootstrap', variables: { page: 1, perPage: 30 }, query }) });
+        const j = await r.json();
+        const items = j?.data?.leiloesHome?.items || [];
+        return { status: r.status, pagination: j?.data?.leiloesHome?.pagination, sample: items.slice(0, 8).map(i => ({ slug: i.slug, cat: i.categoriaMascara, lotes: i.lotesCount, title: (i.title||'').slice(0,40) })) };
+      } catch (e) { return { err: String(e && e.message) }; }
+    }).catch((e) => ({ err: String(e && e.message) }));
+
+    // (3) Navega ao detalhe do 1º leilão para capturar a query de lotes.
+    const slug = out.slug?.sample?.[0]?.slug;
+    if (slug) {
+      gql.length = 0; // limpa; queremos só o que dispara no detalhe
+      await page.goto(`${base}leilao/${slug}`, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
       await new Promise(r => setTimeout(r, 4000));
-      for (let i = 0; i < 10; i++) {
-        try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch {}
-        await new Promise(r => setTimeout(r, 1200));
-      }
-    } catch (e) { gql.push({ erro: String(e && e.message) }); }
-    // Só as queries que NÃO são a 'site' (branding) — queremos as de lote/leilão.
-    const interessantes = gql.filter(g => g.dir === 'req' && !/appName|branding|SiteData/.test(g.body));
-    await gravarDebug(`LT-GQL-${nome}`, base, 200, 'application/json', JSON.stringify({ totalReqs: gql.filter(g=>g.dir==='req').length, totalResps: gql.filter(g=>g.dir==='resp').length, interessantes, todos: gql }, null, 2));
-    console.log(`  ${nome}: ${gql.length} eventos graphql (${interessantes.length} queries de interesse)`);
-    await page.close();
-  }
+      for (let i = 0; i < 4; i++) { try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch {} await new Promise(r => setTimeout(r, 1200)); }
+      out.detalheQueries = gql.filter(g => g.dir === 'req').map(g => g.body);
+    }
+  } catch (e) { out.erro = String(e && e.message); }
+  await gravarDebug('LT-SCHEMA', base, 200, 'application/json', JSON.stringify(out, null, 2));
+  console.log(`  introspection fields: ${out.introspection?.fields?.length ?? 'n/a'}; slug: ${out.slug?.sample?.[0]?.slug ?? 'n/a'}`);
+  await page.close();
 }
 
 // Diagnóstico VIP: pega os eventos da agenda e, para cada um, conta os cards de
