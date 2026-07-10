@@ -16,7 +16,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 18 — desativado; roda o scanVIP (diagnóstico por evento) no main().
+  // Round 19 — triagem de leiloeiros de PORTE MÉDIO por estado. Para cada um:
+  // captura render + domstats + XHRs para classificar viabilidade (server-rendered
+  // / API JSON / bloqueado por Cloudflare) e detectar plataforma white-label comum.
+  { fonte: 'ALFA',    url: 'https://www.alfaleiloes.com/busca?tipo=imovel' },       // SP
+  { fonte: 'TOPO',    url: 'https://topoleiloes.com.br/imoveis' },                  // PR/SC/SP
+  { fonte: 'FERREIRA',url: 'https://www.ferreiraleiloes.com.br/imoveis' },         // MG
+  { fonte: 'RJLEI',   url: 'https://www.rjleiloes.com.br/imoveis' },               // RJ
+  { fonte: 'RECH',    url: 'https://www.rechleiloes.com.br/imoveis' },             // RS
+  { fonte: 'FLEX',    url: 'https://www.flexleiloes.com.br/imoveis' },             // GO
+  { fonte: 'CRAVO',   url: 'https://www.cravoleiloes.com.br/imoveis' },            // ?
+  { fonte: 'SUBLIME', url: 'https://www.sublimeleiloes.com.br/imoveis' },          // ?
 ];
 
 // Diagnóstico VIP: pega os eventos da agenda e, para cada um, conta os cards de
