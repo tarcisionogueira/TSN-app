@@ -16,11 +16,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // === Round 11 — catálogo do Seu Imóvel BB (achar paginação) ===
-  // A home é server-rendered; o catálogo fica em /catalogo/categoria/{...}. Capturamos
-  // o catálogo geral e uma categoria para ver o card + a paginação (?pagina=? / scroll).
-  { fonte: 'SEUIMOVELBB', url: 'https://www.seuimovelbb.com.br/catalogo' },
-  { fonte: 'SEUIMOVELBB-CAT', url: 'https://www.seuimovelbb.com.br/catalogo/categoria/urbanos' },
+  // === Round 12 — listagem real do Marteleiro por estado ===
+  // Seu Imóvel BB saiu (Cloudflare; BD stateless não resolve — handoff). MGL saiu
+  // (Degrau/antiforgery). O /imoveis do Marteleiro era só índice por estado; a lista
+  // real é /imoveis/{uf}. Capturamos SP (2.287) e AC (22) p/ ver card, paginação e CF.
+  { fonte: 'MARTELEIRO-SP', url: 'https://marteleiro.com.br/imoveis/sp' },
+  { fonte: 'MARTELEIRO-AC', url: 'https://marteleiro.com.br/imoveis/ac' },
 ];
 
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
