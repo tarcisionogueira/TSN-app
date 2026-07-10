@@ -2459,9 +2459,18 @@ async function main() {
     console.log('\n📋 Sodré Santoro...');
     if (rodar('SODRE')) await coletarFonte('SODRE', () => scraperSodre(browser));
 
-    // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis
+    // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis. Detalhe
+    // server-rendered → enriquecerDocumentosLote captura edital/matrícula/laudo.
     console.log('\n📋 Frazão Leilões...');
-    if (rodar('FRAZAO')) await coletarFonte('FRAZAO', () => scraperFrazao(browser));
+    if (rodar('FRAZAO')) try {
+      const imoveis = await scraperFrazao(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Frazão falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'FRAZAO');
+      await registrarSaude('FRAZAO', imoveis, 'principal', validarColeta(imoveis, 'FRAZAO'));
+    } catch (e) {
+      console.log(`  ⚠️ Frazão falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
 
     // 7. Leilões Judiciais — REATIVADO via NAVEGADOR REAL (page.evaluate → TLS de
     // Chrome). Esteira multi-estratégia: tenta get-lotes (traz a DATA da praça) e,
