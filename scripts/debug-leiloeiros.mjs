@@ -53,12 +53,16 @@ async function scanLeilotech(browser) {
 
     // Extrai leilões de imóveis (slug/categoria/lotesCount) da resposta interceptada.
     const homeResp = gql.filter(g => g.op === 'HomeBootstrap' && g.json !== '(nao-json)').sort((a,b)=>b.len-a.len)[0];
-    let leiloes = [];
+    let leiloes = [], itemsFull = [];
     if (homeResp) {
       try {
         const j = JSON.parse(homeResp.json);
-        leiloes = (j?.data?.leiloesHome?.items || []).map(i => ({ slug: i.slug, cat: i.categoriaMascara, lotes: i.lotesCount, title: (i.title||'').slice(0,40) }));
+        itemsFull = j?.data?.leiloesHome?.items || [];
+        leiloes = itemsFull.map(i => ({ slug: i.slug, cat: i.categoriaMascara, lotes: i.lotesCount, title: (i.title||'').slice(0,40) }));
         out.pagination = j?.data?.leiloesHome?.pagination;
+        // Dump BRUTO do 1º item de imóvel — precisamos ver primaryLote (valores/foto).
+        const imv = itemsFull.find(i => /im[oó]vel/i.test(i.title||'') || /im[oó]vel/i.test(i.categoriaMascara||''));
+        out.rawImovelItem = JSON.stringify(imv || itemsFull[0] || null).slice(0, 2500);
       } catch (e) { out.parseErr = String(e && e.message); }
     }
     out.leiloes = leiloes.slice(0, 12);
