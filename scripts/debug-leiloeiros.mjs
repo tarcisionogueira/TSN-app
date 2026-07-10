@@ -16,15 +16,52 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 20 — LEILOTECH (plataforma white-label GraphQL). Objetivo: (1) listar os
-  // leiloeiros clientes da Leilotech (/clientes) para medir o alcance; (2) achar a
-  // rota de catálogo que dispara a query GraphQL de lotes (interceptamos o POST).
-  { fonte: 'LT-CLIENTES', url: 'https://leilotech.com.br/clientes' },
-  { fonte: 'TOPO-LOTES',  url: 'https://topoleiloes.com.br/lotes' },
-  { fonte: 'TOPO-CAT',    url: 'https://topoleiloes.com.br/categoria/imoveis' },
-  { fonte: 'TOPO-LEIL',   url: 'https://topoleiloes.com.br/leiloes' },
-  { fonte: 'LT-DEMO',     url: 'https://demo.leilotech.com.br/lotes' },
+  // Round 21 — desativado; roda scanLeilotech (captura os corpos das requisições
+  // GraphQL de lotes na home de um tenant Leilotech).
 ];
+
+// Captura a QUERY GraphQL de lotes da Leilotech: navega a home de um tenant, hooka
+// REQUISIÇÃO e RESPOSTA de /go/graphql, rola para disparar as queries, e grava cada
+// par (operationName + query + variables + tamanho da resposta). Base para escrever
+// o scraper genérico que roda em TODOS os ~20 leiloeiros da plataforma.
+async function scanLeilotech(browser) {
+  console.log('🔎 Leilotech — capturando queries GraphQL de lotes...');
+  const tenants = ['https://topoleiloes.com.br/', 'https://oleiloes.com.br/'];
+  for (const base of tenants) {
+    const nome = base.replace(/^https?:\/\//, '').replace(/[^a-z0-9]/gi, '').slice(0, 14).toUpperCase();
+    const page = await browser.newPage();
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+    const gql = [];
+    page.on('request', (req) => {
+      try {
+        if (!/\/go\/graphql/.test(req.url())) return;
+        const pd = req.postData() || '';
+        if (pd) gql.push({ dir: 'req', body: pd.slice(0, 4000) });
+      } catch {}
+    });
+    page.on('response', async (resp) => {
+      try {
+        if (!/\/go\/graphql/.test(resp.url())) return;
+        const t = await resp.text();
+        gql.push({ dir: 'resp', status: resp.status(), len: t.length, sample: t.slice(0, 600) });
+      } catch {}
+    });
+    try {
+      await page.goto(base, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+      await new Promise(r => setTimeout(r, 4000));
+      for (let i = 0; i < 10; i++) {
+        try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch {}
+        await new Promise(r => setTimeout(r, 1200));
+      }
+    } catch (e) { gql.push({ erro: String(e && e.message) }); }
+    // Só as queries que NÃO são a 'site' (branding) — queremos as de lote/leilão.
+    const interessantes = gql.filter(g => g.dir === 'req' && !/appName|branding|SiteData/.test(g.body));
+    await gravarDebug(`LT-GQL-${nome}`, base, 200, 'application/json', JSON.stringify({ totalReqs: gql.filter(g=>g.dir==='req').length, totalResps: gql.filter(g=>g.dir==='resp').length, interessantes, todos: gql }, null, 2));
+    console.log(`  ${nome}: ${gql.length} eventos graphql (${interessantes.length} queries de interesse)`);
+    await page.close();
+  }
+}
 
 // Diagnóstico VIP: pega os eventos da agenda e, para cada um, conta os cards de
 // anúncio via 3 métodos (DOM da detalhe / fetch /evento/lotes / fetch com header
@@ -249,7 +286,7 @@ async function main() {
       try { await capturar(browser, alvo); }
       catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
     }
-    try { await scanVIP(browser); } catch (e) { console.log(`  scanVIP erro: ${e.message.slice(0, 80)}`); }
+    try { await scanLeilotech(browser); } catch (e) { console.log(`  scanLeilotech erro: ${e.message.slice(0, 80)}`); }
   } finally {
     await browser.close();
   }
