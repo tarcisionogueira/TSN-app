@@ -130,6 +130,8 @@ const CRITERIOS = {
   // Leilotech: plataforma white-label de vários leiloeiros (GraphQL). Cloudflare
   // intermitente → volume varia; min baixo para não marcar degradado à toa.
   LEILOTECH:{ min: 15,  valor: 0.70, uf: 0.45, link: 0.9 },
+  // Suporte Leilões: plataforma white-label server-rendered (/buscador?categoria=2).
+  SUPORTE:  { min: 10,  valor: 0.80, uf: 0.50, link: 0.9 },
   // Sub-portais da rede Superbid (inventário pequeno, leiloeiro real vem no campo
   // `store` de cada oferta). Portal 9 ~72, portal 21 ~39 imóveis abertos.
   SBID9:    { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
@@ -2091,6 +2093,122 @@ async function scraperLeilotech(browser) {
   return todos;
 }
 
+// ─── SUPORTE LEILÕES (plataforma white-label server-rendered) ─────────────────
+// Outra "OS de leiloeiros". Cada tenant tem catálogo em /buscador?categoria=2
+// (2 = Imóveis, padrão da plataforma), server-rendered, paginado. Cada lote é um
+// <article class="lote-main bem-index-{id}"> com: .strong-cod (código), <h3> (tipo),
+// <p> (descrição), .r2 span (Cidade - UF), .r4 strong.reset-colorGrid (lance),
+// img.img-evento (foto no static.suporteleiloes.com.br), link /eventos/leilao/.../lote/{id}/...
+// IMPORTANTE: pular tenants 100% PGFN (redirecionam p/ comprei.pgfn.gov.br — sem docs).
+const SUPORTE_TENANTS = [
+  { domain: 'liderleiloes.com.br', leiloeiro: 'Líder Leilões' },
+];
+
+function mapLoteSuporte(l, tenant) {
+  if (!l || !l.id) return null;
+  const titulo = String(l.descricao || l.tipo || '').replace(/\s+/g, ' ').trim();
+  const loc = String(l.local || '').replace(/\s+/g, ' ').trim();
+  const lm = loc.match(/^(.*?)\s*[-–]\s*([A-Za-z]{2})\s*$/);
+  const cidade = lm ? lm[1].trim() : '';
+  const uf = lm ? lm[2].toUpperCase() : '';
+  const ext = extrairDaDescricao(titulo);
+  const tenantKey = tenant.domain.replace(/\..*/, '');
+  const link = l.href ? (l.href.startsWith('http') ? l.href : `https://${tenant.domain}${l.href}`) : `https://${tenant.domain}/buscador?categoria=2`;
+  return {
+    fonte: 'SUPORTE',
+    fonte_id: `sl_${tenantKey}_${l.id}`,
+    titulo: (titulo || `Imóvel ${tenant.leiloeiro}`).slice(0, 180),
+    tipo: normalizarTipo(l.tipo || titulo),
+    modalidade: 'extrajudicial',
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
+    cidade: cidade ? toTitleCase(cidade) : '',
+    bairro: '',
+    endereco: '',
+    valor_avaliacao: 0,
+    valor_minimo: parseBRL(l.valor || ''),
+    area_m2: ext.area_m2 || 0,
+    ocupacao: ext.ocupacao || null,
+    descricao: titulo.slice(0, 500),
+    link_edital: link,
+    url_lote: link,
+    link_foto: (l.foto && /^https?:\/\//.test(l.foto)) ? l.foto : null,
+    leiloeiro: tenant.leiloeiro,
+    data_leilao: null,
+    forma_pagamento: 'a_vista',
+  };
+}
+
+function suporteParsePagina(page) {
+  return page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('article.lote-main, article[class*="lote-main"]').forEach((c) => {
+      const cls = c.className || '';
+      const mm = cls.match(/bem-index-(\d+)/);
+      const id = mm ? mm[1] : (c.querySelector('.strong-cod')?.textContent || '').replace(/[^\d]/g, '');
+      if (!id) return;
+      const a = c.querySelector('a[href*="/lote/"]');
+      const img = c.querySelector('img.img-evento, img');
+      const valEl = c.querySelector('.r4 strong.reset-colorGrid, .end-typeCol strong');
+      out.push({
+        id,
+        href: a ? (a.getAttribute('href') || '') : '',
+        tipo: (c.querySelector('h3')?.textContent || '').trim(),
+        descricao: (c.querySelector('.cont-infos p, p')?.textContent || '').trim(),
+        local: (c.querySelector('.r2 span, [class*="location"] + span')?.textContent || '').trim(),
+        valor: (valEl?.textContent || '').trim(),
+        foto: img ? (img.getAttribute('src') || '') : '',
+      });
+    });
+    return out;
+  }).catch(() => []);
+}
+
+async function scraperSuporteTenant(browser, tenant) {
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const bens = new Map();
+  const DEADLINE = Date.now() + 5 * 60 * 1000;
+  try {
+    for (let p = 1; p <= 40; p++) {
+      if (Date.now() > DEADLINE) break;
+      const antes = bens.size;
+      try {
+        await page.goto(`https://${tenant.domain}/buscador?categoria=2&pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 1200));
+      } catch { break; }
+      const lotes = await suporteParsePagina(page);
+      for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
+      if (bens.size === antes) break; // página sem novidade → acabou
+    }
+  } finally { await page.close().catch(() => {}); }
+
+  const imoveis = [];
+  const seen = new Set();
+  for (const l of bens.values()) {
+    const row = mapLoteSuporte(l, tenant);
+    if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
+    seen.add(row.fonte_id);
+    imoveis.push(row);
+  }
+  console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${imoveis.length} imóveis (${bens.size} lotes)`);
+  return imoveis;
+}
+
+async function scraperSuporte(browser) {
+  console.log('  Suporte Leilões — plataforma white-label (/buscador?categoria=2 por tenant)...');
+  const todos = [];
+  const vistos = new Set();
+  for (const tenant of SUPORTE_TENANTS) {
+    try {
+      const imoveis = await scraperSuporteTenant(browser, tenant);
+      for (const im of imoveis) { if (!vistos.has(im.fonte_id)) { vistos.add(im.fonte_id); todos.push(im); } }
+    } catch (e) { console.log(`    [${tenant.domain}] erro: ${String(e.message).slice(0, 80)}`); }
+  }
+  console.log(`    Suporte Leilões: ${todos.length} imóveis de ${SUPORTE_TENANTS.length} leiloeiros`);
+  return todos;
+}
+
 async function relatorioCapitacao() {
   const { data } = await supabase
     .from('imoveis_leilao')
@@ -2325,6 +2443,20 @@ async function main() {
       await registrarSaude('LEILOTECH', imoveis, 'principal', validarColeta(imoveis, 'LEILOTECH'));
     } catch (e) {
       console.log(`  ⚠️ Leilotech falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // 13. Suporte Leilões — plataforma white-label server-rendered (/buscador).
+    // Foto do static.suporteleiloes; edital/matrícula na página do lote →
+    // enriquecerDocumentosLote vasculha. Blindado: nunca derruba o job.
+    console.log('\n📋 Suporte Leilões (plataforma white-label)...');
+    if (rodar('SUPORTE')) try {
+      const imoveis = await scraperSuporte(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Suporte falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'SUPORTE');
+      await registrarSaude('SUPORTE', imoveis, 'principal', validarColeta(imoveis, 'SUPORTE'));
+    } catch (e) {
+      console.log(`  ⚠️ Suporte Leilões falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
   } finally {
