@@ -1487,16 +1487,21 @@ async function scraperVendasGov(browser) {
   try {
     await page.setUserAgent(USER_AGENT);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-    // Carrega a home para ganhar contexto/origin — o WAF barra navegação/fetch "cru".
-    // domcontentloaded (não networkidle2): a SPA mantém long-polling e a rede nunca
-    // "assenta" → networkidle2 estourava 45s. Só precisamos estar NO domínio para o
-    // fetch da API (dentro da página) usar Origin/TLS corretos. Best-effort.
-    try {
-      await page.goto(`${VG_BASE}/leilao`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    } catch (e) {
-      console.log(`    VendasGov: goto /leilao demorou (${String(e.message).slice(0, 50)}) — seguindo`);
+    // Precisamos apenas ESTAR no domínio para o fetch (dentro da página) passar pelo
+    // WAF do SERPRO com Origin/TLS corretos. waitUntil:'commit' resolve isso: dispara
+    // assim que a navegação é aceita (headers), sem esperar a SPA (que faz long-polling
+    // e nunca "assenta" — domcontentloaded/networkidle2 estouravam o timeout). Retry.
+    let onOrigin = false;
+    for (let tent = 0; tent < 3 && !onOrigin; tent++) {
+      try {
+        await page.goto(`${VG_BASE}/leilao`, { waitUntil: 'commit', timeout: 30000 });
+        onOrigin = String(page.url() || '').includes('vendasgov.serpro.gov.br');
+      } catch (e) {
+        console.log(`    VendasGov: goto tentativa ${tent + 1} falhou (${String(e.message).slice(0, 40)})`);
+      }
     }
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 1500));
+    if (!onOrigin) console.log('    VendasGov: ⚠️ não confirmou o domínio — os fetches podem falhar no WAF');
 
     for (const sala of VG_SALAS) {
       let totalPages = 1;
@@ -1505,17 +1510,25 @@ async function scraperVendasGov(browser) {
         // itens.edital.dtCertame é específico de leilão → nas salas de venda direta/
         // concorrência/PAI/fundo (sem certame) a query descartava quase tudo.
         const url = `${VG_BASE}/api/public/imoveis?size=100&page=${pg}&sort=dataAtualizacao,desc&sala=${sala}`;
+        // fetch com timeout (AbortController): sem isso, um WAF/rede pendurada custava
+        // ~3 min por sala. Detecta também resposta não-JSON (página de bloqueio do WAF).
         const data = await page.evaluate(async (u) => {
           try {
-            const r = await fetch(u, { headers: { Accept: 'application/json' } });
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 15000);
+            const r = await fetch(u, { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+            clearTimeout(t);
             if (!r.ok) return { __status: r.status };
+            const ct = r.headers.get('content-type') || '';
+            if (!/json/i.test(ct)) return { __nonjson: ct };
             return await r.json();
           } catch (e) { return { __err: String((e && e.message) || e) }; }
         }, url).catch(() => null);
         const items = (data && Array.isArray(data.content)) ? data.content : [];
         if (pg === 0) {
           totalPages = Math.min(80, Number(data && data.totalPages) || 1);
-          console.log(`    VendasGov/${sala}: ${data && data.totalElements != null ? data.totalElements : '?'} imóveis em ${totalPages} página(s) [status=${data && data.__status ? data.__status : 200}]`);
+          const diag = data && data.__err ? `err=${data.__err.slice(0, 30)}` : data && data.__nonjson ? `nonjson=${data.__nonjson}` : data && data.__status ? `http=${data.__status}` : 'ok';
+          console.log(`    VendasGov/${sala}: ${data && data.totalElements != null ? data.totalElements : '?'} imóveis em ${totalPages} página(s) [${diag}]`);
           if (!items.length) break;
         }
         if (!items.length) break;
@@ -1706,8 +1719,10 @@ async function main() {
     console.log('\n📋 Imóveis da União (VendasGov)...');
     if (rodar('VENDASGOV')) try {
       const imoveis = await scraperVendasGov(browser);
-      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
-      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos VendasGov falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      // A FOTO já vem da API (capa). NÃO usamos enriquecerDocumentosLote aqui: as
+      // páginas de detalhe são SPA (Angular) e vasculharDocumentos não enxerga os PDFs
+      // (montados via API) — só gastaria os 8 min do deadline à toa. Edital/laudo do
+      // VendasGov virão por rota própria (API /api/public/editais) como follow-up.
       total += await salvarEFinalizar(imoveis, 'VENDASGOV');
       await registrarSaude('VENDASGOV', imoveis, 'principal', validarColeta(imoveis, 'VENDASGOV'));
     } catch (e) {
