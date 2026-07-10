@@ -16,12 +16,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ALVOS = [
-  // Round 29 — catálogo do tenant limpo Líder Leilões (Suporte Leilões, template novo
-  // /buscador). Confirma tipo de estoque (banco/falência/federal, não PGFN) e a
-  // estrutura do card do lote para escrever o scraper.
-  { fonte: 'LID-BUSCA',  url: 'https://www.liderleiloes.com.br/buscador?categoria=1' },
-  { fonte: 'LID-BUSCA2', url: 'https://www.liderleiloes.com.br/buscador' },
-  { fonte: 'LID-EXTRA',  url: 'https://www.liderleiloes.com.br/leiloes-extrajudiciais' },
+  // Round 30 — Grupo Lance: recon do catálogo de imóveis + detecção de plataforma
+  // (Leilotech/Suporte/bespoke) para viabilizar integração, de preferência via plataforma.
+  { fonte: 'GL-HOME',    url: 'https://www.grupolance.com.br/' },
+  { fonte: 'GL-IMOVEIS', url: 'https://www.grupolance.com.br/imoveis' },
+  { fonte: 'GL-BUSCA',   url: 'https://www.grupolance.com.br/buscador?categoria=2' },
+  { fonte: 'GL-CAT',     url: 'https://www.grupolance.com.br/categoria/imoveis' },
 ];
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
