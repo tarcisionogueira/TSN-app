@@ -72,9 +72,32 @@ generalizar o `loginX(browser)` por fonte conforme forem cadastradas as credenci
 | SODRE | 0% | 100% | página SPA (docs via JS) — precisa captura própria |
 
 Edital chega em ~todas; **matrícula é o gargalo sistêmico**, com motivo distinto por
-fonte. Teste empírico (1 amostra/fonte) rodou em 2026-07-11 via
-`testar-analise-amostras.yml` — resultados ficam em `analises_documental` (user
-`92c713f3-...`); o gate pediu matrícula onde ela não veio, como esperado.
+fonte.
+
+### Teste empírico (1 amostra/fonte, 2026-07-11, via `testar-analise-amostras.yml`)
+
+| Fonte | Leu matrícula | Leu edital | Resultado do gate |
+|---|---|---|---|
+| PESTANA | ✅ | ✅ | Laudo completo (amarelo) |
+| LEILOTECH | ✅ | ✅ | Laudo completo (amarelo) |
+| VIP | (esperado ✅) | ✅ | 96% têm matrícula no acervo |
+| BIASI | ❌ | ✅ | Pediu matrícula |
+| FRAZAO | ❌ | ✅ | Pediu matrícula |
+| LJUD | ❌ | ✅ | Pediu matrícula |
+| MEGA | ❌ | ✅ | Pediu matrícula |
+| SUPERBID | ❌ | ✅ | Pediu matrícula |
+| CEF | ❌ | ❌ | Pediu ambos — download do PDF Caixa falhou nesta amostra |
+| GRUPOLANCE | ❌ | ❌ | Pediu ambos — esta amostra não tinha o edital combinado |
+| SODRE | ❌ | ❌ | Pediu ambos — página SPA |
+| SOLD | ❌ | ❌ | Pediu ambos — rede Superbid |
+
+**Validação central**: em NENHUMA fonte a IA fingiu laudo — leu o que tinha e pediu
+o que faltou (gate + correção de coerência funcionando). Resultados completos em
+`analises_documental` (user `92c713f3-...`).
+
+Observações para a retomada: **CEF** normalmente tem 100% de link de matrícula, mas o
+download do PDF Caixa falha às vezes (Bright Data) — revisar. **GRUPOLANCE** é
+inconsistente: às vezes a matrícula vem no edital combinado, às vezes não.
 
 ---
 
