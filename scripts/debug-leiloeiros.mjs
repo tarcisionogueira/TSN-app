@@ -15,13 +15,86 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-const ALVOS = [
-  // Round 32 — Superbid (item 2): página de DETALHE da oferta. Interceptar o XHR JSON
-  // de detalhe que traz DOCUMENTOS (edital/matrícula/laudo) e o ENDEREÇO completo
-  // (para geo exata). SPA — os PDFs não estão no HTML; vêm por API.
-  { fonte: 'SBD1', url: 'https://www.superbid.net/oferta/4756704' },
-  { fonte: 'SBD2', url: 'https://www.superbid.net/oferta/4588831' },
-];
+const ALVOS = [];
+
+// Round 33 — PortalZuk: a página do lote TEM a "Matrícula do Imóvel" num card de
+// download, mas o link é montado por JS (onclick _gt(...)) e não fica no HTML
+// estático — por isso o vasculhador só pega o edital. Esta sonda: (1) extrai a
+// FONTE da função _gt, (2) o HTML/onclick dos cards de Documentos, (3) CLICA no
+// card da matrícula e intercepta a URL do PDF resultante. Com isso descobrimos a
+// regra exata para capturar a matrícula do ZUK no scraper.
+async function scanZukDocs(browser) {
+  const url = 'https://www.portalzuk.com.br/imovel/sp/bertioga/morada-da-praia/rua-barra-velha-364/36639-228805';
+  console.log(`\n=== ZUKDOC → ${url}`);
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+
+  // Registra TODA requisição (não só JSON) — queremos ver a URL do PDF/documento
+  // que o clique dispara.
+  const reqs = [];
+  page.on('request', (r) => { try { reqs.push(`${r.method()} ${r.resourceType()} ${r.url()}`); } catch {} });
+  // Novas abas (o _gt pode fazer window.open) — captura a URL de destino.
+  const popups = [];
+  browser.on('targetcreated', async (t) => { try { if (t.type() === 'page') popups.push(t.url()); } catch {} });
+
+  try { await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 }); } catch (e) { console.log(`  goto: ${e.message.slice(0, 80)}`); }
+  await new Promise(r => setTimeout(r, 5000));
+
+  // 1) Fonte da função _gt + cards de Documentos (onclick/href/data-*).
+  const info = await page.evaluate(() => {
+    const out = { gtSource: null, cards: [], scriptsComGt: [] };
+    try { if (typeof window._gt === 'function') out.gtSource = window._gt.toString().slice(0, 1500); } catch {}
+    // Procura a definição de _gt no texto dos scripts inline.
+    try {
+      for (const s of Array.from(document.querySelectorAll('script'))) {
+        const t = s.textContent || '';
+        const i = t.indexOf('_gt');
+        if (i >= 0 && /function\s+_gt|_gt\s*=\s*function|_gt\s*=\s*\(/.test(t)) out.scriptsComGt.push(t.slice(Math.max(0, i - 40), i + 600));
+      }
+    } catch {}
+    // Cards/âncoras da seção Documentos: qualquer elemento cujo texto cite Matrícula/Edital.
+    try {
+      const alvos = Array.from(document.querySelectorAll('a,button,[onclick],[class*="document"],[class*="doc"],[class*="card"]'));
+      for (const el of alvos) {
+        const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (/matr[ií]cul|edital|documento/i.test(txt) && txt.length < 60) {
+          out.cards.push({ tag: el.tagName, txt: txt.slice(0, 50), onclick: el.getAttribute('onclick'), href: el.getAttribute('href'), html: el.outerHTML.slice(0, 400) });
+        }
+        if (out.cards.length >= 12) break;
+      }
+    } catch {}
+    return out;
+  }).catch(e => ({ err: String(e.message) }));
+  await gravarDebug('ZUKDOC-info', url, 200, 'application/json', JSON.stringify(info, null, 2));
+  console.log(`  _gt source: ${info.gtSource ? 'sim' : 'não'} · cards: ${(info.cards || []).length} · scriptsComGt: ${(info.scriptsComGt || []).length}`);
+
+  // 2) CLICA no card da matrícula e observa as requisições disparadas.
+  const reqsAntes = reqs.length;
+  try {
+    const clicou = await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll('a,button,[onclick],[class*="card"],[class*="document"]'));
+      const alvo = els.find(el => /matr[ií]cul/i.test((el.textContent || '')) && (el.textContent || '').length < 60);
+      if (!alvo) return false;
+      alvo.click();
+      return true;
+    });
+    console.log(`  clique na matrícula: ${clicou ? 'ok' : 'card não encontrado'}`);
+    await new Promise(r => setTimeout(r, 4000));
+  } catch (e) { console.log(`  clique falhou: ${e.message.slice(0, 60)}`); }
+
+  const novas = reqs.slice(reqsAntes);
+  const docReqs = reqs.filter(u => /\.pdf|documentac|matricul|edital|documento|download|arquivo/i.test(u));
+  await gravarDebug('ZUKDOC-reqs', url, 200, 'text/plain',
+    `POPUPS:\n${popups.join('\n')}\n\nREQS APÓS CLIQUE:\n${novas.join('\n')}\n\nREQS DE DOCUMENTO (todas):\n${docReqs.join('\n')}`);
+  console.log(`  reqs após clique: ${novas.length} · docReqs: ${docReqs.length}`);
+  docReqs.slice(0, 10).forEach(u => console.log(`    ${u.slice(0, 130)}`));
+
+  // 3) HTML renderizado completo (fallback para inspeção manual).
+  let html = ''; try { html = await page.content(); } catch {}
+  await gravarDebug('ZUKDOC-render', url, 200, 'text/html', html);
+  await page.close().catch(() => {});
+}
 
 // Descobre a query de LISTA DE LOTES da Leilotech. Carrega a home (limpa Cloudflare),
 // então dentro da página: (1) tenta INTROSPECTION do schema para achar o campo raiz
@@ -316,7 +389,9 @@ async function main() {
       try { await capturar(browser, alvo); }
       catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
     }
-    // scanLeilotech desativado (Leilotech já integrada). Roda só os ALVOS.
+    // Round 33 — descobrir como o ZUK monta a URL da matrícula (onclick _gt).
+    try { await scanZukDocs(browser); }
+    catch (e) { console.log(`  ZUKDOC erro: ${e.message.slice(0, 80)}`); }
   } finally {
     await browser.close();
   }
