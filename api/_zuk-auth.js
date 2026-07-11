@@ -80,3 +80,46 @@ export async function capturarDocsZukLogado(loteUrl, deadline) {
     return null;
   }
 }
+
+// ── LOGIN REUTILIZÁVEL (captura em LOTE no GitHub Actions) ───────────────────
+// Loga UMA vez e devolve o cookie jar autenticado, para varrer vários lotes sem
+// re-logar. O capturarDocsZukLogado acima (on-demand no Vercel) segue INTOCADO.
+// paginaToken: uma URL de lote do Zuk (tem o modal de login com _token).
+export async function loginZuk(paginaToken) {
+  const email = process.env.ZUK_EMAIL, senha = process.env.ZUK_SENHA;
+  if (!email || !senha) { console.log('[zuk-auth] ZUK_EMAIL/ZUK_SENHA ausentes'); return null; }
+  const jar = {};
+  const T = 12000;
+  try {
+    const url0 = /portalzuk\.com\.br/i.test(String(paginaToken || '')) ? paginaToken : `${BASE}/`;
+    const g0 = await fetch(url0, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(T) });
+    absorveCookies(jar, g0);
+    const token = ((await g0.text()).match(/name="_token"\s+value="([^"]+)"/i) || [])[1];
+    if (!token) { console.log('[zuk-auth] _token não encontrado (login)'); return null; }
+    const form = new URLSearchParams({ _token: token, email, password: senha, user_screen_width: '1280', user_screen_height: '800' });
+    const p = await fetch(`${BASE}/login`, {
+      method: 'POST',
+      headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded', 'Accept-Language': 'pt-BR,pt;q=0.9', Origin: BASE, Referer: url0, Cookie: jarHeader(jar) },
+      body: form.toString(), redirect: 'manual', signal: AbortSignal.timeout(T),
+    });
+    absorveCookies(jar, p);
+    if (![301, 302, 303].includes(p.status)) console.log(`[zuk-auth] login status inesperado ${p.status}`);
+    return jar;
+  } catch (e) { console.warn(`[zuk-auth] login erro ${e?.message}`); return null; }
+}
+
+// Extrai a matrícula (URL assinada) de UM lote usando um jar já autenticado.
+export async function matriculaLoteLogado(loteUrl, jar) {
+  if (!loteUrl || !/portalzuk\.com\.br\/imovel\//i.test(loteUrl) || !jar) return null;
+  try {
+    const g = await fetch(loteUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Cookie: jarHeader(jar) }, redirect: 'follow', signal: AbortSignal.timeout(12000) });
+    absorveCookies(jar, g);
+    const html = await g.text();
+    const cardHrefs = [...html.matchAll(/<a[^>]*property-documents-item[^>]*href="([^"]*)"/gi)]
+      .map(m => m[1].replace(/&amp;/g, '&').trim())
+      .filter(u => /^https?:\/\//.test(u));
+    const matricula = cardHrefs.find(u => /matr[ií]cul/i.test(u) && /\.pdf/i.test(u)) || null;
+    const laudo = cardHrefs.find(u => /laudo|avalia/i.test(u)) || null;
+    return { matricula, laudo, cards: cardHrefs.length };
+  } catch (e) { console.warn(`[zuk-auth] lote erro ${e?.message}`); return null; }
+}

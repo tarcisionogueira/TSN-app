@@ -1,0 +1,43 @@
+name: Matrícula ZUK — captura em lote
+
+# O edital do Zuk é público; a MATRÍCULA fica atrás de login. Este job loga com
+# ZUK_EMAIL/ZUK_SENHA e captura as matrículas em lote, subindo no Storage. Login é
+# via fetch (não precisa de navegador). Vercel segue como fallback on-demand.
+on:
+  schedule:
+    - cron: '15 */6 * * *'   # 4x/dia
+  workflow_dispatch:
+    inputs:
+      lote:
+        description: 'Quantos lotes tentar nesta rodada'
+        required: false
+        default: '20'
+
+concurrency:
+  group: matricula-zuk
+  cancel-in-progress: false
+
+jobs:
+  matricula:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capturar matrículas ZUK (login) → Storage + imovel_anexos
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ZUK_EMAIL: ${{ secrets.ZUK_EMAIL }}
+          ZUK_SENHA: ${{ secrets.ZUK_SENHA }}
+          ZUK_MATRICULA_LOTE: ${{ github.event.inputs.lote || '20' }}
+        run: node scripts/captura-matricula-zuk.mjs
