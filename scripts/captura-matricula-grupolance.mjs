@@ -41,24 +41,29 @@ function urlMatricula(editalUrl) {
 }
 
 async function main() {
-  const { data: lotes, error } = await supabase.from('imoveis_leilao')
+  // Puxa os pendentes com anexos e FILTRA em JS aos que têm edital-PDF (só desses dá
+  // para derivar a matrícula) — evita gastar a cota da rodada em lotes sem edital.
+  const { data: brutos, error } = await supabase.from('imoveis_leilao')
     .select('id, anexos')
     .eq('fonte', 'GRUPOLANCE').eq('ativo', true)
     .or('link_matricula.is.null,link_matricula.eq.')
     .not('anexos', 'is', null)
-    .limit(LOTE);
+    .limit(1000);
   if (error) { console.error('Erro ao ler lotes:', error.message); process.exit(1); }
-  if (!lotes?.length) { console.log('Nenhum lote Grupo Lance pendente de matrícula.'); return; }
-  console.log(`Grupo Lance: ${lotes.length} lote(s) para tentar matrícula (cap ${LOTE}).`);
+  const lotes = (brutos || []).map((l) => {
+    const anexos = Array.isArray(l.anexos) ? l.anexos : [];
+    const edital = anexos.find((a) => /edital/i.test(a.tipo || a.nome || '') && /\.pdf/i.test(a.url || ''))?.url;
+    const matUrl = urlMatricula(edital);
+    return matUrl ? { id: l.id, matUrl } : null;
+  }).filter(Boolean).slice(0, LOTE);
+  if (!lotes.length) { console.log('Nenhum lote Grupo Lance pendente COM edital-PDF.'); return; }
+  console.log(`Grupo Lance: ${lotes.length} lote(s) com edital-PDF para tentar matrícula (cap ${LOTE}).`);
 
   let ok = 0, semMat = 0, erro = 0;
   for (const l of lotes) {
     try {
       if (await jaTemMatricula(l.id)) continue;
-      const anexos = Array.isArray(l.anexos) ? l.anexos : [];
-      const edital = anexos.find(a => /edital/i.test(a.tipo || a.nome || '') && /\.pdf/i.test(a.url || ''))?.url;
-      const matUrl = urlMatricula(edital);
-      if (!matUrl) { semMat++; continue; }
+      const matUrl = l.matUrl;
       const resp = await fetch(matUrl, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' }, redirect: 'follow', signal: AbortSignal.timeout(25000) });
       if (!resp.ok) { semMat++; console.log(`- ${l.id}: sem matrícula pública (HTTP ${resp.status})`); continue; }
       const buf = Buffer.from(await resp.arrayBuffer());
