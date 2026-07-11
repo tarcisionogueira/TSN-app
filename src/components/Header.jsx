@@ -272,6 +272,13 @@ export default function Header() {
             </button>
           )}
 
+          {['analista','admin'].includes(effectiveRole) && (
+            <button onClick={() => nav('/cliente-360')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/cliente-360') ? '#0d9488' : '#0d948822', color: '#5eead4', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              👤 360º Cliente
+            </button>
+          )}
+
           {effectiveRole === 'admin' && (
             <button onClick={() => nav('/admin')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/admin') ? '#7c3aed' : '#7c3aed22', color: '#c4b5fd', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -381,6 +388,12 @@ export default function Header() {
             <button onClick={() => { nav('/atendimento'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#67e8f9', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               <Headphones size={16} /> Atendimento
+            </button>
+          )}
+          {['analista','admin'].includes(effectiveRole) && (
+            <button onClick={() => { nav('/cliente-360'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#5eead4', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              👤 360º Cliente
             </button>
           )}
           {effectiveRole === 'admin' && (

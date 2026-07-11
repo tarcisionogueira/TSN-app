@@ -75,5 +75,17 @@ OpenAI TTS padrão, áudio seletivo ≤30s, cache + fallback texto, teto por cli
 4. **`META_PIXEL_ID`** real (para instalar o Pixel) e confirmar `META_ACCESS_TOKEN` (CAPI).
 5. **Google Ads**: confirmar as 2 conversões importadas/primárias no painel.
 
+## Progresso
+- **Fase B — Tela 360º do cliente: ✅ ENTREGUE** (em produção). Rota `/cliente-360` (admin/analista), botão "👤 360º Cliente" no header. Endpoint `api/admin-usuario-360.js` + funções SQL `admin_busca_usuarios`/`admin_usuario_360` (SECURITY DEFINER, service_role — não afrouxou RLS). Mostra por usuário: perfil + último acesso, intenção (triagem), os 3 relatórios (quantos gerou + últimos imóveis), buscas recentes e chamados, com contato por e-mail e WhatsApp (`wa.me` manual por enquanto).
+  - Pendente opcional: log de "imóvel visto" (hoje só filtros de busca).
+
+## ⏳ A FAZER QUANDO O DONO ESTIVER NO COMPUTADOR (pedido dele)
+**Adiantar o ESQUELETO WhatsApp/Meta** (código pronto, ativa quando as credenciais chegarem):
+- Migração: `canal` + `wa_id` + `janela_expira_em` em `chamados`.
+- `api/whatsapp-webhook.js` (inbound, auth por segredo em header — padrão `inbound-juridico`).
+- `api/_whatsapp.js` (outbound via Cloud API, espelho do `_email.js`), com placeholders de env.
+- Meta Pixel (`fbq`) no `index.html` aguardando `META_PIXEL_ID`.
+- Requer do dono (para ATIVAR, não para escrever o esqueleto): conta Meta Business, número, tokens WhatsApp, `META_PIXEL_ID` (ver pré-requisitos acima).
+
 ## Próximo passo sugerido
-Começar por **Fase A (Google, externa)** e **Fase B (monitoramento, sem bloqueio)** enquanto o dono provê os pré-requisitos Meta/WhatsApp para as Fases C/D.
+Fase A (Google, externa, com o dono) + adiantar o esqueleto WhatsApp/Meta quando o dono estiver no computador.

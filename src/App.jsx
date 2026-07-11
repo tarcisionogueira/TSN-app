@@ -27,6 +27,7 @@ import AtivarVendedor from './pages/AtivarVendedor';
 import Contratos from './pages/Contratos';
 import Calculadora from './pages/Calculadora';
 import Membros from './pages/Membros';
+import Cliente360 from './pages/Cliente360';
 import Curso from './pages/Curso';
 import Planos from './pages/Planos';
 import AdminChargebacks from './pages/AdminChargebacks';
@@ -261,6 +262,7 @@ function MainLayout() {
           <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
+          <Route path="/cliente-360" element={<PrivateRoute roles={['admin','analista']}><Cliente360 /></PrivateRoute>} />
           <Route path="/membros/curso/:id" element={<PrivateRoute><Curso /></PrivateRoute>} />
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
           <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
