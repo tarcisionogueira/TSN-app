@@ -1,6 +1,36 @@
 import { fmt, fmtPct } from '../utils/calculos';
+import { imprimirHtml } from './pdfImprimir';
 
-export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores: ind }) {
+// CSS do documento (exportado para o PDF combinado reaproveitar). O `.bl` aqui é
+// "texto azul" (helper de tabela); o parecer final usa `.blk` para blocos, para
+// não colidir quando os estilos são unidos no combinado.
+export const ESTILOS_MERCADOLOGICO = `
+  body{font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;padding:20px;line-height:1.6;background:white;margin:0;-webkit-font-smoothing:antialiased;}
+  @media print{body{padding:0;}@page{margin:8mm;size:A4;}
+    .pb{page-break-before:always;}.av{page-break-inside:avoid;}}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111111;padding-bottom:12px;margin-bottom:18px;}
+  h2{font-size:13.5px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:18px 0 8px;}
+  h3{font-size:12px;font-weight:800;margin:12px 0 6px;color:#111111;}
+  table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11.5px;}
+  th,td{border:1px solid #cbd5e1;padding:6px 8px;}
+  th{background:#f1f5f9;font-weight:700;text-align:left;}
+  .r{text-align:right;}.c{text-align:center;}
+  .g{color:#059669;font-weight:700;}.rd{color:#dc2626;font-weight:700;}
+  .am{color:#b45309;font-weight:700;}.bl{color:#0D63DB;font-weight:700;}
+  .bg-g{background:#d1fae5;}.bg-rd{background:#fee2e2;}.bg-bl{background:#dbeafe;}
+  .box{border:2px solid #dc2626;background:#fef2f2;padding:10px;border-radius:5px;margin:10px 0;}
+  .obs{border-left:4px solid #0D63DB;background:#f0f9ff;padding:8px 12px;margin-bottom:12px;}
+  pre{white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:12px;margin:0;line-height:1.75;color:#1e293b;}
+  .viab{padding:12px;border-radius:6px;margin:12px 0;border:2px solid;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+  .card{background:#f8fafc;border-radius:5px;padding:8px 10px;text-align:center;}
+  .card-v{font-size:16px;font-weight:900;margin-top:2px;}
+  .card-l{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;}
+`;
+
+// Corpo (conteúdo do <body>) do relatório mercadológico — exportado para o PDF
+// combinado. O gerador individual (gerarPDF) empacota isto num documento completo.
+export function corpoMercadologico({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores: ind }) {
   const parseSecoes = (txt) => {
     if (!txt) return {};
     const res = {};
@@ -32,34 +62,7 @@ export function gerarPDF({ d, metricas: m, metricasTeto: mt, teto, isAVista, isU
   // (uso próprio usa o valor de mercado cheio como referência de economia).
   const valorVendaPretendido = Number(m?.valorRef) || 0;
 
-  const html = `<!DOCTYPE html><html lang="pt-BR"><head>
-<meta charset="UTF-8">
-<title>Relatório BidPro Brasil, ${d.nome||d.endereco}</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
-<style>
-  body{font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;padding:20px;line-height:1.6;background:white;margin:0;-webkit-font-smoothing:antialiased;}
-  @media print{body{padding:0;}@page{margin:8mm;size:A4;}
-    .pb{page-break-before:always;}.av{page-break-inside:avoid;}}
-  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111111;padding-bottom:12px;margin-bottom:18px;}
-  h2{font-size:13.5px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:18px 0 8px;}
-  h3{font-size:12px;font-weight:800;margin:12px 0 6px;color:#111111;}
-  table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11.5px;}
-  th,td{border:1px solid #cbd5e1;padding:6px 8px;}
-  th{background:#f1f5f9;font-weight:700;text-align:left;}
-  .r{text-align:right;}.c{text-align:center;}
-  .g{color:#059669;font-weight:700;}.rd{color:#dc2626;font-weight:700;}
-  .am{color:#b45309;font-weight:700;}.bl{color:#0D63DB;font-weight:700;}
-  .bg-g{background:#d1fae5;}.bg-rd{background:#fee2e2;}.bg-bl{background:#dbeafe;}
-  .box{border:2px solid #dc2626;background:#fef2f2;padding:10px;border-radius:5px;margin:10px 0;}
-  .obs{border-left:4px solid #0D63DB;background:#f0f9ff;padding:8px 12px;margin-bottom:12px;}
-  pre{white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:12px;margin:0;line-height:1.75;color:#1e293b;}
-  .viab{padding:12px;border-radius:6px;margin:12px 0;border:2px solid;}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
-  .card{background:#f8fafc;border-radius:5px;padding:8px 10px;text-align:center;}
-  .card-v{font-size:16px;font-weight:900;margin-top:2px;}
-  .card-l{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;}
-</style></head><body>
-
+  return `
 <div class="hdr av">
   <div>
     <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">BidPro Brasil</div>
@@ -300,37 +303,15 @@ ${sec.conc?`<div class="av"><h2>Conclusão e Recomendação da Gestão</h2><pre>
   <span>BidPro Brasil · Análise gerada em ${new Date().toLocaleString('pt-BR')}</span>
   <span>Documento confidencial · Uso exclusivo do cliente</span>
 </div>
-</body></html>`;
+`;
+}
 
-  // Imprime via IFRAME OCULTO (não usa window.open → não é bloqueado por pop-up).
-  // O navegador abre o diálogo de impressão; "Salvar como PDF" gera o arquivo.
-  // Nome do arquivo no "Salvar como PDF": o Chrome usa o <title> do documento PAI
-  // (a SPA), não o do iframe. Setamos o title antes de imprimir e restauramos depois.
-  const nomeArquivo = `Relatorio Mercadologico - ${(d.nome || d.endereco || 'Imovel')}`.replace(/[\\/:*?"<>|]+/g, ' ').trim();
-  const tituloAnterior = document.title;
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-  document.body.appendChild(iframe);
-  const limpar = () => { document.title = tituloAnterior; setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 1000); };
-  try {
-    const doc = iframe.contentWindow.document;
-    doc.open(); doc.write(html); doc.close();
-    const imprimir = () => {
-      try {
-        document.title = nomeArquivo;
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      } catch {
-        // Fallback extremo: abre numa nova aba (pode pedir pop-up) e imprime.
-        const win = window.open('', '_blank');
-        if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 600); }
-        else alert('Não foi possível abrir a impressão. Verifique o bloqueador de pop-ups.');
-      } finally { limpar(); }
-    };
-    // Espera o conteúdo/CSS assentar antes de chamar print.
-    setTimeout(imprimir, 500);
-  } catch {
-    limpar();
-    alert('Não foi possível gerar o PDF neste navegador.');
-  }
+export function gerarPDF(props) {
+  const d = (props && props.d) || {};
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8">
+<title>Relatório BidPro Brasil, ${d.nome || d.endereco || ''}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>${ESTILOS_MERCADOLOGICO}</style></head><body>${corpoMercadologico(props)}</body></html>`;
+  imprimirHtml(html, `Relatorio Mercadologico - ${(d.nome || d.endereco || 'Imovel')}`);
 }

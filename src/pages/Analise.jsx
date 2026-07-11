@@ -19,6 +19,7 @@ import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { gerarLaudoPDF } from '../components/LaudoPDF';
 import { gerarDocumentalPDF } from '../components/DocumentalPDF';
+import { gerarCombinadoPDF } from '../components/CombinadoPDF';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
 
@@ -1010,6 +1011,21 @@ export default function Analise() {
     return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores });
   };
 
+  // "Baixar os 3": só liberado quando os TRÊS relatórios estão prontos. Gera um
+  // único PDF com Mercadológico + Documental + Conclusão, na ordem.
+  const mercadoProntoPDF = !!parecer;
+  const documentalProntoPDF = !!parecerDocumental && !parecerDocumental.precisaDocumentos;
+  const laudoProntoPDF = relLaudoGerado && !!laudoEntry?.result;
+  const podeExportarTodos = mercadoProntoPDF && documentalProntoPDF && laudoProntoPDF;
+
+  const imprimirTodosPDF = () => {
+    gerarCombinadoPDF({
+      mercado: mercadoProntoPDF ? { d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores } : null,
+      documental: documentalProntoPDF ? { imovel: d, parecer: parecerDocumental, bidscore: bidscoreDoc } : null,
+      laudo: laudoProntoPDF ? { imovel: d, laudo: laudoEntry.result } : null,
+    });
+  };
+
   const solicitarAnalista = async () => {
     if (!user || solicitando || solicitado) return;
     setSolicitando(true);
@@ -1061,6 +1077,11 @@ export default function Analise() {
               {podeExportarPDF && (
                 <button onClick={imprimirPDF} style={{ padding:'8px 14px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                   <Printer size={14}/> PDF
+                </button>
+              )}
+              {podeExportarTodos && (
+                <button onClick={imprimirTodosPDF} title="Baixar os três relatórios num único PDF, na ordem" style={{ padding:'8px 14px', background:'#111111', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                  <Printer size={14}/> Baixar os 3 (PDF)
                 </button>
               )}
             </>

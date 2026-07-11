@@ -4,6 +4,8 @@
 // certidões) e as lacunas. Espelha a mecânica de impressão do LaudoPDF (iframe
 // oculto → diálogo do navegador → "Salvar como PDF"), sem depender de pop-up.
 
+import { imprimirHtml } from './pdfImprimir';
+
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -17,7 +19,23 @@ const OCUP = {
   comodato: 'Ocupado em comodato', invasao: 'Invasão', nao_consta: 'Não consta',
 };
 
-export function gerarDocumentalPDF({ imovel: d = {}, parecer: P = {}, bidscore: sb = null }) {
+// CSS do documento (exportado para o PDF combinado reaproveitar).
+export const ESTILOS_DOCUMENTAL = `
+  body{font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;padding:22px;line-height:1.65;background:white;margin:0;-webkit-font-smoothing:antialiased;}
+  @media print{body{padding:0;}@page{margin:9mm;size:A4;}.av{page-break-inside:avoid;}}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111111;padding-bottom:12px;margin-bottom:16px;}
+  h2{font-size:13px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:20px 0 8px;}
+  h3{font-size:11.5px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;color:#111827;margin:12px 0 4px;}
+  pre{white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:12px;margin:0;line-height:1.75;color:#1e293b;}
+  ul{margin:4px 0 0;padding-left:18px;} li{font-size:11.5px;color:#1e293b;line-height:1.65;margin-bottom:3px;}
+  .sec{margin-bottom:10px;}
+  .foot{margin-top:22px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:9.5px;color:#94a3b8;line-height:1.55;}
+`;
+
+// Corpo (conteúdo do <body>) da análise documental — exportado para o PDF
+// combinado. O gerador individual (gerarDocumentalPDF) empacota isto num
+// documento completo e imprime.
+export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb = null }) {
   const risco = P.nivelRisco || 'amarelo';
   const R = {
     verde:    { txt: 'RISCO BAIXO',   cor: '#065f46', bg: '#d1fae5', bd: '#10b981' },
@@ -114,22 +132,7 @@ export function gerarDocumentalPDF({ imovel: d = {}, parecer: P = {}, bidscore: 
   const local = [d.cidade, d.estado].filter(Boolean).join('/');
   const geradoEm = (() => { try { return new Date(P.geradoEm || Date.now()).toLocaleDateString('pt-BR'); } catch { return new Date().toLocaleDateString('pt-BR'); } })();
 
-  const html = `<!DOCTYPE html><html lang="pt-BR"><head>
-<meta charset="UTF-8">
-<title>Analise Documental BidPro Brasil, ${esc(d.nome || d.endereco || 'Imóvel')}</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
-<style>
-  body{font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;padding:22px;line-height:1.65;background:white;margin:0;-webkit-font-smoothing:antialiased;}
-  @media print{body{padding:0;}@page{margin:9mm;size:A4;}.av{page-break-inside:avoid;}}
-  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111111;padding-bottom:12px;margin-bottom:16px;}
-  h2{font-size:13px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:20px 0 8px;}
-  h3{font-size:11.5px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;color:#111827;margin:12px 0 4px;}
-  pre{white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:12px;margin:0;line-height:1.75;color:#1e293b;}
-  ul{margin:4px 0 0;padding-left:18px;} li{font-size:11.5px;color:#1e293b;line-height:1.65;margin-bottom:3px;}
-  .sec{margin-bottom:10px;}
-  .foot{margin-top:22px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:9.5px;color:#94a3b8;line-height:1.55;}
-</style></head><body>
-
+  return `
 <div class="hdr av">
   <div>
     <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">BidPro Brasil</div>
@@ -159,32 +162,15 @@ ${lacunasHtml}
   Esta análise documental e processual é gerada com apoio de inteligência artificial, a partir dos documentos disponíveis e de consultas públicas. Pode conter imprecisões e não substitui a análise de um profissional nem a verificação presencial. Recomendamos agendar a reunião com um analista BidPro e, uma vez aprovado, o laudo jurídico definitivo por advogado antes de qualquer lance.
   <div style="margin-top:4px;">BidPro Brasil · Documento gerado em ${geradoEm}.</div>
 </div>
+`;
+}
 
-</body></html>`;
-
-  const nomeArquivo = `Analise Documental - ${(d.nome || d.endereco || 'Imovel')}`.replace(/[\\/:*?"<>|]+/g, ' ').trim();
-  const tituloAnterior = document.title;
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-  document.body.appendChild(iframe);
-  const limpar = () => { document.title = tituloAnterior; setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 1000); };
-  try {
-    const doc = iframe.contentWindow.document;
-    doc.open(); doc.write(html); doc.close();
-    const imprimir = () => {
-      try {
-        document.title = nomeArquivo;
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      } catch {
-        const win = window.open('', '_blank');
-        if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 600); }
-        else alert('Não foi possível abrir a impressão. Verifique o bloqueador de pop-ups.');
-      } finally { limpar(); }
-    };
-    setTimeout(imprimir, 500);
-  } catch {
-    limpar();
-    alert('Não foi possível gerar o PDF neste navegador.');
-  }
+export function gerarDocumentalPDF(props) {
+  const d = (props && props.imovel) || {};
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8">
+<title>Analise Documental BidPro Brasil, ${esc(d.nome || d.endereco || 'Imóvel')}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>${ESTILOS_DOCUMENTAL}</style></head><body>${corpoDocumental(props)}</body></html>`;
+  imprimirHtml(html, `Analise Documental - ${(d.nome || d.endereco || 'Imovel')}`);
 }
