@@ -14,7 +14,7 @@
  * (fallback ZUK_EMAIL/ZUK_SENHA). Config: GL_DOCS_LOTE (default 60), GL_DOCS_IDS (csv opcional).
  */
 import { createClient } from '@supabase/supabase-js';
-import { loginGrupoLance, coletarDocsGrupoLance, baixarDoc } from '../api/_grupolance-auth.js';
+import { loginGrupoLance, sessaoAnonima, coletarDocsGrupoLance, baixarDoc, resolverDocUrl } from '../api/_grupolance-auth.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -69,6 +69,8 @@ async function main() {
   const jar = await loginGrupoLance();
   if (!jar) { console.error('Login falhou — verifique GL_EMAIL/GL_SENHA (ou ZUK_*).'); process.exit(1); }
   console.log('Login OK.');
+  // Sessão anônima separada só para LER as páginas (logado o GL esconde os .doc-link).
+  const anon = await sessaoAnonima();
 
   const lotes = await alvos();
   if (!lotes.length) { console.log('Nenhum lote Grupo Lance pendente (sem anexos).'); return; }
@@ -77,27 +79,36 @@ async function main() {
   let okLotes = 0, comMat = 0, docsTotal = 0, semDoc = 0, erros = 0;
   for (const l of lotes) {
     try {
-      const docs = await coletarDocsGrupoLance(l.url_lote, jar);
+      const docs = await coletarDocsGrupoLance(l.url_lote, anon);
       if (!docs.length) { semDoc++; console.log(`- ${l.id}: nenhum documento na página`); continue; }
       const anexos = [];
       let matriculaUrl = null;
       for (const d of docs) {
         try {
-          const r = await baixarDoc(d.url, jar, l.url_lote);
-          if (!r.ehPdf) { console.log(`    ${l.id} ${d.tipo}: não é PDF (status ${r.status})`); continue; }
-          let urlFinal = r.finalUrl; // CDN público por padrão
-          // A MATRÍCULA vai para o Storage (link estável + paridade c/ o fluxo existente).
           if (d.tipo === 'matricula') {
+            // Matrícula: baixa (autenticado) e sobe no Storage — link estável + paridade.
+            const r = await baixarDoc(d.url, jar, l.url_lote);
+            if (!r.ehPdf) { console.log(`    ${l.id} matrícula: não é PDF (status ${r.status})`); continue; }
+            let urlFinal = r.finalUrl;
             try {
               if (!(await jaTemMatricula(l.id))) urlFinal = await subirMatricula(l.id, r.buffer) || r.finalUrl;
-              else urlFinal = r.finalUrl;
-            } catch (e) { console.log(`    ${l.id} matrícula upload falhou: ${e.message}`); urlFinal = r.finalUrl; }
+            } catch (e) { console.log(`    ${l.id} matrícula upload falhou: ${e.message}`); }
             matriculaUrl = urlFinal;
             comMat++;
+            anexos.push({ nome: nomeDoc(d), url: urlFinal, tipo: 'matricula' });
+            docsTotal++;
+          } else if (d.gated) {
+            // Laudo/Análise: resolve o 302 → URL do CDN (sem baixar o corpo, pode ser 42MB).
+            const cdn = await resolverDocUrl(d.url, jar, l.url_lote);
+            if (!cdn) { console.log(`    ${l.id} ${d.tipo}: não resolveu URL do CDN`); continue; }
+            anexos.push({ nome: nomeDoc(d), url: cdn, tipo: d.tipo });
+            docsTotal++;
+          } else {
+            // Público: a URL já é do CDN (edital/processo) — usa direto.
+            anexos.push({ nome: nomeDoc(d), url: d.url, tipo: d.tipo });
+            docsTotal++;
           }
-          anexos.push({ nome: nomeDoc(d), url: urlFinal, tipo: d.tipo });
-          docsTotal++;
-          await new Promise(s => setTimeout(s, 150));
+          await new Promise(s => setTimeout(s, 120));
         } catch (e) { console.log(`    ${l.id} ${d.tipo}: erro ${e.message}`); }
       }
       if (!anexos.length) { semDoc++; console.log(`- ${l.id}: docs achados mas nenhum baixou`); continue; }

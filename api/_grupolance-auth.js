@@ -80,22 +80,47 @@ export function classificarDoc(rotulo, url) {
   return 'anexo'; // processo, análise processual, memorial, etc.
 }
 
+// Abre uma sessão ANÔNIMA (não logada) só para ganhar o cookie GLSESSIONID — a
+// página do lote só renderiza os .doc-link com um cookie de sessão presente.
+export async function sessaoAnonima() {
+  const jar = {};
+  try {
+    const g = await fetch(`${BASE}/`, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+    absorve(jar, g);
+  } catch { /* segue mesmo sem cookie */ }
+  return jar;
+}
+
+// Resolve o endpoint gated (/lote/baixar-documento/...) até a URL final do CDN,
+// SEM baixar o corpo (redirect manual) — leve para docs grandes (ex.: 42 MB).
+export async function resolverDocUrl(url, jar, referer) {
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA, ...(jar ? { Cookie: jarHeader(jar) } : {}), ...(referer ? { Referer: referer } : {}) }, redirect: 'manual', signal: AbortSignal.timeout(20000) });
+    const loc = r.headers.get('location') || '';
+    if (/cdn\.grupolance/i.test(loc)) return loc.startsWith('http') ? loc : `https:${loc}`;
+    if (/\/entrar/i.test(loc)) return null; // sessão caiu/expirou
+    return null;
+  } catch { return null; }
+}
+
 /**
  * Lê a página do lote (autenticada) e devolve a lista de documentos a baixar.
  * @returns {Promise<Array<{url:string, gated:boolean, rotulo:string|null, tipo:string}>>}
  */
-export async function coletarDocsGrupoLance(loteUrl, jar) {
+export async function coletarDocsGrupoLance(loteUrl, sessJar) {
   if (!loteUrl) return [];
-  // IMPORTANTE: lê a página ANÔNIMA. Logado, o GL não renderiza os .doc-link (o
-  // botão vira outra coisa); anônimo, o data-url base64 do endpoint está sempre lá.
-  // O download depois é que usa a sessão (baixarDoc com o jar). Retry p/ robustez.
+  // IMPORTANTE: lê a página com uma sessão NÃO-AUTENTICADA (sessJar de sessaoAnonima).
+  // Logado, o GL não renderiza os .doc-link (o botão vira outra coisa); com uma sessão
+  // anônima "aquecida" o data-url base64 do endpoint está sempre lá. O download depois
+  // é que usa a sessão AUTENTICADA (baixarDoc/resolverDocUrl). Retry p/ robustez.
   let html = '';
-  for (let i = 0; i < 2 && !/doc-link|cdn\.grupolance/i.test(html); i++) {
+  for (let i = 0; i < 3 && !/doc-link|cdn\.grupolance/i.test(html); i++) {
     try {
-      const g = await fetch(loteUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+      const g = await fetch(loteUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', ...(sessJar ? { Cookie: jarHeader(sessJar) } : {}) }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+      if (sessJar) absorve(sessJar, g);
       html = await g.text();
     } catch { html = html || ''; }
-    if (!/doc-link|cdn\.grupolance/i.test(html)) await new Promise(s => setTimeout(s, 600));
+    if (!/doc-link|cdn\.grupolance/i.test(html)) await new Promise(s => setTimeout(s, 700));
   }
   const docs = [];
   const vistos = new Set();
