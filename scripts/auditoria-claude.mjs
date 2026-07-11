@@ -1,9 +1,13 @@
 // Auditoria técnica do sistema pelo Claude — segurança dos dados, fluxos de API e
 // funcionalidades (review ESTÁTICO do código) MAIS uma camada de FUNCIONAMENTO em
 // runtime (auditarFuncionamento): coleta por leiloeiro, filas e health-check em
-// produção. Roda numa GitHub Action (diária + manual). Lê o código-fonte da camada
-// de API (+ scrapers/utilitários críticos), audita em lotes, junta os achados de
-// runtime e grava o relatório em `auditoria_sistema` (o dashboard mostra em leitura).
+// produção. Roda numa GitHub Action (diária + manual).
+//
+// COBERTURA COMPLETA: lê TODO o código (api + scripts + src), FATIANDO arquivos
+// grandes em vez de truncar, para nenhuma parte (scrapers, gerar-documental, telas)
+// ficar de fora — inclui automaticamente qualquer arquivo novo que criarmos. Audita
+// em lotes que cabem no contexto, junta os achados de runtime e grava o relatório em
+// `auditoria_sistema` (o dashboard mostra em leitura).
 //
 // NÃO altera código. Correções são propostas nos achados (campo `correcao`) e
 // viram PR revisável quando você aprovar — nada entra em produção sozinho.
@@ -26,17 +30,39 @@ try { MITIGACOES = readFileSync('docs/SEGURANCA_MITIGACOES.md', 'utf8').slice(0,
 if (!CLAUDE_KEY) { console.error('CLAUDE_KEY ausente'); process.exit(1); }
 if (!SUPABASE_URL || !SERVICE_KEY) { console.error('Supabase ausente'); process.exit(1); }
 
-const MAX_FILE = 26000;       // trunca arquivos grandes (evita blobs de dados)
-const MAX_LOTE = 90000;       // ~22k tokens por lote
-const CAP_TOTAL = Number(process.env.AUDIT_CAP_CHARS || 460000); // orçamento total (~5-6 lotes) — inclui scrapers/leiloeiros
-// Pula só dados puros. Scrapers/leiloeiros ENTRAM na auditoria (contemplar coleta,
-// fotos e documentos), além de segurança/pagamentos.
-const PULAR = /(_municipios\.js|.*-debug\.js|.*-diag\.js)$/;
-// Prioriza segurança / dinheiro / dados sensíveis / SCRAPERS: esses entram primeiro.
-const PRIORIDADE = /(_auth|_webhook|_rate-limit|_email|_claude|_gemini|_uso|_geo|_onr|_cnj|_doc|mp[-_]|mp\.js|asaas|checkout|webhook|pagamento|garantia|assinar|contrato|cpf|kyc|selfie|admin|cron|token|reembolso|comiss|inbound|upload|storage|scraper|leilo|captur|enriquec|fotos?)/i;
+const MAX_LOTE = 90000;       // ~22k tokens por lote (limite de contexto por chamada)
+// Arquivos grandes são FATIADOS (não truncados) neste tamanho, para o código
+// COMPLETO ser auditado — nada de scraper/gerar-documental cortado pela metade.
+const CHUNK = Number(process.env.AUDIT_CHUNK_CHARS || 24000);
+// Teto de segurança (anti-runaway). Default cobre o repositório inteiro (~4M chars);
+// como a ordem prioriza segurança/back-end, um eventual corte cai só na cauda (front).
+const CAP_TOTAL = Number(process.env.AUDIT_CAP_CHARS || 8_000_000);
+const INCLUIR_SRC = process.env.AUDIT_INCLUIR_SRC !== '0'; // front-end entra por padrão
+// Pula só DADOS puros (dicionário de municípios, catálogo de cursos) e sondas de
+// debug/diagnóstico — todo o resto do código (api + scripts + src) é auditado.
+const PULAR = /(_municipios\.js|.*-debug\.(js|mjs)|.*-diag\.js)$/;
+const PULAR_PATH = /(^|\/)src\/data\//;
+// Prioriza segurança / dinheiro / dados sensíveis / SCRAPERS / cliente de auth:
+// esses entram PRIMEIRO (se o tempo apertar, o crítico já foi auditado).
+const PRIORIDADE = /(_auth|AuthContext|apiCall|supabase|_webhook|_rate-limit|_email|_claude|_gemini|_uso|_geo|_onr|_cnj|_doc|mp[-_]|mp\.js|asaas|checkout|webhook|pagamento|garantia|assinar|contrato|cpf|kyc|selfie|admin|cron|token|reembolso|comiss|inbound|upload|storage|scraper|leilo|captur|enriquec|fotos?)/i;
 
-// Coleta os arquivos relevantes, PRIORIZANDO segurança/dinheiro/dados e
-// limitando o total (CAP_TOTAL) para a auditoria concluir dentro do tempo.
+// Fatia um arquivo grande em pedaços por LIMITE DE LINHA (nunca no meio de uma
+// linha), rotulando "parte i/n" para o modelo saber que é continuação.
+function fatiar(path, txt, prio) {
+  if (txt.length <= CHUNK) return [{ path, txt, prio }];
+  const partes = []; let buf = '';
+  for (const ln of txt.split('\n')) {
+    if (buf && buf.length + ln.length + 1 > CHUNK) { partes.push(buf); buf = ''; }
+    buf += (buf ? '\n' : '') + ln;
+  }
+  if (buf) partes.push(buf);
+  const n = partes.length;
+  return partes.map((p, i) => ({ path: `${path} (parte ${i + 1}/${n})`, txt: p, prio }));
+}
+
+// Coleta TODO o código relevante (api + scripts + src), fatiando arquivos grandes
+// para nada ser truncado. Ordena por prioridade (segurança/dinheiro/back-end antes
+// do front) e só corta na cauda se estourar o teto anti-runaway (CAP_TOTAL).
 function coletarArquivos() {
   const brutos = [];
   const addDir = (dir, filtro) => {
@@ -47,26 +73,25 @@ function coletarArquivos() {
       let st; try { st = statSync(p); } catch { continue; }
       if (st.isDirectory()) { addDir(p, filtro); continue; }
       if (!filtro(nome, p)) continue;
-      if (PULAR.test(nome)) continue;
+      if (PULAR.test(nome) || PULAR_PATH.test(p)) continue;
       let txt = '';
       try { txt = readFileSync(p, 'utf8'); } catch { continue; }
-      if (txt.length > MAX_FILE) txt = txt.slice(0, MAX_FILE) + `\n/* … truncado (${txt.length} chars) … */`;
-      brutos.push({ path: p, txt, prio: PRIORIDADE.test(nome) ? 0 : 1 });
+      const prio = PRIORIDADE.test(nome) ? 0 : (p.startsWith('src/') ? 2 : 1);
+      for (const seg of fatiar(p, txt, prio)) brutos.push(seg);
     }
   };
   addDir('api', (n) => n.endsWith('.js'));
   addDir('scripts', (n) => n.endsWith('.js') || n.endsWith('.mjs')); // scrapers/leiloeiros
-  for (const f of ['src/utils/supabase.js', 'src/utils/apiCall.js', 'src/contexts/AuthContext.jsx']) {
-    try { const txt = readFileSync(f, 'utf8'); brutos.push({ path: f, txt: txt.slice(0, MAX_FILE), prio: 0 }); } catch { /* ok */ }
-  }
-  // Prioritários primeiro; acumula até o orçamento de chars.
+  if (INCLUIR_SRC) addDir('src', (n) => n.endsWith('.js') || n.endsWith('.jsx')); // front completo
+  // Prioritários primeiro; acumula até o teto anti-runaway.
   brutos.sort((a, b) => a.prio - b.prio || a.path.localeCompare(b.path));
   const out = []; let tam = 0, cortados = 0;
   for (const a of brutos) {
     if (tam + a.txt.length > CAP_TOTAL) { cortados++; continue; }
     out.push(a); tam += a.txt.length;
   }
-  if (cortados) console.log(`Aviso: ${cortados} arquivo(s) fora do orçamento desta rodada (foco em segurança/dinheiro/dados).`);
+  if (cortados) console.log(`Aviso: ${cortados} fatia(s) além do teto de ${CAP_TOTAL} chars (cauda de menor prioridade).`);
+  console.log(`Cobertura: ${out.length} fatias, ${tam} chars de código auditado.`);
   return out;
 }
 
@@ -237,7 +262,7 @@ async function main() {
   // Ordena por severidade e limita para o relatório não explodir.
   const ordem = { critica: 0, alta: 1, media: 2, baixa: 3 };
   achados.sort((a, b) => (ordem[a.severidade] ?? 9) - (ordem[b.severidade] ?? 9));
-  achados = achados.slice(0, 60);
+  achados = achados.slice(0, 100);
 
   const nCrit = achados.filter((a) => a.severidade === 'critica').length;
   const nAlto = achados.filter((a) => a.severidade === 'alta').length;
