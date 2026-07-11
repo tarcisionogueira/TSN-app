@@ -498,6 +498,11 @@ export default async function handler(req, res) {
     // Cap de leitura adaptativo: judicial lê mais peças (até 8) para o cruzamento
     // apurado exigido nesses casos; o deadline continua protegendo o tempo total.
     const capLeitura = ehJudicial ? 8 : 6;
+    // Prioriza as peças centrais na ordem de leitura (o cap acima é limitado):
+    // matrícula e edital primeiro. Sem isto, fontes com muitos anexos do mesmo tipo
+    // (ex.: o Zuk publica vários links de edital) empurram a matrícula para fora do cap.
+    const prioTipo = { matricula: 0, edital: 1, regras_venda: 2, regras: 2, laudo: 3, proposta: 4, anexo: 5 };
+    urls.sort((a, b) => (prioTipo[a.tipo] ?? 5) - (prioTipo[b.tipo] ?? 5));
     for (const u of urls) {
       if (blocos.length >= capLeitura || Date.now() > deadline) break; // limita custo/payload (deadline protege o tempo)
       const tipoDoc = tipoDoRotulo(u.rotulo);

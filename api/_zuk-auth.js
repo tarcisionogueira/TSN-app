@@ -11,8 +11,6 @@
  * Fluxo: GET no lote (pega _token CSRF + cookies de sessão) → POST /login →
  * GET no lote autenticado → vasculha o HTML (reaproveita _doc-scan) → matrícula.
  */
-import { vasculharDocumentos } from './_doc-scan.js';
-
 const BASE = 'https://www.portalzuk.com.br';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 
@@ -66,10 +64,18 @@ export async function capturarDocsZukLogado(loteUrl, deadline) {
     absorveCookies(jar, g2);
     const html2 = await g2.text();
 
-    const docs = vasculharDocumentos(html2, loteUrl);
-    const achou = docs.matricula || (Array.isArray(docs.anexos) && docs.anexos.some(a => a.tipo === 'matricula'));
-    console.log(`[zuk-auth] ${achou ? 'matrícula CAPTURADA' : 'matrícula ainda ausente (login pode ter falhado)'} ${loteUrl}`);
-    return { matricula: docs.matricula, edital: docs.edital, laudo: docs.laudo, anexos: docs.anexos || [] };
+    // A URL do PDF precisa vir ASSINADA (Expires/Signature do CloudFront) — a versão
+    // sem assinatura dá 403/vazio. O Zuk renderiza AMBAS no HTML logado; pegamos a
+    // assinada por regex (decodificando &amp;) e, só como último recurso, a simples.
+    const assinada = (html, kw) => {
+      const re = new RegExp(`https?:\\/\\/documentac[^"'\\s\\\\]*${kw}[^"'\\s\\\\]*`, 'ig');
+      const cands = [...new Set((html.match(re) || []).map(u => u.replace(/&amp;/g, '&')))];
+      return cands.find(u => /Signature=/i.test(u)) || cands.find(u => /\.pdf/i.test(u)) || null;
+    };
+    const matricula = assinada(html2, 'matricul');
+    const laudo = assinada(html2, 'laudo') || assinada(html2, 'avalia');
+    console.log(`[zuk-auth] matrícula ${matricula ? (/Signature=/i.test(matricula) ? 'ASSINADA ok' : 'sem assinatura!') : 'AUSENTE (login falhou?)'} ${loteUrl}`);
+    return { matricula, laudo, anexos: (matricula ? [{ url: matricula, nome: 'Matrícula do Imóvel', tipo: 'matricula' }] : []) };
   } catch (e) {
     console.warn(`[zuk-auth] erro ${e?.message}`);
     return null;
