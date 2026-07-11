@@ -47,6 +47,45 @@ SOMENTE quando necessário — ações na conta, problemas técnicos não resolv
 - Parágrafos curtos; tópicos numerados quando for complexo
 - Termine direcionando a uma função da plataforma ou perguntando "Isso esclareceu sua dúvida?"`;
 
+// Ajuste por CANAL — o MESMO agente atende o chat do site E (futuramente) o
+// WhatsApp. 'site' não altera nada (comportamento atual); 'whatsapp' só encurta.
+const CANAL_HINT = {
+  site: '',
+  whatsapp: '\n\n## Canal: WhatsApp\n- Respostas MAIS CURTAS, em tom de conversa de app (mensagem, não e-mail). Evite listas longas; prefira frases curtas. Nada de markdown pesado.',
+};
+
+// NÚCLEO REUTILIZÁVEL do agente (site + futuro WhatsApp). Recebe a conversa e a
+// memória DO PRÓPRIO cliente; devolve { resposta, escalar }. Não faz auth nem HTTP,
+// então o webhook do WhatsApp poderá chamá-lo igual ao chat do site. As regras de
+// privacidade (nunca dado de terceiros, nunca caso específico) vivem no SYSTEM.
+export async function responderSuporte({ mensagens, memoria, canal = 'site', apiKey }) {
+  // Monta as mensagens (alterna user/assistant; ignora mensagens de atendente humano).
+  const messages = [];
+  for (const m of mensagens || []) {
+    const role = m.autor_tipo === 'cliente' ? 'user' : m.autor_tipo === 'ia' ? 'assistant' : null;
+    if (!role) continue;
+    if (messages.length && messages[messages.length - 1].role === role) {
+      messages[messages.length - 1].content += '\n' + m.conteudo;
+    } else {
+      messages.push({ role, content: m.conteudo });
+    }
+  }
+  if (!messages.length || messages[messages.length - 1].role !== 'user') return { resposta: null, escalar: false };
+
+  const system = `${SYSTEM}${CANAL_HINT[canal] || ''}${memoria ? `\n\n## Histórico deste cliente (use como contexto, não mencione diretamente ao cliente):\n${memoria}` : ''}`;
+  const res = await iaGeminiPrimary({
+    method: 'POST',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system, messages }),
+  });
+  const data = await res.json();
+  let resposta = data?.content?.[0]?.text
+    || 'Desculpe, não consegui processar sua mensagem no momento. Nossa equipe irá atendê-lo em breve. [[ESCALAR]]';
+  const escalar = resposta.includes('[[ESCALAR]]');
+  if (escalar) resposta = resposta.replace('[[ESCALAR]]', '').trim();
+  return { resposta, escalar };
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
@@ -65,52 +104,16 @@ export default async function handler(req) {
   } catch {
     return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
-  const { mensagens, memoria } = reqBody;
+  const { mensagens, memoria, canal } = reqBody;
   if (!mensagens?.length) return new Response(JSON.stringify({ error: 'mensagens obrigatório' }), {
     status: 400, headers: { 'Content-Type': 'application/json' },
   });
 
-  // Build Claude messages (alternating user/assistant; skip atendente msgs as context)
-  const messages = [];
-  for (const m of mensagens) {
-    const role = m.autor_tipo === 'cliente' ? 'user' : m.autor_tipo === 'ia' ? 'assistant' : null;
-    if (!role) continue;
-    if (messages.length && messages[messages.length - 1].role === role) {
-      messages[messages.length - 1].content += '\n' + m.conteudo;
-    } else {
-      messages.push({ role, content: m.conteudo });
-    }
-  }
-
-  if (!messages.length || messages[messages.length - 1].role !== 'user') {
-    return new Response(JSON.stringify({ resposta: null, escalar: false }), {
-      status: 200, headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  let data;
+  const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
   try {
-    const res = await iaGeminiPrimary({
-      method: 'POST',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system: memoria ? `${SYSTEM}\n\n## Histórico deste cliente (use como contexto, não mencione diretamente ao cliente):\n${memoria}` : SYSTEM, messages }),
-    });
-    data = await res.json();
+    const out = await responderSuporte({ mensagens, memoria, canal: canal || 'site', apiKey });
+    return new Response(JSON.stringify(out), { status: 200, headers: CORS });
   } catch (_) {
-    return new Response(JSON.stringify({ resposta: 'Desculpe, não consegui processar sua mensagem no momento. Nossa equipe irá atendê-lo em breve.', escalar: true }), {
-      status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' },
-    });
+    return new Response(JSON.stringify({ resposta: 'Desculpe, não consegui processar sua mensagem no momento. Nossa equipe irá atendê-lo em breve.', escalar: true }), { status: 200, headers: CORS });
   }
-
-  let resposta = data?.content?.[0]?.text
-    || 'Desculpe, não consegui processar sua mensagem no momento. Nossa equipe irá atendê-lo em breve. [[ESCALAR]]';
-
-  // Detecta marcador de escalonamento
-  const escalar = resposta.includes('[[ESCALAR]]');
-  if (escalar) resposta = resposta.replace('[[ESCALAR]]', '').trim();
-
-  return new Response(JSON.stringify({ resposta, escalar }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' },
-  });
 }
