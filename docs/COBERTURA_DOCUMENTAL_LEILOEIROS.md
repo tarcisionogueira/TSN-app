@@ -97,13 +97,21 @@ Mesmo padrão do ZUK/GL — cadastrar no **GitHub** (Actions) **e Vercel**:
 Pelo recon de hoje, **MEGA, BIASI, FRAZAO e SOLD NÃO precisam de credencial** (são públicos).
 
 ## Progresso da execução (11/07, noite) — backfills rodados
-- **MEGA**: matrícula 158 → **250+** (backfill público, `captura-docs-publico.yml`, rodando).
-- **BIASI**: com anexos 47 → **183+** (edital), matrícula subindo (rodando).
-- **ZUK**: matrícula 6 → **156** (rodado `matricula-zuk.yml`, molde login já existente). Teto
-  prático = lotes com `url_lote` (o scraper só gravou ~120/600 — corrigir para subir mais).
+- **MEGA**: ✅ **635/635 com anexos, matrícula 633 (99,7%)** — era 25%. `captura-docs-publico.yml`.
+- **BIASI**: ✅ **260/260 com anexos, edital 100%** (matrícula 44 — o site só publica em parte). Era 18%.
+- **ZUK**: matrícula 6 → **156** (`matricula-zuk.yml`, molde login já existente). Teto prático =
+  lotes com `url_lote` (o scraper só gravou ~120/600 — corrigir no scraper para subir mais).
 - **GRUPOLANCE**: 87% matrícula (resolvido de manhã).
 - Novos artefatos: `scripts/captura-docs-publico.mjs` + `captura-docs-publico.yml` (backfill
-  público genérico, `PUB_FONTE`), `recon-docs-leiloeiro.yml` (recon), `debug-frazao-docs.*`.
+  público genérico, `PUB_FONTE`, concurrency por fonte), `recon-docs-leiloeiro.yml` (recon
+  genérico), `debug-frazao-docs.*` (sonda estrutura FRAZAO).
+
+### Restam (nenhum precisa de credencial, exceto LJUD comercial)
+- **FRAZAO (144)**: build com interação/XHR (docs dinâmicos Bricks).
+- **SOLD/SUPERBID/SBID (~1.734)**: extrator da plataforma Superbid (hoje pega anexo genérico).
+- **SODRE (35)**: `url_lote` 404 → corrigir montagem da URL no scraper.
+- **ZUK `url_lote`**: scraper só gravou ~120/600 → corrigir para destravar mais matrículas.
+- **LJUD (1.046)**: agregador — integração oficial (comercial, dono).
 
 ## Próximos passos sugeridos
 1. **MEGA + BIASI**: backfill público (sem credencial) — ganho imediato de ~700 lotes.
