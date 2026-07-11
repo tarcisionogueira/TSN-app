@@ -86,9 +86,17 @@ export function classificarDoc(rotulo, url) {
  */
 export async function coletarDocsGrupoLance(loteUrl, jar) {
   if (!loteUrl) return [];
-  const g = await fetch(loteUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', ...(jar ? { Cookie: jarHeader(jar) } : {}) }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
-  if (jar) absorve(jar, g);
-  const html = await g.text();
+  // IMPORTANTE: lê a página ANÔNIMA. Logado, o GL não renderiza os .doc-link (o
+  // botão vira outra coisa); anônimo, o data-url base64 do endpoint está sempre lá.
+  // O download depois é que usa a sessão (baixarDoc com o jar). Retry p/ robustez.
+  let html = '';
+  for (let i = 0; i < 2 && !/doc-link|cdn\.grupolance/i.test(html); i++) {
+    try {
+      const g = await fetch(loteUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+      html = await g.text();
+    } catch { html = html || ''; }
+    if (!/doc-link|cdn\.grupolance/i.test(html)) await new Promise(s => setTimeout(s, 600));
+  }
   const docs = [];
   const vistos = new Set();
 
