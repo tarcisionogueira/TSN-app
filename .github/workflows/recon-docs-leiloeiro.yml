@@ -1,0 +1,35 @@
+name: Recon documentos por leiloeiro (público vs login)
+
+# Sonda genérica: abre páginas de lote de uma fonte e classifica se os documentos
+# (matrícula/edital/laudo/regras) são públicos ou login-gated. Só diagnostica. Manual.
+on:
+  workflow_dispatch:
+    inputs:
+      fonte:
+        description: 'Fonte (ex.: MEGA, BIASI, FRAZAO, SODRE, SOLD, SUPERBID)'
+        required: true
+      n:
+        description: 'Quantos lotes sondar'
+        required: false
+        default: '6'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon documentos
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RECON_FONTE: ${{ github.event.inputs.fonte }}
+          RECON_N: ${{ github.event.inputs.n || '6' }}
+        run: node scripts/recon-docs-leiloeiro.mjs
