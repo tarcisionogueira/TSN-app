@@ -96,10 +96,19 @@ export default async function handler(req, res) {
         ? partes.map(p => ({ nome: sanitizeText(p?.nome || '', 160), qualificacao: sanitizeText(p?.qualificacao || '', 200) })).filter(p => p.nome).slice(0, 10)
         : null;
 
+      // arquivo_url é renderizado como href/src na página de assinatura
+      // (ContratoLink.jsx). Só aceita http(s) — bloqueia javascript:/data: (XSS
+      // armazenado por link, mesmo que só injetável por staff autenticado).
+      const urlArquivoSegura = (() => {
+        const s = String(arquivoUrl || '').trim();
+        if (!s) return null;
+        try { return /^https?:$/.test(new URL(s).protocol) ? s : null; } catch { return null; }
+      })();
+
       const base = {
         titulo: tituloFinal,
         conteudo: conteudoDireto ? sanitizeText(conteudoDireto, 20000) : null,
-        arquivo_url: arquivoUrl || null,
+        arquivo_url: urlArquivoSegura,
         arquivo_nome: arquivoNome ? sanitizeText(arquivoNome, 200) : null,
         tipo_contrato: tipo || 'servico',
         status: 'aguardando_assinatura',
