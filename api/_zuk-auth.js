@@ -64,21 +64,16 @@ export async function capturarDocsZukLogado(loteUrl, deadline) {
     absorveCookies(jar, g2);
     const html2 = await g2.text();
 
-    // A URL do PDF precisa vir ASSINADA (Expires/Signature do CloudFront) — a versão
-    // sem assinatura dá 403/vazio. O Zuk renderiza AMBAS no HTML logado; pegamos a
-    // assinada por regex (decodificando &amp;) e, só como último recurso, a simples.
-    const assinada = (html, kw) => {
-      const re = new RegExp(`https?:\\/\\/documentac[^"'\\s\\\\]*${kw}[^"'\\s\\\\]*`, 'ig');
-      const cands = [...new Set((html.match(re) || []).map(u => u.replace(/&amp;/g, '&')))];
-      return cands.find(u => /Signature=/i.test(u)) || cands.find(u => /\.pdf/i.test(u)) || null;
-    };
-    const matricula = assinada(html2, 'matricul');
-    const laudo = assinada(html2, 'laudo') || assinada(html2, 'avalia');
-    // DIAGNÓSTICO: pega os <a> dos CARDS de documento (property-documents-item) já
-    // logado — é onde está o href real de download da matrícula.
+    // Extrai o href REAL dos cards de documento (property-documents-item), já logado.
+    // O CloudFront exige a URL ASSINADA (Expires/Signature) — decodificamos &amp; e
+    // tiramos os espaços que o Zuk deixa dentro do atributo href.
+    const cardHrefs = [...html2.matchAll(/<a[^>]*property-documents-item[^>]*href="([^"]*)"/gi)]
+      .map(m => m[1].replace(/&amp;/g, '&').trim())
+      .filter(u => /^https?:\/\//.test(u));
+    const matricula = cardHrefs.find(u => /matr[ií]cul/i.test(u) && /\.pdf/i.test(u)) || null;
+    const laudo = cardHrefs.find(u => /laudo|avalia/i.test(u)) || null;
     const logado = /\/sair|logout|minha-conta\/area-logada|meus-lances|Ol[áa],/i.test(html2);
-    const cards = (html2.match(/<a[^>]*property-documents-item[^>]*>/gi) || []).map(s => s.replace(/\s+/g, ' ')).slice(0, 4);
-    console.log(`[zuk-auth] logado=${logado} matricula=${matricula ? (/Signature=/i.test(matricula) ? 'ASSINADA' : 'sem-assinatura') : 'AUSENTE'} | cards(${cards.length}): ${cards.join(' || ').slice(0, 700)}`);
+    console.log(`[zuk-auth] logado=${logado} cards=${cardHrefs.length} matricula=${matricula ? (/Signature=/i.test(matricula) ? 'ASSINADA' : 'sem-assinatura') : 'AUSENTE'} | href: ${(matricula || '(nenhum)').slice(0, 220)}`);
     return { matricula, laudo, anexos: (matricula ? [{ url: matricula, nome: 'Matrícula do Imóvel', tipo: 'matricula' }] : []) };
   } catch (e) {
     console.warn(`[zuk-auth] erro ${e?.message}`);
