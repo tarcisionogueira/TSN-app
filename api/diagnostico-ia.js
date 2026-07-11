@@ -34,7 +34,7 @@ function parseJSON(t) {
 
 // Reúne o "fluxo" (números reais) para o diagnóstico.
 async function coletarSnapshot() {
-  const [snap, sust] = await Promise.all([rpc('diagnostico_snapshot'), rpc('sustentabilidade_ia')]);
+  const [snap, sust, demanda] = await Promise.all([rpc('diagnostico_snapshot'), rpc('sustentabilidade_ia'), rpc('demanda_busca_agregada')]);
   // Custos do mês por provedor + custo/análise aprendido.
   const inicioMes = new Date().toISOString().slice(0, 8) + '01';
   let custos = {};
@@ -65,7 +65,7 @@ async function coletarSnapshot() {
     }
   } catch { /* segue sem a saúde da coleta */ }
 
-  return { snapshot: snap || {}, sustentabilidade: sust || {}, custos_mes_usd: custos, custo_analise_usd: Math.round(custoAnaliseUsd * 1e4) / 1e4, coleta_fontes: coleta };
+  return { snapshot: snap || {}, sustentabilidade: sust || {}, custos_mes_usd: custos, custo_analise_usd: Math.round(custoAnaliseUsd * 1e4) / 1e4, coleta_fontes: coleta, demanda_busca: demanda || {} };
 }
 
 async function gerarDiagnostico(dados) {
@@ -82,6 +82,10 @@ REGRAS:
   * Se uma fonte esperada (CEF, MEGA, SUPERBID, SOLD, ZUK, SODRE, FRAZAO, LJUD) não aparecer em "coleta_fontes", trate como coleta parada (site pode ter mudado / fingerprint bloqueado) e recomende reconectar.
   * Comente a ECONOMIA da coleta: LJUD e CEF migraram para NAVEGADOR real (page.evaluate / puppeteer) — coleta grátis; Bright Data ficou só como BACKUP (custa cota). Se a estratégia ativa de uma fonte for "brightdata"/pago quando havia caminho grátis, aponte como oportunidade de economia. Se o grátis estiver saudável, confirme que não há gasto de cota desnecessário.
   * Se toda a coleta estiver saudável e grátis, diga isso em 1 frase — não invente problema onde não há.
+- APRENDA COM A DEMANDA (campo "demanda_busca": o que os clientes BUSCAM/VISUALIZAM, agregado e anônimo, últimos 30 dias) e transforme em DIRECIONAMENTOS de crescimento:
+  * "demanda_sem_oferta" = cidades onde a busca voltou 0 resultados = PROCURA NÃO ATENDIDA. É o sinal mais forte: recomende CAPTAR leiloeiro/imóvel nessas praças e/ou rodar CAMPANHA de aquisição onde já há procura. Cite as cidades concretas (com o nº de buscas sem resultado).
+  * Cruze "top_cidades" (e "media_resultados" baixa = pouca oferta), "top_tipos", "top_pagamento" e "imoveis_mais_vistos": onde há muita procura e pouca oferta é oportunidade; a forma de pagamento predominante (ex.: financiado/hipotecado) orienta o foco comercial e de conteúdo.
+  * Gere ao menos 1 ponto com impacto "crescimento" a partir dessa demanda, quando houver sinal claro.
 
 INDICADORES (JSON):
 ${JSON.stringify(dados, null, 2)}

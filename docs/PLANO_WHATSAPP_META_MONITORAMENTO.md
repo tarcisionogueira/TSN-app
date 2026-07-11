@@ -79,6 +79,10 @@ OpenAI TTS padrão, áudio seletivo ≤30s, cache + fallback texto, teto por cli
 - **Fase B — Tela 360º do cliente: ✅ ENTREGUE** (em produção). Rota `/cliente-360` (admin/analista), botão "👤 360º Cliente" no header. Endpoint `api/admin-usuario-360.js` + funções SQL `admin_busca_usuarios`/`admin_usuario_360` (SECURITY DEFINER, service_role — não afrouxou RLS). Mostra por usuário: perfil + último acesso, intenção (triagem), os 3 relatórios (quantos gerou + últimos imóveis), buscas recentes e chamados, com contato por e-mail e WhatsApp (`wa.me` manual por enquanto).
 - **Fase B.1 — Log de imóvel visualizado: ✅ ENTREGUE** (em produção). Tabela `imovel_visto` (upsert com contador de visitas), função `registrar_imovel_visto` (definer, grava p/ `auth.uid()`), registro ao abrir a ficha em `ImovelDetalhe.jsx` (só clientes, não staff). Seção "Imóveis que visualizou" na tela 360º (com nº de vezes). Captura o "de olho, mas ainda não analisou".
 
+## Aprendizado das IAs
+- **IA de indicadores (dashboard) aprende com a demanda: ✅ ENTREGUE.** Função `demanda_busca_agregada()` (agregado/anônimo, 30 dias: cidades/tipos/pagamento mais buscados, imóveis mais vistos e **demanda sem oferta** = buscas com 0 resultado) entra no snapshot do `diagnostico-ia.js`; o prompt manda a IA transformar isso em **direcionamentos** (captar leiloeiro/rodar campanha onde há procura sem oferta). Roda no próximo ciclo do diagnóstico.
+- **Agente de atendimento aprende (Fase 2): ⏳ ENGATILHADO** — avançar só com o dono no PC (junto do WhatsApp). Trilho de privacidade definido: o bot só recebe (a) o **360º do PRÓPRIO** cliente + (b) conhecimento **agregado/da plataforma** (catálogo, cursos, leiloeiros, FAQ). **Nunca** dado individual de terceiros — escopado no nível dos dados, não só no prompt. Fase 2 posterior: base de conhecimento anonimizada dos chamados resolvidos (`*_aprendizado`).
+
 ## ⏳ A FAZER QUANDO O DONO ESTIVER NO COMPUTADOR (pedido dele)
 **Adiantar o ESQUELETO WhatsApp/Meta** (código pronto, ativa quando as credenciais chegarem):
 - Migração: `canal` + `wa_id` + `janela_expira_em` em `chamados`.
