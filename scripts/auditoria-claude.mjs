@@ -1,8 +1,9 @@
-// Auditoria técnica do sistema pelo Claude — funcionalidades, fluxos de API e
-// segurança dos dados. Roda numa GitHub Action (semanal + manual). Lê o
-// código-fonte da camada de API (+ utilitários críticos), audita em lotes para
-// caber no contexto, consolida os achados e grava o relatório em
-// `auditoria_sistema` (o dashboard mostra em modo leitura).
+// Auditoria técnica do sistema pelo Claude — segurança dos dados, fluxos de API e
+// funcionalidades (review ESTÁTICO do código) MAIS uma camada de FUNCIONAMENTO em
+// runtime (auditarFuncionamento): coleta por leiloeiro, filas e health-check em
+// produção. Roda numa GitHub Action (diária + manual). Lê o código-fonte da camada
+// de API (+ scrapers/utilitários críticos), audita em lotes, junta os achados de
+// runtime e grava o relatório em `auditoria_sistema` (o dashboard mostra em leitura).
 //
 // NÃO altera código. Correções são propostas nos achados (campo `correcao`) e
 // viram PR revisável quando você aprovar — nada entra em produção sozinho.
@@ -130,6 +131,73 @@ ${MITIGACOES}` : ''}
 ${corpo}`;
 }
 
+// CAMADA DE FUNCIONAMENTO (runtime, determinística): lê o estado de PRODUÇÃO via a
+// função SQL auditoria_funcionamento() e transforma anomalias em achados — falha
+// de conexão com leiloeiro (fonte sem imóveis/estagnada), filas de documentos com
+// erro, health-check parado. A auditoria do Claude é estática (só código); esta
+// camada é o que faltava para o relatório ser "de segurança E funcionamento".
+async function auditarFuncionamento() {
+  let snap = null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/auditoria_funcionamento`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (r.ok) snap = await r.json();
+    else console.log(`  (funcionamento: RPC ${r.status} — camada de runtime pulada)`);
+  } catch (e) { console.log(`  (funcionamento: falha ao ler runtime — ${e.message})`); }
+  if (!snap || typeof snap !== 'object') return [];
+
+  const out = [];
+  const add = (severidade, area, descricao, correcao) => out.push({
+    categoria: 'funcionamento', severidade, area, arquivo: '(runtime/produção)', linha: 0,
+    descricao, caminho_exploracao: '', controle_compensatorio: '', correcao, tipo: 'manual',
+  });
+
+  // Coleta por leiloeiro: fonte sem imóveis ou estagnada = provável queda de conexão.
+  for (const f of Array.isArray(snap.fontes) ? snap.fontes : []) {
+    const dias = Number(f.dias_sem_atualizar);
+    if (Number(f.ativos) === 0) {
+      add('alta', `Coleta ${f.fonte} — sem imóveis ativos`,
+        `A fonte ${f.fonte} está com 0 imóveis ativos — provável falha de coleta/conexão com o leiloeiro.`,
+        `Rodar/inspecionar o scraper da fonte ${f.fonte} (GitHub Action) e conferir se o site do leiloeiro mudou ou está bloqueando.`);
+    } else if (Number.isFinite(dias) && dias > 7) {
+      add('alta', `Coleta ${f.fonte} — estagnada`,
+        `A fonte ${f.fonte} não recebe atualização há ${dias} dias — scraper parado ou conexão com o leiloeiro caiu.`,
+        `Verificar a última execução do scraper de ${f.fonte} e a conectividade com o site do leiloeiro.`);
+    } else if (Number.isFinite(dias) && dias > 3) {
+      add('media', `Coleta ${f.fonte} — atraso`,
+        `A fonte ${f.fonte} está há ${dias} dias sem atualizar (esperado ~diário) — acompanhar.`,
+        `Conferir se o scraper de ${f.fonte} rodou nas últimas execuções.`);
+    }
+  }
+
+  // Filas de captura de documentos.
+  const de = Number(snap.docs_fila_erro) || 0;
+  if (de > 10) add('media', 'Fila de documentos com erros', `${de} lotes na fila de documentos com status=erro — captura falhando.`, 'Revisar documentos_fila (status=erro) e o worker captura-documentos.');
+  else if (de > 0) add('baixa', 'Fila de documentos com erros', `${de} lote(s) na fila de documentos com status=erro.`, 'Revisar documentos_fila (status=erro).');
+  const dp = Number(snap.docs_fila_pend_antigos) || 0;
+  if (dp > 20) add('media', 'Fila de documentos represada', `${dp} itens pendentes há mais de 2 dias na fila de documentos.`, 'Verificar se o cron/worker de captura está processando a fila.');
+  const cfe = Number(snap.cef_fila_erro) || 0;
+  if (cfe > 10) add('media', 'Fila de matrícula CEF com erros', `${cfe} itens com erro na fila de matrícula da Caixa.`, 'Revisar cef_matricula_fila (status=erro).');
+  const uf = Number(snap.ufs_falhando) || 0;
+  if (uf > 5) add('media', 'Coleta CEF por UF falhando', `${uf} UFs da Caixa em scraper_retry (falha de coleta).`, 'Verificar scraper_retry e a coleta da Caixa por UF.');
+
+  // Health-check (cron diário 06:00 UTC).
+  const h = snap.health;
+  if (!h || h.ultimo == null) {
+    add('alta', 'Health-check ausente', 'Não há registro de health-check — o monitor de saúde pode não estar rodando.', 'Conferir o cron /api/health-check no Vercel.');
+  } else {
+    const horas = Number(h.horas_atras);
+    if (Number.isFinite(horas) && horas > 26) add('alta', 'Health-check parado', `O health-check não roda há ${horas}h (esperado a cada 24h) — automações podem estar paradas.`, 'Conferir o cron /api/health-check e o CRON_SECRET.');
+    if (h.status && h.status !== 'ok') add('alta', 'Health-check com falha', `O último health-check retornou status "${h.status}".`, 'Abrir health_check_logs.itens para ver qual verificação falhou.');
+  }
+
+  console.log(out.length ? `  Funcionamento: ${out.length} achado(s) de runtime.` : '  Funcionamento: coleta/filas/health-check saudáveis.');
+  return out;
+}
+
 async function main() {
   const arquivos = coletarArquivos();
   const lotes = emLotes(arquivos);
@@ -143,6 +211,10 @@ async function main() {
     if (j?.achados?.length) achados.push(...j.achados);
     else console.log(`    (lote ${i + 1}: ${j ? '0 achados' : 'resposta não parseável'})`);
   }
+
+  // Camada de FUNCIONAMENTO (runtime) — mesma esteira de achados do relatório.
+  try { achados.push(...await auditarFuncionamento()); }
+  catch (e) { console.log('  (funcionamento pulado:', e.message, ')'); }
 
   // Guardrail DETERMINÍSTICO contra alarme falso: um achado crítico/alto que o
   // PRÓPRIO modelo marcou com um controle compensatório E sem caminho de exploração
@@ -183,7 +255,7 @@ async function main() {
   } catch { resumo = `${achados.length} achados (${nCrit} críticos, ${nAlto} altos).`; }
 
   const row = {
-    gerado_em: new Date().toISOString(), modelo: MODEL, escopo: 'api+seguranca',
+    gerado_em: new Date().toISOString(), modelo: MODEL, escopo: 'api+seguranca+funcionamento',
     saude, resumo, achados, n_criticos: nCrit, n_altos: nAlto, n_total: achados.length,
     commit_sha: COMMIT_SHA,
   };
