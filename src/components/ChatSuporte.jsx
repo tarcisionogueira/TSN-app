@@ -9,6 +9,12 @@ const STAFF_ROLES = ['admin', 'analista', 'consultor', 'advogado'];
 const AVISO_MS = 2 * 60 * 1000;
 const FECHAR_MS = 30 * 60 * 1000;
 
+// WhatsApp da empresa — PREENCHIDO SÓ quando a integração gerar o número (env
+// VITE_WHATSAPP_NUMERO, formato internacional, só dígitos, ex.: 5571999999999).
+// Enquanto vazio, a opção "Falar no WhatsApp" fica OCULTA (nada muda no chat atual);
+// setar a env e redeployar faz o botão aparecer sozinho, sem mexer no código.
+const WHATSAPP_NUMERO = String(import.meta.env.VITE_WHATSAPP_NUMERO || '').replace(/\D/g, '');
+
 // Mapeia o role/plano do cliente para o segmento carimbado no chamado.
 function segmentoDoRole(r) {
   if (r === 'explorador') return 'explorador';
@@ -433,6 +439,22 @@ export default function ChatSuporte() {
               </div>
               <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />
               <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, textAlign: 'center', marginBottom: 0 }}>Ctrl+V para colar prints de tela</p>
+              {/* Alternativa: falar no WhatsApp (aparece só quando o número existir) */}
+              {WHATSAPP_NUMERO && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 10px' }}>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>ou</span>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                  </div>
+                  <a href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent('Olá! Vim pelo site da BidPro Brasil e gostaria de falar por aqui.')}`}
+                    target="_blank" rel="noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '10px', background: '#25D366', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+                    🟢 Falar no WhatsApp
+                  </a>
+                  <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, textAlign: 'center', marginBottom: 0 }}>Continue no seu WhatsApp, sem precisar manter o site aberto.</p>
+                </>
+              )}
             </div>
           ) : (
             /* Conversa ativa */
