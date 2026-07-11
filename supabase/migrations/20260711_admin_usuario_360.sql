@@ -64,6 +64,11 @@ as $$
         'latest', coalesce((select jsonb_agg(x) from (select titulo, cidade, estado, status, arrematado, created_at from public.analises_laudo where user_id = uid order by created_at desc limit 8) x), '[]'::jsonb)
       )
     ),
+    -- Imóveis que o usuário VISUALIZOU (ver 20260711_imovel_visto.sql).
+    'vistos', coalesce((select jsonb_agg(x) from (
+      select imovel_id, titulo, cidade, estado, tipo, valor, vezes, visto_em
+      from public.imovel_visto where user_id = uid order by visto_em desc limit 20
+    ) x), '[]'::jsonb),
     'buscas', coalesce((select jsonb_agg(x) from (
       select cidade, estado, tipo_imovel, valor_min, valor_max, desconto_min, pagamento_tipos, resultados_count, criado_em
       from public.busca_historico where user_id = uid order by criado_em desc limit 20

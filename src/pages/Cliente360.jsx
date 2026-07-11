@@ -170,6 +170,25 @@ export default function Cliente360() {
             <RelatorioCard icone={ClipboardCheck} nome="Conclusão / Laudo" dados={dados.relatorios?.laudo} />
           </div>
 
+          {/* Imóveis que visualizou (abriu a ficha, ainda sem analisar) */}
+          <div style={card}>
+            <div style={{ ...label, marginBottom: 8 }}>Imóveis que visualizou ({(dados.vistos || []).length})</div>
+            {(dados.vistos || []).length === 0 ? <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhuma visualização registrada ainda.</div> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {dados.vistos.map((v, i) => (
+                  <div key={v.imovel_id || i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 5 : 0 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {v.titulo || `${v.tipo || 'Imóvel'} · ${[v.cidade, v.estado].filter(Boolean).join('/') || '—'}`}
+                      {v.valor ? <span style={{ color: '#059669' }}> · {brl(v.valor)}</span> : ''}
+                      {v.vezes > 1 ? <span style={{ color: '#0D63DB', fontWeight: 700 }}> · {v.vezes}×</span> : ''}
+                    </span>
+                    <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(v.visto_em)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Buscas recentes (intenções) */}
           <div style={card}>
             <div style={{ ...label, marginBottom: 8 }}>Buscas recentes ({(dados.buscas || []).length})</div>

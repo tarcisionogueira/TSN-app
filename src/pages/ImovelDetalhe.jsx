@@ -687,6 +687,24 @@ export default function ImovelDetalhe() {
   // Abre sempre no TOPO (foto primeiro) — não herda a rolagem da lista/busca.
   useEffect(() => { window.scrollTo(0, 0); }, [id]);
 
+  // Fase B.1 — registra a VISUALIZAÇÃO do imóvel (upsert com contador) para o
+  // monitoramento 360º. Só CLIENTES (não staff), uma vez por imóvel aberto.
+  const vistoRef = useRef(null);
+  useEffect(() => {
+    const STAFF = ['admin', 'analista', 'consultor', 'advogado', 'leiloeiro'];
+    if (!user || STAFF.includes(role) || !id || !imovel || imovel.id !== id) return;
+    if (vistoRef.current === id) return;
+    vistoRef.current = id;
+    supabase.rpc('registrar_imovel_visto', {
+      p_imovel_id: String(id),
+      p_titulo: imovel.titulo || imovel.endereco || null,
+      p_cidade: imovel.cidade || null,
+      p_estado: imovel.estado || null,
+      p_tipo: imovel.tipo || null,
+      p_valor: imovel.valorMinimo ?? imovel.valorAvaliacao ?? null,
+    }).catch(() => {});
+  }, [user, role, id, imovel]);
+
   useEffect(() => {
     // A busca por raio passa o imóvel no state SEM edital/matrícula/descrição.
     // Se esses documentos faltam, busca o registro completo no banco (o state

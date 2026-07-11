@@ -77,7 +77,7 @@ OpenAI TTS padrão, áudio seletivo ≤30s, cache + fallback texto, teto por cli
 
 ## Progresso
 - **Fase B — Tela 360º do cliente: ✅ ENTREGUE** (em produção). Rota `/cliente-360` (admin/analista), botão "👤 360º Cliente" no header. Endpoint `api/admin-usuario-360.js` + funções SQL `admin_busca_usuarios`/`admin_usuario_360` (SECURITY DEFINER, service_role — não afrouxou RLS). Mostra por usuário: perfil + último acesso, intenção (triagem), os 3 relatórios (quantos gerou + últimos imóveis), buscas recentes e chamados, com contato por e-mail e WhatsApp (`wa.me` manual por enquanto).
-  - Pendente opcional: log de "imóvel visto" (hoje só filtros de busca).
+- **Fase B.1 — Log de imóvel visualizado: ✅ ENTREGUE** (em produção). Tabela `imovel_visto` (upsert com contador de visitas), função `registrar_imovel_visto` (definer, grava p/ `auth.uid()`), registro ao abrir a ficha em `ImovelDetalhe.jsx` (só clientes, não staff). Seção "Imóveis que visualizou" na tela 360º (com nº de vezes). Captura o "de olho, mas ainda não analisou".
 
 ## ⏳ A FAZER QUANDO O DONO ESTIVER NO COMPUTADOR (pedido dele)
 **Adiantar o ESQUELETO WhatsApp/Meta** (código pronto, ativa quando as credenciais chegarem):
