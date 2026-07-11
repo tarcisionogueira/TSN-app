@@ -15,7 +15,7 @@ const BASE = 'https://www.portalzuk.com.br';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 
 // Cookie jar minimalista (o fetch do Node não persiste cookies entre chamadas).
-const jarHeader = (jar) => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
+export const jarHeader = (jar) => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
 function absorveCookies(jar, resp) {
   let arr = [];
   try { arr = typeof resp.headers.getSetCookie === 'function' ? resp.headers.getSetCookie() : []; } catch { arr = []; }
@@ -115,8 +115,10 @@ export async function matriculaLoteLogado(loteUrl, jar) {
     const g = await fetch(loteUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Cookie: jarHeader(jar) }, redirect: 'follow', signal: AbortSignal.timeout(12000) });
     absorveCookies(jar, g);
     const html = await g.text();
+    // Limpa &amp; e QUALQUER espaço (o Zuk deixa espaços dentro do href, que quebram
+    // a assinatura CloudFront → 403 no download).
     const cardHrefs = [...html.matchAll(/<a[^>]*property-documents-item[^>]*href="([^"]*)"/gi)]
-      .map(m => m[1].replace(/&amp;/g, '&').trim())
+      .map(m => m[1].replace(/&amp;/g, '&').replace(/\s/g, ''))
       .filter(u => /^https?:\/\//.test(u));
     const matricula = cardHrefs.find(u => /matr[ií]cul/i.test(u) && /\.pdf/i.test(u)) || null;
     const laudo = cardHrefs.find(u => /laudo|avalia/i.test(u)) || null;

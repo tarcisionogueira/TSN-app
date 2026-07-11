@@ -11,7 +11,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { Buffer } from 'buffer';
-import { loginZuk, matriculaLoteLogado } from '../api/_zuk-auth.js';
+import { loginZuk, matriculaLoteLogado, jarHeader } from '../api/_zuk-auth.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -60,8 +60,13 @@ async function main() {
       if (await jaTemMatricula(lote.id)) continue;
       const r = await matriculaLoteLogado(lote.link_edital, jar);
       if (!r?.matricula) { semMat++; console.log(`- ${lote.id}: sem matrícula (cards=${r?.cards ?? '?'})`); continue; }
-      const resp = await fetch(r.matricula, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20000) });
-      if (!resp.ok) { erro++; console.log(`- ${lote.id}: download HTTP ${resp.status}`); continue; }
+      // Baixa com sessão + Referer (a URL assinada do Zuk pode exigir os dois).
+      let host = ''; try { host = new URL(r.matricula).host; } catch { /* */ }
+      const resp = await fetch(r.matricula, {
+        headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*', Referer: lote.link_edital, Origin: 'https://www.portalzuk.com.br', Cookie: jarHeader(jar) },
+        redirect: 'follow', signal: AbortSignal.timeout(20000),
+      });
+      if (!resp.ok) { erro++; console.log(`- ${lote.id}: download HTTP ${resp.status} (host=${host}) url=${r.matricula.slice(0, 140)}`); continue; }
       const buf = Buffer.from(await resp.arrayBuffer());
       if (buf.length < 1000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') { erro++; console.log(`- ${lote.id}: não é PDF (${buf.length}b)`); continue; }
       await salvarMatricula(lote.id, buf);
