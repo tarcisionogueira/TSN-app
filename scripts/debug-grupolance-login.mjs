@@ -107,31 +107,45 @@ async function main() {
     console.log(`\n[anônimo] GET ${endpoint} → status=${r.status} ${loc ? '→ ' + loc : ''}`);
   } catch (e) { console.log(`\n[anônimo] ERRO ${e.message}`); }
 
-  // 4) Tentar login e baixar a matrícula autenticado.
-  if (EMAIL && SENHA && tokenGlobal && paginaComToken) {
-    console.log(`\n── Tentando login (form Laravel) via _token de ${paginaComToken} ──`);
-    for (const actionUrl of [`${BASE}/login`, `${BASE}/entrar`, `${BASE}/minha-conta/login`]) {
-      try {
-        const form = new URLSearchParams({ _token: tokenGlobal, email: EMAIL, password: SENHA });
-        const p = await fetch(actionUrl, {
-          method: 'POST',
-          headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded', Origin: BASE, Referer: paginaComToken, Cookie: jarHeader(jar) },
-          body: form.toString(), redirect: 'manual', signal: AbortSignal.timeout(20000),
-        });
-        absorve(jar, p);
-        console.log(`  POST ${actionUrl} → status=${p.status} loc=${p.headers.get('location') || ''}`);
-        if ([301, 302, 303].includes(p.status)) {
-          // valida sessão + baixa matrícula
-          const dl = await fetch(endpoint, { headers: { 'User-Agent': UA, Cookie: jarHeader(jar), Referer: loteUrl || BASE }, redirect: 'follow', signal: AbortSignal.timeout(25000) });
+  // 4) Login Yii (form em /entrar) e baixar os 3 docs gated autenticado.
+  if (EMAIL && SENHA) {
+    console.log('\n── Login Yii em /entrar ──');
+    const jar2 = {};
+    try {
+      // GET /entrar → cookies + _csrf hidden
+      const g = await get(`${BASE}/entrar`, jar2);
+      const csrf = (g.html.match(/name=["']_csrf["'][^>]*value=["']([^"']+)["']/i)
+        || g.html.match(/value=["']([^"']+)["'][^>]*name=["']_csrf["']/i) || [])[1];
+      console.log(`  _csrf hidden: ${csrf ? 'sim' : 'NÃO'}  cookies=[${Object.keys(jar2).join(', ')}]`);
+      const form = new URLSearchParams();
+      if (csrf) form.set('_csrf', csrf);
+      form.set('LoginForm[username]', EMAIL);
+      form.set('LoginForm[password]', SENHA);
+      form.set('LoginForm[rememberMe]', '1');
+      const p = await fetch(`${BASE}/entrar`, {
+        method: 'POST',
+        headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded', Origin: BASE, Referer: `${BASE}/entrar`, Cookie: jarHeader(jar2) },
+        body: form.toString(), redirect: 'manual', signal: AbortSignal.timeout(20000),
+      });
+      absorve(jar2, p);
+      console.log(`  POST /entrar → status=${p.status} loc=${p.headers.get('location') || ''}`);
+      // valida sessão
+      const home = await get(`${BASE}/`, jar2);
+      const logado = /\/sair|logout|minha[- ]conta|Ol[áa],|meus[- ]lances|Sair/i.test(home.html);
+      console.log(`  sessão logada (heurística home): ${logado}`);
+      // baixa os 3 docs gated do lote de teste
+      for (const tipo of ['file_registration', 'file_report', 'file_extra_4']) {
+        const u = `${BASE}/lote/baixar-documento/${TEST_ID}/${tipo}`;
+        try {
+          const dl = await fetch(u, { headers: { 'User-Agent': UA, Cookie: jarHeader(jar2), Referer: loteUrl || BASE }, redirect: 'follow', signal: AbortSignal.timeout(30000) });
           const buf = Buffer.from(await dl.arrayBuffer());
           const ehPdf = buf.slice(0, 5).toString('latin1') === '%PDF-';
-          console.log(`  ⇒ download matrícula: status=${dl.status} ${Math.round(buf.length / 1024)}kb PDF=${ehPdf} ct=${dl.headers.get('content-type')}`);
-          if (ehPdf) { console.log('  ✅ LOGIN OK e matrícula baixada — molde confirmado.'); break; }
-        }
-      } catch (e) { console.log(`  POST ${actionUrl} ERRO ${e.message}`); }
-    }
+          console.log(`  ⇒ ${tipo}: status=${dl.status} ${Math.round(buf.length / 1024)}kb PDF=${ehPdf} ct=${dl.headers.get('content-type')} finalUrl=${dl.url}`);
+        } catch (e) { console.log(`  ⇒ ${tipo}: ERRO ${e.message}`); }
+      }
+    } catch (e) { console.log(`  login ERRO ${e.message}`); }
   } else {
-    console.log('\n(login não tentado — faltam credenciais ou _token)');
+    console.log('\n(login não tentado — faltam credenciais)');
   }
   console.log('\nFim do recon de login.');
 }
