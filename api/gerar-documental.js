@@ -10,6 +10,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
+import { capturarDocsZukLogado } from './_zuk-auth.js';
 import { anthropicFetch } from './_claude.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
@@ -472,6 +473,18 @@ export default async function handler(req, res) {
     add(body?.urlMatricula, 'Matrícula');
     add(caixaMatriculaUrl(cxFonte), 'Matrícula (Caixa)');
     add(row?.link_matricula, 'Matrícula');
+    // ZUK (Portal Zuk): a matrícula é login-gated (o edital é público). Se for lote
+    // do Zuk e ainda não temos a matrícula, loga ON-DEMAND (só nesta análise) e
+    // captura a URL assinada — nada em massa. Credenciais em ZUK_EMAIL/ZUK_SENHA.
+    const ehZuk = /zuk|zukerman/i.test(String(row?.fonte || ''));
+    if (ehZuk && !body?.urlMatricula && !row?.link_matricula) {
+      try {
+        const zk = await capturarDocsZukLogado(row?.link_edital || row?.url_lote, deadline);
+        if (zk?.matricula) add(zk.matricula, 'Matrícula');
+        if (zk?.laudo) add(zk.laudo, 'Laudo de avaliação');
+        for (const a of (zk?.anexos || [])) add(a.url, a.nome || 'Anexo', a.tipo);
+      } catch { /* login on-demand nunca derruba a análise */ }
+    }
     add(row?.link_edital || body?.urlEdital, 'Edital');
     add(body?.urlRegras, 'Regras de venda');
     add(caixaRegrasVendaUrl(cxFonte), 'Regras de venda (Caixa)');
