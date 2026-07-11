@@ -1,0 +1,31 @@
+name: Debug Grupo Lance (Puppeteer) — por que não capturou docs?
+
+# Abre as páginas de detalhe do Grupo Lance no navegador REAL e reporta o que existe
+# no DOM vs. o que o vasculharDocumentos captura. Só diagnostica. Manual.
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'fonte_id csv (ex: gl_20920,gl_20921). Vazio = amostra automática.'
+        required: false
+        default: ''
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Sondar páginas do Grupo Lance (Puppeteer)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GL_IDS: ${{ github.event.inputs.ids }}
+        run: node scripts/debug-grupolance-puppeteer.mjs
