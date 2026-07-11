@@ -33,12 +33,26 @@ export async function loginGrupoLance() {
   const jar = {};
   const T = 15000;
   try {
-    const g = await fetch(`${BASE}/entrar`, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(T) });
-    absorve(jar, g);
-    const html = await g.text();
-    const csrf = (html.match(/name=["']_csrf["'][^>]*value=["']([^"']+)["']/i)
-      || html.match(/value=["']([^"']+)["'][^>]*name=["']_csrf["']/i) || [])[1];
-    if (!csrf) { console.log('[gl-auth] _csrf não encontrado'); return null; }
+    // Aquece a sessão (a 1ª batida fria em /entrar às vezes não traz o form — o Yii
+    // só monta o formulário depois de um cookie de sessão). GET / primeiro.
+    try {
+      const w = await fetch(`${BASE}/`, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(T) });
+      absorve(jar, w);
+    } catch { /* segue mesmo se o warm-up falhar */ }
+
+    // GET /entrar com os cookies do warm-up; tenta até achar o _csrf (2 tentativas).
+    let csrf = null, status = 0, tam = 0;
+    for (let i = 0; i < 2 && !csrf; i++) {
+      const g = await fetch(`${BASE}/entrar`, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Cookie: jarHeader(jar) }, redirect: 'follow', signal: AbortSignal.timeout(T) });
+      absorve(jar, g);
+      const html = await g.text();
+      status = g.status; tam = html.length;
+      csrf = (html.match(/name=["']_csrf["'][^>]*value=["']([^"']+)["']/i)
+        || html.match(/value=["']([^"']+)["'][^>]*name=["']_csrf["']/i)
+        || html.match(/<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']/i) || [])[1];
+      if (!csrf) await new Promise(s => setTimeout(s, 700));
+    }
+    if (!csrf) { console.log(`[gl-auth] _csrf não encontrado (status=${status} htmlLen=${tam} cookies=[${Object.keys(jar).join(',')}])`); return null; }
     const form = new URLSearchParams();
     form.set('_csrf', csrf);
     form.set('LoginForm[username]', email);
