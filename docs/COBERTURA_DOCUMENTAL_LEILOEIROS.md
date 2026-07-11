@@ -113,6 +113,19 @@ Pelo recon de hoje, **MEGA, BIASI, FRAZAO e SOLD NÃO precisam de credencial** (
 - **ZUK `url_lote`**: scraper só gravou ~120/600 → corrigir para destravar mais matrículas.
 - **LJUD (1.046)**: agregador — integração oficial (comercial, dono).
 
+## Registro de credenciais (convenção) — etapa de fechamento de hoje
+Cadastrar **os mesmos nomes no GitHub (Actions) e no Vercel** (Production+Preview+Development).
+Prefixo por leiloeiro + `_EMAIL` / `_SENHA`:
+`ZUK_*` (existe) · `GL_*` (Grupo Lance, mesmo login do ZUK) · `MEGA_*` · `BIASI_*` ·
+`FRAZAO_*` · `SODRE_*` · `SUPERBID_*` (cobre SOLD/SBID9/SBID21 — mesma plataforma) ·
+opcionais `LEILOTECH_*`/`PESTANA_*`/`VIP_*`.
+- **Fluxo combinado (dono):** o dono cadastra todos os e-mails/senhas de uma vez;
+  ao sinalizar, o Claude (a) valida cada secret, (b) liga o molde de login de cada
+  leiloeiro (batch no GitHub + fallback on-demand na Vercel), (c) roda as capturas.
+- Pré-cadastrar deixa **plug-and-play**: o molde acha a credencial e funciona sem
+  depender do dono naquele momento (é o fallback on-demand desejado).
+- **Pendente:** aguardando o dono terminar o cadastro para executar tudo de uma vez.
+
 ## Próximos passos sugeridos
 1. **MEGA + BIASI**: backfill público (sem credencial) — ganho imediato de ~700 lotes.
 2. **FRAZAO**: patch no `_doc-scan` (docs sem extensão) → backfill.
