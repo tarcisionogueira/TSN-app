@@ -2309,6 +2309,12 @@ export default function Analise() {
           const vArr = Number(d.valorArrematacao) || 0;
           if (!valorMedia && !sugerido && !vAval && !vArr) return null;
           const descAval = vAval > 0 && vArr > 0 ? (1 - vArr / vAval) * 100 : 0;
+          // Quantas amostras de VENDA compõem o preço médio (transparência do tíquete)
+          // e quanto a venda estimada fica abaixo dessa média (cálculo explícito).
+          const nAmostras = ((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0))
+            || Number(mercado?.totalAmostrasVenda) || (mercado?.vendas?.length || 0)
+            || ((mercado?.nivel1?.totalAmostras || 0) + (mercado?.nivel2?.totalAmostras || 0));
+          const descSugerido = valorMedia > 0 && sugerido > 0 ? Math.round((1 - sugerido / valorMedia) * 100) : 0;
           const card = { background:'rgba(255,255,255,0.12)', borderRadius:12, padding:'12px 14px' };
           const rot = { fontSize:10, opacity:0.85, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 };
           const num = { fontSize:22, fontWeight:900 };
@@ -2335,7 +2341,7 @@ export default function Analise() {
               </div>
               {valorMedia>0 && (
                 <div style={{ fontSize:10.5, opacity:0.8, marginTop:10, lineHeight:1.5 }}>
-                  Base de mercado: {pm2 && area ? `R$ ${fmt(pm2)}/m² × ${fmt(area)} m² = R$ ${fmt(valorMedia)}` : `R$ ${fmt(valorMedia)}`} (média dos anúncios). A venda estimada aplica uma margem conservadora para revenda em prazo saudável.
+                  Base de mercado: {pm2 && area ? `R$ ${fmt(pm2)}/m² × ${fmt(area)} m² = R$ ${fmt(valorMedia)}` : `R$ ${fmt(valorMedia)}`}{nAmostras > 0 ? ` — média de ${nAmostras} anúncio${nAmostras > 1 ? 's' : ''} comparáve${nAmostras > 1 ? 'is' : 'l'} (mesmo condomínio/endereço + raio de ~1 km)` : ' (média dos anúncios)'}.{descSugerido > 0 ? ` A venda estimada (R$ ${fmt(sugerido)}) fica ${descSugerido}% abaixo dessa média — margem conservadora para revenda em prazo saudável.` : ' A venda estimada aplica margem conservadora para revenda em prazo saudável.'}
                 </div>
               )}
             </div>

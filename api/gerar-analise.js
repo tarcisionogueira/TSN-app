@@ -105,7 +105,7 @@ Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências (~1km). Meta
 FONTES: ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
 
 DATA DO ANÚNCIO: para CADA amostra, capture a data no campo "data" (formato "AAAA-MM"; senão "recente").
-O preço varia no tempo — priorize as amostras mais recentes na média.
+RECÊNCIA (IMPORTANTE): priorize FORTEMENTE anúncios do ANO CORRENTE e dos últimos ~12 meses. EVITE anúncios com mais de ~18 meses, a menos que não haja recentes suficientes — o preço muda rápido. Na média, dê MENOS peso às amostras antigas. Se a maioria das amostras for antiga (ex.: de anos anteriores), diga isso EXPLICITAMENTE no "comentario" e trate a estimativa como menos precisa (alargue precoMinM2/precoMaxM2).
 
 ═══ REFERÊNCIA INDEPENDENTE — ÍNDICE FipeZAP ═══
 Busque o Índice FipeZAP mais recente para ${cidade}/${estado}: preço médio de VENDA por m²
