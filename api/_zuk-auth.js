@@ -74,12 +74,11 @@ export async function capturarDocsZukLogado(loteUrl, deadline) {
     };
     const matricula = assinada(html2, 'matricul');
     const laudo = assinada(html2, 'laudo') || assinada(html2, 'avalia');
-    // DIAGNÓSTICO: confirma se a sessão está logada e mostra o HTML do link da
-    // matrícula (para descobrir como o download é montado quando não vem assinado).
+    // DIAGNÓSTICO: pega os <a> dos CARDS de documento (property-documents-item) já
+    // logado — é onde está o href real de download da matrícula.
     const logado = /\/sair|logout|minha-conta\/area-logada|meus-lances|Ol[áa],/i.test(html2);
-    const mi = html2.search(/matr[ií]cula do im[óo]vel/i);
-    const ancora = mi >= 0 ? html2.slice(Math.max(0, mi - 500), mi + 40).replace(/\s+/g, ' ').slice(-460) : '(label não encontrado)';
-    console.log(`[zuk-auth] logado=${logado} matricula=${matricula ? (/Signature=/i.test(matricula) ? 'ASSINADA' : 'sem-assinatura') : 'AUSENTE'} | ancora: ${ancora}`);
+    const cards = (html2.match(/<a[^>]*property-documents-item[^>]*>/gi) || []).map(s => s.replace(/\s+/g, ' ')).slice(0, 4);
+    console.log(`[zuk-auth] logado=${logado} matricula=${matricula ? (/Signature=/i.test(matricula) ? 'ASSINADA' : 'sem-assinatura') : 'AUSENTE'} | cards(${cards.length}): ${cards.join(' || ').slice(0, 700)}`);
     return { matricula, laudo, anexos: (matricula ? [{ url: matricula, nome: 'Matrícula do Imóvel', tipo: 'matricula' }] : []) };
   } catch (e) {
     console.warn(`[zuk-auth] erro ${e?.message}`);
