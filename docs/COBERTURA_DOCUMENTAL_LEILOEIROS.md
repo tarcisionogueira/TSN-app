@@ -61,14 +61,16 @@ Sondadas 6 páginas por fonte. **Nenhuma bateu em parede de login.**
   públicos, preenche `anexos`+`link_matricula`), rodando em lote até drenar. Não precisa
   de credencial.
 
-### 🟡 Público — ajuste de SELETOR (sem credencial)
-- **FRAZAO (144)**: docs em CloudFront **sem `.pdf`**. **Ação:** no `api/_doc-scan.js`,
-  aceitar links de doc sem extensão quando a âncora diz "matrícula/edital/laudo/regras"
-  (classificar pelo texto do link). Depois rodar o backfill.
+### 🟡 Público — precisa INTERAÇÃO/seletor por site (sem credencial, build mais profundo)
+- **FRAZAO (144)**: site **WordPress + Bricks Builder**. Sonda (`debug-frazao-docs.yml`)
+  confirmou: em `networkidle2 + 2s` **não há âncoras** para os docs — a seção "Documentos"
+  (CloudFront `d335luupugsy2.cloudfront.net/cms/files/…`, sem `.pdf`) é montada **depois**,
+  por interação/XHR. **Ação:** captura com Puppeteer que clica na aba "Documentos" e/ou
+  intercepta `page.on('response')` para URLs `cloudfront`/`cms/files`, classificando pelo
+  texto do link revelado. Não é backfill de uma passada.
 - **SOLD/SUPERBID/SBID9/SBID21 (plataforma Superbid, ~1.734)**: o seletor pega um anexo
-  genérico repetido. **Ação:** extrator específico da plataforma Superbid (achar o doc
-  por lote no JSON/estado da página em vez do primeiro `attachment`). Recon do SUPERBID
-  puro pendente para confirmar (mesmo padrão do SOLD).
+  genérico repetido (mesmo UUID em todos). **Ação:** extrator específico da plataforma
+  Superbid (achar o doc por lote no JSON/estado da página em vez do primeiro `attachment`).
 
 ### 🔴 Captura de URL / fonte quebrada
 - **SODRE (35)**: `url_lote` 404. **Ação:** rever no scraper como o link do lote é montado
@@ -93,6 +95,15 @@ Sondadas 6 páginas por fonte. **Nenhuma bateu em parede de login.**
 Mesmo padrão do ZUK/GL — cadastrar no **GitHub** (Actions) **e Vercel**:
 `<FONTE>_EMAIL` / `<FONTE>_SENHA` (ex.: `ZUK_EMAIL`/`ZUK_SENHA`, `GL_EMAIL`/`GL_SENHA`).
 Pelo recon de hoje, **MEGA, BIASI, FRAZAO e SOLD NÃO precisam de credencial** (são públicos).
+
+## Progresso da execução (11/07, noite) — backfills rodados
+- **MEGA**: matrícula 158 → **250+** (backfill público, `captura-docs-publico.yml`, rodando).
+- **BIASI**: com anexos 47 → **183+** (edital), matrícula subindo (rodando).
+- **ZUK**: matrícula 6 → **156** (rodado `matricula-zuk.yml`, molde login já existente). Teto
+  prático = lotes com `url_lote` (o scraper só gravou ~120/600 — corrigir para subir mais).
+- **GRUPOLANCE**: 87% matrícula (resolvido de manhã).
+- Novos artefatos: `scripts/captura-docs-publico.mjs` + `captura-docs-publico.yml` (backfill
+  público genérico, `PUB_FONTE`), `recon-docs-leiloeiro.yml` (recon), `debug-frazao-docs.*`.
 
 ## Próximos passos sugeridos
 1. **MEGA + BIASI**: backfill público (sem credencial) — ganho imediato de ~700 lotes.
