@@ -1,0 +1,36 @@
+name: Debug Grupo Lance — recon de login (matrícula gated)
+
+# Descobre o formulário de login do Grupo Lance e testa baixar a matrícula
+# (endpoint /lote/baixar-documento/{id}/file_registration) autenticado.
+# Só diagnostica. Manual. Reaproveita as credenciais do ZUK (mesmo email/senha).
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: 'ID do lote de teste (sem o prefixo gl_)'
+        required: false
+        default: '27183'
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon de login do Grupo Lance
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ZUK_EMAIL: ${{ secrets.ZUK_EMAIL }}
+          ZUK_SENHA: ${{ secrets.ZUK_SENHA }}
+          GL_EMAIL: ${{ secrets.GL_EMAIL }}
+          GL_SENHA: ${{ secrets.GL_SENHA }}
+          GL_TEST_ID: ${{ github.event.inputs.id || '27183' }}
+        run: node scripts/debug-grupolance-login.mjs
