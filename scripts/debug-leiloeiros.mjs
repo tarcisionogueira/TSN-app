@@ -90,7 +90,28 @@ async function scanZukDocs(browser) {
   console.log(`  reqs após clique: ${novas.length} · docReqs: ${docReqs.length}`);
   docReqs.slice(0, 10).forEach(u => console.log(`    ${u.slice(0, 130)}`));
 
-  // 3) HTML renderizado completo (fallback para inspeção manual).
+  // 3) ESTRUTURA DO LOGIN: a matrícula abre #modalLogin. Precisamos do endpoint e
+  //    dos campos do formulário para logar no scraper. Extrai todos os forms + o
+  //    modal de login + rotas de login candidatas.
+  const login = await page.evaluate(() => {
+    const out = { forms: [], modalLogin: null, matriculaAnchor: null, linksConta: [] };
+    try {
+      for (const f of Array.from(document.querySelectorAll('form'))) {
+        out.forms.push({
+          action: f.getAttribute('action'), method: f.getAttribute('method'), id: f.id, cls: f.className,
+          inputs: Array.from(f.querySelectorAll('input,button')).map(i => ({ name: i.name, type: i.type, id: i.id })),
+        });
+      }
+    } catch {}
+    try { const m = document.querySelector('#modalLogin'); if (m) out.modalLogin = m.outerHTML.slice(0, 2500); } catch {}
+    try { const a = document.querySelector('a[data-target="#modalLogin"] , .property-documents-item[href=""]'); if (a) out.matriculaAnchor = a.outerHTML.slice(0, 500); } catch {}
+    try { out.linksConta = Array.from(document.querySelectorAll('a[href*="login"],a[href*="entrar"],a[href*="conta"],a[href*="cadastr"]')).map(a => a.getAttribute('href')).slice(0, 10); } catch {}
+    return out;
+  }).catch(e => ({ err: String(e.message) }));
+  await gravarDebug('ZUKDOC-login', url, 200, 'application/json', JSON.stringify(login, null, 2));
+  console.log(`  forms: ${(login.forms || []).length} · modalLogin: ${login.modalLogin ? 'sim' : 'não'}`);
+
+  // 4) HTML renderizado completo (fallback para inspeção manual).
   let html = ''; try { html = await page.content(); } catch {}
   await gravarDebug('ZUKDOC-render', url, 200, 'text/html', html);
   await page.close().catch(() => {});
