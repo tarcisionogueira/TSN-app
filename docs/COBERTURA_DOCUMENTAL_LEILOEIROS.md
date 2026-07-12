@@ -109,11 +109,13 @@ Pelo recon de hoje, **MEGA, BIASI, FRAZAO e SOLD NÃO precisam de credencial** (
 ### Arquitetura descoberta (recon de login, 12/07) — SODRE e FRAZAO
 Credenciais `GL_*`, `SODRE_*`, `FRAZAO_*` **cadastradas e validadas (presentes)**. Findings:
 - **GRUPOLANCE**: `GL_*` ok; molde já roda (87%). Feito.
-- **SODRE (35)**: **SPA com API JSON**. Login funciona (redireciona p/ `leilao.sodresantoro.com.br/minha-conta`).
-  App de leilão em outro domínio (`leilao.sodresantoro.com.br`), URL real do lote =
-  `leilao.sodresantoro.com.br/leilao/{leilão}/lote/{lote}/` (os `url_lote` do banco, `/imoveis/lote/{id}`,
-  estão **404**). API: `prd-api.sodresantoro.com.br/api/v1/…` + `www.sodresantoro.com.br/api/search-lots`.
-  **Capturar = integrar com a API** (não scraping). Só 35 lotes → **baixa prioridade** (custo/benefício).
+- **SODRE (35)**: ✅ **descoberto pelo navegador na nuvem que NÃO precisa de login.** Os documentos são
+  **PDFs PÚBLICOS** em `arquivos.sodresantoro.com.br/anexos/{leilão}_{lote}_{docId}.pdf` (matrícula/edital)
+  e `…/catalogos/leilao{leilão}.pdf`. As chamadas à API saem **sem token/cookie** (`auth=—`). O que travava
+  era só a **URL do lote errada** no banco (`/imoveis/lote/{id}` → 404); a real é
+  `leilao.sodresantoro.com.br/leilao/{leilão}/lote/{lote}/` (SPA — precisa render p/ pegar as âncoras, OU a
+  API pública `www.sodresantoro.com.br/api/search-lots` para mapear lote→docs). **Captura = pública**
+  (como MEGA/BIASI), não precisa de credencial. Falta mapear os 35 lotes à URL/leilão real.
 - **FRAZAO (144)**: ⚠️ **mais difícil do que parecia.** A página do lote **NÃO expõe os documentos
   no DOM** — nem após clicar em abas/acordeões (sonda `debug-frazao-click.yml`: 0 âncoras de doc).
   Os únicos `cms/files` na página são **arquivos COMPARTILHADOS** (logo `1446/1588875979/$…` e um doc
