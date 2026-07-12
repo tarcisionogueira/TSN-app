@@ -1,0 +1,47 @@
+name: Backfill docs público diário (auto-reparo MEGA/BIASI/SODRE)
+
+# O scraper diário reescreve imoveis_leilao.anexos e desfaz o backfill público
+# (edital/laudo somem; link_matricula persiste). Este job re-roda os backfills
+# públicos DEPOIS do scrape, para a cobertura não degradar. Sem credencial.
+on:
+  schedule:
+    - cron: '30 11 * * *'   # após a coleta da manhã
+  workflow_dispatch: {}
+
+concurrency:
+  group: backfill-docs-diario
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: MEGA (público)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PUB_FONTE: MEGA
+          PUB_LOTE: '250'
+        run: node scripts/captura-docs-publico.mjs
+      - name: BIASI (público)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PUB_FONTE: BIASI
+          PUB_LOTE: '250'
+        run: node scripts/captura-docs-publico.mjs
+      - name: SODRE (público)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SD_LOTE: '40'
+        run: node scripts/captura-docs-sodre.mjs
