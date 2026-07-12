@@ -31,7 +31,11 @@ function classifica(txt, url) {
   if (/laudo|avalia[çc]/i.test(t)) return 'laudo';
   if (/edital/i.test(t)) return 'edital';
   if (/regras|condi[cç][oõ]es|dinâmic|minuta|compromisso|escritura|venda e compra|vale compras/i.test(t)) return 'regras';
-  return 'anexo'; // débito, iptu, penhora, instrumento, processo…
+  if (/d[eé]bito|iptu|penhora|instrumento|processo|certid|[oô]nus/i.test(t)) return 'anexo';
+  // loteanexo = documento ESPECÍFICO do lote; sem rótulo claro (nome tipo timestamp),
+  // em lote de imóvel judicial é a MATRÍCULA na esmagadora maioria. leilaoanexo = leilão.
+  if (/\/loteanexo\//i.test(url || '')) return 'matricula';
+  return 'anexo';
 }
 
 function leilaoIdDe(html) {
@@ -76,6 +80,7 @@ async function main() {
     const g = await fetch(l.page, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
     const html = await g.text();
     const leilaoId = leilaoIdDe(html);
+    const diag = `st=${g.status} len=${html.length} lotdocs=${/LotDocs/i.test(html)} leilaoLink=${/\/leilao\/\d+/i.test(html)}`;
     const urls = [`${BASE}/Sale/LotDocs?loteId=${l.loteId}${leilaoId ? `&leilaoId=${leilaoId}` : ''}`];
     if (leilaoId) urls.push(`${BASE}/Sale/LotDocs?loteId=${l.loteId}`);
     for (const u of urls) {
@@ -83,18 +88,18 @@ async function main() {
       const r = await fetch(u, { headers: { 'User-Agent': UA, 'X-Requested-With': 'XMLHttpRequest', Referer: l.page }, signal: AbortSignal.timeout(20000) });
       if (!r.ok) continue;
       const docs = parseDocs(await r.text());
-      if (docs.length) return { docs, leilaoId };
+      if (docs.length) return { docs, leilaoId, diag };
     }
-    return { docs: [], leilaoId };
+    return { docs: [], leilaoId, diag };
   }
 
   let ok = 0, semDoc = 0, erro = 0, comMat = 0;
   for (const l of lotes) {
     try {
       // throttle p/ não ser bloqueado; retry 1x com backoff se não vier doc
-      let { docs, leilaoId } = await docsDoLote(l);
-      if (!docs.length) { await sleep(1500); ({ docs, leilaoId } = await docsDoLote(l)); }
-      if (!docs.length) { semDoc++; console.log(`- ${l.fonte_id}: sem docs (leilaoId=${leilaoId || '?'})`); await sleep(400); continue; }
+      let { docs, leilaoId, diag } = await docsDoLote(l);
+      if (!docs.length) { await sleep(1500); ({ docs, leilaoId, diag } = await docsDoLote(l)); }
+      if (!docs.length) { semDoc++; console.log(`- ${l.fonte_id}: sem docs (leilaoId=${leilaoId || '?'} ${diag})`); await sleep(400); continue; }
       const ordem = { matricula: 0, edital: 1, laudo: 2, regras: 3, anexo: 4 };
       docs.sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9));
       const matricula = docs.find(d => d.tipo === 'matricula')?.url || null;
