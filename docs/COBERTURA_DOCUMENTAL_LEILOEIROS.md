@@ -114,9 +114,15 @@ Credenciais `GL_*`, `SODRE_*`, `FRAZAO_*` **cadastradas e validadas (presentes)*
   `leilao.sodresantoro.com.br/leilao/{leilão}/lote/{lote}/` (os `url_lote` do banco, `/imoveis/lote/{id}`,
   estão **404**). API: `prd-api.sodresantoro.com.br/api/v1/…` + `www.sodresantoro.com.br/api/search-lots`.
   **Capturar = integrar com a API** (não scraping). Só 35 lotes → **baixa prioridade** (custo/benefício).
-- **FRAZAO (144)**: docs são **públicos** (CloudFront `cms/files/…`) → **login não é o bloqueio**; a seção
-  "Documentos" é montada por **JS/interação**. Listagem real: `frazaoleiloes.com.br/Sale/SearchLotResult`.
-  **Capturar = Puppeteer que clica/expande "Documentos" e pega os links** (sem credencial). Prioridade média.
+- **FRAZAO (144)**: ⚠️ **mais difícil do que parecia.** A página do lote **NÃO expõe os documentos
+  no DOM** — nem após clicar em abas/acordeões (sonda `debug-frazao-click.yml`: 0 âncoras de doc).
+  Os únicos `cms/files` na página são **arquivos COMPARTILHADOS** (logo `1446/1588875979/$…` e um doc
+  genérico `961605/1739218437/$…`, iguais em todos os lotes) — **não** são a matrícula/edital do lote.
+  As capturas anteriores pegaram esses arquivos compartilhados por engano → **limpei os 4 lotes**
+  afetados (anexos zerados). O login não está nas rotas padrão (`/login`, `/minha-conta`… todas 404;
+  form montado por JS, não localizado). **Conclusão:** precisa de reverse-engineering mais fundo
+  (achar o login real do Bricks/WordPress e/ou o endpoint `Sale/...` que serve o doc por lote).
+  **Deferido** — credencial `FRAZAO_*` fica guardada para quando o molde for construído.
 
 ### Restam (nenhum precisa de credencial, exceto LJUD comercial)
 - **FRAZAO (144)**: build com interação/XHR (docs dinâmicos Bricks).
