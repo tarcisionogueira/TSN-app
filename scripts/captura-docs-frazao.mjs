@@ -15,8 +15,18 @@ const BASE = 'https://www.frazaoleiloes.com.br';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 const LOTE = Number(process.env.FZ_LOTE || 60);
 
+// Decodifica entidades HTML (&#237; → í, &#186; → º, &amp; → &, …) — os títulos do
+// Frazão vêm codificados e quebravam a classificação (ex.: "Matr&#237;cula").
+function decodeEnt(s) {
+  return String(s || '')
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ');
+}
+
 function classifica(txt, url) {
-  const t = `${txt || ''} ${url || ''}`;
+  const t = `${decodeEnt(txt)} ${url || ''}`;
   if (/matr[ií]cul/i.test(t)) return 'matricula';
   if (/laudo|avalia[çc]/i.test(t)) return 'laudo';
   if (/edital/i.test(t)) return 'edital';
@@ -40,7 +50,7 @@ function parseDocs(html) {
     if (vistos.has(url)) continue; vistos.add(url);
     const title = (m.match(/title=["']([^"']+)["']/i) || [])[1];
     const texto = m.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const nome = (title || texto || 'Documento').slice(0, 80);
+    const nome = decodeEnt(title || texto || 'Documento').slice(0, 80);
     out.push({ url, nome, tipo: classifica(nome, url) });
   }
   return out;
