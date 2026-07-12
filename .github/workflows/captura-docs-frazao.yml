@@ -1,6 +1,8 @@
 name: Documentos FRAZAO (público) — Sale/LotDocs
 
 on:
+  schedule:
+    - cron: '43 */3 * * *'   # a cada 3h — o Frazão bloqueia (429) após ~27/sessão; drena aos poucos
   workflow_dispatch:
     inputs:
       lote:

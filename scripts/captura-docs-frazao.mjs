@@ -93,13 +93,21 @@ async function main() {
     return { docs: [], leilaoId, diag };
   }
 
-  let ok = 0, semDoc = 0, erro = 0, comMat = 0;
+  let ok = 0, semDoc = 0, erro = 0, comMat = 0, bloqueios = 0;
   for (const l of lotes) {
     try {
-      // throttle p/ não ser bloqueado; retry 1x com backoff se não vier doc
+      // O Frazão bloqueia (HTTP 429) após ~27 req por sessão/IP. Uma nova execução
+      // (runner novo) ganha nova cota; então paramos cedo ao detectar bloqueio e o
+      // schedule/re-dispatch drena o resto aos poucos.
       let { docs, leilaoId, diag } = await docsDoLote(l);
-      if (!docs.length) { await sleep(1500); ({ docs, leilaoId, diag } = await docsDoLote(l)); }
-      if (!docs.length) { semDoc++; console.log(`- ${l.fonte_id}: sem docs (leilaoId=${leilaoId || '?'} ${diag})`); await sleep(400); continue; }
+      if (!docs.length && !/st=429/.test(diag || '')) { await sleep(1500); ({ docs, leilaoId, diag } = await docsDoLote(l)); }
+      if (!docs.length) {
+        semDoc++;
+        if (/st=429/.test(diag || '')) { bloqueios++; if (bloqueios >= 5) { console.log(`⛔ bloqueado (429) — parando; rode de novo para drenar o resto.`); break; } }
+        console.log(`- ${l.fonte_id}: sem docs (leilaoId=${leilaoId || '?'} ${diag})`);
+        await sleep(600); continue;
+      }
+      bloqueios = 0;
       const ordem = { matricula: 0, edital: 1, laudo: 2, regras: 3, anexo: 4 };
       docs.sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9));
       const matricula = docs.find(d => d.tipo === 'matricula')?.url || null;
