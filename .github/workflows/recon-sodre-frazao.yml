@@ -1,0 +1,34 @@
+name: Recon SODRE search-lots / FRAZAO API (navegador)
+
+on:
+  workflow_dispatch:
+    inputs:
+      alvo:
+        description: 'sodre | frazao'
+        required: true
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FRAZAO_EMAIL: ${{ secrets.FRAZAO_EMAIL }}
+          FRAZAO_SENHA: ${{ secrets.FRAZAO_SENHA }}
+        run: |
+          if [ "${{ github.event.inputs.alvo }}" = "frazao" ]; then
+            node scripts/recon-frazao-api.mjs
+          else
+            node scripts/recon-sodre-searchlots.mjs
+          fi
