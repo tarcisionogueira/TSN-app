@@ -1,0 +1,23 @@
+name: Recon API SODRE (molde via navegador)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon API SODRE
+        env:
+          SODRE_EMAIL: ${{ secrets.SODRE_EMAIL }}
+          SODRE_SENHA: ${{ secrets.SODRE_SENHA }}
+        run: node scripts/recon-sodre-api.mjs
