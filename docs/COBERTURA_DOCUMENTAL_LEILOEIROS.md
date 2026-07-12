@@ -106,6 +106,18 @@ Pelo recon de hoje, **MEGA, BIASI, FRAZAO e SOLD NÃO precisam de credencial** (
   público genérico, `PUB_FONTE`, concurrency por fonte), `recon-docs-leiloeiro.yml` (recon
   genérico), `debug-frazao-docs.*` (sonda estrutura FRAZAO).
 
+### Arquitetura descoberta (recon de login, 12/07) — SODRE e FRAZAO
+Credenciais `GL_*`, `SODRE_*`, `FRAZAO_*` **cadastradas e validadas (presentes)**. Findings:
+- **GRUPOLANCE**: `GL_*` ok; molde já roda (87%). Feito.
+- **SODRE (35)**: **SPA com API JSON**. Login funciona (redireciona p/ `leilao.sodresantoro.com.br/minha-conta`).
+  App de leilão em outro domínio (`leilao.sodresantoro.com.br`), URL real do lote =
+  `leilao.sodresantoro.com.br/leilao/{leilão}/lote/{lote}/` (os `url_lote` do banco, `/imoveis/lote/{id}`,
+  estão **404**). API: `prd-api.sodresantoro.com.br/api/v1/…` + `www.sodresantoro.com.br/api/search-lots`.
+  **Capturar = integrar com a API** (não scraping). Só 35 lotes → **baixa prioridade** (custo/benefício).
+- **FRAZAO (144)**: docs são **públicos** (CloudFront `cms/files/…`) → **login não é o bloqueio**; a seção
+  "Documentos" é montada por **JS/interação**. Listagem real: `frazaoleiloes.com.br/Sale/SearchLotResult`.
+  **Capturar = Puppeteer que clica/expande "Documentos" e pega os links** (sem credencial). Prioridade média.
+
 ### Restam (nenhum precisa de credencial, exceto LJUD comercial)
 - **FRAZAO (144)**: build com interação/XHR (docs dinâmicos Bricks).
 - **SOLD/SUPERBID/SBID (~1.734)**: extrator da plataforma Superbid (hoje pega anexo genérico).
