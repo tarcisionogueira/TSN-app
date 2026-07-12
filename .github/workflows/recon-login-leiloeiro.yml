@@ -1,0 +1,45 @@
+name: Recon de login por leiloeiro (valida credencial + descobre acesso)
+
+# Valida <FONTE>_EMAIL/<FONTE>_SENHA, descobre o formulário de login e reporta como os
+# documentos aparecem autenticado. Só diagnostica. Manual.
+on:
+  workflow_dispatch:
+    inputs:
+      fonte:
+        description: 'Fonte (GRUPOLANCE, SODRE, FRAZAO, MEGA, BIASI)'
+        required: true
+      n:
+        description: 'Quantos lotes de amostra'
+        required: false
+        default: '3'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon de login
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RL_FONTE: ${{ github.event.inputs.fonte }}
+          RL_N: ${{ github.event.inputs.n || '3' }}
+          GL_EMAIL: ${{ secrets.GL_EMAIL }}
+          GL_SENHA: ${{ secrets.GL_SENHA }}
+          SODRE_EMAIL: ${{ secrets.SODRE_EMAIL }}
+          SODRE_SENHA: ${{ secrets.SODRE_SENHA }}
+          FRAZAO_EMAIL: ${{ secrets.FRAZAO_EMAIL }}
+          FRAZAO_SENHA: ${{ secrets.FRAZAO_SENHA }}
+          MEGA_EMAIL: ${{ secrets.MEGA_EMAIL }}
+          MEGA_SENHA: ${{ secrets.MEGA_SENHA }}
+          BIASI_EMAIL: ${{ secrets.BIASI_EMAIL }}
+          BIASI_SENHA: ${{ secrets.BIASI_SENHA }}
+        run: node scripts/recon-login-leiloeiro.mjs
