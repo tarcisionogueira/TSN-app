@@ -1,0 +1,91 @@
+/**
+ * Captura de documentos do FRAZAO — PÚBLICO (sem login). Descoberto via navegador:
+ * o link "Consulte o edital e documentação" abre um modal cujo conteúdo vem de
+ *   GET https://www.frazaoleiloes.com.br/Sale/LotDocs?loteId={lote}&leilaoId={leilao}
+ * → HTML com <ul class="file-list"> de <a href="…pdf" title="…">. Os PDFs ficam em
+ *   cdn.frazaoleiloes.com.br/file/loteanexo/{lote}/{n}.pdf  (matrícula do lote)
+ *   cdn.frazaoleiloes.com.br/file/leilaoanexo/{leilao}/{n}.pdf (edital/minutas do leilão)
+ * Fluxo (fetch, sem navegador): lê a página do lote p/ achar o leilaoId, chama LotDocs,
+ * classifica pelos títulos e grava anexos + link_matricula. Config: FZ_LOTE (default 60).
+ */
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const BASE = 'https://www.frazaoleiloes.com.br';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
+const LOTE = Number(process.env.FZ_LOTE || 60);
+
+function classifica(txt, url) {
+  const t = `${txt || ''} ${url || ''}`;
+  if (/matr[ií]cul/i.test(t)) return 'matricula';
+  if (/laudo|avalia[çc]/i.test(t)) return 'laudo';
+  if (/edital/i.test(t)) return 'edital';
+  if (/regras|condi[cç][oõ]es|dinâmic|minuta|compromisso|escritura|venda e compra|vale compras/i.test(t)) return 'regras';
+  return 'anexo'; // débito, iptu, penhora, instrumento, processo…
+}
+
+async function leilaoIdDe(html) {
+  return (html.match(/\/leilao\/(\d+)/i) || html.match(/leilaoId["'\s:=]+(\d+)/i) || html.match(/data-leilao-id=["'](\d+)/i) || [])[1] || null;
+}
+
+// Parseia o HTML do LotDocs → [{url, nome, tipo}]
+function parseDocs(html) {
+  const out = [];
+  const vistos = new Set();
+  const reA = /<a\b[^>]*>[\s\S]*?<\/a>/gi;
+  for (const m of html.match(reA) || []) {
+    const href = (m.match(/href=["']([^"']+\.pdf[^"']*)["']/i) || [])[1];
+    if (!href) continue;
+    const url = href.startsWith('http') ? href : `https:${href.startsWith('//') ? '' : '//'}${href.replace(/^\/+/, 'cdn.frazaoleiloes.com.br/')}`;
+    if (vistos.has(url)) continue; vistos.add(url);
+    const title = (m.match(/title=["']([^"']+)["']/i) || [])[1];
+    const texto = m.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const nome = (title || texto || 'Documento').slice(0, 80);
+    out.push({ url, nome, tipo: classifica(nome, url) });
+  }
+  return out;
+}
+
+async function main() {
+  const { data, error } = await supabase.from('imoveis_leilao')
+    .select('id, fonte_id, url_lote, link_edital')
+    .eq('fonte', 'FRAZAO').eq('ativo', true)
+    .or('anexos.is.null,anexos.eq.[]')
+    .order('criado_em', { ascending: false }).limit(LOTE);
+  if (error) { console.error(error.message); process.exit(1); }
+  const lotes = (data || []).map(l => ({ ...l, loteId: (String(l.fonte_id).match(/(\d+)/) || [])[1], page: (l.url_lote && /^https?:/.test(l.url_lote)) ? l.url_lote : l.link_edital })).filter(l => l.loteId && l.page);
+  if (!lotes.length) { console.log('FRAZAO: nenhum lote pendente.'); return; }
+  console.log(`FRAZAO: ${lotes.length} lote(s) para tentar (cap ${LOTE}).`);
+
+  let ok = 0, semDoc = 0, erro = 0, comMat = 0;
+  for (const l of lotes) {
+    try {
+      // 1) página do lote → leilaoId
+      const g = await fetch(l.page, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+      const html = await g.text();
+      const leilaoId = await leilaoIdDe(html);
+      // 2) LotDocs (com e sem leilaoId como fallback)
+      const urls = [`${BASE}/Sale/LotDocs?loteId=${l.loteId}${leilaoId ? `&leilaoId=${leilaoId}` : ''}`];
+      if (leilaoId) urls.push(`${BASE}/Sale/LotDocs?loteId=${l.loteId}`);
+      let docs = [];
+      for (const u of urls) {
+        const r = await fetch(u, { headers: { 'User-Agent': UA, 'X-Requested-With': 'XMLHttpRequest', Referer: l.page }, signal: AbortSignal.timeout(20000) });
+        if (!r.ok) continue;
+        docs = parseDocs(await r.text());
+        if (docs.length) break;
+      }
+      if (!docs.length) { semDoc++; console.log(`- ${l.fonte_id}: sem docs (leilaoId=${leilaoId || '?'})`); continue; }
+      const ordem = { matricula: 0, edital: 1, laudo: 2, regras: 3, anexo: 4 };
+      docs.sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9));
+      const matricula = docs.find(d => d.tipo === 'matricula')?.url || null;
+      const upd = { anexos: docs };
+      if (matricula) { upd.link_matricula = matricula; comMat++; }
+      const { error: e2 } = await supabase.from('imoveis_leilao').update(upd).eq('id', l.id);
+      if (e2) { erro++; console.log(`- ${l.fonte_id}: erro gravar ${e2.message}`); continue; }
+      ok++; console.log(`✓ ${l.fonte_id}: ${docs.length} doc(s) [${docs.map(d => d.tipo).join(',')}]${matricula ? ' +matrícula' : ''}`);
+      await new Promise(s => setTimeout(s, 200));
+    } catch (e) { erro++; console.log(`- ${l.fonte_id}: erro ${e.message}`); }
+  }
+  console.log(`\nFRAZAO — resultado: ${ok} enriquecido(s) · ${comMat} com matrícula · ${semDoc} sem doc · ${erro} erro(s).`);
+}
+main().catch(e => { console.error(e); process.exit(1); });
