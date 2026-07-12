@@ -145,6 +145,19 @@ quando falta a matrícula, chama `capturarDocsLoginOnDemand(fonte, loteUrl, dead
 - **MEGA/BIASI:** docs públicos → não precisam de login (scraper/backfill cobre).
 - Regra: fonte sem adaptador retorna null e a análise segue normal (nunca derruba).
 
+## Execução A+B (12/07, noite) — resultado
+- **A) SODRE — ✅ CONSTRUÍDO (público).** `scripts/captura-docs-sodre.mjs` + `captura-docs-sodre.yml`.
+  A API pública `search-lots` (ElasticSearch, sem auth) dá `lot_id`+`auction_id`; a página real do lote
+  (`leilao.sodresantoro.com.br/leilao/{a}/lote/{l}/`) lista os PDFs públicos (`arquivos.sodresantoro…`).
+  Resultado: **20/35** lotes com documentos (matrícula 19 distintas, edital 20), `url_lote` corrigida.
+  Os **15 restantes** não estão mais no `search-lots` (leilões **encerrados/removidos** — sem página) →
+  nada a capturar. **Não precisa de login.**
+- **B) FRAZAO — ❌ travado (precisa de inspeção manual do dono).** Esgotado o recon automático: todas as
+  rotas de login .NET dão 404; a página do lote **não tem** âncoras de doc nem chamadas de rede para
+  documentos (só imagens `cdn.frazaoleiloes…` e `JS/Sale/Detail.min.js`). Provável: doc atrás de login
+  não localizado, ou docs só no nível do **leilão** (não por lote). **Ação p/ o dono:** logar no site e
+  dizer de onde sai a matrícula/edital (URL que abre) ou mandar um link de lote com o doc visível.
+
 ## Registro de credenciais (convenção) — etapa de fechamento de hoje
 Cadastrar **os mesmos nomes no GitHub (Actions) e no Vercel** (Production+Preview+Development).
 Prefixo por leiloeiro + `_EMAIL` / `_SENHA`:
