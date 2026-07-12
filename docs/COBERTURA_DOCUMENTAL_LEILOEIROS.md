@@ -152,11 +152,16 @@ quando falta a matrícula, chama `capturarDocsLoginOnDemand(fonte, loteUrl, dead
   Resultado: **20/35** lotes com documentos (matrícula 19 distintas, edital 20), `url_lote` corrigida.
   Os **15 restantes** não estão mais no `search-lots` (leilões **encerrados/removidos** — sem página) →
   nada a capturar. **Não precisa de login.**
-- **B) FRAZAO — ❌ travado (precisa de inspeção manual do dono).** Esgotado o recon automático: todas as
-  rotas de login .NET dão 404; a página do lote **não tem** âncoras de doc nem chamadas de rede para
-  documentos (só imagens `cdn.frazaoleiloes…` e `JS/Sale/Detail.min.js`). Provável: doc atrás de login
-  não localizado, ou docs só no nível do **leilão** (não por lote). **Ação p/ o dono:** logar no site e
-  dizer de onde sai a matrícula/edital (URL que abre) ou mandar um link de lote com o doc visível.
+- **B) FRAZAO — ✅ RESOLVIDO (público).** `scripts/captura-docs-frazao.mjs` + `captura-docs-frazao.yml`.
+  Destravado com a pista do dono (print): o link `<div>` **"Consulte o edital e documentação"** abre o modal
+  cujo conteúdo vem de `GET /Sale/LotDocs?loteId={lote}&leilaoId={leilao}` (público, ASP.NET). PDFs em
+  `cdn.frazaoleiloes.com.br/file/loteanexo/{lote}/{n}.pdf` (matrícula do lote) e `…/leilaoanexo/{leilao}/…`
+  (edital/minutas/dinâmica do leilão). Captura por `fetch`: lê a página → `leilaoId` → `LotDocs` → classifica.
+  Detalhes: (1) títulos vêm **HTML-encoded** (`Matr&#237;cula`) → decodifica antes de classificar; (2) doc
+  `loteanexo` com nome timestamp (ex. `1732047634601.pdf`) é a **matrícula** do lote → classifica como tal;
+  (3) o Frazão **bloqueia (HTTP 429) após ~27 req/sessão** → o script para cedo no 429 e há **schedule 3/3h**
+  + re-dispatch (cada runner novo ganha nova cota, drena ~27). **Resultado: 0 → 143/144 com matrícula (143
+  distintas); 1 lote restante drena no schedule.** Sem credencial (é público).
 
 ## Registro de credenciais (convenção) — etapa de fechamento de hoje
 Cadastrar **os mesmos nomes no GitHub (Actions) e no Vercel** (Production+Preview+Development).
