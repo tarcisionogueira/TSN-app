@@ -34,9 +34,13 @@ function classifica(txt, url) {
   return 'anexo'; // débito, iptu, penhora, instrumento, processo…
 }
 
-async function leilaoIdDe(html) {
-  return (html.match(/\/leilao\/(\d+)/i) || html.match(/leilaoId["'\s:=]+(\d+)/i) || html.match(/data-leilao-id=["'](\d+)/i) || [])[1] || null;
+function leilaoIdDe(html) {
+  return (html.match(/LotDocs\?loteId=\d+&leilaoId=(\d+)/i)      // referência do próprio modal
+    || html.match(/leilaoId["'\s:=]+(\d+)/i)
+    || html.match(/\/leilao\/(\d+)/i)
+    || html.match(/data-leilao-id=["'](\d+)/i) || [])[1] || null;
 }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Parseia o HTML do LotDocs → [{url, nome, tipo}]
 function parseDocs(html) {
@@ -67,24 +71,30 @@ async function main() {
   if (!lotes.length) { console.log('FRAZAO: nenhum lote pendente.'); return; }
   console.log(`FRAZAO: ${lotes.length} lote(s) para tentar (cap ${LOTE}).`);
 
+  // Captura os docs de UM lote (com throttle interno). Retorna [] se não achar.
+  async function docsDoLote(l) {
+    const g = await fetch(l.page, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+    const html = await g.text();
+    const leilaoId = leilaoIdDe(html);
+    const urls = [`${BASE}/Sale/LotDocs?loteId=${l.loteId}${leilaoId ? `&leilaoId=${leilaoId}` : ''}`];
+    if (leilaoId) urls.push(`${BASE}/Sale/LotDocs?loteId=${l.loteId}`);
+    for (const u of urls) {
+      await sleep(250);
+      const r = await fetch(u, { headers: { 'User-Agent': UA, 'X-Requested-With': 'XMLHttpRequest', Referer: l.page }, signal: AbortSignal.timeout(20000) });
+      if (!r.ok) continue;
+      const docs = parseDocs(await r.text());
+      if (docs.length) return { docs, leilaoId };
+    }
+    return { docs: [], leilaoId };
+  }
+
   let ok = 0, semDoc = 0, erro = 0, comMat = 0;
   for (const l of lotes) {
     try {
-      // 1) página do lote → leilaoId
-      const g = await fetch(l.page, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
-      const html = await g.text();
-      const leilaoId = await leilaoIdDe(html);
-      // 2) LotDocs (com e sem leilaoId como fallback)
-      const urls = [`${BASE}/Sale/LotDocs?loteId=${l.loteId}${leilaoId ? `&leilaoId=${leilaoId}` : ''}`];
-      if (leilaoId) urls.push(`${BASE}/Sale/LotDocs?loteId=${l.loteId}`);
-      let docs = [];
-      for (const u of urls) {
-        const r = await fetch(u, { headers: { 'User-Agent': UA, 'X-Requested-With': 'XMLHttpRequest', Referer: l.page }, signal: AbortSignal.timeout(20000) });
-        if (!r.ok) continue;
-        docs = parseDocs(await r.text());
-        if (docs.length) break;
-      }
-      if (!docs.length) { semDoc++; console.log(`- ${l.fonte_id}: sem docs (leilaoId=${leilaoId || '?'})`); continue; }
+      // throttle p/ não ser bloqueado; retry 1x com backoff se não vier doc
+      let { docs, leilaoId } = await docsDoLote(l);
+      if (!docs.length) { await sleep(1500); ({ docs, leilaoId } = await docsDoLote(l)); }
+      if (!docs.length) { semDoc++; console.log(`- ${l.fonte_id}: sem docs (leilaoId=${leilaoId || '?'})`); await sleep(400); continue; }
       const ordem = { matricula: 0, edital: 1, laudo: 2, regras: 3, anexo: 4 };
       docs.sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9));
       const matricula = docs.find(d => d.tipo === 'matricula')?.url || null;
