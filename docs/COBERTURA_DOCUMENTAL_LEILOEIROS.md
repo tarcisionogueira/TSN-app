@@ -131,6 +131,18 @@ Credenciais `GL_*`, `SODRE_*`, `FRAZAO_*` **cadastradas e validadas (presentes)*
 - **ZUK `url_lote`**: scraper só gravou ~120/600 → corrigir para destravar mais matrículas.
 - **LJUD (1.046)**: agregador — integração oficial (comercial, dono).
 
+## Fallback de login on-demand (via de acesso por e-mail/senha) — ✅ FRAMEWORK PRONTO
+Pedido do dono: se o scraper NÃO pegar o documento, o sistema loga com e-mail/senha e
+puxa o doc na hora — para **qualquer** leiloeiro. Implementado em `api/_leiloeiro-auth.js`
+(registro de adaptadores por leiloeiro) e ligado na análise (`api/gerar-documental.js`):
+quando falta a matrícula, chama `capturarDocsLoginOnDemand(fonte, loteUrl, deadline)`.
+- **Funcional hoje:** **ZUK** (login Laravel) e **GRUPO LANCE** (login Yii) — ambos fetch
+  (rodam no serverless da Vercel). Credenciais `ZUK_*` e `GL_*`.
+- **Encaixe pronto (plugar quando o molde existir):** SODRE (SPA+API), FRAZAO (login Bricks).
+  A credencial já cadastrada → assim que o adaptador for escrito, funciona sem mexer no resto.
+- **MEGA/BIASI:** docs públicos → não precisam de login (scraper/backfill cobre).
+- Regra: fonte sem adaptador retorna null e a análise segue normal (nunca derruba).
+
 ## Registro de credenciais (convenção) — etapa de fechamento de hoje
 Cadastrar **os mesmos nomes no GitHub (Actions) e no Vercel** (Production+Preview+Development).
 Prefixo por leiloeiro + `_EMAIL` / `_SENHA`:

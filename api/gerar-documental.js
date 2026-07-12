@@ -10,7 +10,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
-import { capturarDocsZukLogado } from './_zuk-auth.js';
+import { capturarDocsLoginOnDemand } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
@@ -473,16 +473,17 @@ export default async function handler(req, res) {
     add(body?.urlMatricula, 'Matrícula');
     add(caixaMatriculaUrl(cxFonte), 'Matrícula (Caixa)');
     add(row?.link_matricula, 'Matrícula');
-    // ZUK (Portal Zuk): a matrícula é login-gated (o edital é público). Se for lote
-    // do Zuk e ainda não temos a matrícula, loga ON-DEMAND (só nesta análise) e
-    // captura a URL assinada — nada em massa. Credenciais em ZUK_EMAIL/ZUK_SENHA.
-    const ehZuk = /zuk|zukerman/i.test(String(row?.fonte || ''));
-    if (ehZuk && !body?.urlMatricula && !row?.link_matricula) {
+    // FALLBACK DE LOGIN ON-DEMAND (qualquer leiloeiro): se ainda não temos a matrícula,
+    // loga com e-mail/senha da fonte e captura a URL do doc — só nesta análise, nada em
+    // massa. Cada leiloeiro tem seu molde em api/_leiloeiro-auth.js (ZUK, Grupo Lance…);
+    // fontes sem molde retornam null e a análise segue normal. Credenciais <FONTE>_*.
+    if (!body?.urlMatricula && !row?.link_matricula) {
       try {
-        const zk = await capturarDocsZukLogado(row?.link_edital || row?.url_lote, deadline);
-        if (zk?.matricula) add(zk.matricula, 'Matrícula');
-        if (zk?.laudo) add(zk.laudo, 'Laudo de avaliação');
-        for (const a of (zk?.anexos || [])) add(a.url, a.nome || 'Anexo', a.tipo);
+        const dd = await capturarDocsLoginOnDemand(row?.fonte, row?.link_edital || row?.url_lote, deadline);
+        if (dd?.matricula) add(dd.matricula, 'Matrícula');
+        if (dd?.laudo) add(dd.laudo, 'Laudo de avaliação');
+        if (dd?.edital) add(dd.edital, 'Edital');
+        for (const a of (dd?.anexos || [])) add(a.url, a.nome || 'Anexo', a.tipo);
       } catch { /* login on-demand nunca derruba a análise */ }
     }
     add(row?.link_edital || body?.urlEdital, 'Edital');
