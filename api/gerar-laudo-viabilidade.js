@@ -141,7 +141,12 @@ export default async function handler(req, res) {
       res.status(402).json({ error: 'O laudo de viabilidade está disponível a partir do plano Investidor Pro.', upgrade: true });
       return;
     }
-  } catch { /* se a checagem falhar, não trava quem tem direito */ }
+  } catch {
+    // FAIL-CLOSED: se a checagem de plano falhar, NÃO liberamos (evita laudo pago grátis
+    // num erro transitório). Retornável para quem tem direito.
+    res.status(503).json({ error: 'Não foi possível validar seu plano agora. Tente novamente em instantes.' });
+    return;
+  }
   if (!CLAUDE_KEY) { res.status(500).json({ error: 'CLAUDE_KEY ausente' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 
