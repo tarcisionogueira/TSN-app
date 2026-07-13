@@ -3,9 +3,23 @@ export const config = { runtime: 'edge' };
 import { getAuthUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 
-function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, userId, baseUrl) {
-  const unsubToken = btoa(`${userId}:unsubscribe`);
+// Assina o token de descadastro no MESMO esquema de cancelar-alertas.js
+// (base64url(userId).hmac_sha256(userId, SECRET)[0..16]), aqui via WebCrypto (edge).
+// Substitui o antigo btoa('userId:unsubscribe'), que era forjável E nem validava
+// contra o HMAC do endpoint de descadastro (link quebrado). Sem segredo → token
+// vazio (o endpoint, agora fail-closed, rejeita).
+async function assinarUnsubEdge(userId) {
+  const SECRET = process.env.UNSUB_SECRET || process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_KEY || '';
+  if (!SECRET || !userId) return '';
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(String(userId)));
+  const hex = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+  const b64url = btoa(String(userId)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${b64url}.${hex}`;
+}
 
+function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, unsubToken, baseUrl) {
   // UTM params identificam tráfego vindo de alertas de email no GA4
   // GA4 lê a query string ANTES do #, não dentro do hash (SPA routing)
   // Relatório GA4: Aquisição → Tráfego → utm_source = "email_alerta"
@@ -256,7 +270,8 @@ export default async function handler(req) {
   }
 
   const baseUrl = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
-  const html = gerarEmailHTML(userName || 'Investidor', imoveis, filtros || {}, filtroDesc, userId, baseUrl);
+  const unsubToken = await assinarUnsubEdge(userId);
+  const html = gerarEmailHTML(userName || 'Investidor', imoveis, filtros || {}, filtroDesc, unsubToken, baseUrl);
 
   const qtd = imoveis.length;
   const subject = qtd === 1

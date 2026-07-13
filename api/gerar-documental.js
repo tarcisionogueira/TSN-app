@@ -16,6 +16,7 @@ import { buscarProcessosCNJ } from './_cnj.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
+import { hostExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -216,7 +217,9 @@ async function dispararCaptura(arquivoWorkflow) {
 // Lê um documento do lote: PDF → base64 (bloco document); HTML/texto → texto
 // limpo. Tenta fetch direto e cai no Bright Data quando o host bloqueia o servidor.
 async function lerDoc(url, deadline) {
-  if (!url || !/^https?:\/\//.test(url) || Date.now() > deadline) return null;
+  // Anti-SSRF: URLs de documento vêm do banco E do body do cliente (urlMatricula/
+  // urlEdital/urlRegras) — bloqueia destinos internos/metadados, permite CDN público.
+  if (!hostExternoSeguro(url) || Date.now() > deadline) return null;
   const h = { 'User-Agent': UA, Accept: '*/*', 'Accept-Language': 'pt-BR,pt;q=0.9' };
   const ehPdfUrl = /\.pdf(\?|#|$)/i.test(url);
 
@@ -371,7 +374,12 @@ export default async function handler(req, res) {
         res.status(402).json({ error: 'A análise documental e jurídica está disponível a partir do plano Investidor Pro.', upgrade: true });
         return;
       }
-    } catch { /* se a checagem falhar, não trava quem tem direito */ }
+    } catch {
+      // Fail-closed: se a checagem de plano falhar (Supabase indisponível/erro), NÃO
+      // libera a análise paga — retorna erro retornável em vez de conceder acesso.
+      res.status(503).json({ error: 'Não foi possível validar seu plano agora. Tente novamente em instantes.' });
+      return;
+    }
   }
   if (!CLAUDE_KEY) { res.status(500).json({ error: 'CLAUDE_KEY ausente' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
