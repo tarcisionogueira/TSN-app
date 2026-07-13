@@ -60,12 +60,34 @@ export default async function handler(req) {
   const rpc = async (fn, body) => { try { const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.ok ? await r.json() : []; } catch { return []; } };
 
   const seteDias = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-  const ROLES = 'explorador,top2,top2_anual,assessorado,clube';
+  // Inclui 'admin' (o dono acompanha os disparos) além dos planos.
+  const ROLES = 'explorador,top2,top2_anual,assessorado,clube,admin';
 
-  // Destinatários: clientes com e-mail (batch). opt-out/último-envio via alertas_email.
-  const filtroTeste = testeEmail ? `&email=eq.${encodeURIComponent(testeEmail)}` : '';
-  const perfis = await sbGet(`perfis?select=id,nome,email,endereco_cidade,endereco_uf,created_at&email=not.is.null&role=in.(${ROLES})${filtroTeste}&limit=1000`);
-  if (!Array.isArray(perfis) || !perfis.length) return new Response(JSON.stringify({ ok: true, enviados: 0, total: 0 }), { headers: { 'Content-Type': 'application/json' } });
+  // E-mail NÃO fica em perfis (fica em auth.users) — o select anterior por
+  // `perfis.email` FALHAVA no PostgREST e o cron nunca enviava nada. Buscamos os
+  // e-mails em lote pela Admin API do GoTrue (service role) e mapeamos por id.
+  async function mapaEmails() {
+    const map = new Map();
+    for (let page = 1; page <= 30; page++) {
+      let users = [];
+      try {
+        const r = await fetch(`${URL_}/auth/v1/admin/users?page=${page}&per_page=200`, { headers: hdr });
+        if (!r.ok) break;
+        const data = await r.json();
+        users = Array.isArray(data) ? data : (data?.users || []);
+      } catch { break; }
+      for (const u of users) if (u?.id && u?.email) map.set(u.id, String(u.email).toLowerCase());
+      if (users.length < 200) break;
+    }
+    return map;
+  }
+  const emailMap = await mapaEmails();
+
+  // Destinatários: perfis nos ROLES (o e-mail vem do emailMap). opt-out/último-envio via alertas_email.
+  let perfis = await sbGet(`perfis?select=id,nome,endereco_cidade,endereco_uf,created_at&role=in.(${ROLES})&limit=1000`);
+  if (Array.isArray(perfis)) perfis = perfis.filter(p => emailMap.has(p.id)); // só quem tem e-mail conhecido
+  if (testeEmail) perfis = (perfis || []).filter(p => emailMap.get(p.id) === testeEmail); // modo teste: só esse e-mail
+  if (!Array.isArray(perfis) || !perfis.length) return new Response(JSON.stringify({ ok: true, enviados: 0, total: 0, emails_conhecidos: emailMap.size }), { headers: { 'Content-Type': 'application/json' } });
   // Só UUIDs válidos entram na lista in.(...) — defesa contra interpolação indevida.
   const ids = perfis.map(p => p.id).filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '')));
   const inList = `(${ids.join(',')})`;
@@ -112,9 +134,12 @@ export default async function handler(req) {
     if (f.descontoMin) p.push(`desconto_percentual=gte.${Number(f.descontoMin)}`);
     const bairros = Array.isArray(f.bairros) ? f.bairros.filter(Boolean) : [];
     if (bairros.length) p.push(`bairro=in.(${bairros.map(b => encodeURIComponent(`"${b}"`)).join(',')})`);
+    // Estado é aplicado SEMPRE (não em else) — cidades homônimas em UFs diferentes
+    // (Palmas/TO vs Palmas/PR) exigem estado E cidade juntos. Antes, ter cidade no
+    // filtro DROPAVA o estado e o e-mail trazia imóveis de outro estado.
+    if (f.estado) p.push(`estado=eq.${encodeURIComponent(f.estado)}`);
     const cidades = Array.isArray(f.cidades) ? f.cidades.filter(Boolean) : [];
     if (cidades.length) p.push(`cidade_norm=in.(${cidades.map(c => encodeURIComponent(normCid(c))).join(',')})`);
-    else if (f.estado) p.push(`estado=eq.${encodeURIComponent(f.estado)}`);
     return p.length ? '&' + p.join('&') : '';
   };
   const buscarPorFiltro = (f, lim) => sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f)}&order=desconto_percentual.desc&limit=${lim}`);
@@ -124,7 +149,7 @@ export default async function handler(req) {
 
   for (const perfil of perfis) {
     try {
-      const email = perfil.email; if (!email || !RESEND_KEY) continue;
+      const email = emailMap.get(perfil.id); if (!email || !RESEND_KEY) continue;
       const a = alertaMap[perfil.id];
       if (!testeEmail) {
         if (a && a.ativo === false) continue;                       // opt-out (descadastrado)
@@ -183,7 +208,9 @@ export default async function handler(req) {
         if (pool.size >= LIMITE) break;
         const cen = centroide(cid, uf);
         if (cen) despejar(await rpc('buscar_por_raio_v2', { lat: cen.lat, lng: cen.lng, raio_metros: 200000, lim: 40 }), LIMITE - pool.size);
-        if (pool.size < LIMITE) despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&cidade=ilike.*${encodeURIComponent(cid)}*&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
+        // Fallback por NOME da cidade: sempre escopado pela UF de referência — senão o
+        // ilike traz homônimas de outros estados (Palmas/TO vs Palmas/PR).
+        if (pool.size < LIMITE) despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
       }
 
       // 3) Similares às arrematações do usuário (mesmo tipo), se ainda faltar.

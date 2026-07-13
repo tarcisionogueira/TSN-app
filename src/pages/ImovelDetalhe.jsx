@@ -191,6 +191,9 @@ function ImoveisSimilares({ imovel, nav }) {
       let q = supabase.from('imoveis_leilao')
         .select('id,titulo,bairro,cidade,estado,valor_minimo,valor_avaliacao,link_foto,tipo,area_m2,fonte,fonte_id')
         .eq('ativo', true).eq('cidade', imovel.cidade).neq('id', imovel.id).limit(12);
+      // SEMPRE junto do estado: há cidades homônimas em UFs diferentes (ex.: Palmas/TO
+      // e Palmas/PR). Sem este filtro, os "semelhantes" misturavam imóveis de outro estado.
+      if (imovel.estado) q = q.eq('estado', imovel.estado);
       if (imovel.tipo) q = q.eq('tipo', imovel.tipo);
       const { data } = await q;
       let lista = data || [];

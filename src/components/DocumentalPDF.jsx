@@ -99,12 +99,24 @@ export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb 
   if (db.totalAssumidoArrematante > 0) rxLinhas.push(`<b>Débitos que você assume (propter rem):</b> ${brl(db.totalAssumidoArrematante)}`);
   else if (db.aLevantar) rxLinhas.push(`<b>Débitos propter rem:</b> a levantar (IPTU/condomínio)`);
   if (cron.length) rxLinhas.push(`<b>Cronograma:</b> ${cron.map(esc).join(' · ')}`);
-  const raioXHtml = (rxLinhas.length || cad.length || cert.length) ? `
+  const raioXHtml = (rxLinhas.length || cad.length) ? `
 <div class="av" style="border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;padding:14px 16px;margin:12px 0;">
   <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;color:#1e3a8a;margin-bottom:8px;">Raio-X jurídico</div>
   ${rxLinhas.map(l => `<div style="font-size:11.5px;color:#334155;line-height:1.6;margin-bottom:3px;">${l}</div>`).join('')}
   ${cad.length ? `<div style="font-size:11px;color:#334155;margin-top:8px;"><b>Cadeia dominial (${cad.length}):</b><br/>${cad.slice(0, 10).map(a => `${esc(a.ato || '—')}${a.data ? ' · ' + dataBR(a.data) : ''}: ${esc([a.evento, a.parte].filter(Boolean).join(' — '))}`).join('<br/>')}</div>` : ''}
-  ${cert.length ? `<div style="font-size:11px;color:#334155;margin-top:8px;"><b>Certidões recomendadas:</b> ${cert.map(c => esc(c.nome)).join(', ')}</div>` : ''}
+</div>` : '';
+
+  // Certidões recomendadas — SEÇÃO FINAL do relatório (as que o arrematante deve
+  // gerar antes do lance), com órgão, motivo e se sai grátis online.
+  const certidoesHtml = cert.length ? `
+<div class="av" style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:10px;padding:14px 16px;margin-top:14px;page-break-inside:avoid;">
+  <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;color:#1e3a8a;margin-bottom:4px;">Certidões a gerar antes do lance</div>
+  <div style="font-size:10px;color:#475569;margin-bottom:10px;">Documentos que confirmam a segurança da arrematação. As marcadas "online" saem grátis pela internet; as demais no órgão indicado.</div>
+  ${cert.map(c => `<div style="border-top:1px solid #dbeafe;padding:7px 0;">
+    <div style="font-size:11.5px;font-weight:700;color:#0f172a;">${esc(c.nome)}${c.online ? ' <span style="font-size:9px;font-weight:700;color:#047857;background:#d1fae5;border-radius:10px;padding:1px 7px;">online</span>' : ''}</div>
+    ${c.orgao ? `<div style="font-size:10.5px;color:#475569;">Órgão: ${esc(c.orgao)}</div>` : ''}
+    ${c.motivo ? `<div style="font-size:10.5px;color:#475569;line-height:1.5;">${esc(c.motivo)}</div>` : ''}
+  </div>`).join('')}
 </div>` : '';
 
   // Parecer (split por § SEÇÃO)
@@ -157,6 +169,7 @@ ${checklistHtml}
 ${raioXHtml}
 ${parecerHtml}
 ${lacunasHtml}
+${certidoesHtml}
 
 <div class="foot av">
   Esta análise documental e processual é gerada com apoio de inteligência artificial, a partir dos documentos disponíveis e de consultas públicas. Pode conter imprecisões e não substitui a análise de um profissional nem a verificação presencial. Recomendamos agendar a reunião com um analista BidPro e, uma vez aprovado, o laudo jurídico definitivo por advogado antes de qualquer lance.
