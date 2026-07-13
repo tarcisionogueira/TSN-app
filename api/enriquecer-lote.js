@@ -13,6 +13,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
+import { hostExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
 import { PDFParse } from 'pdf-parse';
@@ -30,6 +31,8 @@ function sb(path, opts = {}) {
 
 // fetch direto; se 403/erro → Bright Data (desbloqueia fontes que barram o servidor).
 export async function fetchLote(url) {
+  // Anti-SSRF: URL vinda do banco (url_lote/link_edital) — nunca alcança rede interna/metadados.
+  if (!hostExternoSeguro(url)) return { html: '', finalUrl: url, via: 'bloqueado' };
   const h = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'pt-BR,pt;q=0.9' };
   let resp = null;
   try { resp = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(9000) }); } catch { resp = null; }
@@ -86,7 +89,7 @@ export function extrairAvaliacao(html) {
 // para o laudo documental, que já usa o proxy pago sob demanda). Devolve os
 // campos extraídos ou null. Só tenta quando a URL é um .pdf.
 async function lerCartorioMatricula(url) {
-  if (!url || !/^https?:\/\//.test(url) || !/\.pdf(\?|#|$)/i.test(url)) return null;
+  if (!hostExternoSeguro(url) || !/\.pdf(\?|#|$)/i.test(url)) return null;
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' }, redirect: 'follow', signal: AbortSignal.timeout(9000) });
     if (!r.ok) return null;

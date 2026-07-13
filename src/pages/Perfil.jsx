@@ -132,13 +132,13 @@ export default function Perfil() {
           body: JSON.stringify({ imagem }),
         });
         const json = await res.json();
+        // A persistência de identidade_validada/pendente é feita NO SERVIDOR (service
+        // key) por /api/validar-selfie — o cliente não escreve mais esses campos (o
+        // trigger de perfis os bloqueia). Aqui só reflete o resultado retornado.
         if (json.ok) {
-          await supabase.from('perfis').update({ identidade_validada: true, identidade_validada_em: new Date().toISOString(), identidade_pendente: false }).eq('id', user.id);
           setIdentValidada(true); setIdentPendente(false);
           setSelfieMsg({ ok: true, texto: 'Identidade verificada com sucesso!' });
         } else {
-          // Claude não aprovou automaticamente — marca como pendente para revisão manual
-          await supabase.from('perfis').update({ identidade_pendente: true }).eq('id', user.id);
           setIdentPendente(true);
           setSelfieMsg({ ok: false, texto: json.mensagem || 'Foto não aprovada. Nossa equipe irá revisar.' });
         }

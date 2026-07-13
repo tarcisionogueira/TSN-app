@@ -13,6 +13,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 import { getUser } from './_auth.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
 import { fetchViaBrightData } from './_brightdata.js';
+import { hostExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -22,7 +23,9 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // que ajude a geolocalizar: logradouro + número (leva a nível 'endereço', o mais
 // preciso), bairro e CEP. fetch direto primeiro; se bloquear (Cloudflare), BD.
 async function infoDoDocumento(url) {
-  if (!url || !/^https?:\/\//.test(url)) return null;
+  // Anti-SSRF: a URL vem do banco (link_edital) e é buscada pelo servidor — bloqueia
+  // destinos internos/metadados de nuvem, permitindo qualquer leiloeiro/CDN público.
+  if (!hostExternoSeguro(url)) return null;
   let txt = '';
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(8000) });

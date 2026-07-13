@@ -37,3 +37,49 @@ export function hostPermitido(rawUrl) {
   try { u = new URL(rawUrl); } catch { return false; }
   return u.protocol === 'https:' && ALLOWED_HOSTS.has(u.hostname);
 }
+
+// Faixas de IP INTERNAS/reservadas que um fetch do servidor NUNCA deve alcançar
+// (loopback, redes privadas, link-local/metadados de nuvem, CGNAT, "this network").
+const FAIXAS_IP_INTERNAS = [
+  /^127\./,                                    // loopback
+  /^10\./,                                      // privado classe A
+  /^192\.168\./,                                // privado classe C
+  /^169\.254\./,                                // link-local / metadados AWS/GCP/Azure
+  /^172\.(1[6-9]|2\d|3[01])\./,                 // privado classe B (172.16–172.31)
+  /^0\./,                                        // "this" network
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,   // CGNAT 100.64.0.0/10
+];
+
+// Anti-SSRF para os fetchers de ENRIQUECIMENTO (enriquecer-lote, geocodificar,
+// gerar-documental): eles precisam alcançar QUALQUER leiloeiro/CDN público — uma
+// allowlist exata quebraria a cobertura — mas jamais a rede interna ou o endpoint
+// de metadados da nuvem. Bloqueia literais de IP privado/loopback/link-local e
+// hostnames internos. Não resolve DNS (o runtime serverless não expõe resolver);
+// cobre o vetor concreto: uma URL de documento no banco apontando p/ 169.254.169.254,
+// localhost, 10.x, etc. Trata URL ilegível/protocolo não-http como interno (fail-closed).
+export function ehHostInterno(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { return true; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return true;
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, ''); // remove colchetes de IPv6
+  if (!host) return true;
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host.endsWith('.internal') || host.endsWith('.local') || host.endsWith('.lan')) return true;
+  // IPv6 loopback / não-especificado / link-local (fe80::) / unique-local (fc00::/7)
+  if (host === '::1' || host === '::') return true;
+  if (/^fe80:/i.test(host) || /^f[cd][0-9a-f]*:/i.test(host)) return true;
+  // IPv4-mapeado em IPv6 (::ffff:a.b.c.d) — o parser WHATWG normaliza p/ hex
+  // (::ffff:a9fe:a9fe), driblando o teste de IPv4 abaixo. Bloqueia todos os mapeados:
+  // embutem um IPv4 e são vetor clássico de bypass de SSRF; nenhum uso legítimo aqui.
+  if (/::ffff:/i.test(host)) return true;
+  // IPv4 (literal, inclusive na forma pontilhada dentro de um mapeado não-normalizado)
+  const m = host.match(/(?:^|:)((?:\d{1,3}\.){3}\d{1,3})$/);
+  const ipv4 = m ? m[1] : host;
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ipv4) && FAIXAS_IP_INTERNAS.some((re) => re.test(ipv4))) return true;
+  return false;
+}
+
+/** Destino externo seguro: http(s) público e que NÃO aponta p/ rede interna/metadados. */
+export function hostExternoSeguro(rawUrl) {
+  return !!rawUrl && /^https?:\/\//i.test(rawUrl) && !ehHostInterno(rawUrl);
+}

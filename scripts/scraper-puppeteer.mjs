@@ -61,18 +61,54 @@ function parseBRL(str) {
 async function salvarImoveis(imoveis, fonte) {
   if (!imoveis.length) return;
 
-  const rows = imoveis.map(im => ({
-    ...im,
-    ativo: true, // coletado agora ⇒ está ativo (reativa lotes que voltaram)
-    viavel: im.valor_avaliacao > 0 ? (1 - im.valor_minimo / im.valor_avaliacao) >= 0.3 : null,
-    score_viabilidade: im.valor_avaliacao > 0
-      ? Math.min(100, Math.round((1 - im.valor_minimo / im.valor_avaliacao) * 150))
-      : 30,
-    desconto_percentual: im.valor_avaliacao > 0
-      ? Math.round((1 - im.valor_minimo / im.valor_avaliacao) * 100)
-      : null,
-    atualizado_em: new Date().toISOString(),
-  }));
+  // MESCLAGEM de documentos (fix de raiz): o upsert por fonte_id sobrescreve a linha
+  // inteira, então o scrape diário APAGAVA os anexos/matrícula capturados fora dele
+  // (backfill em jsonb de MEGA/BIASI/Sodré era transitório). Aqui carregamos os docs
+  // já existentes e fazemos UNIÃO — o scrape do dia é a fonte da verdade, mas os docs
+  // de backfill que ele não traz são preservados. Links de coluna (matrícula/regras)
+  // idem: só sobrescreve quando o scrape traz um valor novo.
+  const fonteIds = imoveis.map(im => im.fonte_id).filter(Boolean);
+  const existentes = new Map();
+  for (let i = 0; i < fonteIds.length; i += 150) {
+    try {
+      const { data } = await supabase
+        .from('imoveis_leilao')
+        .select('fonte_id, anexos, link_matricula, link_regras_venda')
+        .in('fonte_id', fonteIds.slice(i, i + 150));
+      for (const r of data || []) existentes.set(r.fonte_id, r);
+    } catch (e) { console.log(`  [${fonte}] merge-docs lookup erro: ${String(e.message).slice(0, 80)}`); }
+  }
+
+  const rows = imoveis.map(im => {
+    const row = {
+      ...im,
+      ativo: true, // coletado agora ⇒ está ativo (reativa lotes que voltaram)
+      viavel: im.valor_avaliacao > 0 ? (1 - im.valor_minimo / im.valor_avaliacao) >= 0.3 : null,
+      score_viabilidade: im.valor_avaliacao > 0
+        ? Math.min(100, Math.round((1 - im.valor_minimo / im.valor_avaliacao) * 150))
+        : 30,
+      desconto_percentual: im.valor_avaliacao > 0
+        ? Math.round((1 - im.valor_minimo / im.valor_avaliacao) * 100)
+        : null,
+      atualizado_em: new Date().toISOString(),
+    };
+    const prev = im.fonte_id ? existentes.get(im.fonte_id) : null;
+    if (prev) {
+      // União de anexos por URL (novos primeiro; agrega os de backfill que faltaram). Cap 25.
+      const novos = Array.isArray(im.anexos) ? im.anexos : [];
+      const antigos = Array.isArray(prev.anexos) ? prev.anexos : [];
+      if (antigos.length) {
+        const vistos = new Set(novos.map(a => a?.url).filter(Boolean));
+        const merge = [...novos];
+        for (const a of antigos) { if (a?.url && !vistos.has(a.url)) { vistos.add(a.url); merge.push(a); } }
+        row.anexos = merge.slice(0, 25);
+      }
+      // Preserva links de documento do backfill quando o scrape do dia não os traz.
+      if (prev.link_matricula && !im.link_matricula) row.link_matricula = prev.link_matricula;
+      if (prev.link_regras_venda && !im.link_regras_venda) row.link_regras_venda = prev.link_regras_venda;
+    }
+    return row;
+  });
 
   const { error } = await supabase
     .from('imoveis_leilao')

@@ -13,7 +13,10 @@ import crypto from 'crypto';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const SECRET = process.env.UNSUB_SECRET || process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_KEY || 'bidpro';
+// Sem fallback hardcoded: um segredo previsível ('bidpro') tornaria o token forjável
+// (descadastro de terceiros por enumeração). Se nenhum segredo estiver setado, a
+// validação falha fechada (todos os tokens rejeitados) — ver handler.
+const SECRET = process.env.UNSUB_SECRET || process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_KEY || '';
 const BASE = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
 export function assinarUnsub(userId) {
@@ -37,6 +40,8 @@ export default async function handler(req, res) {
   let userId = '';
   try { userId = Buffer.from(b64 || '', 'base64url').toString('utf8'); } catch { /* inválido */ }
 
+  // Fail-closed: sem segredo de assinatura, não valida nenhum token (evita forja).
+  if (!SECRET) { res.status(500).send(page('Erro', 'Não foi possível processar agora. Tente novamente mais tarde.')); return; }
   if (!userId || !sig || assinarUnsub(userId).split('.')[1] !== sig) {
     res.status(400).send(page('Link inválido', 'Este link de descadastro é inválido ou expirou. Você pode gerenciar suas preferências entrando na plataforma.'));
     return;

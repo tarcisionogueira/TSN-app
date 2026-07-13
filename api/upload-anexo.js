@@ -96,6 +96,16 @@ export default async function handler(req) {
   const buffer = await file.arrayBuffer();
   if (buffer.byteLength > MAX_BYTES) return json({ error: 'Arquivo excede 20 MB' }, 413);
 
+  // Confere a ASSINATURA REAL do arquivo (magic bytes) — o content-type é enviado
+  // pelo cliente e é forjável. Impede que um payload arbitrário (HTML/JS) seja
+  // aceito como matrícula/edital só por declarar application/pdf. Imóveis de leilão
+  // são um cache COMPARTILHADO; docs de não-staff já não sobrescrevem os da equipe.
+  const head = new Uint8Array(buffer.slice(0, 4));
+  const ehPDF = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46; // %PDF
+  const ehPNG = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47; // \x89PNG
+  const ehJPG = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;                     // JPEG SOI
+  if (!ehPDF && !ehPNG && !ehJPG) return json({ error: 'Conteúdo do arquivo não é um PDF/JPG/PNG válido' }, 415);
+
   const ext = contentType.includes('pdf') ? 'pdf'
     : contentType.includes('png') ? 'png'
     : 'jpg';
