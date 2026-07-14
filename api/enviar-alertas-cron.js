@@ -83,6 +83,10 @@ async function handler(req) {
   // (ignora a trava de 1x/semana e o opt-out) — prático para validar no navegador.
   const qs = new URL(req.url, 'http://localhost').searchParams;
   const testeEmail = (qs.get('email') || '').trim().toLowerCase();
+  // Modo FORÇAR: ?forcar=1 (com header CRON_SECRET) ignora o gate de "só segunda"
+  // para um disparo pontual em outro dia (ex.: a segunda não saiu). MANTÉM o opt-out
+  // e a trava anti-reenvio de 7 dias — não re-spamma quem já recebeu na semana.
+  const forcar = qs.get('forcar') === '1';
   // Auth SOMENTE por header (isCronAuthorized) — sem ?secret= por query (vazaria em
   // logs e permitia bular opt-out/throttle). O ?email= só escolhe o destinatário de teste.
   if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
@@ -207,8 +211,9 @@ async function handler(req) {
           const idadeMs = perfil.created_at ? (Date.now() - new Date(perfil.created_at).getTime()) : 0;
           if (idadeMs < 24 * 3600 * 1000) continue;
         } else {
-          // Recorrente: só às segundas, e não reenvia se já mandou nos últimos 7 dias.
-          if (!isSegunda) continue;
+          // Recorrente: só às segundas (ou com ?forcar=1), e não reenvia se já mandou
+          // nos últimos 7 dias.
+          if (!isSegunda && !forcar) continue;
           if (a.ultimo_envio > seteDias) continue;
         }
       }

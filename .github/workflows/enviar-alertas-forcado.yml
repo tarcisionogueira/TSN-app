@@ -1,0 +1,25 @@
+name: Disparo FORÇADO — e-mail de oportunidades (todos os assinantes)
+
+# Dispara o /api/enviar-alertas-cron?forcar=1 (com header CRON_SECRET), que envia o
+# e-mail de oportunidades para TODOS os assinantes elegíveis IGNORANDO o gate de
+# "só segunda-feira" — para um disparo pontual em outro dia (ex.: a segunda não
+# saiu). MANTÉM o opt-out e a trava anti-reenvio de 7 dias. Uso manual e consciente.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  disparar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparo forçado para todos os assinantes
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET vazio"; exit 1; fi
+          BASE="${APP_BASE_URL:-https://bidprobrasil.com.br}"
+          echo "POST ${BASE}/api/enviar-alertas-cron?forcar=1"
+          curl -sSL --max-time 295 -X POST "${BASE}/api/enviar-alertas-cron?forcar=1" \
+            -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n"
+          echo "Resposta:"; cat resp.json; echo
+          python3 -c "import json,sys; d=json.load(open('resp.json')); print('enviados=',d.get('enviados'),'total=',d.get('total')); sys.exit(0 if (d.get('enviados') or 0)>=1 else 2)"
