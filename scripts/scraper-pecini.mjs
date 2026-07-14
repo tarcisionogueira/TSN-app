@@ -27,6 +27,8 @@ import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-cor
 const BASE = 'https://www.pecinileiloes.com.br';
 const MAX_LOTES = Number(process.env.PECINI_MAX_LOTES || 40);
 const DRYRUN = process.env.PECINI_DRYRUN !== '0'; // default: dry-run (não grava)
+const DEBUG = process.env.PECINI_DEBUG === '1';   // dumpa contexto dos R$ p/ achar os rótulos reais
+let debugRestante = 3;                              // só nos primeiros lotes (log enxuto)
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -93,6 +95,18 @@ function parseDetalhe(html, rec) {
   const base = extrairGenerico(html, rec.loteUrl) || {};
   const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+  // RECON: com PECINI_DEBUG=1 dumpa o contexto de cada "R$ ..." (rótulo à esquerda)
+  // p/ descobrir os rótulos REAIS do site sem acesso direto (o proxy bloqueia Pecini).
+  if (DEBUG && debugRestante > 0) {
+    debugRestante--;
+    console.log(`\n[DEBUG ${rec.id}] contextos de R$ (texto):`);
+    for (const m of txt.matchAll(/(.{0,45})R\$\s*([\d.]+(?:,\d{2})?)/g)) {
+      console.log(`   …${m[1].trim()} » R$ ${m[2]}`);
+    }
+    const trimp = [...html.matchAll(/(Valor\w*|Lance\w*|Avalia\w*)["'\s:=]{1,4}R?\$?\s*([\d.]+,\d{2})/gi)].map(x => `${x[1]}=${x[2]}`);
+    if (trimp.length) console.log(`   [trimpath/attrs] ${trimp.join(' · ')}`);
+  }
 
   // Valores: SÓ pelos rótulos específicos (Avaliação/Lance) e pelo template
   // trimpath — NÃO caímos no min/max genérico do extrairGenerico, que pegava lixo

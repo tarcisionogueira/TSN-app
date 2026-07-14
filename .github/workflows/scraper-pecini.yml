@@ -15,6 +15,10 @@ on:
         description: 'Máx. de lotes por execução (cota Bright Data grátis)'
         required: false
         default: '40'
+      debug:
+        description: '1 = dumpa os contextos de R$ (recon dos rótulos)'
+        required: false
+        default: '0'
 
 concurrency:
   group: scraper-pecini
@@ -41,4 +45,5 @@ jobs:
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
           PECINI_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
           PECINI_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
+          PECINI_DEBUG: ${{ github.event.inputs.debug || '0' }}
         run: node scripts/scraper-pecini.mjs
