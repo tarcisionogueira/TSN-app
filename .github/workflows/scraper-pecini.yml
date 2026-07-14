@@ -1,0 +1,44 @@
+name: Scraper PECINI (Bright Data)
+
+# Dispatch-only (sem cron) até validar o parsing ao vivo. Cada lote = 1 request
+# Bright Data (cota semanal com teto de custo em _brightdata.js). Rode PRIMEIRO com
+# dryrun=1 (default) p/ conferir o parsing no log; depois dryrun=0 p/ gravar.
+# Quando estabilizado, considerar habilitar um cron modesto (respeitando a cota).
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = não grava (só loga o que inseriria) · 0 = grava'
+        required: false
+        default: '1'
+      max_lotes:
+        description: 'Máx. de lotes por execução (cota Bright Data grátis)'
+        required: false
+        default: '40'
+
+concurrency:
+  group: scraper-pecini
+  cancel-in-progress: false
+
+jobs:
+  pecini:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Scraper Pecini
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          PECINI_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
+          PECINI_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
+        run: node scripts/scraper-pecini.mjs
