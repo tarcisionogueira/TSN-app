@@ -9,6 +9,10 @@ on:
         description: 'Fontes a rodar (vazio = todas). Ex.: VENDASGOV ou MEGA,SOLD'
         required: false
         default: ''
+      ljud_debug:
+        description: '1 = dumpa a estrutura do bem LJUD (recon da URL do lote)'
+        required: false
+        default: '0'
 
 jobs:
   scraper-puppeteer:
@@ -40,6 +44,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SCRAPER_FONTES: ${{ github.event.inputs.fontes }}
+          LJUD_DEBUG: ${{ github.event.inputs.ljud_debug || '0' }}
         run: node scripts/scraper-puppeteer.mjs
 
       - name: Notify on failure

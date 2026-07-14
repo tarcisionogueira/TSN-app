@@ -1473,6 +1473,16 @@ async function scraperLJUD_navegador(browser, endpoint) {
       await new Promise(r => setTimeout(r, 120));
     }
     console.log(`    LJUD/${endpoint}: ${bens.size} bens em ${vistos} páginas`);
+    // RECON (LJUD_DEBUG=1): dumpa a estrutura do 1º bem p/ achar a URL do LOTE no
+    // portal (hoje só guardamos nm_url_leiloeiro = home do leiloeiro, sem lote/matrícula).
+    if (process.env.LJUD_DEBUG === '1') {
+      const primeiro = bens.values().next().value;
+      if (primeiro) {
+        console.log('    LJUD DEBUG keys:', Object.keys(primeiro).join(','));
+        const urlKeys = Object.keys(primeiro).filter(k => /url|slug|link|lote|leilao|matric|edital|path/i.test(k));
+        console.log('    LJUD DEBUG campos url-ish:', JSON.stringify(Object.fromEntries(urlKeys.map(k => [k, primeiro[k]]))).slice(0, 900));
+      }
+    }
   } finally { try { await page.close(); } catch {} }
   const seen = new Set(); const imoveis = [];
   for (const it of bens.values()) {
