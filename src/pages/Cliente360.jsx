@@ -78,12 +78,14 @@ export default function Cliente360() {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
   const [stats, setStats] = useState(null);
+  const [aprend, setAprend] = useState(null);   // corpus de aprendizado dos arremates
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
 
   // Estatísticas (triagem) — carrega uma vez ao abrir a tela.
   useEffect(() => {
     apiCall('/api/admin-usuario-360?stats=1').then((r) => r.json()).then((j) => { if (j && !j.error) setStats(j); }).catch(() => {});
+    apiCall('/api/arremate-aprendizado').then((r) => r.json()).then((j) => { if (j && !j.error) setAprend(j); }).catch(() => {});
   }, []);
 
   // Busca AO VIVO: já carrega a lista ao abrir (termo vazio) e filtra a cada dígito
@@ -225,6 +227,39 @@ export default function Cliente360() {
                 <div><div style={{ ...label, marginBottom: 5 }}>Tipos mais buscados</div>
                   <div style={{ fontSize: 12, color: '#334155' }}>{stats.top_tipos.map((t) => `${t.tipo_imovel} (${t.n})`).join(' · ')}</div></div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Aprendizado da IA a partir dos arremates reais (previsto × realizado) */}
+      {!dados && aprend && (
+        <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ ...label }}>Aprendizado da IA · arremates reais</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#0D63DB' }}>{aprend.total ?? 0}</div>
+              <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>arremates no corpus</div>
+            </div>
+            <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#059669' }}>{aprend.com_assertividade ?? 0}</div>
+              <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>já calibrando a IA</div>
+            </div>
+          </div>
+          {(aprend.resumo || []).length === 0 ? (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>Ainda sem assertividade calculada. Conforme os arremates atribuídos geram relatórios e registram revenda/aluguel/desfecho, a IA passa a se calibrar por modalidade aqui.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {aprend.resumo.map((s, i) => (
+                <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 6 : 0 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#5b21b6', background: '#ede9fe', padding: '3px 8px', borderRadius: 20 }}>
+                    {s.modalidade || 'n/d'}{s.tipo_aquisicao ? ` · ${s.tipo_aquisicao}` : ''} · {s.n}
+                  </span>
+                  {s.desconto_real_pct_med != null && <span>desconto real médio <b>{s.desconto_real_pct_med}%</b></span>}
+                  {s.valor_delta_pct_med != null && <span>· mercado {s.valor_delta_pct_med > 0 ? '+' : ''}{s.valor_delta_pct_med}% vs revenda</span>}
+                  {s.locacao_delta_pct_med != null && <span>· aluguel {s.locacao_delta_pct_med > 0 ? '+' : ''}{s.locacao_delta_pct_med}% vs real</span>}
+                </div>
+              ))}
             </div>
           )}
         </div>
