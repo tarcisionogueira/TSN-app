@@ -1,0 +1,27 @@
+name: Recon SODRE search-lots (chaves do lote)
+
+# Dumpa as chaves reais do objeto de lote da API pública /api/search-lots
+# (roda no runner do GitHub, que a Sodré atende). Usado p/ descobrir o nome
+# real do campo de imagem — o scraper chutava lot_image/image (não existem),
+# por isso link_foto ficava null para todos os lotes SODRE.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon search-lots
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/recon-sodre-searchlots.mjs
