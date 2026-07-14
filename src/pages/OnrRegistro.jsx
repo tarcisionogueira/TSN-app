@@ -111,8 +111,10 @@ export default function OnrRegistro() {
       setUploads(p => ({ ...p, [key]: 'error' }));
       return;
     }
-    // Bucket privado: gera signed URL de 1 ano (token não-adivinhável)
-    const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(data.path, 60 * 60 * 24 * 365);
+    // Bucket privado: signed URL CURTA só p/ preview na sessão. NÃO persistimos
+    // a URL — só o path; a leitura gera signed URL on-demand (evita guardar
+    // credencial de longa duração no banco).
+    const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(data.path, 3600);
     setDocs(p => ({ ...p, [key]: { nome: file.name, url: signed?.signedUrl || null, path: data.path } }));
     setUploads(p => ({ ...p, [key]: 'done' }));
   };
@@ -161,7 +163,7 @@ export default function OnrRegistro() {
         matricula:         form.matricula_numero.trim() || null,
         nome_arrematante:  form.nome_arrematante.trim(),
         cpf_cnpj_arrematante: form.tipo_pessoa === 'pj' ? form.cnpj : form.cpf_arrematante,
-        docs_enviados:     Object.entries(docs).map(([k, v]) => ({ key: k, nome: v.nome, url: v.url })),
+        docs_enviados:     Object.entries(docs).map(([k, v]) => ({ key: k, nome: v.nome, path: v.path })),
         status:            'protocolado',
         notas:             form.notas.trim() || null,
       };
@@ -452,10 +454,16 @@ export default function OnrRegistro() {
                   {r.docs_enviados && r.docs_enviados.length > 0 && (
                     <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {r.docs_enviados.map(d => (
-                        <a key={d.key} href={d.url} target="_blank" rel="noreferrer"
-                          style={{ fontSize: 11, padding: '3px 8px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 6, textDecoration: 'none', fontWeight: 600 }}>
+                        <button key={d.key} type="button"
+                          onClick={async () => {
+                            const alvo = d.path || null;
+                            if (!alvo) return;
+                            const { data } = await supabase.storage.from('documentos').createSignedUrl(alvo, 300);
+                            if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener');
+                          }}
+                          style={{ fontSize: 11, padding: '3px 8px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600 }}>
                           📄 {d.nome || d.key}
-                        </a>
+                        </button>
                       ))}
                     </div>
                   )}

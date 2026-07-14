@@ -15,12 +15,22 @@ export default function EbookPage() {
   const [dark, setDark] = useState(false);
   const [fontSize, setFontSize] = useState(17);
   const [comprouAvulso, setComprouAvulso] = useState(false);
+  const [arquivoUrl, setArquivoUrl] = useState(null);
 
   useEffect(() => {
     if (!id) return;
-    supabase.from('ebooks_admin').select('*').eq('id', id).single()
+    // Metadados só — NUNCA arquivo_url (vem por RPC de entitlement abaixo).
+    supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em').eq('id', id).single()
       .then(({ data }) => { setEbook(data); setLoading(false); });
   }, [id]);
+
+  // A URL do arquivo vem SÓ da RPC de entitlement server-side (obter_arquivo_ebook):
+  // devolve a URL apenas se grátis / plano / compra ativa. Fecha o vazamento de
+  // arquivo_url do ebook pago pela leitura pública de ebooks_admin.
+  useEffect(() => {
+    if (!id || !ebook) return;
+    supabase.rpc('obter_arquivo_ebook', { p_id: id }).then(({ data }) => setArquivoUrl(data || null));
+  }, [id, ebook, user, comprouAvulso]);
 
   // Verifica compra avulsa para ebooks pagos
   useEffect(() => {
@@ -34,8 +44,8 @@ export default function EbookPage() {
   const ehGratuito = ebook && Number(ebook.preco || 0) === 0;
   const podeAcessar = user && (temPlano || ehGratuito || comprouAvulso);
 
-  // Prefer pdf_url over arquivo_url
-  const pdfUrl = ebook?.pdf_url || ebook?.arquivo_url;
+  // A URL do arquivo vem da RPC de entitlement (não do registro público).
+  const pdfUrl = arquivoUrl;
   const isPdf = pdfUrl ? pdfUrl.toLowerCase().endsWith('.pdf') : false;
 
   if (loading) return (

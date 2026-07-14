@@ -82,8 +82,8 @@ R$ 5.000 para assessoria e club) para os valores acima, ou lê-los de `planos_co
 ## Triagem da auditoria id=9 (14/07, c072ad1) — 40 "altas"
 
 Verificados achado a achado contra o código + RLS real (project `zuwfiwokkdytvjixiwac`).
-**Resultado: 26 falso-positivos, 3 reais corrigidos (15, 23, 16), 4 decisão-do-dono,
-2 reais em aberto (34, 32).** Os achados-manchete do resumo ("cancelar assinaturas
+**Resultado: 27 falso-positivos (inclui 32), 5 reais corrigidos (15, 23, 16, 34, 39),
+1 real em aberto (18/19).** Os achados-manchete do resumo ("cancelar assinaturas
 alheias", "rebaixar planos", "sobrescrever documentos") são **FALSO-POSITIVOS** — os
 controles existem.
 
@@ -132,15 +132,38 @@ controles existem.
   ligado). Enumeração impossível. Hardening futuro opcional: mover `kyc_fotos` de Data URL
   p/ Storage privado (defesa em profundidade — o vetor de enumeração já está fechado).
 
-### Reais EM ABERTO (precisam de trabalho cuidadoso / decisão do dono):
-- **ebooks_admin.arquivo_url legível por anon** (34) — média: policy "Leitura publica
-  ebooks" `qual=true` expõe `arquivo_url` do ebook pago (hoje um link **público** do
-  Google Drive — o arquivo já está aberto). Fix: RPC de entitlement + mover PDF p/
-  bucket privado + signed URL.
-- **Cota de análise client-side** (32) — média: enforcement/incremento no cliente
-  (`Caso.jsx`); mover p/ RPC `SECURITY DEFINER` com `FOR UPDATE`.
-- **Decisão do dono** (18,19,39): assinatura de contrato/KYC no cliente e signed URLs de
-  1 ano guardadas em `onr_protocolos.docs_enviados` — endurecer conforme a operação.
+### Mais reais CORRIGIDOS (34, 39):
+- **ebooks_admin.arquivo_url legível por anon** (34) — **RESOLVIDO** (parcial + base p/
+  o resto): `arquivo_url` sai só pela RPC `obter_arquivo_ebook` (grátis/plano/compra);
+  EbookPage/Membros não selecionam mais a coluna; `revoke select (arquivo_url) from anon`.
+  Fecha a enumeração anônima. Como o PDF atual é um link **público do Drive**, a proteção
+  total exige o dono mover o arquivo p/ Storage privado (a RPC já devolve signed URL
+  quando isso ocorrer). Migração `obter_arquivo_ebook.sql`.
+- **Signed URL de 1 ano em onr_protocolos.docs_enviados** (39) — **RESOLVIDO**: passa a
+  guardar só o `path`; a leitura gera signed URL curta (300s) on-demand; o upload usa
+  signed URL de 1h só p/ preview na sessão (`OnrRegistro.jsx`). A tabela ainda nem existe
+  no banco (feature não publicada) → corte limpo, sem linhas legadas.
+
+### #32 — REAVALIADO como FALSO-POSITIVO:
+- **Cota de análise "client-side"** (32): o fluxo de análise PAGA real passa por
+  `api/gerar-analise.js` / `api/gerar-documental.js` (service key), que já enforçam a cota
+  ATOMICAMENTE via RPCs `SECURITY DEFINER consumir_analise_por` / `consumir_documental_por`
+  (check+incremento num único UPDATE, reset mensal, limite por `limite_ia(role,tipo)`). As
+  escritas client em `cotas_analise`/`analise_jobs` (Caso.jsx) são **bloqueadas por RLS**
+  (sem policy de INSERT/UPDATE p/ o dono) → no-op. A cota já é server-authoritative.
+
+### Real EM ABERTO (precisa de trabalho testado — não alterado p/ não quebrar):
+- **Assinatura direta pelo client em Contratos.jsx** (18/19) — média: o link PÚBLICO
+  (`ContratoLink.jsx`) já assina pelo endpoint autoritativo `api/assinar-contrato` (IP +
+  timestamp do servidor + hash do conteúdo + service key) ✅. Mas o "Meus contratos"
+  logado (`Contratos.jsx:105` `assinar()`) faz `update` DIRETO em `contratos_link`
+  (:135) com hash/geo/data do cliente; a policy UPDATE "Assinante pode assinar" tem
+  `with_check=NULL` → o assinante pode forjar `assinatura_hash`/`assinado_em`/geo do
+  próprio contrato `aguardando`, enfraquecendo a prova (Lei 14.063). Fix: rotear
+  `Contratos.assinar()` pelo endpoint + derrubar a policy. **Não aplicado** porque o
+  endpoint grava em colunas DIFERENTES (`assinatura`/`dados_signatario`) das que o
+  Contratos usa/exibe (`assinatura_data`/`assinante_nome/cpf`) — rotear cego quebraria a
+  exibição do contrato assinado. Precisa alinhar o schema/exibição e TESTAR o fluxo antes.
 
 ---
 

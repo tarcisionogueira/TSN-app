@@ -69,7 +69,7 @@ export default function Membros() {
     async function fetchData() {
       const { data: cs } = await supabase.from('cursos_admin').select('*').eq('ativo', true).order('ordem');
       const { data: as } = await supabase.from('aulas_admin').select('*').order('ordem');
-      const { data: es } = await supabase.from('ebooks_admin').select('*').eq('ativo', true).order('criado_em', { ascending: false });
+      const { data: es } = await supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em').eq('ativo', true).order('criado_em', { ascending: false });
 
       const cursosComModulos = (cs || []).map(c => {
         const aulasC = (as || []).filter(a => a.curso_id === c.id);
