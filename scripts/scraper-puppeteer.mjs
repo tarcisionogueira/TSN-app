@@ -2585,6 +2585,59 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
   return enr;
 }
 
+// ─── RECON Leiloaria Smart (Leilofy) — mapeia a API/estrutura (SPA + Cloudflare) ──
+// Roda só com SCRAPER_FONTES=LEILOFY_RECON. Carrega as páginas de listagem no
+// navegador real, captura os endpoints JSON (XHR/fetch) e dá dump da estrutura para
+// escrevermos o mapper. Não grava nada — é só descoberta.
+async function reconLeilofy(browser) {
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const apis = new Map();
+  page.on('response', async (resp) => {
+    try {
+      const url = resp.url();
+      if (/google|gtag|analytics|sentry|hotjar|clarity|facebook|recaptcha|cloudflare|cdn-cgi/i.test(url)) return;
+      const ct = resp.headers()['content-type'] || '';
+      if (!/json/i.test(ct)) return;
+      const j = await resp.json().catch(() => null);
+      if (!j || apis.has(url)) return;
+      const keys = Array.isArray(j) ? `array[${j.length}] de {${j[0] && typeof j[0] === 'object' ? Object.keys(j[0]).join(',') : typeof j[0]}}` : `{${Object.keys(j).join(',')}}`;
+      apis.set(url, { method: resp.request().method(), keys, sample: JSON.stringify(j).slice(0, 1500) });
+    } catch { /* ignora */ }
+  });
+  const urls = [
+    'https://leiloariasmart.com.br/imoveis',
+    'https://leiloariasmart.com.br/busca',
+    'https://leiloariasmart.com.br/leiloes',
+    'https://leiloariasmart.com.br/',
+  ];
+  for (const u of urls) {
+    try {
+      console.log(`\n[RECON] goto ${u}`);
+      await page.goto(u, { waitUntil: 'networkidle2', timeout: 45000 });
+      await new Promise(r => setTimeout(r, 4500));
+      const info = await page.evaluate(() => {
+        const nx = document.getElementById('__NEXT_DATA__')?.textContent || null;
+        const nuxt = typeof window.__NUXT__ !== 'undefined' ? JSON.stringify(window.__NUXT__).slice(0, 1500) : null;
+        const links = Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(h => h && /imovel|lote|lot|leilao|\/l\//i.test(h));
+        return { title: document.title, url: location.href, temNext: !!nx, nextSample: nx ? nx.slice(0, 1500) : null, nuxt, linksLote: [...new Set(links)].slice(0, 25) };
+      }).catch(() => null);
+      if (info) {
+        console.log(`[RECON] título="${info.title}" url=${info.url}`);
+        console.log(`[RECON] links de lote: ${JSON.stringify(info.linksLote)}`);
+        if (info.temNext) console.log(`[RECON] __NEXT_DATA__: ${info.nextSample}`);
+        if (info.nuxt) console.log(`[RECON] __NUXT__: ${info.nuxt}`);
+      }
+    } catch (e) { console.log(`[RECON] falhou ${u}: ${String(e.message).slice(0, 100)}`); }
+  }
+  console.log(`\n[RECON] ${apis.size} endpoint(s) JSON capturado(s):`);
+  for (const [url, i] of apis) console.log(`\n[RECON-API] ${i.method} ${url}\n  keys: ${i.keys}\n  sample: ${i.sample}`);
+  console.log('\n[RECON] fim.');
+  await page.close().catch(() => {});
+  return [];
+}
+
 async function main() {
   console.log(`\n🏠 Scraper Puppeteer — ${new Date().toISOString()}\n`);
 
@@ -2600,6 +2653,13 @@ async function main() {
   const ONLY = String(process.env.SCRAPER_FONTES || '').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
   const rodar = (f) => !ONLY.length || ONLY.includes(f);
   if (ONLY.length) console.log(`⚙️  SCRAPER_FONTES ativo — rodando apenas: ${ONLY.join(', ')}\n`);
+
+  // Modo descoberta da Leiloaria Smart (Leilofy): mapeia a API e encerra.
+  if (rodar('LEILOFY_RECON')) {
+    console.log('🔎 RECON Leiloaria Smart (Leilofy)...');
+    try { await reconLeilofy(browser); } catch (e) { console.error('RECON falhou:', e?.message); }
+    if (ONLY.length === 1) { await browser.close(); console.log('\n✅ RECON concluído.'); return; }
+  }
 
   try {
     // 1. Mega Leilões — varre TODAS as páginas (todos os estados), somente ativos
