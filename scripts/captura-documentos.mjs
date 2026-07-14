@@ -14,7 +14,7 @@ import { Buffer } from 'buffer';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
-const LOTE = Number(process.env.DOCS_LOTE || 15);
+const LOTE = Number(process.env.DOCS_LOTE || 40);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const ehUrl = v => typeof v === 'string' && /^https?:\/\//i.test(v);

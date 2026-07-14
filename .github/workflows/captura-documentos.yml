@@ -12,7 +12,7 @@ concurrency:
 jobs:
   documentos:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,4 +37,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # 40/run (~13s por lote → ~9 min; teto seguro no timeout de 45 min). O */15
+          # é throttled pelo GitHub p/ ~1-2h, então cada run precisa render mais.
+          DOCS_LOTE: '40'
         run: node scripts/captura-documentos.mjs
