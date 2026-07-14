@@ -2606,33 +2606,41 @@ async function reconLeilofy(browser) {
       apis.set(url, { method: resp.request().method(), keys, sample: JSON.stringify(j).slice(0, 1500) });
     } catch { /* ignora */ }
   });
-  const urls = [
-    'https://leiloariasmart.com.br/imoveis',
-    'https://leiloariasmart.com.br/busca',
-    'https://leiloariasmart.com.br/leiloes',
-    'https://leiloariasmart.com.br/',
-  ];
-  for (const u of urls) {
-    try {
-      console.log(`\n[RECON] goto ${u}`);
-      await page.goto(u, { waitUntil: 'networkidle2', timeout: 45000 });
-      await new Promise(r => setTimeout(r, 4500));
-      const info = await page.evaluate(() => {
-        const nx = document.getElementById('__NEXT_DATA__')?.textContent || null;
-        const nuxt = typeof window.__NUXT__ !== 'undefined' ? JSON.stringify(window.__NUXT__).slice(0, 1500) : null;
-        const links = Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(h => h && /imovel|lote|lot|leilao|\/l\//i.test(h));
-        return { title: document.title, url: location.href, temNext: !!nx, nextSample: nx ? nx.slice(0, 1500) : null, nuxt, linksLote: [...new Set(links)].slice(0, 25) };
-      }).catch(() => null);
-      if (info) {
-        console.log(`[RECON] título="${info.title}" url=${info.url}`);
-        console.log(`[RECON] links de lote: ${JSON.stringify(info.linksLote)}`);
-        if (info.temNext) console.log(`[RECON] __NEXT_DATA__: ${info.nextSample}`);
-        if (info.nuxt) console.log(`[RECON] __NUXT__: ${info.nuxt}`);
-      }
-    } catch (e) { console.log(`[RECON] falhou ${u}: ${String(e.message).slice(0, 100)}`); }
-  }
-  console.log(`\n[RECON] ${apis.size} endpoint(s) JSON capturado(s):`);
-  for (const [url, i] of apis) console.log(`\n[RECON-API] ${i.method} ${url}\n  keys: ${i.keys}\n  sample: ${i.sample}`);
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // 1) LISTAGEM: carrega /imoveis, faz scroll p/ carregar mais e dá dump do 1º card.
+  try {
+    console.log('\n[RECON] goto /imoveis');
+    await page.goto('https://leiloariasmart.com.br/imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
+    await sleep(4000);
+    for (let s = 0; s < 6; s++) { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await sleep(1500); }
+    const listing = await page.evaluate(() => {
+      const anchors = Array.from(document.querySelectorAll('a[href^="/imovel/"]'));
+      const ids = [...new Set(anchors.map(a => a.getAttribute('href')))];
+      const a = anchors[0];
+      let card = a; for (let k = 0; k < 5 && card && card.parentElement; k++) { card = card.parentElement; if ((card.className || '').toString().match(/card|item|imovel|lote|col/i)) break; }
+      return { total: ids.length, ids: ids.slice(0, 12), cardHTML: card ? card.outerHTML.replace(/\s+/g, ' ').slice(0, 3500) : null };
+    });
+    console.log(`[RECON] listagem: ${listing.total} ids. amostra: ${JSON.stringify(listing.ids)}`);
+    console.log(`[RECON] card HTML: ${listing.cardHTML}`);
+
+    // 2) DETALHE: primeiro imóvel — innerText + links de documentos + imagens.
+    const firstId = String(listing.ids[0] || '').replace('/imovel/', '');
+    if (firstId) {
+      console.log(`\n[RECON] goto /imovel/${firstId}`);
+      await page.goto(`https://leiloariasmart.com.br/imovel/${firstId}`, { waitUntil: 'networkidle2', timeout: 45000 });
+      await sleep(4000);
+      const det = await page.evaluate(() => {
+        const text = (document.body?.innerText || '').replace(/\n{2,}/g, '\n').slice(0, 4000);
+        const docs = Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(h => h && /\.pdf|edital|matricula|matrícula|documento|laudo|anexo/i.test(h));
+        const imgs = Array.from(document.querySelectorAll('img')).map(i => i.getAttribute('src') || i.getAttribute('data-src')).filter(Boolean).filter(s => !/logo|icon|avatar/i.test(s)).slice(0, 6);
+        return { text, docs: [...new Set(docs)].slice(0, 20), imgs };
+      });
+      console.log(`[RECON] detalhe innerText:\n${det.text}`);
+      console.log(`[RECON] detalhe docs: ${JSON.stringify(det.docs)}`);
+      console.log(`[RECON] detalhe imgs: ${JSON.stringify(det.imgs)}`);
+    }
+  } catch (e) { console.log(`[RECON] falhou: ${String(e.message).slice(0, 120)}`); }
+  console.log(`\n[RECON] ${apis.size} endpoint(s) JSON: ${[...apis.keys()].filter(u => !/jivosite|youtube/.test(u)).join(' | ') || '(nenhum relevante)'}`);
   console.log('\n[RECON] fim.');
   await page.close().catch(() => {});
   return [];
