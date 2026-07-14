@@ -313,7 +313,11 @@ async function scraperCEFcsv(uf) {
     const imoveis = rows.map(row => {
       const m = mapearColunaCaixa(row);
       const valorMin = parseBRNumber(m.valor_minimo);
-      const valorAval = parseBRNumber(m.valor_avaliacao);
+      // Sanitiza a avaliação da Caixa (como já se faz no Superbid): uma avaliação
+      // absurda/inflada (>20× o mínimo) geraria um "X% OFF" falso e empurraria um lote
+      // fraco (ou de 1ª praça) para dentro do corte de 40% do e-mail. Zera nesse caso
+      // → desconto vira null → excluído. Não afeta descontos legítimos.
+      const valorAval = sanitizarAval(parseBRNumber(m.valor_avaliacao), valorMin);
       if (!m.id || valorMin <= 0) return null;
 
       // Modalidade normalizada (venda_direta, 1ª/2ª praça, licitação, judicial...)
