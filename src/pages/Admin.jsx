@@ -2206,9 +2206,13 @@ function ContratosTab() {
   const [savingLink, setSavingLink] = useState(false);
 
   const [kycIncluido, setKycIncluido] = useState(false);
-  const [kycFotos, setKycFotos] = useState({ selfie_rosto: null, doc_frente: null, selfie_doc: null });
-  // Conjunto de fotos KYC: '2' = selfie + documento · '3' = + selfie segurando o documento
-  const [kycNivel, setKycNivel] = useState('2');
+  const [kycFotos, setKycFotos] = useState({ selfie_rosto: null, doc_frente: null, doc_verso: null, doc_digital: null, selfie_doc: null });
+  // Documento: 'fisico' (frente + verso) | 'digital' (CNH-e / RG digital)
+  const [kycModalidade, setKycModalidade] = useState('fisico');
+  // Extra opcional: selfie segurando o documento
+  const [kycSelfieSegurando, setKycSelfieSegurando] = useState(false);
+  // Verificação de identidade por IA em andamento (bloqueia o botão)
+  const [verificandoKyc, setVerificandoKyc] = useState(false);
 
   // Modo de criação: 'ia' (IA gera o texto) | 'assinar' (documento pronto que o admin carrega)
   const [modo, setModo] = useState(null);
@@ -2230,7 +2234,8 @@ function ContratosTab() {
     setTitulo(''); setTipo('servico'); setDescricao('');
     setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
     setLinkGerado(''); setTemplateSelecionado(null);
-    setKycIncluido(false); setKycFotos({ selfie_rosto: null, doc_frente: null, selfie_doc: null }); setKycNivel('2');
+    setKycIncluido(false); setKycFotos({ selfie_rosto: null, doc_frente: null, doc_verso: null, doc_digital: null, selfie_doc: null });
+    setKycModalidade('fisico'); setKycSelfieSegurando(false); setVerificandoKyc(false);
     setModo(null); setArquivoUrl(''); setArquivoNome(''); setArquivoUploading(false);
     setStep(0); // etapa 0 = escolher o modo (IA ou documento pronto)
   }
@@ -2335,6 +2340,51 @@ function ContratosTab() {
     } else if (!conteudo.trim()) {
       alert('O conteúdo do contrato está vazio.'); return;
     }
+
+    // Monta o conjunto de fotos KYC conforme a modalidade escolhida.
+    let kycFotosFinal = null;
+    let verificacaoKyc = null;
+    if (kycIncluido) {
+      kycFotosFinal = { selfie_rosto: kycFotos.selfie_rosto };
+      if (kycModalidade === 'digital') kycFotosFinal.doc_digital = kycFotos.doc_digital;
+      else { kycFotosFinal.doc_frente = kycFotos.doc_frente; kycFotosFinal.doc_verso = kycFotos.doc_verso; }
+      if (kycSelfieSegurando) kycFotosFinal.selfie_doc = kycFotos.selfie_doc;
+
+      // Fotos mínimas: selfie + documento (frente+verso no físico / digital).
+      const faltando = kycKeys.filter(k => !kycFotos[k]);
+      if (faltando.length) { alert('Envie todas as fotos do KYC: ' + faltando.map(k => KYC_LABELS[k].label).join(', ')); return; }
+
+      // Verificação por IA (documento válido + rosto bate). Veredito híbrido.
+      setVerificandoKyc(true);
+      try {
+        const rv = await apiCall('/api/verificar-identidade-kyc', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            selfie: kycFotos.selfie_rosto,
+            doc_tipo: kycModalidade,
+            doc_frente: kycFotos.doc_frente,
+            doc_verso: kycFotos.doc_verso,
+            doc_digital: kycFotos.doc_digital,
+          }),
+        });
+        const v = await rv.json().catch(() => ({}));
+        verificacaoKyc = { resultado: v.resultado || 'revisar', detalhes: v.detalhes || null, em: new Date().toISOString() };
+        setVerificandoKyc(false);
+        if (v.resultado === 'bloqueado') {
+          alert('⚠️ Verificação de identidade reprovada: ' + (v.mensagem || 'documento/rosto não conferem') + '\n\nCorrija as fotos e tente novamente.');
+          return;
+        }
+        if (v.resultado === 'revisar') {
+          if (!window.confirm('A IA não confirmou a identidade com segurança (' + (v.detalhes?.motivo || 'imagem pouco nítida') + ').\n\nGerar o contrato mesmo assim e marcar para revisão manual?')) return;
+        }
+      } catch {
+        setVerificandoKyc(false);
+        verificacaoKyc = { resultado: 'revisar', detalhes: { motivo: 'falha técnica na verificação' }, em: new Date().toISOString() };
+        if (!window.confirm('Não foi possível verificar a identidade automaticamente. Gerar o contrato e marcar para revisão manual?')) return;
+      }
+    }
+
     setSavingLink(true);
     const { data, error } = await supabase.from('contratos_link').insert({
       titulo: titulo || 'Contrato',
@@ -2343,14 +2393,8 @@ function ContratosTab() {
       arquivo_nome: ehAssinar ? arquivoNome : null,
       tipo_contrato: tipo,
       kyc_incluido: kycIncluido,
-      // Só grava as fotos do conjunto escolhido (nível '2' não inclui a selfie segurando o documento).
-      kyc_fotos: (() => {
-        if (!kycIncluido) return null;
-        const fotos = kycNivel === '3'
-          ? kycFotos
-          : { selfie_rosto: kycFotos.selfie_rosto, doc_frente: kycFotos.doc_frente, selfie_doc: null };
-        return (fotos.selfie_rosto || fotos.doc_frente || fotos.selfie_doc) ? fotos : null;
-      })(),
+      kyc_fotos: kycFotosFinal,
+      verificacao_kyc: verificacaoKyc,
     }).select().single();
     setSavingLink(false);
     if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
@@ -2381,61 +2425,74 @@ function ContratosTab() {
 
   const TIPO_LABEL = { servico:'Serviço', prestacao:'Prestação', locacao:'Locação', compra:'Compra e Venda', outro:'Outro', nda:'NDA / Sigilo' };
 
-  // Seção KYC compartilhada (modo IA e modo documento pronto). Duas opções de fotos:
-  // '2' = selfie + documento · '3' = + selfie segurando o documento.
-  const KYC_SLOTS = {
+  // Seção KYC compartilhada (modo IA e documento pronto): selfie + documento
+  // (FÍSICO frente/verso ou DIGITAL) + opcional "selfie segurando o documento".
+  // Ao gerar, a IA confere se o documento é válido e se a selfie é a mesma pessoa.
+  const KYC_LABELS = {
     selfie_rosto: { label: 'Selfie (rosto)', emoji: '🤳' },
-    doc_frente:   { label: 'Documento', emoji: '🪪' },
+    doc_frente:   { label: 'Documento — frente', emoji: '🪪' },
+    doc_verso:    { label: 'Documento — verso', emoji: '🪪' },
+    doc_digital:  { label: 'Documento digital (CNH-e / RG digital)', emoji: '📱' },
     selfie_doc:   { label: 'Selfie segurando o documento', emoji: '📋' },
   };
-  const kycKeys = kycNivel === '3' ? ['selfie_rosto', 'doc_frente', 'selfie_doc'] : ['selfie_rosto', 'doc_frente'];
+  const kycKeys = [
+    'selfie_rosto',
+    ...(kycModalidade === 'digital' ? ['doc_digital'] : ['doc_frente', 'doc_verso']),
+    ...(kycSelfieSegurando ? ['selfie_doc'] : []),
+  ];
+  const slotKyc = (key) => (
+    <label key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 8px', border: `2px dashed ${kycFotos[key] ? '#22c55e' : '#e2e8f0'}`, borderRadius: 10, cursor: 'pointer', background: kycFotos[key] ? '#f0fdf4' : '#f8fafc' }}>
+      {kycFotos[key] ? (
+        <img src={kycFotos[key]} alt={KYC_LABELS[key].label} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 6 }} />
+      ) : (
+        <>
+          <span style={{ fontSize: 24 }}>{KYC_LABELS[key].emoji}</span>
+          <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>{KYC_LABELS[key].label}</span>
+        </>
+      )}
+      <input type="file" accept="image/*" style={{ display: 'none' }}
+        onChange={e => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = ev => setKycFotos(p => ({ ...p, [key]: ev.target.result }));
+          reader.readAsDataURL(file);
+        }} />
+    </label>
+  );
   const renderKyc = () => (
     <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
       <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: kycIncluido ? 14 : 0 }}>
         <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0D63DB' }} />
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Incluir documentação de identificação (KYC) ao final do contrato</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>As fotos escolhidas ficam registradas na última página do contrato, junto à assinatura.</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Incluir e verificar identidade (KYC) ao final do contrato</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Ao gerar, a IA confere se o documento é válido e se a selfie é a mesma pessoa do documento. As fotos ficam na última página do contrato.</div>
         </div>
       </label>
       {kycIncluido && (
         <>
-          {/* Escolha do conjunto de fotos */}
-          <div style={{ display:'flex', gap:8, marginTop:12, marginBottom:4, flexWrap:'wrap' }}>
+          {/* Modalidade do documento */}
+          <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.4, marginTop:14, marginBottom:6 }}>Tipo de documento</div>
+          <div style={{ display:'flex', gap:8, marginBottom:8, flexWrap:'wrap' }}>
             {[
-              { v:'2', label:'Selfie + documento' },
-              { v:'3', label:'Selfie + documento + selfie segurando o documento' },
+              { v:'fisico', label:'Físico (frente e verso)' },
+              { v:'digital', label:'Digital (CNH-e / RG digital)' },
             ].map(op => (
-              <button key={op.v} type="button" onClick={() => setKycNivel(op.v)}
-                style={{ padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', border:'1px solid', textAlign:'left',
-                  background: kycNivel === op.v ? '#0D63DB' : '#fff',
-                  color: kycNivel === op.v ? '#fff' : '#475569',
-                  borderColor: kycNivel === op.v ? '#0D63DB' : '#cbd5e1' }}>
+              <button key={op.v} type="button" onClick={() => setKycModalidade(op.v)}
+                style={{ padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', border:'1px solid',
+                  background: kycModalidade === op.v ? '#0D63DB' : '#fff',
+                  color: kycModalidade === op.v ? '#fff' : '#475569',
+                  borderColor: kycModalidade === op.v ? '#0D63DB' : '#cbd5e1' }}>
                 {op.label}
               </button>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${kycKeys.length}, 1fr)`, gap: 10, marginTop: 10 }}>
-            {kycKeys.map((key) => (
-              <label key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 8px', border: `2px dashed ${kycFotos[key] ? '#22c55e' : '#e2e8f0'}`, borderRadius: 10, cursor: 'pointer', background: kycFotos[key] ? '#f0fdf4' : '#f8fafc' }}>
-                {kycFotos[key] ? (
-                  <img src={kycFotos[key]} alt={KYC_SLOTS[key].label} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 6 }} />
-                ) : (
-                  <>
-                    <span style={{ fontSize: 24 }}>{KYC_SLOTS[key].emoji}</span>
-                    <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>{KYC_SLOTS[key].label}</span>
-                  </>
-                )}
-                <input type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={e => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = ev => setKycFotos(p => ({ ...p, [key]: ev.target.result }));
-                    reader.readAsDataURL(file);
-                  }} />
-              </label>
-            ))}
+          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, color:'#475569', marginBottom:10 }}>
+            <input type="checkbox" checked={kycSelfieSegurando} onChange={e => setKycSelfieSegurando(e.target.checked)} style={{ width:15, height:15, accentColor:'#0D63DB' }} />
+            Incluir também “selfie segurando o documento”
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(kycKeys.length, 3)}, 1fr)`, gap: 10 }}>
+            {kycKeys.map(slotKyc)}
           </div>
         </>
       )}
@@ -2543,14 +2600,25 @@ function ContratosTab() {
               <div style={{ fontSize:13, color:'#111111', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{detalhe.conteudo}</div>
             </div>
 
-            {/* KYC fotos */}
+            {/* KYC fotos + resultado da verificação por IA */}
             {detalhe.kyc_incluido && detalhe.kyc_fotos && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Documentação KYC</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {['selfie_rosto','doc_frente','selfie_doc'].filter(k => detalhe.kyc_fotos[k]).map(k => (
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                  Documentação KYC
+                  {detalhe.verificacao_kyc?.resultado && (() => {
+                    const r = detalhe.verificacao_kyc.resultado;
+                    const cor = r === 'aprovado' ? '#059669' : r === 'bloqueado' ? '#dc2626' : '#d97706';
+                    const txt = r === 'aprovado' ? '✓ Identidade verificada (IA)' : r === 'bloqueado' ? '✗ Reprovada (IA)' : '⚠ Revisão manual (IA)';
+                    return <span style={{ padding:'2px 8px', borderRadius:999, fontSize:10, fontWeight:800, background:cor+'20', color:cor, textTransform:'none', letterSpacing:0 }}>{txt}</span>;
+                  })()}
+                </div>
+                {detalhe.verificacao_kyc?.detalhes?.motivo && (
+                  <div style={{ fontSize:11, color:'#64748b', marginBottom:8 }}>IA: {detalhe.verificacao_kyc.detalhes.motivo}</div>
+                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap:'wrap' }}>
+                  {['selfie_rosto','doc_frente','doc_verso','doc_digital','selfie_doc'].filter(k => detalhe.kyc_fotos[k]).map(k => (
                     <a key={k} href={detalhe.kyc_fotos[k]} target="_blank" rel="noopener noreferrer"
-                      style={{ flex: 1, display: 'block' }}>
+                      style={{ flex: '1 1 30%', minWidth: 90, display: 'block' }}>
                       <img src={detalhe.kyc_fotos[k]} alt={k} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
                     </a>
                   ))}
@@ -2665,8 +2733,8 @@ function ContratosTab() {
 
                 <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
                   <button style={S.btn('outline')} onClick={() => setStep(0)}>← Voltar</button>
-                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || arquivoUploading || !arquivoUrl}>
-                    {savingLink ? 'Gerando link…' : 'Gerar link de assinatura →'}
+                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || verificandoKyc || arquivoUploading || !arquivoUrl}>
+                    {verificandoKyc ? '🔎 Verificando identidade…' : savingLink ? 'Gerando link…' : 'Gerar link de assinatura →'}
                   </button>
                 </div>
               </>
@@ -2798,8 +2866,8 @@ function ContratosTab() {
                 <button style={S.btn('outline')} onClick={() => setStep(1)}>← Voltar e editar</button>
                 <div style={{ display:'flex', alignItems:'center', gap:12 }}>
                   <span style={{ fontSize:12, color:'#94a3b8' }}>{conteudo.split(/\s+/).filter(Boolean).length} palavras</span>
-                  <button style={{ ...S.btn('primary'), padding:'10px 28px' }} onClick={gerarLinkContrato} disabled={savingLink || !conteudo.trim()}>
-                    {savingLink ? 'Gerando link…' : '✓ Aprovar e gerar link'}
+                  <button style={{ ...S.btn('primary'), padding:'10px 28px' }} onClick={gerarLinkContrato} disabled={savingLink || verificandoKyc || !conteudo.trim()}>
+                    {verificandoKyc ? '🔎 Verificando identidade…' : savingLink ? 'Gerando link…' : '✓ Aprovar e gerar link'}
                   </button>
                 </div>
               </div>

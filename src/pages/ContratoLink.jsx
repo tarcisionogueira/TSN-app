@@ -361,9 +361,11 @@ export default function ContratoLink() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                 {[
-                  { key: 'selfie_rosto', label: '1. Selfie, Identidade Visual', desc: 'Foto do signatário para identificação' },
-                  { key: 'doc_frente', label: '2. Documento de Identidade', desc: 'RG ou CNH, frente' },
-                  { key: 'selfie_doc', label: '3. Selfie com Documento', desc: 'Confirmação de posse do documento' },
+                  { key: 'selfie_rosto', label: 'Selfie, Identidade Visual', desc: 'Foto do signatário para identificação' },
+                  { key: 'doc_frente', label: 'Documento de Identidade — Frente', desc: 'RG ou CNH, frente' },
+                  { key: 'doc_verso', label: 'Documento de Identidade — Verso', desc: 'RG ou CNH, verso' },
+                  { key: 'doc_digital', label: 'Documento Digital', desc: 'CNH-e / RG digital' },
+                  { key: 'selfie_doc', label: 'Selfie com Documento', desc: 'Confirmação de posse do documento' },
                 ].filter(({ key }) => contrato.kyc_fotos[key]).map(({ key, label, desc }) => (
                   <div key={key} style={{ background: '#1a2744', border: '1px solid #111111', borderRadius: 12, overflow: 'hidden' }}>
                     <img
