@@ -79,11 +79,30 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
     if (!imovelId) { setDocs([]); setDocsLoading(false); return; }
     setDocsLoading(true);
     const { data } = await supabase.from('imovel_anexos')
-      .select('id,tipo,nome,storage_path,criado_em')
+      .select('id,tipo,nome,storage_path,validacao,criado_em')
       .eq('imovel_id', imovelId).order('criado_em', { ascending: true });
     setDocs(Array.isArray(data) ? data : []);
     setDocsLoading(false);
   }, [imovelId]);
+  const [validando, setValidando] = React.useState(false);
+  const [valMsg, setValMsg] = React.useState(null);
+
+  // IA confere se cada anexo é MESMO desta arrematação (endereço/processo).
+  const validarDocs = async () => {
+    if (!imovelId || validando) return;
+    setValidando(true); setValMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/validar-anexos-arremate', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: JSON.stringify({ imovel_id: imovelId }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setValMsg({ ok: false, texto: j.error || 'Falha ao validar.' }); return; }
+      if (j.sem_referencia) { setValMsg({ ok: false, texto: j.motivo }); return; }
+      const divergentes = (j.resultados || []).filter(r => r.status === 'divergente').length;
+      setValMsg({ ok: divergentes === 0, texto: divergentes === 0 ? 'Tudo coerente com a arrematação.' : `${divergentes} anexo(s) parecem NÃO ser desta arrematação — revise e remova.` });
+      await carregarDocs();
+    } catch { setValMsg({ ok: false, texto: 'Falha ao validar.' }); }
+    finally { setValidando(false); }
+  };
   React.useEffect(() => { carregarDocs(); }, [carregarDocs]);
 
   // Números da operação: avaliação (imóvel) + valor de mercado (relatório concluído).
@@ -274,6 +293,14 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
                       <input type="file" accept="application/pdf,.pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
                     </label>
                   </div>
+                  {docs.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <button onClick={validarDocs} disabled={validando} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: validando ? '#f1f5f9' : '#faf5ff', color: validando ? '#94a3b8' : '#7c3aed', border: '1px solid #e9d5ff', borderRadius: 8, padding: '7px 12px', fontSize: 12.5, fontWeight: 700, cursor: validando ? 'default' : 'pointer' }}>
+                        {validando ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Validando…</> : '🤖 Validar documentos (conferir se são desta arrematação)'}
+                      </button>
+                      {valMsg && <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 600, color: valMsg.ok ? '#15803d' : '#b45309' }}>{valMsg.ok ? '✓ ' : '⚠️ '}{valMsg.texto}</div>}
+                    </div>
+                  )}
                 </>
               )}
               {docsLoading ? (
@@ -283,11 +310,16 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {docs.map(d => (
-                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: `1px solid ${d.validacao?.status === 'divergente' ? '#fecaca' : '#f1f5f9'}`, background: d.validacao?.status === 'divergente' ? '#fef2f2' : 'white', borderRadius: 10 }}>
                       <FileText size={17} color="#1e3a8a" />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <button onClick={() => abrirDoc(d)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', fontSize: 13, fontWeight: 700, color: '#1e3a8a', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%' }}>{d.nome}</button>
-                        {d.tipo && d.tipo !== 'outro' && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>{DOC_TIPO_LABEL[d.tipo] || d.tipo}</div>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {d.tipo && d.tipo !== 'outro' && <span style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>{DOC_TIPO_LABEL[d.tipo] || d.tipo}</span>}
+                          {d.validacao?.status === 'coerente' && <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d', background: '#dcfce7', padding: '1px 7px', borderRadius: 20 }}>✓ confere</span>}
+                          {d.validacao?.status === 'divergente' && <span title={d.validacao?.motivo || ''} style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', background: '#fee2e2', padding: '1px 7px', borderRadius: 20 }}>⚠️ não parece desta arrematação</span>}
+                          {d.validacao?.status === 'indeterminado' && <span style={{ fontSize: 10, fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 7px', borderRadius: 20 }}>? indeterminado</span>}
+                        </div>
                       </div>
                       <button onClick={() => abrirDoc(d)} title="Abrir" style={{ background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer' }}><ExternalLink size={15} /></button>
                       {!soLeitura && <button onClick={() => delDoc(d)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
