@@ -15,6 +15,13 @@ const brl = (v) => (v == null ? null : `R$ ${Number(v).toLocaleString('pt-BR')}`
 const card = { background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 };
 const label = { fontSize: 10, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 };
 
+// Rótulo amigável do plano (o tier real fica no role; o campo `plano` = status de pagamento).
+const PLANO_LABEL = { top2: 'Investidor Pro', assessorado: 'Assessoria', clube: 'Leilão Club', explorador: 'Explorador', admin: 'Admin', consultor: 'Consultor', analista: 'Analista', advogado: 'Advogado' };
+const planoLabel = (role) => PLANO_LABEL[role] || role || '—';
+const fmtCidades = (v) => Array.isArray(v)
+  ? v.map((c) => (c && typeof c === 'object') ? `${c.cidade || ''}${c.uf ? '/' + c.uf : ''}${c.raio_km ? ` (${c.raio_km}km)` : ''}` : String(c)).filter(Boolean).join(', ')
+  : String(v || '');
+
 function StatusChip({ status }) {
   const c = status === 'concluida' ? { bg: '#dcfce7', fg: '#15803d' }
     : status === 'erro' ? { bg: '#fee2e2', fg: '#b91c1c' }
@@ -83,6 +90,16 @@ export default function Cliente360() {
     } catch { setErro('Falha ao carregar o cliente.'); } finally { setCarregando(false); }
   };
 
+  // Volta do 360 do cliente para a lista (recarrega com o termo atual).
+  const voltar = () => {
+    setDados(null); setErro(''); setBuscando(true);
+    apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(termo.trim())}`)
+      .then((r) => r.json())
+      .then((j) => setResultados(Array.isArray(j) ? j : []))
+      .catch(() => setErro('Falha na busca.'))
+      .finally(() => setBuscando(false));
+  };
+
   const p = dados?.perfil || {};
   const a = dados?.auth || {};
   const email = a.email || '';
@@ -133,13 +150,17 @@ export default function Cliente360() {
 
       {dados && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <button onClick={voltar} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#334155', cursor: 'pointer' }}>
+            ← Voltar para a lista
+          </button>
           {/* Cabeçalho do cliente + contato */}
           <div style={{ ...card, background: '#111', color: 'white', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <div style={{ fontSize: 18, fontWeight: 900 }}>{p.nome || '(sem nome)'}</div>
               <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 2 }}>{email}{p.telefone ? ` · ${p.telefone}` : ''}</div>
               <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>
-                {p.role} · plano {p.plano || '—'} · {p.ativo ? 'ativo' : 'inativo'}
+                <span style={{ background: '#1e293b', color: '#93c5fd', fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{planoLabel(p.role)}</span>
+                {' · '}{p.ativo ? 'ativo' : 'inativo'}
                 {p.inadimplente_desde ? ' · ⚠ inadimplente' : ''}
               </div>
               <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
@@ -162,7 +183,7 @@ export default function Cliente360() {
                 {intencao.map(([k, v]) => (
                   <span key={k} style={{ fontSize: 12, background: '#f1f5f9', borderRadius: 8, padding: '5px 10px', color: '#334155' }}><b>{k}:</b> {v}</span>
                 ))}
-                {p.cidades_interesse && <span style={{ fontSize: 12, background: '#f1f5f9', borderRadius: 8, padding: '5px 10px', color: '#334155' }}><b>Cidades:</b> {Array.isArray(p.cidades_interesse) ? p.cidades_interesse.join(', ') : String(p.cidades_interesse)}</span>}
+                {p.cidades_interesse && <span style={{ fontSize: 12, background: '#f1f5f9', borderRadius: 8, padding: '5px 10px', color: '#334155' }}><b>Cidades:</b> {fmtCidades(p.cidades_interesse)}</span>}
               </div>
             </div>
           )}
