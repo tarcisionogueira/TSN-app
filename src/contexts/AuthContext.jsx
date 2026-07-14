@@ -24,9 +24,17 @@ async function fetchPerfil(userId) {
   if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0, cadastroIncompleto: false };
   const { data } = await supabase
     .from('perfis')
-    .select('role, ativo, inadimplente_desde, cpf_hash, lgpd_aceito')
+    .select('role, ativo, inadimplente_desde, cpf_hash, lgpd_aceito, nome, telefone, endereco_cidade, endereco_uf')
     .eq('id', userId)
     .single();
+
+  // Cadastro obrigatório: nome, telefone/WhatsApp, CPF, cidade E estado, + aceite LGPD.
+  // Falta QUALQUER um → o cliente é levado a /completar-cadastro antes de usar o app.
+  const cadastroFalta = !data?.nome || !String(data?.nome).trim()
+    || !data?.telefone
+    || !data?.cpf_hash
+    || !data?.endereco_cidade || !data?.endereco_uf
+    || !data?.lgpd_aceito;
 
   let inadimplenteDias = 0;
   if (data?.inadimplente_desde) {
@@ -42,7 +50,7 @@ async function fetchPerfil(userId) {
       role_anterior: data.role,
       role: 'explorador',
     }).eq('id', userId);
-    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: (!data?.cpf_hash || !data?.lgpd_aceito) };
+    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: cadastroFalta };
   }
 
   // Normaliza o sufixo _anual: a modalidade anual é forma de PAGAMENTO, não um
@@ -55,8 +63,8 @@ async function fetchPerfil(userId) {
     role: roleFinal,
     ativo: data?.ativo !== false,
     inadimplenteDias,
-    // Cliente sem CPF ou sem aceite LGPD (ex.: cadastro via Google) precisa completar
-    cadastroIncompleto: ehCliente && (!data?.cpf_hash || !data?.lgpd_aceito),
+    // Cliente sem nome/telefone/CPF/cidade/UF/LGPD precisa completar antes de usar o app.
+    cadastroIncompleto: ehCliente && cadastroFalta,
   };
 }
 
