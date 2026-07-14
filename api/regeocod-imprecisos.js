@@ -1,14 +1,23 @@
 // Re-enfileira imóveis com geocoding IMPRECISO (bairro/cidade) ou que FALHARAM,
 // marcando-os como 'refazer' para o cron de geocodificação tentar de novo com a
-// cascata melhorada (retry/backoff + Google). Rotaciona por geocod_reproc_em para
-// não re-tentar sempre os mesmos: cada linha volta à fila no máx. 1x a cada 14 dias.
-// Objetivo: subir o % de nível ENDEREÇO ao longo do tempo (destrava o score de
-// localização, que só roda em nível endereço, e melhora pins/raio).
+// cascata melhorada (retry/backoff + Google). Rotaciona pelo guard de 14 dias
+// (geocod_reproc_em) para não re-tentar sempre os mesmos.
+//
+// PRIORIZA POR DESCONTO (maior primeiro): os imóveis mais atrativos são os que
+// aparecem no topo da busca e no e-mail das 8h — logo, os que o usuário vê no
+// mapa antes de abrir a página. Corrigi-los primeiro elimina o efeito "pino no
+// bairro errado na 1ª vista" justamente onde ele mais aparece.
+//
+// VAZÃO: o cron /api/geocodificar (a cada 10 min) tem capacidade de ~23k/dia, mas
+// só processa quem está marcado 'refazer'. Este job é o gargalo — por isso o
+// limite subiu de 500 p/ 2000. Ajuste REGEOCOD_LIMITE (env) e/ou a frequência do
+// cron conforme a COTA do Google Geocoding (cada reprocessamento de endereço é 1
+// chamada Google; itens sem endereço reaproveitam cache por bairro no geocodificar).
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const LIMITE = parseInt(process.env.REGEOCOD_LIMITE || '500', 10);
+const LIMITE = parseInt(process.env.REGEOCOD_LIMITE || '2000', 10);
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -34,10 +43,13 @@ export default async function handler(req, resp) {
 
   const corte = new Date(Date.now() - 14 * 86400000).toISOString();
   // Imprecisos (bairro/cidade) ou que falharam, ainda não reprocessados neste ciclo.
+  // Ordena por DESCONTO desc: corrige primeiro os imóveis atrativos (topo da busca /
+  // e-mail das 8h), que são os mais vistos no mapa. O guard de 14 dias fica no WHERE
+  // (geocod_reproc_em), então trocar a ordenação não re-martela os mesmos.
   const sel = `imoveis_leilao?select=id&ativo=eq.true`
     + `&geocod_nivel=in.(bairro,cidade,falhou)`
     + `&or=(geocod_reproc_em.is.null,geocod_reproc_em.lt.${corte})`
-    + `&order=geocod_reproc_em.asc.nullsfirst&limit=${LIMITE}`;
+    + `&order=desconto_percentual.desc.nullslast&limit=${LIMITE}`;
   const r = await sb(sel);
   if (!r.ok) return resp.status(500).json({ error: 'select falhou', detalhe: (await r.text()).slice(0, 200) });
   const linhas = await r.json();
