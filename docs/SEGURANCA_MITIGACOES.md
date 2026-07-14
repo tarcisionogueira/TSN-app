@@ -79,6 +79,66 @@ R$ 5.000 para assessoria e club) para os valores acima, ou lê-los de `planos_co
 - **Por que é aceito:** `encodeURIComponent` codifica `&`, `=`, `,` e demais metacaracteres do PostgREST (viram `%26`/`%3D`/`%2C`), então não dá para injetar operadores/colunas extras na query string. Não é "SQL/PostgREST injection".
 - **Severidade justa:** informativo. (Hardening desejável: validar UUID quando o campo é um id; isso é "baixa", não "alta".)
 
+## Triagem da auditoria id=9 (14/07, c072ad1) — 40 "altas"
+
+Verificados achado a achado contra o código + RLS real (project `zuwfiwokkdytvjixiwac`).
+**Resultado: 26 falso-positivos, 2 reais corrigidos, 4 decisão-do-dono, 2 reais em
+aberto.** Os achados-manchete do resumo ("cancelar assinaturas alheias", "rebaixar
+planos", "sobrescrever documentos") são **FALSO-POSITIVOS** — os controles existem.
+
+### Falso-positivos re-sinalizados (NÃO reportar como alta) — evidência:
+- **asaas cancelar/gerenciar/criar_assinatura sem ownership** (achados 1,2): guard no
+  topo do handler (`api/asaas.js:137`) roda p/ TODAS as userActions (403 se
+  `body.email != authUser.email`). Ver item 7.
+- **SSRF enriquecer-lote / gerar-documental** (3,25): `hostExternoSeguro()` fail-closed
+  antes de todo fetch (`enriquecer-lote.js:35,92`; `gerar-documental.js:222`). Item 5.
+- **Injeção PostgREST** (4 cnj-monitor, 22 advogado-atendimentos, 24 duvida): filtros
+  usam `encodeURIComponent`; colunas `id/caso_id` são `uuid` no banco (rejeita não-UUID);
+  cnj-monitor é cron-gated (CRON_SECRET timing-safe). Item 9.
+- **scraper-caixa "bypass"** (5): todo o bloco é **código morto** após `return 410`
+  incondicional — inalcançável. Higiene, não vuln.
+- **upload-anexo sobrescreve docs** (6): gate anti-poisoning (`upload-anexo.js:130-133`)
+  barra não-staff de sobrescrever doc de staff; `role_criador` é server-side; magic-bytes
+  validados; RLS de `imovel_anexos` só deixa staff inserir. Cache compartilhado é
+  intencional. Residual: baixa (poisoning de doc pendente).
+- **simularRole** (9): guard `role==='admin'` (real, do banco) em `AuthContext.jsx:219`.
+- **Admin client-side sem role** (10-14): escrita de role barrada pelo trigger
+  `proteger_campos_sensiveis_perfil`; tabelas do painel têm RLS admin. Painel é UX; a
+  autorização é no banco (RLS), não no front.
+- **Arrematados DELETE sem ownership** (29,30): RLS por `auth.uid()` nas tabelas.
+- **AdminFinanceiro PIX sem validar valor** (17): o servidor (`asaas.js transferir_pix`)
+  valida valor>0 + teto + role admin. Front é defense-in-depth. Item 8.
+- **Atendimento/Caso/ImovelDetalhe/Curso** (31,33,35,36): filtros de UX; RLS no banco.
+- **push-send URL** (27), **duvida CORS wildcard** (23-cors), **onr paraUserId** (26):
+  baixa/inofensivo (ver detalhes no relatório da sessão).
+
+### Reais CORRIGIDOS nesta triagem:
+- **XSS na impressão do Admin** (15): `imprimirRelatorio` (Admin.jsx) fazia
+  `document.write` do conteúdo do chat sem escape (about:blank herda a origem) → DOM-XSS.
+  **Corrigido:** escape de HTML antes do write.
+- **/api/duvida sem rate limit** (23): endpoint público grava com service key (bypassa
+  RLS). **Corrigido:** `checkRateLimit` 5/min por IP.
+
+### Reais EM ABERTO (precisam de trabalho cuidadoso / decisão do dono):
+- **KYC/PII em contratos_link expostos ao anon** (16) — **ALTA**: a policy "Público
+  acessa contrato pelo token" (`SELECT` p/ `public`, qual só
+  `status IN ('aguardando','aguardando_assinatura') AND expira_em>now()`, **sem
+  predicado de token**) deixa qualquer anônimo ler `kyc_fotos` (fotos de identidade em
+  Data URL) + `assinante_email` de TODOS os contratos pendentes. Fix correto: servir o
+  contrato por endpoint service-key que exige o token + derrubar a policy pública +
+  mover KYC p/ Storage privado (o `ContratoLink.jsx` LÊ e exibe `kyc_fotos`, então não
+  dá p/ só revogar a coluna). Refactor do fluxo de assinatura — testar antes.
+- **ebooks_admin.arquivo_url legível por anon** (34) — média: policy "Leitura publica
+  ebooks" `qual=true` expõe `arquivo_url` do ebook pago (hoje um link **público** do
+  Google Drive — o arquivo já está aberto). Fix: RPC de entitlement + mover PDF p/
+  bucket privado + signed URL.
+- **Cota de análise client-side** (32) — média: enforcement/incremento no cliente
+  (`Caso.jsx`); mover p/ RPC `SECURITY DEFINER` com `FOR UPDATE`.
+- **Decisão do dono** (18,19,39): assinatura de contrato/KYC no cliente e signed URLs de
+  1 ano guardadas em `onr_protocolos.docs_enviados` — endurecer conforme a operação.
+
+---
+
 ## 10. Web Push — VAPID + criptografia aes128gcm (CORRIGIDO)
 - **Estava quebrado:** `push-send.js` importava a chave privada VAPID com `format:'raw'` (só vale p/ chave pública EC → o import lançava e o JWT nunca era gerado) e mandava o payload em JSON puro sob `Content-Encoding: aes128gcm` (sem cifrar) → o navegador não decifrava e a notificação era descartada. Push **nunca** chegava.
 - **Correção (versionada em `api/_webpush.js`):** JWT VAPID assinado importando a chave privada via **JWK** (`d/x/y`); payload cifrado conforme **RFC 8291 + RFC 8188** (ECDH efêmero + HKDF + AES-128-GCM, `keyid` no cabeçalho). Round-trip validado por teste local. **Não** reportar mais como pendente.
