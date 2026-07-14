@@ -123,7 +123,7 @@ export default function Cliente360() {
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{u.nome || '(sem nome)'}</div>
                     <div style={{ fontSize: 12, color: '#64748b' }}>{u.email}{u.telefone ? ` · ${u.telefone}` : ''}</div>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#0D63DB' }}>{u.role} · {u.plano || '—'}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#0D63DB', flexShrink: 0, background: '#eff6ff', padding: '3px 10px', borderRadius: 20 }}>{u.plano_label || u.role || '—'}</span>
                 </button>
               ))}
             </div>
