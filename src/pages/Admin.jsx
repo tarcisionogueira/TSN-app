@@ -2207,6 +2207,8 @@ function ContratosTab() {
 
   const [kycIncluido, setKycIncluido] = useState(false);
   const [kycFotos, setKycFotos] = useState({ selfie_rosto: null, doc_frente: null, selfie_doc: null });
+  // Conjunto de fotos KYC: '2' = selfie + documento · '3' = + selfie segurando o documento
+  const [kycNivel, setKycNivel] = useState('2');
 
   // Modo de criação: 'ia' (IA gera o texto) | 'assinar' (documento pronto que o admin carrega)
   const [modo, setModo] = useState(null);
@@ -2228,7 +2230,7 @@ function ContratosTab() {
     setTitulo(''); setTipo('servico'); setDescricao('');
     setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
     setLinkGerado(''); setTemplateSelecionado(null);
-    setKycIncluido(false); setKycFotos({ selfie_rosto: null, doc_frente: null, selfie_doc: null });
+    setKycIncluido(false); setKycFotos({ selfie_rosto: null, doc_frente: null, selfie_doc: null }); setKycNivel('2');
     setModo(null); setArquivoUrl(''); setArquivoNome(''); setArquivoUploading(false);
     setStep(0); // etapa 0 = escolher o modo (IA ou documento pronto)
   }
@@ -2341,7 +2343,14 @@ function ContratosTab() {
       arquivo_nome: ehAssinar ? arquivoNome : null,
       tipo_contrato: tipo,
       kyc_incluido: kycIncluido,
-      kyc_fotos: kycIncluido && (kycFotos.selfie_rosto || kycFotos.doc_frente || kycFotos.selfie_doc) ? kycFotos : null,
+      // Só grava as fotos do conjunto escolhido (nível '2' não inclui a selfie segurando o documento).
+      kyc_fotos: (() => {
+        if (!kycIncluido) return null;
+        const fotos = kycNivel === '3'
+          ? kycFotos
+          : { selfie_rosto: kycFotos.selfie_rosto, doc_frente: kycFotos.doc_frente, selfie_doc: null };
+        return (fotos.selfie_rosto || fotos.doc_frente || fotos.selfie_doc) ? fotos : null;
+      })(),
     }).select().single();
     setSavingLink(false);
     if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
@@ -2371,6 +2380,67 @@ function ContratosTab() {
   };
 
   const TIPO_LABEL = { servico:'Serviço', prestacao:'Prestação', locacao:'Locação', compra:'Compra e Venda', outro:'Outro', nda:'NDA / Sigilo' };
+
+  // Seção KYC compartilhada (modo IA e modo documento pronto). Duas opções de fotos:
+  // '2' = selfie + documento · '3' = + selfie segurando o documento.
+  const KYC_SLOTS = {
+    selfie_rosto: { label: 'Selfie (rosto)', emoji: '🤳' },
+    doc_frente:   { label: 'Documento', emoji: '🪪' },
+    selfie_doc:   { label: 'Selfie segurando o documento', emoji: '📋' },
+  };
+  const kycKeys = kycNivel === '3' ? ['selfie_rosto', 'doc_frente', 'selfie_doc'] : ['selfie_rosto', 'doc_frente'];
+  const renderKyc = () => (
+    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: kycIncluido ? 14 : 0 }}>
+        <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0D63DB' }} />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Incluir documentação de identificação (KYC) ao final do contrato</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>As fotos escolhidas ficam registradas na última página do contrato, junto à assinatura.</div>
+        </div>
+      </label>
+      {kycIncluido && (
+        <>
+          {/* Escolha do conjunto de fotos */}
+          <div style={{ display:'flex', gap:8, marginTop:12, marginBottom:4, flexWrap:'wrap' }}>
+            {[
+              { v:'2', label:'Selfie + documento' },
+              { v:'3', label:'Selfie + documento + selfie segurando o documento' },
+            ].map(op => (
+              <button key={op.v} type="button" onClick={() => setKycNivel(op.v)}
+                style={{ padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', border:'1px solid', textAlign:'left',
+                  background: kycNivel === op.v ? '#0D63DB' : '#fff',
+                  color: kycNivel === op.v ? '#fff' : '#475569',
+                  borderColor: kycNivel === op.v ? '#0D63DB' : '#cbd5e1' }}>
+                {op.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${kycKeys.length}, 1fr)`, gap: 10, marginTop: 10 }}>
+            {kycKeys.map((key) => (
+              <label key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 8px', border: `2px dashed ${kycFotos[key] ? '#22c55e' : '#e2e8f0'}`, borderRadius: 10, cursor: 'pointer', background: kycFotos[key] ? '#f0fdf4' : '#f8fafc' }}>
+                {kycFotos[key] ? (
+                  <img src={kycFotos[key]} alt={KYC_SLOTS[key].label} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 6 }} />
+                ) : (
+                  <>
+                    <span style={{ fontSize: 24 }}>{KYC_SLOTS[key].emoji}</span>
+                    <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>{KYC_SLOTS[key].label}</span>
+                  </>
+                )}
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => setKycFotos(p => ({ ...p, [key]: ev.target.result }));
+                    reader.readAsDataURL(file);
+                  }} />
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -2553,7 +2623,7 @@ function ContratosTab() {
                     { id:'ia', emoji:'✨', cor:'#6366f1', titulo:'Criar com IA', desc:'Você escreve em texto livre o que o contrato deve conter (e pode anexar documentos para a IA extrair as informações). A IA redige com máximo resguardo jurídico.' },
                     { id:'assinar', emoji:'📄', cor:'#0D63DB', titulo:'Assinar documento pronto', desc:'Você já tem o documento. Carregue o arquivo (PDF/Word/imagem) e gere o link de assinatura, sem editar o conteúdo.' },
                   ].map(op => (
-                    <button key={op.id} onClick={() => { setModo(op.id); setStep(1); }}
+                    <button key={op.id} onClick={() => { setModo(op.id); if (op.id === 'assinar') setTipo('outro'); setStep(1); }}
                       style={{ padding:'22px 18px', background:'white', border:`2px solid ${op.cor}33`, borderRadius:14, cursor:'pointer', textAlign:'left' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = op.cor; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = `${op.cor}33`; }}>
@@ -2572,22 +2642,9 @@ function ContratosTab() {
                 <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Documento pronto para assinatura</h3>
                 <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>Carregue o arquivo final. Ele será enviado para assinatura <strong>sem edição</strong>. A outra parte preenche os dados e assina digitalmente.</p>
 
-                <div style={{ display:'flex', gap:10, marginBottom:14 }}>
-                  <div style={{ flex:2 }}>
-                    <label style={S.label}>Título do contrato</label>
-                    <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do contrato" />
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <label style={S.label}>Tipo</label>
-                    <select style={S.input} value={tipo} onChange={e => setTipo(e.target.value)}>
-                      <option value="servico">Serviço</option>
-                      <option value="prestacao">Prestação</option>
-                      <option value="locacao">Locação</option>
-                      <option value="compra">Compra e Venda</option>
-                      <option value="nda">NDA / Sigilo</option>
-                      <option value="outro">Outro</option>
-                    </select>
-                  </div>
+                <div style={{ marginBottom:14 }}>
+                  <label style={S.label}>Título do contrato</label>
+                  <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do contrato" />
                 </div>
 
                 <div style={{ marginBottom:16 }}>
@@ -2604,44 +2661,7 @@ function ContratosTab() {
                   )}
                 </div>
 
-                {/* KYC — opcional (mesma seção do modo IA) */}
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: kycIncluido ? 14 : 0 }}>
-                    <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0D63DB' }} />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Incluir documentação KYC ao final do contrato</div>
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Selfie, documento e selfie com documento serão exibidos na última página</div>
-                    </div>
-                  </label>
-                  {kycIncluido && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 12 }}>
-                      {[
-                        { key: 'selfie_rosto', label: '1. Selfie (rosto)', emoji: '🤳' },
-                        { key: 'doc_frente', label: '2. Documento (frente)', emoji: '🪪' },
-                        { key: 'selfie_doc', label: '3. Selfie + documento', emoji: '📋' },
-                      ].map(({ key, label, emoji }) => (
-                        <label key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 8px', border: `2px dashed ${kycFotos[key] ? '#22c55e' : '#e2e8f0'}`, borderRadius: 10, cursor: 'pointer', background: kycFotos[key] ? '#f0fdf4' : '#f8fafc' }}>
-                          {kycFotos[key] ? (
-                            <img src={kycFotos[key]} alt={label} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 6 }} />
-                          ) : (
-                            <>
-                              <span style={{ fontSize: 24 }}>{emoji}</span>
-                              <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>{label}</span>
-                            </>
-                          )}
-                          <input type="file" accept="image/*" style={{ display: 'none' }}
-                            onChange={e => {
-                              const file = e.target.files[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = ev => setKycFotos(p => ({ ...p, [key]: ev.target.result }));
-                              reader.readAsDataURL(file);
-                            }} />
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {renderKyc()}
 
                 <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
                   <button style={S.btn('outline')} onClick={() => setStep(0)}>← Voltar</button>
@@ -2703,45 +2723,7 @@ function ContratosTab() {
                   )}
                 </div>
 
-                {/* KYC — opcional */}
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: kycIncluido ? 14 : 0 }}>
-                    <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0D63DB' }} />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Incluir documentação KYC ao final do contrato</div>
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Selfie, documento e selfie com documento serão exibidos na última página</div>
-                    </div>
-                  </label>
-
-                  {kycIncluido && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 12 }}>
-                      {[
-                        { key: 'selfie_rosto', label: '1. Selfie (rosto)', emoji: '🤳' },
-                        { key: 'doc_frente', label: '2. Documento (frente)', emoji: '🪪' },
-                        { key: 'selfie_doc', label: '3. Selfie + documento', emoji: '📋' },
-                      ].map(({ key, label, emoji }) => (
-                        <label key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 8px', border: `2px dashed ${kycFotos[key] ? '#22c55e' : '#e2e8f0'}`, borderRadius: 10, cursor: 'pointer', background: kycFotos[key] ? '#f0fdf4' : '#f8fafc', transition: 'all 0.15s' }}>
-                          {kycFotos[key] ? (
-                            <img src={kycFotos[key]} alt={label} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 6 }} />
-                          ) : (
-                            <>
-                              <span style={{ fontSize: 24 }}>{emoji}</span>
-                              <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>{label}</span>
-                            </>
-                          )}
-                          <input type="file" accept="image/*" style={{ display: 'none' }}
-                            onChange={e => {
-                              const file = e.target.files[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = ev => setKycFotos(p => ({ ...p, [key]: ev.target.result }));
-                              reader.readAsDataURL(file);
-                            }} />
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {renderKyc()}
 
                 <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
                   <button style={S.btn('outline')} onClick={() => setStep(null)}>Cancelar</button>
