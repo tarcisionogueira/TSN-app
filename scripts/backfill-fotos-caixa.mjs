@@ -26,6 +26,23 @@ const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
 const REF = 'https://venda-imoveis.caixa.gov.br/';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
+// fetch com retry/backoff para blips transitórios (5xx/429/rede). Um único 500 do
+// PostgREST no select derrubava o backfill inteiro (a run travou em ~20k por causa
+// disso). Cria um AbortSignal novo a cada tentativa (o signal é de uso único).
+async function fetchRetry(url, { timeoutMs = 20000, ...opts } = {}, tentativas = 5) {
+  let ultimoErro;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const r = await fetch(url, { ...opts, signal: AbortSignal.timeout(timeoutMs) });
+      // 4xx (exceto 429) é erro do request, não adianta repetir.
+      if (r.ok || (r.status < 500 && r.status !== 429)) return r;
+      ultimoErro = new Error(`HTTP ${r.status}`);
+    } catch (e) { ultimoErro = e; }
+    if (i < tentativas - 1) await new Promise(res => setTimeout(res, Math.min(1000 * 2 ** i, 15000)));
+  }
+  throw ultimoErro || new Error('falha após retries');
+}
+
 // Busca um lote de imóveis CEF ainda não migrados (link_foto na Caixa).
 async function proximoLote(qtd) {
   const cond = SO_ATRATIVOS ? '&desconto_percentual=gte.40' : '';
@@ -33,7 +50,7 @@ async function proximoLote(qtd) {
     + `?select=id,fonte_id,link_foto&fonte=eq.CEF`
     + `&link_foto=like.*venda-imoveis.caixa.gov.br*${cond}`
     + `&order=desconto_percentual.desc.nullslast&limit=${qtd}`;
-  const r = await fetch(url, { headers: hdr, signal: AbortSignal.timeout(20000) });
+  const r = await fetchRetry(url, { headers: hdr, timeoutMs: 20000 });
   if (!r.ok) throw new Error(`select falhou: ${r.status}`);
   return r.json();
 }
