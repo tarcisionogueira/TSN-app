@@ -49,18 +49,21 @@ function fotoParaEmail(im, base) {
   // Proxy SEMPRE por www: o apex bidprobrasil.com.br responde 308 e clientes de e-mail
   // (Gmail) não seguem redirect em <img>, então a foto some.
   const proxBase = String(base || '').replace(/:\/\/(www\.)?bidprobrasil\.com\.br/, '://www.bidprobrasil.com.br');
+  const src = im?.link_foto || '';
+  // 1) Foto já hospedada por NÓS (Storage do Supabase): é o caminho confiável no e-mail —
+  //    a Caixa RECUSA o IP da Vercel (edge e node), então o img-proxy dá 404 no Gmail.
+  //    O backfill (scripts/backfill-fotos-caixa.mjs) migra as fotos da Caixa p/ o Storage.
+  if (src.includes('supabase.co')) return src;
   const isCef = im?.fonte === 'CEF' || im?.fonte === 'caixa';
   if (isCef && im?.fonte_id) {
-    // Caixa: a foto principal é F<num>21.jpg (confirmado servindo 200/JPEG). O F<num>.jpg
-    // (às vezes gravado no banco) dá 404. Serve pelo nosso proxy (a Caixa responde ao
-    // nosso IP; o proxy manda o Referer certo e resolve o hotlink nos clientes de e-mail).
+    // Fallback enquanto a foto não foi migrada: img-proxy da Caixa. ATENÇÃO: no e-mail
+    // (Gmail) isto tende a FALHAR, porque a Caixa não atende o IP da Vercel — a foto só
+    // aparece de verdade depois do backfill p/ o Storage. Mantido p/ não piorar o site.
     const num = String(im.fonte_id).replace(/^(caixa_|cef_)/, '');
     const caixa = `https://venda-imoveis.caixa.gov.br/fotos/F${num}21.jpg`;
     return `${proxBase}/api/img-proxy?url=${encodeURIComponent(caixa)}`;
   }
-  const src = im?.link_foto || '';
   if (!src) return null;
-  if (src.includes('supabase.co')) return src;
   if (src.startsWith('/')) return `${proxBase}${src}`;
   if (!/^https?:\/\//.test(src)) return null;
   // Demais leiloeiros carregam hotlink direto no e-mail (como no print) — não roteamos p/ não regredir.
