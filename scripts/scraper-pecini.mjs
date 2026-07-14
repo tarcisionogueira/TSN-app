@@ -54,13 +54,24 @@ function inferirTipo(titulo = '') {
   return 'outros';
 }
 
+// "barreiras-ba" → { cidade: 'Barreiras', uf: 'BA' } (o slug do lote traz cidade+UF).
+function cidadeUfDoSlug(slug) {
+  const m = String(slug || '').match(/^(.+)-([a-z]{2})$/i);
+  if (!m) return { cidade: null, uf: null };
+  const cidade = m[1].split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  return { cidade: cidade || null, uf: m[2].toUpperCase() };
+}
+
 // Enumera lotes do sitemap. Tolerante a 2 formatos: URLs /lote/{slug}/{id}/ (em
 // <loc>/<link>/href) e feed de listings (home_listing_id + city + region).
 function parseSitemap(xml) {
   const lotes = new Map(); // id -> { id, loteUrl, cidade, uf }
   for (const m of xml.matchAll(/\/lote\/([a-z0-9-]+)\/(\d+)\/?/gi)) {
     const id = m[2];
-    if (!lotes.has(id)) lotes.set(id, { id, loteUrl: `${BASE}/lote/${m[1].toLowerCase()}/${id}/`, cidade: null, uf: null });
+    if (!lotes.has(id)) {
+      const { cidade, uf } = cidadeUfDoSlug(m[1]); // cidade/UF vêm do slug da URL
+      lotes.set(id, { id, loteUrl: `${BASE}/lote/${m[1].toLowerCase()}/${id}/`, cidade, uf });
+    }
   }
   for (const bl of xml.matchAll(/<listing\b[\s\S]*?<\/listing>/gi)) {
     const b = bl[0];
@@ -83,19 +94,28 @@ function parseDetalhe(html, rec) {
   const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
-  // Avaliação (valor de referência) pelo rótulo específico.
-  const avaliacao = num((txt.match(/Avalia[çc][ãa]o[:\s]*R\$\s*([\d.]+,\d{2})/i) || [])[1]) || base.valor_avaliacao || 0;
-
-  // Lance mínimo/inicial: menor valor entre rótulos e o template trimpath.
+  // Valores: SÓ pelos rótulos específicos (Avaliação/Lance) e pelo template
+  // trimpath — NÃO caímos no min/max genérico do extrairGenerico, que pegava lixo
+  // (dry-run mostrou avaliação R$100mi e lance R$10). Faixa plausível p/ imóvel:
+  // piso R$1.000 (descarta taxas/placeholders), teto R$500mi. Sem match plausível
+  // fica 0 → checarQualidade descarta (melhor que gravar valor errado).
+  const plaus = (v) => (v >= 1000 && v <= 500_000_000) ? v : 0;
+  const avaliacao = plaus(num((txt.match(/Avalia[çc][ãa]o[:\s]*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
   const lances = [];
-  for (const m of txt.matchAll(/Lance\s*(?:Inicial|M[íi]nimo)[:\s]*R\$\s*([\d.]+,\d{2})/gi)) lances.push(num(m[1]));
+  for (const m of txt.matchAll(/Lance\s*(?:Inicial|M[íi]nimo|Atual)[:\s]*R\$\s*([\d.]+,\d{2})/gi)) lances.push(num(m[1]));
   for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) lances.push(num(m[1]));
-  const lancesValidos = lances.filter(v => v > 0);
-  const valorMinimo = lancesValidos.length ? Math.min(...lancesValidos) : (base.valor_minimo || 0);
+  const lancesValidos = lances.map(plaus).filter(v => v > 0);
+  const valorMinimo = lancesValidos.length ? Math.min(...lancesValidos) : 0;
 
   const modalidade = /venda\s*direta/i.test(txt) ? 'venda_direta'
     : /judicial/i.test(txt) ? 'judicial' : 'extrajudicial';
   const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
+
+  // Página genérica (lote inexistente/redirect p/ a home): og:image é o ícone do
+  // site (apple-touch-icon / Themes) e/ou título institucional. Marca p/ pular.
+  const paginaInvalida = !base.link_foto
+    || /apple-touch-icon|Themes\/DefaultClean|\/Content\/images\//i.test(base.link_foto || '')
+    || /^Pecini Leil[õo]es\s*[|-]/i.test((base.titulo || '').trim());
 
   return {
     titulo: (base.titulo || `Imóvel Pecini ${rec.id}`).slice(0, 180),
@@ -107,6 +127,7 @@ function parseDetalhe(html, rec) {
     descricao: (base.descricao || '').slice(0, 500) || null,
     data_leilao: base.data_leilao || extrairData(html),
     numero_matricula: base.numero_matricula || null,
+    paginaInvalida,
   };
 }
 
@@ -179,6 +200,7 @@ async function main() {
     const html = await bd(rec.loteUrl);
     if (!html) { semDetalhe++; console.log(`- ${rec.id}: detalhe não veio (teto BD?)`); continue; }
     const det = parseDetalhe(html, rec);
+    if (det.paginaInvalida) { semDetalhe++; console.log(`- ${rec.id}: página genérica/sem lote (pulado)`); continue; }
     const row = montarRow(rec, det);
     const q = checarQualidade(row, { estrito: false });
     console.log(`  ${rec.id} ${rec.cidade || '?'}/${rec.uf || '?'} · aval R$${row.valor_avaliacao} · min R$${row.valor_minimo} · desc ${row.desconto_percentual ?? '?'}% · foto ${row.link_foto ? 'sim' : 'NÃO'} · ${row.modalidade}${q.descartar ? ' · DESCARTADO(' + q.faltando.join(',') + ')' : (q.faltando.length ? ' · faltando ' + q.faltando.join(',') : ' · OK')}`);
