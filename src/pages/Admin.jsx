@@ -2746,22 +2746,9 @@ function ContratosTab() {
                 <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Descreva o contrato</h3>
                 <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>Escreva livremente o que o contrato deve conter — a IA redige com máximo resguardo jurídico (leis aplicáveis, LGPD, anticorrupção e foro de Feira de Santana/BA). O contrato será emitido pela <strong>Nogueira Empreendimentos</strong>. A outra parte preenche os dados e assina digitalmente.</p>
 
-                <div style={{ display:'flex', gap:10, marginBottom:12 }}>
-                  <div style={{ flex:2 }}>
-                    <label style={S.label}>Título do contrato</label>
-                    <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do contrato" />
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <label style={S.label}>Tipo</label>
-                    <select style={S.input} value={tipo} onChange={e => setTipo(e.target.value)}>
-                      <option value="servico">Serviço</option>
-                      <option value="prestacao">Prestação</option>
-                      <option value="locacao">Locação</option>
-                      <option value="compra">Compra e Venda</option>
-                      <option value="nda">NDA / Sigilo</option>
-                      <option value="outro">Outro</option>
-                    </select>
-                  </div>
+                <div style={{ marginBottom:12 }}>
+                  <label style={S.label}>Título do contrato</label>
+                  <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do contrato" />
                 </div>
 
                 <div style={{ marginBottom:14 }}>
