@@ -174,6 +174,9 @@ const CRITERIOS = {
   // `store` de cada oferta). Portal 9 ~72, portal 21 ~39 imóveis abertos.
   SBID9:    { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
   SBID21:   { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
+  // WebLeilões: inventário de imóveis pequeno (poucas dezenas); cidade/UF vêm do texto
+  // do card e do slug — critérios brandos para não marcar "degradado" à toa.
+  WEBLEILOES:{ min: 5,  valor: 0.60, uf: 0.45, link: 0.9 },
   _default: { min: 10,  valor: 0.70, uf: 0.40, link: 0.8 },
 };
 
@@ -1881,6 +1884,102 @@ async function scraperBiasi(browser) {
   return imoveis;
 }
 
+// ─── WEBLEILÕES (webleiloes.com.br) ───────────────────────────────────────────
+// Server-rendered. Listagens: /imoveis, /busca?categoria=imoveis, /leiloes (mix).
+// Cada lote é um link /oferta/{leilao|venda-direta}/imoveis/{categoria}/{n}/id-{id}/{slug}.
+// Extração robusta: a partir de cada link de lote, sobe ao card e lê texto/foto; o
+// tipo/cidade/UF saem do texto e da URL. edital/matrícula na página de detalhe →
+// enriquecerDocumentosLote vasculha.
+const WEBLEILOES_BASE = 'https://www.webleiloes.com.br';
+
+// Cidade/UF de "Cidade, UF" ou "Cidade/UF" — pega o ÚLTIMO par (o alt termina em
+// "…, Cidade/UF") e ignora ruído antes. Retorna {cidade, uf} ou vazio.
+function cidadeUfWL(txt) {
+  const s = String(txt || '');
+  let cidade = '', uf = '';
+  const re = /([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.\- ]{1,38}?)\s*[,/]\s*([A-Z]{2})\b/g;
+  let m, ult = null;
+  while ((m = re.exec(s))) ult = m;
+  if (ult) { cidade = ult[1].replace(/\s+/g, ' ').trim(); uf = ult[2]; }
+  return { cidade, uf };
+}
+
+function mapLoteWebLeiloes(l) {
+  const url = String(l.href || '').startsWith('http') ? l.href : `${WEBLEILOES_BASE}${l.href}`;
+  // Preço: do .r1 strong (leilão) ou 1º R$ do texto (venda-direta usa .list-datas).
+  const pm = String(l.preco || l.texto || '').match(/R\$\s*([\d.]+,\d{2})/);
+  const valor = pm ? parseBRL(pm[1]) : 0;
+  // Cidade/UF: prioriza a <li> de localização; fallback no alt e no slug da URL.
+  let { cidade, uf } = cidadeUfWL(l.local);
+  if (!uf) ({ cidade, uf } = cidadeUfWL(l.alt));
+  if (!uf) { const ms = url.match(/-([a-z\- ]+)-([a-z]{2})(?:$|[/?#])/i); if (ms) { cidade = toTitleCase(ms[1].replace(/-/g, ' ')); uf = ms[2].toUpperCase(); } }
+  const catUrl = String(l.categoria || '').replace(/-/g, ' ');
+  const tipo = normalizarTipo(`${catUrl} ${l.alt || ''}`);
+  const modalidade = /venda-direta/.test(String(l.href)) ? 'venda_direta'
+    : (/\bextrajudicial\b/i.test(l.texto || '') ? 'extrajudicial'
+    : (/\bjudicial\b/i.test(l.texto || '') ? 'judicial' : 'extrajudicial'));
+  const foto = l.img && /^https?:\/\//.test(l.img) ? l.img : null;
+  const am = String(l.alt || '').match(/(\d{1,3}(?:[.,]\d{1,2})?)\s*m²/);
+  const area = am ? parseFloat(am[1].replace('.', '').replace(',', '.')) : 0;
+  const titulo = (String(l.alt || '').replace(/\s+/g, ' ').trim() || `${toTitleCase(catUrl)}${cidade ? ' em ' + cidade : ''}`).slice(0, 180);
+  return {
+    fonte: 'WEBLEILOES', fonte_id: `webleiloes_${l.id}`,
+    titulo, tipo, modalidade,
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
+    cidade: cidade ? toTitleCase(cidade) : '',
+    bairro: '', endereco: '',
+    valor_avaliacao: 0, valor_minimo: valor, area_m2: area || 0,
+    descricao: String(l.alt || l.texto || '').slice(0, 500),
+    link_edital: url, url_lote: url, link_foto: foto,
+    leiloeiro: 'WebLeilões', data_leilao: null, forma_pagamento: 'a_vista',
+  };
+}
+
+async function scraperWebLeiloes(browser) {
+  console.log('  WebLeilões — server-rendered (imóveis + leilões)...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const bens = new Map();
+  try {
+    for (const path of ['/imoveis', '/busca?categoria=imoveis', '/leiloes']) {
+      try {
+        await page.goto(`${WEBLEILOES_BASE}${path}`, { waitUntil: 'networkidle2', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 2500));
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+        await new Promise(r => setTimeout(r, 1500));
+        const lotes = await page.evaluate(() => {
+          const out = []; const vistos = new Set();
+          const clean = (t) => (t || '').replace(/\s+/g, ' ').trim();
+          document.querySelectorAll('a[href*="/oferta/"][href*="/imoveis/"]').forEach((a) => {
+            const href = a.getAttribute('href') || '';
+            const mid = href.match(/id-(\d+)/); const id = mid ? mid[1] : null;
+            if (!id || vistos.has(id)) return; vistos.add(id);
+            const mcat = href.match(/\/oferta\/(?:leilao|venda-direta)\/imoveis\/([^/]+)\//);
+            const card = a.closest('article') || a.closest('li, [class*="card"]') || a.parentElement;
+            const q = (sel) => card ? clean(card.querySelector(sel)?.textContent) : '';
+            const imgEl = card ? card.querySelector('img') : null;
+            out.push({
+              href, id, categoria: mcat ? mcat[1] : '',
+              preco: q('.r1 strong') || q('.list-datas span') || q('strong'), // leilão | venda-direta
+              local: q('.cont-infos ul li') || q('ul li'),                    // "Cidade, UF"
+              alt: imgEl ? (imgEl.getAttribute('alt') || '') : '',            // "Tipo NNm²- Bairro, Cidade/UF"
+              img: imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '') : '',
+              texto: card ? clean(card.textContent).slice(0, 400) : '',
+            });
+          });
+          return out;
+        }).catch(() => []);
+        for (const l of lotes) if (l.id && !bens.has(l.id)) bens.set(l.id, l);
+        console.log(`    WebLeilões ${path}: +${lotes.length} (total ${bens.size})`);
+      } catch (e) { console.log(`    WebLeilões ${path}: ${String(e.message).slice(0, 60)}`); }
+    }
+  } finally { await page.close(); }
+  const imoveis = [...bens.values()].map(mapLoteWebLeiloes).filter(im => im.valor_minimo > 0 || (im.cidade && im.estado));
+  console.log(`  ✅ WebLeilões: ${imoveis.length} imóveis`);
+  return imoveis;
+}
+
 // ─── LEILÃO VIP (VIP Leilões) ─────────────────────────────────────────────────
 // Server-rendered (.NET). Modelo em 2 níveis, confirmado por captura real:
 //   /agenda?segmento=Imóveis   → cards .card-evento com links /evento/detalhes/{id}
@@ -2658,6 +2757,19 @@ async function main() {
       await registrarSaude('GRUPOLANCE', imoveis, 'principal', validarColeta(imoveis, 'GRUPOLANCE'));
     } catch (e) {
       console.log(`  ⚠️ Grupo Lance falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
+    }
+
+    // 15. WebLeilões — server-rendered (/imoveis, /leiloes). Foto no card; edital/
+    // matrícula na página do lote → enriquecerDocumentosLote vasculha. Blindado.
+    console.log('\n📋 WebLeilões...');
+    if (rodar('WEBLEILOES')) try {
+      const imoveis = await scraperWebLeiloes(browser);
+      try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
+      catch (e) { console.log(`  ⚠️ Enriquecimento de documentos WebLeilões falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      total += await salvarEFinalizar(imoveis, 'WEBLEILOES');
+      await registrarSaude('WEBLEILOES', imoveis, 'principal', validarColeta(imoveis, 'WEBLEILOES'));
+    } catch (e) {
+      console.log(`  ⚠️ WebLeilões falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
     }
 
   } finally {
