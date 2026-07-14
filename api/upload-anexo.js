@@ -26,7 +26,9 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const BUCKET       = 'documentos';
 const ROLES_STAFF  = ['analista', 'advogado', 'admin'];
-const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', 'outro'];
+// auto_arrematacao/carta_arrematacao: prova da arrematação realizada (atribuição
+// pela equipe → alimenta a IA com o caso real). Aceitam múltiplos arquivos.
+const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', 'auto_arrematacao', 'carta_arrematacao', 'outro'];
 // Só matrícula/edital são únicos por imóvel (índice parcial). Os demais tipos
 // aceitam vários arquivos — leilões podem ter anexos extras (laudo, ata, etc.).
 const TIPOS_UNICOS = ['matricula', 'edital'];
@@ -87,7 +89,7 @@ export default async function handler(req) {
   if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'Arquivo obrigatório' }, 400);
   // imovel_id precisa ser UUID válido antes de entrar em URLs PostgREST/Storage.
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(imovel_id || ''))) return json({ error: 'imovel_id inválido' }, 400);
-  if (!TIPOS_OK.includes(tipo)) return json({ error: "tipo deve ser 'matricula', 'edital' ou 'regras_venda'" }, 400);
+  if (!TIPOS_OK.includes(tipo)) return json({ error: `tipo inválido (use: ${TIPOS_OK.join(', ')})` }, 400);
 
   const contentType = file.type || 'application/octet-stream';
   if (!TIPOS_MIME.includes(contentType)) return json({ error: 'Formato não suportado (use PDF, JPG ou PNG)' }, 415);

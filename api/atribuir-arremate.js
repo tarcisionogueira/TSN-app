@@ -4,8 +4,13 @@
  * "arrematado" (habilita o acompanhamento + lançamentos financeiros/indicadores) e
  * promove o usuário para ASSESSORADO imediatamente.
  *
- * Body: { user_id, imovel_endereco?, imovel_valor?, tipo_leilao? }
+ * Body: { user_id, imovel_endereco?, imovel_valor?, tipo_leilao?, cidade?, estado?, tipo_imovel? }
  * Só admin/analista. Usa service key (age em nome de outro usuário — fora do RLS).
+ *
+ * A atribuição existe para alimentar a IA com uma ARREMATAÇÃO REAL (sem cobrar o
+ * assessorado): cria um imóvel-âncora oculto → habilita anexar o AUTO DE ARREMATAÇÃO
+ * + documentos e gerar os 3 relatórios (mercadológico/jurídico/laudo), que ficam de
+ * base para a IA aprender e ganhar assertividade.
  */
 export const config = { runtime: 'edge' };
 
@@ -35,24 +40,48 @@ export default async function handler(req) {
 
   let body;
   try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
-  const { user_id, imovel_endereco, imovel_valor, tipo_leilao } = body || {};
+  const { user_id, imovel_endereco, imovel_valor, tipo_leilao, cidade, estado, tipo_imovel } = body || {};
   if (!user_id) return json({ error: 'user_id obrigatório' }, 400);
 
   // Valida o usuário-alvo.
   const [alvo] = await (await sb(`perfis?id=eq.${encodeURIComponent(user_id)}&select=id,role&limit=1`)).json().catch(() => []);
   if (!alvo) return json({ error: 'Usuário não encontrado' }, 404);
 
-  // 1) Cria o CASO já marcado como arrematado (habilita o acompanhamento/lançamentos).
   const agora = new Date();
   const valor = Number(String(imovel_valor ?? '').toString().replace(/\./g, '').replace(',', '.')) || null;
+  const modalidade = /judicial/i.test(tipo_leilao || '') ? 'judicial' : 'extrajudicial';
+
+  // 1) Cria o IMÓVEL-ÂNCORA oculto (ativo=false → fora da busca pública). É ele que
+  //    habilita anexar o auto de arrematação/documentos (imovel_anexos exige imovel_id)
+  //    e a geração dos 3 relatórios da IA, que ficam de base para aprendizado.
+  const imovelRow = {
+    fonte: 'atribuido_manual',
+    fonte_id: crypto.randomUUID(),
+    titulo: imovel_endereco || 'Arremate atribuído pela equipe',
+    tipo: tipo_imovel || null,
+    modalidade,
+    estado: estado || null,
+    cidade: cidade || null,
+    endereco: imovel_endereco || null,
+    valor_minimo: valor,
+    descricao: 'Arrematação real atribuída pela equipe (sem cobrança) para gerar os laudos e servir de aprendizado à IA.',
+    ativo: false,
+  };
+  const imRes = await sb('imoveis_leilao', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(imovelRow) });
+  if (!imRes.ok) return json({ error: 'Falha ao criar o imóvel do arremate', detalhe: await imRes.text().catch(() => '') }, 500);
+  const [imovel] = await imRes.json().catch(() => []);
+  const imovelId = imovel?.id || null;
+
+  // 2) Cria o CASO já marcado como arrematado, vinculado ao imóvel-âncora (habilita
+  //    o acompanhamento/lançamentos e conecta os anexos/relatórios ao mesmo id).
   const casoRow = {
     cliente_id: user_id,
-    imovel_id: null,
+    imovel_id: imovelId,
     imovel_endereco: imovel_endereco || 'Operação atribuída pela equipe',
     imovel_valor: valor,
     status_etapa: 'arrematado',
     arrematado_em: agora.toISOString(),
-    tipo_leilao: /judicial/i.test(tipo_leilao || '') ? 'judicial' : 'extrajudicial',
+    tipo_leilao: modalidade,
     analista_id: role === 'analista' ? user.id : null,
   };
   const casoRes = await sb('casos', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(casoRow) });
@@ -69,5 +98,5 @@ export default async function handler(req) {
   });
   if (!upd.ok) return json({ error: 'Caso criado, mas falha ao promover para assessorado', detalhe: await upd.text().catch(() => ''), caso_id: caso?.id }, 500);
 
-  return json({ ok: true, caso_id: caso?.id, role: 'assessorado', plano_vencimento: venc.toISOString() });
+  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: 'assessorado', plano_vencimento: venc.toISOString() });
 }

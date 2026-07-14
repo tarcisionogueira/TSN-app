@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
@@ -503,9 +503,21 @@ function UsuariosTab() {
   const [auditoriaData, setAuditoriaData] = useState(null);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
   const [atribUser, setAtribUser] = useState(null);   // usuário recebendo a atribuição de arremate
-  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial' });
+  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '' });
   const [atribExtraindo, setAtribExtraindo] = useState('');   // '' | 'lendo' | 'ok' | 'erro'
   const [atribDocs, setAtribDocs] = useState([]);             // [{ nome, status }] dos anexos lidos
+  const atribFilesRef = useRef([]);                           // File[] p/ persistir no imóvel-âncora
+
+  // tipo do anexo a partir do nome do arquivo (o auto de arrematação alimenta a IA).
+  const inferirTipoAnexo = (nome) => {
+    const s = String(nome || '').toLowerCase();
+    if (s.includes('matric') || s.includes('matríc')) return 'matricula';
+    if (s.includes('edital')) return 'edital';
+    if (s.includes('regras')) return 'regras_venda';
+    if (s.includes('carta') && s.includes('arremat')) return 'carta_arrematacao';
+    if (s.includes('auto') && s.includes('arremat')) return 'auto_arrematacao';
+    return 'outro';
+  };
 
   // Inclusão por ANEXO(S): o admin sobe o edital + a matrícula (vários PDFs) do
   // arremate e a IA extrai endereço, valor e tipo de TODOS, mesclando o resultado
@@ -514,9 +526,10 @@ function UsuariosTab() {
     const lista = Array.from(files || []).filter(f => f.type === 'application/pdf');
     if (!lista.length) { if (files?.length) alert('Envie os documentos em PDF.'); return; }
     setAtribExtraindo('lendo');
+    atribFilesRef.current = [...atribFilesRef.current, ...lista]; // guarda p/ persistir depois
     setAtribDocs(prev => [...prev, ...lista.map(f => ({ nome: f.name, status: 'lendo' }))]);
     const marcar = (nome, status) => setAtribDocs(prev => { let feito = false; return prev.map(d => (!feito && d.nome === nome && d.status === 'lendo') ? (feito = true, { ...d, status }) : d); });
-    const acc = { endereco: '', valor: 0, tipo: '' };
+    const acc = { endereco: '', valor: 0, tipo: '', cidade: '', estado: '' };
     let algum = false;
     for (const file of lista) {
       try {
@@ -533,14 +546,19 @@ function UsuariosTab() {
         if (endereco && !acc.endereco) acc.endereco = endereco;
         if (valorNum > acc.valor) acc.valor = valorNum;
         if (tipo && !acc.tipo) acc.tipo = tipo;
+        if (ext.cidade && !acc.cidade) acc.cidade = ext.cidade;
+        if (ext.estado && !acc.estado) acc.estado = ext.estado;
         algum = true;
         marcar(file.name, 'ok');
       } catch { marcar(file.name, 'erro'); }
     }
     setAtribForm(p => ({
+      ...p,
       endereco: acc.endereco || p.endereco,
       valor: acc.valor ? acc.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.valor,
       tipo: acc.tipo || p.tipo,
+      cidade: acc.cidade || p.cidade,
+      estado: acc.estado || p.estado,
     }));
     setAtribExtraindo(algum ? 'ok' : 'erro');
   };
@@ -668,16 +686,39 @@ function UsuariosTab() {
     try {
       const res = await apiCall('/api/atribuir-arremate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo }),
+        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');
       setUsers(users.map(u => u.id === atribUser.id ? { ...u, role: 'assessorado' } : u));
       const casoId = data.caso_id;
+      const imovelId = data.imovel_id;   // imóvel-âncora: chave dos anexos e dos 3 relatórios
       const alvoId = atribUser.id;
       const alvoNome = atribUser.nome || atribUser.cpf;
       const end = atribForm.endereco; const tipo = atribForm.tipo;
+      const cid = atribForm.cidade; const est = atribForm.estado;
       const valorNum = Number(String(atribForm.valor || '').replace(/\./g, '').replace(',', '.')) || 0;
+
+      // Persiste os PDFs anexados (auto de arrematação + edital/matrícula) no imóvel-
+      // âncora — é o material real que os relatórios leem e que alimenta a IA. Tipo
+      // inferido do nome do arquivo. Best-effort: não bloqueia a promoção.
+      const arquivos = atribFilesRef.current || [];
+      if (imovelId && arquivos.length) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const auth = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+          for (const file of arquivos) {
+            try {
+              const fd = new FormData();
+              fd.append('file', file);
+              fd.append('imovel_id', imovelId);
+              fd.append('tipo', inferirTipoAnexo(file.name));
+              await fetch('/api/upload-anexo', { method: 'POST', headers: auth, body: fd });
+            } catch { /* segue com os demais */ }
+          }
+        } catch { /* sem sessão: os docs podem ser anexados na análise */ }
+      }
+      atribFilesRef.current = [];
       setAtribUser(null);
       // Roteamento pós-arremate (decisão do dono): PRIMEIRO a tela de CONTRATO para
       // gerar/vincular o contrato de assessoria deste arremate; depois a análise.
@@ -687,11 +728,12 @@ function UsuariosTab() {
         navSup('/contratos/novo', { state: { contexto, casoId, clienteId: alvoId, clienteNome: alvoNome } });
         return;
       }
-      // Alternativa: abrir a análise deste arremate (chave = caso) para anexar os
-      // documentos e gerar os relatórios EM NOME DO cliente (modo suporte, gratuito).
-      if (casoId && window.confirm('Abrir a análise deste arremate (como o cliente) para anexar documentos e gerar os relatórios?')) {
+      // Alternativa: abrir a análise deste arremate (chave = IMÓVEL-ÂNCORA) para anexar
+      // o AUTO DE ARREMATAÇÃO + documentos e gerar os 3 relatórios EM NOME DO cliente
+      // (modo suporte, gratuito) — o material real alimenta o aprendizado da IA.
+      if ((imovelId || casoId) && window.confirm('Abrir a análise deste arremate (como o cliente) para anexar o auto de arrematação + documentos e gerar os relatórios?')) {
         iniciarSuporte({ id: alvoId, nome: alvoNome, role: 'assessorado' });
-        navSup('/analise', { state: { manual: true, paraUserId: alvoId, imovel: { id: casoId, endereco: end, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
+        navSup('/analise', { state: { manual: true, paraUserId: alvoId, imovel: { id: imovelId || casoId, endereco: end, cidade: cid, estado: est, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
       }
     } catch (e) {
       alert('Erro ao atribuir arremate: ' + (e.message || e));
@@ -782,7 +824,7 @@ function UsuariosTab() {
                               {u.role !== 'assessorado' && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#fef9c3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#a16207', cursor: 'pointer' }}
-                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial' }); setAtribExtraindo(''); setAtribDocs([]); }}
+                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '' }); setAtribExtraindo(''); setAtribDocs([]); atribFilesRef.current = []; }}
                                   title="Atribuir uma arrematação a este usuário e torná-lo Assessorado (habilita o acompanhamento e os lançamentos)">
                                   🏷 Atribuir arremate
                                 </button>
@@ -848,13 +890,13 @@ function UsuariosTab() {
           <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 4 }}>🏷 Atribuir arremate</div>
             <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
-              Cria o acompanhamento (arrematado) para <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> e o promove a <b>Assessorado</b> imediatamente — habilita os lançamentos financeiros e os indicadores.
+              Cria o acompanhamento (arrematado) para <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> e o promove a <b>Assessorado</b> imediatamente. Na etapa seguinte você anexa o <b>auto de arrematação</b> + documentos e gera os 3 relatórios — o material da arrematação real alimenta o aprendizado da IA.
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {/* Inclusão por anexo(s): a IA extrai endereço/valor/tipo do edital + matrícula */}
               <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6 }}>📎 Incluir pelos documentos (recomendado)</div>
-                <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5, marginBottom: 10 }}>Suba o edital e a matrícula (pode anexar vários PDFs) — a IA lê todos e mescla o endereço, o valor e o tipo abaixo (você revisa antes de confirmar).</div>
+                <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5, marginBottom: 10 }}>Anexe o edital, a matrícula e o <b>auto de arrematação</b> (vários PDFs). A IA lê todos e mescla o endereço, o valor e o tipo abaixo (você revisa antes de confirmar); os arquivos ficam guardados no arremate e alimentam os relatórios.</div>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: atribExtraindo === 'lendo' ? '#e2e8f0' : '#0D63DB', color: atribExtraindo === 'lendo' ? '#94a3b8' : 'white', borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: atribExtraindo === 'lendo' ? 'default' : 'pointer' }}>
                   {atribExtraindo === 'lendo' ? '⏳ Extraindo…' : '📎 Anexar edital/matrícula (PDF)'}
                   <input type="file" accept="application/pdf" multiple disabled={atribExtraindo === 'lendo'} onChange={e => { const fs = e.target.files; e.target.value = ''; extrairArremateDocs(fs); }} style={{ display: 'none' }} />

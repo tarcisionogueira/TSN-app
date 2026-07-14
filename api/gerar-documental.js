@@ -56,6 +56,8 @@ function tipoDoRotulo(rotulo) {
   if (r.includes('matríc') || r.includes('matric')) return 'matricula';
   if (r.includes('edital')) return 'edital';
   if (r.includes('regras')) return 'regras_venda';
+  if (r.includes('carta') && r.includes('arremat')) return 'carta_arrematacao';
+  if (r.includes('auto') && r.includes('arremat')) return 'auto_arrematacao';
   return null; // anexos genéricos não entram no cache por tipo
 }
 // Documentos já ARMAZENADOS deste imóvel (manual do analista ou cache anterior).
@@ -510,7 +512,7 @@ export default async function handler(req, res) {
     // Prioriza as peças centrais na ordem de leitura (o cap acima é limitado):
     // matrícula e edital primeiro. Sem isto, fontes com muitos anexos do mesmo tipo
     // (ex.: o Zuk publica vários links de edital) empurram a matrícula para fora do cap.
-    const prioTipo = { matricula: 0, edital: 1, regras_venda: 2, regras: 2, laudo: 3, proposta: 4, anexo: 5 };
+    const prioTipo = { matricula: 0, edital: 1, auto_arrematacao: 2, carta_arrematacao: 2, regras_venda: 3, regras: 3, laudo: 4, proposta: 5, anexo: 6 };
     urls.sort((a, b) => (prioTipo[a.tipo] ?? 5) - (prioTipo[b.tipo] ?? 5));
     for (const u of urls) {
       if (blocos.length >= capLeitura || Date.now() > deadline) break; // limita custo/payload (deadline protege o tempo)
