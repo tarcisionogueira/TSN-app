@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
@@ -42,17 +42,30 @@ function fotoImovel(im) {
   return (f.includes('supabase.co') || f.startsWith('/')) ? f : `/api/img-proxy?url=${encodeURIComponent(f)}`;
 }
 
+// Números da operação: avaliação, valor de mercado (relatório), arrematação, lucro.
+function StatOp({ label, valor, cor, sub }) {
+  return (
+    <div style={{ flex: 1, minWidth: 130, background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 900, color: cor || '#111' }}>{valor == null ? '—' : brl(valor)}</div>
+      {sub && <div style={{ fontSize: 10.5, color: cor || '#94a3b8', fontWeight: 700 }}>{sub}</div>}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Detalhe de um arrematado: Documentos + Lançamentos financeiros
+// Tela do arremate (dedicada): números da operação + Lançamentos + Documentos
 // ─────────────────────────────────────────────────────────────────────────────
-function Detalhe({ arr, onClose, onChange, soLeitura }) {
+function Detalhe({ arr, onBack, onChange, soLeitura }) {
   const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   const [lancs, setLancs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [docs, setDocs] = React.useState(Array.isArray(arr.documentos) ? arr.documentos : []);
+  const [docs, setDocs] = React.useState([]);
+  const [docsLoading, setDocsLoading] = React.useState(true);
   const [enviando, setEnviando] = React.useState(false);
   const [docTipo, setDocTipo] = React.useState('auto_arrematacao');
   const [imovelId, setImovelId] = React.useState(arr.imovel_id || null);
+  const [nums, setNums] = React.useState({ avaliacao: null, valorMercado: null });
   const [novo, setNovo] = React.useState({ tipo: 'saida', categoria: 'Reforma', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10) });
 
   React.useEffect(() => {
@@ -60,9 +73,42 @@ function Detalhe({ arr, onClose, onChange, soLeitura }) {
       .then(({ data }) => { setLancs(Array.isArray(data) ? data : []); setLoading(false); });
   }, [arr.id]);
 
+  // Documentos do arremate: fonte única = imovel_anexos (é o que a atribuição gravou
+  // e o que a IA lê). Assim os anexos incluídos na atribuição aparecem aqui.
+  const carregarDocs = React.useCallback(async () => {
+    if (!imovelId) { setDocs([]); setDocsLoading(false); return; }
+    setDocsLoading(true);
+    const { data } = await supabase.from('imovel_anexos')
+      .select('id,tipo,nome,storage_path,criado_em')
+      .eq('imovel_id', imovelId).order('criado_em', { ascending: true });
+    setDocs(Array.isArray(data) ? data : []);
+    setDocsLoading(false);
+  }, [imovelId]);
+  React.useEffect(() => { carregarDocs(); }, [carregarDocs]);
+
+  // Números da operação: avaliação (imóvel) + valor de mercado (relatório concluído).
+  React.useEffect(() => {
+    let vivo = true;
+    (async () => {
+      let avaliacao = null, valorMercado = null;
+      if (imovelId) {
+        try { const { data: im } = await supabase.from('imoveis_leilao').select('valor_avaliacao').eq('id', imovelId).maybeSingle(); avaliacao = im?.valor_avaliacao ?? null; } catch { /* ignore */ }
+        try {
+          const { data: am } = await supabase.from('analises_mercado').select('result').eq('user_id', arr.user_id).eq('imovel_id', imovelId).eq('status', 'concluida').order('updated_at', { ascending: false }).limit(1);
+          valorMercado = am?.[0]?.result?.valorMercado ?? null;
+        } catch { /* ignore */ }
+      }
+      if (vivo) setNums({ avaliacao, valorMercado });
+    })();
+    return () => { vivo = false; };
+  }, [imovelId, arr.user_id]);
+
   const entradas = lancs.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor || 0), 0);
   const saidas = lancs.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor || 0), 0);
   const saldo = entradas - saidas;
+  const arrematacao = Number(arr.valor_arrematacao) || null;
+  const lucro = (nums.valorMercado != null && arrematacao != null) ? (nums.valorMercado - arrematacao) : null;
+  const lucroPct = (lucro != null && arrematacao > 0) ? (lucro / arrematacao) * 100 : null;
 
   const addLanc = async () => {
     const valor = Number(String(novo.valor).replace(/\./g, '').replace(',', '.'));
@@ -77,8 +123,7 @@ function Detalhe({ arr, onClose, onChange, soLeitura }) {
     setLancs(prev => prev.filter(l => l.id !== id));
   };
 
-  // Garante o imóvel-âncora (cria sob demanda se o arrematado não veio da base) —
-  // sem ele não há onde anexar nem como entrar no corpus de aprendizado.
+  // Garante o imóvel-âncora (cria sob demanda se o arrematado não veio da base).
   const garantirAncora = async () => {
     if (imovelId) return imovelId;
     const { data: { session } } = await supabase.auth.getSession();
@@ -108,39 +153,51 @@ function Detalhe({ arr, onClose, onChange, soLeitura }) {
       const res = await fetch('/api/upload-anexo', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha no envio');
-      const doc = { id: data.anexo_id || String(Date.now()), nome: file.name, tipo: docTipo, url: data.url_publica || data.url, criado_em: new Date().toISOString() };
-      const novosDocs = [...docs, doc];
-      setDocs(novosDocs);
-      await supabase.from('arrematados').update({ documentos: novosDocs, updated_at: new Date().toISOString() }).eq('id', arr.id);
-      onChange?.({ ...arr, documentos: novosDocs, imovel_id: imId });
+      await carregarDocs();
     } catch (err) { alert(err.message || 'Erro ao enviar o documento.'); }
     finally { setEnviando(false); }
   };
-  const delDoc = async (id) => {
-    const novosDocs = docs.filter(d => d.id !== id);
-    setDocs(novosDocs);
-    await supabase.from('arrematados').update({ documentos: novosDocs }).eq('id', arr.id);
-    onChange?.({ ...arr, documentos: novosDocs });
+  const abrirDoc = async (d) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/anexo-url', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: JSON.stringify({ anexo_id: d.id }) });
+      const j = await res.json().catch(() => ({}));
+      if (j.url) window.open(j.url, '_blank', 'noopener'); else alert(j.error || 'Não foi possível abrir o documento.');
+    } catch { alert('Não foi possível abrir o documento.'); }
+  };
+  const delDoc = async (d) => {
+    if (!confirm(`Remover "${d.nome}"? Use quando o anexo não tiver a ver com esta arrematação.`)) return;
+    const { error } = await supabase.from('imovel_anexos').delete().eq('id', d.id);
+    if (error) { alert('Não foi possível remover o documento.'); return; }
+    setDocs(prev => prev.filter(x => x.id !== d.id));
   };
 
   const inp = { width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 9, fontSize: 13, boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' };
   const tab = (k, label, Icon) => (
     <button onClick={() => setAba(k)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', border: 'none', borderRadius: 10, background: aba === k ? '#0D63DB' : '#f1f5f9', color: aba === k ? 'white' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-      <Icon size={15} /> {label}
+      <Icon size={15} /> {label}{k === 'documentos' && docs.length ? ` (${docs.length})` : ''}
     </button>
   );
 
   return (
-    <div onClick={e => e.target === e.currentTarget && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 16px', overflowY: 'auto' }}>
-      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 620, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '18px 20px', borderBottom: '1px solid #f1f5f9' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 900, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{arr.titulo || 'Imóvel arrematado'}</div>
-            <div style={{ fontSize: 12.5, color: '#64748b' }}>{[arr.cidade, arr.estado].filter(Boolean).join(', ')}</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', flexShrink: 0 }}><X size={22} /></button>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Cabeçalho: voltar + título + números da operação */}
+      <div>
+        <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '7px 12px', fontSize: 13, fontWeight: 700, color: '#334155', cursor: 'pointer', marginBottom: 12 }}>
+          <ChevronLeft size={16} /> Voltar
+        </button>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#111' }}>{arr.titulo || 'Imóvel arrematado'}</div>
+        <div style={{ fontSize: 13, color: '#64748b' }}>{[arr.cidade, arr.estado].filter(Boolean).join(', ')}</div>
+      </div>
 
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <StatOp label="Avaliação" valor={nums.avaliacao} />
+        <StatOp label="Valor de mercado" valor={nums.valorMercado} cor="#0d9488" sub={nums.valorMercado == null ? 'gere o relatório' : null} />
+        <StatOp label="Arrematação" valor={arrematacao} cor="#0D63DB" />
+        <StatOp label="Lucro × mercado" valor={lucro} cor={lucro == null ? null : (lucro >= 0 ? '#15803d' : '#dc2626')} sub={lucroPct == null ? null : `${lucroPct >= 0 ? '+' : ''}${lucroPct.toFixed(0)}% sobre a arrematação`} />
+      </div>
+
+      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', gap: 8, padding: '14px 20px 0' }}>
           {tab('lancamentos', 'Lançamentos', DollarSign)}
           {tab('documentos', 'Documentos', FileText)}
@@ -206,7 +263,7 @@ function Detalhe({ arr, onClose, onChange, soLeitura }) {
               ) : (
                 <>
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, lineHeight: 1.5 }}>
-                    Selecione o tipo e anexe o PDF. Os documentos do arremate ficam <b>permanentes</b> (nunca apagados) e alimentam a IA. Você pode anexar mais ao longo do tempo (auto/carta, contrato do banco, escritura, matrícula registrada…).
+                    Selecione o tipo e anexe o PDF. Os documentos do arremate ficam <b>permanentes</b> (nunca apagados) e alimentam a IA. Anexe ao longo do tempo (auto/carta, contrato do banco, escritura, matrícula registrada…). Se algum anexo não for desta arrematação, remova pelo ícone de lixeira.
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                     <select value={docTipo} onChange={e => setDocTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
@@ -214,12 +271,14 @@ function Detalhe({ arr, onClose, onChange, soLeitura }) {
                     </select>
                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', border: '1.5px dashed #cbd5e1', borderRadius: 10, cursor: enviando ? 'default' : 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
                       {enviando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar PDF</>}
-                      <input type="file" accept="application/pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
+                      <input type="file" accept="application/pdf,.pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
                     </label>
                   </div>
                 </>
               )}
-              {docs.length === 0 ? (
+              {docsLoading ? (
+                <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Carregando documentos…</div>
+              ) : docs.length === 0 ? (
                 <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>{soLeitura ? 'O assinante ainda não anexou documentos.' : 'Nenhum documento anexado. Guarde aqui o auto/carta de arrematação, contrato do banco, escritura, matrícula registrada, edital.'}</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -227,11 +286,11 @@ function Detalhe({ arr, onClose, onChange, soLeitura }) {
                     <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: '1px solid #f1f5f9', borderRadius: 10 }}>
                       <FileText size={17} color="#1e3a8a" />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 700, color: '#1e3a8a', textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{d.nome}</a>
+                        <button onClick={() => abrirDoc(d)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', fontSize: 13, fontWeight: 700, color: '#1e3a8a', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%' }}>{d.nome}</button>
                         {d.tipo && d.tipo !== 'outro' && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>{DOC_TIPO_LABEL[d.tipo] || d.tipo}</div>}
                       </div>
-                      {d.url && <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB' }}><ExternalLink size={15} /></a>}
-                      {!soLeitura && <button onClick={() => delDoc(d.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
+                      <button onClick={() => abrirDoc(d)} title="Abrir" style={{ background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer' }}><ExternalLink size={15} /></button>
+                      {!soLeitura && <button onClick={() => delDoc(d)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
                     </div>
                   ))}
                 </div>
@@ -329,6 +388,8 @@ export default function Arrematados() {
   const uid = effectiveUserId || user?.id || null;
   const [arrematados, setArrematados] = React.useState([]);
   const [saldos, setSaldos] = React.useState({}); // arrematado_id → saldo
+  const [nDocs, setNDocs] = React.useState({});    // imovel_id → nº de anexos
+  const [mercado, setMercado] = React.useState({}); // imovel_id → valorMercado
   const [loading, setLoading] = React.useState(true);
   const [sel, setSel] = React.useState(null);
   const [novo, setNovo] = React.useState(false);
@@ -339,13 +400,25 @@ export default function Arrematados() {
     const { data } = await supabase.from('arrematados').select('*').eq('user_id', uid).order('updated_at', { ascending: false });
     const lista = Array.isArray(data) ? data : [];
     setArrematados(lista);
-    // saldo por arrematado (uma consulta agregada simples)
     if (lista.length) {
+      // saldo por arrematado
       const { data: ls } = await supabase.from('arrematado_lancamentos').select('arrematado_id,tipo,valor').in('arrematado_id', lista.map(a => a.id));
       const acc = {};
       (ls || []).forEach(l => { acc[l.arrematado_id] = (acc[l.arrematado_id] || 0) + (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor || 0); });
       setSaldos(acc);
-    } else setSaldos({});
+      // números por imóvel: nº de documentos (imovel_anexos) + valor de mercado (relatório)
+      const imovelIds = [...new Set(lista.map(a => a.imovel_id).filter(Boolean))];
+      if (imovelIds.length) {
+        try {
+          const { data: an } = await supabase.from('imovel_anexos').select('imovel_id').in('imovel_id', imovelIds);
+          const dc = {}; (an || []).forEach(x => { dc[x.imovel_id] = (dc[x.imovel_id] || 0) + 1; }); setNDocs(dc);
+        } catch { setNDocs({}); }
+        try {
+          const { data: am } = await supabase.from('analises_mercado').select('imovel_id,result,updated_at').eq('user_id', uid).in('imovel_id', imovelIds).eq('status', 'concluida').order('updated_at', { ascending: false });
+          const mm = {}; (am || []).forEach(x => { if (!(x.imovel_id in mm)) mm[x.imovel_id] = x.result?.valorMercado ?? null; }); setMercado(mm);
+        } catch { setMercado({}); }
+      } else { setNDocs({}); setMercado({}); }
+    } else { setSaldos({}); setNDocs({}); setMercado({}); }
     setLoading(false);
   }, [uid]);
   React.useEffect(() => { carregar(); }, [carregar]);
@@ -369,14 +442,13 @@ export default function Arrematados() {
   const criar = async (payload) => {
     const { data, error } = await supabase.from('arrematados').insert({ user_id: uid, status: 'arrematado', ...payload }).select().single();
     if (!error && data) {
-      // Se a arrematação tem valor, já registra como 1º lançamento (saída = capital).
       if (payload.valor_arrematacao) {
         await supabase.from('arrematado_lancamentos').insert({ arrematado_id: data.id, user_id: uid, tipo: 'saida', categoria: 'Arrematação', valor: payload.valor_arrematacao, data: payload.data_arrematacao || null });
       }
       setNovo(false);
       setPrefill(null);
       await carregar();
-      // Direciona para os Documentos deste arremate — é onde anexa auto/carta,
+      // Abre a tela do arremate já nos Documentos — é onde anexa auto/carta,
       // contrato do banco, escritura, matrícula registrada.
       setSel({ ...data, _abaInicial: 'documentos' });
     }
@@ -397,6 +469,10 @@ export default function Arrematados() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {sel ? (
+        <Detalhe arr={sel} soLeitura={soLeitura} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
+      ) : (
+      <>
       <div>
         <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>BidPro Brasil</div>
         <h1 style={{ fontSize: 24, fontWeight: 900, color: '#111', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -433,7 +509,10 @@ export default function Arrematados() {
             const foto = fotoImovel(a.imovel);
             const st = STATUS[a.status] || STATUS.arrematado;
             const saldo = saldos[a.id] || 0;
-            const nDocs = Array.isArray(a.documentos) ? a.documentos.length : 0;
+            const docsCount = a.imovel_id ? (nDocs[a.imovel_id] || 0) : (Array.isArray(a.documentos) ? a.documentos.length : 0);
+            const arrematacao = Number(a.valor_arrematacao) || null;
+            const vMerc = a.imovel_id ? (mercado[a.imovel_id] ?? null) : null;
+            const lucro = (vMerc != null && arrematacao != null) ? (vMerc - arrematacao) : null;
             return (
               <div key={a.id} onClick={() => setSel(a)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, cursor: 'pointer' }}
@@ -447,7 +526,10 @@ export default function Arrematados() {
                   <div style={{ fontSize: 12.5, color: '#64748b' }}>{[a.cidade, a.estado].filter(Boolean).join(', ')}</div>
                   <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.c }}>{st.l}</span>
-                    <span style={{ color: '#94a3b8' }}><FileText size={11} style={{ verticalAlign: -1 }} /> {nDocs} doc{nDocs !== 1 ? 's' : ''}</span>
+                    <span style={{ color: '#94a3b8' }}><FileText size={11} style={{ verticalAlign: -1 }} /> {docsCount} doc{docsCount !== 1 ? 's' : ''}</span>
+                    {arrematacao != null && <span style={{ color: '#0D63DB', fontWeight: 700 }}>Arremat. {brl(arrematacao)}</span>}
+                    {vMerc != null && <span style={{ color: '#0d9488', fontWeight: 700 }}>Mercado {brl(vMerc)}</span>}
+                    {lucro != null && <span style={{ color: lucro >= 0 ? '#15803d' : '#dc2626', fontWeight: 700 }}>Lucro×merc. {lucro >= 0 ? '+' : ''}{brl(lucro)}</span>}
                     <span style={{ fontWeight: 700, color: saldo >= 0 ? '#0D63DB' : '#dc2626' }}>Saldo {brl(saldo)}</span>
                   </div>
                 </div>
@@ -457,8 +539,9 @@ export default function Arrematados() {
           })}
         </div>
       )}
+      </>
+      )}
 
-      {sel && <Detalhe arr={sel} soLeitura={soLeitura} onClose={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />}
       {novo && <NovoArrematado onClose={() => { setNovo(false); setPrefill(null); }} onCriar={criar} sugestoes={sugestoes} inicial={prefill} />}
     </div>
   );
