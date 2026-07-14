@@ -735,18 +735,11 @@ function UsuariosTab() {
       }
       atribFilesRef.current = [];
       setAtribUser(null);
-      // Roteamento pós-arremate (decisão do dono): PRIMEIRO a tela de CONTRATO para
-      // gerar/vincular o contrato de assessoria deste arremate; depois a análise.
-      if (casoId && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nIr para a tela de CONTRATO para gerar o contrato de assessoria deste arremate?')) {
-        const valorFmt = valorNum ? valorNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'a definir';
-        const contexto = `Contrato de assessoria pós-arrematação. Cliente: ${alvoNome}. Imóvel: ${end || 'a definir'}. Valor arrematado: R$ ${valorFmt}. Modalidade: ${/judicial/i.test(tipo) ? 'judicial' : 'extrajudicial'}. Caso: ${casoId}.`;
-        navSup('/contratos/novo', { state: { contexto, casoId, clienteId: alvoId, clienteNome: alvoNome } });
-        return;
-      }
-      // Alternativa: abrir a análise deste arremate (chave = IMÓVEL-ÂNCORA) para anexar
-      // o AUTO DE ARREMATAÇÃO + documentos e gerar os 3 relatórios EM NOME DO cliente
-      // (modo suporte, gratuito) — o material real alimenta o aprendizado da IA.
-      if ((imovelId || casoId) && window.confirm('Abrir a análise deste arremate (como o cliente) para anexar o auto de arrematação + documentos e gerar os relatórios?')) {
+      // A atribuição NÃO exige contrato (só planos/produtos/serviços com contrato
+      // atribuído exigem). Roteamento: abrir a análise deste arremate (chave = IMÓVEL-
+      // ÂNCORA) para gerar os 3 relatórios EM NOME DO cliente — o material real
+      // alimenta o aprendizado da IA.
+      if ((imovelId || casoId) && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nAbrir a análise deste arremate (como o cliente) para gerar os relatórios?')) {
         iniciarSuporte({ id: alvoId, nome: alvoNome, role: 'assessorado' });
         navSup('/analise', { state: { manual: true, paraUserId: alvoId, imovel: { id: imovelId || casoId, endereco: end, cidade: cid, estado: est, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
       }
