@@ -146,6 +146,10 @@ export default async function handler(req) {
   // Normalização = cidade_norm do banco (minúsc., sem acento, sem espaço/pontuação).
   const normCid = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
   const numOnly = (v) => Number(String(v ?? '').replace(/\D/g, '')) || 0;
+  // Desconto MÍNIMO para entrar no e-mail: só oportunidade ATRATIVA (regra do dono).
+  // 1ª praça tem desconto ~0 (imóvel a 100% da avaliação) → naturalmente excluída.
+  // Aplicado em TODOS os caminhos de seleção + rede de segurança na lista final.
+  const DESC_MIN = Number(process.env.ALERTA_DESCONTO_MIN || 40);
   // Monta as condições PostgREST de UM filtro salvo (tipo/modalidade/valor/desconto/
   // bairros/cidades) — fiel ao que o cliente salvou na Busca.
   const condFiltro = (f) => {
@@ -156,7 +160,8 @@ export default async function handler(req) {
     if (mods.length) p.push(`modalidade=in.(${mods.map(encodeURIComponent).join(',')})`);
     if (f.valorMin) p.push(`valor_minimo=gte.${numOnly(f.valorMin)}`);
     if (f.valorMax) p.push(`valor_minimo=lte.${numOnly(f.valorMax)}`);
-    if (f.descontoMin) p.push(`desconto_percentual=gte.${Number(f.descontoMin)}`);
+    // Desconto: piso de DESC_MIN (o filtro do cliente pode exigir MAIS, nunca menos).
+    p.push(`desconto_percentual=gte.${Math.max(DESC_MIN, Number(f.descontoMin) || 0)}`);
     const bairros = Array.isArray(f.bairros) ? f.bairros.filter(Boolean) : [];
     if (bairros.length) p.push(`bairro=in.(${bairros.map(b => encodeURIComponent(`"${b}"`)).join(',')})`);
     // Estado é aplicado SEMPRE (não em else) — cidades homônimas em UFs diferentes
@@ -232,10 +237,10 @@ export default async function handler(req) {
       for (const cid of cidadesRef.slice(0, 3)) {
         if (pool.size >= LIMITE) break;
         const cen = centroide(cid, uf);
-        if (cen) despejar(await rpc('buscar_por_raio_v2', { lat: cen.lat, lng: cen.lng, raio_metros: 200000, lim: 40 }), LIMITE - pool.size);
+        if (cen) despejar(await rpc('buscar_por_raio_v2', { lat: cen.lat, lng: cen.lng, raio_metros: 200000, lim: 40, desconto_min: DESC_MIN }), LIMITE - pool.size);
         // Fallback por NOME da cidade: sempre escopado pela UF de referência — senão o
-        // ilike traz homônimas de outros estados (Palmas/TO vs Palmas/PR).
-        if (pool.size < LIMITE) despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
+        // ilike traz homônimas de outros estados (Palmas/TO vs Palmas/PR). Só desconto ≥ DESC_MIN.
+        if (pool.size < LIMITE) despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
       }
 
       // 3) Similares às arrematações do usuário (mesmo tipo), se ainda faltar.
@@ -244,12 +249,16 @@ export default async function handler(req) {
         const tipos = [...new Set(meus.map(i => arremInfo[i]?.tipo).filter(Boolean))];
         for (const t of tipos.slice(0, 2)) {
           if (pool.size >= LIMITE) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&order=desconto_percentual.desc&limit=8`), LIMITE - pool.size);
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}&order=desconto_percentual.desc&limit=8`), LIMITE - pool.size);
         }
       }
 
-      // Ordena por MAIOR desconto (os acima de 40% lideram) e pega até 12.
+      // Rede de segurança: só oportunidade ATRATIVA (desconto ≥ DESC_MIN) entra no e-mail,
+      // qualquer que tenha sido o caminho de seleção. Exclui 1ª praça / valor perto da
+      // avaliação (ex.: extrajudicial da Caixa antes da 2ª praça, desconto ~0 ou negativo).
+      // Ordena por MAIOR desconto e pega até 12.
       const top = [...pool.values()].map(v => v.im)
+        .filter(im => (Number(im.desconto_percentual) || 0) >= DESC_MIN)
         .sort((x, y) => (Number(y.desconto_percentual) || 0) - (Number(x.desconto_percentual) || 0))
         .slice(0, LIMITE);
       if (!top.length) continue;
