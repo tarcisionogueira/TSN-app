@@ -7,7 +7,9 @@
  *    edital) e `…/catalogos/leilao{auction}.pdf`.
  * Fluxo: captura o corpo real do search-lots (no navegador), replica paginando p/ mapear
  * lot_id→auction_id, e abre a página de cada lote nosso p/ ler as âncoras de documento.
- * Grava anexos + link_matricula + corrige url_lote. Config: SD_LOTE (default 40).
+ * Grava anexos + link_matricula + url_lote + link_foto (og:image da página do lote —
+ * o scraper de listagem chutava um campo de imagem inexistente da API e deixava a
+ * foto do SODRE sempre nula). Config: SD_LOTE (default 40).
  */
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
@@ -69,10 +71,22 @@ async function main() {
       try {
         await page.goto(loteUrl, { waitUntil: 'networkidle2', timeout: 40000 });
         await sleep(2500);
-        const docs = await page.evaluate(() => [...document.querySelectorAll('a[href]')]
-          .map(a => ({ t: (a.textContent || '').replace(/\s+/g, ' ').trim(), h: a.href }))
-          .filter(a => /arquivos\.sodresantoro\.com\.br\/(anexos|catalogos)\//i.test(a.h)));
-        if (!docs.length) { semDoc++; console.log(`- sodre_${lid}: página sem PDFs (${loteUrl})`); continue; }
+        // Além dos PDFs, lê a FOTO de capa do lote (og:image — meta padrão).
+        // Reaproveita este page-load que já ocorre; corrige o SODRE sem foto.
+        const { docs, foto } = await page.evaluate(() => ({
+          docs: [...document.querySelectorAll('a[href]')]
+            .map(a => ({ t: (a.textContent || '').replace(/\s+/g, ' ').trim(), h: a.href }))
+            .filter(a => /arquivos\.sodresantoro\.com\.br\/(anexos|catalogos)\//i.test(a.h)),
+          foto: document.querySelector('meta[property="og:image"], meta[name="og:image"]')?.content
+            || document.querySelector('link[rel="image_src"]')?.href || null,
+        }));
+        const fotoUrl = (foto && /^https?:\/\//.test(foto)) ? foto : null;
+        if (!docs.length) {
+          // Sem PDF, mas grava a foto de capa se houver (não perde o imóvel).
+          if (fotoUrl) { await supabase.from('imoveis_leilao').update({ link_foto: fotoUrl }).eq('id', imovelId); ok++; console.log(`~ sodre_${lid}: sem PDF, foto capturada`); }
+          else { semDoc++; console.log(`- sodre_${lid}: página sem PDFs (${loteUrl})`); }
+          continue;
+        }
         const vistos = new Set();
         const anexos = [];
         let matricula = null;
@@ -88,9 +102,10 @@ async function main() {
         anexos.sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9));
         const upd = { anexos, url_lote: loteUrl };
         if (matricula) upd.link_matricula = matricula;
+        if (fotoUrl) upd.link_foto = fotoUrl;
         const { error } = await supabase.from('imoveis_leilao').update(upd).eq('id', imovelId);
         if (error) { erro++; console.log(`- sodre_${lid}: erro gravar ${error.message}`); continue; }
-        ok++; console.log(`✓ sodre_${lid}: ${anexos.length} doc(s) [${anexos.map(a => a.tipo).join(',')}]${matricula ? ' +matrícula' : ''}`);
+        ok++; console.log(`✓ sodre_${lid}: ${anexos.length} doc(s) [${anexos.map(a => a.tipo).join(',')}]${matricula ? ' +matrícula' : ''}${fotoUrl ? ' +foto' : ''}`);
       } catch (e) { erro++; console.log(`- sodre_${lid}: erro ${e.message}`); }
     }
     console.log(`\nSODRE — resultado: ${ok} enriquecido(s) · ${semMap} fora do search-lots · ${semDoc} sem PDF · ${erro} erro(s).`);

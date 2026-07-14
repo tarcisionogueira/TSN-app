@@ -633,6 +633,11 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
       const desc = str(of.offerDescription) || titulo;
       // Área/ocupação vêm no texto (título+descrição) — confirmado nos dados.
       const ext = extrairDaDescricao(`${titulo} ${desc}`);
+      // URL da página do lote (vem da API em linkURL). Serve tanto p/ link_edital
+      // quanto p/ url_lote — este último destrava a captura de documentos
+      // (enfileirar_docs_faltantes só enfileira quem tem url_lote http). Antes ficava
+      // NULL nos ~1.431 SUPERBID + ~111 SBID, travando ~1,5k matrículas.
+      const loteUrl = linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`);
 
       return {
         fonte,
@@ -649,8 +654,9 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
         area_m2: ext.area_m2 || 0,
         ocupacao: ext.ocupacao || null,
         descricao: desc.replace(/<[^>]+>/g, '').slice(0, 500),
-        link_edital: linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`),
+        link_edital: loteUrl,
         link_foto: p.thumbnailUrl || null,
+        url_lote: loteUrl,
         // Sub-portais: o leiloeiro real é a "loja" (store) de cada oferta; cai no
         // rótulo genérico da fonte se o campo vier vazio.
         leiloeiro: (storeAsLeiloeiro && str(of.store)) ? str(of.store).slice(0, 120) : leiloeiro,
@@ -1076,6 +1082,9 @@ async function scraperSodre(browser) {
         ocupacao: extrairDaDescricao(`${titulo} ${r.lot_description || ''}`).ocupacao || null,
         descricao: String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500),
         link_edital: `https://www.sodresantoro.com.br/imoveis/lote/${r.lot_id || r.id}`,
+        // NOTA: o campo de imagem real do search-lots não foi confirmado (recon
+        // pendente) — estes nomes são palpite e caem em null. A foto do SODRE é
+        // preenchida por captura-docs-sodre.mjs (og:image da página do lote).
         link_foto: r.lot_image || r.image || null,
         leiloeiro: 'Sodré Santoro',
         data_leilao: parseData(r.auction_date_init || r.auction_date_end),

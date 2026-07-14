@@ -183,6 +183,7 @@ async function coletarSuperbid(paginas, deadline) {
         descricao: (of.offerDescription || '').replace(/<[^>]+>/g, '').slice(0, 500) || null,
         link_edital: `https://www.superbid.net/lote/${id}`,
         link_foto: pr.thumbnailUrl || null,
+        url_lote: `https://www.superbid.net/lote/${id}`,
         leiloeiro: of.store?.name || of.seller?.name || 'Superbid',
         data_leilao: (of.endDate || '').slice(0, 10) || null,
         forma_pagamento: null,
