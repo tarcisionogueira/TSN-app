@@ -139,6 +139,78 @@ async function reconViaBrightData(nome, cfg) {
   }
 }
 
+// Busca crua via Bright Data unlocker (retorna {status, html}).
+async function bdFetch(url) {
+  const TOKEN = process.env.BRIGHTDATA_API_TOKEN, ZONE = process.env.BRIGHTDATA_ZONE;
+  const r = await fetch('https://api.brightdata.com/request', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ zone: ZONE, url, format: 'raw' }),
+    signal: AbortSignal.timeout(70000),
+  });
+  return { status: r.status, html: await r.text().catch(() => '') };
+}
+
+// Recon PROFUNDO do Pecini: enumeração via sitemap (sem JS), JSON embutido (Next/Nuxt),
+// refs de API e o dump de UMA página de lote (estrutura para o scraper de detalhe).
+async function reconPeciniProfundo(cfg) {
+  const TOKEN = process.env.BRIGHTDATA_API_TOKEN, ZONE = process.env.BRIGHTDATA_ZONE;
+  console.log(`\n\n══════════════════ RECON PECINI PROFUNDO ══════════════════`);
+  if (!TOKEN || !ZONE) { console.log('   ⚠️ BRIGHTDATA_* ausentes — pulei.'); return; }
+
+  // 1) Sitemaps — a via mais robusta p/ enumerar TODOS os lotes sem executar JS.
+  for (const sm of ['/sitemap.xml', '/sitemap_index.xml', '/sitemap-lotes.xml', '/robots.txt']) {
+    try {
+      const { status, html } = await bdFetch(cfg.base + sm);
+      const locs = [...new Set((html.match(/<loc>\s*([^<]+?)\s*<\/loc>/gi) || []).map(x => x.replace(/<\/?loc>/gi, '').trim()))];
+      const subs = locs.filter(u => /sitemap/i.test(u));
+      const lotes = locs.filter(u => /\/lote\//i.test(u));
+      const smRefs = sm === '/robots.txt' ? [...new Set((html.match(/Sitemap:\s*(\S+)/gi) || []))] : [];
+      console.log(`\n── ${sm} → HTTP ${status}, len ${html.length}`);
+      if (smRefs.length) console.log(`   robots Sitemap: ${JSON.stringify(smRefs)}`);
+      console.log(`   ${locs.length} <loc>; sub-sitemaps: ${JSON.stringify(subs.slice(0, 10))}`);
+      if (lotes.length) console.log(`   lotes (${lotes.length}) amostra: ${JSON.stringify(lotes.slice(0, 6))}`);
+    } catch (e) { console.log(`── ${sm} → ERRO: ${String(e.message).slice(0, 100)}`); }
+  }
+
+  // 2) Home: JSON embutido + refs de API + links de lote.
+  let loteUrls = [];
+  try {
+    const { html: home } = await bdFetch(cfg.base + '/');
+    const nd = (home.match(/id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i) || [])[1];
+    const nuxt = /window\.__NUXT__/.test(home);
+    const apiRefs = [...new Set((home.match(/["'`](https?:\/\/[^"'`\s]*\/(?:api|v\d|graphql)\/[^"'`\s]*|\/(?:api|v\d|graphql)\/[^"'`\s]*)["'`]/gi) || []).map(s => s.replace(/["'`]/g, '')))].slice(0, 15);
+    loteUrls = [...new Set((home.match(/\/lote\/[^"'\s)]+/gi) || []))];
+    console.log(`\n── HOME: __NEXT_DATA__=${!!nd}${nd ? ` (len ${nd.length})` : ''}  __NUXT__=${nuxt}`);
+    console.log(`   refs de API: ${JSON.stringify(apiRefs)}`);
+    console.log(`   lotes na home (${loteUrls.length}): ${JSON.stringify(loteUrls.slice(0, 8))}`);
+    if (nd) console.log(`   __NEXT_DATA__ (3000): ${nd.replace(/\s+/g, ' ').slice(0, 3000)}`);
+  } catch (e) { console.log(`── HOME → ERRO: ${String(e.message).slice(0, 100)}`); }
+
+  // 3) Dump de UMA página de lote — estrutura de detalhe (preço, avaliação, praças, foto, cidade/UF).
+  const alvoLote = loteUrls[0] || '/lote/recife-pe/10474/';
+  try {
+    const { status, html } = await bdFetch(cfg.base + alvoLote);
+    console.log(`\n── LOTE ${alvoLote} → HTTP ${status}, len ${html.length}`);
+    const nd = (html.match(/id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i) || [])[1];
+    const ldjson = [...(html.match(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi) || [])].map(s => s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 800));
+    const valores = [...new Set((html.match(/R\$\s?[\d.\s]+,\d{2}/g) || []))].slice(0, 12);
+    const marcadores = [...new Set((html.match(/(avalia\w*|1[ªa]?\s*pra\w*|2[ªa]?\s*pra\w*|lance\s*(?:inicial|m[íi]nimo)|venda\s*direta|edital|matr[íi]cula|\d+[.,]?\d*\s*m²)/gi) || []))].slice(0, 18);
+    const ogimg = [...new Set((html.match(/<meta[^>]+og:image[^>]+content=["']([^"']+)["']/gi) || []).map(s => (s.match(/content=["']([^"']+)/i) || [])[1]))].slice(0, 4);
+    const fotos = [...new Set((html.match(/https?:\/\/[^"'\s]+\.(?:jpe?g|png|webp)/gi) || []))].slice(0, 6);
+    console.log(`   valores R$: ${JSON.stringify(valores)}`);
+    console.log(`   marcadores: ${JSON.stringify(marcadores)}`);
+    console.log(`   og:image: ${JSON.stringify(ogimg)}`);
+    console.log(`   fotos: ${JSON.stringify(fotos)}`);
+    if (ldjson.length) console.log(`   ld+json: ${JSON.stringify(ldjson)}`);
+    if (nd) console.log(`   __NEXT_DATA__ do lote (5000): ${nd.replace(/\s+/g, ' ').slice(0, 5000)}`);
+    else {
+      const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 1800);
+      console.log(`   texto do lote: ${txt}`);
+    }
+  } catch (e) { console.log(`── LOTE ${alvoLote} → ERRO: ${String(e.message).slice(0, 100)}`); }
+}
+
 (async () => {
   const browser = await puppeteer.launch({ headless: 'new', args: BROWSER_ARGS });
   try {
@@ -148,7 +220,10 @@ async function reconViaBrightData(nome, cfg) {
       try { await reconSite(browser, nome, cfg); }
       catch (e) { console.log(`Recon ${nome} (puppeteer) falhou: ${e.message}`); }
       // Pecini responde 403 (Cloudflare) ao Puppeteer → tenta pelo Bright Data unlocker.
-      if (nome === 'PECINI') { try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); } }
+      if (nome === 'PECINI') {
+        try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); }
+        try { await reconPeciniProfundo(cfg); } catch (e) { console.log(`Recon ${nome} PROFUNDO falhou: ${e.message}`); }
+      }
     }
   } finally {
     await browser.close();

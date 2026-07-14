@@ -156,8 +156,12 @@ export default function Atendimento() {
 
   const fmtData = d => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
   const fmtHora = d => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const cont = s => chamados.filter(c => c.status === s).length;
-  const contSeg = seg => chamados.filter(c => segOf(c) === seg).length;
+  // Contadores restritos ao escopo do papel: sem isso o resumo somava chamados que a
+  // lista (abaixo) esconde por escopo — aparecia "1 Aberto" com a fila vazia (ex.: um
+  // chamado de 'explorador' visto por um Analista, cujo escopo não inclui esse segmento).
+  const chamadosNoEscopo = chamados.filter(c => escopo === null || escopo.includes(segOf(c)));
+  const cont = s => chamadosNoEscopo.filter(c => c.status === s).length;
+  const contSeg = seg => chamadosNoEscopo.filter(c => segOf(c) === seg).length;
   const buscaLower = busca.toLowerCase();
   const chamadosFiltrados = chamados.filter(c => {
     if (escopo !== null && !escopo.includes(segOf(c))) return false; // escopo do papel (simulação fiel + defesa em profundidade)
