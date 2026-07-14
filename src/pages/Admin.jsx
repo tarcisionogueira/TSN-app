@@ -8473,9 +8473,13 @@ function CnjTab() {
 
   function imprimirRelatorio() {
     const w = window.open('', '_blank');
+    // Escapa HTML antes do document.write: about:blank herda a origem do app,
+    // então conteúdo de chat não sanitizado seria DOM-XSS (o auto-escape do React
+    // não cobre document.write).
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     w.document.write(`<html><head><title>Relatório — ${new Date().toLocaleDateString('pt-BR')}</title><style>body{font-family:sans-serif;padding:32px;color:#111111;max-width:800px;margin:0 auto}.user{background:#eff6ff;padding:12px;border-radius:8px;margin:8px 0}.assistant{background:#f8fafc;padding:12px;border-radius:8px;margin:8px 0}</style></head><body>`);
     w.document.write(`<h1>Relatório Administrativo — ${new Date().toLocaleString('pt-BR')}</h1>`);
-    chat.forEach(m => w.document.write(`<div class="${m.role}"><strong>${m.role === 'user' ? 'Admin' : 'Assistente'}:</strong><br>${m.content.replace(/\n/g, '<br>')}</div>`));
+    chat.forEach(m => w.document.write(`<div class="${m.role === 'user' ? 'user' : 'assistant'}"><strong>${m.role === 'user' ? 'Admin' : 'Assistente'}:</strong><br>${esc(m.content).replace(/\n/g, '<br>')}</div>`));
     w.document.write('</body></html>'); w.document.close(); w.print();
   }
 

@@ -6,6 +6,8 @@
  *     tela de Atendimento e responder — a resposta de encerramento vai ao
  *     e-mail do cliente pelo fluxo do Atendimento.
  */
+import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+
 export const config = { runtime: 'edge' };
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -31,6 +33,11 @@ const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
 export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors() });
+
+  // Rate limit por IP: endpoint público que grava com service key (bypassa RLS) —
+  // limita flood de leads/chamados. 5/min por IP (fail-open se o Redis cair).
+  const rl = await checkRateLimit(`duvida:${getIP(req)}`, 5, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   let body;
   try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
