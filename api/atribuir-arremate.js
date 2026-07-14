@@ -40,8 +40,9 @@ export default async function handler(req) {
 
   let body;
   try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
-  const { user_id, imovel_endereco, imovel_valor, tipo_leilao, cidade, estado, tipo_imovel } = body || {};
+  const { user_id, imovel_endereco, imovel_valor, tipo_leilao, cidade, estado, tipo_imovel, numero_processo } = body || {};
   if (!user_id) return json({ error: 'user_id obrigatório' }, 400);
+  const numProc = (String(numero_processo || '').trim()) || null;
 
   // Valida o usuário-alvo.
   const [alvo] = await (await sb(`perfis?id=eq.${encodeURIComponent(user_id)}&select=id,role&limit=1`)).json().catch(() => []);
@@ -64,6 +65,7 @@ export default async function handler(req) {
     cidade: cidade || null,
     endereco: imovel_endereco || null,
     valor_minimo: valor,
+    numero_processo: numProc,
     descricao: 'Arrematação real atribuída pela equipe (sem cobrança) para gerar os laudos e servir de aprendizado à IA.',
     ativo: false,
   };
@@ -102,6 +104,27 @@ export default async function handler(req) {
         }),
       });
     } catch { /* aprendizado é best-effort */ }
+
+    // 2.2) Cria o ARREMATADO (portfólio do cliente) + o lançamento da arrematação —
+    //      é o ledger onde revenda/aluguel serão registrados e de onde o corpus lê o
+    //      realizado. Sem isto o join financeiro fica vazio.
+    try {
+      const arrRes = await sb('arrematados', {
+        method: 'POST', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          user_id, imovel_id: imovelId, titulo: imovel_endereco || 'Arremate atribuído',
+          cidade: cidade || null, estado: estado || null, status: 'arrematado',
+          valor_arrematacao: valor, data_arrematacao: agora.toISOString().slice(0, 10),
+        }),
+      });
+      const [arr] = arrRes.ok ? await arrRes.json().catch(() => []) : [];
+      if (arr?.id && valor) {
+        await sb('arrematado_lancamentos', {
+          method: 'POST', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ arrematado_id: arr.id, user_id, tipo: 'saida', categoria: 'Arrematação', descricao: 'Valor da arrematação', valor, data: agora.toISOString().slice(0, 10) }),
+        });
+      }
+    } catch { /* ledger é best-effort */ }
   }
 
   // 2) Promove o usuário para ASSESSORADO imediatamente (habilita as telas/indicadores).

@@ -46,6 +46,25 @@ export async function recalcularArremate(imovelId) {
       const c = await (await sb(`casos?id=eq.${row.caso_id}&select=imovel_valor&limit=1`)).json().catch(() => []);
       if (c?.[0]?.imovel_valor != null) realizado.valor_arrematado = num(c[0].imovel_valor);
     }
+    // REVENDA/ALUGUEL realizados: lidos do ledger do arremate (arrematado_lancamentos
+    // via arrematados). Venda = soma das entradas categoria 'Venda'; aluguel_mensal =
+    // a entrada 'Aluguel recebido' mais recente. Fecham o comparativo de valor e renda.
+    if (row.user_id) {
+      try {
+        const arr = await (await sb(`arrematados?user_id=eq.${row.user_id}&imovel_id=eq.${enc}&select=id&limit=1`)).json().catch(() => []);
+        const arrId = arr?.[0]?.id;
+        if (arrId) {
+          const lanc = await (await sb(`arrematado_lancamentos?arrematado_id=eq.${arrId}&select=categoria,valor,tipo,data&order=data.desc`)).json().catch(() => []);
+          if (Array.isArray(lanc) && lanc.length) {
+            const entradas = lanc.filter((l) => l.tipo === 'entrada');
+            const venda = entradas.filter((l) => l.categoria === 'Venda').reduce((s, l) => s + (Number(l.valor) || 0), 0);
+            const alugueis = entradas.filter((l) => l.categoria === 'Aluguel recebido');
+            if (venda > 0) realizado.valor_revenda = venda;
+            if (alugueis.length && num(alugueis[0].valor)) realizado.aluguel_mensal = num(alugueis[0].valor);
+          }
+        }
+      } catch { /* ledger é best-effort */ }
+    }
 
     // tipo_aquisicao: financiado se há contrato do banco anexado ao imóvel.
     let tipo_aquisicao = row.tipo_aquisicao || null;

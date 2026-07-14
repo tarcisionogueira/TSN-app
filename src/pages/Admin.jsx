@@ -503,7 +503,7 @@ function UsuariosTab() {
   const [auditoriaData, setAuditoriaData] = useState(null);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
   const [atribUser, setAtribUser] = useState(null);   // usuário recebendo a atribuição de arremate
-  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '' });
+  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '' });
   const [atribExtraindo, setAtribExtraindo] = useState('');   // '' | 'lendo' | 'ok' | 'erro'
   const [atribDocs, setAtribDocs] = useState([]);             // [{ nome, status }] dos anexos lidos
   const atribFilesRef = useRef([]);                           // File[] p/ persistir no imóvel-âncora
@@ -515,6 +515,9 @@ function UsuariosTab() {
     if (s.includes('carta') && s.includes('arremat')) return 'carta_arrematacao';
     if (s.includes('auto') && s.includes('arremat')) return 'auto_arrematacao';
     if (s.includes('contrato') && (s.includes('banc') || s.includes('financ') || s.includes('caixa') || s.includes('cef'))) return 'contrato_banco';
+    if (s.includes('escritura') || s.includes('lavratura')) return 'escritura';
+    if (s.includes('boleto') && s.includes('sinal')) return 'boleto_sinal';
+    if (s.includes('boleto') || s.includes('aquisic') || s.includes('aquisiç')) return 'boleto_aquisicao';
     if (s.includes('matric') || s.includes('matríc')) return 'matricula';
     if (s.includes('edital')) return 'edital';
     if (s.includes('regras')) return 'regras_venda';
@@ -531,7 +534,7 @@ function UsuariosTab() {
     atribFilesRef.current = [...atribFilesRef.current, ...lista]; // guarda p/ persistir depois
     setAtribDocs(prev => [...prev, ...lista.map(f => ({ nome: f.name, status: 'lendo' }))]);
     const marcar = (nome, status) => setAtribDocs(prev => { let feito = false; return prev.map(d => (!feito && d.nome === nome && d.status === 'lendo') ? (feito = true, { ...d, status }) : d); });
-    const acc = { endereco: '', valor: 0, tipo: '', cidade: '', estado: '' };
+    const acc = { endereco: '', valor: 0, tipo: '', cidade: '', estado: '', numero_processo: '' };
     let algum = false;
     for (const file of lista) {
       try {
@@ -550,6 +553,8 @@ function UsuariosTab() {
         if (tipo && !acc.tipo) acc.tipo = tipo;
         if (ext.cidade && !acc.cidade) acc.cidade = ext.cidade;
         if (ext.estado && !acc.estado) acc.estado = ext.estado;
+        const nproc = ext.numeroProcesso || ext.numero_processo || '';
+        if (nproc && !acc.numero_processo) acc.numero_processo = String(nproc);
         algum = true;
         marcar(file.name, 'ok');
       } catch { marcar(file.name, 'erro'); }
@@ -561,6 +566,7 @@ function UsuariosTab() {
       tipo: acc.tipo || p.tipo,
       cidade: acc.cidade || p.cidade,
       estado: acc.estado || p.estado,
+      numero_processo: acc.numero_processo || p.numero_processo,
     }));
     setAtribExtraindo(algum ? 'ok' : 'erro');
   };
@@ -688,7 +694,7 @@ function UsuariosTab() {
     try {
       const res = await apiCall('/api/atribuir-arremate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null }),
+        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');
@@ -827,7 +833,7 @@ function UsuariosTab() {
                               {u.role !== 'assessorado' && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#fef9c3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#a16207', cursor: 'pointer' }}
-                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '' }); setAtribExtraindo(''); setAtribDocs([]); atribFilesRef.current = []; }}
+                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '' }); setAtribExtraindo(''); setAtribDocs([]); atribFilesRef.current = []; }}
                                   title="Atribuir uma arrematação a este usuário e torná-lo Assessorado (habilita o acompanhamento e os lançamentos)">
                                   🏷 Atribuir arremate
                                 </button>
@@ -934,6 +940,11 @@ function UsuariosTab() {
                     <option value="judicial">Judicial</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Nº do processo (CNJ){atribForm.tipo === 'extrajudicial' ? ' — se houver imissão na posse' : ''}</label>
+                <input value={atribForm.numero_processo} onChange={e => setAtribForm(p => ({ ...p, numero_processo: e.target.value }))} placeholder="0000000-00.0000.0.00.0000" style={S.input} />
+                <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 3 }}>Com o número, acompanhamos a evolução no CNJ até a baixa/encerramento (aprendizado jurídico).</div>
               </div>
               <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '9px 12px', fontSize: 11.5, color: '#166534', lineHeight: 1.5 }}>
                 ✓ Atribuição pela equipe <b>não gera cobrança</b>. A assessoria vale por <b>12 meses</b> (até a conclusão da posse do imóvel). Os 10% de honorários de êxito sobre a arrematação são tratados separadamente pelo analista.
