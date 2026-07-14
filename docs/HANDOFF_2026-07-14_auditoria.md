@@ -15,11 +15,19 @@ valida e-mail do usuário; PIX tem teto + role admin; RLS tem o trigger
 mandava JSON puro sob `Content-Encoding: aes128gcm` sem cifrar → nada chegava.
 - Novo `api/_webpush.js`: JWT VAPID via JWK + criptografia RFC 8291/8188 (ECDH+HKDF+
   AES-128-GCM). Round-trip validado em teste local.
-- **PENDENTE (config, sem código):** setar na **Vercel** (não no GitHub):
-  `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (servidor) e `VITE_VAPID_PUBLIC_KEY`
-  (front) — os três com o MESMO par de chaves. Já existe uma pública hardcoded em
-  `src/utils/push.js`; se a privada na Vercel casar com ela, basta conferir. Trocar
-  as chaves invalida as subscriptions atuais (usuários re-assinam).
+- **Chaves:** gerado um trio NOVO e consistente (validado assinando/verificando com o
+  próprio `_webpush.js`). A pública embutida em `src/utils/push.js` foi atualizada
+  para a nova (`BPh_NvzDB_OuiqNCN_Jhjb15IMDGpKIDU8Gv3cnrzTEXeFsEbVs-hrKV4AKwduCb_-g1ZBkIF2CsGj-d2nZOANA`).
+- **PENDENTE (config na Vercel, sem código):** definir/sobrescrever (Production+Preview+
+  Development), com o MESMO par:
+  - `VAPID_PUBLIC_KEY` = a pública acima
+  - `VITE_VAPID_PUBLIC_KEY` = a pública acima
+  - `VAPID_PRIVATE_KEY` = a privada (entregue no chat da sessão — NÃO versionada)
+  Depois **Redeploy**. NÃO vai no GitHub (nenhum workflow envia push). Como o push
+  nunca funcionou, trocar as chaves não quebra nada (subscriptions antigas só re-assinam).
+- **Como sinalizar "pronto" na próxima sessão:** após setar as 3 vars + redeploy,
+  ativar push no app (Perfil) e enviar um teste via `/api/push-send` (admin) para o
+  próprio usuário; se a notificação chegar, está OK.
 
 ## 🗺️ Geocoding — pino no bairro errado na 1ª vista (CORRIGIDO)
 Causa: ~23k imóveis ativos em nível `bairro`/`cidade`; o mapa da busca lê a coord

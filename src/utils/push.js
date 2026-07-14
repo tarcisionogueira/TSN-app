@@ -1,6 +1,9 @@
 // Gerencia Web Push Notifications no frontend
 
-const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BNQnHyI14FqAdg3R8hxiqGPhtLy-UkmxDLIkUcYN1-6LGE0ezXwf8Bx7_hQ7JRZwz7Gcd3e6qfvWIwVO_VtancU';
+// Pública VAPID: deve ser IGUAL à VAPID_PUBLIC_KEY do servidor (api/push-send.js) e
+// à VITE_VAPID_PUBLIC_KEY. O fallback embutido garante consistência mesmo se a env
+// VITE_ não for recompilada no build.
+const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BPh_NvzDB_OuiqNCN_Jhjb15IMDGpKIDU8Gv3cnrzTEXeFsEbVs-hrKV4AKwduCb_-g1ZBkIF2CsGj-d2nZOANA';
 
 function urlB64ToUint8(b64) {
   const pad = b64.replace(/-/g, '+').replace(/_/g, '/');
