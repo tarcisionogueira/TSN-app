@@ -12,6 +12,7 @@ export const config = { runtime: 'nodejs', maxDuration: 180 };
 
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
+import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -214,6 +215,8 @@ export default async function handler(req, res) {
         if (linhas.length) aprendizados = `\n\nAPRENDIZADOS COM ANALISTAS (correções reais de vereditos anteriores — aplique estas lições):\n${linhas.join('\n')}`;
       }
     } catch { /* aprendizado é best-effort */ }
+    // Calibração por ARREMATES REAIS (previsto×realizado, por modalidade).
+    try { aprendizados += await resumoAprendizadoTexto(imovel?.modalidade || null); } catch { /* best-effort */ }
 
     const data = await anthropic({
       model: MODEL, max_tokens: 4000,
@@ -255,6 +258,9 @@ export default async function handler(req, res) {
     })()]);
 
     await upsertLaudo({ ...baseRow, status: 'concluida', erro: null, result });
+    // Com os 3 relatórios prontos, atualiza o corpus previsto×realizado deste arremate
+    // (no-op se não for um arremate atribuído). Best-effort, não bloqueia a resposta.
+    try { await recalcularArremate(String(imovelId)); } catch { /* best-effort */ }
     res.status(200).json({ ok: true, result });
   } catch (e) {
     const timeout = String(e?.message) === 'tempo_limite';

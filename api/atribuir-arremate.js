@@ -88,6 +88,22 @@ export default async function handler(req) {
   if (!casoRes.ok) return json({ error: 'Falha ao criar o caso', detalhe: await casoRes.text().catch(() => '') }, 500);
   const [caso] = await casoRes.json().catch(() => []);
 
+  // 2.1) Semeia o corpus de aprendizado (previsto×realizado) deste arremate real.
+  //      O realizado começa com o valor arrematado; o previsto e a assertividade são
+  //      preenchidos por /api/arremate-recalibrar quando os relatórios/docs chegam.
+  if (imovelId) {
+    try {
+      await sb('arremate_aprendizado?on_conflict=imovel_id', {
+        method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({
+          imovel_id: imovelId, caso_id: caso?.id, user_id,
+          modalidade, origem: 'atribuido_manual',
+          realizado: valor ? { valor_arrematado: valor } : {},
+        }),
+      });
+    } catch { /* aprendizado é best-effort */ }
+  }
+
   // 2) Promove o usuário para ASSESSORADO imediatamente (habilita as telas/indicadores).
   //    Atribuição pela equipe NÃO gera cobrança — a validade da assessoria é de 12
   //    meses (até a conclusão da posse), então marcamos plano_vencimento = hoje+12m.
