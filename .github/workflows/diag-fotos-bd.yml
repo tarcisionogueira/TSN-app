@@ -1,0 +1,50 @@
+name: Diagnóstico — fotos + Bright Data
+
+# Testa por que a foto da Caixa não aparece no e-mail e confirma se BRIGHTDATA_* estão
+# no GitHub. Só diagnóstico (curl). Manual.
+on:
+  workflow_dispatch:
+    inputs:
+      foto_url:
+        description: 'URL de foto da Caixa para testar'
+        required: false
+        default: 'https://venda-imoveis.caixa.gov.br/fotos/F1555525215624.jpg'
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Diagnóstico
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          FOTO: ${{ github.event.inputs.foto_url }}
+        run: |
+          set +e
+          ENC=$(python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['FOTO']))")
+          echo "== Secrets presentes? =="
+          [ -n "$BRIGHTDATA_API_TOKEN" ] && echo "BRIGHTDATA_API_TOKEN: PRESENTE (${#BRIGHTDATA_API_TOKEN} chars)" || echo "BRIGHTDATA_API_TOKEN: AUSENTE"
+          [ -n "$BRIGHTDATA_ZONE" ] && echo "BRIGHTDATA_ZONE: PRESENTE (valor='$BRIGHTDATA_ZONE')" || echo "BRIGHTDATA_ZONE: AUSENTE"
+
+          echo ""; echo "== 1) Caixa DIRETO (IP datacenter, com Referer) =="
+          curl -sS -o /dev/null -w "HTTP %{http_code} | type=%{content_type} | size=%{size_download}\n" --max-time 25 \
+            -A "Mozilla/5.0" -e "https://venda-imoveis.caixa.gov.br/" "$FOTO"
+
+          echo ""; echo "== 2) Nosso img-proxy (www) =="
+          curl -sS -o /dev/null -w "HTTP %{http_code} | type=%{content_type} | size=%{size_download}\n" --max-time 30 \
+            "https://www.bidprobrasil.com.br/api/img-proxy?url=$ENC"
+
+          echo ""; echo "== 3) Nosso img-proxy (apex — checa redirect 308) =="
+          curl -sS -o /dev/null -w "HTTP %{http_code} | redirect=%{redirect_url}\n" --max-time 30 \
+            "https://bidprobrasil.com.br/api/img-proxy?url=$ENC"
+
+          echo ""; echo "== 4) Caixa via Bright Data unlocker =="
+          if [ -n "$BRIGHTDATA_API_TOKEN" ] && [ -n "$BRIGHTDATA_ZONE" ]; then
+            code=$(curl -sS -o bd.bin -w "%{http_code}" --max-time 70 -X POST https://api.brightdata.com/request \
+              -H "Authorization: Bearer $BRIGHTDATA_API_TOKEN" -H "Content-Type: application/json" \
+              -d "{\"zone\":\"$BRIGHTDATA_ZONE\",\"url\":\"$FOTO\",\"format\":\"raw\"}")
+            echo "HTTP $code | bytes=$(wc -c < bd.bin) | magic=$(xxd -l 4 -p bd.bin 2>/dev/null)"
+            echo "(JPEG começa com ffd8ff; se vier texto/JSON é erro) primeiros 200 bytes:"; head -c 200 bd.bin | tr -d '\0'; echo
+          else
+            echo "pulado (secrets ausentes)"
+          fi
