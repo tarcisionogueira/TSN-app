@@ -27,4 +27,6 @@ jobs:
       - name: Recon
         env:
           RECON_SITES: ${{ github.event.inputs.sites || 'PECINI,WEBLEILOES' }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
         run: node scripts/recon-novos-leiloeiros.mjs

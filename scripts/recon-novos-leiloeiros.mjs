@@ -85,6 +85,16 @@ async function reconSite(browser, nome, cfg) {
       if (info.sampleCards?.length) console.log(`   amostra de cards: ${JSON.stringify(info.sampleCards)}`);
       if (info.loteLinks?.length) console.log(`   links de lote/imóvel: ${JSON.stringify(info.loteLinks)}`);
       if (info.paginacao?.length) console.log(`   paginação: ${JSON.stringify(info.paginacao)}`);
+
+      // Dump do 1º card (article) que tem link de /oferta/ — estrutura exata p/ o scraper.
+      if (status === 200 && /imoveis|leiloes|busca/.test(path)) {
+        const cardHtml = await page.evaluate(() => {
+          const arts = Array.from(document.querySelectorAll('article, [class*="card"], li'));
+          const alvo = arts.find(a => a.querySelector('a[href*="/oferta/"]'));
+          return alvo ? alvo.outerHTML.replace(/\s+/g, ' ').slice(0, 2200) : null;
+        }).catch(() => null);
+        if (cardHtml) console.log(`   ▸ CARD outerHTML: ${cardHtml}`);
+      }
     } catch (e) {
       console.log(`\n── ${url}  → ERRO: ${String(e.message).slice(0, 120)}`);
     }
@@ -98,6 +108,37 @@ async function reconSite(browser, nome, cfg) {
   await page.close();
 }
 
+// Recon via Bright Data Web Unlocker — para sites atrás de Cloudflare (Pecini), que
+// respondem 403 ao Puppeteer. Precisa de BRIGHTDATA_API_TOKEN/ZONE no ambiente.
+async function reconViaBrightData(nome, cfg) {
+  const TOKEN = process.env.BRIGHTDATA_API_TOKEN, ZONE = process.env.BRIGHTDATA_ZONE;
+  console.log(`\n\n══════════════════ RECON ${nome} via Bright Data (${cfg.base}) ══════════════════`);
+  if (!TOKEN || !ZONE) { console.log('   ⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes — pulei o unlocker.'); return; }
+  for (const path of cfg.paths) {
+    const url = cfg.base + path;
+    try {
+      const r = await fetch('https://api.brightdata.com/request', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zone: ZONE, url, format: 'raw' }),
+        signal: AbortSignal.timeout(60000),
+      });
+      const html = await r.text().catch(() => '');
+      const titulo = (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || '';
+      const ofertas = [...new Set((html.match(/\/(oferta|lote|imovel|leilao)[^"'\s)]+/gi) || []))].slice(0, 12);
+      const cloudflare = /just a moment|challenge-platform|cf-chl/i.test(html);
+      console.log(`\n── ${url}  → HTTP ${r.status} ${cloudflare ? '(ainda Cloudflare)' : ''}`);
+      console.log(`   título: ${titulo}`);
+      console.log(`   len=${html.length}  links: ${JSON.stringify(ofertas)}`);
+      // 1º bloco que parece card (contém link de lote)
+      const m = html.match(/<(article|div|li)[^>]*>(?:(?!<\1)[\s\S]){0,1800}?\/(?:oferta|lote|imovel)[\s\S]{0,1200}?<\/\1>/i);
+      if (m) console.log(`   ▸ CARD: ${m[0].replace(/\s+/g, ' ').slice(0, 2000)}`);
+    } catch (e) {
+      console.log(`\n── ${url}  → ERRO BD: ${String(e.message).slice(0, 120)}`);
+    }
+  }
+}
+
 (async () => {
   const browser = await puppeteer.launch({ headless: 'new', args: BROWSER_ARGS });
   try {
@@ -105,7 +146,9 @@ async function reconSite(browser, nome, cfg) {
       const cfg = SITES[nome];
       if (!cfg) { console.log(`Site desconhecido: ${nome}`); continue; }
       try { await reconSite(browser, nome, cfg); }
-      catch (e) { console.log(`Recon ${nome} falhou: ${e.message}`); }
+      catch (e) { console.log(`Recon ${nome} (puppeteer) falhou: ${e.message}`); }
+      // Pecini responde 403 (Cloudflare) ao Puppeteer → tenta pelo Bright Data unlocker.
+      if (nome === 'PECINI') { try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); } }
     }
   } finally {
     await browser.close();
