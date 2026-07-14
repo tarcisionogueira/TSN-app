@@ -176,13 +176,16 @@ export default function ContratoLink() {
 
   useEffect(() => {
     if (!token) return;
-    supabase.from('contratos_link').select('id, titulo, conteudo, arquivo_url, arquivo_nome, tipo_contrato, status, expira_em, kyc_incluido, kyc_fotos, verificacao_identidade, docs_extras_exigidos, arquivos_referencia, requer_testemunha')
-      .eq('token', token).single()
+    // Acesso público ao contrato SÓ pelo token exato, via RPC SECURITY DEFINER
+    // (a policy anônima antiga permitia enumerar TODOS os contratos pendentes,
+    // vazando kyc_fotos + assinante_email). A RPC devolve a linha só p/ o token.
+    supabase.rpc('get_contrato_por_token', { p_token: token })
       .then(({ data, error }) => {
-        if (error || !data) setErro('Contrato não encontrado ou link inválido.');
-        else if (data.status === 'assinado') setErro('Este contrato já foi assinado.');
-        else if (data.status === 'expirado' || new Date(data.expira_em) < new Date()) setErro('Este link expirou.');
-        else setContrato(data);
+        const c = Array.isArray(data) ? data[0] : data;
+        if (error || !c) setErro('Contrato não encontrado ou link inválido.');
+        else if (c.status === 'assinado') setErro('Este contrato já foi assinado.');
+        else if (c.status === 'expirado' || new Date(c.expira_em) < new Date()) setErro('Este link expirou.');
+        else setContrato(c);
         setLoading(false);
       });
   }, [token]);
