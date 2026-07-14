@@ -84,24 +84,14 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
     setDocs(Array.isArray(data) ? data : []);
     setDocsLoading(false);
   }, [imovelId]);
-  const [validando, setValidando] = React.useState(false);
-  const [valMsg, setValMsg] = React.useState(null);
-
-  // IA confere se cada anexo é MESMO desta arrematação (endereço/processo).
-  const validarDocs = async () => {
-    if (!imovelId || validando) return;
-    setValidando(true); setValMsg(null);
+  // Valida UM anexo (a IA confere se é mesmo desta arrematação). Chamado logo após
+  // o upload. Best-effort — não bloqueia nem quebra o envio.
+  const validarAnexo = async (anexoId) => {
+    if (!anexoId) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch('/api/validar-anexos-arremate', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: JSON.stringify({ imovel_id: imovelId }) });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) { setValMsg({ ok: false, texto: j.error || 'Falha ao validar.' }); return; }
-      if (j.sem_referencia) { setValMsg({ ok: false, texto: j.motivo }); return; }
-      const divergentes = (j.resultados || []).filter(r => r.status === 'divergente').length;
-      setValMsg({ ok: divergentes === 0, texto: divergentes === 0 ? 'Tudo coerente com a arrematação.' : `${divergentes} anexo(s) parecem NÃO ser desta arrematação — revise e remova.` });
-      await carregarDocs();
-    } catch { setValMsg({ ok: false, texto: 'Falha ao validar.' }); }
-    finally { setValidando(false); }
+      await fetch('/api/validar-anexos-arremate', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: JSON.stringify({ anexo_id: anexoId }) });
+    } catch { /* validação é best-effort */ }
   };
   React.useEffect(() => { carregarDocs(); }, [carregarDocs]);
 
@@ -173,6 +163,9 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha no envio');
       await carregarDocs();
+      // A IA confere automaticamente se o anexo é desta arrematação (etiqueta na
+      // lista); se for divergente, o cliente remove pela lixeira.
+      if (data.anexo_id) { await validarAnexo(data.anexo_id); await carregarDocs(); }
     } catch (err) { alert(err.message || 'Erro ao enviar o documento.'); }
     finally { setEnviando(false); }
   };
@@ -213,7 +206,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
         <StatOp label="Avaliação" valor={nums.avaliacao} />
         <StatOp label="Valor de mercado" valor={nums.valorMercado} cor="#0d9488" sub={nums.valorMercado == null ? 'gere o relatório' : null} />
         <StatOp label="Arrematação" valor={arrematacao} cor="#0D63DB" />
-        <StatOp label="Lucro × mercado" valor={lucro} cor={lucro == null ? null : (lucro >= 0 ? '#15803d' : '#dc2626')} sub={lucroPct == null ? null : `${lucroPct >= 0 ? '+' : ''}${lucroPct.toFixed(0)}% sobre a arrematação`} />
+        <StatOp label="ROE × mercado" valor={lucro} cor={lucro == null ? null : (lucro >= 0 ? '#15803d' : '#dc2626')} sub={lucroPct == null ? null : `${lucroPct >= 0 ? '+' : ''}${lucroPct.toFixed(0)}% sobre a arrematação`} />
       </div>
 
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
@@ -282,7 +275,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
               ) : (
                 <>
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, lineHeight: 1.5 }}>
-                    Selecione o tipo e anexe o PDF. Os documentos do arremate ficam <b>permanentes</b> (nunca apagados) e alimentam a IA. Anexe ao longo do tempo (auto/carta, contrato do banco, escritura, matrícula registrada…). Se algum anexo não for desta arrematação, remova pelo ícone de lixeira.
+                    Selecione o tipo e anexe o PDF. Os documentos ficam <b>permanentes</b> e alimentam a IA. Ao anexar, a IA <b>confere automaticamente</b> se o documento é desta arrematação — se sinalizar que <b>não é</b>, remova pelo ícone de lixeira.
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                     <select value={docTipo} onChange={e => setDocTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
@@ -293,14 +286,6 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
                       <input type="file" accept="application/pdf,.pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
                     </label>
                   </div>
-                  {docs.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      <button onClick={validarDocs} disabled={validando} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: validando ? '#f1f5f9' : '#faf5ff', color: validando ? '#94a3b8' : '#7c3aed', border: '1px solid #e9d5ff', borderRadius: 8, padding: '7px 12px', fontSize: 12.5, fontWeight: 700, cursor: validando ? 'default' : 'pointer' }}>
-                        {validando ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Validando…</> : '🤖 Validar documentos (conferir se são desta arrematação)'}
-                      </button>
-                      {valMsg && <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 600, color: valMsg.ok ? '#15803d' : '#b45309' }}>{valMsg.ok ? '✓ ' : '⚠️ '}{valMsg.texto}</div>}
-                    </div>
-                  )}
                 </>
               )}
               {docsLoading ? (
@@ -422,6 +407,7 @@ export default function Arrematados() {
   const [saldos, setSaldos] = React.useState({}); // arrematado_id → saldo
   const [nDocs, setNDocs] = React.useState({});    // imovel_id → nº de anexos
   const [mercado, setMercado] = React.useState({}); // imovel_id → valorMercado
+  const [avals, setAvals] = React.useState({});     // imovel_id → valor_avaliacao
   const [loading, setLoading] = React.useState(true);
   const [sel, setSel] = React.useState(null);
   const [novo, setNovo] = React.useState(false);
@@ -449,8 +435,12 @@ export default function Arrematados() {
           const { data: am } = await supabase.from('analises_mercado').select('imovel_id,result,updated_at').eq('user_id', uid).in('imovel_id', imovelIds).eq('status', 'concluida').order('updated_at', { ascending: false });
           const mm = {}; (am || []).forEach(x => { if (!(x.imovel_id in mm)) mm[x.imovel_id] = x.result?.valorMercado ?? null; }); setMercado(mm);
         } catch { setMercado({}); }
-      } else { setNDocs({}); setMercado({}); }
-    } else { setSaldos({}); setNDocs({}); setMercado({}); }
+        try {
+          const { data: iv } = await supabase.from('imoveis_leilao').select('id,valor_avaliacao').in('id', imovelIds);
+          const av = {}; (iv || []).forEach(x => { av[x.id] = x.valor_avaliacao ?? null; }); setAvals(av);
+        } catch { setAvals({}); }
+      } else { setNDocs({}); setMercado({}); setAvals({}); }
+    } else { setSaldos({}); setNDocs({}); setMercado({}); setAvals({}); }
     setLoading(false);
   }, [uid]);
   React.useEffect(() => { carregar(); }, [carregar]);
@@ -544,7 +534,9 @@ export default function Arrematados() {
             const docsCount = a.imovel_id ? (nDocs[a.imovel_id] || 0) : (Array.isArray(a.documentos) ? a.documentos.length : 0);
             const arrematacao = Number(a.valor_arrematacao) || null;
             const vMerc = a.imovel_id ? (mercado[a.imovel_id] ?? null) : null;
-            const lucro = (vMerc != null && arrematacao != null) ? (vMerc - arrematacao) : null;
+            const aval = a.imovel_id ? (avals[a.imovel_id] ?? null) : null;
+            const roe = (vMerc != null && arrematacao != null) ? (vMerc - arrematacao) : null;
+            const roePct = (roe != null && arrematacao > 0) ? (roe / arrematacao) * 100 : null;
             return (
               <div key={a.id} onClick={() => setSel(a)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, cursor: 'pointer' }}
@@ -559,9 +551,10 @@ export default function Arrematados() {
                   <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.c }}>{st.l}</span>
                     <span style={{ color: '#94a3b8' }}><FileText size={11} style={{ verticalAlign: -1 }} /> {docsCount} doc{docsCount !== 1 ? 's' : ''}</span>
-                    {arrematacao != null && <span style={{ color: '#0D63DB', fontWeight: 700 }}>Arremat. {brl(arrematacao)}</span>}
+                    {aval != null && <span style={{ color: '#64748b', fontWeight: 700 }}>Aval. {brl(aval)}</span>}
                     {vMerc != null && <span style={{ color: '#0d9488', fontWeight: 700 }}>Mercado {brl(vMerc)}</span>}
-                    {lucro != null && <span style={{ color: lucro >= 0 ? '#15803d' : '#dc2626', fontWeight: 700 }}>Lucro×merc. {lucro >= 0 ? '+' : ''}{brl(lucro)}</span>}
+                    {arrematacao != null && <span style={{ color: '#0D63DB', fontWeight: 700 }}>Arremat. {brl(arrematacao)}</span>}
+                    {roe != null && <span style={{ color: roe >= 0 ? '#15803d' : '#dc2626', fontWeight: 700 }}>ROE {roe >= 0 ? '+' : ''}{brl(roe)}{roePct != null ? ` · ${roePct >= 0 ? '+' : ''}${roePct.toFixed(0)}%` : ''}</span>}
                     <span style={{ fontWeight: 700, color: saldo >= 0 ? '#0D63DB' : '#dc2626' }}>Saldo {brl(saldo)}</span>
                   </div>
                 </div>
