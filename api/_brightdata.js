@@ -76,7 +76,7 @@ async function consumirCota(proposito = 'geral') {
  * com o corpo bruto da fonte, ou null se: BD não configurado, teto atingido, ou erro.
  * O chamador usa resp.ok / resp.arrayBuffer() / resp.text() normalmente.
  */
-export async function fetchViaBrightData(url, { method = 'GET', headers = null, proposito = 'geral' } = {}) {
+export async function fetchViaBrightData(url, { method = 'GET', headers = null, proposito = 'geral', timeoutMs = 45000 } = {}) {
   if (!brightDataDisponivel()) return null;
   const liberado = await consumirCota(proposito);
   if (!liberado) return null; // teto semanal atingido → não chama (fail-safe de custo)
@@ -89,7 +89,7 @@ export async function fetchViaBrightData(url, { method = 'GET', headers = null, 
       method: 'POST',
       headers: { Authorization: `Bearer ${BD_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw', ...(temHeaders ? { headers } : {}) }),
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     return resp;
   } catch {

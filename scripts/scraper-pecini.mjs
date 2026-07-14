@@ -36,8 +36,8 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 const supabase = createClient(SB_URL, SB_KEY);
 
 // Busca crua via Web Unlocker (com teto de custo). Retorna o HTML/XML ou null.
-async function bd(url, proposito = 'pecini') {
-  const r = await fetchViaBrightData(url, { proposito });
+async function bd(url, { proposito = 'pecini', timeoutMs = 45000 } = {}) {
+  const r = await fetchViaBrightData(url, { proposito, timeoutMs });
   if (!r || !r.ok) return null;
   return await r.text().catch(() => null);
 }
@@ -148,8 +148,9 @@ async function main() {
   }
   console.log(`PECINI ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · max ${MAX_LOTES} lote(s)/run`);
 
-  // 1) Sitemap → enumeração (1 request).
-  const xml = await bd(`${BASE}/sitemap.xml`);
+  // 1) Sitemap → enumeração (1 request). Timeout maior: o feed pode ser grande e
+  //    o Web Unlocker demora a resolver Cloudflare (45s estourou na 1ª validação).
+  const xml = await bd(`${BASE}/sitemap.xml`, { timeoutMs: 110000 });
   if (!xml) { console.error('sitemap.xml não veio (teto BD atingido ou erro). Abortado.'); return; }
   let lotes = parseSitemap(xml);
   console.log(`sitemap: ${lotes.length} lote(s) enumerados (com URL: ${lotes.filter(l => l.loteUrl).length}).`);

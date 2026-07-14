@@ -1082,10 +1082,15 @@ async function scraperSodre(browser) {
         ocupacao: extrairDaDescricao(`${titulo} ${r.lot_description || ''}`).ocupacao || null,
         descricao: String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500),
         link_edital: `https://www.sodresantoro.com.br/imoveis/lote/${r.lot_id || r.id}`,
-        // NOTA: o campo de imagem real do search-lots não foi confirmado (recon
-        // pendente) — estes nomes são palpite e caem em null. A foto do SODRE é
-        // preenchida por captura-docs-sodre.mjs (og:image da página do lote).
-        link_foto: r.lot_image || r.image || null,
+        // Campo real de imagem = lot_pictures (confirmado no recon-sodre-searchlots).
+        // Aceita array de strings ou de objetos; normaliza relativo → absoluto. A
+        // foto também é backfillada por captura-docs-sodre.mjs (og:image do lote).
+        link_foto: (() => {
+          const pic = Array.isArray(r.lot_pictures) ? r.lot_pictures[0] : r.lot_pictures;
+          const u = typeof pic === 'string' ? pic : (pic?.url || pic?.src || pic?.image || pic?.path || null);
+          if (!u) return r.lot_image || r.image || null;
+          return /^https?:\/\//.test(u) ? u : `https://www.sodresantoro.com.br${u.startsWith('/') ? '' : '/'}${u}`;
+        })(),
         leiloeiro: 'Sodré Santoro',
         data_leilao: parseData(r.auction_date_init || r.auction_date_end),
         forma_pagamento: 'a_vista',
