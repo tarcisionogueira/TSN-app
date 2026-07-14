@@ -43,21 +43,27 @@ const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor
 // clientes de e-mail (referer/IP) — a foto existe (aparece no site) mas o e-mail não
 // carrega. Fix: se o host da foto está na whitelist, serve pelo NOSSO /api/img-proxy
 // (que manda o Referer correto e busca do nosso IP). supabase/local vai direto; host
-// fora da whitelist cai no hotlink direto (best-effort); CEF sem link_foto deriva o
-// padrão F<id>.jpg (SEM "21" — o "21" era o bug do foto.js) e proxia. URL absoluta ou null.
+// fora da whitelist cai no hotlink direto (best-effort); CEF deriva a foto de fonte_id
+// no padrão F<num>21.jpg (confirmado servindo 200/JPEG) e proxia. URL absoluta ou null.
 function fotoParaEmail(im, base) {
+  // Proxy SEMPRE por www: o apex bidprobrasil.com.br responde 308 e clientes de e-mail
+  // (Gmail) não seguem redirect em <img>, então a foto some.
+  const proxBase = String(base || '').replace(/:\/\/(www\.)?bidprobrasil\.com\.br/, '://www.bidprobrasil.com.br');
   const isCef = im?.fonte === 'CEF' || im?.fonte === 'caixa';
-  let src = im?.link_foto || '';
-  // CEF sem link_foto: deriva o padrão correto F<id>.jpg (SEM "21" — o "21" era o bug do foto.js).
-  if (!src && isCef && im?.fonte_id) src = `https://venda-imoveis.caixa.gov.br/fotos/F${String(im.fonte_id).replace(/^(caixa_|cef_)/, '')}.jpg`;
+  if (isCef && im?.fonte_id) {
+    // Caixa: a foto principal é F<num>21.jpg (confirmado servindo 200/JPEG). O F<num>.jpg
+    // (às vezes gravado no banco) dá 404. Serve pelo nosso proxy (a Caixa responde ao
+    // nosso IP; o proxy manda o Referer certo e resolve o hotlink nos clientes de e-mail).
+    const num = String(im.fonte_id).replace(/^(caixa_|cef_)/, '');
+    const caixa = `https://venda-imoveis.caixa.gov.br/fotos/F${num}21.jpg`;
+    return `${proxBase}/api/img-proxy?url=${encodeURIComponent(caixa)}`;
+  }
+  const src = im?.link_foto || '';
   if (!src) return null;
   if (src.includes('supabase.co')) return src;
-  if (src.startsWith('/')) return `${base}${src}`;
+  if (src.startsWith('/')) return `${proxBase}${src}`;
   if (!/^https?:\/\//.test(src)) return null;
-  // Só a Caixa é roteada pelo nosso proxy: ela bloqueia hotlink dos clientes de e-mail
-  // (a foto some no e-mail mas aparece no site). Os demais leiloeiros carregam hotlink
-  // direto no e-mail (como no print), então NÃO os roteamos p/ não regredir.
-  try { if (new URL(src).hostname === 'venda-imoveis.caixa.gov.br' && ALLOWED_HOSTS.has('venda-imoveis.caixa.gov.br')) return `${base}/api/img-proxy?url=${encodeURIComponent(src)}`; } catch { /* url inválida */ }
+  // Demais leiloeiros carregam hotlink direto no e-mail (como no print) — não roteamos p/ não regredir.
   return src;
 }
 
