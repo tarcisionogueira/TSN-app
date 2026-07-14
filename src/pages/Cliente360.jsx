@@ -245,6 +245,10 @@ export default function Cliente360() {
               <div style={{ fontSize: 22, fontWeight: 900, color: '#059669' }}>{aprend.com_assertividade ?? 0}</div>
               <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>já calibrando a IA</div>
             </div>
+            <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#7c3aed' }}>{(aprend.itens || []).filter((x) => x.realizado?.juridico?.encerrado).length}</div>
+              <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>desembaraços concluídos (CNJ)</div>
+            </div>
           </div>
           {(aprend.resumo || []).length === 0 ? (
             <div style={{ fontSize: 12, color: '#94a3b8' }}>Ainda sem assertividade calculada. Conforme os arremates atribuídos geram relatórios e registram revenda/aluguel/desfecho, a IA passa a se calibrar por modalidade aqui.</div>

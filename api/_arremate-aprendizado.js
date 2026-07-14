@@ -93,11 +93,13 @@ export async function recalcularArremate(imovelId) {
 }
 
 // Bloco de texto p/ injetar no prompt do gerador — lições dos arremates reais da
-// mesma modalidade. Vazio quando ainda não há assertividade calculada.
+// mesma modalidade (mercadológico + jurídico). Vazio quando ainda não há dados.
 export async function resumoAprendizadoTexto(modalidade) {
-  const seg = await rpc('arremate_aprendizado_resumo', { p_modalidade: modalidade || null });
-  if (!Array.isArray(seg) || !seg.length) return '';
-  const linhas = seg.map((s) => {
+  const [seg, jur] = await Promise.all([
+    rpc('arremate_aprendizado_resumo', { p_modalidade: modalidade || null }),
+    rpc('arremate_juridico_resumo', { p_modalidade: modalidade || null }),
+  ]);
+  const linhas = (Array.isArray(seg) ? seg : []).map((s) => {
     const parts = [];
     if (s.valor_delta_pct_med != null) parts.push(`valor de mercado previsto ${s.valor_delta_pct_med > 0 ? '+' : ''}${s.valor_delta_pct_med}% vs a revenda real`);
     if (s.locacao_delta_pct_med != null) parts.push(`aluguel previsto ${s.locacao_delta_pct_med > 0 ? '+' : ''}${s.locacao_delta_pct_med}% vs o real`);
@@ -105,6 +107,60 @@ export async function resumoAprendizadoTexto(modalidade) {
     if (!parts.length) return null;
     return `- ${s.modalidade || 'n/d'}${s.tipo_aquisicao ? '/' + s.tipo_aquisicao : ''} (${s.n} arremate(s) real(is)): ${parts.join('; ')}.`;
   }).filter(Boolean);
-  if (!linhas.length) return '';
-  return `\n\nAPRENDIZADO DE ARREMATES REAIS (calibre por modalidade — ajuste suas estimativas nesta direção; se o previsto costuma ficar acima do real, seja mais conservador):\n${linhas.join('\n')}`;
+  const jurLinhas = (Array.isArray(jur) ? jur : []).map((j) => (
+    j.com_processo > 0 ? `- ${j.modalidade || 'n/d'}: ${j.encerrados}/${j.com_processo} processo(s) já com desembaraço concluído no CNJ (baixa/arquivamento/trânsito em julgado).` : null
+  )).filter(Boolean);
+  if (!linhas.length && !jurLinhas.length) return '';
+  let txt = '\n\nAPRENDIZADO DE ARREMATES REAIS (calibre por modalidade — ajuste nesta direção; se o previsto costuma ficar acima do real, seja mais conservador):';
+  if (linhas.length) txt += `\n${linhas.join('\n')}`;
+  if (jurLinhas.length) txt += `\nDESEMBARAÇO JURÍDICO (evolução real no CNJ, por modalidade):\n${jurLinhas.join('\n')}`;
+  return txt;
+}
+
+// Classifica a EVOLUÇÃO do processo a partir das movimentações (mais novas primeiro).
+// encerrado = houve baixa/arquivamento/trânsito em julgado/extinção. marco = o
+// milestone relevante mais recente (também posse/carta/auto de arrematação).
+const MARCOS = [
+  { re: /baixa\s+defini|arquiva(mento|d[oa])\s+defini|arquivad[oa]\s+definitivamente/i, marco: 'baixa/arquivamento definitivo', encerra: true },
+  { re: /tr[âa]nsito\s+em\s+julgado/i, marco: 'trânsito em julgado', encerra: true },
+  { re: /extin[çc][ãa]o|extint[ao]\s+(a\s+)?execu/i, marco: 'extinção', encerra: true },
+  { re: /imiss[ãa]o\s+na\s+posse|imitid[ao]\s+na\s+posse|mandado\s+de\s+imiss/i, marco: 'imissão na posse', encerra: false },
+  { re: /carta\s+de\s+arremat/i, marco: 'carta de arrematação', encerra: false },
+  { re: /auto\s+de\s+arremat/i, marco: 'auto de arrematação', encerra: false },
+];
+export function classificarDesfecho(movimentos) {
+  const movs = Array.isArray(movimentos) ? movimentos : [];
+  let encerrado = false, marco = null, data = null;
+  for (const m of movs) {           // vêm do mais novo p/ o mais antigo
+    const d = String(m?.descricao || '');
+    for (const mk of MARCOS) {
+      if (mk.re.test(d)) {
+        if (mk.encerra) encerrado = true;
+        if (!marco) { marco = mk.marco; data = m?.data || null; } // milestone mais recente
+      }
+    }
+  }
+  return { encerrado, marco, data };
+}
+
+// Grava a evolução jurídica (CNJ) no realizado do corpus. No-op se não for arremate.
+export async function registrarDesfechoJuridico(imovelId, proc, desfecho) {
+  if (!SB || !KEY || !imovelId) return false;
+  const enc = encodeURIComponent(String(imovelId));
+  try {
+    const [row] = await (await sb(`arremate_aprendizado?imovel_id=eq.${enc}&limit=1`)).json().catch(() => []);
+    if (!row) return false;
+    const realizado = (row.realizado && typeof row.realizado === 'object') ? { ...row.realizado } : {};
+    realizado.juridico = {
+      numero: proc?.numero || null,
+      tribunal: proc?.tribunal || null,
+      encerrado: !!desfecho?.encerrado,
+      marco: desfecho?.marco || null,
+      marco_data: desfecho?.data || null,
+      atualizado_em: new Date().toISOString().slice(0, 10),
+      movimentos: (proc?.movimentos || []).slice(0, 8).map((m) => ({ data: m?.data || null, descricao: String(m?.descricao || '').slice(0, 160) })),
+    };
+    await sb(`arremate_aprendizado?imovel_id=eq.${enc}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ realizado, updated_at: new Date().toISOString() }) });
+    return true;
+  } catch { return false; }
 }

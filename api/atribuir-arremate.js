@@ -125,6 +125,21 @@ export default async function handler(req) {
         });
       }
     } catch { /* ledger é best-effort */ }
+
+    // 2.3) Monitor CNJ: se há nº de processo (judicial sempre; extrajudicial só na
+    //      imissão na posse), acompanha a evolução até a baixa/encerramento e aprende
+    //      o desembaraço. Reaproveita o cron cnj-monitor-cron + processos_monitorados.
+    if (numProc) {
+      try {
+        await sb('processos_monitorados?on_conflict=numero_processo', {
+          method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({
+            numero_processo: numProc, uf: estado || null, caso_id: caso?.id, imovel_id: imovelId,
+            rotulo: `Arremate ${modalidade} ${(imovel_endereco || '').slice(0, 80)}`.trim(), ativo: true, criado_por: user.id,
+          }),
+        });
+      } catch { /* monitor é best-effort */ }
+    }
   }
 
   // 2) Promove o usuário para ASSESSORADO imediatamente (habilita as telas/indicadores).

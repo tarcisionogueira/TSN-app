@@ -9,6 +9,7 @@ export const config = { runtime: 'edge', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { buscarProcessosCNJ } from './_cnj.js';
+import { classificarDesfecho, registrarDesfechoJuridico } from './_arremate-aprendizado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -58,6 +59,21 @@ export default async function handler(req) {
         await avisarCaso(mon, `🔔 Movimento novo no processo ${proc.numero} (${proc.tribunal}) em ${dataMov || 's/data'}: ${ultimoMov}.${temSusp ? ` ⚠️ Risco de suspensão/atraso${cats.length ? ` [${cats.join(', ')}]` : ''}.` : ''}`);
         alertas++;
       }
+
+      // DESEMBARAÇO JURÍDICO: classifica a evolução (posse/carta/baixa/arquivamento/
+      // trânsito) e grava no corpus de aprendizado do arremate (se for um). Ao
+      // encerrar, avisa e desativa o monitor — cumprimos "consultar até o despacho
+      // final". A IA aprende o desfecho por modalidade.
+      const desfecho = classificarDesfecho(proc.movimentos);
+      await registrarDesfechoJuridico(mon.imovel_id, proc, desfecho).catch(() => {});
+      if (desfecho.encerrado) {
+        await avisarCaso(mon, `✅ Processo ${proc.numero} (${proc.tribunal}) com desembaraço concluído: ${desfecho.marco || 'baixa/arquivamento'}${desfecho.data ? ` em ${desfecho.data}` : ''}. Acompanhamento no CNJ encerrado.`);
+        await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal',
+          body: { ativo: false, ultima_data_mov: dataMov || mon.ultima_data_mov, ultima_checagem: new Date().toISOString(),
+            snapshot: { total_mov: (proc.movimentos || []).length, ultima_data: dataMov, tem_suspensiva: temSusp, encerrado: true, marco: desfecho.marco } } });
+        continue;
+      }
+
       await sb(`processos_monitorados?id=eq.${mon.id}`, { method: 'PATCH', prefer: 'return=minimal',
         body: { ultima_data_mov: dataMov || mon.ultima_data_mov, ultima_checagem: new Date().toISOString(),
           snapshot: { total_mov: (proc.movimentos || []).length, ultima_data: dataMov, tem_suspensiva: temSusp } } });
