@@ -719,6 +719,25 @@ export default async function handler(req, res) {
     let docOk = (execDoc.length === 11 && cpfValido(execDoc)) || (execDoc.length === 14 && cnpjValido(execDoc));
     let execNome = String(ex.executadoNome || '').trim();
 
+    // GEOCODIFICAÇÃO on-demand: se a MATRÍCULA revelou o endereço e o imóvel não
+    // tinha (ex.: LJUD, que caem no centroide da cidade), grava e re-enfileira o
+    // geocoder (geocod_nivel='refazer' → api/geocodificar.js reprocessa no nível de
+    // rua). Corrige o mapa para casos como este assim que o cliente pede o laudo.
+    try {
+      const endMat = String(ex.enderecoImovel || '').trim();
+      const baiMat = String(ex.bairroImovel || '').trim();
+      const cepMat = String(ex.cepImovel || '').replace(/\D/g, '');
+      if (endMat && endMat.length >= 5 && !String(im.endereco || '').trim()) {
+        const patch = { endereco: endMat.slice(0, 200), geocod_nivel: 'refazer' };
+        if (baiMat) patch.bairro = baiMat.slice(0, 120);
+        if (cepMat.length === 8) patch.cep = cepMat;
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch),
+        }).catch(() => {});
+        console.log(`[documental] endereço da matrícula → imóvel ${imovelId}: ${endMat}${baiMat ? ' · ' + baiMat : ''} (geocod refazer)`);
+      }
+    } catch { /* nunca trava o laudo */ }
+
     // ── FALLBACK 1: PASSE DE EXTRAÇÃO FOCADO ───────────────────────────────────
     // O passe geral (que produz o parecer inteiro) às vezes NÃO captura o CPF/nome/
     // processo da matrícula — aí certidões e CNJ não rodam e o relatório sai "vazio".
