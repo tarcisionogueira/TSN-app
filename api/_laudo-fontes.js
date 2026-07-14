@@ -24,9 +24,17 @@ export async function consultarComunicaDJEN(numeroProcesso) {
   if (num.length < 15) return { ok: false, instavel: false, erro: 'sem número de processo' };
   const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${num}&pagina=1&itensPorPagina=50`;
   try {
-    const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': UA }, signal: AbortSignal.timeout(12000) });
-    if (!r.ok) return { ok: false, instavel: r.status >= 500 || r.status === 429, erro: `HTTP ${r.status}` };
-    const j = await r.json().catch(() => null);
+    let j = null;
+    let r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': UA }, signal: AbortSignal.timeout(12000) }).catch(() => null);
+    // A API do DJEN passou a barrar o IP do servidor (HTTP 403). Fallback pelo Bright
+    // Data (IP residencial) para manter o monitoramento do processo funcionando.
+    if (!r || !r.ok) {
+      const bd = await fetchViaBrightData(url, { proposito: 'certidao', headers: { Accept: 'application/json', 'User-Agent': UA } });
+      if (bd && bd.ok) r = bd;
+      else if (!r) return { ok: false, instavel: true, erro: 'sem resposta' };
+      else return { ok: false, instavel: r.status >= 500 || r.status === 429 || r.status === 403, erro: `HTTP ${r.status}` };
+    }
+    j = await r.json().catch(() => null);
     const itens = j?.items || j?.content || (Array.isArray(j) ? j : []) || [];
     const coms = itens.map(c => ({
       data: c.data_disponibilizacao || c.dataDisponibilizacao || c.data || null,
