@@ -176,6 +176,32 @@ ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</
 
 <h2>Detalhamento Financeiro Completo</h2>
 <div class="av">
+  <h3>Resumo de Caixa</h3>
+  <div style="display:grid;grid-template-columns:${isUsoProprio?'repeat(2,1fr)':'repeat(3,1fr)'};gap:8px;margin-bottom:12px;">
+    <div class="card" style="background:#fff7ed;">
+      <div class="card-l" style="color:#c2410c;">1 · Disponível ao arrematar</div>
+      <div class="card-v" style="color:#9a3412;">R$ ${fmt(m.desembolsoInicial)}</div>
+      <div style="font-size:8px;color:#9a3412;">${isAVista?'lance + custos, à vista':`sinal (${fmtPct(d.sinalPercentual)}) + custos iniciais`}</div>
+    </div>
+    <div class="card" style="background:#eff6ff;">
+      <div class="card-l" style="color:#1d4ed8;">2 · Custo mensal a suportar</div>
+      <div class="card-v" style="color:#1e3a8a;">R$ ${fmt(m.parcelaMedia+m.carregoMensal)}/mês</div>
+      <div style="font-size:8px;color:#1e3a8a;">${m.parcelaMedia>0?`parcela ~R$ ${fmt(m.parcelaMedia)}`:'sem parcela'}${m.carregoMensal>0?` + IPTU/cond. R$ ${fmt(m.carregoMensal)}`:''} · ${m.mesesCarregados} meses</div>
+    </div>
+    ${!isUsoProprio?`<div class="card" style="background:#fef2f2;">
+      <div class="card-l" style="color:#b91c1c;">3 · Despesas ao vender</div>
+      <div class="card-v" style="color:#991b1b;">R$ ${fmt(m.custoVenda)}</div>
+      <div style="font-size:8px;color:#991b1b;">comissão 5% + IR ganho${m.saldoDevedor>0?' + quitação do saldo':''}</div>
+    </div>`:''}
+  </div>
+  ${d.valorLocacao>0?(()=>{
+    const custoMensal=m.parcelaMedia+m.carregoMensal;
+    const cobertura=custoMensal>0?(m.aluguelMensal/custoMensal)*100:100;
+    const liq=m.aluguelMensal-custoMensal;
+    return `<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:4px;padding:8px 10px;margin-bottom:12px;">
+      <div style="font-size:9px;font-weight:800;color:#6d28d9;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Cenário alternativo · Locação (segurar e alugar)</div>
+      <div style="font-size:10px;color:#5b21b6;">Aluguel R$ ${fmt(m.aluguelMensal)}/mês cobre <b>${fmtPct(cobertura,0)}</b> do custo mensal · resultado ${liq>=0?'+':'-'} R$ ${fmt(Math.abs(liq))}/mês · yield ${fmtPct(m.yieldAnual)}/ano. Na locação <b>não</b> incidem IR de ganho de capital nem comissão de venda — apenas IPTU/condomínio e eventual administração.</div>
+    </div>`;})():''}
   <h3>A) Capital Mobilizado (Saídas)</h3>
   <table>
     <tr><th>Item</th><th class="c">% do Aporte</th><th class="r">Lance sem disputa</th><th class="r">Lance com disputa (R$ ${fmt(teto)})</th></tr>
@@ -188,8 +214,8 @@ ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</
       ...(d.foreiro>0?[['Foreiro', m.foreiro, mt.foreiro]]:[]),
       ...(d.debitosAssumidos>0?[['Débitos Assumidos', m.debitos, mt.debitos]]:[]),
       ['Reforma / Retrofit', m.manutencao, mt.manutencao],
-      ...(!isAVista?[['Parcelas Banco','–','–']]:[]),
-      ['Carrego (IPTU/Cond)', m.custoCarrrego, mt.custoCarrrego],
+      ...(!isAVista&&m.parcelasPagas>0?[[`Parcelas Banco (projeção ${m.mesesCarregados} meses)`, m.parcelasPagas, mt.parcelasPagas]]:[]),
+      [`Carrego IPTU/Cond. (${m.mesesCarregados} meses)`, m.custoCarrrego, mt.custoCarrrego],
     ].filter(r=>typeof r[1]==='string'||r[1]>0||r[2]>0).map(([l,b,tv])=>`
     <tr><td>${l}</td><td class="c">${m.capitalMobilizado>0&&typeof b==='number'?fmtPct(b/m.capitalMobilizado*100):'-'}</td>
     <td class="r rd">- R$ ${typeof b==='number'?fmt(b):b}</td>

@@ -2688,6 +2688,51 @@ export default function Analise() {
             )}
           </div>
 
+          {/* Resumo de caixa: quanto ter AO ARREMATAR × quanto suportar POR MÊS × despesas NA VENDA */}
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : (isUsoProprio ? 'repeat(2,1fr)' : 'repeat(3,1fr)'), gap:12 }}>
+            <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:14, padding:'16px 18px' }}>
+              <div style={{ fontSize:11, fontWeight:800, color:'#c2410c', textTransform:'uppercase', letterSpacing:0.5 }}>1 · Disponível ao arrematar</div>
+              <div style={{ fontSize:23, fontWeight:900, color:'#9a3412', margin:'6px 0 4px' }}>R$ {fmt(metricas.desembolsoInicial)}</div>
+              <div style={{ fontSize:12, color:'#9a3412' }}>{isAVista ? 'Lance + custos, pagos à vista na arrematação' : `Sinal (${d.sinalPercentual||0}%) + custos iniciais (leiloeiro, honorários, ITBI…)`}</div>
+            </div>
+            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:14, padding:'16px 18px' }}>
+              <div style={{ fontSize:11, fontWeight:800, color:'#1d4ed8', textTransform:'uppercase', letterSpacing:0.5 }}>2 · Custo mensal a suportar</div>
+              <div style={{ fontSize:23, fontWeight:900, color:'#1e3a8a', margin:'6px 0 4px' }}>R$ {fmt(metricas.parcelaMedia + metricas.carregoMensal)}<span style={{ fontSize:13, fontWeight:700 }}> /mês</span></div>
+              <div style={{ fontSize:12, color:'#1e3a8a' }}>
+                {metricas.parcelaMedia>0 ? `Parcela do banco ~R$ ${fmt(metricas.parcelaMedia)}` : 'Sem parcela (à vista)'}
+                {metricas.carregoMensal>0 ? ` + IPTU/cond. R$ ${fmt(metricas.carregoMensal)}` : ''} · projeção {metricas.mesesCarregados} meses
+              </div>
+            </div>
+            {!isUsoProprio && (
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:14, padding:'16px 18px' }}>
+                <div style={{ fontSize:11, fontWeight:800, color:'#b91c1c', textTransform:'uppercase', letterSpacing:0.5 }}>3 · Despesas ao vender</div>
+                <div style={{ fontSize:23, fontWeight:900, color:'#991b1b', margin:'6px 0 4px' }}>R$ {fmt(metricas.custoVenda)}</div>
+                <div style={{ fontSize:12, color:'#991b1b' }}>Comissão 5% + IR sobre ganho de capital{metricas.saldoDevedor>0 ? ' + quitação do saldo do banco' : ''}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Cenário alternativo: LOCAÇÃO (segurar e alugar em vez de vender) */}
+          {metricas.aluguelMensal>0 && (() => {
+            const custoMensal = metricas.parcelaMedia + metricas.carregoMensal;
+            const cobertura = custoMensal>0 ? (metricas.aluguelMensal / custoMensal) * 100 : 100;
+            const liquidoMensal = metricas.aluguelMensal - custoMensal;
+            return (
+              <div style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:14, padding:'16px 20px' }}>
+                <div style={{ fontSize:11, fontWeight:800, color:'#6d28d9', textTransform:'uppercase', letterSpacing:0.5, marginBottom:10 }}>Cenário alternativo · Locação (segurar e alugar, sem vender)</div>
+                <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:12 }}>
+                  <div><div style={{ fontSize:11, color:'#7c3aed', fontWeight:700 }}>Aluguel mensal</div><div style={{ fontSize:18, fontWeight:900, color:'#5b21b6' }}>R$ {fmt(metricas.aluguelMensal)}</div></div>
+                  <div><div style={{ fontSize:11, color:'#7c3aed', fontWeight:700 }}>Cobre do custo mensal</div><div style={{ fontSize:18, fontWeight:900, color: cobertura>=100?'#059669':'#5b21b6' }}>{fmtPct(cobertura,0)}</div></div>
+                  <div><div style={{ fontSize:11, color:'#7c3aed', fontWeight:700 }}>Resultado mensal</div><div style={{ fontSize:18, fontWeight:900, color: liquidoMensal>=0?'#059669':'#dc2626' }}>{liquidoMensal>=0?'+ ':'- '}R$ {fmt(Math.abs(liquidoMensal))}</div></div>
+                  <div><div style={{ fontSize:11, color:'#7c3aed', fontWeight:700 }}>Yield anual</div><div style={{ fontSize:18, fontWeight:900, color:'#5b21b6' }}>{fmtPct(metricas.yieldAnual)}</div></div>
+                </div>
+                <div style={{ fontSize:11.5, color:'#6d28d9', marginTop:10, lineHeight:1.6 }}>
+                  Alugando, o aluguel cobre {cobertura>=100?'integralmente':'parcialmente'} a parcela + carrego. <strong>Não incidem</strong> IR de ganho de capital nem comissão de corretor sobre venda — só os custos de locação (IPTU/condomínio e eventual taxa de administração). {cobertura<100 ? `Faltam R$ ${fmt(custoMensal-metricas.aluguelMensal)}/mês de aporte até o aluguel cobrir tudo.` : 'O imóvel se paga sozinho no mês.'}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Tabela financeira detalhada */}
           <div style={{ borderRadius:12, border:'1px solid #e2e8f0', overflow:'hidden' }}>
             <div style={{ background:'#111111', padding:'12px 18px' }}>
@@ -2714,8 +2759,8 @@ export default function Analise() {
                     d.foreiro>0 && ['Foreiro', metricas.foreiro, metricasTeto.foreiro],
                     d.debitosAssumidos>0 && ['Débitos Assumidos', metricas.debitos, metricasTeto.debitos],
                     d.manutencaoEstimada>0 && ['Reforma/Retrofit', metricas.manutencao, metricasTeto.manutencao],
-                    !isAVista && metricas.parcelasPagas>0 && ['Parcelas Banco', metricas.parcelasPagas, metricasTeto.parcelasPagas],
-                    (d.iptuMensal>0||d.condominioMensal>0) && ['Carrego (IPTU/Cond)', metricas.custoCarrrego, metricasTeto.custoCarrrego],
+                    !isAVista && metricas.parcelasPagas>0 && [`Parcelas Banco (projeção ${metricas.mesesCarregados} meses)`, metricas.parcelasPagas, metricasTeto.parcelasPagas],
+                    (d.iptuMensal>0||d.condominioMensal>0) && [`Carrego IPTU/Cond. (${metricas.mesesCarregados} meses)`, metricas.custoCarrrego, metricasTeto.custoCarrrego],
                   ].filter(Boolean).filter(r=>r[1]>0||r[2]>0).map(([label,base,tetoV],i)=>(
                     <tr key={i} style={{ borderBottom:'1px solid #f1f5f9', background:i%2===0?'white':'#fafafa' }}>
                       <td style={{ padding:'9px 14px', color:'#334155' }}>{label}</td>

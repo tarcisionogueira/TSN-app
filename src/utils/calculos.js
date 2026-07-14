@@ -86,7 +86,10 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
       vArremate, taxaLeiloeiro, honorarios, itbiRegistro, taxaAdministrativa, despesasAdm, laudemio, foreiro, debitos, manutencao,
       custoCarrrego, capitalMobilizado, valorRef, comissao, ir, receitaLiquida, lucro, roi,
       valorSinal: vArremate, parcelasPagas: 0, saldoDevedor: 0, parcelaMedia: 0,
-      yieldMensal: capitalMobilizado > 0 ? (vLocacao / capitalMobilizado) * 100 : 0, yieldAnual
+      yieldMensal: capitalMobilizado > 0 ? (vLocacao / capitalMobilizado) * 100 : 0, yieldAnual,
+      // Blocos de caixa (à vista): tudo é desembolsado na arrematação; sem parcela mensal.
+      custosExtra, desembolsoInicial: vArremate + custosExtra, carregoMensal: iptu + cond,
+      mesesCarregados: pVenda, custoVenda: comissao + ir + 0, aluguelMensal: vLocacao,
     };
   } else {
     const valorSinal = vArremate * (sinalPct / 100);
@@ -111,7 +114,11 @@ export const calcularMetricasCenario = (inputs, vArremate, isAVista) => {
       vArremate, taxaLeiloeiro, honorarios, itbiRegistro, taxaAdministrativa, despesasAdm, laudemio, foreiro, debitos, manutencao,
       custoCarrrego, capitalMobilizado, valorRef, comissao, ir, receitaLiquida, lucro, roi: roe,
       valorSinal, parcelasPagas, saldoDevedor, parcelaMedia, tabela,
-      yieldMensal: capitalMobilizado > 0 ? (vLocacao / capitalMobilizado) * 100 : 0, yieldAnual
+      yieldMensal: capitalMobilizado > 0 ? (vLocacao / capitalMobilizado) * 100 : 0, yieldAnual,
+      // Blocos de caixa (financiado): o que sai NA arrematação (sinal + custos) vs. o
+      // que se paga por MÊS (parcela do banco + carrego) vs. o que sai NA VENDA.
+      custosExtra, desembolsoInicial, carregoMensal: iptu + cond,
+      mesesCarregados, custoVenda: comissao + ir + saldoDevedor, aluguelMensal: vLocacao,
     };
   }
 };
