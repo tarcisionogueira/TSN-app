@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase';
+import { ativarPushAutomatico } from '../utils/push';
 
 const AuthContext = createContext(null);
 
@@ -119,6 +120,10 @@ export function AuthProvider({ children }) {
             import('../utils/logUso').then(({ logUso }) => logUso(u.id, 'login'));
           } catch (_) {}
         }
+        // Push automático: se já autorizado, sincroniza a inscrição na hora;
+        // se nunca pedimos, pede no próximo gesto do usuário (só 1x por navegador).
+        // Assim o usuário passa a receber push além do e-mail sem configurar nada.
+        try { ativarPushAutomatico(() => session); } catch (_) {}
         const ref = sessionStorage.getItem('tsn_ref_codigo');
         if (ref) {
           try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}

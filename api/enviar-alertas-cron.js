@@ -29,6 +29,7 @@ import { escapeHtml } from './_sanitize.js';
 import MUNICIPIOS from './_municipios.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { ALLOWED_HOSTS } from './_allowed-hosts.js';
+import { enviarWebPush } from './_webpush.js';
 
 const norm = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 function centroide(cidade, uf) {
@@ -101,6 +102,29 @@ async function handler(req) {
   const BASE = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
   if (!URL_ || !KEY) return new Response(JSON.stringify({ error: 'env not configured' }), { status: 500 });
   const hdr = { apikey: KEY, Authorization: `Bearer ${KEY}` };
+  // Push (opcional): mesmo conteúdo do e-mail vira notificação push para quem
+  // autorizou. Best-effort — se as chaves VAPID não existirem, só o e-mail sai.
+  const VAPID = { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY, subject: 'mailto:alertas@bidprobrasil.com.br' };
+  const pushHabilitado = !!(VAPID.publicKey && VAPID.privateKey);
+  async function enviarPushOportunidades(userId, titulo, corpo) {
+    if (!pushHabilitado) return;
+    try {
+      const r = await fetch(`${URL_}/rest/v1/push_subscriptions?user_id=eq.${encodeURIComponent(userId)}&select=endpoint,p256dh,auth`, {
+        headers: hdr, signal: AbortSignal.timeout(10000),
+      });
+      if (!r.ok) return;
+      const subs = await r.json();
+      if (!Array.isArray(subs) || !subs.length) return;
+      const payload = { title: titulo, body: corpo, url: '/#/buscar', tag: 'oportunidades', icon: '/logo.svg' };
+      await Promise.all(subs.map(async (s) => {
+        const res = await enviarWebPush(s, payload, VAPID);
+        // Limpa inscrição expirada (404/410) para não tentar de novo na próxima.
+        if (res.status === 410 || res.status === 404) {
+          await fetch(`${URL_}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(s.endpoint)}`, { method: 'DELETE', headers: hdr }).catch(() => {});
+        }
+      }));
+    } catch { /* push é best-effort; nunca derruba o envio de e-mail */ }
+  }
   // Timeout em TODAS as chamadas de rede: sem AbortSignal, um upstream lento (PostgREST/
   // GoTrue) pendura a função até o maxDuration e corta o disparo no meio.
   const sbGet = async (path) => { try { const r = await fetch(`${URL_}/rest/v1/${path}`, { headers: hdr, signal: AbortSignal.timeout(15000) }); return r.ok ? await r.json() : []; } catch { return []; } };
@@ -354,6 +378,14 @@ async function handler(req) {
           } catch { /* dedup é best-effort */ }
         }
         enviados++;
+        // Push com o mesmo resumo do e-mail (best-effort, não bloqueia o loop).
+        if (!testeEmail) {
+          await enviarPushOportunidades(
+            perfil.id,
+            `🏠 ${top.length} oportunidade${top.length > 1 ? 's' : ''} em ${local}`,
+            top[0] ? `${(top[0].titulo || top[0].endereco || 'Imóvel em leilão').slice(0, 80)} — ${fmtBRL(top[0].valor_minimo)}` : 'Veja as oportunidades selecionadas para você.',
+          );
+        }
       }
     } catch (e) {
       console.error('[enviar-alertas-cron] erro user', perfil.id, e?.message);
