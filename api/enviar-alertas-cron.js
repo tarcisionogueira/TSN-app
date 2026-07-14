@@ -43,8 +43,8 @@ const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor
 // clientes de e-mail (referer/IP) — a foto existe (aparece no site) mas o e-mail não
 // carrega. Fix: se o host da foto está na whitelist, serve pelo NOSSO /api/img-proxy
 // (que manda o Referer correto e busca do nosso IP). supabase/local vai direto; host
-// fora da whitelist cai no hotlink direto (best-effort); CEF sem link_foto deriva o
-// padrão F<id>.jpg (SEM "21" — o "21" era o bug do foto.js) e proxia. URL absoluta ou null.
+// fora da whitelist cai no hotlink direto (best-effort); CEF deriva a foto de fonte_id
+// no padrão F<num>21.jpg (confirmado servindo 200/JPEG) e proxia. URL absoluta ou null.
 function fotoParaEmail(im, base) {
   // Proxy SEMPRE por www: o apex bidprobrasil.com.br responde 308 e clientes de e-mail
   // (Gmail) não seguem redirect em <img>, então a foto some.
