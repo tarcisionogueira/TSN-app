@@ -540,7 +540,7 @@ function UsuariosTab() {
     atribFilesRef.current = [...atribFilesRef.current, ...lista]; // guarda p/ persistir depois
     setAtribDocs(prev => [...prev, ...lista.map(f => ({ nome: f.name, status: 'lendo' }))]);
     const marcar = (nome, status) => setAtribDocs(prev => { let feito = false; return prev.map(d => (!feito && d.nome === nome && d.status === 'lendo') ? (feito = true, { ...d, status }) : d); });
-    const acc = { endereco: '', valor: 0, tipo: '', cidade: '', estado: '', numero_processo: '' };
+    const acc = { endereco: '', valor: 0, tipo: '', cidade: '', estado: '', numero_processo: '', valor_avaliacao: 0 };
     let algum = false;
     for (const file of lista) {
       try {
@@ -561,6 +561,8 @@ function UsuariosTab() {
         if (ext.estado && !acc.estado) acc.estado = ext.estado;
         const nproc = ext.numeroProcesso || ext.numero_processo || '';
         if (nproc && !acc.numero_processo) acc.numero_processo = String(nproc);
+        const aval = Number(ext.valorAvaliacao || 0) || 0;
+        if (aval > acc.valor_avaliacao) acc.valor_avaliacao = aval;
         algum = true;
         marcar(file.name, 'ok');
       } catch { marcar(file.name, 'erro'); }
@@ -573,6 +575,7 @@ function UsuariosTab() {
       cidade: acc.cidade || p.cidade,
       estado: acc.estado || p.estado,
       numero_processo: acc.numero_processo || p.numero_processo,
+      valor_avaliacao: acc.valor_avaliacao || p.valor_avaliacao,
     }));
     setAtribExtraindo(algum ? 'ok' : 'erro');
   };
@@ -700,7 +703,7 @@ function UsuariosTab() {
     try {
       const res = await apiCall('/api/atribuir-arremate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null }),
+        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null, valor_avaliacao: atribForm.valor_avaliacao || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');

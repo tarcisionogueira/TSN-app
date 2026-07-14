@@ -40,9 +40,10 @@ export default async function handler(req) {
 
   let body;
   try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
-  const { user_id, imovel_endereco, imovel_valor, tipo_leilao, cidade, estado, tipo_imovel, numero_processo } = body || {};
+  const { user_id, imovel_endereco, imovel_valor, tipo_leilao, cidade, estado, tipo_imovel, numero_processo, valor_avaliacao } = body || {};
   if (!user_id) return json({ error: 'user_id obrigatório' }, 400);
   const numProc = (String(numero_processo || '').trim()) || null;
+  const avaliacao = Number(String(valor_avaliacao ?? '').toString().replace(/\./g, '').replace(',', '.')) || null;
 
   // Valida o usuário-alvo.
   const [alvo] = await (await sb(`perfis?id=eq.${encodeURIComponent(user_id)}&select=id,role&limit=1`)).json().catch(() => []);
@@ -65,6 +66,7 @@ export default async function handler(req) {
     cidade: cidade || null,
     endereco: imovel_endereco || null,
     valor_minimo: valor,
+    valor_avaliacao: avaliacao,
     numero_processo: numProc,
     descricao: 'Arrematação real atribuída pela equipe (sem cobrança) para gerar os laudos e servir de aprendizado à IA.',
     ativo: false,
