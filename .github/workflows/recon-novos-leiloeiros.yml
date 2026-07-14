@@ -1,0 +1,30 @@
+name: Recon leiloeiros novos (Pecini / WebLeilões)
+
+# Explora os sites novos (pecinileiloes.com.br, webleiloes.com.br) para descobrir a
+# estrutura da listagem de imóveis e as APIs JSON internas ANTES de escrever o
+# scraper (recon-first). Só diagnostica; não grava nada. Manual.
+on:
+  workflow_dispatch:
+    inputs:
+      sites:
+        description: 'Sites (csv): PECINI,WEBLEILOES'
+        required: false
+        default: 'PECINI,WEBLEILOES'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon
+        env:
+          RECON_SITES: ${{ github.event.inputs.sites || 'PECINI,WEBLEILOES' }}
+        run: node scripts/recon-novos-leiloeiros.mjs

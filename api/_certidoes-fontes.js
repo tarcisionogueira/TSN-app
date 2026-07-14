@@ -6,9 +6,20 @@
  * Fontes: Receita Federal (via ReceitaWS), PGFN (Dívida Ativa da União), FGTS (Caixa).
  * Todas best-effort: erro/timeout vira { ok:false } e NÃO derruba o laudo.
  */
+import { fetchViaBrightData } from './_brightdata.js';
+
 const RECEITAWS = 'https://www.receitaws.com.br/v1';
 const PGFN_URL   = 'https://www.regularize.pgfn.gov.br/api/contribuinte';
 const FGTS_URL   = 'https://consultas.caixa.gov.br/servicos/contribuinte/certificado';
+
+// Fetch direto e, se falhar/estourar (o IP do servidor é barrado ou a fonte é lenta),
+// cai no Bright Data (IP residencial). Devolve um Response ou null.
+async function fetchDiretoOuBD(url, { headers, timeout = 10000 } = {}) {
+  let r = await fetch(url, { headers, signal: AbortSignal.timeout(timeout) }).catch(() => null);
+  if (r) return r; // inclui 404 (tratado como "sem débito" pelos chamadores)
+  const bd = await fetchViaBrightData(url, { proposito: 'certidao', headers });
+  return bd || null;
+}
 
 export async function consultarReceita(documento) {
   const doc = String(documento || '').replace(/\D/g, '');
@@ -32,9 +43,8 @@ export async function consultarDividaAtiva(documento) {
   const doc = String(documento || '').replace(/\D/g, '');
   if (!doc) return { ok: false, erro: 'doc vazio' };
   try {
-    const res = await fetch(`${PGFN_URL}/${doc}/regularidade`, {
-      headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000),
-    });
+    const res = await fetchDiretoOuBD(`${PGFN_URL}/${doc}/regularidade`, { headers: { Accept: 'application/json' }, timeout: 10000 });
+    if (!res) return { ok: false, indisponivel: true, erro: 'Timeout PGFN' };
     if (res.status === 404) return { ok: true, regular: true, situacao: 'Sem débitos na Dívida Ativa', fonte: 'PGFN' };
     if (!res.ok) return { ok: false, indisponivel: true, erro: `PGFN HTTP ${res.status}` };
     const d = await res.json();
@@ -50,9 +60,8 @@ export async function consultarFGTS(documento) {
   const doc = String(documento || '').replace(/\D/g, '');
   if (!doc) return { ok: false, erro: 'doc vazio' };
   try {
-    const res = await fetch(`${FGTS_URL}/${doc}`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000),
-    });
+    const res = await fetchDiretoOuBD(`${FGTS_URL}/${doc}`, { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 });
+    if (!res) return { ok: false, indisponivel: true, erro: 'Timeout FGTS' };
     if (res.status === 404) return { ok: true, regular: true, situacao: 'Sem débito FGTS', fonte: 'CEF / FGTS' };
     if (!res.ok) return { ok: false, indisponivel: true, erro: `FGTS HTTP ${res.status} — consultar manualmente` };
     const d = await res.json();
