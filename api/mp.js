@@ -98,13 +98,21 @@ async function ativarRoleInline(userId, planoKey, mpId) {
 
 // ─── Configurações de plano ───────────────────────────────────────────────────
 
+// Valores ESPELHAM o planos_config do admin (fonte da verdade — mesma tabela lida
+// pelo front e pelo asaas.js). ATENÇÃO à semântica por tipo de cobrança:
+//  - recorrente=true  → `valor` é o MENSAL cobrado todo mês (top2 = preço; clube =
+//    preço total 60.000 ÷ 12 = 5.000/mês). NÃO usar o preço total aqui.
+//  - recorrente=false → `valor` é o TOTAL da cobrança avulsa/parcelada
+//    (assessorado 6.000 em 12×; variantes _vista = preço à vista do admin).
+// Por causa dessa diferença (mensal × total), NÃO dá para ler o planos_config de
+// forma ingênua (o clube cobraria 60.000/mês). Manter sincronizado com o admin.
 const PLANOS_CONFIG = {
-  assessorado:       { nome: 'Assessoria Pós-Arrematação',  valor: 5000.00, recorrente: false },
-  assessorado_vista: { nome: 'Assessoria (À Vista)',         valor: 4800.00, recorrente: false },
-  clube:             { nome: 'Leilão Club — Mensal',         valor: 5000.00, recorrente: true  },
-  clube_vista:       { nome: 'Leilão Club (12× Anual)',      valor: 5000.00, recorrente: false },
-  top2:              { nome: 'Investidor Pro',               valor: 49.90,  recorrente: true  },
-  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 449.90, recorrente: false },
+  assessorado:       { nome: 'Assessoria Pós-Arrematação',  valor: 6000.00,  recorrente: false }, // 12× de R$ 500
+  assessorado_vista: { nome: 'Assessoria (À Vista)',         valor: 4800.00,  recorrente: false },
+  clube:             { nome: 'Leilão Club — Mensal',         valor: 5000.00,  recorrente: true  }, // 60.000 ÷ 12
+  clube_vista:       { nome: 'Leilão Club (À Vista)',        valor: 48000.00, recorrente: false },
+  top2:              { nome: 'Investidor Pro',               valor: 49.90,    recorrente: true  },
+  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 449.90,   recorrente: false },
 };
 
 // ─── Handlers ────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import {
   ChevronRight, Crown, Search, AlertTriangle,
 } from 'lucide-react';
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
+import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
@@ -58,6 +59,10 @@ export default function Membros() {
   const [cancelMsg, setCancelMsg] = useState('');
   const [cursos, setCursos] = useState([]);
   const [ebooks, setEbooks] = useState([]);
+  // Preços dos planos: começa no estático (render imediato) e é sobrescrito com os
+  // valores AO VIVO do admin (planos_config). Antes usava só o estático (cursos.js),
+  // então mudar um preço no admin NÃO refletia na área de membros.
+  const [planos, setPlanos] = useState(PLANOS);
 
   // Carregar cursos, aulas e ebooks
   useEffect(() => {
@@ -81,6 +86,8 @@ export default function Membros() {
       setEbooks(es || []);
     }
     fetchData();
+    // Preços dos planos AO VIVO do admin (planos_config).
+    fetchPlanosComConfig().then(setPlanos).catch(() => {});
   }, []);
 
   // Carregar progresso do Supabase (merge com local)
@@ -346,7 +353,7 @@ export default function Membros() {
             <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:14 }}>Escolha o plano ideal para sua jornada em leilões imobiliários</p>
 
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:14, marginBottom:20 }}>
-              {Object.entries(PLANOS).map(([k,p])=>(
+              {Object.entries(planos).map(([k,p])=>(
                 <div key={k} onClick={()=>ativarPlano(k)}
                   style={{ borderRadius:16, border:`2px solid ${plano===k?p.cor:p.destaque?p.cor+'60':'#e2e8f0'}`, padding:'20px 18px', cursor:'pointer', background:plano===k?p.cor+'10':p.destaque?p.cor+'06':'white', transition:'all 0.15s', position:'relative' }}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=p.cor} onMouseLeave={e=>e.currentTarget.style.borderColor=plano===k?p.cor:p.destaque?p.cor+'60':'#e2e8f0'}>
