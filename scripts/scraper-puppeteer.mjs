@@ -1906,9 +1906,15 @@ function cidadeUfWL(txt) {
 
 function mapLoteWebLeiloes(l) {
   const url = String(l.href || '').startsWith('http') ? l.href : `${WEBLEILOES_BASE}${l.href}`;
-  // Preço: do .r1 strong (leilão) ou 1º R$ do texto (venda-direta usa .list-datas).
-  const pm = String(l.preco || l.texto || '').match(/R\$\s*([\d.]+,\d{2})/);
+  // Preço: 1º R$ do texto COMPLETO do card (robusto p/ leilão "R$ X" e venda-direta
+  // "Data Única R$ X"; o .r1 strong às vezes traz o título, não o valor).
+  const pm = String(l.texto || '').match(/R\$\s*([\d.]+,\d{2})/);
   const valor = pm ? parseBRL(pm[1]) : 0;
+  // Desconto vs avaliação: o card MOSTRA o percentual ("50% Lance mínimo"). Captura do
+  // .r1 small (fallback no texto). Deriva a avaliação p/ o desconto ficar consistente.
+  const dm = String(l.descPct || l.texto || '').match(/(\d{1,3})\s*%/);
+  const desc = dm ? Math.min(99, Math.max(0, Number(dm[1]))) : 0;
+  const avaliacao = (desc > 0 && desc < 100 && valor > 0) ? Math.round(valor / (1 - desc / 100)) : 0;
   // Cidade/UF: prioriza a <li> de localização; fallback no alt e no slug da URL.
   let { cidade, uf } = cidadeUfWL(l.local);
   if (!uf) ({ cidade, uf } = cidadeUfWL(l.alt));
@@ -1928,7 +1934,8 @@ function mapLoteWebLeiloes(l) {
     estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
     cidade: cidade ? toTitleCase(cidade) : '',
     bairro: '', endereco: '',
-    valor_avaliacao: 0, valor_minimo: valor, area_m2: area || 0,
+    // avaliação derivada do % do card → salvarImoveis calcula desconto_percentual consistente.
+    valor_avaliacao: avaliacao, valor_minimo: valor, area_m2: area || 0,
     descricao: String(l.alt || l.texto || '').slice(0, 500),
     link_edital: url, url_lote: url, link_foto: foto,
     leiloeiro: 'WebLeilões', data_leilao: null, forma_pagamento: 'a_vista',
@@ -1961,11 +1968,11 @@ async function scraperWebLeiloes(browser) {
             const imgEl = card ? card.querySelector('img') : null;
             out.push({
               href, id, categoria: mcat ? mcat[1] : '',
-              preco: q('.r1 strong') || q('.list-datas span') || q('strong'), // leilão | venda-direta
+              descPct: q('.r1 small'),                                         // "50%" (desconto vs avaliação)
               local: q('.cont-infos ul li') || q('ul li'),                    // "Cidade, UF"
               alt: imgEl ? (imgEl.getAttribute('alt') || '') : '',            // "Tipo NNm²- Bairro, Cidade/UF"
               img: imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '') : '',
-              texto: card ? clean(card.textContent).slice(0, 400) : '',
+              texto: card ? clean(card.textContent).slice(0, 400) : '',       // contém "R$ ..." (lance) e "NN%"
             });
           });
           return out;
