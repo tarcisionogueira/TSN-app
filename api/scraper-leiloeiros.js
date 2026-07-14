@@ -418,7 +418,7 @@ async function coletarLJUD(paginas, deadline) {
       if (Date.now() > deadline) break;
       const url = `${API}?pg=${p}&qtd_por_pagina=48&${vencedora.qs}`;
       const bd = await fetchViaBrightData(url, { method: 'POST', headers: hdrs, proposito: 'ljud' });
-      let data = null; try { data = JSON.parse(await bd.text()); } catch { /* */ }
+      let data = null; try { data = JSON.parse(bd ? await bd.text() : ''); } catch { /* */ }
       const items = ljudItens(data);
       if (!items.length) break;
       for (const it of items) {

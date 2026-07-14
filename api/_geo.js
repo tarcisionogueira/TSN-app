@@ -187,7 +187,9 @@ export async function nominatimTextoLivre(q) {
 // nível conforme a precisão (ROOFTOP/RANGE = endereço exato). É a 1ª opção da
 // cascata; sem a chave, cai no Nominatim normalmente.
 export async function googleGeocode(enderecoCompleto) {
-  const key = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
+  // Chave de SERVIDOR: nunca aceitar de var VITE_* (essas vão para o bundle público
+  // do front por definição do Vite → chave paga exposta a qualquer visitante).
+  const key = (process.env.GOOGLE_MAPS_API_KEY || '').trim();
   if (!key || !enderecoCompleto || !enderecoCompleto.trim()) return null;
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(enderecoCompleto)}&region=br&language=pt-BR&key=${key}`;
   try {

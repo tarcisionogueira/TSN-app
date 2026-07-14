@@ -51,3 +51,34 @@ R$ 5.000 para assessoria e club) para os valores acima, ou lê-los de `planos_co
 
 ## Achados de segurança já RESOLVIDOS (versionados)
 - **RLS de `perfis` sem `WITH CHECK` por coluna** — RESOLVIDO: o trigger `proteger_campos_sensiveis_perfil` (a barreira contra auto-escalada de `role`) foi **versionado** em `supabase/migrations/proteger_campos_sensiveis_perfil.sql` (antes só existia em produção via MCP). Um reprovisionamento a partir do repo não perde mais a proteção.
+
+---
+
+## 5. Anti-SSRF dos fetchers de enriquecimento — JÁ EXISTE (`_allowed-hosts.js`)
+- **Padrão:** `enriquecer-lote.js` (`fetchLote`/`lerCartorioMatricula`), `geocodificar-imovel.js` (`infoDoDocumento`) e `gerar-documental.js` (`lerDoc`) buscam URLs vindas do banco/body do cliente.
+- **Controle compensatório:** TODOS chamam `hostExternoSeguro(url)` de `api/_allowed-hosts.js` ANTES do fetch. `ehHostInterno` bloqueia loopback, redes privadas (10/172.16-31/192.168), link-local/metadados de nuvem (169.254.169.254), CGNAT, IPv6 loopback/ULA/link-local e IPv4-mapeado — tratando URL ilegível/protocolo não-http como interna (fail-closed). O vetor "url_lote/link_edital → 169.254.169.254" **não** alcança a rede interna.
+- **Severidade justa:** informativo/baixa. Só reporte se aparecer um fetcher NOVO de URL do banco/cliente **sem** `hostExternoSeguro`.
+
+## 6. Gate de plano do documental é FAIL-CLOSED
+- **Padrão:** `gerar-documental.js` checa `perfis.role` antes de gerar a análise paga.
+- **Controle compensatório:** o `try/catch` da checagem **não** libera em falha — o `catch` retorna **503** ("não foi possível validar seu plano"), sem gerar o laudo. Não há "bypass por exceção silenciosa".
+- **Severidade justa:** informativo.
+
+## 7. `asaas.js` — operação de assinatura por e-mail exige que o e-mail seja do próprio usuário
+- **Padrão:** `criar_assinatura`/`gerenciar_assinatura`/`cancelar_assinatura` localizam o customer no Asaas por `body.email`.
+- **Controle compensatório:** o guard único no topo (`if (emailBody && authUser.email !== emailBody) → 403`) roda para TODAS as `userActions`. Como as três ações usam `body.email`, um atacante que informe o e-mail da vítima é barrado (403) antes de qualquer chamada ao Asaas; omitir o e-mail cai em "cliente não encontrado" (404). Não há cancelamento/gerência de assinatura de terceiros.
+- **Severidade justa:** informativo.
+
+## 8. `asaas.js transferir_pix` — teto de valor + role admin no servidor
+- **Padrão:** transferência PIX a partir da tela do Financeiro.
+- **Controle compensatório:** o handler exige `role==='admin'` (buscado com service key, não confia no front) para `financas`/`extrato`/`transferir_pix`, e a transferência valida `0 < valor <= PIX_TRANSFER_MAX` (default R$ 10.000). Uma sessão admin comprometida não esvazia o saldo numa única transferência.
+- **Severidade justa:** baixa (hardening — ajustar `PIX_TRANSFER_MAX` conforme a operação).
+
+## 9. Filtros PostgREST por `id`/`user_id` usam `encodeURIComponent`
+- **Padrão:** vários endpoints montam `...?id=eq.${encodeURIComponent(x)}`.
+- **Por que é aceito:** `encodeURIComponent` codifica `&`, `=`, `,` e demais metacaracteres do PostgREST (viram `%26`/`%3D`/`%2C`), então não dá para injetar operadores/colunas extras na query string. Não é "SQL/PostgREST injection".
+- **Severidade justa:** informativo. (Hardening desejável: validar UUID quando o campo é um id; isso é "baixa", não "alta".)
+
+## 10. Web Push — VAPID + criptografia aes128gcm (CORRIGIDO)
+- **Estava quebrado:** `push-send.js` importava a chave privada VAPID com `format:'raw'` (só vale p/ chave pública EC → o import lançava e o JWT nunca era gerado) e mandava o payload em JSON puro sob `Content-Encoding: aes128gcm` (sem cifrar) → o navegador não decifrava e a notificação era descartada. Push **nunca** chegava.
+- **Correção (versionada em `api/_webpush.js`):** JWT VAPID assinado importando a chave privada via **JWK** (`d/x/y`); payload cifrado conforme **RFC 8291 + RFC 8188** (ECDH efêmero + HKDF + AES-128-GCM, `keyid` no cabeçalho). Round-trip validado por teste local. **Não** reportar mais como pendente.

@@ -114,7 +114,8 @@ export function rateLimitedResponse(resetAt) {
       headers: {
         'Content-Type': 'application/json',
         'Retry-After': String(retryAfter),
-        'Access-Control-Allow-Origin': '*',
+        // Alinha com o resto da plataforma (APP_ORIGIN) em vez de curinga.
+        'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br',
       },
     }
   );
