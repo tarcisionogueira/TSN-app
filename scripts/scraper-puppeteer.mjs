@@ -1424,17 +1424,30 @@ function mapLoteLJUD_pp(it) {
   const cidade = String(it.nm_cidade || '').trim();
   const valMin = parseFloat(it.vl_lanceminimo || it.vl_ordenacao || 0) || 0;
   const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : null;
-  const urlLeiloeiro = String(it.nm_url_leiloeiro || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const loteId = it.lote_id || it.id;
+  // Página do LOTE no portal (não a home do leiloeiro) — destino do "Acessar leiloeiro".
+  const loteUrl = loteId ? `https://www.leiloesjudiciais.com.br/lote/${loteId}` : 'https://www.leiloesjudiciais.com.br';
+  // `anexos`: documentos REAIS do lote (edital, matrícula, laudo…) com URL S3 direta.
+  const anexosArr = (Array.isArray(it.anexos) ? it.anexos : [])
+    .filter(a => a && a.nm_path_completo)
+    .map(a => ({ nome: String(a.nm || a.nm_path || 'Documento').slice(0, 120), url: String(a.nm_path_completo) }));
+  const achaDoc = (re) => anexosArr.find(a => re.test(a.nome))?.url || null;
+  const matricula = achaDoc(/matr[íi]cula/i);
+  const editalDoc = achaDoc(/edital|regras|leil[ãa]o/i);
   return {
-    fonte: 'LJUD', fonte_id: `ljud_${it.lote_id || it.id}`,
-    titulo: (titulo || `Imóvel ${it.lote_id || it.id}`).slice(0, 180),
+    fonte: 'LJUD', fonte_id: `ljud_${loteId}`,
+    titulo: (titulo || `Imóvel ${loteId}`).slice(0, 180),
     tipo: normalizarTipo(it.nm_subcategoria || it.nm_categoria || titulo),
     modalidade: /extrajudicial/i.test(it.nm_titulo_leilao || it.nm_tipo_leilao || '') ? 'extrajudicial' : 'judicial',
     estado: String(it.nm_estado || '').toUpperCase().slice(0, 2), cidade: toTitleCase(cidade),
     bairro: '', endereco: '', valor_avaliacao: parseFloat(it.vl_avaliacao || 0) || 0, valor_minimo: valMin,
     area_m2: (() => { const m = (titulo.match(/([\d.,]+)\s*m²/) || [])[1]; return m ? parseBRL(m) : 0; })(),
     descricao: [titulo, it.nm_leiloeiro].filter(Boolean).join(' — ').slice(0, 500),
-    link_edital: urlLeiloeiro ? `https://${urlLeiloeiro}` : 'https://www.leiloesjudiciais.com.br',
+    // Documentos reais do lote (antes tudo apontava p/ a home do leiloeiro).
+    link_edital: editalDoc || loteUrl,
+    link_matricula: matricula,
+    url_lote: loteUrl,
+    anexos: anexosArr.length ? anexosArr : null,
     link_foto: foto, leiloeiro: String(it.nm_leiloeiro || 'Leilões Judiciais').slice(0, 120),
     data_leilao: parseDataLJUD(it.dt_fechamento), forma_pagamento: 'a_vista',
   };
