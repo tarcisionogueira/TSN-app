@@ -1,0 +1,32 @@
+name: Enfileirar documentos faltantes (matrícula)
+
+# Contramedida para a lacuna de matrículas: chama a função enfileirar_docs_faltantes(),
+# que põe na documentos_fila os imóveis públicos ativos sem matrícula (com url_lote). O
+# job "Documentos — captura genérica" (a cada 15 min) drena a fila -> Storage/imovel_anexos.
+# Diário às 10 UTC (antes do backfill de docs das 11:30) + manual.
+on:
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Máximo a enfileirar por execução'
+        required: false
+        default: '3000'
+  schedule:
+    - cron: '0 10 * * *'
+
+jobs:
+  enfileirar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar RPC enfileirar_docs_faltantes
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LIMITE: ${{ github.event.inputs.limite || '3000' }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_KEY" ]; then echo "::error::secrets ausentes"; exit 1; fi
+          echo "Enfileirando (limite $LIMITE)…"
+          curl -sS -X POST "$SUPABASE_URL/rest/v1/rpc/enfileirar_docs_faltantes" \
+            -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"p_limite\": $LIMITE}" -w "\nHTTP %{http_code}\n"
