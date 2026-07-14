@@ -1,16 +1,18 @@
 name: Scraper PECINI (Bright Data)
 
-# Dispatch-only (sem cron) até validar o parsing ao vivo. Cada lote = 1 request
-# Bright Data (cota semanal com teto de custo em _brightdata.js). Rode PRIMEIRO com
-# dryrun=1 (default) p/ conferir o parsing no log; depois dryrun=0 p/ gravar.
-# Quando estabilizado, considerar habilitar um cron modesto (respeitando a cota).
+# Parsing VALIDADO ao vivo (23 imóveis com valor/avaliação/foto em 2026-07-14).
+# Cada lote = 1 request Bright Data (cota semanal com teto de custo em _brightdata.js).
+# Cron modesto 2x/semana (seg e qui, 09h UTC) — prioriza lotes NOVOS e refresca os
+# existentes, dentro do teto. Dispatch manual continua disponível (dryrun=1 p/ testar).
 on:
+  schedule:
+    - cron: '0 9 * * 1,4'
   workflow_dispatch:
     inputs:
       dryrun:
         description: '1 = não grava (só loga o que inseriria) · 0 = grava'
         required: false
-        default: '1'
+        default: '0'
       max_lotes:
         description: 'Máx. de lotes por execução (cota Bright Data grátis)'
         required: false
