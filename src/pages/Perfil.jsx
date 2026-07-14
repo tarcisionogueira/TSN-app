@@ -3,29 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
-import { BarChart2, FileText, Clock, CheckCircle, AlertTriangle, XCircle, Bell, BellOff, Camera, ShieldCheck, MapPin } from 'lucide-react';
+import { BarChart2, Bell, BellOff, Camera, ShieldCheck, MapPin } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscriptionAtiva } from '../utils/push';
 import { ESTADOS_UF } from '../data/cidades';
+import CidadeAutocomplete from '../components/CidadeAutocomplete';
 
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
-
-const STATUS_LABEL = {
-  analise: 'Em Análise', aprovado: 'Aprovado', arrematado: 'Arrematado',
-  em_reforma: 'Em Reforma', venda: 'À Venda', alugado: 'Alugado',
-  concluido: 'Concluído', reprovado: 'Reprovado',
-};
-const STATUS_COLOR = {
-  analise: '#0D63DB', aprovado: '#16a34a', arrematado: '#7c3aed',
-  em_reforma: '#d97706', venda: '#0891b2', alugado: '#0891b2',
-  concluido: '#15803d', reprovado: '#dc2626',
-};
-const STATUS_BG = {
-  analise: '#eff6ff', aprovado: '#f0fdf4', arrematado: '#f5f3ff',
-  em_reforma: '#fefce8', venda: '#ecfeff', alugado: '#ecfeff',
-  concluido: '#f0fdf4', reprovado: '#fef2f2',
-};
 
 const ROLES_COM_COMISSAO = ['admin', 'consultor', 'analista', 'advogado'];
 
@@ -51,6 +36,159 @@ const ROLE_COLORS = {
   clube: '#dc2626',
 };
 
+// Opções do perfil de investidor (espelham a triagem inicial). Deixamos o cliente
+// corrigir aqui a qualquer momento — é o que direciona a recomendação de imóveis
+// do e-mail semanal (objetivo + cidade de interesse).
+const INV_OBJETIVOS = [
+  ['revenda', '🔁 Comprar para revender'],
+  ['locacao', '🏠 Comprar para alugar'],
+  ['uso_proprio', '🔑 Comprar para uso'],
+  ['incorporacao', '🏗️ Comprar para incorporar'],
+];
+const INV_FAIXAS = [
+  ['ate_150k', 'Até R$ 150 mil'],
+  ['150_400k', 'R$ 150 a 400 mil'],
+  ['400k_1mi', 'R$ 400 mil a 1 milhão'],
+  ['acima_1mi', 'Acima de R$ 1 milhão'],
+];
+const INV_PAGAMENTO = [
+  ['a_vista', 'À vista'],
+  ['financiado', 'Financiado'],
+  ['avaliando', 'Ainda avaliando'],
+];
+const INV_CONSORCIO = [
+  ['tem', 'Já tenho consórcio'],
+  ['quero', 'Tenho interesse em consórcio'],
+  ['nao', 'Não'],
+];
+const INV_EXPERIENCIA = [
+  ['primeira', 'Primeira vez'],
+  ['1_2', 'Já arrematei 1 a 2'],
+  ['recorrente', 'Investidor recorrente'],
+];
+
+// Card editável do perfil de investidor. Autossuficiente (carrega/salva sozinho),
+// independente do formulário de dados cadastrais.
+function PerfilInvestidorCard({ userId, isMobile }) {
+  const [f, setF] = useState(null); // null = carregando
+  const [orig, setOrig] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from('perfis')
+      .select('perfil_investidor, faixa_capital, forma_pagamento, consorcio_interesse, experiencia_leilao, cidades_interesse')
+      .eq('id', userId).single()
+      .then(({ data }) => {
+        const c0 = Array.isArray(data?.cidades_interesse) && data.cidades_interesse[0] && typeof data.cidades_interesse[0] === 'object' ? data.cidades_interesse[0] : {};
+        const snap = {
+          perfil_investidor: data?.perfil_investidor || '',
+          faixa_capital: data?.faixa_capital || '',
+          forma_pagamento: data?.forma_pagamento || '',
+          consorcio_interesse: data?.consorcio_interesse || '',
+          experiencia_leilao: data?.experiencia_leilao || '',
+          cidade: c0.cidade || '', uf: c0.uf || '', raio_km: String(c0.raio_km || 50),
+        };
+        setF(snap); setOrig(snap);
+      });
+  }, [userId]);
+
+  if (!f) return null;
+  const set = (k, v) => { setF(p => ({ ...p, [k]: v })); setMsg(null); };
+  const dirty = orig && JSON.stringify(f) !== JSON.stringify(orig);
+
+  const salvar = async () => {
+    setSalvando(true); setMsg(null);
+    const cidades = f.cidade.trim()
+      ? [{ cidade: f.cidade.trim(), uf: (f.uf || '').trim().toUpperCase(), raio_km: Number(f.raio_km) || 50 }]
+      : [];
+    const { error } = await supabase.from('perfis').update({
+      perfil_investidor: f.perfil_investidor || null,
+      faixa_capital: f.faixa_capital || null,
+      forma_pagamento: f.forma_pagamento || null,
+      consorcio_interesse: f.consorcio_interesse || null,
+      experiencia_leilao: f.experiencia_leilao || null,
+      cidades_interesse: cidades,
+    }).eq('id', userId);
+    setSalvando(false);
+    if (error) setMsg({ ok: false, texto: 'Não foi possível salvar. Tente novamente.' });
+    else { setOrig({ ...f }); setMsg({ ok: true, texto: 'Perfil de investidor atualizado! As recomendações do seu e-mail passam a seguir essa intenção.' }); }
+  };
+
+  const selStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13.5, color: '#111', background: 'white', outline: 'none', boxSizing: 'border-box' };
+  const lbl = { display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 5 };
+  const Campo = ({ label, campo, opts }) => (
+    <div>
+      <label style={lbl}>{label}</label>
+      <select value={f[campo]} onChange={e => set(campo, e.target.value)} style={selStyle}>
+        <option value="">Selecione…</option>
+        {opts.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+      </select>
+    </div>
+  );
+
+  return (
+    <div style={{ background: 'white', borderRadius: 14, padding: isMobile ? '16px' : '24px', border: '1px solid #e2e8f0', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <BarChart2 size={18} color="#0D63DB" />
+        <span style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>Perfil de investidor</span>
+      </div>
+      <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 16px', lineHeight: 1.5 }}>
+        É o que direciona a recomendação de imóveis que você recebe por e-mail. Ajuste sempre que sua intenção mudar.
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+        <Campo label="Objetivo principal" campo="perfil_investidor" opts={INV_OBJETIVOS} />
+        <Campo label="Faixa de capital" campo="faixa_capital" opts={INV_FAIXAS} />
+        <Campo label="Forma de pagamento" campo="forma_pagamento" opts={INV_PAGAMENTO} />
+        <Campo label="Consórcio" campo="consorcio_interesse" opts={INV_CONSORCIO} />
+        <Campo label="Experiência com leilão" campo="experiencia_leilao" opts={INV_EXPERIENCIA} />
+      </div>
+
+      <div style={{ height: 1, background: '#f1f5f9', margin: '18px 0 14px' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+        <MapPin size={15} color="#0D63DB" />
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>Cidade/região de interesse</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 12, alignItems: 'start' }}>
+        <div>
+          <CidadeAutocomplete value={f.cidade} placeholder="Digite e selecione sua cidade…"
+            onSelect={({ cidade, uf }) => setF(p => ({ ...p, cidade, uf }))} />
+          {f.cidade && !f.uf && <div style={{ fontSize: 11, color: '#d97706', marginTop: 5 }}>Selecione a cidade na lista para vincular o estado (UF).</div>}
+        </div>
+        <select value={f.raio_km} onChange={e => set('raio_km', e.target.value)} style={selStyle}>
+          <option value="25">Raio de 25 km</option>
+          <option value="50">Raio de 50 km</option>
+          <option value="100">Raio de 100 km</option>
+          <option value="200">Raio de 200 km</option>
+        </select>
+      </div>
+      {f.cidade && (
+        <button type="button" onClick={() => setF(p => ({ ...p, cidade: '', uf: '' }))}
+          style={{ marginTop: 8, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+          Remover cidade de interesse
+        </button>
+      )}
+
+      {msg && (
+        <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+          background: msg.ok ? '#f0fdf4' : '#fef2f2', color: msg.ok ? '#16a34a' : '#dc2626', border: `1px solid ${msg.ok ? '#bbf7d0' : '#fecaca'}` }}>
+          {msg.ok ? '✓ ' : '✕ '}{msg.texto}
+        </div>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        <button type="button" onClick={salvar} disabled={!dirty || salvando}
+          style={{ padding: '10px 20px', background: (!dirty || salvando) ? '#e2e8f0' : '#0D63DB', color: (!dirty || salvando) ? '#94a3b8' : 'white',
+            border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: (!dirty || salvando) ? 'not-allowed' : 'pointer' }}>
+          {salvando ? 'Salvando…' : dirty ? 'Salvar perfil de investidor' : 'Tudo salvo'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Perfil() {
   const { user, role, effectiveRole } = useAuth();
   const isMobile = useIsMobile();
@@ -67,8 +205,6 @@ export default function Perfil() {
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState(null);
-  const [relatorios, setRelatorios] = useState([]);
-  const [loadRelatorios, setLoadRelatorios] = useState(false);
 
   // Validação de identidade (assessorado e clube)
   const ROLES_SELFIE = ['assessorado', 'clube'];
@@ -187,18 +323,6 @@ export default function Perfil() {
   const [textoConfirmacao, setTextoConfirmacao] = useState('');
   const [excluindo, setExcluindo] = useState(false);
   const [lgpdErro, setLgpdErro] = useState(null);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    setLoadRelatorios(true);
-    supabase.from('relatorios')
-      .select('id, imovel_nome, imovel_cidade, imovel_estado, valor_minimo, desconto_percentual, status, arrematado, created_at, expira_em')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data }) => { setRelatorios(data || []); setLoadRelatorios(false); })
-      .catch(() => setLoadRelatorios(false));
-  }, [user?.id]);
 
   // CPF é mostrado mascarado (o valor cheio nunca vem para o navegador; a chave
   // de decifra fica só no backend). O próprio dono recebe a máscara.
@@ -553,73 +677,10 @@ export default function Perfil() {
           </div>
         )}
 
-        {/* Minhas Análises */}
-        {['top2','assessorado','clube','analista','advogado','admin'].includes(role) && (
-          <div style={{ background: 'white', borderRadius: 14, padding: isMobile ? '16px' : '24px', border: '1px solid #e2e8f0', marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <BarChart2 size={18} color="#0D63DB" />
-                <span style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>Minhas Análises</span>
-              </div>
-              <button onClick={() => navGuard('/analise')}
-                style={{ padding: '6px 14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                + Nova análise
-              </button>
-            </div>
-
-            {loadRelatorios ? (
-              <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: '20px 0' }}>Carregando…</div>
-            ) : relatorios.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: '28px 0' }}>
-                <FileText size={32} color="#e2e8f0" style={{ marginBottom: 8 }} />
-                <div>Nenhuma análise salva ainda.</div>
-                <div style={{ fontSize: 12, marginTop: 4 }}>Encontre um imóvel e clique em "Solicitar Análise".</div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {relatorios.map(r => {
-                  const desc = r.desconto_percentual || 0;
-                  const diasRestantes = r.expira_em ? Math.ceil((new Date(r.expira_em) - new Date()) / (1000*60*60*24)) : null;
-                  return (
-                    <div key={r.id}
-                      onClick={() => navGuard('/analise')}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', cursor: 'pointer', background: '#f8fafc', transition: 'background 0.15s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                      onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
-                    >
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: STATUS_BG[r.status] || '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <FileText size={16} color={STATUS_COLOR[r.status] || '#64748b'} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.imovel_nome || 'Imóvel sem nome'}
-                        </div>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                          {[r.imovel_cidade, r.imovel_estado].filter(Boolean).join('/')}
-                          {r.valor_minimo ? ` · ${fmtBRL(r.valor_minimo)}` : ''}
-                          {desc > 0 ? ` · -${Number(desc).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : ''}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: STATUS_BG[r.status] || '#f1f5f9', color: STATUS_COLOR[r.status] || '#64748b' }}>
-                          {STATUS_LABEL[r.status] || r.status}
-                        </span>
-                        {diasRestantes !== null && (
-                          <span style={{ fontSize: 10, color: diasRestantes <= 7 ? '#dc2626' : '#94a3b8' }}>
-                            {diasRestantes > 0 ? `Expira em ${diasRestantes}d` : 'Expirado'}
-                          </span>
-                        )}
-                        {r.arrematado && (
-                          <span style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700 }}>Permanente</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-          </div>
+        {/* Perfil de investidor (editável) — direciona a recomendação por e-mail.
+            Só para clientes; equipe (admin/analista/etc.) não recebe recomendação. */}
+        {['explorador','top2','top2_anual','assessorado','assessorado_anual','clube','clube_anual'].includes(role) && (
+          <PerfilInvestidorCard userId={user?.id} isMobile={isMobile} />
         )}
 
         {/* Card Comissões (apenas para papéis com repasse) */}

@@ -78,6 +78,8 @@ export default function Cliente360() {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
   const [stats, setStats] = useState(null);
+  const [importando, setImportando] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
 
   // Estatísticas (triagem) — carrega uma vez ao abrir a tela.
   useEffect(() => {
@@ -111,12 +113,27 @@ export default function Cliente360() {
 
   // Volta do 360 do cliente para a lista (recarrega com o termo atual).
   const voltar = () => {
-    setDados(null); setErro(''); setBuscando(true);
+    setDados(null); setErro(''); setBuscando(true); setImportMsg(null);
     apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(termo.trim())}${perfilFiltro ? `&perfil=${perfilFiltro}` : ''}`)
       .then((r) => r.json())
       .then((j) => setResultados(Array.isArray(j) ? j : []))
       .catch(() => setErro('Falha na busca.'))
       .finally(() => setBuscando(false));
+  };
+
+  // Puxa o histórico do Resend p/ emails_log e recarrega o cliente aberto. É global
+  // (não filtra por cliente — o Resend lista tudo), mas o efeito aparece na ficha.
+  const importarResend = async () => {
+    if (importando) return;
+    setImportando(true); setImportMsg(null);
+    try {
+      const r = await apiCall('/api/importar-emails-resend', { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok || j?.error) { setImportMsg({ ok: false, texto: j?.error || 'Falha ao importar.' }); return; }
+      setImportMsg({ ok: true, texto: `${j.importados} novo(s) e-mail(s) importado(s) (${j.vistos} verificados no Resend).` });
+      if (dados?._busca?.id) await abrir(dados._busca); // recarrega a ficha p/ mostrar os novos
+    } catch { setImportMsg({ ok: false, texto: 'Falha ao importar.' }); }
+    finally { setImportando(false); }
   };
 
   const p = dados?.perfil || {};
@@ -372,13 +389,25 @@ export default function Cliente360() {
             )}
           </div>
 
-          {/* E-mails recebidos (histórico gravado a partir de agora — o Resend não retém) */}
+          {/* E-mails recebidos (histórico) — importável do Resend + registrado nos envios */}
           <div style={card}>
-            <div style={{ ...label, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Mail size={12} color="#0D63DB" /> E-mails recebidos ({dados.emails_total ?? (dados.emails || []).length})
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+              <div style={{ ...label, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 0 }}>
+                <Mail size={12} color="#0D63DB" /> E-mails recebidos ({dados.emails_total ?? (dados.emails || []).length})
+              </div>
+              <button onClick={importarResend} disabled={importando}
+                title="Puxa do Resend os e-mails ainda disponíveis e grava no histórico"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, background: importando ? '#f1f5f9' : '#eff6ff', color: importando ? '#94a3b8' : '#0D63DB', border: '1px solid #dbeafe', borderRadius: 8, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: importando ? 'default' : 'pointer' }}>
+                {importando ? 'Importando…' : '↓ Importar histórico (Resend)'}
+              </button>
             </div>
+            {importMsg && (
+              <div style={{ marginBottom: 8, fontSize: 11.5, fontWeight: 600, color: importMsg.ok ? '#15803d' : '#b91c1c' }}>
+                {importMsg.ok ? '✓ ' : '✕ '}{importMsg.texto}
+              </div>
+            )}
             {(dados.emails || []).length === 0 ? (
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum e-mail registrado ainda — o histórico passa a ser gravado a partir de agora.</div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum e-mail registrado ainda. Use "Importar histórico (Resend)" para puxar o que ainda estiver disponível; novos envios já entram automaticamente.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {dados.emails.map((e, i) => (

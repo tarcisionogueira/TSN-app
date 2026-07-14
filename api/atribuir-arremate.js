@@ -43,6 +43,7 @@ export default async function handler(req) {
   if (!alvo) return json({ error: 'Usuário não encontrado' }, 404);
 
   // 1) Cria o CASO já marcado como arrematado (habilita o acompanhamento/lançamentos).
+  const agora = new Date();
   const valor = Number(String(imovel_valor ?? '').toString().replace(/\./g, '').replace(',', '.')) || null;
   const casoRow = {
     cliente_id: user_id,
@@ -50,6 +51,7 @@ export default async function handler(req) {
     imovel_endereco: imovel_endereco || 'Operação atribuída pela equipe',
     imovel_valor: valor,
     status_etapa: 'arrematado',
+    arrematado_em: agora.toISOString(),
     tipo_leilao: /judicial/i.test(tipo_leilao || '') ? 'judicial' : 'extrajudicial',
     analista_id: role === 'analista' ? user.id : null,
   };
@@ -58,11 +60,14 @@ export default async function handler(req) {
   const [caso] = await casoRes.json().catch(() => []);
 
   // 2) Promove o usuário para ASSESSORADO imediatamente (habilita as telas/indicadores).
+  //    Atribuição pela equipe NÃO gera cobrança — a validade da assessoria é de 12
+  //    meses (até a conclusão da posse), então marcamos plano_vencimento = hoje+12m.
+  const venc = new Date(agora); venc.setMonth(venc.getMonth() + 12);
   const upd = await sb(`perfis?id=eq.${encodeURIComponent(user_id)}`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ role: 'assessorado' }),
+    body: JSON.stringify({ role: 'assessorado', plano_vencimento: venc.toISOString() }),
   });
   if (!upd.ok) return json({ error: 'Caso criado, mas falha ao promover para assessorado', detalhe: await upd.text().catch(() => ''), caso_id: caso?.id }, 500);
 
-  return json({ ok: true, caso_id: caso?.id, role: 'assessorado' });
+  return json({ ok: true, caso_id: caso?.id, role: 'assessorado', plano_vencimento: venc.toISOString() });
 }
