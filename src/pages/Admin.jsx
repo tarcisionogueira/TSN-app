@@ -527,9 +527,15 @@ function UsuariosTab() {
   // Inclusão por ANEXO(S): o admin sobe o edital + a matrícula (vários PDFs) do
   // arremate e a IA extrai endereço, valor e tipo de TODOS, mesclando o resultado
   // (endereço da matrícula, valor do edital…). Revisável. Mesma extração da análise.
+  const removerAtribDoc = (i) => {
+    setAtribDocs(prev => prev.filter((_, idx) => idx !== i));
+    atribFilesRef.current = atribFilesRef.current.filter((_, idx) => idx !== i);
+  };
+
   const extrairArremateDocs = async (files) => {
-    const lista = Array.from(files || []).filter(f => f.type === 'application/pdf');
-    if (!lista.length) { if (files?.length) alert('Envie os documentos em PDF.'); return; }
+    // Aceita por MIME OU por extensão — alguns sistemas não marcam o type do PDF.
+    const lista = Array.from(files || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
+    if (!lista.length) { if ((files?.length || 0) > 0) alert('Envie os documentos em PDF.'); return; }
     setAtribExtraindo('lendo');
     atribFilesRef.current = [...atribFilesRef.current, ...lista]; // guarda p/ persistir depois
     setAtribDocs(prev => [...prev, ...lista.map(f => ({ nome: f.name, status: 'lendo' }))]);
@@ -907,16 +913,20 @@ function UsuariosTab() {
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6 }}>📎 Anexos do arremate</div>
                 <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5, marginBottom: 10 }}>Anexe a matrícula, o edital e outros documentos, se houver (vários PDFs).</div>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: atribExtraindo === 'lendo' ? '#e2e8f0' : '#0D63DB', color: atribExtraindo === 'lendo' ? '#94a3b8' : 'white', borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: atribExtraindo === 'lendo' ? 'default' : 'pointer' }}>
-                  {atribExtraindo === 'lendo' ? '⏳ Lendo…' : '📎 Anexar documentos (PDF)'}
-                  <input type="file" accept="application/pdf" multiple disabled={atribExtraindo === 'lendo'} onChange={e => { const fs = e.target.files; e.target.value = ''; extrairArremateDocs(fs); }} style={{ display: 'none' }} />
+                  {atribExtraindo === 'lendo' ? '⏳ Lendo…' : (atribDocs.length ? '📎 Anexar mais' : '📎 Anexar documentos (PDF)')}
+                  {/* Captura os arquivos ANTES de limpar o input (senão a FileList
+                      esvazia e a lista some). */}
+                  <input type="file" accept="application/pdf,.pdf" multiple disabled={atribExtraindo === 'lendo'} onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ''; extrairArremateDocs(fs); }} style={{ display: 'none' }} />
                 </label>
                 {atribDocs.length > 0 && (
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>Anexos ({atribDocs.length})</div>
                     {atribDocs.map((d, i) => (
-                      <div key={i} style={{ fontSize: 11, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span>{d.status === 'ok' ? '✓' : d.status === 'erro' ? '✕' : '⏳'}</span>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nome}</span>
-                        {d.status === 'erro' && <span style={{ color: '#b91c1c' }}>não lido</span>}
+                      <div key={i} style={{ fontSize: 11.5, color: '#334155', display: 'flex', alignItems: 'center', gap: 6, background: 'white', border: '1px solid #e2e8f0', borderRadius: 7, padding: '5px 8px' }}>
+                        <span>{d.status === 'ok' ? '✅' : d.status === 'erro' ? '⚠️' : '⏳'}</span>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nome}</span>
+                        {d.status === 'erro' && <span style={{ color: '#b45309', fontSize: 10 }}>não lido (guardado)</span>}
+                        <button type="button" onClick={() => removerAtribDoc(i)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 15 }}>×</button>
                       </div>
                     ))}
                   </div>
