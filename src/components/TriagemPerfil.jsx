@@ -58,8 +58,13 @@ export default function TriagemPerfil({ userId }) {
     supabase.from('perfis').select('role, triagem_em, perfil_investidor').eq('id', userId).single()
       .then(({ data }) => {
         if (!vivo || !data) return;
-        // Só cliente e só quem ainda não respondeu.
-        if (ROLES_CLIENTE.includes(data.role) && !data.triagem_em && !data.perfil_investidor) setMostrar(true);
+        // Só cliente e só quem ainda NÃO respondeu o perfil. Reaparece a cada acesso
+        // enquanto perfil_investidor estiver vazio (mesmo que tenha fechado antes);
+        // o "fechar" (X) só dispensa na SESSÃO atual (sessionStorage).
+        if (ROLES_CLIENTE.includes(data.role) && !data.perfil_investidor) {
+          try { if (sessionStorage.getItem('tsn_triagem_dispensada')) return; } catch { /* ignore */ }
+          setMostrar(true);
+        }
       });
     return () => { vivo = false; };
   }, [userId]);
@@ -87,7 +92,9 @@ export default function TriagemPerfil({ userId }) {
     setMostrar(false);
   };
 
-  const depois = () => setMostrar(false); // fecha na sessão; volta a perguntar no próximo acesso
+  // Fecha na SESSÃO atual (não repete a cada volta pra Home); volta a perguntar no
+  // próximo acesso enquanto o perfil não for respondido.
+  const depois = () => { try { sessionStorage.setItem('tsn_triagem_dispensada', '1'); } catch { /* ignore */ } setMostrar(false); };
 
   const ehCidade = step === STEPS.length; // último passo = cidade (opcional)
   const passo = ehCidade ? null : STEPS[step];
