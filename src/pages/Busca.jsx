@@ -539,7 +539,7 @@ export default function Busca() {
       // e o filtro não vinha na cidade da pessoa.
       let uf = '', cidade = '';
       try {
-        const { data } = await supabase.from('perfis').select('endereco_uf,endereco_cidade,endereco').eq('id', user.id).single();
+        const { data } = await supabase.from('perfis').select('endereco_uf,endereco_cidade,endereco').eq('id', effectiveUserId || user.id).single();
         uf = (data?.endereco_uf || '').toUpperCase();
         cidade = data?.endereco_cidade || '';
         if (!uf && !cidade && data?.endereco) {
@@ -564,7 +564,7 @@ export default function Busca() {
       let alerta = null;
       if (!uf && !cidade) {
         try {
-          const { data } = await supabase.from('alertas_email').select('filtros').eq('user_id', user.id).single();
+          const { data } = await supabase.from('alertas_email').select('filtros').eq('user_id', effectiveUserId || user.id).single();
           if (data?.filtros?.estado) alerta = data.filtros;
         } catch {}
       }
@@ -703,10 +703,11 @@ export default function Busca() {
   }, [vista]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!user?.id) return;
-    supabase.from('filtros_salvos').select('*').eq('user_id', user.id).order('criado_em', { ascending: false })
+    const uid = effectiveUserId || user?.id;
+    if (!uid) return;
+    supabase.from('filtros_salvos').select('*').eq('user_id', uid).order('criado_em', { ascending: false })
       .then(({ data }) => setFiltrosSalvos(data || []));
-  }, [user?.id]);
+  }, [effectiveUserId, user?.id]);
 
   // (preset por residência/último alerta unificado no efeito sequencial acima)
 
