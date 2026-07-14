@@ -94,7 +94,7 @@ function parseSitemap(xml) {
 function parseDetalhe(html, rec) {
   const base = extrairGenerico(html, rec.loteUrl) || {};
   const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
 
   // RECON: com PECINI_DEBUG=1 dumpa o contexto de cada "R$ ..." (rótulo à esquerda)
   // p/ descobrir os rótulos REAIS do site sem acesso direto (o proxy bloqueia Pecini).
@@ -108,21 +108,29 @@ function parseDetalhe(html, rec) {
     if (trimp.length) console.log(`   [trimpath/attrs] ${trimp.join(' · ')}`);
   }
 
-  // Valores: SÓ pelos rótulos específicos (Avaliação/Lance) e pelo template
-  // trimpath — NÃO caímos no min/max genérico do extrairGenerico, que pegava lixo
-  // (dry-run mostrou avaliação R$100mi e lance R$10). Faixa plausível p/ imóvel:
-  // piso R$1.000 (descarta taxas/placeholders), teto R$500mi. Sem match plausível
-  // fica 0 → checarQualidade descarta (melhor que gravar valor errado).
+  // Valores pelos rótulos REAIS do Pecini (recon via PECINI_DEBUG):
+  //   "Valor de Avaliação (dd/mm/aaaa): R$ X"     → avaliação (a data no meio quebrava o regex antigo)
+  //   "1º Público Leilão: R$ X" / "2º Público Leilão: R$ Y" → praças (lance mínimo)
+  // Ignoramos "Incremento", "Exercício da Preferência" e o filtro "Faixa de Preço".
+  // Faixa plausível p/ imóvel: piso R$1.000, teto R$500mi. Sem match → 0 → descartado.
   const plaus = (v) => (v >= 1000 && v <= 500_000_000) ? v : 0;
-  const avaliacao = plaus(num((txt.match(/Avalia[çc][ãa]o[:\s]*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
-  const lances = [];
-  for (const m of txt.matchAll(/Lance\s*(?:Inicial|M[íi]nimo|Atual)[:\s]*R\$\s*([\d.]+,\d{2})/gi)) lances.push(num(m[1]));
-  for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) lances.push(num(m[1]));
-  const lancesValidos = lances.map(plaus).filter(v => v > 0);
-  const valorMinimo = lancesValidos.length ? Math.min(...lancesValidos) : 0;
+  const avalLabel = plaus(num((txt.match(/Avalia\S*o[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+  const pracas = [];
+  for (const m of txt.matchAll(/P\S*blico\s+Leil\S*o\s*:?\s*R\$\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
+  for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
+  const pracasValidas = pracas.map(plaus).filter(v => v > 0);
+  const valorMinimo = pracasValidas.length ? Math.min(...pracasValidas) : 0;
+  // A 1ª praça abre pelo valor de avaliação → se não houver rótulo de avaliação, usa a MAIOR praça.
+  const avaliacao = avalLabel || (pracasValidas.length ? Math.max(...pracasValidas) : 0);
 
-  const modalidade = /venda\s*direta/i.test(txt) ? 'venda_direta'
-    : /judicial/i.test(txt) ? 'judicial' : 'extrajudicial';
+  // Modalidade: "Público Leilão" (1ª/2ª praça) = leilão, não venda direta (que
+  // aparece no menu do site em toda página). "extrajudicial" contém "judicial",
+  // então usa lookbehind p/ não classificar errado.
+  const temPracas = /P\S*blico\s+Leil\S*o|[12][ªa]\s*pra[çc]a/i.test(txt);
+  const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
+    : (temPracas || /extrajudicial/i.test(txt)) ? 'extrajudicial'
+    : /venda\s*direta/i.test(txt) ? 'venda_direta'
+    : 'extrajudicial';
   const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
 
   // Página genérica (lote inexistente/redirect p/ a home): og:image é o ícone do
