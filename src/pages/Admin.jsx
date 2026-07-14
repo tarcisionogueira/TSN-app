@@ -899,15 +899,15 @@ function UsuariosTab() {
           <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 4 }}>🏷 Atribuir arremate</div>
             <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
-              Cria o acompanhamento (arrematado) para <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> e o promove a <b>Assessorado</b> imediatamente. Na etapa seguinte você anexa o <b>auto de arrematação</b> + documentos e gera os 3 relatórios — o material da arrematação real alimenta o aprendizado da IA.
+              Promove <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> a <b>Assessorado</b> — sem cobrança.
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Inclusão por anexo(s): a IA extrai endereço/valor/tipo do edital + matrícula */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Anexos (matrícula, edital, outros). A IA lê e preenche o resto sozinha. */}
               <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6 }}>📎 Incluir pelos documentos (recomendado)</div>
-                <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5, marginBottom: 10 }}>Anexe o edital, a matrícula e o <b>auto de arrematação</b> (vários PDFs). A IA lê todos e mescla o endereço, o valor e o tipo abaixo (você revisa antes de confirmar); os arquivos ficam guardados no arremate e alimentam os relatórios.</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6 }}>📎 Anexos do arremate</div>
+                <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5, marginBottom: 10 }}>Anexe a matrícula, o edital e outros documentos, se houver (vários PDFs).</div>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', background: atribExtraindo === 'lendo' ? '#e2e8f0' : '#0D63DB', color: atribExtraindo === 'lendo' ? '#94a3b8' : 'white', borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: atribExtraindo === 'lendo' ? 'default' : 'pointer' }}>
-                  {atribExtraindo === 'lendo' ? '⏳ Extraindo…' : '📎 Anexar edital/matrícula (PDF)'}
+                  {atribExtraindo === 'lendo' ? '⏳ Lendo…' : '📎 Anexar documentos (PDF)'}
                   <input type="file" accept="application/pdf" multiple disabled={atribExtraindo === 'lendo'} onChange={e => { const fs = e.target.files; e.target.value = ''; extrairArremateDocs(fs); }} style={{ display: 'none' }} />
                 </label>
                 {atribDocs.length > 0 && (
@@ -921,33 +921,13 @@ function UsuariosTab() {
                     ))}
                   </div>
                 )}
-                {atribExtraindo === 'ok' && <div style={{ fontSize: 11, color: '#15803d', fontWeight: 700, marginTop: 8 }}>✓ Campos preenchidos a partir dos documentos. Revise abaixo.</div>}
-                {atribExtraindo === 'erro' && atribDocs.every(d => d.status === 'erro') && <div style={{ fontSize: 11, color: '#b91c1c', fontWeight: 700, marginTop: 8 }}>Não consegui ler os documentos. Preencha manualmente abaixo.</div>}
+                {atribExtraindo === 'ok' && <div style={{ fontSize: 11, color: '#15803d', fontWeight: 700, marginTop: 8 }}>✓ Documentos lidos.</div>}
+                {atribExtraindo === 'erro' && atribDocs.every(d => d.status === 'erro') && <div style={{ fontSize: 11, color: '#b91c1c', fontWeight: 700, marginTop: 8 }}>Não consegui ler os documentos (o anexo mesmo assim fica guardado).</div>}
               </div>
+              {/* Único campo a informar — o resto vem dos documentos. */}
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Imóvel (endereço)</label>
-                <input value={atribForm.endereco} onChange={e => setAtribForm(p => ({ ...p, endereco: e.target.value }))} placeholder="Rua, nº, cidade/UF" style={S.input} />
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Valor arrematado (R$)</label>
-                  <input value={atribForm.valor} onChange={e => setAtribForm(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" style={S.input} />
-                </div>
-                <div style={{ width: 150 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Tipo</label>
-                  <select value={atribForm.tipo} onChange={e => setAtribForm(p => ({ ...p, tipo: e.target.value }))} style={S.input}>
-                    <option value="extrajudicial">Extrajudicial</option>
-                    <option value="judicial">Judicial</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Nº do processo (CNJ){atribForm.tipo === 'extrajudicial' ? ' — se houver imissão na posse' : ''}</label>
-                <input value={atribForm.numero_processo} onChange={e => setAtribForm(p => ({ ...p, numero_processo: e.target.value }))} placeholder="0000000-00.0000.0.00.0000" style={S.input} />
-                <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 3 }}>Com o número, acompanhamos a evolução no CNJ até a baixa/encerramento (aprendizado jurídico).</div>
-              </div>
-              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '9px 12px', fontSize: 11.5, color: '#166534', lineHeight: 1.5 }}>
-                ✓ Atribuição pela equipe <b>não gera cobrança</b>. A assessoria vale por <b>12 meses</b> (até a conclusão da posse do imóvel). Os 10% de honorários de êxito sobre a arrematação são tratados separadamente pelo analista.
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Valor arrematado (R$)</label>
+                <input value={atribForm.valor} onChange={e => setAtribForm(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" style={S.input} />
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
