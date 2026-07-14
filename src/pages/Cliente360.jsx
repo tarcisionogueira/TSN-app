@@ -57,29 +57,44 @@ function RelatorioCard({ icone: Icone, nome, dados }) {
   );
 }
 
+const PERFIS = [
+  { v: '', label: 'Todos os perfis' },
+  { v: 'uso_proprio', label: 'Uso próprio' },
+  { v: 'revenda', label: 'Revenda (flip)' },
+  { v: 'locacao', label: 'Locação (renda)' },
+];
+const PERFIL_LABEL = { uso_proprio: 'Uso próprio', revenda: 'Revenda', locacao: 'Locação' };
+
 export default function Cliente360() {
   const [termo, setTermo] = useState('');
+  const [perfilFiltro, setPerfilFiltro] = useState('');
   const [resultados, setResultados] = useState(null);
   const [buscando, setBuscando] = useState(false);
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
+  const [stats, setStats] = useState(null);
+
+  // Estatísticas (triagem) — carrega uma vez ao abrir a tela.
+  useEffect(() => {
+    apiCall('/api/admin-usuario-360?stats=1').then((r) => r.json()).then((j) => { if (j && !j.error) setStats(j); }).catch(() => {});
+  }, []);
 
   // Busca AO VIVO: já carrega a lista ao abrir (termo vazio) e filtra a cada dígito
-  // (debounce de 300ms). Sem botão. 1 caractere é amplo demais → aguarda o 2º.
+  // (debounce de 300ms) e ao trocar o filtro de perfil. Sem botão.
   useEffect(() => {
     const t = termo.trim();
     if (t.length === 1) return;
     const id = setTimeout(async () => {
       setBuscando(true); setErro(''); setDados(null);
       try {
-        const r = await apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(t)}`);
+        const r = await apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(t)}${perfilFiltro ? `&perfil=${perfilFiltro}` : ''}`);
         const j = await r.json();
         setResultados(Array.isArray(j) ? j : []);
       } catch { setErro('Falha na busca.'); } finally { setBuscando(false); }
     }, 300);
     return () => clearTimeout(id);
-  }, [termo]);
+  }, [termo, perfilFiltro]);
 
   const abrir = async (u) => {
     setCarregando(true); setErro(''); setResultados(null);
@@ -93,7 +108,7 @@ export default function Cliente360() {
   // Volta do 360 do cliente para a lista (recarrega com o termo atual).
   const voltar = () => {
     setDados(null); setErro(''); setBuscando(true);
-    apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(termo.trim())}`)
+    apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(termo.trim())}${perfilFiltro ? `&perfil=${perfilFiltro}` : ''}`)
       .then((r) => r.json())
       .then((j) => setResultados(Array.isArray(j) ? j : []))
       .catch(() => setErro('Falha na busca.'))
@@ -127,6 +142,73 @@ export default function Cliente360() {
         {buscando && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#94a3b8' }}>filtrando…</span>}
       </div>
 
+      {/* Filtro por perfil de investidor */}
+      {!dados && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {PERFIS.map((op) => (
+            <button key={op.v} onClick={() => setPerfilFiltro(op.v)}
+              style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+                background: perfilFiltro === op.v ? '#111' : '#fff', color: perfilFiltro === op.v ? '#fff' : '#475569',
+                borderColor: perfilFiltro === op.v ? '#111' : '#cbd5e1' }}>
+              {op.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Estatísticas (triagem do tipo de cliente) */}
+      {!dados && stats && (
+        <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...label }}>Estatísticas · triagem de clientes</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+            {[
+              ['Clientes', stats.total_clientes, '#0D63DB'],
+              ['Sem perfil', stats.sem_perfil, stats.sem_perfil > 0 ? '#d97706' : '#059669'],
+              ['Buscas', stats.buscas_total, '#7c3aed'],
+              ['Imóveis vistos', stats.vistos_total, '#0891b2'],
+              ['Relat. mercado', stats.relatorios?.mercado, '#059669'],
+              ['Relat. documental', stats.relatorios?.documental, '#059669'],
+              ['Relat. laudo', stats.relatorios?.laudo, '#059669'],
+            ].map(([l, v, c]) => (
+              <div key={l} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: c }}>{v ?? 0}</div>
+                <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ ...label, marginBottom: 5 }}>Por perfil de investidor</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {Object.entries(stats.por_perfil || {}).map(([k, n]) => (
+                  <span key={k} style={{ fontSize: 12, background: '#ede9fe', color: '#5b21b6', borderRadius: 8, padding: '4px 9px', fontWeight: 600 }}>{PERFIL_LABEL[k] || k}: <b>{n}</b></span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ ...label, marginBottom: 5 }}>Por plano</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {Object.entries(stats.por_plano || {}).map(([k, n]) => (
+                  <span key={k} style={{ fontSize: 12, background: '#eff6ff', color: '#0D63DB', borderRadius: 8, padding: '4px 9px', fontWeight: 600 }}>{planoLabel(k)}: <b>{n}</b></span>
+                ))}
+              </div>
+            </div>
+          </div>
+          {(stats.top_cidades?.length > 0 || stats.top_tipos?.length > 0) && (
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              {stats.top_cidades?.length > 0 && (
+                <div><div style={{ ...label, marginBottom: 5 }}>Cidades mais buscadas</div>
+                  <div style={{ fontSize: 12, color: '#334155' }}>{stats.top_cidades.map((c) => `${c.cidade} (${c.n})`).join(' · ')}</div></div>
+              )}
+              {stats.top_tipos?.length > 0 && (
+                <div><div style={{ ...label, marginBottom: 5 }}>Tipos mais buscados</div>
+                  <div style={{ fontSize: 12, color: '#334155' }}>{stats.top_tipos.map((t) => `${t.tipo_imovel} (${t.n})`).join(' · ')}</div></div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {erro && <div style={{ ...card, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' }}>{erro}</div>}
 
       {resultados && (
@@ -140,7 +222,12 @@ export default function Cliente360() {
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{u.nome || '(sem nome)'}</div>
                     <div style={{ fontSize: 12, color: '#64748b' }}>{u.email}{u.telefone ? ` · ${u.telefone}` : ''}</div>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#0D63DB', flexShrink: 0, background: '#eff6ff', padding: '3px 10px', borderRadius: 20 }}>{u.plano_label || u.role || '—'}</span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {u.perfil_investidor
+                      ? <span style={{ fontSize: 10.5, fontWeight: 700, color: '#5b21b6', background: '#ede9fe', padding: '3px 8px', borderRadius: 20 }}>{PERFIL_LABEL[u.perfil_investidor] || u.perfil_investidor}</span>
+                      : <span style={{ fontSize: 10.5, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '3px 8px', borderRadius: 20 }}>sem perfil</span>}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0D63DB', background: '#eff6ff', padding: '3px 10px', borderRadius: 20 }}>{u.plano_label || u.role || '—'}</span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -187,6 +274,35 @@ export default function Cliente360() {
               </div>
             </div>
           )}
+
+          {/* Filtros salvos — o que o cliente monitora (características do imóvel que busca) */}
+          <div style={card}>
+            <div style={{ ...label, marginBottom: 8 }}>Filtros salvos ({(dados.filtros_salvos || []).length}) — imóveis que procura</div>
+            {(dados.filtros_salvos || []).length === 0 ? <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum filtro salvo. {p.perfil_investidor ? '' : '(Cliente ainda sem perfil respondido.)'}</div> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {dados.filtros_salvos.map((fs, i) => {
+                  const f = fs.filtros || {};
+                  const tags = [
+                    (Array.isArray(f.cidades) && f.cidades.length) ? `📍 ${fmtCidades(f.cidades)}` : (f.estado ? `📍 ${f.estado}` : null),
+                    (Array.isArray(f.tipos) && f.tipos.length) ? `🏠 ${f.tipos.join(', ')}` : null,
+                    (Array.isArray(f.modalidades) && f.modalidades.length) ? `⚖ ${f.modalidades.join(', ')}` : null,
+                    (f.valorMin || f.valorMax) ? `R$ ${f.valorMin || '0'}–${f.valorMax || '∞'}` : null,
+                    f.descontoMin ? `desc ≥${f.descontoMin}%` : null,
+                    (Array.isArray(f.bairros) && f.bairros.length) ? `bairros: ${f.bairros.join(', ')}` : null,
+                  ].filter(Boolean);
+                  return (
+                    <div key={i} style={{ borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 8 : 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 4 }}>{fs.nome || `Filtro ${i + 1}`}</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {tags.length ? tags.map((t, j) => <span key={j} style={{ fontSize: 11.5, background: '#f1f5f9', color: '#334155', borderRadius: 8, padding: '3px 9px' }}>{t}</span>)
+                          : <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Sem critérios específicos.</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Relatórios (os 3) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>

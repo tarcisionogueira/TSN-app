@@ -35,16 +35,21 @@ export default async function handler(req) {
   const params = new URL(req.url).searchParams;
   const q = (params.get('q') || '').trim();
   const uid = params.get('user_id');
+  const perfil = (params.get('perfil') || '').trim() || null;   // filtro por perfil_investidor
+  const stats = params.get('stats');                             // ?stats=1 → estatísticas
 
   let data;
-  if (uid) {
+  if (stats) {
+    data = await rpc('admin_360_estatisticas', {});
+  } else if (uid) {
     data = await rpc('admin_usuario_360', { uid });
   } else {
     // Termo vazio → lista geral. Se o termo tem 11 dígitos, calcula o hash do CPF
     // (HMAC no backend) p/ casar cpf_hash; sempre passa o termo (nome/email/telefone).
+    // p_perfil filtra por perfil de investidor (locacao/revenda/uso_proprio).
     const dig = q.replace(/\D/g, '');
     const cpfHash = dig.length === 11 ? await hashCpf(dig).catch(() => null) : null;
-    data = await rpc('admin_busca_usuarios', { termo: q, p_cpf_hash: cpfHash });
+    data = await rpc('admin_busca_usuarios', { termo: q, p_cpf_hash: cpfHash, p_perfil: perfil });
   }
 
   return new Response(JSON.stringify(data ?? { error: 'Falha ao consultar' }), {
