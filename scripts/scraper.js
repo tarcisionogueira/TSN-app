@@ -334,8 +334,10 @@ async function scraperCEFcsv(uf) {
       const linkMatricula = (uf && numeroLimpo)
         ? `https://venda-imoveis.caixa.gov.br/editais/matricula/${String(uf).toUpperCase()}/${numeroLimpo}.pdf`
         : null;
-      // CEF não fornece URL de foto no CSV — construir a partir do número do imóvel
-      const fotoUrl = `https://venda-imoveis.caixa.gov.br/fotos/F${numeroLimpo}.jpg`;
+      // CEF não fornece URL de foto no CSV — construir a partir do número do imóvel.
+      // O padrão que serve 200/JPEG é F<num>21.jpg (confirmado em diagnóstico);
+      // F<num>.jpg retorna 404.
+      const fotoUrl = `https://venda-imoveis.caixa.gov.br/fotos/F${numeroLimpo}21.jpg`;
       // Extrai dados do texto: CEP no endereço, matrícula e área na descrição
       const cep = extrairCEP(m.logradouro) || extrairCEP(m.descricao_csv);
       const enderecoLimpo = toTitleCase((m.logradouro || '').replace(/\s*[-–,]?\s*CEP[:\s]+\d{5}-?\d{3}/i, '').trim());
