@@ -61,7 +61,7 @@ export default function Cliente360() {
   const buscar = async (e) => {
     e?.preventDefault();
     const t = termo.trim();
-    if (t.length < 2) return;
+    if (t.length === 1) return; // 1 caractere é amplo demais; vazio = lista completa
     setBuscando(true); setErro(''); setDados(null);
     try {
       const r = await apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(t)}`);
@@ -100,7 +100,7 @@ export default function Cliente360() {
       </div>
 
       <form onSubmit={buscar} style={{ display: 'flex', gap: 8 }}>
-        <input value={termo} onChange={(e) => setTermo(e.target.value)} placeholder="Buscar por nome ou e-mail…"
+        <input value={termo} onChange={(e) => setTermo(e.target.value)} placeholder="Buscar por nome, e-mail, telefone ou CPF… (vazio = todos)"
           style={{ flex: 1, padding: '11px 14px', border: '1px solid #cbd5e1', borderRadius: 10, fontSize: 14 }} />
         <button type="submit" disabled={buscando} style={{ padding: '11px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Search size={15} /> {buscando ? 'Buscando…' : 'Buscar'}
@@ -113,11 +113,12 @@ export default function Cliente360() {
         resultados.length === 0
           ? <div style={{ ...card, color: '#64748b' }}>Nenhum usuário encontrado.</div>
           : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>{resultados.length} usuário(s){resultados.length >= 200 ? '+ (refine a busca para ver mais)' : ''}</div>
               {resultados.map((u) => (
                 <button key={u.id} onClick={() => abrir(u)} style={{ ...card, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{u.nome || '(sem nome)'}</div>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>{u.email}</div>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>{u.email}{u.telefone ? ` · ${u.telefone}` : ''}</div>
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#0D63DB' }}>{u.role} · {u.plano || '—'}</span>
                 </button>
