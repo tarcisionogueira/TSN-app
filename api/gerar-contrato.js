@@ -144,6 +144,7 @@ export default async function handler(req, res) {
           html: `<p>Olá${l.nome ? ' ' + l.nome : ''}!</p><p>Você tem um contrato para revisar e assinar: <strong>${tituloFinal}</strong>.</p>
                  <p><a href="${l.url}" style="display:inline-block;padding:11px 20px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Abrir e assinar</a></p>
                  <p>Ou copie o link: ${l.url}</p><p>BidPro Brasil</p>`,
+          meta: { tipo: 'contrato' },
         }).catch(() => {})
       ));
 

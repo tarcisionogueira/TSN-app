@@ -382,6 +382,15 @@ async function handler(req) {
           body: JSON.stringify({ user_id: perfil.id, ultimo_envio: new Date().toISOString(), total_enviados: (a?.total_enviados || 0) + 1 }),
           signal: AbortSignal.timeout(15000),
         });
+        // Histórico do e-mail (Cliente 360). Best-effort — não bloqueia o loop.
+        try {
+          await fetch(`${URL_}/rest/v1/emails_log`, {
+            method: 'POST',
+            headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({ user_id: perfil.id, destinatario: String(email).toLowerCase(), assunto: `🏠 ${top.length} oportunidades em ${local} esta semana`, tipo: 'oportunidades', status: 'enviado' }),
+            signal: AbortSignal.timeout(15000),
+          });
+        } catch { /* histórico é best-effort */ }
         // Registra os imóveis enviados (dedup dos próximos envios; ignora repetidos).
         if (!testeEmail) {
           try {

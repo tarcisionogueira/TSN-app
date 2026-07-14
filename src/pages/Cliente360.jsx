@@ -65,6 +65,10 @@ const PERFIS = [
 ];
 const PERFIL_LABEL = { uso_proprio: 'Uso próprio', revenda: 'Revenda', locacao: 'Locação' };
 
+// Rótulo amigável do tipo de e-mail (histórico gravado a partir de agora).
+const EMAIL_TIPO_LABEL = { oportunidades: 'Oportunidades', boas_vindas: 'Boas-vindas', contrato: 'Contrato', juridico: 'Jurídico', renovacao: 'Renovação', financiamento: 'Financiamento' };
+const emailTipoLabel = (t) => EMAIL_TIPO_LABEL[t] || (t ? t.charAt(0).toUpperCase() + t.slice(1) : 'E-mail');
+
 export default function Cliente360() {
   const [termo, setTermo] = useState('');
   const [perfilFiltro, setPerfilFiltro] = useState('');
@@ -362,6 +366,29 @@ export default function Cliente360() {
                   <div key={c.id} style={{ fontSize: 12.5, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                     <span>{c.titulo || '(sem título)'} {c.atendente_nome ? <span style={{ color: '#94a3b8' }}>· {c.atendente_nome}</span> : ''}</span>
                     <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}><StatusChip status={c.status} /><span style={{ color: '#94a3b8' }}>{dataBR(c.criado_em)}</span></span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* E-mails recebidos (histórico gravado a partir de agora — o Resend não retém) */}
+          <div style={card}>
+            <div style={{ ...label, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Mail size={12} color="#0D63DB" /> E-mails recebidos ({dados.emails_total ?? (dados.emails || []).length})
+            </div>
+            {(dados.emails || []).length === 0 ? (
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum e-mail registrado ainda — o histórico passa a ser gravado a partir de agora.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {dados.emails.map((e, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 6 : 0 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#eff6ff', color: '#0D63DB', flexShrink: 0 }}>{emailTipoLabel(e.tipo)}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.assunto || '(sem assunto)'}</span>
+                      {e.status === 'falha' && <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 20, background: '#fee2e2', color: '#b91c1c', flexShrink: 0 }}>falhou</span>}
+                    </span>
+                    <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(e.enviado_em)}</span>
                   </div>
                 ))}
               </div>

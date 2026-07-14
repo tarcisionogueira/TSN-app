@@ -168,6 +168,7 @@ export default async function handler(req, res) {
         to: email,
         subject: `Bem-vindo ao ${cfg.nome} — BidPro Brasil`,
         html: `<p>Olá, ${nome.split(' ')[0] || ''}!</p><p>Sua assinatura do <strong>${cfg.nome}</strong> foi confirmada. Já pode entrar na plataforma com o seu e-mail e senha.</p><p>Bons arremates!<br/>BidPro Brasil</p>`,
+        meta: { tipo: 'boas_vindas', userId },
       });
     } catch { /* não bloqueia */ }
   }
