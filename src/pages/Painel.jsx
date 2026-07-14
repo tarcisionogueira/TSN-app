@@ -440,9 +440,15 @@ export default function Painel() {
   const filtrados = imoveis.filter(im => !filtroStatus || im.status===filtroStatus);
 
   const marcarArrematado = (im) => {
-    if (!confirm('Confirmar arrematação deste imóvel? Ele será movido para a aba Arrematação.')) return;
+    if (!confirm('Confirmar arrematação deste imóvel? Você vai para "Meus Arrematados" para registrar e anexar os documentos (auto/carta, contrato do banco, escritura, matrícula registrada).')) return;
     alterarStatus(im.id, 'arrematado');
-    setAba('arrematacoes');
+    // Direciona para a tela de arrematados com o imóvel pré-preenchido — lá o
+    // cliente confirma o registro e anexa os documentos do arremate.
+    nav('/arrematados', { state: { prefill: {
+      titulo: im.nome || im.titulo || '', cidade: im.cidade || '', estado: im.estado || '',
+      valor: im.valorArrematacao || im.valorMinimo || '', imovelId: im.id || null,
+      imovel: im, modalidade: /judicial/i.test(im.modalidade || '') && !/extra/i.test(im.modalidade || '') ? 'judicial' : 'extrajudicial',
+    } } });
   };
 
   const tabBtn = (id, label) => (

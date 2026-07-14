@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,6 +15,22 @@ const STATUS = {
   concluido:  { l: 'Concluído',  c: '#15803d', bg: '#dcfce7' },
 };
 const CATEGORIAS = ['Arrematação', 'Honorários advocatícios', 'Taxa do leiloeiro', 'ITBI / Registro', 'Reforma', 'IPTU', 'Condomínio', 'Débitos assumidos', 'Venda', 'Aluguel recebido', 'Outro'];
+// Documentos do ciclo do arremate — ficam permanentes (nunca apagados) e alimentam
+// a IA. Judicial: auto/carta. Extrajudicial: boleto sinal/aquisição, contrato do
+// banco (financiado), escritura (lavratura) e matrícula registrada.
+const DOC_TIPOS = [
+  ['auto_arrematacao', 'Auto de arrematação (judicial)'],
+  ['carta_arrematacao', 'Carta de arrematação (judicial)'],
+  ['boleto_sinal', 'Boleto do sinal (extrajudicial)'],
+  ['boleto_aquisicao', 'Boleto da aquisição (extrajudicial)'],
+  ['contrato_banco', 'Contrato do banco (financiado)'],
+  ['escritura', 'Escritura / lavratura'],
+  ['matricula_registrada', 'Matrícula registrada'],
+  ['edital', 'Edital'],
+  ['matricula', 'Matrícula'],
+  ['outro', 'Outro documento'],
+];
+const DOC_TIPO_LABEL = Object.fromEntries(DOC_TIPOS.map(([v, l]) => [v, l]));
 
 function fotoImovel(im) {
   if (!im) return null;
@@ -30,11 +46,13 @@ function fotoImovel(im) {
 // Detalhe de um arrematado: Documentos + Lançamentos financeiros
 // ─────────────────────────────────────────────────────────────────────────────
 function Detalhe({ arr, onClose, onChange }) {
-  const [aba, setAba] = React.useState('lancamentos');
+  const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   const [lancs, setLancs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [docs, setDocs] = React.useState(Array.isArray(arr.documentos) ? arr.documentos : []);
   const [enviando, setEnviando] = React.useState(false);
+  const [docTipo, setDocTipo] = React.useState('auto_arrematacao');
+  const [imovelId, setImovelId] = React.useState(arr.imovel_id || null);
   const [novo, setNovo] = React.useState({ tipo: 'saida', categoria: 'Reforma', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10) });
 
   React.useEffect(() => {
@@ -59,25 +77,42 @@ function Detalhe({ arr, onClose, onChange }) {
     setLancs(prev => prev.filter(l => l.id !== id));
   };
 
+  // Garante o imóvel-âncora (cria sob demanda se o arrematado não veio da base) —
+  // sem ele não há onde anexar nem como entrar no corpus de aprendizado.
+  const garantirAncora = async () => {
+    if (imovelId) return imovelId;
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/arrematado-ancora', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ arrematado_id: arr.id }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.imovel_id) throw new Error(d.error || 'Não foi possível preparar o anexo.');
+    setImovelId(d.imovel_id);
+    onChange?.({ ...arr, imovel_id: d.imovel_id });
+    return d.imovel_id;
+  };
+
   const uploadDoc = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    if (!arr.imovel_id) { alert('Este arrematado não está vinculado a um imóvel da base — anexo indisponível.'); return; }
     if (file.type !== 'application/pdf') { alert('Envie o documento em PDF.'); return; }
     if (file.size > 20 * 1024 * 1024) { alert('Arquivo acima de 20 MB.'); return; }
     setEnviando(true);
     try {
+      const imId = await garantirAncora();
       const fd = new FormData();
-      fd.append('file', file); fd.append('imovel_id', arr.imovel_id); fd.append('tipo', 'outro');
+      fd.append('file', file); fd.append('imovel_id', imId); fd.append('tipo', docTipo); fd.append('arrematado', 'true');
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/upload-anexo', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Falha no envio');
-      const doc = { id: data.anexo_id || String(Date.now()), nome: file.name, url: data.url_publica || data.url, criado_em: new Date().toISOString() };
+      const doc = { id: data.anexo_id || String(Date.now()), nome: file.name, tipo: docTipo, url: data.url_publica || data.url, criado_em: new Date().toISOString() };
       const novosDocs = [...docs, doc];
       setDocs(novosDocs);
       await supabase.from('arrematados').update({ documentos: novosDocs, updated_at: new Date().toISOString() }).eq('id', arr.id);
-      onChange?.({ ...arr, documentos: novosDocs });
+      onChange?.({ ...arr, documentos: novosDocs, imovel_id: imId });
     } catch (err) { alert(err.message || 'Erro ao enviar o documento.'); }
     finally { setEnviando(false); }
   };
@@ -162,18 +197,29 @@ function Detalhe({ arr, onClose, onChange }) {
 
           {aba === 'documentos' && (
             <>
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', border: '1.5px dashed #cbd5e1', borderRadius: 12, cursor: 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, marginBottom: 14 }}>
-                {enviando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar documento (PDF)</>}
-                <input type="file" accept="application/pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
-              </label>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, lineHeight: 1.5 }}>
+                Selecione o tipo e anexe o PDF. Os documentos do arremate ficam <b>permanentes</b> (nunca apagados) e alimentam a IA. Você pode anexar mais ao longo do tempo (auto/carta, contrato do banco, escritura, matrícula registrada…).
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+                <select value={docTipo} onChange={e => setDocTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
+                  {DOC_TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', border: '1.5px dashed #cbd5e1', borderRadius: 10, cursor: enviando ? 'default' : 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
+                  {enviando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar PDF</>}
+                  <input type="file" accept="application/pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
+                </label>
+              </div>
               {docs.length === 0 ? (
-                <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Nenhum documento anexado. Guarde aqui edital assinado, matrícula, carta de arrematação, contratos.</div>
+                <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Nenhum documento anexado. Guarde aqui o auto/carta de arrematação, contrato do banco, escritura, matrícula registrada, edital.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {docs.map(d => (
                     <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: '1px solid #f1f5f9', borderRadius: 10 }}>
                       <FileText size={17} color="#1e3a8a" />
-                      <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: '#1e3a8a', textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.nome}</a>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 700, color: '#1e3a8a', textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{d.nome}</a>
+                        {d.tipo && d.tipo !== 'outro' && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>{DOC_TIPO_LABEL[d.tipo] || d.tipo}</div>}
+                      </div>
                       {d.url && <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB' }}><ExternalLink size={15} /></a>}
                       <button onClick={() => delDoc(d.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>
                     </div>
@@ -191,18 +237,29 @@ function Detalhe({ arr, onClose, onChange }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Modal "Registrar arrematação"
 // ─────────────────────────────────────────────────────────────────────────────
-function NovoArrematado({ onClose, onCriar, sugestoes }) {
-  const [form, setForm] = React.useState({ titulo: '', cidade: '', estado: '', valor: '', data: new Date().toISOString().slice(0, 10), imovel_id: null, imovel: null });
+function NovoArrematado({ onClose, onCriar, sugestoes, inicial }) {
+  const [form, setForm] = React.useState({
+    titulo: inicial?.titulo || '', cidade: inicial?.cidade || '', estado: inicial?.estado || '',
+    valor: inicial?.valor ? String(inicial.valor) : '', data: new Date().toISOString().slice(0, 10),
+    imovel_id: inicial?.imovelId || null, imovel: inicial?.imovel || null,
+    modalidade: inicial?.modalidade || 'extrajudicial', numero_processo: '',
+  });
   const [salvando, setSalvando] = React.useState(false);
   const inp = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' };
 
-  const escolher = (s) => setForm(f => ({ ...f, titulo: s.titulo || '', cidade: s.cidade || '', estado: s.estado || '', imovel_id: s.imovelId || null, imovel: s.imovel || null }));
+  const escolher = (s) => setForm(f => ({ ...f, titulo: s.titulo || '', cidade: s.cidade || '', estado: s.estado || '', imovel_id: s.imovelId || null, imovel: s.imovel || null, modalidade: s.imovel?.modalidade || f.modalidade }));
 
   const salvar = async () => {
     if (!form.titulo.trim()) return;
     setSalvando(true);
     const valor = Number(String(form.valor).replace(/\./g, '').replace(',', '.')) || null;
-    await onCriar({ titulo: form.titulo.trim(), cidade: form.cidade.trim() || null, estado: form.estado.trim() || null, valor_arrematacao: valor, data_arrematacao: form.data || null, imovel_id: form.imovel_id, imovel: form.imovel });
+    // modalidade e nº do processo viajam no jsonb `imovel` (a tabela não tem colunas
+    // próprias) — o imóvel-âncora e o corpus os leem de lá.
+    await onCriar({
+      titulo: form.titulo.trim(), cidade: form.cidade.trim() || null, estado: form.estado.trim() || null,
+      valor_arrematacao: valor, data_arrematacao: form.data || null, imovel_id: form.imovel_id,
+      imovel: { ...(form.imovel || {}), modalidade: form.modalidade, numero_processo: form.numero_processo.trim() || null },
+    });
     setSalvando(false);
   };
 
@@ -233,6 +290,14 @@ function NovoArrematado({ onClose, onCriar, sugestoes }) {
             <input placeholder="Valor arrematado (R$)" inputMode="decimal" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} style={inp} />
             <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} style={inp} />
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <select value={form.modalidade} onChange={e => setForm(f => ({ ...f, modalidade: e.target.value }))} style={inp}>
+              <option value="extrajudicial">Extrajudicial</option>
+              <option value="judicial">Judicial</option>
+            </select>
+            <input placeholder="Nº do processo (CNJ, se houver)" value={form.numero_processo} onChange={e => setForm(f => ({ ...f, numero_processo: e.target.value }))} style={inp} />
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -4 }}>Com o nº do processo acompanhamos a evolução no CNJ até o encerramento. Depois de registrar, você anexa os documentos.</div>
           <button onClick={salvar} disabled={!form.titulo.trim() || salvando} style={{ padding: '12px', background: '#059669', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: form.titulo.trim() && !salvando ? 1 : 0.5 }}>
             {salvando ? 'Salvando…' : 'Registrar arrematação'}
           </button>
@@ -245,7 +310,9 @@ function NovoArrematado({ onClose, onCriar, sugestoes }) {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Arrematados() {
   const nav = useNavigate();
+  const loc = useLocation();
   const isMobile = useIsMobile();
+  const [prefill, setPrefill] = React.useState(null);
   const { user, effectiveUserId } = useAuth();
   const { analises, documentais } = useAnalises();
   const uid = effectiveUserId || user?.id || null;
@@ -272,6 +339,15 @@ export default function Arrematados() {
   }, [uid]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
+  // Veio de "✅ Arrematei!" (Painel) com o imóvel pré-preenchido → abre o registro.
+  React.useEffect(() => {
+    if (loc.state?.prefill) {
+      setPrefill(loc.state.prefill);
+      setNovo(true);
+      nav('.', { replace: true, state: {} }); // não reabre ao voltar
+    }
+  }, [loc.state]); // eslint-disable-line
+
   const sugestoes = React.useMemo(() => {
     const by = {};
     [...(analises || []), ...(documentais || [])].forEach(a => { if (a?.imovelId && !by[a.imovelId]) by[a.imovelId] = a; });
@@ -286,7 +362,11 @@ export default function Arrematados() {
         await supabase.from('arrematado_lancamentos').insert({ arrematado_id: data.id, user_id: uid, tipo: 'saida', categoria: 'Arrematação', valor: payload.valor_arrematacao, data: payload.data_arrematacao || null });
       }
       setNovo(false);
+      setPrefill(null);
       await carregar();
+      // Direciona para os Documentos deste arremate — é onde anexa auto/carta,
+      // contrato do banco, escritura, matrícula registrada.
+      setSel({ ...data, _abaInicial: 'documentos' });
     }
   };
 
@@ -360,7 +440,7 @@ export default function Arrematados() {
       )}
 
       {sel && <Detalhe arr={sel} onClose={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />}
-      {novo && <NovoArrematado onClose={() => setNovo(false)} onCriar={criar} sugestoes={sugestoes} />}
+      {novo && <NovoArrematado onClose={() => { setNovo(false); setPrefill(null); }} onCriar={criar} sugestoes={sugestoes} inicial={prefill} />}
     </div>
   );
 }
