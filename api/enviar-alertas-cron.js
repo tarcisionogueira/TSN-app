@@ -1,5 +1,6 @@
 /**
- * /api/enviar-alertas-cron — e-mail de oportunidades. Roda TODO DIA às 8h UTC.
+ * /api/enviar-alertas-cron — e-mail de oportunidades. Roda TODO DIA às 11h UTC
+ * (= 8h de Brasília, horário de envio ao cliente).
  * Cadência por usuário:
  *   • 1º e-mail (boas-vindas): 24h após criar a conta, em QUALQUER dia — quem se
  *     cadastra no meio da semana não fica sem oportunidade até a segunda seguinte.
@@ -145,7 +146,7 @@ export default async function handler(req) {
   const buscarPorFiltro = (f, lim) => sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f)}&order=desconto_percentual.desc&limit=${lim}`);
 
   let enviados = 0;
-  const isSegunda = new Date().getUTCDay() === 1; // 8h UTC de segunda = 5h BRT de segunda
+  const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
 
   for (const perfil of perfis) {
     try {

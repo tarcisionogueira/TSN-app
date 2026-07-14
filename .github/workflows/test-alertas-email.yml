@@ -1,0 +1,33 @@
+name: Teste — e-mail de alertas (envio único)
+
+# Dispara o /api/enviar-alertas-cron em MODO DE TESTE (?email=...), que envia o
+# e-mail de oportunidades APENAS para o endereço informado, ignorando a trava de
+# 1x/semana e o opt-out. Serve para validar o disparo sem afetar a base.
+# Autentica com CRON_SECRET (header x-cron-secret) — mesmo padrão dos demais crons.
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 'E-mail de destino do teste'
+        required: true
+        default: 'tarcisioaraujo@reimob.com.br'
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar e-mail de teste
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          EMAIL: ${{ github.event.inputs.email }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET vazio — cadastre em Settings > Secrets and variables > Actions"; exit 1; fi
+          BASE="${APP_BASE_URL:-https://bidprobrasil.com.br}"
+          URL="${BASE}/api/enviar-alertas-cron?email=$(python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['EMAIL']))")"
+          echo "POST ${BASE}/api/enviar-alertas-cron?email=<oculto>"
+          curl -sSL --max-time 295 -X POST "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n"
+          echo "Resposta:"; cat resp.json; echo
+          # Falha o job se não retornou enviados >= 1
+          python3 -c "import json,sys; d=json.load(open('resp.json')); print('enviados=',d.get('enviados'),'total=',d.get('total'),'emails_conhecidos=',d.get('emails_conhecidos')); sys.exit(0 if (d.get('enviados') or 0)>=1 else 2)"
