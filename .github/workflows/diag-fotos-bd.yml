@@ -38,6 +38,16 @@ jobs:
           curl -sS -o /dev/null -w "HTTP %{http_code} | redirect=%{redirect_url}\n" --max-time 30 \
             "https://bidprobrasil.com.br/api/img-proxy?url=$ENC"
 
+          echo ""; echo "== 3b) PADRÕES de foto da Caixa (achar o que serve 200/imagem) =="
+          for NUM in 8444429185090 1444418039030 1444417460662; do
+            echo "-- imóvel $NUM --"
+            for PAT in "F${NUM}.jpg" "F${NUM}21.jpg" "F${NUM}22.jpg" "F${NUM}11.jpg" "F${NUM}1.jpg" "${NUM}21.jpg"; do
+              U="https://venda-imoveis.caixa.gov.br/fotos/$PAT"
+              printf "  %-26s -> " "$PAT"
+              curl -sS -o /dev/null -w "HTTP %{http_code} type=%{content_type} size=%{size_download}\n" --max-time 15 -A "Mozilla/5.0" -e "https://venda-imoveis.caixa.gov.br/" "$U"
+            done
+          done
+
           echo ""; echo "== 4) Caixa via Bright Data unlocker =="
           if [ -n "$BRIGHTDATA_API_TOKEN" ] && [ -n "$BRIGHTDATA_ZONE" ]; then
             code=$(curl -sS -o bd.bin -w "%{http_code}" --max-time 70 -X POST https://api.brightdata.com/request \
