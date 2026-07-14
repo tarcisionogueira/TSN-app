@@ -2504,8 +2504,8 @@ function ContratosTab() {
         </div>
       )}
 
-      {/* Modal: Novo contrato — 3 etapas */}
-      {step && (
+      {/* Modal: Novo contrato — etapa 0 (modo) → 1/2/3. step===0 é válido (não usar truthiness). */}
+      {step !== null && (
         <div style={{ ...S.overlay, alignItems: step === 2 ? 'stretch' : 'center', padding: step === 2 ? 0 : '20px' }}
           onClick={e => e.target === e.currentTarget && setStep(null)}>
           <div style={step === 2
