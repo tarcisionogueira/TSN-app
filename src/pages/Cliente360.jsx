@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { apiCall } from '../utils/apiCall';
 import { MapPin, Search, Mail, MessageCircle, User, FileText, Scale, ClipboardCheck } from 'lucide-react';
 
@@ -58,17 +58,21 @@ export default function Cliente360() {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
 
-  const buscar = async (e) => {
-    e?.preventDefault();
+  // Busca AO VIVO: já carrega a lista ao abrir (termo vazio) e filtra a cada dígito
+  // (debounce de 300ms). Sem botão. 1 caractere é amplo demais → aguarda o 2º.
+  useEffect(() => {
     const t = termo.trim();
-    if (t.length === 1) return; // 1 caractere é amplo demais; vazio = lista completa
-    setBuscando(true); setErro(''); setDados(null);
-    try {
-      const r = await apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(t)}`);
-      const j = await r.json();
-      setResultados(Array.isArray(j) ? j : []);
-    } catch { setErro('Falha na busca.'); } finally { setBuscando(false); }
-  };
+    if (t.length === 1) return;
+    const id = setTimeout(async () => {
+      setBuscando(true); setErro(''); setDados(null);
+      try {
+        const r = await apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(t)}`);
+        const j = await r.json();
+        setResultados(Array.isArray(j) ? j : []);
+      } catch { setErro('Falha na busca.'); } finally { setBuscando(false); }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [termo]);
 
   const abrir = async (u) => {
     setCarregando(true); setErro(''); setResultados(null);
@@ -99,13 +103,12 @@ export default function Cliente360() {
         <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>Acompanhe o que cada usuário está gerando, buscando e conversando — e contate direto.</div>
       </div>
 
-      <form onSubmit={buscar} style={{ display: 'flex', gap: 8 }}>
-        <input value={termo} onChange={(e) => setTermo(e.target.value)} placeholder="Buscar por nome, e-mail, telefone ou CPF… (vazio = todos)"
-          style={{ flex: 1, padding: '11px 14px', border: '1px solid #cbd5e1', borderRadius: 10, fontSize: 14 }} />
-        <button type="submit" disabled={buscando} style={{ padding: '11px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Search size={15} /> {buscando ? 'Buscando…' : 'Buscar'}
-        </button>
-      </form>
+      <div style={{ position: 'relative' }}>
+        <Search size={16} color="#94a3b8" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)' }} />
+        <input value={termo} onChange={(e) => setTermo(e.target.value)} autoFocus placeholder="Filtrar por nome, e-mail, telefone ou CPF…"
+          style={{ width: '100%', padding: '11px 14px 11px 38px', border: '1px solid #cbd5e1', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
+        {buscando && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#94a3b8' }}>filtrando…</span>}
+      </div>
 
       {erro && <div style={{ ...card, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5' }}>{erro}</div>}
 
