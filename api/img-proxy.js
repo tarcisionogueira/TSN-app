@@ -1,15 +1,8 @@
-// Proxy de imagens para o E-MAIL (e fallback do site). Runtime NODE (não edge):
-// o IP do edge da Vercel (Cloudflare) é RECUSADO pela Caixa (venda-imoveis.caixa.gov.br
-// responde 404 ao edge), enquanto IPs de datacenter (AWS/Azure) recebem 200. O runtime
-// nodejs roda em AWS, que a Caixa atende — sem isso a foto do e-mail quebra (o cliente
-// de e-mail busca esta URL e recebe 404).
-// IMPORTANTE: exportar por método (GET) — com nodejs, `export default` é tratado como
-// assinatura Express e o Response é ignorado (trava até o maxDuration).
-export const config = { runtime: 'nodejs', maxDuration: 15 };
+export const config = { runtime: 'edge' };
 
 import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 
-async function handler(req) {
+export default async function handler(req) {
   const { searchParams } = new URL(req.url);
   const url = searchParams.get('url');
 
@@ -30,15 +23,18 @@ async function handler(req) {
     return new Response('Only HTTPS allowed', { status: 403 });
   }
 
+  // OBS: para a Caixa (venda-imoveis.caixa.gov.br) este proxy NÃO resolve no e-mail — a
+  // Caixa recusa o IP da Vercel (edge e node) e devolve 404. As fotos da Caixa são
+  // hospedadas no nosso Storage pelo backfill (scripts/backfill-fotos-caixa.mjs); este
+  // proxy segue útil para os demais hosts da whitelist.
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': `https://${targetUrl.hostname}/`,
-        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8',
+        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
       },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!res.ok) return new Response('Image not found', { status: 404 });
@@ -50,7 +46,7 @@ async function handler(req) {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+        'Cache-Control': 'public, max-age=86400',
         'Access-Control-Allow-Origin': '*',
       },
     });
@@ -58,6 +54,3 @@ async function handler(req) {
     return new Response('Proxy error', { status: 502 });
   }
 }
-
-export const GET = handler;
-export const POST = handler;

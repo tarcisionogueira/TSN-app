@@ -1,0 +1,38 @@
+name: Backfill fotos da Caixa → Storage
+
+# Baixa as fotos da Caixa (que só atende IPs de datacenter, não a Vercel) e hospeda no
+# bucket público imoveis-fotos do Supabase, para o e-mail carregar a foto pelo CDN nosso.
+# Manual (workflow_dispatch) e diário às 09 UTC (após o scrape), para pegar imóveis novos.
+on:
+  workflow_dispatch:
+    inputs:
+      so_atrativos:
+        description: 'Só imóveis com desconto>=40% (1) ou todos (0)'
+        required: false
+        default: '0'
+      limite:
+        description: 'Máximo de imóveis (0 = todos)'
+        required: false
+        default: '0'
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 320
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Backfill
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BACKFILL_SO_ATRATIVOS: ${{ github.event.inputs.so_atrativos || '0' }}
+          BACKFILL_LIMITE: ${{ github.event.inputs.limite || '0' }}
+          BACKFILL_CONCURRENCIA: '8'
+        run: node scripts/backfill-fotos-caixa.mjs
