@@ -67,7 +67,14 @@ function fotoParaEmail(im, base) {
   return src;
 }
 
-export default async function handler(req) {
+// IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
+// Node da Vercel, `export default` é tratado como assinatura Express `(req, res)` e o
+// `Response` retornado é IGNORADO — a função nunca sinaliza fim e trava até o maxDuration
+// (504 "Task timed out after 300s") a cada execução. Com GET/POST o `req` é um Request
+// Web e o `Response` é honrado (a função retorna assim que o trabalho termina).
+export const GET = handler;
+export const POST = handler;
+async function handler(req) {
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('ok', { status: 200 });
   // Modo de teste: ?email=voce@x.com&secret=<CRON_SECRET> envia só para esse e-mail
   // (ignora a trava de 1x/semana e o opt-out) — prático para validar no navegador.
@@ -87,8 +94,10 @@ export default async function handler(req) {
   const BASE = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
   if (!URL_ || !KEY) return new Response(JSON.stringify({ error: 'env not configured' }), { status: 500 });
   const hdr = { apikey: KEY, Authorization: `Bearer ${KEY}` };
-  const sbGet = async (path) => { try { const r = await fetch(`${URL_}/rest/v1/${path}`, { headers: hdr }); return r.ok ? await r.json() : []; } catch { return []; } };
-  const rpc = async (fn, body) => { try { const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.ok ? await r.json() : []; } catch { return []; } };
+  // Timeout em TODAS as chamadas de rede: sem AbortSignal, um upstream lento (PostgREST/
+  // GoTrue) pendura a função até o maxDuration e corta o disparo no meio.
+  const sbGet = async (path) => { try { const r = await fetch(`${URL_}/rest/v1/${path}`, { headers: hdr, signal: AbortSignal.timeout(15000) }); return r.ok ? await r.json() : []; } catch { return []; } };
+  const rpc = async (fn, body) => { try { const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) }); return r.ok ? await r.json() : []; } catch { return []; } };
 
   const seteDias = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
   // Inclui 'admin' (o dono acompanha os disparos) além dos planos.
@@ -102,7 +111,7 @@ export default async function handler(req) {
     for (let page = 1; page <= 30; page++) {
       let users = [];
       try {
-        const r = await fetch(`${URL_}/auth/v1/admin/users?page=${page}&per_page=200`, { headers: hdr });
+        const r = await fetch(`${URL_}/auth/v1/admin/users?page=${page}&per_page=200`, { headers: hdr, signal: AbortSignal.timeout(15000) });
         if (!r.ok) break;
         const data = await r.json();
         users = Array.isArray(data) ? data : (data?.users || []);
@@ -316,12 +325,14 @@ export default async function handler(req) {
       const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST', headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: FROM, to: email, subject: `🏠 ${top.length} oportunidades em ${local} esta semana`, html }),
+        signal: AbortSignal.timeout(20000),
       });
       if (emailRes.ok) {
         await fetch(`${URL_}/rest/v1/alertas_email?on_conflict=user_id`, {
           method: 'POST',
           headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
           body: JSON.stringify({ user_id: perfil.id, ultimo_envio: new Date().toISOString(), total_enviados: (a?.total_enviados || 0) + 1 }),
+          signal: AbortSignal.timeout(15000),
         });
         // Registra os imóveis enviados (dedup dos próximos envios; ignora repetidos).
         if (!testeEmail) {
@@ -330,6 +341,7 @@ export default async function handler(req) {
               method: 'POST',
               headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
               body: JSON.stringify(top.map(im => ({ user_id: perfil.id, imovel_id: im.id }))),
+              signal: AbortSignal.timeout(15000),
             });
           } catch { /* dedup é best-effort */ }
         }
