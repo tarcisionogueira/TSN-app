@@ -28,6 +28,7 @@ import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
 import MUNICIPIOS from './_municipios.js';
 import { assinarUnsub } from './cancelar-alertas.js';
+import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 
 const norm = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 function centroide(cidade, uf) {
@@ -35,7 +36,30 @@ function centroide(cidade, uf) {
   const c = MUNICIPIOS[`${String(uf).toUpperCase()}|${norm(cidade)}`];
   return Array.isArray(c) ? { lat: c[0], lng: c[1] } : null;
 }
-const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto';
+const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto,fonte,fonte_id';
+
+// Foto para o E-MAIL: url ÚNICA e confiável (o e-mail não tem fallback onError como o
+// site). Motivo do "sem foto" em alguns cards: fontes como a Caixa BLOQUEIAM hotlink de
+// clientes de e-mail (referer/IP) — a foto existe (aparece no site) mas o e-mail não
+// carrega. Fix: se o host da foto está na whitelist, serve pelo NOSSO /api/img-proxy
+// (que manda o Referer correto e busca do nosso IP). supabase/local vai direto; host
+// fora da whitelist cai no hotlink direto (best-effort); CEF sem link_foto deriva o
+// padrão F<id>.jpg (SEM "21" — o "21" era o bug do foto.js) e proxia. URL absoluta ou null.
+function fotoParaEmail(im, base) {
+  const isCef = im?.fonte === 'CEF' || im?.fonte === 'caixa';
+  let src = im?.link_foto || '';
+  // CEF sem link_foto: deriva o padrão correto F<id>.jpg (SEM "21" — o "21" era o bug do foto.js).
+  if (!src && isCef && im?.fonte_id) src = `https://venda-imoveis.caixa.gov.br/fotos/F${String(im.fonte_id).replace(/^(caixa_|cef_)/, '')}.jpg`;
+  if (!src) return null;
+  if (src.includes('supabase.co')) return src;
+  if (src.startsWith('/')) return `${base}${src}`;
+  if (!/^https?:\/\//.test(src)) return null;
+  // Só a Caixa é roteada pelo nosso proxy: ela bloqueia hotlink dos clientes de e-mail
+  // (a foto some no e-mail mas aparece no site). Os demais leiloeiros carregam hotlink
+  // direto no e-mail (como no print), então NÃO os roteamos p/ não regredir.
+  try { if (new URL(src).hostname === 'venda-imoveis.caixa.gov.br' && ALLOWED_HOSTS.has('venda-imoveis.caixa.gov.br')) return `${base}/api/img-proxy?url=${encodeURIComponent(src)}`; } catch { /* url inválida */ }
+  return src;
+}
 
 export default async function handler(req) {
   if (req.method !== 'GET' && req.method !== 'POST') return new Response('ok', { status: 200 });
@@ -235,7 +259,8 @@ export default async function handler(req) {
 
       const cards = top.map(im => {
         const url = `${BASE}/#/imovel/${im.id}`;
-        const foto = im.link_foto ? `<a href="${url}"><img src="${im.link_foto}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
+        const fotoUrl = fotoParaEmail(im, BASE);
+        const foto = fotoUrl ? `<a href="${url}"><img src="${fotoUrl}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
         const desc = Number(im.desconto_percentual) || 0;
         const descTag = desc > 0 ? `<span style="display:inline-block;background:#f0fdf4;color:#059669;border:1px solid #bbf7d0;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">${Math.round(desc)}% OFF</span>` : '';
         const dataLabel = fmtData(im.data_leilao);
