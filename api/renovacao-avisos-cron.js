@@ -63,7 +63,13 @@ function corpoEmail({ nome, plano, valor, dataFmt }) {
   </div>`;
 }
 
-export default async function handler(req) {
+// IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
+// Node da Vercel, `export default` é tratado como assinatura Express `(req, res)` e o
+// `Response` retornado é IGNORADO — a função nunca sinaliza fim e trava até o maxDuration
+// (504) a cada execução. Com GET/POST o `req` é um Request Web e o `Response` é honrado.
+export const GET = handler;
+export const POST = handler;
+async function handler(req) {
   if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
   if (!MP_TOKEN) return new Response(JSON.stringify({ error: 'MP_ACCESS_TOKEN ausente' }), { status: 500 });
   if (!SUPABASE_URL || !SERVICE_KEY) return new Response(JSON.stringify({ error: 'Supabase não configurado' }), { status: 500 });
