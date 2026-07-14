@@ -196,7 +196,7 @@ export default function Analise() {
       const { data } = await supabase.from('imovel_anexos')
         .select('id,tipo,nome,url,criado_em')
         .eq('imovel_id', idImovel)
-        .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'proposta', 'outro']);
+        .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'proposta', 'auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'matricula_registrada', 'outro']);
       if (!cancel) setDocsLeiloeiro(data || []);
     })();
     return () => { cancel = true; };

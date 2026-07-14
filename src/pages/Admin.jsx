@@ -508,14 +508,16 @@ function UsuariosTab() {
   const [atribDocs, setAtribDocs] = useState([]);             // [{ nome, status }] dos anexos lidos
   const atribFilesRef = useRef([]);                           // File[] p/ persistir no imóvel-âncora
 
-  // tipo do anexo a partir do nome do arquivo (o auto de arrematação alimenta a IA).
+  // tipo do anexo a partir do nome do arquivo (o ciclo do arremate alimenta a IA).
   const inferirTipoAnexo = (nome) => {
     const s = String(nome || '').toLowerCase();
+    if ((s.includes('matric') || s.includes('matríc')) && s.includes('registr')) return 'matricula_registrada';
+    if (s.includes('carta') && s.includes('arremat')) return 'carta_arrematacao';
+    if (s.includes('auto') && s.includes('arremat')) return 'auto_arrematacao';
+    if (s.includes('contrato') && (s.includes('banc') || s.includes('financ') || s.includes('caixa') || s.includes('cef'))) return 'contrato_banco';
     if (s.includes('matric') || s.includes('matríc')) return 'matricula';
     if (s.includes('edital')) return 'edital';
     if (s.includes('regras')) return 'regras_venda';
-    if (s.includes('carta') && s.includes('arremat')) return 'carta_arrematacao';
-    if (s.includes('auto') && s.includes('arremat')) return 'auto_arrematacao';
     return 'outro';
   };
 
@@ -713,6 +715,7 @@ function UsuariosTab() {
               fd.append('file', file);
               fd.append('imovel_id', imovelId);
               fd.append('tipo', inferirTipoAnexo(file.name));
+              fd.append('arrematado', 'true'); // arremate real → permanente (nunca apagado)
               await fetch('/api/upload-anexo', { method: 'POST', headers: auth, body: fd });
             } catch { /* segue com os demais */ }
           }

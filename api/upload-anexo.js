@@ -26,9 +26,11 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const BUCKET       = 'documentos';
 const ROLES_STAFF  = ['analista', 'advogado', 'admin'];
-// auto_arrematacao/carta_arrematacao: prova da arrematação realizada (atribuição
-// pela equipe → alimenta a IA com o caso real). Aceitam múltiplos arquivos.
-const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', 'auto_arrematacao', 'carta_arrematacao', 'outro'];
+// Documentos do CICLO do arremate (prova + pós-leilão) — atribuição pela equipe
+// alimenta a IA com o caso real e ficam PERMANENTES (arrematado=true → o cron nunca
+// apaga). Aceitam múltiplos arquivos e podem ser anexados ao longo do tempo.
+const TIPOS_ARREMATE = ['auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'matricula_registrada'];
+const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', ...TIPOS_ARREMATE, 'outro'];
 // Só matrícula/edital são únicos por imóvel (índice parcial). Os demais tipos
 // aceitam vários arquivos — leilões podem ter anexos extras (laudo, ata, etc.).
 const TIPOS_UNICOS = ['matricula', 'edital'];
@@ -85,6 +87,9 @@ export default async function handler(req) {
   const imovel_id = form.get('imovel_id');
   const tipo = String(form.get('tipo') || '').toLowerCase();
   const data_leilao = form.get('data_leilao') || null;
+  // Documentos de arremate são PERMANENTES: nunca apagados pelo cron de retenção.
+  // arrematado=true vem explícito (fluxo de atribuição) OU é inferido pelo tipo.
+  const arrematadoPerm = String(form.get('arrematado') || '') === 'true' || TIPOS_ARREMATE.includes(tipo);
 
   if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'Arquivo obrigatório' }, 400);
   // imovel_id precisa ser UUID válido antes de entrar em URLs PostgREST/Storage.
@@ -167,7 +172,7 @@ export default async function handler(req) {
     storage_path: storagePath,
     origem_url: null,
     data_leilao: data_leilao || null,
-    arrematado: false,
+    arrematado: arrematadoPerm,
     tamanho_kb: Math.round(buffer.byteLength / 1024),
     criado_por: user.id,
     role_criador: perfil.role,
