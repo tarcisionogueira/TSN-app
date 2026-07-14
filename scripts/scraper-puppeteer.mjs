@@ -1476,11 +1476,12 @@ async function scraperLJUD_navegador(browser, endpoint) {
     // RECON (LJUD_DEBUG=1): dumpa a estrutura do 1º bem p/ achar a URL do LOTE no
     // portal (hoje só guardamos nm_url_leiloeiro = home do leiloeiro, sem lote/matrícula).
     if (process.env.LJUD_DEBUG === '1') {
-      const primeiro = bens.values().next().value;
-      if (primeiro) {
-        console.log('    LJUD DEBUG keys:', Object.keys(primeiro).join(','));
-        const urlKeys = Object.keys(primeiro).filter(k => /url|slug|link|lote|leilao|matric|edital|path/i.test(k));
-        console.log('    LJUD DEBUG campos url-ish:', JSON.stringify(Object.fromEntries(urlKeys.map(k => [k, primeiro[k]]))).slice(0, 900));
+      const real = [...bens.values()].find(b => Number(b.statuslote_id) === 1 && !/simula|teste/i.test(String(b.nm_titulo_lote || b.nm_titulo_leilao || '')));
+      const b = real || bens.values().next().value;
+      if (b) {
+        console.log('    LJUD DEBUG titulo:', b.nm_titulo_lote, '| lote_id', b.lote_id, '| leilao_id', b.leilao_id, '| url_leiloeiro', b.nm_url_leiloeiro);
+        console.log('    LJUD DEBUG parcelas: nu_parcelas=', b.nu_parcelas, 'vl_percentualentrada=', b.vl_percentualentrada);
+        console.log('    LJUD DEBUG anexos:', JSON.stringify(b.anexos).slice(0, 1400));
       }
     }
   } finally { try { await page.close(); } catch {} }
