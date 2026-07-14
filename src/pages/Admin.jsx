@@ -2208,6 +2208,13 @@ function ContratosTab() {
   const [kycIncluido, setKycIncluido] = useState(false);
   const [kycFotos, setKycFotos] = useState({ selfie_rosto: null, doc_frente: null, selfie_doc: null });
 
+  // Modo de criação: 'ia' (IA gera o texto) | 'assinar' (documento pronto que o admin carrega)
+  const [modo, setModo] = useState(null);
+  // Modo 'assinar': documento pronto enviado ao Storage
+  const [arquivoUrl, setArquivoUrl] = useState('');
+  const [arquivoNome, setArquivoNome] = useState('');
+  const [arquivoUploading, setArquivoUploading] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('contratos_link').select('*, kyc_incluido, kyc_fotos').order('criado_em', { ascending: false });
@@ -2222,7 +2229,29 @@ function ContratosTab() {
     setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
     setLinkGerado(''); setTemplateSelecionado(null);
     setKycIncluido(false); setKycFotos({ selfie_rosto: null, doc_frente: null, selfie_doc: null });
-    setStep(1);
+    setModo(null); setArquivoUrl(''); setArquivoNome(''); setArquivoUploading(false);
+    setStep(0); // etapa 0 = escolher o modo (IA ou documento pronto)
+  }
+
+  // Modo 'assinar': envia o documento pronto ao Storage privado e guarda a signed URL.
+  async function enviarDocumentoPronto(file) {
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) { alert('Arquivo muito grande. Limite: 20 MB.'); return; }
+    setArquivoUploading(true);
+    try {
+      const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
+      const path = `contratos-docs/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { data, error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
+      if (error) throw error;
+      const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(data.path, 60 * 60 * 24 * 365);
+      setArquivoUrl(signed?.signedUrl || '');
+      setArquivoNome(file.name);
+      if (!titulo.trim()) setTitulo(file.name.replace(/\.[^.]+$/, ''));
+    } catch (e) {
+      alert('Erro ao enviar o documento: ' + (e.message || 'tente novamente'));
+      setArquivoUrl(''); setArquivoNome('');
+    }
+    setArquivoUploading(false);
   }
 
   function aplicarTemplate(key) {
@@ -2298,11 +2327,18 @@ function ContratosTab() {
   }
 
   async function gerarLinkContrato() {
-    if (!conteudo.trim()) { alert('O conteúdo do contrato está vazio.'); return; }
+    const ehAssinar = modo === 'assinar';
+    if (ehAssinar) {
+      if (!arquivoUrl) { alert('Envie o documento pronto antes de gerar o link.'); return; }
+    } else if (!conteudo.trim()) {
+      alert('O conteúdo do contrato está vazio.'); return;
+    }
     setSavingLink(true);
     const { data, error } = await supabase.from('contratos_link').insert({
       titulo: titulo || 'Contrato',
-      conteudo,
+      conteudo: ehAssinar ? `Documento anexo: ${arquivoNome || 'contrato'}` : conteudo,
+      arquivo_url: ehAssinar ? arquivoUrl : null,
+      arquivo_nome: ehAssinar ? arquivoNome : null,
       tipo_contrato: tipo,
       kyc_incluido: kycIncluido,
       kyc_fotos: kycIncluido && (kycFotos.selfie_rosto || kycFotos.doc_frente || kycFotos.selfie_doc) ? kycFotos : null,
@@ -2476,52 +2512,151 @@ function ContratosTab() {
             ? { background:'white', display:'flex', flexDirection:'column', width:'100%', height:'100%', maxWidth:'100%', overflow:'hidden' }
             : { ...S.modal, maxWidth:700 }}>
 
-            {/* Indicador de etapas — em etapa 2 fica no topo fixo */}
-            <div style={{ display:'flex', alignItems:'center', gap:8, padding: step===2 ? '14px 24px' : '0 0 20px',
-              borderBottom: step===2 ? '1px solid #e2e8f0' : 'none', flexShrink:0,
-              background: step===2 ? 'white' : 'transparent' }}>
-              {['Descrever','Revisar','Link gerado'].map((s, i) => (
-                <React.Fragment key={s}>
-                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <div style={{ width:22, height:22, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800,
-                      background: step > i+1 ? '#059669' : step === i+1 ? '#0D63DB' : '#e2e8f0',
-                      color: step >= i+1 ? 'white' : '#94a3b8' }}>{step > i+1 ? '✓' : i+1}</div>
-                    <span style={{ fontSize:12, fontWeight:step===i+1?700:400, color:step===i+1?'#111111':'#94a3b8' }}>{s}</span>
-                  </div>
-                  {i < 2 && <div style={{ flex:1, height:1, background:'#e2e8f0' }}/>}
-                </React.Fragment>
-              ))}
-              {step === 2 && (
-                <button onClick={() => setStep(null)} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8', lineHeight:1 }}>×</button>
-              )}
-            </div>
+            {/* Indicador de etapas — só a partir da etapa 1 (a 0 é a escolha do modo).
+                Em modo 'assinar' não há revisão de texto gerado pela IA. */}
+            {step >= 1 && (() => {
+              const passos = modo === 'assinar'
+                ? [{ label:'Documento', n:1 }, { label:'Link gerado', n:3 }]
+                : [{ label:'Descrever', n:1 }, { label:'Revisar', n:2 }, { label:'Link gerado', n:3 }];
+              return (
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding: step===2 ? '14px 24px' : '0 0 20px',
+                  borderBottom: step===2 ? '1px solid #e2e8f0' : 'none', flexShrink:0,
+                  background: step===2 ? 'white' : 'transparent' }}>
+                  {passos.map((p, i) => (
+                    <React.Fragment key={p.n}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <div style={{ width:22, height:22, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800,
+                          background: step > p.n ? '#059669' : step === p.n ? '#0D63DB' : '#e2e8f0',
+                          color: step >= p.n ? 'white' : '#94a3b8' }}>{step > p.n ? '✓' : i+1}</div>
+                        <span style={{ fontSize:12, fontWeight:step===p.n?700:400, color:step===p.n?'#111111':'#94a3b8' }}>{p.label}</span>
+                      </div>
+                      {i < passos.length-1 && <div style={{ flex:1, height:1, background:'#e2e8f0' }}/>}
+                    </React.Fragment>
+                  ))}
+                  {step === 2 && (
+                    <button onClick={() => setStep(null)} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8', lineHeight:1 }}>×</button>
+                  )}
+                </div>
+              );
+            })()}
 
-            {/* ── Etapa 1: Descrever ── */}
-            {step === 1 && (
+            {/* ── Etapa 0: Escolher o modo ── */}
+            {step === 0 && (
               <>
-                {/* Seleção rápida de template */}
-                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+                  <h3 style={{ ...S.sectionTitle, margin:0 }}>Novo contrato</h3>
+                  <button onClick={() => setStep(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8', lineHeight:1 }}>×</button>
+                </div>
+                <p style={{ fontSize:13, color:'#64748b', marginBottom:18 }}>Como você quer criar este contrato? Emitido pela <strong>Nogueira Empreendimentos</strong>, com foro de Feira de Santana/BA e cláusulas de LGPD e anticorrupção.</p>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                   {[
-                    { key:'assessorado',  label:'📋 Assessorado' },
-                    { key:'clube',        label:'🏛️ Clube de Negócios' },
-                    { key:'analista',     label:'🔍 Analista' },
-                    { key:'advogado',     label:'⚖️ Advogado Parceiro' },
-                    { key:'consultor',    label:'🤝 Consultor/Afiliado' },
-                    { key:'nda',          label:'📄 NDA/Sigilo' },
-                    { key:'personalizado', label:'✏️ Personalizado' },
-                  ].map(t => (
-                    <button key={t.key} onClick={() => aplicarTemplate(t.key)}
-                      style={{ padding:'5px 14px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:'1px solid',
-                        background: templateSelecionado === t.key ? '#111111' : '#fff',
-                        color: templateSelecionado === t.key ? '#fff' : '#475569',
-                        borderColor: templateSelecionado === t.key ? '#111111' : '#cbd5e1' }}>
-                      {t.label}
+                    { id:'ia', emoji:'✨', cor:'#6366f1', titulo:'Criar com IA', desc:'Você escreve em texto livre o que o contrato deve conter (e pode anexar documentos para a IA extrair as informações). A IA redige com máximo resguardo jurídico.' },
+                    { id:'assinar', emoji:'📄', cor:'#0D63DB', titulo:'Assinar documento pronto', desc:'Você já tem o documento. Carregue o arquivo (PDF/Word/imagem) e gere o link de assinatura, sem editar o conteúdo.' },
+                  ].map(op => (
+                    <button key={op.id} onClick={() => { setModo(op.id); setStep(1); }}
+                      style={{ padding:'22px 18px', background:'white', border:`2px solid ${op.cor}33`, borderRadius:14, cursor:'pointer', textAlign:'left' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = op.cor; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = `${op.cor}33`; }}>
+                      <div style={{ fontSize:28, marginBottom:10 }}>{op.emoji}</div>
+                      <div style={{ fontWeight:800, fontSize:15, color:'#111111', marginBottom:6 }}>{op.titulo}</div>
+                      <div style={{ fontSize:12.5, color:'#64748b', lineHeight:1.6 }}>{op.desc}</div>
                     </button>
                   ))}
                 </div>
+              </>
+            )}
 
+            {/* ── Etapa 1 (modo assinar): documento pronto ── */}
+            {step === 1 && modo === 'assinar' && (
+              <>
+                <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Documento pronto para assinatura</h3>
+                <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>Carregue o arquivo final. Ele será enviado para assinatura <strong>sem edição</strong>. A outra parte preenche os dados e assina digitalmente.</p>
+
+                <div style={{ display:'flex', gap:10, marginBottom:14 }}>
+                  <div style={{ flex:2 }}>
+                    <label style={S.label}>Título do contrato</label>
+                    <input style={S.input} value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do contrato" />
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <label style={S.label}>Tipo</label>
+                    <select style={S.input} value={tipo} onChange={e => setTipo(e.target.value)}>
+                      <option value="servico">Serviço</option>
+                      <option value="prestacao">Prestação</option>
+                      <option value="locacao">Locação</option>
+                      <option value="compra">Compra e Venda</option>
+                      <option value="nda">NDA / Sigilo</option>
+                      <option value="outro">Outro</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom:16 }}>
+                  <label style={S.label}>Arquivo do contrato (PDF, Word ou imagem) *</label>
+                  <input type="file" accept=".pdf,.doc,.docx,image/*"
+                    style={{ fontSize:12, color:'#334155' }}
+                    onChange={e => enviarDocumentoPronto(e.target.files?.[0])} />
+                  {arquivoUploading && <div style={{ fontSize:12, color:'#0D63DB', marginTop:8 }}>⏳ Enviando documento…</div>}
+                  {arquivoUrl && !arquivoUploading && (
+                    <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#dcfce7', color:'#166534', fontSize:12, fontWeight:700, padding:'5px 12px', borderRadius:20, marginTop:8 }}>
+                      ✓ {arquivoNome}
+                      <button onClick={() => { setArquivoUrl(''); setArquivoNome(''); }} style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:0 }}>×</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* KYC — opcional (mesma seção do modo IA) */}
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: kycIncluido ? 14 : 0 }}>
+                    <input type="checkbox" checked={kycIncluido} onChange={e => setKycIncluido(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0D63DB' }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Incluir documentação KYC ao final do contrato</div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Selfie, documento e selfie com documento serão exibidos na última página</div>
+                    </div>
+                  </label>
+                  {kycIncluido && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 12 }}>
+                      {[
+                        { key: 'selfie_rosto', label: '1. Selfie (rosto)', emoji: '🤳' },
+                        { key: 'doc_frente', label: '2. Documento (frente)', emoji: '🪪' },
+                        { key: 'selfie_doc', label: '3. Selfie + documento', emoji: '📋' },
+                      ].map(({ key, label, emoji }) => (
+                        <label key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 8px', border: `2px dashed ${kycFotos[key] ? '#22c55e' : '#e2e8f0'}`, borderRadius: 10, cursor: 'pointer', background: kycFotos[key] ? '#f0fdf4' : '#f8fafc' }}>
+                          {kycFotos[key] ? (
+                            <img src={kycFotos[key]} alt={label} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 6 }} />
+                          ) : (
+                            <>
+                              <span style={{ fontSize: 24 }}>{emoji}</span>
+                              <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', fontWeight: 600 }}>{label}</span>
+                            </>
+                          )}
+                          <input type="file" accept="image/*" style={{ display: 'none' }}
+                            onChange={e => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = ev => setKycFotos(p => ({ ...p, [key]: ev.target.result }));
+                              reader.readAsDataURL(file);
+                            }} />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
+                  <button style={S.btn('outline')} onClick={() => setStep(0)}>← Voltar</button>
+                  <button style={S.btn('primary')} onClick={gerarLinkContrato} disabled={savingLink || arquivoUploading || !arquivoUrl}>
+                    {savingLink ? 'Gerando link…' : 'Gerar link de assinatura →'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── Etapa 1 (modo IA): Descrever ── */}
+            {step === 1 && modo !== 'assinar' && (
+              <>
                 <h3 style={{ ...S.sectionTitle, marginBottom:4 }}>Descreva o contrato</h3>
-                <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>O contrato será emitido pela <strong>Nogueira Empreendimentos</strong>. A outra parte preenche os dados e assina digitalmente.</p>
+                <p style={{ fontSize:13, color:'#64748b', marginBottom:16 }}>Escreva livremente o que o contrato deve conter — a IA redige com máximo resguardo jurídico (leis aplicáveis, LGPD, anticorrupção e foro de Feira de Santana/BA). O contrato será emitido pela <strong>Nogueira Empreendimentos</strong>. A outra parte preenche os dados e assina digitalmente.</p>
 
                 <div style={{ display:'flex', gap:10, marginBottom:12 }}>
                   <div style={{ flex:2 }}>
