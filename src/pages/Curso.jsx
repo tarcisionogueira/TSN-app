@@ -27,6 +27,22 @@ function podeAssistir(licao, plano, comprouAvulso = false) {
   return PLANOS_PAGOS.includes(plano);
 }
 
+// Converte a "URL do vídeo" da aula no player certo. Recomendado: URL de EMBED
+// (iframe) da Bunny Stream — o player da Bunny já cuida de HLS adaptativo, token e
+// tela cheia em qualquer navegador. Também aceita YouTube, Vimeo, Panda e MP4 direto.
+function videoEmbed(url) {
+  const u = String(url || '').trim();
+  if (!u) return null;
+  let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/i);
+  if (m) return { tipo: 'iframe', src: `https://www.youtube.com/embed/${m[1]}` };
+  m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+  if (m) return { tipo: 'iframe', src: `https://player.vimeo.com/video/${m[1]}` };
+  // Arquivo de vídeo progressivo (MP4/WebM/OGG) → tag <video> nativa.
+  if (/\.(mp4|webm|ogg)(\?|$)/i.test(u)) return { tipo: 'video', src: u };
+  // Bunny Stream / Panda / qualquer URL de embed → iframe (o player do provedor cuida do HLS).
+  return { tipo: 'iframe', src: u };
+}
+
 export default function Curso() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -278,39 +294,38 @@ export default function Curso() {
             {podeVer ? (
               <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden' }}>
 
-                {/* Player simulado com progresso */}
-                <div style={{ background:'#111111', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}
-                  onClick={() => { if (podeVer) setVideoPlaying(p => !p); }}>
-                  <div style={{ position:'absolute', inset:0, background:`radial-gradient(circle at 30% 40%, ${curso.cor}30 0%, transparent 60%)` }}/>
-                  <div style={{ fontSize:72, position:'relative' }}>{curso.emoji}</div>
-                  <div style={{ position:'relative', textAlign:'center' }}>
-                    <div style={{ fontSize:16, fontWeight:700, color:'white', marginBottom:8 }}>{licaoAtiva.titulo}</div>
-                    <div style={{ fontSize:12, color:'#94a3b8' }}>{licaoAtiva.duracao}</div>
-                  </div>
-                  <button style={{ position:'relative', width:64, height:64, borderRadius:'50%', background:curso.cor, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 0 8px ${curso.cor}40` }}
-                    onClick={e => { e.stopPropagation(); setVideoPlaying(p => !p); }}>
-                    <Play size={24} color="white" fill="white" style={{ marginLeft:3 }}/>
-                  </button>
-                  {/* Barra de progresso de vídeo */}
-                  <div style={{ position:'absolute', bottom:16, left:16, right:16, display:'flex', alignItems:'center', gap:10 }}>
-                    <div style={{ flex:1, height:4, background:'rgba(255,255,255,0.15)', borderRadius:4, cursor:'pointer', position:'relative' }}>
-                      <div style={{ width:`${videoProgress}%`, height:4, background:curso.cor, borderRadius:4, transition:'width 0.3s' }}/>
+                {/* Player de vídeo — real quando a aula tem video_url; senão, capa "em breve" */}
+                {(() => {
+                  const emb = videoEmbed(licaoAtiva.video_url);
+                  if (emb?.tipo === 'iframe') {
+                    return (
+                      <div style={{ position:'relative', width:'100%', aspectRatio:'16/9', background:'#000' }}>
+                        <iframe src={emb.src} title={licaoAtiva.titulo} loading="lazy"
+                          allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                          allowFullScreen
+                          style={{ position:'absolute', inset:0, width:'100%', height:'100%', border:'none' }} />
+                      </div>
+                    );
+                  }
+                  if (emb?.tipo === 'video') {
+                    return (
+                      <video src={emb.src} controls controlsList="nodownload" playsInline
+                        onEnded={() => { if (!progresso[licaoAtiva.id]) marcarConcluida(licaoAtiva.id); }}
+                        style={{ width:'100%', aspectRatio:'16/9', background:'#000', display:'block' }} />
+                    );
+                  }
+                  // Sem vídeo cadastrado: capa neutra (nada de "player" falso).
+                  return (
+                    <div style={{ background:'#111111', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, position:'relative' }}>
+                      <div style={{ position:'absolute', inset:0, background:`radial-gradient(circle at 30% 40%, ${curso.cor}30 0%, transparent 60%)` }}/>
+                      <div style={{ fontSize:72, position:'relative' }}>{curso.emoji}</div>
+                      <div style={{ position:'relative', textAlign:'center' }}>
+                        <div style={{ fontSize:16, fontWeight:700, color:'white', marginBottom:6 }}>{licaoAtiva.titulo}</div>
+                        <div style={{ fontSize:12, color:'#94a3b8' }}>🎬 Vídeo em breve</div>
+                      </div>
                     </div>
-                    <span style={{ fontSize:11, color:'#94a3b8', flexShrink:0 }}>
-                      {videoPlaying ? `${videoProgress}%` : '0:00'} / {licaoAtiva.duracao}
-                    </span>
-                  </div>
-                  {videoPlaying && (
-                    <div style={{ position:'absolute', top:12, right:12, background:'rgba(0,0,0,0.6)', borderRadius:6, padding:'3px 8px', fontSize:10, color:'white', fontWeight:600 }}>
-                      ▶ Assistindo…
-                    </div>
-                  )}
-                  {videoProgress >= 80 && progresso[licaoAtiva.id] && !videoPlaying && (
-                    <div style={{ position:'absolute', top:12, right:12, background:'#10b981', borderRadius:6, padding:'3px 8px', fontSize:10, color:'white', fontWeight:600 }}>
-                      ✅ Concluída automaticamente
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* Controles + título */}
                 <div style={{ padding:'22px 24px' }}>
