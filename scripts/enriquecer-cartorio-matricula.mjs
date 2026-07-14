@@ -13,7 +13,7 @@
  */
 import { PDFParse } from 'pdf-parse';
 import { createClient } from '@supabase/supabase-js';
-import { extrairRegistroMatricula } from '../api/_registro-matricula.js';
+import { extrairRegistroMatricula, extrairEnderecoMatricula } from '../api/_registro-matricula.js';
 
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -32,7 +32,7 @@ async function buscarCandidatos() {
   const out = [];
   while (out.length < LIMITE) {
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('id, fonte, estado, link_matricula, ficha_cef')
+      .select('id, fonte, estado, link_matricula, ficha_cef, endereco, bairro')
       .eq('ativo', true).neq('fonte', 'CEF')
       .is('matricula_scan_em', null)
       .ilike('link_matricula', '%.pdf%')
@@ -69,7 +69,7 @@ async function main() {
   if (!cands?.length) { console.log('Matrícula: sem candidatos (PDF de texto, não-CEF, sem cartório).'); return; }
   console.log(`Candidatos: ${cands.length} · conc ${CONC} · limite ${LIMITE}`);
 
-  let idx = 0, ok = 0, semTexto = 0, mortos = 0, transientes = 0, feitos = 0, logs = 0;
+  let idx = 0, ok = 0, semTexto = 0, mortos = 0, transientes = 0, feitos = 0, logs = 0, endOk = 0, logsEnd = 0;
   const marcar = (id, patch) => supabase.from('imoveis_leilao').update(patch).eq('id', id).then(() => {}, () => {});
 
   async function worker() {
@@ -99,6 +99,21 @@ async function main() {
       } else {
         semTexto++; // PDF escaneado (imagem) ou sem cabeçalho legível → fica p/ o laudo (IA).
       }
+      // ENDEREÇO da matrícula p/ geocodificar lotes sem logradouro (ex.: LJUD, que
+      // caem no centroide da cidade). Só preenche o que está VAZIO e re-enfileira o
+      // geocoder (geocod_nivel='refazer' → api/geocodificar.js reprocessa).
+      const semEnd = (im.endereco == null || String(im.endereco).trim() === '');
+      const end = (texto && semEnd) ? extrairEnderecoMatricula(texto) : null;
+      if (end) {
+        let mudou = false;
+        if (end.logradouro) { patch.endereco = String(end.logradouro).slice(0, 200); mudou = true; }
+        if (end.bairro && (im.bairro == null || String(im.bairro).trim() === '')) { patch.bairro = String(end.bairro).slice(0, 120); mudou = true; }
+        if (mudou) {
+          patch.geocod_nivel = 'refazer';
+          endOk++;
+          if (logsEnd < 5) { logsEnd++; console.log(`  [end ${logsEnd}] ${im.fonte} → ${JSON.stringify(end)}`); }
+        }
+      }
       await marcar(im.id, patch);
       feitos++;
       if (feitos % 100 === 0) console.log(`  ${feitos}/${cands.length} · com-registro ${ok} · sem-texto ${semTexto} · mortos ${mortos} · transientes ${transientes}`);
@@ -107,7 +122,7 @@ async function main() {
   }
 
   await Promise.all(Array.from({ length: CONC }, () => worker()));
-  console.log(`FIM: registro preenchido ${ok} · sem-texto/escaneado ${semTexto} · links mortos ${mortos} · transientes(retry) ${transientes} · processados ${feitos}`);
+  console.log(`FIM: registro preenchido ${ok} · endereço preenchido ${endOk} · sem-texto/escaneado ${semTexto} · links mortos ${mortos} · transientes(retry) ${transientes} · processados ${feitos}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

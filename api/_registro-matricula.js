@@ -31,3 +31,22 @@ export function extrairRegistroMatricula(txt) {
   if (m) { const num = m[1].replace(/\.+$/, ''); if (/\d/.test(num)) f.matricula = num; }
   return Object.keys(f).length ? f : null;
 }
+
+// Extrai do CORPO da matrícula (descrição do imóvel) o ENDEREÇO para geocodificar:
+// logradouro (rua/av/estrada…), bairro (ou "Fazenda X" em FSA) e loteamento/
+// condomínio. Serve para lotes SEM endereço na ficha (ex.: LJUD), que hoje caem no
+// centroide da cidade. Heurístico e tolerante; devolve só o que casar, ou null.
+export function extrairEnderecoMatricula(txt) {
+  if (!txt) return null;
+  const t = String(txt).replace(/\s+/g, ' ').slice(0, 6000);
+  const f = {};
+  const tipos = 'rua|avenida|av\\.?|travessa|estrada|rodovia|pra[çc]a|alameda|ladeira|beco|via|largo';
+  let m = t.match(new RegExp(`\\b(?:na|no|à|situad[oa]s?\\s+(?:na|no|à)|localizad[oa]s?\\s+(?:na|no|à))\\s+((?:${tipos})\\s+[A-Za-zÀ-ú0-9'’.ºª\\- ]{2,55}?)(?=\\s*[,;.]|\\s+n[º°o]\\b|\\s+medindo|\\s+bairro|\\s+fazenda|\\s+lote\\b|\\s+quadra\\b|\\s+nesta|\\s+s/?n\\b|$)`, 'i'));
+  if (m) f.logradouro = limpar(m[1]);
+  m = t.match(/\bbairro\s+([A-Za-zÀ-ú][A-Za-zÀ-ú'’.\- ]{2,40}?)(?=\s*[,;.]|\s+medindo|\s+lote\b|\s+quadra\b|\s+munic|\s+cidade|$)/i)
+    || t.match(/\b(fazenda\s+[A-Za-zÀ-ú][A-Za-zÀ-ú'’.\- ]{2,30}?)(?=\s*[,;.]|\s+nesta|$)/i);
+  if (m) f.bairro = limpar(m[1]);
+  m = t.match(/\b(?:loteamento|condom[íi]nio|residencial|conjunto(?:\s+habitacional)?)\s+([A-Za-zÀ-ú0-9][A-Za-zÀ-ú0-9'’.\- ]{2,45}?)(?=\s*[,;.]|\s+localizad|\s+situad|\s+nesta|\s+lote\b|\s+quadra\b|$)/i);
+  if (m) f.loteamento = limpar(m[1]);
+  return Object.keys(f).length ? f : null;
+}
