@@ -32,7 +32,10 @@ function classifica(txt, url) {
 async function main() {
   const { data: pend } = await supabase.from('imoveis_leilao')
     .select('id, fonte_id').eq('fonte', 'SODRE').eq('ativo', true)
-    .or('anexos.is.null,anexos.eq.[]').limit(LOTE);
+    // Falta anexo OU foto: assim os lotes que já têm doc mas seguem sem foto
+    // também entram p/ o backfill de og:image (auto-limitante — some do filtro
+    // assim que link_foto é preenchido).
+    .or('anexos.is.null,anexos.eq.[],link_foto.is.null').limit(LOTE);
   const nossos = new Map((pend || []).map(l => [String(l.fonte_id).replace(/^sodre_/, ''), l.id]));
   if (!nossos.size) { console.log('SODRE: nenhum lote pendente.'); return; }
   console.log(`SODRE: ${nossos.size} lote(s) pendentes.`);
