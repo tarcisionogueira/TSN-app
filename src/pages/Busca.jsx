@@ -456,7 +456,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 export default function Busca() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { role, user, effectiveRole, effectiveUserId } = useAuth();
+  const { role, user, effectiveRole, effectiveUserId, impersonate } = useAuth();
+  const soLeitura = !!impersonate; // modo suporte: só visualiza (não salva/apaga filtro do cliente)
   // Lê filtros pré-ativados via URL (usados no deep-link do email de alerta)
   const loc = typeof window !== 'undefined' ? window.location.hash : '';
   const _urlParams = React.useMemo(() => {
@@ -1039,8 +1040,9 @@ export default function Busca() {
       setDistancias({});
       setResultados(mapeados);
 
-      // Silent tracking — fire and forget
-      try {
+      // Silent tracking — fire and forget. Não registra em modo suporte (o admin
+      // navegando como o cliente não deve poluir históricos/alertas).
+      if (!soLeitura) try {
         const sid = sessionStorage.getItem('tsn_session_id') || (() => { const s = Math.random().toString(36).slice(2); sessionStorage.setItem('tsn_session_id', s); return s; })();
         supabase.from('busca_historico').insert({
           user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos,
@@ -1053,7 +1055,7 @@ export default function Busca() {
         }).then(() => {}).catch(() => {});
       } catch (_) {}
 
-      if (user?.id && (filtrosAtivos.estado || filtrosAtivos.cidades?.length > 0)) {
+      if (!soLeitura && user?.id && (filtrosAtivos.estado || filtrosAtivos.cidades?.length > 0)) {
         try {
           supabase.from('alertas_email').upsert({
             user_id: user.id, filtros: filtrosAtivos,
@@ -1545,15 +1547,16 @@ export default function Busca() {
             {filtrosSalvos.map(filtro => (
               <span key={filtro.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#084BA6', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 <span onClick={() => setFiltrosPersist(filtro.filtros)}>{filtro.nome}</span>
-                <button onClick={() => deletarFiltro(filtro.id)} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center' }}>×</button>
+                {!soLeitura && <button onClick={() => deletarFiltro(filtro.id)} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center' }}>×</button>}
               </span>
             ))}
-            {!showSalvarModal && (
+            {soLeitura && filtrosSalvos.length === 0 && <span style={{ fontSize: 12, color: '#94a3b8' }}>o assinante não tem filtros salvos</span>}
+            {!soLeitura && !showSalvarModal && (
               <button onClick={() => setShowSalvarModal(true)} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 + Salvar filtros atuais
               </button>
             )}
-            {showSalvarModal && (
+            {!soLeitura && showSalvarModal && (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <input value={nomeFiltro} onChange={e => setNomeFiltro(e.target.value)}
                   placeholder="Nome do filtro..." autoFocus

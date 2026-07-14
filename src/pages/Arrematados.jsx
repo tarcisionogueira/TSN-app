@@ -45,7 +45,7 @@ function fotoImovel(im) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Detalhe de um arrematado: Documentos + Lançamentos financeiros
 // ─────────────────────────────────────────────────────────────────────────────
-function Detalhe({ arr, onClose, onChange }) {
+function Detalhe({ arr, onClose, onChange, soLeitura }) {
   const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   const [lancs, setLancs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -157,6 +157,7 @@ function Detalhe({ arr, onClose, onChange }) {
                   </div>
                 ))}
               </div>
+              {!soLeitura && (
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: 10 }}>Novo lançamento</div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -175,6 +176,7 @@ function Detalhe({ arr, onClose, onChange }) {
                   <button onClick={addLanc} style={{ padding: '9px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Adicionar</button>
                 </div>
               </div>
+              )}
               {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando…</div> : lancs.length === 0 ? (
                 <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Nenhum lançamento ainda.</div>
               ) : (
@@ -187,7 +189,7 @@ function Detalhe({ arr, onClose, onChange }) {
                         <div style={{ fontSize: 11, color: '#94a3b8' }}>{l.data ? new Date(l.data + 'T12:00:00').toLocaleDateString('pt-BR') : ''}</div>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 800, color: l.tipo === 'entrada' ? '#059669' : '#dc2626' }}>{l.tipo === 'entrada' ? '+' : '−'} {brl(l.valor)}</div>
-                      <button onClick={() => delLanc(l.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>
+                      {!soLeitura && <button onClick={() => delLanc(l.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
                     </div>
                   ))}
                 </div>
@@ -197,20 +199,28 @@ function Detalhe({ arr, onClose, onChange }) {
 
           {aba === 'documentos' && (
             <>
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, lineHeight: 1.5 }}>
-                Selecione o tipo e anexe o PDF. Os documentos do arremate ficam <b>permanentes</b> (nunca apagados) e alimentam a IA. Você pode anexar mais ao longo do tempo (auto/carta, contrato do banco, escritura, matrícula registrada…).
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-                <select value={docTipo} onChange={e => setDocTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
-                  {DOC_TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', border: '1.5px dashed #cbd5e1', borderRadius: 10, cursor: enviando ? 'default' : 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
-                  {enviando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar PDF</>}
-                  <input type="file" accept="application/pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
-                </label>
-              </div>
+              {soLeitura ? (
+                <div style={{ fontSize: 12, color: '#9a3412', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '9px 12px', marginBottom: 12, fontWeight: 600 }}>
+                  👁 Modo suporte — somente visualização dos documentos do assinante.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, lineHeight: 1.5 }}>
+                    Selecione o tipo e anexe o PDF. Os documentos do arremate ficam <b>permanentes</b> (nunca apagados) e alimentam a IA. Você pode anexar mais ao longo do tempo (auto/carta, contrato do banco, escritura, matrícula registrada…).
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+                    <select value={docTipo} onChange={e => setDocTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
+                      {DOC_TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 16px', border: '1.5px dashed #cbd5e1', borderRadius: 10, cursor: enviando ? 'default' : 'pointer', color: '#0D63DB', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
+                      {enviando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enviando…</> : <><UploadCloud size={16} /> Anexar PDF</>}
+                      <input type="file" accept="application/pdf" onChange={uploadDoc} disabled={enviando} style={{ display: 'none' }} />
+                    </label>
+                  </div>
+                </>
+              )}
               {docs.length === 0 ? (
-                <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Nenhum documento anexado. Guarde aqui o auto/carta de arrematação, contrato do banco, escritura, matrícula registrada, edital.</div>
+                <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>{soLeitura ? 'O assinante ainda não anexou documentos.' : 'Nenhum documento anexado. Guarde aqui o auto/carta de arrematação, contrato do banco, escritura, matrícula registrada, edital.'}</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {docs.map(d => (
@@ -221,7 +231,7 @@ function Detalhe({ arr, onClose, onChange }) {
                         {d.tipo && d.tipo !== 'outro' && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>{DOC_TIPO_LABEL[d.tipo] || d.tipo}</div>}
                       </div>
                       {d.url && <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB' }}><ExternalLink size={15} /></a>}
-                      <button onClick={() => delDoc(d.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>
+                      {!soLeitura && <button onClick={() => delDoc(d.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
                     </div>
                   ))}
                 </div>
@@ -313,7 +323,8 @@ export default function Arrematados() {
   const loc = useLocation();
   const isMobile = useIsMobile();
   const [prefill, setPrefill] = React.useState(null);
-  const { user, effectiveUserId } = useAuth();
+  const { user, effectiveUserId, impersonate } = useAuth();
+  const soLeitura = !!impersonate; // modo suporte: só visualiza, não altera pelo cliente
   const { analises, documentais } = useAnalises();
   const uid = effectiveUserId || user?.id || null;
   const [arrematados, setArrematados] = React.useState([]);
@@ -340,8 +351,9 @@ export default function Arrematados() {
   React.useEffect(() => { carregar(); }, [carregar]);
 
   // Veio de "✅ Arrematei!" (Painel) com o imóvel pré-preenchido → abre o registro.
+  // Em modo suporte não abre (o registro é ação do próprio assinante).
   React.useEffect(() => {
-    if (loc.state?.prefill) {
+    if (loc.state?.prefill && !soLeitura) {
       setPrefill(loc.state.prefill);
       setNovo(true);
       nav('.', { replace: true, state: {} }); // não reabre ao voltar
@@ -392,8 +404,13 @@ export default function Arrematados() {
         </h1>
       </div>
 
+      {soLeitura && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: '#9a3412', fontWeight: 600 }}>
+          👁 Modo suporte — somente visualização. Você acompanha as telas do assinante para orientá-lo; alterações são feitas por ele.
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {acaoBtn('Registrar arrematação', Plus, '#059669', () => setNovo(true))}
+        {!soLeitura && acaoBtn('Registrar arrematação', Plus, '#059669', () => setNovo(true))}
         {acaoBtn('Minhas análises', Search, '#0D63DB', () => nav('/analises'))}
       </div>
 
@@ -403,10 +420,12 @@ export default function Arrematados() {
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '48px 24px', textAlign: 'center' }}>
           <Home size={40} color="#cbd5e1" />
           <div style={{ fontSize: 15, fontWeight: 800, color: '#334155', margin: '14px 0 6px' }}>Nenhum imóvel arrematado ainda</div>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18, lineHeight: 1.5 }}>Registre uma arrematação para acompanhar seus documentos e o financeiro do lote.</div>
-          <button onClick={() => setNovo(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
-            <Plus size={16} /> Registrar arrematação
-          </button>
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18, lineHeight: 1.5 }}>{soLeitura ? 'O assinante ainda não registrou nenhuma arrematação.' : 'Registre uma arrematação para acompanhar seus documentos e o financeiro do lote.'}</div>
+          {!soLeitura && (
+            <button onClick={() => setNovo(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+              <Plus size={16} /> Registrar arrematação
+            </button>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -432,14 +451,14 @@ export default function Arrematados() {
                     <span style={{ fontWeight: 700, color: saldo >= 0 ? '#0D63DB' : '#dc2626' }}>Saldo {brl(saldo)}</span>
                   </div>
                 </div>
-                <button onClick={(e) => remover(a.id, e)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
+                {!soLeitura && <button onClick={(e) => remover(a.id, e)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>}
               </div>
             );
           })}
         </div>
       )}
 
-      {sel && <Detalhe arr={sel} onClose={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />}
+      {sel && <Detalhe arr={sel} soLeitura={soLeitura} onClose={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />}
       {novo && <NovoArrematado onClose={() => { setNovo(false); setPrefill(null); }} onCriar={criar} sugestoes={sugestoes} inicial={prefill} />}
     </div>
   );
