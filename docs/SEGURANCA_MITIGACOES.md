@@ -82,9 +82,10 @@ R$ 5.000 para assessoria e club) para os valores acima, ou lê-los de `planos_co
 ## Triagem da auditoria id=9 (14/07, c072ad1) — 40 "altas"
 
 Verificados achado a achado contra o código + RLS real (project `zuwfiwokkdytvjixiwac`).
-**Resultado: 26 falso-positivos, 2 reais corrigidos, 4 decisão-do-dono, 2 reais em
-aberto.** Os achados-manchete do resumo ("cancelar assinaturas alheias", "rebaixar
-planos", "sobrescrever documentos") são **FALSO-POSITIVOS** — os controles existem.
+**Resultado: 26 falso-positivos, 3 reais corrigidos (15, 23, 16), 4 decisão-do-dono,
+2 reais em aberto (34, 32).** Os achados-manchete do resumo ("cancelar assinaturas
+alheias", "rebaixar planos", "sobrescrever documentos") são **FALSO-POSITIVOS** — os
+controles existem.
 
 ### Falso-positivos re-sinalizados (NÃO reportar como alta) — evidência:
 - **asaas cancelar/gerenciar/criar_assinatura sem ownership** (achados 1,2): guard no
@@ -119,15 +120,19 @@ planos", "sobrescrever documentos") são **FALSO-POSITIVOS** — os controles ex
 - **/api/duvida sem rate limit** (23): endpoint público grava com service key (bypassa
   RLS). **Corrigido:** `checkRateLimit` 5/min por IP.
 
-### Reais EM ABERTO (precisam de trabalho cuidadoso / decisão do dono):
-- **KYC/PII em contratos_link expostos ao anon** (16) — **ALTA**: a policy "Público
-  acessa contrato pelo token" (`SELECT` p/ `public`, qual só
+### Real CORRIGIDO (16):
+- **KYC/PII em contratos_link expostos ao anon** (16) — era **ALTA**, **RESOLVIDO**: a
+  policy "Público acessa contrato pelo token" (`SELECT` p/ `public`, qual só
   `status IN ('aguardando','aguardando_assinatura') AND expira_em>now()`, **sem
-  predicado de token**) deixa qualquer anônimo ler `kyc_fotos` (fotos de identidade em
-  Data URL) + `assinante_email` de TODOS os contratos pendentes. Fix correto: servir o
-  contrato por endpoint service-key que exige o token + derrubar a policy pública +
-  mover KYC p/ Storage privado (o `ContratoLink.jsx` LÊ e exibe `kyc_fotos`, então não
-  dá p/ só revogar a coluna). Refactor do fluxo de assinatura — testar antes.
+  predicado de token**) deixava qualquer anônimo ler `kyc_fotos` (fotos de identidade em
+  Data URL) + `assinante_email` de TODOS os contratos pendentes. **Correção aplicada**
+  (`supabase/migrations/get_contrato_por_token.sql`): acesso público agora é SÓ pelo
+  token exato via RPC `SECURITY DEFINER get_contrato_por_token` (testada: token válido→1,
+  falso→0); `ContratoLink.jsx` usa a RPC; a policy pública foi derrubada (RLS confirmado
+  ligado). Enumeração impossível. Hardening futuro opcional: mover `kyc_fotos` de Data URL
+  p/ Storage privado (defesa em profundidade — o vetor de enumeração já está fechado).
+
+### Reais EM ABERTO (precisam de trabalho cuidadoso / decisão do dono):
 - **ebooks_admin.arquivo_url legível por anon** (34) — média: policy "Leitura publica
   ebooks" `qual=true` expõe `arquivo_url` do ebook pago (hoje um link **público** do
   Google Drive — o arquivo já está aberto). Fix: RPC de entitlement + mover PDF p/
