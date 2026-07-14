@@ -166,12 +166,32 @@ async function reconPeciniProfundo(cfg) {
       const subs = locs.filter(u => /sitemap/i.test(u));
       const lotes = locs.filter(u => /\/lote\//i.test(u));
       const smRefs = sm === '/robots.txt' ? [...new Set((html.match(/Sitemap:\s*(\S+)/gi) || []))] : [];
-      console.log(`\n── ${sm} → HTTP ${status}, len ${html.length}`);
+      const pareceGzip = /\x1f\x8b/.test(html.slice(0, 4)) || /�/.test(html.slice(0, 40));
+      console.log(`\n── ${sm} → HTTP ${status}, len ${html.length}${pareceGzip ? ' (parece GZIP/binário)' : ''}`);
       if (smRefs.length) console.log(`   robots Sitemap: ${JSON.stringify(smRefs)}`);
       console.log(`   ${locs.length} <loc>; sub-sitemaps: ${JSON.stringify(subs.slice(0, 10))}`);
       if (lotes.length) console.log(`   lotes (${lotes.length}) amostra: ${JSON.stringify(lotes.slice(0, 6))}`);
+      // Dump cru do começo p/ ver a estrutura real (índice? urlset? html? gzip?).
+      if (sm !== '/robots.txt') console.log(`   raw[0..600]: ${html.slice(0, 600).replace(/\s+/g, ' ')}`);
+      else console.log(`   robots.txt: ${html.replace(/\s+/g, ' ').slice(0, 500)}`);
     } catch (e) { console.log(`── ${sm} → ERRO: ${String(e.message).slice(0, 100)}`); }
   }
+
+  // 1b) Página de LISTAGEM — descobrir o endpoint AJAX que carrega a grade de lotes
+  // (a listagem vem por XHR; no HTML cru achamos a URL do endpoint nos <script>).
+  try {
+    const { status, html } = await bdFetch(cfg.base + '/busca?categoria=imoveis');
+    const scriptSrcs = [...new Set((html.match(/<script[^>]+src=["']([^"']+)["']/gi) || []).map(s => (s.match(/src=["']([^"']+)/i) || [])[1]))].filter(u => /pecini|\/js\/|catalog|busca|lote|produto/i.test(u)).slice(0, 12);
+    const endpoints = [...new Set((html.match(/["'`](\/(?:[a-z0-9\-]+\/)*(?:busca|search|catalog|produtos?|lotes?|resultado|filtro|ajax|api)[^"'`\s]*)["'`]/gi) || []).map(s => s.replace(/["'`]/g, '')))].slice(0, 20);
+    const formAction = [...new Set((html.match(/<form[^>]+action=["']([^"']+)["']/gi) || []).map(s => (s.match(/action=["']([^"']+)/i) || [])[1]))].slice(0, 6);
+    console.log(`\n── LISTAGEM /busca?categoria=imoveis → HTTP ${status}, len ${html.length}`);
+    console.log(`   <script src> (relevantes): ${JSON.stringify(scriptSrcs)}`);
+    console.log(`   possíveis endpoints: ${JSON.stringify(endpoints)}`);
+    console.log(`   form actions: ${JSON.stringify(formAction)}`);
+    // trechos de JS que montam a chamada da grade (fetch/ajax/url:)
+    const ajaxHints = [...new Set((html.match(/(?:url|action|fetch|\.get|\.post|\.load)\s*[:(]\s*["'`][^"'`]{4,80}["'`]/gi) || []))].filter(s => /busca|lote|catalog|produt|result|filtr|ajax|api/i.test(s)).slice(0, 12);
+    console.log(`   pistas de AJAX: ${JSON.stringify(ajaxHints)}`);
+  } catch (e) { console.log(`── LISTAGEM → ERRO: ${String(e.message).slice(0, 100)}`); }
 
   // 2) Home: JSON embutido + refs de API + links de lote.
   let loteUrls = [];
@@ -204,9 +224,16 @@ async function reconPeciniProfundo(cfg) {
     console.log(`   fotos: ${JSON.stringify(fotos)}`);
     if (ldjson.length) console.log(`   ld+json: ${JSON.stringify(ldjson)}`);
     if (nd) console.log(`   __NEXT_DATA__ do lote (5000): ${nd.replace(/\s+/g, ' ').slice(0, 5000)}`);
-    else {
-      const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 1800);
-      console.log(`   texto do lote: ${txt}`);
+    // Bloco <script> que contém o objeto de dados do lote (campos tipo AvaliacaoDateReferencia).
+    const scripts = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi) || [];
+    const dataScript = scripts.find(s => /Avaliacao|LanceMinimo|LanceInicial|DataAbertura|IdLeilao/i.test(s));
+    if (dataScript) console.log(`   ▸ SCRIPT c/ dados do lote (4000): ${dataScript.replace(/<\/?script[^>]*>/gi, '').replace(/\s+/g, ' ').slice(0, 4000)}`);
+    // Rótulos-chave com o valor logo à frente (Avaliação / Lance / desconto / datas).
+    const rotulos = [...(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').matchAll(/(Avalia\w*|Lance\s*(?:M[íi]nimo|Inicial)|[\d.,]+\s*%\s*de\s*desconto|Abertura|Fechamento)\s*:?\s*([R$\d.,%\/\sh-]{0,40})/gi))].slice(0, 14).map(m => `${m[1].trim()} = ${m[2].trim()}`);
+    console.log(`   rótulos→valor: ${JSON.stringify(rotulos)}`);
+    {
+      const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 400);
+      console.log(`   texto[0..400]: ${txt}`);
     }
   } catch (e) { console.log(`── LOTE ${alvoLote} → ERRO: ${String(e.message).slice(0, 100)}`); }
 }
