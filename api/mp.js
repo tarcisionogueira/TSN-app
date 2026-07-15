@@ -115,6 +115,35 @@ const PLANOS_CONFIG = {
   top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 449.90,   recorrente: false },
 };
 
+// Espelha os preços do admin (planos_config) respeitando mensal×total: clube.preco é
+// o TOTAL anual → mensal = ÷12; preco_vista = à vista; assessorado/top2 diretos;
+// top2_anual = preco_anual. Fallback = PLANOS_CONFIG hardcoded (nunca quebra pagamento).
+let _precoCache = { at: 0, cfg: null };
+async function carregarPrecos() {
+  if (_precoCache.cfg && Date.now() - _precoCache.at < 60000) return _precoCache.cfg;
+  const cfg = JSON.parse(JSON.stringify(PLANOS_CONFIG)); // fallback conhecido-bom
+  try {
+    if (SB_URL && SB_KEY) {
+      const r = await fetch(`${SB_URL}/rest/v1/planos_config?select=plano_key,nome,preco,preco_vista,preco_anual`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(6000),
+      });
+      if (r.ok) {
+        const by = {}; for (const x of await r.json()) by[x.plano_key] = x;
+        const num = v => (v == null || v === '' ? null : Number(v));
+        const P = by.assessorado, C = by.clube, T = by.top2;
+        if (num(P?.preco) != null)       { cfg.assessorado.valor = num(P.preco); if (P.nome) cfg.assessorado.nome = P.nome; }
+        if (num(P?.preco_vista) != null)   cfg.assessorado_vista.valor = num(P.preco_vista);
+        if (num(C?.preco) != null)       { cfg.clube.valor = num(C.preco) / 12; if (C.nome) cfg.clube.nome = C.nome + ' — Mensal'; } // total anual ÷ 12
+        if (num(C?.preco_vista) != null)   cfg.clube_vista.valor = num(C.preco_vista);
+        if (num(T?.preco) != null)       { cfg.top2.valor = num(T.preco); if (T.nome) cfg.top2.nome = T.nome; }
+        if (num(T?.preco_anual) != null)   cfg.top2_anual.valor = num(T.preco_anual);
+      }
+    }
+  } catch { /* mantém o fallback hardcoded */ }
+  _precoCache = { at: Date.now(), cfg };
+  return cfg;
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 /**
@@ -123,7 +152,7 @@ const PLANOS_CONFIG = {
  * Para split (ex: 2k PIX + 3k cartão), cria 2 preferências vinculadas.
  */
 async function criarPreferencia({ plano: planoKey, email, nome, cpf, userId, parcelas = null, split = null }) {
-  const cfg = PLANOS_CONFIG[planoKey];
+  const cfg = (await carregarPrecos())[planoKey];
   if (!cfg) throw new Error(`Plano inválido: ${planoKey}`);
 
   // Split de pagamento: [{ metodo, valor }]
@@ -195,7 +224,7 @@ async function criarPreferenciaSimples({ titulo, valor, email, nome, cpf, userId
  * MP cobra automaticamente todo mês no cartão salvo.
  */
 async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
-  const cfg = PLANOS_CONFIG[planoKey];
+  const cfg = (await carregarPrecos())[planoKey];
   if (!cfg || !cfg.recorrente) throw new Error(`Plano ${planoKey} não é recorrente`);
 
   const body = {
@@ -232,7 +261,7 @@ async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
  * nunca sai do BidPro. Preço SEMPRE do servidor (PLANOS_CONFIG), nunca do cliente.
  */
 async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId, userId }) {
-  const cfg = PLANOS_CONFIG[planoKey];
+  const cfg = (await carregarPrecos())[planoKey];
   if (!cfg || !cfg.recorrente) throw new Error(`Plano ${planoKey} não é recorrente`);
   if (!cardTokenId) throw new Error('Token do cartão ausente');
   if (!email) throw new Error('E-mail do pagador ausente');
