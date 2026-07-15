@@ -2737,6 +2737,12 @@ async function scraperLeilofy(browser) {
       const row = mapLoteLeilofy(det, id);
       // Debug dos 3 primeiros lotes: confirma que o parse pega os valores após o render.
       if (i <= 3) console.log(`    Leilofy debug #${id}: aval=${row?.valor_avaliacao} lance=${row?.valor_minimo} end="${(row?.endereco || '').slice(0, 50)}" textLen=${(det.text || '').length}`);
+      // Dump da região dos valores no 1º lote p/ descobrir o rótulo do lance.
+      if (i === 1) {
+        const t = det.text || '';
+        const ia = t.search(/avalia[çc][ãa]o/i);
+        console.log(`    Leilofy DUMP-VALORES: «${t.slice(Math.max(0, ia - 30), ia + 320).replace(/\n/g, '⏎')}»`);
+      }
       if (row && row.valor_minimo) imoveis.push(row);
     } catch { /* lote a lote; nunca derruba o scrape */ }
     await sleep(120);
