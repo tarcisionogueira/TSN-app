@@ -2766,7 +2766,7 @@ async function scraperLeilofy(browser) {
       if (!det) continue;
       const row = mapLoteLeilofy(det, id);
       if (row && row.valor_minimo) imoveis.push(row);
-      else if (i <= 4) console.log(`    [leilofy diag] ${id}: valor=${row?.valor_minimo || 0} textLen=${(det.text || '').length} avalia=${/valor de avalia/i.test(det.text || '')} lanceFix=${/lance est[áa] fixado/i.test(det.text || '')} rs=${/R\$/.test(det.text || '')}`);
+      else if (i <= 4) console.log(`    [leilofy diag] ${id}: valor=${row?.valor_minimo || 0} rsVals=${JSON.stringify([...(det.text || '').matchAll(/R\$\s*[\d.]+(?:,\d{2})?/g)].map(m => m[0]).slice(0, 10))} docs=${(det.docs || []).length}`);
     } catch (e) { if (i <= 4) console.log(`    [leilofy diag] ${id}: erro ${String(e.message).slice(0, 60)}`); }
     await sleep(900); // gentileza entre páginas (evita rate-limit no loop de 24 detalhes)
   }
