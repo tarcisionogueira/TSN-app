@@ -524,6 +524,7 @@ function UsuariosTab() {
     if ((s.includes('matric') || s.includes('matríc')) && s.includes('registr')) return 'matricula_registrada';
     if (s.includes('carta') && s.includes('arremat')) return 'carta_arrematacao';
     if (s.includes('auto') && s.includes('arremat')) return 'auto_arrematacao';
+    if (s.includes('assessoria') || (s.includes('contrato') && (s.includes('presta') || s.includes('servi') || s.includes('assessor')))) return 'contrato_assessoria';
     if (s.includes('contrato') && (s.includes('banc') || s.includes('financ') || s.includes('caixa') || s.includes('cef'))) return 'contrato_banco';
     if (s.includes('escritura') || s.includes('lavratura')) return 'escritura';
     if (s.includes('boleto') && s.includes('sinal')) return 'boleto_sinal';

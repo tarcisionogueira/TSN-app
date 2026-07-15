@@ -26,6 +26,7 @@ const DOC_TIPOS = [
   ['contrato_banco', 'Contrato do banco (financiado)'],
   ['escritura', 'Escritura / lavratura'],
   ['matricula_registrada', 'Matrícula registrada'],
+  ['contrato_assessoria', 'Contrato de assessoria'],
   ['edital', 'Edital'],
   ['matricula', 'Matrícula'],
   ['outro', 'Outro documento'],
@@ -192,7 +193,8 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeEditar }) {
       if (!res.ok) throw new Error(data.error || 'Falha no envio');
       await carregarDocs();
       // A IA confere automaticamente se o anexo é desta arrematação (etiqueta na
-      // lista); se for divergente, o cliente remove pela lixeira.
+      // lista); se for divergente, o cliente remove pela lixeira. Documentos
+      // administrativos (contrato de assessoria) voltam como "isento" (sem custo de IA).
       if (data.anexo_id) { await validarAnexo(data.anexo_id); await carregarDocs(); }
     } catch (err) { alert(err.message || 'Erro ao enviar o documento.'); }
     finally { setEnviando(false); }
@@ -342,7 +344,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeEditar }) {
               {/* Confirmação de que a IA LEU os documentos: a validação abre cada PDF e
                   o compara com a operação. Aqui o resumo; o selo por documento fica na lista. */}
               {docs.length > 0 && (() => {
-                const lidos = docs.filter(d => d.validacao?.status).length;
+                const lidos = docs.filter(d => d.validacao?.status && d.validacao.status !== 'isento').length;
                 const ok = docs.filter(d => d.validacao?.status === 'coerente').length;
                 const div = docs.filter(d => d.validacao?.status === 'divergente').length;
                 return (
@@ -369,6 +371,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeEditar }) {
                           {d.validacao?.status === 'coerente' && <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d', background: '#dcfce7', padding: '1px 7px', borderRadius: 20 }}>✓ confere</span>}
                           {d.validacao?.status === 'divergente' && <span title={d.validacao?.motivo || ''} style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', background: '#fee2e2', padding: '1px 7px', borderRadius: 20 }}>⚠️ não parece desta arrematação</span>}
                           {d.validacao?.status === 'indeterminado' && <span style={{ fontSize: 10, fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 7px', borderRadius: 20 }}>? indeterminado</span>}
+                          {d.validacao?.status === 'isento' && <span title="Documento administrativo — não é sobre o imóvel" style={{ fontSize: 10, fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '1px 7px', borderRadius: 20 }}>documento administrativo</span>}
                           {d.criado_em && <span style={{ fontSize: 10, color: '#94a3b8' }}>· enviado em {new Date(d.criado_em).toLocaleDateString('pt-BR')}{['admin', 'analista', 'advogado', 'consultor'].includes(d.role_criador) ? ' pela equipe' : ''}</span>}
                         </div>
                       </div>

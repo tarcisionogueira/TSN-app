@@ -472,7 +472,10 @@ export default async function handler(req, res) {
     // 1º: anexos guardados no storage (capturados por navegador ou enviados pela equipe).
     try {
       const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url&limit=10`)).json();
-      for (const a of (Array.isArray(manuais) ? manuais : [])) add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo);
+      // Documentos ADMINISTRATIVOS (ex.: contrato de assessoria) não são sobre o imóvel
+      // — ficam de fora da análise documental para não poluir o laudo jurídico.
+      const TIPOS_ADMIN = ['contrato_assessoria'];
+      for (const a of (Array.isArray(manuais) ? manuais : [])) { if (TIPOS_ADMIN.includes(a.tipo)) continue; add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo); }
     } catch { /* segue com os do lote */ }
     // 2º: anexos capturados no scrape (jsonb do lote). Leilão JUDICIAL costuma ter
     // MUITOS anexos (auto de penhora/avaliação, laudo, decisão, certidões, ata) —

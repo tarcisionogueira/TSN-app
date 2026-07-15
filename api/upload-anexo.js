@@ -32,7 +32,7 @@ const ROLES_STAFF  = ['analista', 'advogado', 'admin'];
 // apaga). Aceitam múltiplos arquivos e podem ser anexados ao longo do tempo.
 // Judicial: auto/carta de arrematação. Extrajudicial: boleto do sinal/aquisição,
 // contrato do banco (financiado), escritura (lavratura) e matrícula registrada.
-const TIPOS_ARREMATE = ['auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada'];
+const TIPOS_ARREMATE = ['auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada', 'contrato_assessoria'];
 const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', ...TIPOS_ARREMATE, 'outro'];
 // Só matrícula/edital são únicos por imóvel (índice parcial). Os demais tipos
 // aceitam vários arquivos — leilões podem ter anexos extras (laudo, ata, etc.).
