@@ -27,6 +27,13 @@
   - **Connect to Project → tsn-app** (Production + Preview) → **Redeploy**
 - **Depois que fizer:** me avisa que eu **verifico pelos logs** se o L2 ligou de verdade.
 
+### 3. PECINI — validar a captura de documentos (1 rodada, grátis)
+- **Por quê:** o scraper do PECINI **já foi ensinado** a extrair os PDFs da página (matrícula/edital/laudo → `link_matricula`/`link_edital`/`anexos`), mas a página é **Cloudflare-gated** e só abre pelo Bright Data (token é segredo do GitHub) — **não dá para validar automaticamente daqui**. É a única fonte ainda com 0% de matrícula.
+- **Passos (GitHub → Actions → workflow do PECINI):**
+  - Rodar 1x com `PECINI_DRYRUN=1` (não grava) e conferir no log se os links `.pdf` vêm corretos (padrão `/arquivos/Leiloes/Docs/…`).
+  - Se estiver certo, rodar com `PECINI_DRYRUN=0` para gravar.
+- **Depois que fizer:** me avisa que eu **confirmo pelo banco** a cobertura de matrícula/edital e marco o PECINI como `docs_status='ok'` (sai do alerta semanal de cobertura). Se algum PDF cair no Cloudflare no download, aí sim aciono o Bright Data como suporte.
+
 ---
 
 ## 🟡 Fazer quando os usuários PAGOS crescerem — exigem assinar plano
