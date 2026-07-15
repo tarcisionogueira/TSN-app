@@ -2653,8 +2653,22 @@ async function reconLeilofy(browser) {
 function mapLoteLeilofy(raw, id) {
   const text = String(raw?.text || '');
   const q = (re) => { const m = text.match(re); return m ? m[1].trim() : ''; };
-  const avaliacao = parseBRL(q(/avalia[çc][ãa]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/i));
-  const lance = parseBRL(q(/lance[^R]{0,50}R\$\s*([\d.]+,\d{2})/i));
+  // Preço robusto: 1) tenta pelos rótulos (preciso quando a frase bate); 2) se algum
+  // faltar, usa TODOS os "R$ x.xxx,xx" do texto — avaliação=maior, lance=menor —
+  // filtrando valores pequenos (R$/m², taxas, comissão). Diagnóstico provou que a
+  // página vem completa (avaliação e R$ no texto), mas a frase variou entre lotes e a
+  // regex ancorada falhava → 0 mapeados. Este fallback não depende do fraseado.
+  let avaliacao = parseBRL(q(/avalia[çc][ãa]o[^R]{0,60}R\$\s*([\d.]+,\d{2})/i));
+  let lance = parseBRL(q(/(?:lance|arremat|m[íi]nimo|lote)[^R]{0,60}R\$\s*([\d.]+,\d{2})/i));
+  if (!avaliacao || !lance) {
+    const valores = [...text.matchAll(/R\$\s*([\d.]+,\d{2})/g)]
+      .map(m => parseBRL(m[1]))
+      .filter(v => v >= 10000 && v <= 500000000);
+    if (valores.length) {
+      if (!avaliacao) avaliacao = Math.max(...valores);
+      if (!lance) lance = valores.length > 1 ? Math.min(...valores) : avaliacao;
+    }
+  }
   const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
   const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
   const areaCon = q(/[ÁA]rea constru[íi]da:\s*([\d.,]+)/i);
