@@ -2697,8 +2697,7 @@ function mapLoteLeilofy(raw, id) {
     link_edital: findDoc(/edital/i),
     link_matricula: findDoc(/matr[íi]cula/i),
     url_lote: `https://leiloariasmart.com.br/imovel/${id}`,
-    link_foto: fotos[0] || null,
-    fotos,
+    link_foto: fotos[0] || null,   // imoveis_leilao não tem coluna `fotos` (só link_foto)
     anexos,
     leiloeiro: 'Leiloaria Smart',
     data_leilao: null,
