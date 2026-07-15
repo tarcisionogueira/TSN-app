@@ -66,6 +66,11 @@ export default async function handler(req) {
   if (!url || !imovel_id) {
     return new Response(JSON.stringify({ error: 'url e imovel_id são obrigatórios' }), { status: 400 });
   }
+  // SEGURANÇA: imovel_id vai cru no caminho do Storage (casos/${imovel_id}/...). Sem
+  // validar, um "../" manipularia a chave. Exige UUID (mesma guarda do upload-anexo).
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(imovel_id))) {
+    return new Response(JSON.stringify({ error: 'imovel_id inválido' }), { status: 400 });
+  }
   // Anti-SSRF: só baixa de hosts de leiloeiros/CEF na whitelist exata
   if (!hostPermitido(url)) {
     return new Response(JSON.stringify({ error: 'Domínio não permitido' }), { status: 403 });

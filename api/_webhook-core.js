@@ -156,6 +156,37 @@ export async function suspenderPlanoDireto({ userId, gateway }) {
   return { ok: true, suspenso: true };
 }
 
+// ── ESTORNO DE COMISSÃO (chargeback / reembolso) ──────────────────────────────
+// Reverte a comissão de afiliado de um pagamento que foi revertido: cancela a
+// comissão e lança um ESTORNO NEGATIVO no saldo (fonte do saque). Sem isto o
+// afiliado ficava com a comissão MESMO com o pagamento estornado — fraude: indicar
+// → comissão vira 'disponivel' → chargeback/reembolso → sacar. Idempotente por
+// origem_id (não estorna duas vezes o mesmo pagamento).
+export async function estornarComissao({ gatewayPaymentId, gateway }) {
+  if (!gatewayPaymentId) return { skipped: 'sem_payment_id' };
+  try {
+    const { data: com } = await supabase.from('comissoes')
+      .select('id, beneficiario_id, valor_comissao, status')
+      .eq('gateway_payment_id', gatewayPaymentId).eq('origem', 'assinatura').maybeSingle();
+    if (!com) return { skipped: 'sem_comissao' };
+    if (com.status === 'cancelado') return { ok: true, ja_estornada: true };
+    const { data: jaEstorno } = await supabase.from('saldo_lancamentos')
+      .select('id').eq('origem_id', gatewayPaymentId).eq('tipo', 'estorno_comissao').maybeSingle();
+    await supabase.from('comissoes').update({ status: 'cancelado' }).eq('id', com.id);
+    if (!jaEstorno && Number(com.valor_comissao) > 0) {
+      await supabase.from('saldo_lancamentos').insert({
+        user_id: com.beneficiario_id, tipo: 'estorno_comissao', valor: -Number(com.valor_comissao),
+        origem_tipo: 'assinatura', origem_id: gatewayPaymentId,
+        descricao: `Estorno de comissão (${gateway}) — pagamento revertido`, status: 'disponivel',
+      });
+    }
+    return { ok: true, estornado: Number(com.valor_comissao) };
+  } catch (e) {
+    console.error(`[${gateway}] estornarComissao:`, e.message);
+    return { erro: e.message };
+  }
+}
+
 // ── PAGAMENTO CONFIRMADO ──────────────────────────────────────────────────────
 export async function processarConfirmado({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gateway, servico }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
@@ -381,6 +412,10 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
 
   // Suspende o acesso (mesmo efeito de inadimplência) enquanto a disputa corre
   try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (_) {}
+
+  // Estorna a comissão de afiliado deste pagamento (o dinheiro voltou → a comissão
+  // não é mais devida). Evita "refund + comissão paga" (perda dupla).
+  try { await estornarComissao({ gatewayPaymentId, gateway }); } catch (_) {}
 
   // Alerta a equipe
   alertarErro(

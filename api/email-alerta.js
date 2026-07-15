@@ -270,7 +270,10 @@ export default async function handler(req) {
   }
 
   const baseUrl = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
-  const unsubToken = await assinarUnsubEdge(userId);
+  // SEGURANÇA: assina o token de descadastro com o ID do usuário AUTENTICADO, nunca o
+  // userId do corpo — senão dava para forjar um token de unsub válido para a vítima
+  // (mandando o e-mail para si mesmo com userId alheio) e desligar os alertas dela.
+  const unsubToken = await assinarUnsubEdge(authUser.id);
   const html = gerarEmailHTML(userName || 'Investidor', imoveis, filtros || {}, filtroDesc, unsubToken, baseUrl);
 
   const qtd = imoveis.length;
