@@ -2646,6 +2646,100 @@ async function reconLeilofy(browser) {
   return [];
 }
 
+// ─── LEILOARIA SMART (Leilofy) — SPA server-rendered, DOM parsing ──────────────
+// Listagem em /imoveis (links /imovel/{id}); cada detalhe tem endereço, avaliação,
+// lance, matrícula, modalidade e os PDFs em /_admin_/upload/*.pdf (MATRÍCULA/EDITAL/
+// LAUDO). Sem API JSON — parseia o texto da página do lote.
+function mapLoteLeilofy(raw, id) {
+  const text = String(raw?.text || '');
+  const q = (re) => { const m = text.match(re); return m ? m[1].trim() : ''; };
+  const avaliacao = parseBRL(q(/avalia[çc][ãa]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/i));
+  const lance = parseBRL(q(/lance[^R]{0,50}R\$\s*([\d.]+,\d{2})/i));
+  const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
+  const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
+  const areaCon = q(/[ÁA]rea constru[íi]da:\s*([\d.,]+)/i);
+  const titulo = String(raw?.titulo || '').replace(/\s+/g, ' ').trim() || q(/\n([^\n]{3,80}m²[^\n]*)\n/);
+  const modalidade = /\bjudicial\b/i.test(text) && !/extrajudicial/i.test(text) ? 'judicial' : 'extrajudicial';
+  // cidade/UF/bairro a partir de "Rua …, nº, Bairro, Cidade, UF, CEP"
+  let cidade = '', uf = '', bairro = '';
+  const parts = localizacao.split(',').map(s => s.trim()).filter(Boolean);
+  const ufIdx = parts.findIndex(p => /^[A-Z]{2}$/.test(p));
+  if (ufIdx > 0) { uf = parts[ufIdx]; cidade = parts[ufIdx - 1]; if (ufIdx >= 3) bairro = parts[ufIdx - 2]; }
+  if (!uf && titulo) { const m = titulo.match(/([A-Za-zÀ-ÿ'.\- ]{2,40})\/([A-Z]{2})\b/); if (m) { cidade = m[1].trim(); uf = m[2]; } }
+  const docs = (Array.isArray(raw?.docs) ? raw.docs : []).filter(d => d && d.url);
+  const findDoc = (re) => (docs.find(d => re.test(d.label || '')) || {}).url || null;
+  const anexos = docs.map(d => ({ tipo: /matr[íi]cula/i.test(d.label) ? 'matricula' : (/edital/i.test(d.label) ? 'edital' : (/laudo/i.test(d.label) ? 'laudo' : 'outro')), nome: (d.label || 'Documento').slice(0, 80), url: d.url }));
+  const fotos = (Array.isArray(raw?.fotos) ? raw.fotos : []).filter(Boolean);
+  return {
+    fonte: 'LEILOFY',
+    fonte_id: `leilofy_${id}`,
+    titulo: (titulo || `Imóvel ${id}`).slice(0, 180),
+    tipo: normalizarTipo(tipoTxt || titulo),
+    modalidade,
+    estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
+    cidade: cidade ? toTitleCase(cidade) : '',
+    bairro: bairro ? toTitleCase(bairro) : '',
+    endereco: localizacao.slice(0, 200),
+    valor_avaliacao: avaliacao || 0,
+    valor_minimo: lance || 0,
+    area_m2: Number(String(areaCon).replace(/\./g, '').replace(',', '.')) || 0,
+    descricao: String(raw?.descricao || titulo || '').slice(0, 500),
+    link_edital: findDoc(/edital/i),
+    link_matricula: findDoc(/matr[íi]cula/i),
+    url_lote: `https://leiloariasmart.com.br/imovel/${id}`,
+    link_foto: fotos[0] || null,
+    fotos,
+    anexos,
+    leiloeiro: 'Leiloaria Smart',
+    data_leilao: null,
+    forma_pagamento: 'a_vista',
+  };
+}
+
+async function scraperLeilofy(browser) {
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const ids = new Set();
+  try {
+    for (const path of ['/imoveis', '/busca']) {
+      await page.goto(`https://leiloariasmart.com.br${path}`, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+      await sleep(3000);
+      for (let s = 0; s < 12; s++) { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {}); await sleep(1200); }
+      const found = await page.evaluate(() => [...new Set(Array.from(document.querySelectorAll('a[href^="/imovel/"]')).map(a => (a.getAttribute('href') || '').replace('/imovel/', '').split(/[#?]/)[0]))]).catch(() => []);
+      found.forEach(id => { if (/^\d+$/.test(id)) ids.add(id); });
+    }
+  } catch (e) { console.log(`    Leilofy listagem: ${String(e.message).slice(0, 60)}`); }
+  console.log(`    Leilofy: ${ids.size} imóveis na listagem`);
+  const imoveis = [];
+  let i = 0;
+  for (const id of ids) {
+    if (i++ >= 300) break;
+    try {
+      await page.goto(`https://leiloariasmart.com.br/imovel/${id}`, { waitUntil: 'networkidle2', timeout: 40000 });
+      await sleep(1000);
+      const det = await page.evaluate(() => {
+        const text = (document.body?.innerText || '').slice(0, 9000);
+        const titulo = (document.querySelector('h1,h2,.titulo,.title')?.innerText || '').trim();
+        let descricao = '';
+        const dm = text.match(/Descri[çc][ãa]o\s*([\s\S]{0,1500}?)\s*Detalhes do Im[óo]vel/i);
+        if (dm) descricao = dm[1].replace(/\s+/g, ' ').trim();
+        const docs = Array.from(document.querySelectorAll('a[href*="/_admin_/upload/"]')).filter(a => /\.pdf(\?|$)/i.test(a.href)).map(a => ({ url: a.href, label: (a.innerText || a.textContent || '').trim() }));
+        const fotos = Array.from(document.querySelectorAll('img')).map(i2 => i2.src || i2.getAttribute('data-src')).filter(s => s && /_admin_\/upload/i.test(s) && /\.(png|jpe?g|webp)(\?|$)/i.test(s));
+        return { text, titulo, descricao, docs, fotos: [...new Set(fotos)] };
+      }).catch(() => null);
+      if (!det) continue;
+      const row = mapLoteLeilofy(det, id);
+      if (row && row.valor_minimo) imoveis.push(row);
+    } catch { /* lote a lote; nunca derruba o scrape */ }
+    await sleep(120);
+  }
+  await page.close().catch(() => {});
+  console.log(`    Leilofy: ${imoveis.length} imóveis mapeados`);
+  return imoveis;
+}
+
 async function main() {
   console.log(`\n🏠 Scraper Puppeteer — ${new Date().toISOString()}\n`);
 
@@ -2731,6 +2825,10 @@ async function main() {
     console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
     if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
     if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
+
+    // Leiloaria Smart (Leilofy) — imóveis não-CEF (securitizadoras etc.), DOM parsing.
+    console.log('\n📋 Leiloaria Smart (Leilofy)...');
+    if (rodar('LEILOFY')) await coletarFonte('LEILOFY', () => scraperLeilofy(browser));
 
     // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos.
     // A página de detalhe do lote (link_edital) é server-rendered → enrich vasculha
