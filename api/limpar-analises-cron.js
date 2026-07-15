@@ -27,8 +27,6 @@ export default async function handler(req, res) {
   if (!isCronAuthorized(req)) return res.status(401).json({ error: 'Não autorizado' });
   if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).json({ error: 'Supabase não configurado' });
 
-  const corteLeilao = new Date(Date.now() - DIAS_POS_LEILAO * 86400000).toISOString();
-  const corteSemData = new Date(Date.now() - DIAS_SEM_DATA * 86400000).toISOString();
   const out = {};
 
   // Recuperação de análises TRAVADAS: a função de geração (maxDuration 5 min) pode
@@ -46,16 +44,19 @@ export default async function handler(req, res) {
     } catch { out[`${tabela}_destravadas`] = 0; }
   }
 
-  // Mesma regra para a mercadológica E a documental: 15 dias após o leilão sem
-  // arrematar → apaga; sem data → fallback de 60 dias por idade. Arrematado nunca apaga.
-  for (const tabela of ['analises_mercado', 'analises_documental']) {
-    const r1 = await sb(`${tabela}?arrematado=eq.false&data_leilao=not.is.null&data_leilao=lt.${corteLeilao}&select=id`, { method: 'DELETE' });
-    const c1 = r1.ok ? ((await r1.json().catch(() => [])).length || 0) : 0;
-    const r2 = await sb(`${tabela}?arrematado=eq.false&data_leilao=is.null&created_at=lt.${corteSemData}&select=id`, { method: 'DELETE' });
-    const c2 = r2.ok ? ((await r2.json().catch(() => [])).length || 0) : 0;
-    out[tabela] = { por_leilao: c1, sem_data: c2 };
-  }
+  // Regra 15d pós-leilão (ou 60d sem data) para não-arrematados. GUARDA: preserva a
+  // análise se o imóvel segue ATIVO com data_leilao FUTURA (2ª praça/re-agendamento) —
+  // senão o relatório sumia com o imóvel ainda listado. Feito na RPC atômica.
+  let apagados = {};
+  try {
+    const rr = await sb('rpc/limpar_analises_orfas', {
+      method: 'POST',
+      body: JSON.stringify({ p_dias: DIAS_POS_LEILAO, p_dias_sem_data: DIAS_SEM_DATA }),
+    });
+    apagados = rr.ok ? (await rr.json().catch(() => ({}))) : { erro: `rpc HTTP ${rr.status}` };
+  } catch (e) { apagados = { erro: String(e.message).slice(0, 120) }; }
 
-  const total = Object.values(out).reduce((s, v) => s + v.por_leilao + v.sem_data, 0);
-  return res.status(200).json({ ok: true, ...out, total });
+  const total = ['analises_mercado', 'analises_documental']
+    .reduce((s, t) => s + ((apagados[t]?.por_leilao || 0) + (apagados[t]?.sem_data || 0)), 0);
+  return res.status(200).json({ ok: true, destravadas: out, apagados, total });
 }

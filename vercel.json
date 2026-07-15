@@ -45,6 +45,7 @@
     { "path": "/api/regeocod-imprecisos",         "schedule": "0 */6 * * *" },
     { "path": "/api/diagnostico-ia?forcar=1",     "schedule": "0 11 * * *" },
     { "path": "/api/enriquecer-backfill-cron",    "schedule": "30 16 * * *" },
-    { "path": "/api/documental-retry-cron",       "schedule": "0 * * * *"    }
+    { "path": "/api/documental-retry-cron",       "schedule": "0 * * * *"    },
+    { "path": "/api/moderador-cron",              "schedule": "0 8 * * 1"    }
   ]
 }

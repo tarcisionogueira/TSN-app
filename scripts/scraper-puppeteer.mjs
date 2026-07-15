@@ -240,6 +240,13 @@ async function registrarSaude(fonte, imoveis, estrategia, validacao) {
       uf_pct: m.uf_pct, valor_pct: m.valor_pct, link_pct: m.link_pct, foto_pct: m.foto_pct,
       status, motivo: motivo || null,
     });
+    // Auto-aprendizado (Passo 1b): refresca a qualidade na base de conhecimento —
+    // upsert parcial preserva os campos ricos curados (plataforma/url_lote/etc.).
+    try {
+      const q = Number((((m.foto_pct || 0) + (m.valor_pct || 0) + (m.link_pct || 0)) / 3).toFixed(3));
+      await supabase.from('leiloeiro_conhecimento').upsert(
+        { fonte, qualidade: q, atualizado_em: new Date().toISOString() }, { onConflict: 'fonte' });
+    } catch { /* base de conhecimento é opcional */ }
   } catch (e) { console.log(`  [${fonte}] registrarSaude erro: ${String(e.message).slice(0, 80)}`); }
   return { status, motivo, metricas: m };
 }

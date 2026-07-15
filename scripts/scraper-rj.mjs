@@ -18,6 +18,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
+import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 
 const BASE = 'https://www.rjleiloes.com.br';
 const MAX_LOTES = Number(process.env.RJ_MAX_LOTES || 40);
@@ -254,6 +255,12 @@ async function main() {
   const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
   if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
   console.log(`✅ ${prontos.length} imóveis RJ Leilões gravados/atualizados.`);
+  // Auto-aprendizado: registra o que este scraper sabe na base de conhecimento.
+  await registrarConhecimento(supabase, {
+    fonte: 'RJLEILOES', plataforma: 'SOLEON', acesso: 'brightdata', custo: 'pago',
+    anti_bot: 'cloudflare', enumeracao: 'listagem_paginada', url_lote: '/item/{id}/detalhes',
+    scraper: 'scraper-rj.mjs', qualidade: qualidadeColeta(prontos),
+  });
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
