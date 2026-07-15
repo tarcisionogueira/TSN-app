@@ -1,5 +1,24 @@
 # TSN App — Guia para Claude Code
 
+## 🩺 Ritual de início de sessão (diagnóstico — fazer ANTES dos próximos passos)
+Ao começar uma sessão nova e ler o HANDOFF (`docs/HANDOFF.md`), produza um diagnóstico
+curto (5–8 linhas) antes de seguir:
+
+1. **Saúde** (MCP Supabase/Vercel): imóveis ativos e atualizados nas últimas 24h, fila de
+   geocode, últimos deploys (`state=READY`?), crons com timeout recente.
+2. **Segurança — postura**: rode `select public.auditoria_seguranca();` (ou leia a última
+   linha de `seguranca_auditoria`). `0 crítico / 0 atenção` = íntegro; qualquer achado =
+   investigar e corrigir ANTES de seguir. Este auditor cobre AUTOMATICAMENTE qualquer
+   objeto novo de banco (tabela com PII sem RLS, função SECURITY DEFINER exposta a anon,
+   bucket sensível público, política ampla no bucket `documentos`, trigger anti-escalação
+   sumindo) — **não precisa lembrar de incluir nada**.
+3. **Segurança — ofensiva** (quando houve mudança substancial): se desde a última auditoria
+   entraram rotas novas OU mudanças em pagamento/webhook/RLS/upload/tokens, rode os 3 agentes
+   ofensivos (verificação+lacunas · auth/tokens/contratos/KYC/convites · injeção/SSRF/XSS) e
+   só considere "seguro" depois. Lógica de NEGÓCIO nova NÃO é coberta pelo item 2 — exige isto.
+4. **Escala (rumo a 10 mil usuários)**: relembre os gaps pendentes do HANDOFF (índices,
+   chunking de crons, quotas) e sinalize o que precisa antes de crescer.
+
 ## Stack
 - **Frontend:** React + Vite → Vercel (Pro)
 - **Backend:** Vercel Serverless Functions (Edge + Node.js)

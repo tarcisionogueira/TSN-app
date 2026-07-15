@@ -48,6 +48,6 @@
     { "path": "/api/documental-retry-cron",       "schedule": "0 * * * *"    },
     { "path": "/api/moderador-cron",              "schedule": "0 8 * * 1"    },
     { "path": "/api/reconciliar-asaas-cron",      "schedule": "45 */6 * * *" },
-    { "path": "/api/seguranca-auditoria-cron",    "schedule": "15 5 * * *"   }
+    { "path": "/api/seguranca-auditoria-cron",    "schedule": "15 5 * * 1"   }
   ]
 }

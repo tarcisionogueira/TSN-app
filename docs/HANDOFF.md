@@ -2,6 +2,8 @@
 
 > Cole este documento no início de uma nova sessão do Claude Code (com o **conector Supabase ativo**) para continuar com acesso total ao banco. Peça primeiro uma **auditoria completa dos fluxos** e depois siga pelos "Próximos passos".
 
+> 🩺 **Ritual de início de sessão** (ver `CLAUDE.md` → "Ritual de início de sessão"): antes dos próximos passos, o Claude deve entregar um diagnóstico de **saúde + segurança + escala**. A postura de segurança tem um auditor contínuo — rode `select public.auditoria_seguranca();` (ou leia a última linha de `seguranca_auditoria`); `0 crítico / 0 atenção` = íntegro. Última auditoria ofensiva completa (3 agentes): **15/07/2026** — 15 correções aplicadas (pagamentos, PII, oráculos, SSRF, poisoning, comissão). Refazer a ofensiva sempre que entrarem rotas/pagamento/RLS novos.
+
 ## 1. Projeto & infraestrutura
 - **App:** BidPro Brasil — plataforma de leilões de imóveis (React + Vite → Vercel).
 - **Repo GitHub:** `tarcisionogueira/tsn-app`
