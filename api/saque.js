@@ -45,10 +45,28 @@ async function rpc(fn, args) {
 
 const roleFor = async (id) => (await db(`perfis?id=eq.${id}&select=role`)).data?.[0]?.role || null;
 const saldoDe = async (id) => Number((await db(`saldo_usuarios?user_id=eq.${id}&select=saldo_disponivel`)).data?.[0]?.saldo_disponivel || 0);
-// Sexta-feira no fuso America/Bahia
-function ehSexta() {
-  const dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bahia' })).getDay();
-  return dia === 5;
+
+// ── Janela de saque (fuso America/Bahia, UTC−3 sem horário de verão) ──────────
+// Regra: solicitações são avulsas e ilimitadas durante a semana; o PAGAMENTO sai
+// só às sextas, com CORTE ao meio-dia — o que entra até sexta 12h cai naquela
+// sexta; depois disso, na sexta seguinte.
+function partesBahia(d) {
+  const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bahia', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  const wd = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bahia', weekday: 'short' }).format(d);
+  const idx = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[wd];
+  return { ymd, idx };
+}
+function ehSexta(now = new Date()) { return partesBahia(now).idx === 5; }
+// Meio-dia de HOJE em Bahia como instante UTC (corte da liberação de sexta).
+function corteHojeBahia(now = new Date()) { return new Date(`${partesBahia(now).ymd}T12:00:00-03:00`); }
+// Próxima liberação: sexta 12:00 (Bahia) igual/após `now`. Se já passou o corte
+// de sexta, aponta para a sexta seguinte.
+function proximaLiberacao(now = new Date()) {
+  const { ymd, idx } = partesBahia(now);
+  const sexta = new Date(`${ymd}T12:00:00-03:00`);
+  sexta.setUTCDate(sexta.getUTCDate() + ((5 - idx + 7) % 7)); // sexta desta semana (sem DST: mantém 12:00)
+  if (now.getTime() > sexta.getTime()) sexta.setUTCDate(sexta.getUTCDate() + 7);
+  return sexta;
 }
 
 export default async function handler(req) {
@@ -65,11 +83,17 @@ export default async function handler(req) {
       if (role !== 'admin') return forbidden();
       const saldos = (await db('saldo_usuarios?select=*&order=saldo_disponivel.desc')).data || [];
       const pendentes = (await db("saldo_lancamentos?status=eq.solicitado&order=criado_em.asc&select=*")).data || [];
-      return json({ saldos, pendentes });
+      // Marca quais solicitações já passaram do corte (elegíveis para a liberação de HOJE,
+      // se hoje for sexta) — o admin vê o que pode pagar nesta sexta.
+      const corte = corteHojeBahia();
+      const hojeSexta = ehSexta();
+      for (const p of pendentes) p.elegivel_hoje = hojeSexta && new Date(p.criado_em) <= corte;
+      return json({ saldos, pendentes, hoje_sexta: hojeSexta });
     }
     const saldo = await saldoDe(user.id);
     const extrato = (await db(`saldo_lancamentos?user_id=eq.${user.id}&order=criado_em.desc&limit=200&select=*`)).data || [];
-    return json({ saldo, extrato });
+    // Data da próxima liberação (sexta 12:00 Bahia) para exibir na tela do profissional.
+    return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString() });
   }
 
   // ── POST: solicitar saque ────────────────────────────────────────────────
@@ -99,6 +123,13 @@ export default async function handler(req) {
 
     if (acao === 'pagar') {
       if (!ehSexta()) return json({ error: 'Pagamentos de saque são processados apenas às sextas-feiras.' }, 422);
+      // Corte de sexta ao meio-dia: só paga hoje o que foi solicitado até 12h de HOJE.
+      // Solicitação feita depois do corte entra na liberação da próxima sexta.
+      const alvo = (await db(`saldo_lancamentos?id=eq.${id}&status=eq.solicitado&select=id,criado_em`)).data?.[0];
+      if (!alvo) return json({ error: 'Solicitação não encontrada ou já processada.' }, 404);
+      if (new Date(alvo.criado_em) > corteHojeBahia()) {
+        return json({ error: 'Solicitação feita após o corte de sexta (12h). Entra na liberação da próxima sexta.' }, 422);
+      }
       const r = await db(`saldo_lancamentos?id=eq.${id}&status=eq.solicitado`, {
         method: 'PATCH', body: JSON.stringify({ status: 'sacado' }), headers: { Prefer: 'return=minimal' },
       });

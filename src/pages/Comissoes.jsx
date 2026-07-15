@@ -41,8 +41,16 @@ export default function Comissoes() {
   const [valorSaque, setValorSaque] = useState('');
   const [msgSaque, setMsgSaque] = useState(null);
   const [showSaqueForm, setShowSaqueForm] = useState(false);
+  const [proximaLiberacao, setProximaLiberacao] = useState(null); // data da próxima sexta de pagamento
 
   const [cfinConfig, setCfinConfig] = useState({});  // config financeira por gateway
+
+  // "sexta, 18/07" a partir do ISO devolvido pela API (calculado no fuso Bahia no servidor).
+  const fmtLiberacao = (iso) => {
+    if (!iso) return null;
+    try { return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }).format(new Date(iso)); }
+    catch { return null; }
+  };
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -57,6 +65,7 @@ export default function Comissoes() {
       const sq = await saqueRes.json();
       setSaldoApi(Number(sq.saldo || 0));
       setExtrato(Array.isArray(sq.extrato) ? sq.extrato : []);
+      setProximaLiberacao(sq.proxima_liberacao || null);
     } catch { setSaldoApi(0); setExtrato([]); }
     const k = p?.chave_pix || '';
     setPixKey(k);
@@ -96,7 +105,8 @@ export default function Comissoes() {
       const res = await apiCall('/api/saque', { method: 'POST', body: JSON.stringify({ valor }) });
       const data = await res.json();
       if (res.ok) {
-        setMsgSaque({ tipo: 'ok', txt: `Saque solicitado! Saldo restante: ${fmt(data.saldo_restante)}` });
+        const lib = fmtLiberacao(proximaLiberacao);
+        setMsgSaque({ tipo: 'ok', txt: `Saque solicitado! Liberação ${lib ? `na ${lib}` : 'na próxima sexta'}. Saldo restante: ${fmt(data.saldo_restante)}` });
         setValorSaque('');
         setShowSaqueForm(false);
         carregar();
@@ -202,6 +212,11 @@ export default function Comissoes() {
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>Solicitar saque</div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Disponível: {fmt(totalDisponivel)}</div>
+              {proximaLiberacao && (
+                <div style={{ fontSize: 11, color: '#0D63DB', marginTop: 4, fontWeight: 600 }}>
+                  Pagamentos às sextas · próxima liberação: {fmtLiberacao(proximaLiberacao)}
+                </div>
+              )}
             </div>
             <button onClick={() => setShowSaqueForm(p => !p)} disabled={totalDisponivel <= 0 || !pixKeySalva}
               style={{ padding: '9px 18px', background: totalDisponivel > 0 && pixKeySalva ? '#0D63DB' : '#e2e8f0', color: totalDisponivel > 0 && pixKeySalva ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: totalDisponivel > 0 && pixKeySalva ? 'pointer' : 'default' }}>
