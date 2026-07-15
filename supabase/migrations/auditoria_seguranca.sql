@@ -26,7 +26,8 @@ declare
   allow_anon_definer text[] := array[
     'get_contrato_por_token','is_admin','is_equipe','app_role','email_existe',
     'obter_arquivo_ebook','registrar_imovel_visto','vincular_indicacao',
-    'usar_convite','usar_convite_equipe','salvar_kyc_equipe','gerar_codigo_indicacao'
+    'usar_convite','usar_convite_equipe','salvar_kyc_equipe','gerar_codigo_indicacao',
+    'get_convite_equipe_info','get_convite_vendedor_info'
   ];
   admin_rpcs text[] := array[
     'admin_busca_usuarios','admin_360_estatisticas','limpar_analises_orfas',
