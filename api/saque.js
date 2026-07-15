@@ -82,13 +82,43 @@ export default async function handler(req) {
     if (url.searchParams.get('todos') === '1') {
       if (role !== 'admin') return forbidden();
       const saldos = (await db('saldo_usuarios?select=*&order=saldo_disponivel.desc')).data || [];
-      const pendentes = (await db("saldo_lancamentos?status=eq.solicitado&order=criado_em.asc&select=*")).data || [];
+      // Embute o solicitante (nome/papel/PIX) para a conferência do admin.
+      const pendentes = (await db("saldo_lancamentos?status=eq.solicitado&order=criado_em.asc&select=*,perfis(nome,role,chave_pix)")).data || [];
       // Marca quais solicitações já passaram do corte (elegíveis para a liberação de HOJE,
       // se hoje for sexta) — o admin vê o que pode pagar nesta sexta.
       const corte = corteHojeBahia();
       const hojeSexta = ehSexta();
       for (const p of pendentes) p.elegivel_hoje = hojeSexta && new Date(p.criado_em) <= corte;
-      return json({ saldos, pendentes, hoje_sexta: hojeSexta });
+      return json({ saldos, pendentes, hoje_sexta: hojeSexta, proxima_liberacao: proximaLiberacao().toISOString() });
+    }
+
+    // Analítico de UM beneficiário: cada crédito (honorário/comissão) com o valor da
+    // VENDA que o originou e o REPASSE, para a conferência antes de liberar o saque.
+    if (url.searchParams.get('analitico') === '1') {
+      if (role !== 'admin') return forbidden();
+      const uid = url.searchParams.get('user_id') || '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid)) return json({ error: 'user_id inválido' }, 400);
+      const creditos = (await db(`saldo_lancamentos?user_id=eq.${uid}&tipo=in.(honorario_exito,comissao_venda)&order=criado_em.desc&select=tipo,valor,origem_tipo,origem_id,descricao,criado_em,status`)).data || [];
+      const arremIds = [...new Set(creditos.filter(c => c.tipo === 'honorario_exito' && c.origem_id).map(c => c.origem_id))];
+      const comIds  = [...new Set(creditos.filter(c => c.tipo === 'comissao_venda' && c.origem_id).map(c => c.origem_id))];
+      const arremMap = {}, comMap = {};
+      if (arremIds.length) {
+        const rows = (await db(`arrematacoes?id=in.(${arremIds.join(',')})&select=id,valor_arrematado`)).data || [];
+        for (const r of rows) arremMap[r.id] = Number(r.valor_arrematado || 0);
+      }
+      if (comIds.length) {
+        const rows = (await db(`comissoes?gateway_payment_id=in.(${comIds.map(encodeURIComponent).join(',')})&select=gateway_payment_id,valor_base,percentual,referencia`)).data || [];
+        for (const r of rows) comMap[r.gateway_payment_id] = r;
+      }
+      const linhas = creditos.map(c => ({
+        data: c.criado_em, tipo: c.tipo, descricao: c.descricao, status: c.status,
+        repasse: Number(c.valor || 0),
+        venda: c.tipo === 'honorario_exito' ? (arremMap[c.origem_id] ?? null) : (comMap[c.origem_id]?.valor_base ?? null),
+        percentual: c.tipo === 'comissao_venda' ? (comMap[c.origem_id]?.percentual ?? null) : null,
+        referencia: c.tipo === 'comissao_venda' ? (comMap[c.origem_id]?.referencia ?? null) : null,
+      }));
+      const totalRepasse = linhas.reduce((s, l) => s + (l.repasse > 0 ? l.repasse : 0), 0);
+      return json({ user_id: uid, linhas, total_repasse: totalRepasse });
     }
     const saldo = await saldoDe(user.id);
     const extrato = (await db(`saldo_lancamentos?user_id=eq.${user.id}&order=criado_em.desc&limit=200&select=*`)).data || [];
@@ -111,15 +141,28 @@ export default async function handler(req) {
     return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
   }
 
-  // ── PATCH: admin paga (só sexta) ou recusa ───────────────────────────────
+  // ── PATCH: admin paga (só sexta) — em massa ou individual — ou recusa ─────
   if (req.method === 'PATCH') {
     if (role !== 'admin') return forbidden();
-    const id = url.searchParams.get('id');
-    if (!id) return json({ error: 'id obrigatório' }, 400);
-    // id vai cru na query PostgREST (admin-only, mas validamos por higiene/defesa).
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return json({ error: 'id inválido' }, 400);
     let body; try { body = await req.json(); } catch { body = {}; }
     const acao = body.acao;
+
+    // Liberar TODOS os elegíveis de uma vez (sexta + até o corte de 12h).
+    if (acao === 'pagar_todos') {
+      if (!ehSexta()) return json({ error: 'Pagamentos de saque são processados apenas às sextas-feiras.' }, 422);
+      const corteISO = corteHojeBahia().toISOString();
+      const r = await db(`saldo_lancamentos?status=eq.solicitado&criado_em=lte.${encodeURIComponent(corteISO)}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'sacado' }), headers: { Prefer: 'return=representation' },
+      });
+      if (!r.ok) return json({ error: 'Erro ao liberar pagamentos', detail: r.data }, 500);
+      const pagos = Array.isArray(r.data) ? r.data.length : 0;
+      return json({ ok: true, pagos });
+    }
+
+    // Ações individuais precisam do id do lançamento (bigint).
+    const id = url.searchParams.get('id');
+    if (!id) return json({ error: 'id obrigatório' }, 400);
+    if (!/^\d+$/.test(id)) return json({ error: 'id inválido' }, 400);
 
     if (acao === 'pagar') {
       if (!ehSexta()) return json({ error: 'Pagamentos de saque são processados apenas às sextas-feiras.' }, 422);

@@ -7538,8 +7538,13 @@ function PrestacaoContasTab() {
   const [processando, setProcessando] = React.useState({});
   const [msg, setMsg] = React.useState(null);
   const [reembolsos, setReembolsos] = React.useState([]);
+  const [hojeSexta, setHojeSexta] = React.useState(false);
+  const [proximaLib, setProximaLib] = React.useState(null);
+  const [pagandoTodos, setPagandoTodos] = React.useState(false);
+  const [analitico, setAnalitico] = React.useState({}); // user_id -> { loading, linhas, total } (aberto)
 
   const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtLib = (iso) => { if (!iso) return null; try { return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }).format(new Date(iso)); } catch { return null; } };
 
   const carregarReembolsos = React.useCallback(async () => {
     const { data } = await supabase.from('reembolsos_garantia').select('*').eq('status', 'solicitado').order('solicitado_em', { ascending: true });
@@ -7560,6 +7565,8 @@ function PrestacaoContasTab() {
       const data = await res.json();
       setSaldos(Array.isArray(data.saldos) ? data.saldos : []);
       setPendentes(Array.isArray(data.pendentes) ? data.pendentes : []);
+      setHojeSexta(!!data.hoje_sexta);
+      setProximaLib(data.proxima_liberacao || null);
     } catch { setSaldos([]); setPendentes([]); }
     await carregarReembolsos();
     setLoading(false);
@@ -7585,9 +7592,34 @@ function PrestacaoContasTab() {
     setProcessando(p => ({ ...p, [id]: false }));
   };
 
+  // Libera TODOS os saques elegíveis (sexta + até o corte de 12h) de uma vez.
+  const pagarTodos = async () => {
+    if (!window.confirm('Liberar TODOS os saques elegíveis desta sexta? Confirme que já fez os PIX correspondentes.')) return;
+    setPagandoTodos(true); setMsg(null);
+    try {
+      const res = await apiCall('/api/saque', { method: 'PATCH', body: JSON.stringify({ acao: 'pagar_todos' }) });
+      const data = await res.json();
+      if (res.ok) { setMsg({ tipo: 'ok', txt: `${data.pagos || 0} saque(s) liberado(s).` }); await carregar(); }
+      else setMsg({ tipo: 'erro', txt: data.error || 'Erro ao liberar.' });
+    } catch { setMsg({ tipo: 'erro', txt: 'Erro ao liberar.' }); }
+    setPagandoTodos(false);
+  };
+
+  // Abre/fecha o analítico venda→repasse de um beneficiário (para conferência).
+  const verAnalitico = async (userId) => {
+    if (analitico[userId]) { setAnalitico(a => { const n = { ...a }; delete n[userId]; return n; }); return; }
+    setAnalitico(a => ({ ...a, [userId]: { loading: true } }));
+    try {
+      const res = await apiCall(`/api/saque?analitico=1&user_id=${userId}`);
+      const data = await res.json();
+      setAnalitico(a => ({ ...a, [userId]: { loading: false, linhas: data.linhas || [], total: data.total_repasse || 0 } }));
+    } catch { setAnalitico(a => ({ ...a, [userId]: { loading: false, linhas: [], total: 0 } })); }
+  };
+
   const S2 = {
     card: { background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '20px 24px', marginBottom: 20 },
   };
+  const TIPO_LBL = { honorario_exito: 'Honorário de êxito', comissao_venda: 'Comissão de venda' };
 
   return (
     <div style={{ maxWidth: 980 }}>
@@ -7632,32 +7664,103 @@ function PrestacaoContasTab() {
 
       {/* Solicitações pendentes */}
       <div style={S2.card}>
-        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 14 }}>Solicitações de saque</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#111' }}>
+            Solicitações de saque {pendentes.length > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: '#0D63DB', background: '#eff6ff', borderRadius: 999, padding: '1px 8px', marginLeft: 6 }}>{pendentes.length}</span>}
+          </div>
+          {(() => {
+            const elegiveis = pendentes.filter(p => p.elegivel_hoje).length;
+            return (
+              <button onClick={pagarTodos} disabled={pagandoTodos || !hojeSexta || elegiveis === 0}
+                title={!hojeSexta ? 'Só às sextas-feiras' : elegiveis === 0 ? 'Nenhum saque elegível para hoje' : `Libera ${elegiveis} saque(s)`}
+                style={{ padding: '8px 18px', background: (hojeSexta && elegiveis > 0 && !pagandoTodos) ? '#059669' : '#e2e8f0', color: (hojeSexta && elegiveis > 0 && !pagandoTodos) ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 12, cursor: (hojeSexta && elegiveis > 0 && !pagandoTodos) ? 'pointer' : 'default' }}>
+                {pagandoTodos ? 'Liberando…' : `Pagar todos${elegiveis > 0 ? ` (${elegiveis})` : ''}`}
+              </button>
+            );
+          })()}
+        </div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+          Pagamentos são liberados às sextas (corte 12h). {proximaLib && <>Próxima liberação: <strong>{fmtLib(proximaLib)}</strong>.</>} {!hojeSexta && 'Hoje não é sexta — libere no dia do pagamento.'}
+        </div>
         {loading ? (
           <div style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</div>
         ) : pendentes.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px 0', fontSize: 14 }}>Nenhuma solicitação pendente.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {pendentes.map(p => (
-              <div key={p.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{fmtBRL(Math.abs(Number(p.valor)))}</div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{p.descricao}</div>
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{new Date(p.criado_em).toLocaleString('pt-BR')}</div>
+            {pendentes.map(p => {
+              const an = analitico[p.user_id];
+              return (
+              <div key={p.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>
+                      {p.perfis?.nome || '—'} <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'capitalize' }}>· {p.perfis?.role || '—'}</span>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#059669', marginTop: 2 }}>{fmtBRL(Math.abs(Number(p.valor)))}</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                      PIX: {p.perfis?.chave_pix || '—'} · {new Date(p.criado_em).toLocaleString('pt-BR')}
+                    </div>
+                    <span style={{ display: 'inline-block', marginTop: 6, fontSize: 10.5, fontWeight: 800, borderRadius: 999, padding: '1px 8px', background: p.elegivel_hoje ? '#dcfce7' : '#fef9c3', color: p.elegivel_hoje ? '#15803d' : '#a16207' }}>
+                      {p.elegivel_hoje ? 'Elegível nesta sexta' : 'Próxima sexta'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => verAnalitico(p.user_id)}
+                      style={{ padding: '7px 14px', background: an ? '#0D63DB' : '#eff6ff', color: an ? 'white' : '#0D63DB', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      Analítico
+                    </button>
+                    <button onClick={() => acao(p.id, 'pagar')} disabled={processando[p.id]}
+                      style={{ padding: '7px 18px', background: processando[p.id] ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      Pagar
+                    </button>
+                    <button onClick={() => acao(p.id, 'recusar')} disabled={processando[p.id]}
+                      style={{ padding: '7px 18px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      Recusar
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => acao(p.id, 'pagar')} disabled={processando[p.id]}
-                    style={{ padding: '7px 18px', background: processando[p.id] ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    Pagar
-                  </button>
-                  <button onClick={() => acao(p.id, 'recusar')} disabled={processando[p.id]}
-                    style={{ padding: '7px 18px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    Recusar
-                  </button>
-                </div>
+
+                {/* Analítico venda → repasse do beneficiário */}
+                {an && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #cbd5e1' }}>
+                    {an.loading ? (
+                      <div style={{ fontSize: 12, color: '#94a3b8' }}>Carregando analítico…</div>
+                    ) : !an.linhas?.length ? (
+                      <div style={{ fontSize: 12, color: '#94a3b8' }}>Sem créditos lançados para este beneficiário.</div>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
+                              {['Data', 'Origem', 'Venda', '%', 'Repasse'].map(h => <th key={h} style={{ padding: '5px 8px', fontWeight: 700 }}>{h}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {an.linhas.map((l, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', color: '#334155' }}>
+                                <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }}>{new Date(l.data).toLocaleDateString('pt-BR')}</td>
+                                <td style={{ padding: '5px 8px' }}>{TIPO_LBL[l.tipo] || l.tipo}{l.referencia ? ` · ${l.referencia}` : ''}</td>
+                                <td style={{ padding: '5px 8px' }}>{l.venda != null ? fmtBRL(l.venda) : '—'}</td>
+                                <td style={{ padding: '5px 8px' }}>{l.percentual != null ? `${Number(l.percentual).toFixed(2)}%` : '—'}</td>
+                                <td style={{ padding: '5px 8px', fontWeight: 700, color: l.repasse >= 0 ? '#059669' : '#dc2626' }}>{fmtBRL(l.repasse)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{ borderTop: '2px solid #e2e8f0', fontWeight: 800, color: '#111' }}>
+                              <td style={{ padding: '6px 8px' }} colSpan={4}>Total de repasses (créditos)</td>
+                              <td style={{ padding: '6px 8px', color: '#059669' }}>{fmtBRL(an.total)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
