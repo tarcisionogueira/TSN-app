@@ -1359,13 +1359,6 @@ async function scraperLeiloesJudiciais(browser) {
     }
     console.log(`    LJUD: ${bensMap.size} bens colhidos (${vistos200} páginas 200)`);
 
-    // Diagnóstico único: quais campos vl_*/avaliação a API expõe (define se dá p/
-    // capturar avaliação — hoje 0 p/ todos os 1082 lotes, o que zera desconto/ROE).
-    if (bensMap.size) {
-      const amostra = [...bensMap.values()][0] || {};
-      const campos = Object.entries(amostra).filter(([k]) => /vl_|avalia|valor|lance|praca|pra[çc]a/i.test(k));
-      console.log(`    LJUD campos $: ${campos.map(([k, v]) => `${k}=${v}`).join(' | ').slice(0, 400)}`);
-    }
     const imoveis = [...bensMap.values()].map(it => {
       if (Number(it.statuslote_id) !== 1) return null; // só "Aberto para Lance"
       const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').replace(/\s+/g, ' ').trim();

@@ -53,8 +53,8 @@ Notas: CEF guarda docs em colunas (`link_*`), por isso "anexos=0" é normal. "Re
 ### Brechas priorizadas (impacto: cliente vê desconto/ROE, e-mail recomenda, IA lê docs)
 
 1. **Avaliação faltando (~2.500 lotes)** — LJUD, GRUPOLANCE, PESTANA, BIASI, FRAZAO, VIP, SODRE, SUPORTE. Sem avaliação → sem desconto/ROE/score de viabilidade → o lote fica menos visível na busca e nas recomendações por e-mail. **Maior impacto.**
-   - Contramedida iniciada: **LJUD** — tenta ler a avaliação da API (fallback 0, sem risco) + diagnóstico dos campos `$`. (Resultado do diagnóstico confirma se a API expõe o campo.)
-   - Para os demais: cada mapper é próprio; a técnica é ou (a) ler o campo de avaliação da fonte, ou (b) derivar do **% de desconto do card** (`aval = lance / (1 − desc)`, técnica já usada no Leilofy). Precisa de 1 diagnóstico + 1 rodada de teste por fonte — **não fazer em lote sem validar** (o scrape diário alimenta ~30k lotes).
+   - **LJUD investigado**: o mapper (`mapLoteLJUD_pp`) já lê `vl_avaliacao`, mas o endpoint de LISTA (`get-lotes`) **não retorna** a avaliação — ela só existe na **página de detalhe de cada lote**. Capturar exige um fetch por lote (como o passo de enriquecimento de documentos). É melhoria real, não conserto rápido → **backlog**.
+   - Para os demais: cada mapper é próprio; a técnica é ou (a) ler o campo de avaliação da fonte (se vier na lista), ou (b) derivar do **% de desconto do card** (`aval = lance / (1 − desc)`, técnica já usada no Leilofy), ou (c) buscar na página de detalhe. Precisa de 1 diagnóstico + 1 rodada de teste por fonte — **não fazer em lote sem validar** (o scrape diário alimenta ~30k lotes).
 2. **Matrícula faltando na família Superbid (~1.770 lotes)** — SUPERBID (2/1563!), SOLD, SBID9, SBID21. A matrícula é chave para o laudo jurídico e a due diligence do cliente. Verificar se a seção "Documentação" da oferta expõe matrícula ou se é limitação da fonte (muitas vezes vem só o edital).
 3. **PECINI/VENDASGOV sem matrícula/anexos** — volumes baixos; investigar quando sobrar tempo.
 
