@@ -79,6 +79,15 @@ export default async function handler(req, res) {
     if (!r.ok) return res.status(502).json({ error: `rpc moderador ${r.status}` });
     const total = await r.json().catch(() => null);
 
+    // Monitoramento de COBERTURA DE DOCUMENTOS: atualiza o insight docs:cobertura
+    // (leiloeiros com lacuna CORRIGÍVEL — ver leiloeiro_conhecimento.docs_estrategia)
+    // para entrar no relatório semanal sem eu precisar lembrar. Best-effort.
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/moderador_docs_coverage_insight`, {
+        method: 'POST', headers: h, body: '{}', signal: AbortSignal.timeout(15000),
+      });
+    } catch { /* não bloqueia o relatório */ }
+
     // Relatório completo (ordenado: crítico → atenção → info) + e-mail semanal ao admin.
     const cr = await fetch(`${SUPABASE_URL}/rest/v1/moderador_insights?select=categoria,severidade,agente,titulo,detalhe&order=severidade.asc`, {
       headers: h, signal: AbortSignal.timeout(15000),
