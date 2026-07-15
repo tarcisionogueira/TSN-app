@@ -297,13 +297,22 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
   return { assinaturaId: sub.id, status: sub.status, ativado };
 }
 
-async function verificar({ paymentId, assinaturaId }) {
+async function verificar({ paymentId, assinaturaId, userId }) {
+  // SEGURANÇA: só o DONO consulta, e devolvemos SÓ o status — nunca o objeto MP cru.
+  // Antes, qualquer logado passava um paymentId (numérico/enumerável) e recebia o
+  // pagamento MP completo de OUTRO cliente (e-mail, CPF, dígitos do cartão) — IDOR/PII.
+  // Amarra pelo external_reference (`userId|plano`) ou metadata.user_id.
   if (assinaturaId) {
     const s = await mpGet(`/preapproval/${assinaturaId}`);
-    return { tipo: 'assinatura', status: s.status, dados: s };
+    const dono = String(s?.external_reference || '').split('|')[0];
+    if (!dono || dono !== String(userId)) return { tipo: 'assinatura', status: 'nao_autorizado' };
+    return { tipo: 'assinatura', status: s.status };
   }
   const p = await mpGet(`/v1/payments/${paymentId}`);
-  return { tipo: 'pagamento', status: p.status, statusDetalhe: p.status_detail, dados: p };
+  const dono = String(p?.external_reference || '').split('|')[0]
+    || String(p?.metadata?.user_id ?? p?.metadata?.userId ?? '');
+  if (!dono || dono !== String(userId)) return { tipo: 'pagamento', status: 'nao_autorizado' };
+  return { tipo: 'pagamento', status: p.status, statusDetalhe: p.status_detail };
 }
 
 async function cancelarAssinatura({ assinaturaId, email, userId }) {

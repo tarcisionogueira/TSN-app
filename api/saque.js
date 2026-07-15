@@ -92,6 +92,8 @@ export default async function handler(req) {
     if (role !== 'admin') return forbidden();
     const id = url.searchParams.get('id');
     if (!id) return json({ error: 'id obrigatório' }, 400);
+    // id vai cru na query PostgREST (admin-only, mas validamos por higiene/defesa).
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return json({ error: 'id inválido' }, 400);
     let body; try { body = await req.json(); } catch { body = {}; }
     const acao = body.acao;
 

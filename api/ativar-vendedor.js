@@ -61,5 +61,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Falha ao ativar.', detalhe: t.slice(0, 200) });
   }
 
+  // Single-use: desativa o convite após ativar (não pode ser reutilizado — um token
+  // concede um % de comissão, então não deve valer para vários cadastros).
+  await sb(`convites_vendedor?token=eq.${encodeURIComponent(token)}`, {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ ativo: false }),
+  }).catch(() => {});
+
   return res.status(200).json({ ok: true, tipo, comissao_pct: pct, codigo });
 }

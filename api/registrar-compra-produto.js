@@ -33,8 +33,9 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Ação não permitida' }), { status: 403, headers });
   }
 
-  // Verifica se já existe compra ativa para evitar duplicata
-  const rc = await sb(`compras_produtos?user_id=eq.${user_id}&produto_tipo=eq.${produto_tipo}&produto_id=eq.${produto_id}&status=eq.ativo&select=id`);
+  // Verifica se já existe compra ativa para evitar duplicata. produto_tipo/produto_id vêm
+  // do corpo → encodeURIComponent (evita injeção de parâmetros na query PostgREST).
+  const rc = await sb(`compras_produtos?user_id=eq.${encodeURIComponent(user_id)}&produto_tipo=eq.${encodeURIComponent(produto_tipo)}&produto_id=eq.${encodeURIComponent(produto_id)}&status=eq.ativo&select=id`);
   const existentes = await rc.json();
   if (Array.isArray(existentes) && existentes.length > 0) {
     return new Response(JSON.stringify({ ok: true, duplicata: true }), { status: 200, headers });

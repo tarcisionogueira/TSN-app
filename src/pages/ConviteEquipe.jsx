@@ -300,14 +300,12 @@ export default function ConviteEquipe() {
 
   useEffect(() => {
     if (!token) return;
-    supabase.from('convites_equipe')
-      .select('id, token, roles, descricao, criado_em, expira_em')
-      .eq('token', token.toUpperCase())
-      .eq('ativo', true)
-      .maybeSingle()
+    // SEGURANÇA: valida o token por RPC de correspondência EXATA (get_convite_equipe_info).
+    // A tabela convites_equipe não é mais legível por token (evita enumerar todos os
+    // convites ativos e roubar um token de staff antes do convidado real).
+    supabase.rpc('get_convite_equipe_info', { p_token: token.toUpperCase() })
       .then(({ data, error }) => {
-        if (error || !data) setErro('Convite não encontrado, já utilizado ou expirado.');
-        else if (data.expira_em && new Date(data.expira_em) < new Date()) setErro('Este convite expirou.');
+        if (error || !data?.valido) setErro('Convite não encontrado, já utilizado ou expirado.');
         else setConvite(data);
         setLoading(false);
       });

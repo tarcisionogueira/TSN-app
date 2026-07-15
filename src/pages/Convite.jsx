@@ -33,22 +33,12 @@ export default function Convite() {
     async function detectar() {
       setLoading(true);
 
-      // 1. Try convites_equipe first (team invite by token)
-      const { data: equipeData } = await supabase
-        .from('convites_equipe')
-        .select('*')
-        .eq('token', codigo)
-        .eq('ativo', true)
-        .single();
-
-      if (equipeData) {
-        // Check not expired
-        if (equipeData.expira_em && new Date(equipeData.expira_em) < new Date()) {
-          setErro('Este link de convite da equipe expirou.');
-        } else {
-          setConviteEquipe(equipeData);
-          sessionStorage.setItem('tsn_convite_equipe', equipeData.token);
-        }
+      // 1. Try convites_equipe first (team invite by token) — via RPC de match EXATO
+      // (a tabela não é mais legível por token: evita enumeração de convites de staff).
+      const { data: equipeInfo } = await supabase.rpc('get_convite_equipe_info', { p_token: codigo });
+      if (equipeInfo?.valido) {
+        setConviteEquipe(equipeInfo);
+        sessionStorage.setItem('tsn_convite_equipe', codigo);
         setLoading(false);
         return;
       }
