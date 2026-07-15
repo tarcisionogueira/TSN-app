@@ -837,6 +837,25 @@ function UsuariosTab() {
       if (d.url) window.open(d.url, '_blank', 'noopener'); else alert(d.error || 'Não foi possível abrir.');
     } catch { alert('Não foi possível abrir.'); }
   };
+  // Gera os 3 relatórios (mercadológico/jurídico/laudo) do arremate EM NOME DO cliente.
+  // É o que alimenta o aprendizado (corpus previsto×realizado). Abre a tela /analise.
+  const gerarRelatoriosArrem = async (arremate) => {
+    if (!arremate.imovel_id) { alert('Este arremate ainda não tem imóvel-âncora — anexe um documento primeiro.'); return; }
+    try {
+      const { data: im } = await supabase.from('imoveis_leilao')
+        .select('id,endereco,cidade,estado,valor_minimo,modalidade,numero_processo,titulo')
+        .eq('id', arremate.imovel_id).maybeSingle();
+      const imovel = {
+        id: arremate.imovel_id, endereco: im?.endereco || arremate.titulo || '',
+        titulo: im?.titulo || arremate.titulo || 'Imóvel arrematado',
+        cidade: im?.cidade || arremate.cidade || '', estado: im?.estado || arremate.estado || '',
+        valorMinimo: im?.valor_minimo ?? arremate.valor_arrematacao ?? null,
+        modalidade: im?.modalidade || 'extrajudicial', numero_processo: im?.numero_processo || null,
+      };
+      iniciarSuporte({ id: atribUser.id, nome: atribUser.nome || atribUser.cpf, role: 'assessorado' });
+      navSup('/analise', { state: { manual: false, paraUserId: atribUser.id, imovel } });
+    } catch { alert('Não foi possível abrir a geração de relatórios.'); }
+  };
 
   const filtered = users.filter(u => {
     if (!busca) return true;
@@ -1055,14 +1074,21 @@ function UsuariosTab() {
                         </button>
                         {aberto && (
                           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {a.imovel_id ? (
-                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', padding: '7px 12px', background: atribAnexando === a.id ? '#e2e8f0' : '#0D63DB', color: atribAnexando === a.id ? '#94a3b8' : 'white', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: atribAnexando === a.id ? 'default' : 'pointer' }}>
-                                {atribAnexando === a.id ? '⏳ Enviando…' : '📎 Anexar documento (PDF)'}
-                                <input type="file" accept="application/pdf,.pdf" multiple disabled={atribAnexando === a.id} onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ''; anexarNoArremate(a, fs); }} style={{ display: 'none' }} />
-                              </label>
-                            ) : (
-                              <div style={{ fontSize: 11, color: '#b45309' }}>Sem imóvel-âncora — anexe pela conta do cliente (Meus Arrematados) para criá-lo.</div>
-                            )}
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {a.imovel_id ? (
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: atribAnexando === a.id ? '#e2e8f0' : '#0D63DB', color: atribAnexando === a.id ? '#94a3b8' : 'white', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: atribAnexando === a.id ? 'default' : 'pointer' }}>
+                                  {atribAnexando === a.id ? '⏳ Enviando…' : '📎 Anexar documento (PDF)'}
+                                  <input type="file" accept="application/pdf,.pdf" multiple disabled={atribAnexando === a.id} onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ''; anexarNoArremate(a, fs); }} style={{ display: 'none' }} />
+                                </label>
+                              ) : (
+                                <div style={{ fontSize: 11, color: '#b45309', alignSelf: 'center' }}>Sem imóvel-âncora — anexe pela conta do cliente (Meus Arrematados) para criá-lo.</div>
+                              )}
+                              {a.imovel_id && (
+                                <button type="button" onClick={() => gerarRelatoriosArrem(a)} title="Gera mercadológico, jurídico e laudo (em nome do cliente) — alimenta o aprendizado da IA" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#0e7490', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                                  🤖 Gerar relatórios
+                                </button>
+                              )}
+                            </div>
                             {a.anexos.length === 0 ? (
                               <div style={{ fontSize: 11.5, color: '#94a3b8' }}>Nenhum documento anexado.</div>
                             ) : a.anexos.map(x => (

@@ -67,6 +67,8 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
   const [imovelId, setImovelId] = React.useState(arr.imovel_id || null);
   const [nums, setNums] = React.useState({ avaliacao: null, valorMercado: null });
   const [novo, setNovo] = React.useState({ tipo: 'saida', categoria: 'Reforma', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10) });
+  const [preparando, setPreparando] = React.useState(false);
+  const navegar = useNavigate();
 
   React.useEffect(() => {
     supabase.from('arrematado_lancamentos').select('*').eq('arrematado_id', arr.id).order('data', { ascending: false })
@@ -147,6 +149,32 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
     return d.imovel_id;
   };
 
+  // Abre a geração dos 3 relatórios (mercadológico, jurídico, laudo de viabilidade)
+  // do imóvel-âncora deste arremate. É o que ALIMENTA O APRENDIZADO da IA: ao gerar,
+  // o corpus recalcula previsto×realizado. Reaproveita a tela /analise (com todo o
+  // fluxo/porta de progresso). Em modo suporte, gera EM NOME DO cliente (paraUserId).
+  const gerarRelatorios = async () => {
+    setPreparando(true);
+    try {
+      const imId = await garantirAncora();
+      const { data: im } = await supabase.from('imoveis_leilao')
+        .select('id,endereco,cidade,estado,valor_minimo,modalidade,numero_processo,titulo')
+        .eq('id', imId).maybeSingle();
+      const imovel = {
+        id: imId,
+        endereco: im?.endereco || arr.titulo || '',
+        titulo: im?.titulo || arr.titulo || 'Imóvel arrematado',
+        cidade: im?.cidade || arr.cidade || '',
+        estado: im?.estado || arr.estado || '',
+        valorMinimo: im?.valor_minimo ?? arr.valor_arrematacao ?? null,
+        modalidade: im?.modalidade || 'extrajudicial',
+        numero_processo: im?.numero_processo || null,
+      };
+      navegar('/analise', { state: { imovel, manual: false, paraUserId: soLeitura ? arr.user_id : null } });
+    } catch (e) { alert(e.message || 'Não foi possível abrir a geração de relatórios.'); }
+    finally { setPreparando(false); }
+  };
+
   const uploadDoc = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -213,6 +241,18 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
         <StatOp label="Valor de mercado" valor={nums.valorMercado} cor="#0d9488" sub={nums.valorMercado == null ? 'gere o relatório' : null} />
         <StatOp label="Arrematação" valor={arrematacao} cor="#0D63DB" />
         <StatOp label="ROE × mercado" valor={lucro} cor={lucro == null ? null : (lucro >= 0 ? '#15803d' : '#dc2626')} sub={lucroPct == null ? null : `${lucroPct >= 0 ? '+' : ''}${lucroPct.toFixed(0)}% sobre a arrematação`} />
+      </div>
+
+      {/* Gerar relatórios da IA (mercadológico + jurídico + laudo). É o que preenche o
+          "Valor de mercado"/ROE e ALIMENTA O APRENDIZADO (corpus previsto×realizado). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: nums.valorMercado == null ? '#eff6ff' : '#f8fafc', border: `1px solid ${nums.valorMercado == null ? '#bfdbfe' : '#e2e8f0'}`, borderRadius: 12, padding: '12px 16px' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#111' }}>{nums.valorMercado == null ? 'Relatórios da IA ainda não gerados' : 'Relatórios da IA'}</div>
+          <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5 }}>Gera o mercadológico, o jurídico e o laudo de viabilidade a partir dos documentos. Sem eles a IA <b>não aprende</b> com este arremate (o comparativo previsto×realizado depende do relatório).</div>
+        </div>
+        <button onClick={gerarRelatorios} disabled={preparando} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', background: preparando ? '#93c5fd' : '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: preparando ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+          {preparando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Abrindo…</> : <>🤖 {nums.valorMercado == null ? 'Gerar relatórios' : 'Abrir / regerar relatórios'}</>}
+        </button>
       </div>
 
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
@@ -294,6 +334,20 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
                   </div>
                 </>
               )}
+              {/* Confirmação de que a IA LEU os documentos: a validação abre cada PDF e
+                  o compara com a operação. Aqui o resumo; o selo por documento fica na lista. */}
+              {docs.length > 0 && (() => {
+                const lidos = docs.filter(d => d.validacao?.status).length;
+                const ok = docs.filter(d => d.validacao?.status === 'coerente').length;
+                const div = docs.filter(d => d.validacao?.status === 'divergente').length;
+                return (
+                  <div style={{ fontSize: 12, color: lidos ? '#15803d' : '#92400e', background: lidos ? '#f0fdf4' : '#fffbeb', border: `1px solid ${lidos ? '#bbf7d0' : '#fde68a'}`, borderRadius: 10, padding: '9px 12px', marginBottom: 12, fontWeight: 600, lineHeight: 1.5 }}>
+                    🤖 {lidos ? `A IA leu e conferiu ${lidos} de ${docs.length} documento${docs.length !== 1 ? 's' : ''}` : 'A IA ainda não conferiu os documentos'}
+                    {ok ? ` · ${ok} confere${ok !== 1 ? 'm' : ''}` : ''}{div ? ` · ${div} divergente${div !== 1 ? 's' : ''} (remova)` : ''}.
+                    {lidos < docs.length ? ' Os relatórios da IA também leem estes anexos ao serem gerados.' : ''}
+                  </div>
+                );
+              })()}
               {docsLoading ? (
                 <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '10px 0' }}>Carregando documentos…</div>
               ) : docs.length === 0 ? (
