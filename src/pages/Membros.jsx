@@ -63,6 +63,8 @@ export default function Membros() {
   // valores AO VIVO do admin (planos_config). Antes usava só o estático (cursos.js),
   // então mudar um preço no admin NÃO refletia na área de membros.
   const [planos, setPlanos] = useState(PLANOS);
+  // Preço do PACOTE de cursos AO VIVO do admin (planos_config.pacote); estático como fallback.
+  const [precoPacote, setPrecoPacote] = useState(PACOTE.preco);
 
   // Carregar cursos, aulas e ebooks
   useEffect(() => {
@@ -88,6 +90,8 @@ export default function Membros() {
     fetchData();
     // Preços dos planos AO VIVO do admin (planos_config).
     fetchPlanosComConfig().then(setPlanos).catch(() => {});
+    supabase.from('planos_config').select('preco').eq('plano_key', 'pacote').maybeSingle()
+      .then(({ data }) => { if (data && data.preco != null) setPrecoPacote(Number(data.preco)); }).catch(() => {});
   }, []);
 
   // Carregar progresso do Supabase (merge com local)
@@ -384,11 +388,11 @@ export default function Membros() {
             <div style={{ borderRadius:14, border:'2px dashed #f59e0b', padding:'18px 20px', background:'#fffbeb', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
               <div style={{ flex:1, minWidth:200 }}>
                 <div style={{ fontSize:12, fontWeight:800, color:'#92400e', textTransform:'uppercase', letterSpacing:1, marginBottom:4 }}>📦 {PACOTE.titulo}</div>
-                <div style={{ fontSize:13, color:'#78350f' }}>Todos os 4 cursos pagos em um único pacote, economize <strong>R$ {PACOTE.economia}</strong></div>
+                <div style={{ fontSize:13, color:'#78350f' }}>Todos os 4 cursos pagos em um único pacote, economize <strong>R$ {Math.max(0, PACOTE.precoOriginal - precoPacote)}</strong></div>
               </div>
               <div style={{ textAlign:'right' }}>
                 <div style={{ fontSize:12, color:'#94a3b8', textDecoration:'line-through' }}>R$ {PACOTE.precoOriginal}</div>
-                <div style={{ fontSize:24, fontWeight:900, color:'#92400e' }}>R$ {PACOTE.preco}</div>
+                <div style={{ fontSize:24, fontWeight:900, color:'#92400e' }}>R$ {precoPacote}</div>
                 <button style={{ marginTop:6, padding:'8px 18px', background:'#f59e0b', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
                   Adquirir pacote
                 </button>
