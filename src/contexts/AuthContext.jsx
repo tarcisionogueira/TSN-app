@@ -28,11 +28,12 @@ async function fetchPerfil(userId) {
     .eq('id', userId)
     .single();
 
-  // Cadastro obrigatório: nome, telefone/WhatsApp, CPF, cidade E estado, + aceite LGPD.
-  // Falta QUALQUER um → o cliente é levado a /completar-cadastro antes de usar o app.
+  // Cadastro-base obrigatório: nome, telefone/WhatsApp, cidade E estado, + aceite LGPD.
+  // O CPF NÃO entra aqui — só é exigido na hora de PAGAR (checkout) e de SACAR. A cidade
+  // é obrigatória porque alimenta o filtro por região e os alertas por e-mail.
+  // Falta QUALQUER um → um popup pede para completar (um campo por vez) antes de usar o app.
   const cadastroFalta = !data?.nome || !String(data?.nome).trim()
     || !data?.telefone
-    || !data?.cpf_hash
     || !data?.endereco_cidade || !data?.endereco_uf
     || !data?.lgpd_aceito;
 

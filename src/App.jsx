@@ -9,6 +9,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import TourGuia from './components/TourGuia';
 import ContratoObrigatorio from './components/ContratoObrigatorio';
+import CompletarCadastroModal from './components/CompletarCadastroModal';
 import ChatSuporte from './components/ChatSuporte';
 import SugestaoImovel from './components/SugestaoImovel';
 import Landing from './pages/Landing';
@@ -175,14 +176,14 @@ function RedirectPlano() {
 
 // Redireciona não-logados para /login preservando o destino
 function PrivateRoute({ children, roles }) {
-  const { isLoggedIn, role, loading, ativo, cadastroIncompleto } = useAuth();
+  const { isLoggedIn, role, loading, ativo } = useAuth();
   const loc = useLocation();
   if (loading) return null;
   if (!isLoggedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
   // Bloqueio de conta inativa é GLOBAL (rotas fora do MainLayout: /admin, /leiloeiro...)
   if (!ativo) return <ContaInativa />;
-  // Cadastro incompleto (ex.: login Google sem CPF/LGPD) → completar antes de usar o app
-  if (cadastroIncompleto && loc.pathname !== '/completar-cadastro') return <Navigate to="/completar-cadastro" replace />;
+  // Cadastro incompleto NÃO redireciona mais: um popup (CompletarCadastroModal) pede os
+  // dados que faltam UM POR VEZ, sobreposto ao app, sem tirar o usuário da tela.
   if (roles && !roles.includes(role)) return <Navigate to="/" replace />;
   return children;
 }
@@ -243,6 +244,7 @@ function MainLayout() {
       {showBonus && <PopupBonusAnalises userId={user.id} onFechar={() => setShowBonus(false)} />}
       {isLoggedIn && <TourGuia />}
       {user && <ContratoObrigatorio userId={user.id} />}
+      {user && <CompletarCadastroModal />}
       {isLoggedIn && <SugestaoImovel />}
       <ChatSuporte />
       <main style={{ flex: 1 }}>
