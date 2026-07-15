@@ -42,6 +42,7 @@ export default function Comissoes() {
   const [msgSaque, setMsgSaque] = useState(null);
   const [showSaqueForm, setShowSaqueForm] = useState(false);
   const [proximaLiberacao, setProximaLiberacao] = useState(null); // data da próxima sexta de pagamento
+  const [faltandoSaque, setFaltandoSaque] = useState([]); // campos do cadastro que faltam p/ liberar saque
 
   const [cfinConfig, setCfinConfig] = useState({});  // config financeira por gateway
 
@@ -66,6 +67,7 @@ export default function Comissoes() {
       setSaldoApi(Number(sq.saldo || 0));
       setExtrato(Array.isArray(sq.extrato) ? sq.extrato : []);
       setProximaLiberacao(sq.proxima_liberacao || null);
+      setFaltandoSaque(Array.isArray(sq.faltando) ? sq.faltando : []);
     } catch { setSaldoApi(0); setExtrato([]); }
     const k = p?.chave_pix || '';
     setPixKey(k);
@@ -218,13 +220,20 @@ export default function Comissoes() {
                 </div>
               )}
             </div>
-            <button onClick={() => setShowSaqueForm(p => !p)} disabled={totalDisponivel <= 0 || !pixKeySalva}
-              style={{ padding: '9px 18px', background: totalDisponivel > 0 && pixKeySalva ? '#0D63DB' : '#e2e8f0', color: totalDisponivel > 0 && pixKeySalva ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: totalDisponivel > 0 && pixKeySalva ? 'pointer' : 'default' }}>
+            <button onClick={() => setShowSaqueForm(p => !p)} disabled={totalDisponivel <= 0 || faltandoSaque.length > 0}
+              title={faltandoSaque.length > 0 ? `Complete o cadastro: falta ${faltandoSaque.join(', ')}` : undefined}
+              style={{ padding: '9px 18px', background: (totalDisponivel > 0 && faltandoSaque.length === 0) ? '#0D63DB' : '#e2e8f0', color: (totalDisponivel > 0 && faltandoSaque.length === 0) ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: (totalDisponivel > 0 && faltandoSaque.length === 0) ? 'pointer' : 'default' }}>
               Solicitar saque
             </button>
           </div>
-          {!pixKeySalva && totalDisponivel > 0 && (
-            <div style={{ fontSize: 12, color: '#d97706', marginTop: 8, fontWeight: 600 }}>Cadastre sua chave PIX acima para solicitar.</div>
+          {faltandoSaque.length > 0 && (
+            <div style={{ marginTop: 8, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e', marginBottom: 4 }}>⚠ Complete seu cadastro para liberar o saque. Falta:</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#92400e', lineHeight: 1.6 }}>
+                {faltandoSaque.map(f => <li key={f}><strong>{f}</strong></li>)}
+              </ul>
+              <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Chave PIX você preenche acima. Telefone no seu Perfil; nome e CPF, se faltarem, fale com o atendimento.</div>
+            </div>
           )}
           {showSaqueForm && (
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #dbeafe' }}>

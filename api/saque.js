@@ -122,8 +122,16 @@ export default async function handler(req) {
     }
     const saldo = await saldoDe(user.id);
     const extrato = (await db(`saldo_lancamentos?user_id=eq.${user.id}&order=criado_em.desc&limit=200&select=*`)).data || [];
+    // Pré-requisitos do saque: cadastro completo (nome, CPF, telefone, chave PIX).
+    // Aponta o que falta para o profissional liberar o saque (espelha a RPC).
+    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,telefone,chave_pix`)).data?.[0] || {};
+    const faltando = [];
+    if (!perfil.nome || !String(perfil.nome).trim()) faltando.push('nome');
+    if (!perfil.cpf || !String(perfil.cpf).trim()) faltando.push('CPF');
+    if (!perfil.telefone || !String(perfil.telefone).trim()) faltando.push('telefone');
+    if (!perfil.chave_pix || !String(perfil.chave_pix).trim()) faltando.push('chave PIX');
     // Data da próxima liberação (sexta 12:00 Bahia) para exibir na tela do profissional.
-    return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString() });
+    return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(), saque_habilitado: faltando.length === 0, faltando });
   }
 
   // ── POST: solicitar saque ────────────────────────────────────────────────

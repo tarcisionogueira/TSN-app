@@ -581,6 +581,7 @@ function UsuariosTab() {
   };
   const [atribLoad, setAtribLoad] = useState(false);
   const [exito, setExito] = useState(null); // editor do % de êxito INDIVIDUAL do membro da equipe
+  const [comAfiliado, setComAfiliado] = useState(null); // editor do % de comissão do afiliado/consultor (modal)
 
   // Abre o editor do % de êxito individual deste membro (advogado/analista/consultor).
   // O admin sempre recebe o saldo (total − soma dos envolvidos), então não tem editor aqui.
@@ -608,6 +609,22 @@ function UsuariosTab() {
       const d = await res.json();
       setExito(e => ({ ...e, saving: false, msg: res.ok ? 'salvo' : (d.error || 'Erro ao salvar.') }));
     } catch { setExito(e => ({ ...e, saving: false, msg: 'Erro ao salvar.' })); }
+  };
+
+  // Editor (modal) do % de comissão do afiliado/consultor sobre as vendas do link dele.
+  const abrirComissaoAfiliado = async (u) => {
+    setComAfiliado({ user: u, loading: true });
+    try {
+      const { data } = await supabase.from('perfis').select('comissao_afiliado_pct, vendedor_tipo').eq('id', u.id).single();
+      setComAfiliado({ user: u, loading: false, valor: String(data?.comissao_afiliado_pct ?? 0), tipo: data?.vendedor_tipo || u.role });
+    } catch { setComAfiliado({ user: u, loading: false, valor: '0', msg: 'Erro ao carregar.' }); }
+  };
+  const salvarComissaoAfiliado = async () => {
+    if (!comAfiliado?.user) return;
+    const pct = Math.max(0, Math.min(100, Number(String(comAfiliado.valor).replace(',', '.')) || 0));
+    setComAfiliado(c => ({ ...c, saving: true, msg: '' }));
+    const { error } = await supabase.from('perfis').update({ comissao_afiliado_pct: pct }).eq('id', comAfiliado.user.id);
+    setComAfiliado(c => ({ ...c, saving: false, valor: String(pct), msg: error ? (error.message || 'Erro ao salvar.') : 'salvo' }));
   };
 
   const verComo = (u) => {
@@ -851,15 +868,7 @@ function UsuariosTab() {
                                 <button
                                   style={{ padding: '5px 10px', background: '#fce7f3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#db2777', cursor: 'pointer' }}
                                   title="% de comissão sobre as vendas que vierem pelo link deste consultor/afiliado"
-                                  onClick={async () => {
-                                    const { data } = await supabase.from('perfis').select('comissao_afiliado_pct').eq('id', u.id).single();
-                                    const atual = data?.comissao_afiliado_pct ?? 0;
-                                    const v = window.prompt(`Comissão de ${u.nome || 'membro'} sobre as vendas que vierem pelo link dele (%):`, String(atual));
-                                    if (v === null) return;
-                                    const pct = Math.max(0, Math.min(100, Number(String(v).replace(',', '.')) || 0));
-                                    const { error } = await supabase.from('perfis').update({ comissao_afiliado_pct: pct }).eq('id', u.id);
-                                    window.alert(error ? ('Erro: ' + error.message) : `Comissão definida em ${pct.toLocaleString('pt-BR')}%.`);
-                                  }}>
+                                  onClick={() => abrirComissaoAfiliado(u)}>
                                   🔗 Comissão
                                 </button>
                               )}
@@ -1098,6 +1107,38 @@ function UsuariosTab() {
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => setExito(null)} disabled={exito.saving} style={{ padding: '8px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
                   <button onClick={salvarExito} disabled={exito.saving} style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: exito.saving ? 'default' : 'pointer' }}>{exito.saving ? 'Salvando…' : 'Salvar'}</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal — % de comissão do afiliado/consultor (padroniza o antigo prompt) */}
+      {comAfiliado && (
+        <div onClick={() => !comAfiliado.saving && setComAfiliado(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 22, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 2 }}>Comissão de afiliado — {comAfiliado.user?.nome || comAfiliado.user?.cpf || 'Membro'}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
+              Percentual que <strong>{comAfiliado.user?.nome || 'este vendedor'}</strong> recebe sobre as <strong>vendas de assinatura</strong> que vierem pelo link dele. Vale para as próximas vendas — não altera comissões já lançadas.
+            </div>
+            {comAfiliado.loading ? (
+              <div style={{ color: '#94a3b8', fontSize: 14, padding: 20, textAlign: 'center' }}>Carregando…</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Comissão</div>
+                  <input type="number" step="0.1" min="0" max="100" value={comAfiliado.valor}
+                    onChange={e => setComAfiliado(x => ({ ...x, valor: e.target.value, msg: '' }))}
+                    style={{ width: 90, padding: '7px 8px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'right' }} />
+                  <span style={{ fontSize: 12, color: '#64748b' }}>% sobre a venda</span>
+                </div>
+                {comAfiliado.msg && comAfiliado.msg !== 'salvo' && <div style={{ fontSize: 12.5, color: '#dc2626', marginBottom: 10 }}>{comAfiliado.msg}</div>}
+                {comAfiliado.msg === 'salvo' && <div style={{ fontSize: 12.5, color: '#16a34a', marginBottom: 10 }}>Comissão salva. Vale para as próximas vendas.</div>}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setComAfiliado(null)} disabled={comAfiliado.saving} style={{ padding: '8px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
+                  <button onClick={salvarComissaoAfiliado} disabled={comAfiliado.saving} style={{ padding: '8px 16px', background: '#db2777', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: comAfiliado.saving ? 'default' : 'pointer' }}>{comAfiliado.saving ? 'Salvando…' : 'Salvar'}</button>
                 </div>
               </>
             )}

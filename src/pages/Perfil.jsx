@@ -413,6 +413,7 @@ export default function Perfil() {
   const [solicitandoSaque, setSolicitandoSaque] = useState(false);
   const [msgSaque, setMsgSaque] = useState(null);
   const [proximaLiberacao, setProximaLiberacao] = useState(null); // data da próxima sexta de pagamento
+  const [faltandoSaque, setFaltandoSaque] = useState([]); // campos do cadastro que faltam p/ liberar saque
 
   // "sexta-feira, 18/07" — data calculada no servidor (fuso Bahia) e devolvida pela API.
   const fmtLiberacao = (iso) => {
@@ -425,7 +426,11 @@ export default function Perfil() {
     try {
       const res = await apiCall('/api/saque');
       const data = await res.json();
-      if (res.ok) { setSaldoSaque(Number(data.saldo || 0)); setProximaLiberacao(data.proxima_liberacao || null); }
+      if (res.ok) {
+        setSaldoSaque(Number(data.saldo || 0));
+        setProximaLiberacao(data.proxima_liberacao || null);
+        setFaltandoSaque(Array.isArray(data.faltando) ? data.faltando : []);
+      }
     } catch { /* ignora */ }
   };
 
@@ -506,6 +511,7 @@ export default function Perfil() {
       setConfirmarSenha('');
       setOriginal({ telefone, chavePix, end: { ...end } });
       setMensagem({ tipo: 'sucesso', texto: 'Dados atualizados com sucesso!' });
+      if (temComissao) carregarSaldo(); // reavalia o que falta p/ liberar o saque
     } catch (err) {
       setMensagem({ tipo: 'erro', texto: err.message || 'Erro ao salvar alterações.' });
     } finally {
@@ -717,15 +723,24 @@ export default function Perfil() {
                   📅 Próxima liberação: {fmtLiberacao(proximaLiberacao)}
                 </div>
               )}
-              <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: chavePix ? '#16a34a' : '#d97706' }}>
-                {chavePix ? '✓ Chave PIX cadastrada' : '⚠ Cadastre sua chave PIX abaixo para poder sacar'}
-              </div>
+              {faltandoSaque.length === 0 ? (
+                <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: '#16a34a' }}>✓ Cadastro completo — você pode solicitar saque.</div>
+              ) : (
+                <div style={{ marginTop: 8, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, color: '#92400e', marginBottom: 4 }}>⚠ Complete seu cadastro para liberar o saque. Falta:</div>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: '#92400e', lineHeight: 1.6 }}>
+                    {faltandoSaque.map(f => <li key={f}><strong>{f}</strong></li>)}
+                  </ul>
+                  <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Telefone e chave PIX você preenche abaixo, nos dados cadastrais. Nome e CPF, se faltarem, fale com o atendimento.</div>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => { setShowSaqueForm(v => !v); setMsgSaque(null); }}
-                disabled={!saldoSaque || saldoSaque <= 0}
-                style={{ flex: 1, padding: '9px', background: saldoSaque > 0 ? '#0D63DB' : '#e2e8f0', color: saldoSaque > 0 ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: saldoSaque > 0 ? 'pointer' : 'default' }}>
+                disabled={!saldoSaque || saldoSaque <= 0 || faltandoSaque.length > 0}
+                title={faltandoSaque.length > 0 ? `Complete o cadastro: falta ${faltandoSaque.join(', ')}` : undefined}
+                style={{ flex: 1, padding: '9px', background: (saldoSaque > 0 && faltandoSaque.length === 0) ? '#0D63DB' : '#e2e8f0', color: (saldoSaque > 0 && faltandoSaque.length === 0) ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: (saldoSaque > 0 && faltandoSaque.length === 0) ? 'pointer' : 'default' }}>
                 Solicitar saque
               </button>
               <button onClick={() => navGuard('/comissoes')}
