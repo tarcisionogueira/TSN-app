@@ -56,7 +56,7 @@ function StatOp({ label, valor, cor, sub }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Tela do arremate (dedicada): números da operação + Lançamentos + Documentos
 // ─────────────────────────────────────────────────────────────────────────────
-function Detalhe({ arr, onBack, onChange, soLeitura }) {
+function Detalhe({ arr, onBack, onChange, soLeitura, podeEditar }) {
   const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   const [lancs, setLancs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -243,8 +243,10 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
         <StatOp label="ROE × mercado" valor={lucro} cor={lucro == null ? null : (lucro >= 0 ? '#15803d' : '#dc2626')} sub={lucroPct == null ? null : `${lucroPct >= 0 ? '+' : ''}${lucroPct.toFixed(0)}% sobre a arrematação`} />
       </div>
 
-      {/* Gerar relatórios da IA (mercadológico + jurídico + laudo). É o que preenche o
-          "Valor de mercado"/ROE e ALIMENTA O APRENDIZADO (corpus previsto×realizado). */}
+      {/* Gerar relatórios da IA (mercadológico + jurídico + laudo). Preenche o
+          "Valor de mercado"/ROE e ALIMENTA O APRENDIZADO (corpus previsto×realizado).
+          Só p/ o titular (gera p/ si) ou no suporte (gera em nome do cliente). */}
+      {(podeEditar || soLeitura) && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: nums.valorMercado == null ? '#eff6ff' : '#f8fafc', border: `1px solid ${nums.valorMercado == null ? '#bfdbfe' : '#e2e8f0'}`, borderRadius: 12, padding: '12px 16px' }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: '#111' }}>{nums.valorMercado == null ? 'Relatórios da IA ainda não gerados' : 'Relatórios da IA'}</div>
@@ -254,6 +256,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
           {preparando ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Abrindo…</> : <>🤖 {nums.valorMercado == null ? 'Gerar relatórios' : 'Abrir / regerar relatórios'}</>}
         </button>
       </div>
+      )}
 
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', gap: 8, padding: '14px 20px 0' }}>
@@ -272,7 +275,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
                   </div>
                 ))}
               </div>
-              {!soLeitura && (
+              {podeEditar && (
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: 10 }}>Novo lançamento</div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -304,7 +307,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
                         <div style={{ fontSize: 11, color: '#94a3b8' }}>{l.data ? new Date(l.data + 'T12:00:00').toLocaleDateString('pt-BR') : ''}</div>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 800, color: l.tipo === 'entrada' ? '#059669' : '#dc2626' }}>{l.tipo === 'entrada' ? '+' : '−'} {brl(l.valor)}</div>
-                      {!soLeitura && <button onClick={() => delLanc(l.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
+                      {podeEditar && <button onClick={() => delLanc(l.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
                     </div>
                   ))}
                 </div>
@@ -314,9 +317,11 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
 
           {aba === 'documentos' && (
             <>
-              {soLeitura ? (
+              {!podeEditar ? (
                 <div style={{ fontSize: 12, color: '#9a3412', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '9px 12px', marginBottom: 12, fontWeight: 600 }}>
-                  👁 Modo suporte — somente visualização dos documentos do assinante.
+                  👁 {soLeitura
+                    ? 'Modo suporte — somente visualização dos documentos do assinante.'
+                    : 'Somente o titular anexa documentos por aqui. A inclusão pela equipe é feita em Usuários › Atribuir arremate.'}
                 </div>
               ) : (
                 <>
@@ -368,7 +373,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
                         </div>
                       </div>
                       <button onClick={() => abrirDoc(d)} title="Abrir" style={{ background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer' }}><ExternalLink size={15} /></button>
-                      {!soLeitura && <button onClick={() => delDoc(d)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
+                      {podeEditar && <button onClick={() => delDoc(d)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
                     </div>
                   ))}
                 </div>
@@ -505,6 +510,11 @@ export default function Arrematados() {
     setLoading(false);
   }, [uid]);
   React.useEffect(() => { carregar(); }, [carregar]);
+  // Ao ENTRAR ou SAIR do modo suporte, fecha qualquer arremate aberto. Senão a tela
+  // interna continua exibindo o arremate de OUTRO usuário e, fora do suporte, o botão
+  // de anexar reaparece — deixando o admin inserir documentos pela tela do cliente
+  // (o vazamento relatado). A inclusão pela equipe é só pelo popup de Atribuir arremate.
+  React.useEffect(() => { setSel(null); }, [impersonate]);
 
   // Veio de "✅ Arrematei!" (Painel) com o imóvel pré-preenchido → abre o registro.
   // Em modo suporte não abre (o registro é ação do próprio assinante).
@@ -553,7 +563,7 @@ export default function Arrematados() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sel ? (
-        <Detalhe arr={sel} soLeitura={soLeitura} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
+        <Detalhe arr={sel} soLeitura={soLeitura} podeEditar={!soLeitura && sel.user_id === user?.id} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
       ) : (
       <>
       <div>
