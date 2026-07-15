@@ -2653,8 +2653,9 @@ async function reconLeilofy(browser) {
 function mapLoteLeilofy(raw, id) {
   const text = String(raw?.text || '');
   const q = (re) => { const m = text.match(re); return m ? m[1].trim() : ''; };
-  const avaliacao = parseBRL(q(/avalia[çc][ãa]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/i));
-  const lance = parseBRL(q(/lance[^R]{0,50}R\$\s*([\d.]+,\d{2})/i));
+  // cents opcionais — o site pode exibir "R$ 225.000,00" ou "R$ 225.000".
+  const avaliacao = parseBRL(q(/avalia[çc][ãa]o[^R]{0,40}R\$\s*([\d.]+(?:,\d{2})?)/i));
+  const lance = parseBRL(q(/lance[^R]{0,50}R\$\s*([\d.]+(?:,\d{2})?)/i));
   const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
   const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
   const areaCon = q(/[ÁA]rea constru[íi]da:\s*([\d.,]+)/i);
@@ -2718,7 +2719,10 @@ async function scraperLeilofy(browser) {
     if (i++ >= 300) break;
     try {
       await page.goto(`https://leiloariasmart.com.br/imovel/${id}`, { waitUntil: 'networkidle2', timeout: 40000 });
-      await sleep(1000);
+      // A SPA renderiza os valores/descrição APÓS o networkidle — espera o conteúdo
+      // aparecer (senão o parse acha 0 e o lote é descartado, como no 1º teste).
+      await page.waitForFunction(() => /avalia[çc][ãa]o|Localiza[çc][ãa]o|Lance/i.test(document.body?.innerText || ''), { timeout: 8000 }).catch(() => {});
+      await sleep(900);
       const det = await page.evaluate(() => {
         const text = (document.body?.innerText || '').slice(0, 9000);
         const titulo = (document.querySelector('h1,h2,.titulo,.title')?.innerText || '').trim();
@@ -2731,6 +2735,8 @@ async function scraperLeilofy(browser) {
       }).catch(() => null);
       if (!det) continue;
       const row = mapLoteLeilofy(det, id);
+      // Debug dos 3 primeiros lotes: confirma que o parse pega os valores após o render.
+      if (i <= 3) console.log(`    Leilofy debug #${id}: aval=${row?.valor_avaliacao} lance=${row?.valor_minimo} end="${(row?.endereco || '').slice(0, 50)}" textLen=${(det.text || '').length}`);
       if (row && row.valor_minimo) imoveis.push(row);
     } catch { /* lote a lote; nunca derruba o scrape */ }
     await sleep(120);
