@@ -24,6 +24,10 @@ const SITES = {
     base: 'https://www.webleiloes.com.br',
     paths: ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes'],
   },
+  RJLEILOES: {
+    base: 'https://www.rjleiloes.com.br',
+    paths: ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes', '/lotes', '/imovel', '/pesquisa?tipo=imovel'],
+  },
 };
 
 const alvo = String(process.env.RECON_SITES || 'PECINI,WEBLEILOES').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
