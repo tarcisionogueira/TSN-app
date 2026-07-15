@@ -22,7 +22,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function classifica(txt, url) {
   const t = `${txt || ''} ${url || ''}`;
-  if (/matr[ií]cul/i.test(t)) return 'matricula';
+  // Aceita também a abreviação do SODRE ("Matr." / "Matr 12345"), não só "matrícula".
+  if (/matr[ií]cul|\bmatr\.?\b/i.test(t)) return 'matricula';
   if (/laudo|avalia[çc]/i.test(t)) return 'laudo';
   if (/edital/i.test(t)) return 'edital';
   if (/cat[áa]logo/i.test(t)) return 'anexo';
@@ -31,12 +32,12 @@ function classifica(txt, url) {
 
 async function main() {
   const { data: pend } = await supabase.from('imoveis_leilao')
-    .select('id, fonte_id').eq('fonte', 'SODRE').eq('ativo', true)
+    .select('id, fonte_id, data_leilao').eq('fonte', 'SODRE').eq('ativo', true)
     // Falta anexo OU foto: assim os lotes que já têm doc mas seguem sem foto
     // também entram p/ o backfill de og:image (auto-limitante — some do filtro
     // assim que link_foto é preenchido).
     .or('anexos.is.null,anexos.eq.[],link_foto.is.null').limit(LOTE);
-  const nossos = new Map((pend || []).map(l => [String(l.fonte_id).replace(/^sodre_/, ''), l.id]));
+  const nossos = new Map((pend || []).map(l => [String(l.fonte_id).replace(/^sodre_/, ''), { id: l.id, data: l.data_leilao }]));
   if (!nossos.size) { console.log('SODRE: nenhum lote pendente.'); return; }
   console.log(`SODRE: ${nossos.size} lote(s) pendentes.`);
 
@@ -66,10 +67,19 @@ async function main() {
 
     let ok = 0, semMap = 0, semDoc = 0, erro = 0;
     const fim = Date.now() + 22 * 60 * 1000;
-    for (const [lid, imovelId] of nossos) {
+    for (const [lid, { id: imovelId, data: dataLeilao }] of nossos) {
       if (Date.now() > fim) { console.log('deadline — resto p/ próxima rodada'); break; }
       const aid = mapa.get(lid);
-      if (!aid) { semMap++; console.log(`- sodre_${lid}: não achado no search-lots (leilão encerrado?)`); continue; }
+      if (!aid) {
+        semMap++;
+        // Fora do search-lots + data do leilão no passado = ENCERRADO. Expira (ativo=false)
+        // p/ não virar lote-zumbi (ativo mas sumido da fonte, poluindo busca e fila de docs).
+        if (dataLeilao && Date.parse(dataLeilao) < Date.now()) {
+          await supabase.from('imoveis_leilao').update({ ativo: false }).eq('id', imovelId);
+          console.log(`× sodre_${lid}: leilão encerrado (${dataLeilao}) → expirado`);
+        } else console.log(`- sodre_${lid}: não achado no search-lots (leilão encerrado?)`);
+        continue;
+      }
       const loteUrl = `https://leilao.sodresantoro.com.br/leilao/${aid}/lote/${lid}/`;
       try {
         await page.goto(loteUrl, { waitUntil: 'networkidle2', timeout: 40000 });

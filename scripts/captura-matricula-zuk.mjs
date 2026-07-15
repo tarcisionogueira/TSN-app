@@ -7,7 +7,7 @@
  * expira). O Vercel segue como fallback on-demand (api/_zuk-auth.js).
  *
  * Secrets necessários: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY, ZUK_EMAIL, ZUK_SENHA.
- * Config opcional: ZUK_MATRICULA_LOTE (quantos lotes por rodada, default 20).
+ * Config opcional: ZUK_MATRICULA_LOTE (quantos lotes por rodada, default 50).
  */
 import { createClient } from '@supabase/supabase-js';
 import { Buffer } from 'buffer';
@@ -15,7 +15,8 @@ import { loginZuk, matriculaLoteLogado, jarHeader } from '../api/_zuk-auth.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
-const LOTE = Number(process.env.ZUK_MATRICULA_LOTE || 20);
+const LOTE = Number(process.env.ZUK_MATRICULA_LOTE || 50);
+const COOLDOWN_DIAS = 14; // negative-cache: re-tenta um lote "sem matrícula" só após isso
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 
 async function jaTemMatricula(imovelId) {
@@ -41,11 +42,18 @@ async function main() {
   if (!process.env.ZUK_EMAIL || !process.env.ZUK_SENHA) { console.error('ZUK_EMAIL/ZUK_SENHA ausentes'); process.exit(1); }
 
   // Lotes ZUK ativos ainda SEM matrícula (usa link_edital como URL do lote no Zuk).
+  // ORDER BY matricula_checada_em (NULLS FIRST) + negative-cache: os NUNCA checados vêm
+  // primeiro e os já checados-sem-matrícula só voltam após o cooldown. Assim a rodada
+  // ALCANÇA A CAUDA em vez de reprocessar sempre a cabeça (lotes login-gated sem matrícula).
+  const cutoff = new Date(Date.now() - COOLDOWN_DIAS * 24 * 3600 * 1000).toISOString();
   const { data: lotes, error } = await supabase.from('imoveis_leilao')
     .select('id, link_edital')
     .eq('fonte', 'ZUK').eq('ativo', true)
-    .or('link_matricula.is.null,link_matricula.eq.')
+    .is('link_matricula', null)
     .not('link_edital', 'is', null)
+    .or(`matricula_checada_em.is.null,matricula_checada_em.lt.${cutoff}`)
+    .order('matricula_checada_em', { nullsFirst: true, ascending: true })
+    .order('id', { ascending: true })
     .limit(LOTE);
   if (error) { console.error('Erro ao ler lotes:', error.message); process.exit(1); }
   if (!lotes?.length) { console.log('Nenhum lote ZUK pendente de matrícula.'); return; }
@@ -59,7 +67,14 @@ async function main() {
     try {
       if (await jaTemMatricula(lote.id)) continue;
       const r = await matriculaLoteLogado(lote.link_edital, jar);
-      if (!r?.matricula) { semMat++; console.log(`- ${lote.id}: sem matrícula (cards=${r?.cards ?? '?'})`); continue; }
+      if (!r?.matricula) {
+        semMat++;
+        // negative-cache: marca que checamos e a fonte não tinha matrícula. Sai da fila
+        // por COOLDOWN_DIAS (volta depois, caso a matrícula seja publicada mais tarde).
+        await supabase.from('imoveis_leilao').update({ matricula_checada_em: new Date().toISOString() }).eq('id', lote.id);
+        console.log(`- ${lote.id}: sem matrícula (cards=${r?.cards ?? '?'})`);
+        continue;
+      }
       // Baixa com sessão + Referer (a URL assinada do Zuk pode exigir os dois).
       let host = ''; try { host = new URL(r.matricula).host; } catch { /* */ }
       const resp = await fetch(r.matricula, {

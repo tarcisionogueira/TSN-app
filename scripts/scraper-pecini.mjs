@@ -57,6 +57,38 @@ function inferirTipo(titulo = '') {
   return 'outros';
 }
 
+// Resolve href relativo → absoluto no domínio do Pecini (o _abs do core não é exportado).
+function absPecini(href) {
+  if (!href) return null;
+  if (/^https?:\/\//i.test(href)) return href;
+  if (/^\/\//.test(href)) return 'https:' + href;
+  if (/^\//.test(href)) return BASE + href;
+  return `${BASE}/${String(href).replace(/^\.?\//, '')}`;
+}
+
+// Extrai os DOCUMENTOS (PDFs) da página do lote — o Pecini serve em
+// /arquivos/Leiloes/Docs/*.pdf. Coleta todo <a href>.pdf, classifica por rótulo/nome e
+// monta os anexos. Zero-regressão: sem PDF na página, retorna [] e o comportamento é o
+// de hoje (link_edital = página do lote, sem matrícula). Só ADICIONA cobertura.
+function extrairDocs(html) {
+  const anexos = [];
+  const vistos = new Set();
+  for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+\.pdf(?:\?[^"']*)?)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const url = absPecini(m[1]);
+    if (!url || vistos.has(url)) continue; vistos.add(url);
+    const rotulo = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const alvo = `${rotulo} ${url}`.toLowerCase();
+    const tipo = /matr[íi]cul/.test(alvo) ? 'matricula'
+      : /edital/.test(alvo) ? 'edital'
+      : /laudo|avalia[çc]/.test(alvo) ? 'laudo'
+      : 'anexo';
+    anexos.push({ nome: (rotulo || tipo).slice(0, 60), url, tipo });
+  }
+  const ordem = { matricula: 0, edital: 1, laudo: 2, anexo: 3 };
+  anexos.sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9));
+  return anexos;
+}
+
 // "barreiras-ba" → { cidade: 'Barreiras', uf: 'BA' } (o slug do lote traz cidade+UF).
 function cidadeUfDoSlug(slug) {
   const m = String(slug || '').match(/^(.+)-([a-z]{2})$/i);
@@ -134,6 +166,11 @@ function parseDetalhe(html, rec) {
     : 'extrajudicial';
   const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
 
+  // Documentos do lote (matrícula/edital/laudo) a partir dos PDFs da própria página.
+  const anexos = extrairDocs(html);
+  const matriculaDoc = anexos.find(a => a.tipo === 'matricula')?.url || null;
+  const editalDoc = anexos.find(a => a.tipo === 'edital')?.url || null;
+
   // Página genérica (lote inexistente/redirect p/ a home): og:image é o ícone do
   // site (apple-touch-icon / Themes) e/ou título institucional. Marca p/ pular.
   const paginaInvalida = !base.link_foto
@@ -150,6 +187,9 @@ function parseDetalhe(html, rec) {
     descricao: (base.descricao || '').slice(0, 500) || null,
     data_leilao: base.data_leilao || extrairData(html),
     numero_matricula: base.numero_matricula || null,
+    link_matricula: matriculaDoc,
+    link_edital_doc: editalDoc,
+    anexos: anexos.length ? anexos : null,
     paginaInvalida,
   };
 }
@@ -170,8 +210,11 @@ function montarRow(rec, det) {
     valor_minimo: vm,
     area_m2: det.area_m2 || 0,
     descricao: det.descricao,
-    link_edital: rec.loteUrl,
+    // Edital REAL (PDF) quando a página o expõe; senão a página do lote (comportamento atual).
+    link_edital: det.link_edital_doc || rec.loteUrl,
     url_lote: rec.loteUrl,
+    link_matricula: det.link_matricula || null,
+    anexos: det.anexos,
     link_foto: det.link_foto || null,
     numero_matricula: det.numero_matricula,
     leiloeiro: 'Pecini Leilões',
