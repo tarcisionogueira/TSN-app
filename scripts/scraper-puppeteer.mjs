@@ -2727,15 +2727,16 @@ async function scraperLeilofy(browser) {
     if (i++ >= 300) break;
     try {
       await page.goto(`https://leiloariasmart.com.br/imovel/${id}`, { waitUntil: 'networkidle2', timeout: 40000 });
-      // O detalhe é um SPA: preço/descrição renderizam DEPOIS do networkidle. Espera o
-      // conteúdo real aparecer (senão o texto sai sem "R$", valor_minimo=0 e o lote é
-      // descartado — causa de "0 mapeados" quando o site está lento). Teto de 8s;
-      // adaptativo (só espera o necessário) em vez do sleep(1000) fixo que ficou curto.
+      // O detalhe é um SPA: preço/descrição renderizam DEPOIS do networkidle. Espera por
+      // MARCADORES ESPECÍFICOS do conteúdo real do lote — "valor de avaliação" / "lance
+      // está fixado" / "Documentos do lote" (recon confirmou que só aparecem com a página
+      // renderizada). Evita casar cedo demais num "R$" do shell e capturar texto sem o
+      // preço (valor_minimo=0 → lote descartado → "0 mapeados"). Teto de 12s; adaptativo.
       await page.waitForFunction(
-        () => /Detalhes do Im[óo]vel|Documentos do lote|R\$\s*[\d.]/i.test(document.body?.innerText || ''),
-        { timeout: 8000 }
+        () => /valor de avalia|lance est[áa] fixado|Documentos do lote/i.test(document.body?.innerText || ''),
+        { timeout: 12000 }
       ).catch(() => {});
-      await sleep(400);
+      await sleep(700);
       const det = await page.evaluate(() => {
         const text = (document.body?.innerText || '').slice(0, 9000);
         const titulo = (document.querySelector('h1,h2,.titulo,.title')?.innerText || '').trim();
@@ -2751,8 +2752,9 @@ async function scraperLeilofy(browser) {
       if (!det) continue;
       const row = mapLoteLeilofy(det, id);
       if (row && row.valor_minimo) imoveis.push(row);
-    } catch { /* lote a lote; nunca derruba o scrape */ }
-    await sleep(120);
+      else if (i <= 4) console.log(`    [leilofy diag] ${id}: valor=${row?.valor_minimo || 0} textLen=${(det.text || '').length} avalia=${/valor de avalia/i.test(det.text || '')} lanceFix=${/lance est[áa] fixado/i.test(det.text || '')} rs=${/R\$/.test(det.text || '')}`);
+    } catch (e) { if (i <= 4) console.log(`    [leilofy diag] ${id}: erro ${String(e.message).slice(0, 60)}`); }
+    await sleep(900); // gentileza entre páginas (evita rate-limit no loop de 24 detalhes)
   }
   await page.close().catch(() => {});
   console.log(`    Leilofy: ${imoveis.length} imóveis mapeados`);
