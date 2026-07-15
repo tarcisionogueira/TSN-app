@@ -2750,8 +2750,6 @@ async function scraperLeilofy(browser) {
       }).catch(() => null);
       if (!det) continue;
       const row = mapLoteLeilofy(det, id);
-      // Debug enxuto dos 3 primeiros lotes: confirma o parse dos valores pós-render.
-      if (i <= 3) console.log(`    Leilofy #${id}: aval=${row?.valor_avaliacao} lance=${row?.valor_minimo} end="${(row?.endereco || '').slice(0, 45)}"`);
       if (row && row.valor_minimo) imoveis.push(row);
     } catch { /* lote a lote; nunca derruba o scrape */ }
     await sleep(120);
