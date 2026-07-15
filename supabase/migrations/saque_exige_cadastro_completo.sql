@@ -21,10 +21,11 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'Valor inválido');
   END IF;
 
-  -- Cadastro completo é pré-requisito do saque (pagamento + fiscal).
-  SELECT nome, cpf, telefone, chave_pix INTO v_perfil FROM perfis WHERE id = p_user_id;
-  IF v_perfil.nome     IS NULL OR btrim(v_perfil.nome)     = '' THEN v_faltando := array_append(v_faltando, 'nome'); END IF;
-  IF v_perfil.cpf      IS NULL OR btrim(v_perfil.cpf)      = '' THEN v_faltando := array_append(v_faltando, 'CPF'); END IF;
+  -- Cadastro completo é pré-requisito do saque (pagamento + fiscal). O CPF conta como
+  -- presente se houver texto claro (legado) OU o hash (cpf-set cifra e zera o texto).
+  SELECT nome, cpf, cpf_hash, telefone, chave_pix INTO v_perfil FROM perfis WHERE id = p_user_id;
+  IF v_perfil.nome IS NULL OR btrim(v_perfil.nome) = '' THEN v_faltando := array_append(v_faltando, 'nome'); END IF;
+  IF (v_perfil.cpf IS NULL OR btrim(v_perfil.cpf) = '') AND v_perfil.cpf_hash IS NULL THEN v_faltando := array_append(v_faltando, 'CPF'); END IF;
   IF v_perfil.telefone IS NULL OR btrim(v_perfil.telefone) = '' THEN v_faltando := array_append(v_faltando, 'telefone'); END IF;
   IF v_perfil.chave_pix IS NULL OR btrim(v_perfil.chave_pix) = '' THEN v_faltando := array_append(v_faltando, 'chave PIX'); END IF;
   IF array_length(v_faltando, 1) > 0 THEN

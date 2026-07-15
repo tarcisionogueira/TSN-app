@@ -97,9 +97,19 @@ export default async function handler(req) {
 
     if (body.action === 'transacoes') {
       // Fonte de verdade REAL: pagamentos direto na API do MP (não o nosso banco).
-      // Mostra o valor da operação: bruto, taxa do MP e líquido efetivamente
-      // recebido — o número que de fato entra na conta.
+      // Mostra o valor da operação: bruto, taxa do MP e líquido efetivamente recebido.
+      //
+      // CRÍTICO (integridade financeira): a busca de pagamentos do MP devolve TUDO que
+      // passa pela conta — inclusive pagamentos que a PRÓPRIA conta FEZ (ex.: compras no
+      // cartão, "Anthropic"). Esses NÃO são receita e chegam a mostrar líquido > bruto.
+      // Só contamos como RECEITA o que ESTA conta COLETOU de fato:
+      //   (1) status = approved
+      //   (2) operação de venda (regular_payment)
+      //   (3) NÓS somos o recebedor (collector_id = nossa conta) — exclui o que pagamos
+      //   (4) sanidade: líquido nunca excede o bruto (uma coleta real desconta a taxa)
       const limit = Math.min(Number(body.limit) || 30, 50);
+      let meuId = null;
+      try { const me = await mpGet('/users/me'); meuId = me?.id != null ? String(me.id) : null; } catch { /* sem /me: não exclui por recebedor */ }
       const search = await mpGet(`/v1/payments/search?sort=date_created&criteria=desc&limit=${limit}`);
       const results = Array.isArray(search?.results) ? search.results : [];
       const tx = results.map((p) => {
@@ -110,6 +120,12 @@ export default async function handler(req) {
         const taxa = liquido != null
           ? Math.max(0, Number((bruto - liquido).toFixed(2)))
           : (Array.isArray(p.fee_details) ? p.fee_details.reduce((s, f) => s + Number(f.amount || 0), 0) : null);
+        const collectorId = p.collector_id ?? p.collector?.id ?? null;
+        const somosRecebedor = (meuId == null || collectorId == null) ? true : String(collectorId) === meuId;
+        const receita = p.status === 'approved'
+          && (!p.operation_type || p.operation_type === 'regular_payment')
+          && somosRecebedor
+          && (liquido == null || liquido <= bruto + 0.005);
         return {
           id: String(p.id),
           status: p.status,
@@ -117,6 +133,8 @@ export default async function handler(req) {
           bruto,
           liquido,
           taxa,
+          receita,
+          operacao: p.operation_type || null,
           data: p.date_approved || p.date_created || null,
           email: p.payer?.email || null,
           descricao: p.description || '',
@@ -124,13 +142,16 @@ export default async function handler(req) {
           parcelas: p.installments || null,
         };
       });
-      const aprovados = tx.filter((t) => t.status === 'approved');
-      const totalBruto = aprovados.reduce((s, t) => s + t.bruto, 0);
-      const totalLiquido = aprovados.reduce((s, t) => s + (t.liquido ?? t.bruto), 0);
+      // Só as RECEITAS entram na lista e nos totais (exclui pagamentos que a conta fez,
+      // estornos e qualquer coisa com líquido > bruto) — dado financeiro tem de ser sólido.
+      const receitas = tx.filter((t) => t.receita);
+      const totalBruto = receitas.reduce((s, t) => s + t.bruto, 0);
+      const totalLiquido = receitas.reduce((s, t) => s + (t.liquido ?? t.bruto), 0);
       return new Response(JSON.stringify({
-        transacoes: tx,
+        transacoes: receitas,
+        excluidos: tx.length - receitas.length, // transparência: quantos não-receita foram descartados
         resumo: {
-          qtdAprovados: aprovados.length,
+          qtdAprovados: receitas.length,
           totalBruto: Number(totalBruto.toFixed(2)),
           totalLiquido: Number(totalLiquido.toFixed(2)),
         },

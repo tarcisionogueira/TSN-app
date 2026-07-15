@@ -196,6 +196,9 @@ export default function Perfil() {
 
   const [nome, setNome] = useState(user?.user_metadata?.nome || '');
   const [cpf, setCpf] = useState('');
+  const [cpfInput, setCpfInput] = useState('');   // entrada quando ainda não há CPF salvo
+  const [salvandoCpf, setSalvandoCpf] = useState(false);
+  const [msgCpf, setMsgCpf] = useState(null);
   const [telefone, setTelefone] = useState('');
   const [chavePix, setChavePix] = useState('');
   const [end, setEnd] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
@@ -438,6 +441,30 @@ export default function Perfil() {
     if (!temComissao) return;
     carregarSaldo();
   }, [temComissao, user.id]); // eslint-disable-line
+
+  // CPF: só é digitado UMA vez. Grava cifrado (cpf-set) e passa a ser reusado em
+  // pagamentos e saques. Depois de salvo, o campo vira somente-leitura (mascarado).
+  const maskCpf = (v) => (v || '').replace(/\D/g, '').slice(0, 11)
+    .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  async function salvarCpf() {
+    const digits = cpfInput.replace(/\D/g, '');
+    if (digits.length !== 11) { setMsgCpf({ tipo: 'erro', texto: 'Informe um CPF válido (11 dígitos).' }); return; }
+    setSalvandoCpf(true); setMsgCpf(null);
+    try {
+      const r = await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: digits }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Não foi possível salvar o CPF.');
+      // Re-lê o CPF mascarado e reavalia a habilitação de saque.
+      apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id] }) })
+        .then(rr => rr.json()).then(dd => setCpf(dd?.cpfs?.[user.id] || '')).catch(() => {});
+      if (temComissao) carregarSaldo();
+      setCpfInput('');
+      setMsgCpf({ tipo: 'sucesso', texto: 'CPF salvo! Será usado nos seus pagamentos e saques.' });
+    } catch (e) {
+      setMsgCpf({ tipo: 'erro', texto: e.message || 'Erro ao salvar o CPF.' });
+    }
+    setSalvandoCpf(false);
+  }
 
   async function solicitarSaque() {
     const valor = Number(valorSaque);
@@ -731,7 +758,7 @@ export default function Perfil() {
                   <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: '#92400e', lineHeight: 1.6 }}>
                     {faltandoSaque.map(f => <li key={f}><strong>{f}</strong></li>)}
                   </ul>
-                  <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Telefone e chave PIX você preenche abaixo, nos dados cadastrais. Nome e CPF, se faltarem, fale com o atendimento.</div>
+                  <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Telefone, CPF e chave PIX você preenche abaixo, nos dados cadastrais. Nome, se faltar, fale com o atendimento.</div>
                 </div>
               )}
             </div>
@@ -795,11 +822,28 @@ export default function Perfil() {
               </div>
               <div style={{ ...fieldStyle, flex: 1, minWidth: 160 }}>
                 <label style={labelStyle}>CPF</label>
-                <input type="text" value={cpf || '—'} readOnly
-                  style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }} />
+                {cpf ? (
+                  <input type="text" value={cpf} readOnly
+                    style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }} />
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input type="text" value={cpfInput} onChange={e => setCpfInput(maskCpf(e.target.value))}
+                      placeholder="000.000.000-00" inputMode="numeric"
+                      style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
+                    <button type="button" onClick={salvarCpf} disabled={salvandoCpf || cpfInput.replace(/\D/g, '').length !== 11}
+                      style={{ padding: '9px 16px', background: cpfInput.replace(/\D/g, '').length === 11 ? '#111111' : '#e2e8f0', color: cpfInput.replace(/\D/g, '').length === 11 ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: cpfInput.replace(/\D/g, '').length === 11 ? 'pointer' : 'default' }}>
+                      {salvandoCpf ? 'Salvando…' : 'Salvar CPF'}
+                    </button>
+                  </div>
+                )}
+                {msgCpf && <div style={{ fontSize: 11, marginTop: 4, fontWeight: 600, color: msgCpf.tipo === 'sucesso' ? '#16a34a' : '#dc2626' }}>{msgCpf.texto}</div>}
               </div>
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -12, marginBottom: 20 }}>Nome, e-mail e CPF não podem ser alterados aqui. Para corrigir, fale com o atendimento.</div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -12, marginBottom: 20 }}>
+              {cpf
+                ? 'Nome, e-mail e CPF não podem ser alterados aqui. Para corrigir, fale com o atendimento.'
+                : 'Informe seu CPF uma única vez — ele fica salvo com segurança e é reusado nos pagamentos e saques. Nome e e-mail não mudam aqui.'}
+            </div>
 
             {/* Telefone (editável) */}
             <div style={fieldStyle}>

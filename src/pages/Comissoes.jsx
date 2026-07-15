@@ -232,7 +232,7 @@ export default function Comissoes() {
               <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#92400e', lineHeight: 1.6 }}>
                 {faltandoSaque.map(f => <li key={f}><strong>{f}</strong></li>)}
               </ul>
-              <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Chave PIX você preenche acima. Telefone no seu Perfil; nome e CPF, se faltarem, fale com o atendimento.</div>
+              <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>Chave PIX você preenche acima. Telefone e CPF, no seu Perfil; nome, se faltar, fale com o atendimento.</div>
             </div>
           )}
           {showSaqueForm && (

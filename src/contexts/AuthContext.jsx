@@ -111,63 +111,60 @@ export function AuthProvider({ children }) {
     window.addEventListener('click', onActivity, { passive: true });
     window.addEventListener('keydown', onActivity, { passive: true });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null;
       setUser(u);
-      const p = await fetchPerfil(u?.id);
-      setRole(p.role);
-      setAtivo(p.ativo);
-      setInad(p.inadimplenteDias);
-      setCadastroIncompleto(p.cadastroIncompleto ?? false);
-      // Vincula o cliente ao consultor que o indicou (link de afiliado),
-      // inclusive no login Google onde o trigger não recebe o código.
-      // Só tenta no sign-in real (não em token refresh, user_updated, etc.)
-      if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        // Log de uso — prova de acesso para proteção contra chargeback
-        if (event === 'SIGNED_IN') {
-          try {
-            import('../utils/logUso').then(({ logUso }) => logUso(u.id, 'login'));
-          } catch (_) {}
-        }
-        // Push automático: se já autorizado, sincroniza a inscrição na hora;
-        // se nunca pedimos, pede no próximo gesto do usuário (só 1x por navegador).
-        // Assim o usuário passa a receber push além do e-mail sem configurar nada.
-        try { ativarPushAutomatico(() => session); } catch (_) {}
-        const ref = sessionStorage.getItem('tsn_ref_codigo');
-        if (ref) {
-          try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}
-          sessionStorage.removeItem('tsn_ref_codigo');
-        }
-        // Vincula via link de convite (cliente)
-        const convite = sessionStorage.getItem('tsn_convite_codigo');
-        if (convite) {
-          try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
-          sessionStorage.removeItem('tsn_convite_codigo');
-        }
-        // Convite de equipe — funciona também no login Google (antes só por senha)
-        const conviteEq = sessionStorage.getItem('tsn_convite_equipe');
-        if (conviteEq) {
-          try { await supabase.rpc('usar_convite_equipe', { p_token: conviteEq, p_user_id: u.id }); } catch (_) {}
-          sessionStorage.removeItem('tsn_convite_equipe');
-        }
-        // Redirect pós-login social (Google): leva ao destino preservado antes do
-        // redirect (plano/checkout, next ou produto). Cobre SIGNED_IN e
-        // INITIAL_SESSION (o Supabase às vezes emite INITIAL_SESSION ao voltar do OAuth).
-        const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
-        if (oauthDest) {
-          sessionStorage.removeItem('tsn_oauth_redirect');
-          if (window.location.hash.replace(/^#/, '') !== oauthDest) {
-            window.location.hash = oauthDest;
-          }
-        }
-      }
-      // Encerra o modo suporte ao sair da sessão
-      if (event === 'SIGNED_IN') updateActivity();
+      // Limpeza do modo suporte no logout (não usa supabase → pode ser síncrono).
       if (event === 'SIGNED_OUT') {
         sessionStorage.removeItem(IMPERSONATE_KEY);
         localStorage.removeItem(LAST_ACTIVITY_KEY);
         setImpersonate(null);
       }
+      // IMPORTANTE: NÃO chamar funções async do supabase DENTRO do callback do
+      // onAuthStateChange. Ele roda sob o lock interno do auth e a query de perfil
+      // vinha com o contexto de sessão ainda não propagado, retornando role='explorador'
+      // até o usuário dar refresh (o sistema "não reconhecia o role" no login). Deferindo
+      // para FORA do lock (setTimeout 0), a query usa a sessão já estabelecida e o role
+      // é reconhecido de primeira, sem precisar recarregar a tela.
+      setTimeout(async () => {
+        const p = await fetchPerfil(u?.id);
+        setRole(p.role);
+        setAtivo(p.ativo);
+        setInad(p.inadimplenteDias);
+        setCadastroIncompleto(p.cadastroIncompleto ?? false);
+        // Vincula o cliente ao consultor que o indicou (link de afiliado), inclusive no
+        // login Google onde o trigger não recebe o código. Só no sign-in real.
+        if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+          // Log de uso — prova de acesso para proteção contra chargeback
+          if (event === 'SIGNED_IN') {
+            try { import('../utils/logUso').then(({ logUso }) => logUso(u.id, 'login')); } catch (_) {}
+          }
+          // Push automático (só 1x por navegador).
+          try { ativarPushAutomatico(() => session); } catch (_) {}
+          const ref = sessionStorage.getItem('tsn_ref_codigo');
+          if (ref) {
+            try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}
+            sessionStorage.removeItem('tsn_ref_codigo');
+          }
+          const convite = sessionStorage.getItem('tsn_convite_codigo');
+          if (convite) {
+            try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
+            sessionStorage.removeItem('tsn_convite_codigo');
+          }
+          const conviteEq = sessionStorage.getItem('tsn_convite_equipe');
+          if (conviteEq) {
+            try { await supabase.rpc('usar_convite_equipe', { p_token: conviteEq, p_user_id: u.id }); } catch (_) {}
+            sessionStorage.removeItem('tsn_convite_equipe');
+          }
+          // Redirect pós-login social (Google) ao destino preservado antes do OAuth.
+          const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
+          if (oauthDest) {
+            sessionStorage.removeItem('tsn_oauth_redirect');
+            if (window.location.hash.replace(/^#/, '') !== oauthDest) window.location.hash = oauthDest;
+          }
+          updateActivity();
+        }
+      }, 0);
     });
 
     // Reavalia o perfil (role/inadimplência/cadastro) quando a aba volta ao foco.
