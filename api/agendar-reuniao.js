@@ -49,6 +49,11 @@ export default async function handler(req) {
   if (!slot_id || !caso_id || !reuniao_numero) {
     return new Response(JSON.stringify({ error: 'slot_id, caso_id e reuniao_numero são obrigatórios' }), { status: 400 });
   }
+  // slot_id/caso_id vão crus em filtros PostgREST → exige UUID (defesa contra injeção de parâmetros).
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(String(slot_id)) || !UUID_RE.test(String(caso_id))) {
+    return new Response(JSON.stringify({ error: 'slot_id ou caso_id inválido' }), { status: 400 });
+  }
 
   // 1. Valida que o caso pertence ao cliente
   const casoRes = await sb(`casos?id=eq.${caso_id}&select=id,cliente_id,analista_id,imovel_endereco`);

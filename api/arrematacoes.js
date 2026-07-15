@@ -181,9 +181,9 @@ export default async function handler(req) {
     const imovelId = url.searchParams.get('imovel_id');
     if (!imovelId) return json({ error: 'imovel_id obrigatório' }, 400);
 
-    // Busca arrematacao
+    // Busca arrematacao (imovelId vem da query → encode para não injetar parâmetros PostgREST)
     const r = await dbFetch(
-      `arrematacoes?imovel_id=eq.${imovelId}&select=*&limit=1`,
+      `arrematacoes?imovel_id=eq.${encodeURIComponent(imovelId)}&select=*&limit=1`,
     );
     if (!r.ok) return json({ error: 'Erro ao buscar arrematação' }, 500);
 
@@ -336,7 +336,7 @@ export default async function handler(req) {
     if (body.valor_arrematado !== undefined) allowed.valor_arrematado = body.valor_arrematado;
     allowed.atualizado_em = new Date().toISOString();
 
-    const r = await dbFetch(`arrematacoes?id=eq.${id}`, {
+    const r = await dbFetch(`arrematacoes?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(allowed),
     });
