@@ -10,7 +10,7 @@
  *
  * Roda 1x/dia após o scraper diário (vercel.json).
  */
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';

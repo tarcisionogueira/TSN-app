@@ -20,7 +20,7 @@
  *
  * Roda de 6/6h (vercel.json). Autorizado por CRON_SECRET (Authorization: Bearer).
  */
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { supabase, buscarCliente, ativarPlanoDireto, mapearPlano } from './_webhook-core.js';

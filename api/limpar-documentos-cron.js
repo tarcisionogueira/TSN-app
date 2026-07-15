@@ -12,7 +12,12 @@
  * Processa em lotes para não estourar o timeout da Edge.
  */
 
-export const runtime = 'edge';
+// Node runtime (não edge): a limpeza faz um DELETE em lote no Storage + PATCH no
+// banco que às vezes passava do teto curto da Edge (timeout ~60s). Com nodejs +
+// maxDuration 300 há folga de sobra. Exportar por MÉTODO nomeado (GET/POST), nunca
+// `export default` — no Node da Vercel o default vira assinatura Express (req,res) e
+// o Response é ignorado, pendurando a função até o timeout.
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 
@@ -45,7 +50,9 @@ function storage(path, opts = {}) {
   });
 }
 
-export default async function handler(req) {
+export const GET = handler;
+export const POST = handler;
+async function handler(req) {
   if (!isCronAuthorized(req)) return new Response('Unauthorized', { status: 401 });
 
   // A regra em camadas (com/sem reunião) vive na RPC anexos_expirados — junta

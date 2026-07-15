@@ -13,7 +13,7 @@
  *
  * Roda 1x/dia (vercel.json). Autorizado por CRON_SECRET.
  */
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';

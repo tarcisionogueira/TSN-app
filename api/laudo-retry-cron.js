@@ -4,7 +4,7 @@
  * mescla o resultado no relatório do caso e remove a seção de "faltando".
  * Fora do prazo → marca 'expirada'. Roda a cada 2h (vercel.json). CRON_SECRET.
  */
-export const config = { runtime: 'nodejs', maxDuration: 120 };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
