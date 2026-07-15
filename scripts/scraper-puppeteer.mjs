@@ -2670,6 +2670,9 @@ function mapLoteLeilofy(raw, id) {
   const findDoc = (re) => (docs.find(d => re.test(d.label || '')) || {}).url || null;
   const anexos = docs.map(d => ({ tipo: /matr[íi]cula/i.test(d.label) ? 'matricula' : (/edital/i.test(d.label) ? 'edital' : (/laudo/i.test(d.label) ? 'laudo' : 'outro')), nome: (d.label || 'Documento').slice(0, 80), url: d.url }));
   const fotos = (Array.isArray(raw?.fotos) ? raw.fotos : []).filter(Boolean);
+  // Fallback de foto (lotes sem imagem em /_admin_/upload/): og:image da página,
+  // exceto se for logo/ícone/placeholder do site.
+  const ogFoto = (raw?.ogImage && /^https?:\/\//i.test(raw.ogImage) && !/logo|icon|placeholder|default|favicon|sprite/i.test(raw.ogImage)) ? raw.ogImage : null;
   return {
     fonte: 'LEILOFY',
     fonte_id: `leilofy_${id}`,
@@ -2687,11 +2690,17 @@ function mapLoteLeilofy(raw, id) {
     link_edital: findDoc(/edital/i),
     link_matricula: findDoc(/matr[íi]cula/i),
     url_lote: `https://leiloariasmart.com.br/imovel/${id}`,
-    link_foto: fotos[0] || null,
-    fotos,
+    // Foto: prioriza as imagens do lote (/_admin_/upload/); se o lote não tiver
+    // (4 de 21 na 1ª coleta), cai para o og:image da página — desde que não seja
+    // logo/ícone/placeholder (senão gravaria a marca do site como foto do imóvel).
+    link_foto: fotos[0] || ogFoto || null,
+    fotos: ogFoto && !fotos.length ? [ogFoto] : fotos,
     anexos,
     leiloeiro: 'Leiloaria Smart',
-    data_leilao: null,
+    // Data do leilão: reusa o extrator ancorado (procura dd/mm/aaaa perto de
+    // "leilão/praça/encerra/licitação/data"; só aceita datas de ontem a +400 dias,
+    // senão null). Antes era hardcoded null → 0/21 imóveis tinham data.
+    data_leilao: extrairDataLeilaoHTML(text),
     forma_pagamento: 'a_vista',
   };
 }
@@ -2727,7 +2736,9 @@ async function scraperLeilofy(browser) {
         if (dm) descricao = dm[1].replace(/\s+/g, ' ').trim();
         const docs = Array.from(document.querySelectorAll('a[href*="/_admin_/upload/"]')).filter(a => /\.pdf(\?|$)/i.test(a.href)).map(a => ({ url: a.href, label: (a.innerText || a.textContent || '').trim() }));
         const fotos = Array.from(document.querySelectorAll('img')).map(i2 => i2.src || i2.getAttribute('data-src')).filter(s => s && /_admin_\/upload/i.test(s) && /\.(png|jpe?g|webp)(\?|$)/i.test(s));
-        return { text, titulo, descricao, docs, fotos: [...new Set(fotos)] };
+        const ogImage = document.querySelector('meta[property="og:image"]')?.content
+          || document.querySelector('meta[name="og:image"]')?.content || null;
+        return { text, titulo, descricao, docs, fotos: [...new Set(fotos)], ogImage };
       }).catch(() => null);
       if (!det) continue;
       const row = mapLoteLeilofy(det, id);
