@@ -250,6 +250,9 @@ export default function Login() {
     setErro(''); setLoading(true);
     try {
       if (!form.nome || !form.email || !form.senha) throw new Error('Preencha nome, email e senha.');
+      // Cidade é obrigatória (mesmo no explorador grátis): filtra os imóveis da região do
+      // usuário e é a base dos alertas por e-mail. CPF NÃO é exigido aqui — só na hora de pagar.
+      if (!form.endereco || !form.endereco.trim()) throw new Error('Informe sua cidade — ela filtra os imóveis da sua região e é a base dos seus alertas por e-mail.');
       // Senha forte: 8+ com maiúscula, minúscula, número e caractere especial
       if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.senha)) {
         throw new Error('A senha deve ter ao menos 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.');
@@ -445,9 +448,9 @@ export default function Login() {
                 </div>
               </div>
               <div>
-                <label style={lbl}>Cidade / Endereço</label>
+                <label style={lbl}>Cidade * (filtra imóveis da sua região e é a base dos seus alertas)</label>
                 <input value={form.endereco} onChange={e => up('endereco', e.target.value)}
-                  placeholder="Comece a digitar a cidade…" style={inp}
+                  placeholder="Comece a digitar a cidade…" style={inp} required
                   list="cidades-datalist" autoComplete="off" />
                 <datalist id="cidades-datalist">
                   {sugestoesCidade.map(c => <option key={c} value={c} />)}
