@@ -2737,11 +2737,12 @@ async function scraperLeilofy(browser) {
       const row = mapLoteLeilofy(det, id);
       // Debug dos 3 primeiros lotes: confirma que o parse pega os valores após o render.
       if (i <= 3) console.log(`    Leilofy debug #${id}: aval=${row?.valor_avaliacao} lance=${row?.valor_minimo} end="${(row?.endereco || '').slice(0, 50)}" textLen=${(det.text || '').length}`);
-      // Dump da região dos valores no 1º lote p/ descobrir o rótulo do lance.
+      // Dump dos rótulos ao redor de cada "R$" no 1º lote — revela como o lance é
+      // rotulado (label antes/depois do valor) p/ acertar o regex.
       if (i === 1) {
         const t = det.text || '';
-        const ia = t.search(/avalia[çc][ãa]o/i);
-        console.log(`    Leilofy DUMP-VALORES: «${t.slice(Math.max(0, ia - 30), ia + 320).replace(/\n/g, '⏎')}»`);
+        const ctx = [...t.matchAll(/(.{28})R\$\s*([\d.]+(?:,\d{2})?)/gi)].slice(0, 12).map(m => `[${m[1].replace(/\n/g, '⏎').trim()}] R$ ${m[2]}`);
+        console.log(`    Leilofy MONEY: ${ctx.join('  ||  ')}`);
       }
       if (row && row.valor_minimo) imoveis.push(row);
     } catch { /* lote a lote; nunca derruba o scrape */ }
