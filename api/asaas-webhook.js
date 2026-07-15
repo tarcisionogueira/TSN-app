@@ -44,28 +44,51 @@ export default async function handler(req, res) {
 
   const tipo      = event.event;
   const pag       = event.payment;
-  const valor = Number(pag?.value);
+  if (!pag?.id) return res.status(400).json({ error: 'Pagamento sem id' });
+
+  // SEGURANÇA: NÃO confiar nos valores do corpo (valor/customer/status poderiam ser
+  // forjados por quem obtivesse o token). Re-busca o pagamento na API do Asaas por id
+  // e usa os valores AUTORITATIVOS — mesmo modelo do webhook do Mercado Pago, que
+  // refaz o fetch. Sem isso, o token era o único fator e um POST forjado elevava plano.
+  const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
+  const ASAAS_API_KEY = (process.env.ASAAS_API_KEY || '').trim();
+  if (!ASAAS_API_KEY) return res.status(500).json({ error: 'ASAAS_API_KEY não configurado' });
+  let pagReal = null;
+  try {
+    const rr = await fetch(`${ASAAS_URL}/payments/${encodeURIComponent(pag.id)}`, {
+      headers: { access_token: ASAAS_API_KEY }, signal: AbortSignal.timeout(10000),
+    });
+    if (rr.ok) pagReal = await rr.json();
+  } catch { /* rede/timeout → cai no 502 abaixo (Asaas reenvia depois) */ }
+  if (!pagReal?.id) return res.status(502).json({ error: 'Falha ao verificar pagamento no Asaas' });
+
+  const valor = Number(pagReal.value);
   if (!valor || valor <= 0) return res.status(400).json({ error: 'Valor de pagamento inválido' });
 
-  // Idempotência: o Asaas reenvia eventos. Se já tratamos este (pagamento,
-  // evento), responde OK sem reprocessar.
-  if (await eventoJaProcessado({ gateway: 'asaas', gatewayPaymentId: pag?.id, evento: tipo })) {
+  // Confirmação só eleva se a API confirma status pago DE FATO (defende contra um
+  // evento "confirmado" forjado sobre um pagamento que não foi pago).
+  const STATUS_PAGO = new Set(['CONFIRMED', 'RECEIVED', 'RECEIVED_IN_CASH']);
+  if ((tipo === 'PAYMENT_CONFIRMED' || tipo === 'PAYMENT_RECEIVED') && !STATUS_PAGO.has(pagReal.status)) {
+    return res.status(200).json({ ok: true, ignorado: 'status_nao_pago', status: pagReal.status });
+  }
+
+  // Idempotência: o Asaas reenvia eventos. Se já tratamos este (pagamento, evento),
+  // responde OK sem reprocessar.
+  if (await eventoJaProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo })) {
     return res.status(200).json({ ok: true, duplicado: true });
   }
 
-  // O Asaas envia payment.customer como STRING (id do cliente, ex. "cus_000...")
-  // — não como objeto. Ler .id/.email direto resultava em null e a confirmação
-  // virava no-op (perfil_nao_encontrado). Tolera os dois formatos.
-  const cust = pag?.customer;
+  // O Asaas retorna payment.customer como STRING (id do cliente, ex. "cus_000...").
+  const cust = pagReal.customer;
   const custId    = typeof cust === 'string' ? cust : (cust?.id || null);
   const custEmail = (cust && typeof cust === 'object') ? (cust.email || null) : null;
   const contexto  = {
     gateway:           'asaas',
     valor,
-    descricao:         pag?.description || '',
+    descricao:         pagReal.description || '',
     email:             custEmail,
     gatewayCustomerId: custId,
-    gatewayPaymentId:  pag?.id || null,
+    gatewayPaymentId:  pagReal.id,
   };
 
   try {

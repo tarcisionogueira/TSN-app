@@ -117,10 +117,11 @@ export default async function handler(req, res) {
         body: JSON.stringify({ id: userId, nome, telefone: whatsapp, role: 'explorador', indicado_por: consultorId, comissionado_por: sellerId, lgpd_aceito: true, lgpd_data: meta.lgpd_data }),
       });
     } catch { /* best-effort */ }
-  } else if (jaExistia && sellerId) {
-    // Conta pré-existente e sem vendedor: adota o do link (só se estava vazio).
-    try { await sb(`perfis?email=eq.${encodeURIComponent(email)}&comissionado_por=is.null`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ...(consultorId ? { indicado_por: consultorId } : {}), comissionado_por: sellerId }) }); } catch { /* best-effort */ }
   }
+  // SEGURANÇA: NÃO atribuir vendedor a uma conta JÁ EXISTENTE por aqui. Este endpoint
+  // é PÚBLICO e não prova posse do e-mail: antes, um afiliado com um ?ref válido adotava
+  // como indicação sua qualquer conta órfã (comissionado_por nulo) só informando o
+  // e-mail da vítima — sequestro de comissão. Atribuição só no 1º cadastro (bloco acima).
 
   // Marca a última indicação do vendedor (regra dos 3 meses sem indicar).
   if (sellerId) {

@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
   if (!ACCESS_TOKEN) return res.status(500).json({ error: 'Pagamento não configurado' });
 
-  const { valor, descricao, email, metodoPagamento, dadosCartao, planoId } = req.body;
+  const { valor, descricao, email, metodoPagamento, dadosCartao } = req.body;
   if (!valor || !descricao || !email) {
     return res.status(400).json({ error: 'valor, descricao e email são obrigatórios' });
   }
@@ -40,10 +40,12 @@ export default async function handler(req, res) {
       description: String(descricao).slice(0, 256),
       payment_method_id: metodoPagamento || 'pix',
       payer: { email: String(email) },
-      // tipo='servico': pagamento avulso (serviço), NÃO é assinatura de plano. O
-      // webhook usa isso para NÃO elevar o plano/role do usuário só porque o valor
-      // do serviço coincide com o preço de um plano.
-      metadata: { user_id: user.id, plano_id: planoId || null, origem: 'tsn-app', tipo: planoId ? 'plano' : 'servico' },
+      // SEGURANÇA: este endpoint é SEMPRE pagamento avulso de serviço (tipo='servico').
+      // Nunca eleva plano/role — senão um cliente pagaria 1x um valor qualquer e o
+      // webhook mapearia valor→plano, virando plano vitalício de graça (pagamento único
+      // não gera preapproval, então nada revoga). Assinaturas de plano vão por /api/mp
+      // (preapproval), onde o preço vem do servidor (planos_config) e é recorrente.
+      metadata: { user_id: user.id, origem: 'tsn-app', tipo: 'servico' },
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'BIDPRO BRASIL',
     };
