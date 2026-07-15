@@ -7,7 +7,7 @@
  *
  * Todas são consultas PÚBLICAS — não requerem certificado digital.
  */
-import { getUser } from './_auth.js';
+import { getUser, getUserRoleById } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { sanitizeCpfCnpj } from './_sanitize.js';
 
@@ -182,6 +182,12 @@ export default async function handler(req) {
   if (!user) return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401 });
 
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
+
+  // SEGURANÇA: consulta de CPF/CNPJ (nome, nascimento, dívida ativa) é ferramenta SÓ
+  // DO ADMIN. Antes bastava estar logado → qualquer cliente consultava os dados de
+  // qualquer CPF (oráculo de PII). Agora exige papel admin.
+  const role = await getUserRoleById(user.id);
+  if (role !== 'admin') return new Response(JSON.stringify({ error: 'Acesso restrito ao administrador' }), { status: 403, headers });
 
   let body;
   try { body = await req.json(); } catch {

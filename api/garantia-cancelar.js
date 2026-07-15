@@ -15,6 +15,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { hashCpf, cpfDoRegistro } from './_cpf.js';
 
 const SB_URL = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
 const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
@@ -87,7 +88,7 @@ export default async function handler(req, res) {
   if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
   const email = user.email || null;
 
-  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role,role_anterior,plano_pago_em,mp_id,asaas_id,nome`)).json().catch(() => []);
+  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role,role_anterior,plano_pago_em,mp_id,asaas_id,nome,cpf,cpf_enc`)).json().catch(() => []);
   if (!perfil) { res.status(404).json({ error: 'Perfil não encontrado' }); return; }
 
   const rolePagante = PAGANTES.includes(perfil.role) ? perfil.role : (PAGANTES.includes(perfil.role_anterior) ? perfil.role_anterior : null);
@@ -96,10 +97,24 @@ export default async function handler(req, res) {
   const gateway = perfil.mp_id ? 'mercadopago' : perfil.asaas_id ? 'asaas' : 'desconhecido';
   const dentro7 = perfil.plano_pago_em && (Date.now() - new Date(perfil.plano_pago_em).getTime() <= JANELA_MS);
 
+  // Garantia é UMA VEZ POR CPF: apura o hash do CPF do cliente e verifica se esse CPF
+  // já exerceu a garantia antes (impede o loop assinar→reembolsar→assinar→reembolsar,
+  // inclusive recriando conta com o mesmo CPF).
+  let cpfHash = null, jaUsouGarantia = false;
+  try {
+    const cpf = await cpfDoRegistro(perfil);
+    cpfHash = cpf ? await hashCpf(cpf) : null;
+    if (cpfHash) {
+      const [ja] = await (await sb(`reembolsos_garantia?cpf_hash=eq.${encodeURIComponent(cpfHash)}&select=id&limit=1`)).json().catch(() => []);
+      jaUsouGarantia = !!ja;
+    }
+  } catch { /* sem CPF apurável → segue sem bloquear o cancelamento (só não reembolsa 2x) */ }
+  const podeReembolso = dentro7 && !jaUsouGarantia;
+
   // 1) Cancela a recorrência nos gateways (best-effort nos dois).
   const cancelados = (await cancelarMP(perfil.mp_id, email, user.id)) + (await cancelarAsaas(perfil.asaas_id));
 
-  if (dentro7) {
+  if (podeReembolso) {
     // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida).
     await sb(`perfis?id=eq.${user.id}`, {
       method: 'PATCH', headers: { Prefer: 'return=minimal' },
@@ -116,7 +131,7 @@ export default async function handler(req, res) {
     // 3) Registra o pedido de reembolso (canal auditável p/ o admin executar o estorno).
     await sb('reembolsos_garantia', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: rolePagante, valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49)' }),
+      body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: rolePagante, valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49)', cpf_hash: cpfHash }),
     }).catch(() => {});
 
     // 4) E-mails (cliente + admin). Não bloqueiam a resposta.
@@ -129,6 +144,10 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Após 7 dias: só cancela a renovação; acesso segue até o fim do período pago.
-  res.status(200).json({ ok: true, reembolso: false, dentro7: false, cancelados, renovacaoCancelada: cancelados > 0, msg: 'Renovação cancelada. Seu acesso continua até o fim do período já pago.' });
+  // Após 7 dias OU garantia já usada por este CPF: só cancela a renovação; acesso segue
+  // até o fim do período pago; sem novo reembolso.
+  const msgFim = jaUsouGarantia
+    ? 'Renovação cancelada. A garantia de 7 dias já foi utilizada com este CPF, então não há novo reembolso; seu acesso continua até o fim do período já pago.'
+    : 'Renovação cancelada. Seu acesso continua até o fim do período já pago.';
+  res.status(200).json({ ok: true, reembolso: false, dentro7, garantiaJaUsada: jaUsouGarantia, cancelados, renovacaoCancelada: cancelados > 0, msg: msgFim });
 }

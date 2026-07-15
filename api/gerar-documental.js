@@ -219,6 +219,25 @@ async function dispararCaptura(arquivoWorkflow) {
   } catch { return false; }
 }
 
+// Fetch com anti-SSRF em CADA salto de redirect: valida o host inicial E o de cada
+// Location (redirect:'manual'), impedindo que uma URL "externa segura" redirecione
+// para um endereço interno/metadados (169.254.169.254, localhost, rede interna).
+async function fetchAntiSSRF(url, opts, maxHops = 3) {
+  let atual = url;
+  for (let i = 0; i <= maxHops; i++) {
+    if (!hostExternoSeguro(atual)) return null;
+    const resp = await fetch(atual, { ...opts, redirect: 'manual' });
+    if (resp.status >= 300 && resp.status < 400) {
+      const loc = resp.headers.get('location');
+      if (!loc) return resp; // sem Location legível → o chamador trata como falha (não-ok)
+      try { atual = new URL(loc, atual).toString(); } catch { return null; }
+      continue;
+    }
+    return resp;
+  }
+  return null; // excedeu o limite de saltos
+}
+
 // Lê um documento do lote: PDF → base64 (bloco document); HTML/texto → texto
 // limpo. Tenta fetch direto e cai no Bright Data quando o host bloqueia o servidor.
 async function lerDoc(url, deadline) {
@@ -248,7 +267,7 @@ async function lerDoc(url, deadline) {
   // nos PDFs. Aceita o 1º que render um documento válido; para .pdf, o direto que
   // trouxer HTML de negação é descartado e o Bright Data assume.
   let doc = null;
-  try { doc = await extrair(await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(12000) })); } catch { doc = null; }
+  try { doc = await extrair(await fetchAntiSSRF(url, { headers: h, signal: AbortSignal.timeout(12000) })); } catch { doc = null; }
   if (doc) { console.log(`[lerDoc] direto OK (${doc.kind}) ${url}`); return doc; }
   if (Date.now() > deadline) return null;
   // Bright Data: manda cabeçalhos que a Caixa espera (senão devolve HTML de negação

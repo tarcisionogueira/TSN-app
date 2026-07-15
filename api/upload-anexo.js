@@ -89,14 +89,27 @@ export default async function handler(req) {
   const imovel_id = form.get('imovel_id');
   const tipo = String(form.get('tipo') || '').toLowerCase();
   const data_leilao = form.get('data_leilao') || null;
-  // Documentos de arremate são PERMANENTES: nunca apagados pelo cron de retenção.
-  // arrematado=true vem explícito (fluxo de atribuição) OU é inferido pelo tipo.
-  const arrematadoPerm = String(form.get('arrematado') || '') === 'true' || TIPOS_ARREMATE.includes(tipo);
+  // Documentos de arremate são PERMANENTES (nunca apagados pela retenção). NÃO confiar
+  // no campo do cliente (antes: arrematado='true' fixava doc permanente em imóvel
+  // alheio). Deriva no servidor: tipo de doc de arremate, staff, ou usuário que REALMENTE
+  // arrematou este imóvel — checado logo após validar o imovel_id.
+  let arrematadoPerm = TIPOS_ARREMATE.includes(tipo);
 
   if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'Arquivo obrigatório' }, 400);
   // imovel_id precisa ser UUID válido antes de entrar em URLs PostgREST/Storage.
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(imovel_id || ''))) return json({ error: 'imovel_id inválido' }, 400);
   if (!TIPOS_OK.includes(tipo)) return json({ error: `tipo inválido (use: ${TIPOS_OK.join(', ')})` }, 400);
+
+  // Escalona "permanente" só por motivo confiável: staff, ou o usuário arrematou ESTE
+  // imóvel de fato (tabela arrematados). Sem isso a retenção limpa normalmente.
+  if (!arrematadoPerm) {
+    if (ROLES_STAFF.includes(perfil.role)) {
+      arrematadoPerm = true;
+    } else {
+      const arrRes = await sb(`arrematados?user_id=eq.${encodeURIComponent(user.id)}&imovel_id=eq.${encodeURIComponent(imovel_id)}&select=id&limit=1`);
+      if (arrRes.ok) { const [a] = await arrRes.json().catch(() => []); if (a) arrematadoPerm = true; }
+    }
+  }
 
   const contentType = file.type || 'application/octet-stream';
   if (!TIPOS_MIME.includes(contentType)) return json({ error: 'Formato não suportado (use PDF, JPG ou PNG)' }, 415);

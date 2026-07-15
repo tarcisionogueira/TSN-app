@@ -23,7 +23,7 @@ async function checkRateLimit(ip) {
   ).catch(() => null);
   if (!res?.ok) return false; // tabela não existe ainda, permite
   const rows = await res.json().catch(() => []);
-  if (Array.isArray(rows) && rows.length >= 10) return true; // bloqueado
+  if (Array.isArray(rows) && rows.length >= 6) return true; // bloqueado
 
   // Registra nova tentativa (fire-and-forget)
   sb('verificar_cpf_rate', {
@@ -41,7 +41,13 @@ export default async function handler(req) {
 
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
 
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+  // IP CONFIÁVEL para o rate-limit: x-real-ip/x-vercel-forwarded-for são setados pela
+  // Vercel e não são falsificáveis. Antes usava o 1º item do x-forwarded-for, que o
+  // cliente injeta a cada request → o limite de enumeração de CPF/e-mail era furável.
+  const ip = req.headers.get('x-real-ip')
+    || req.headers.get('x-vercel-forwarded-for')
+    || (req.headers.get('x-forwarded-for')?.split(',').map((s) => s.trim()).filter(Boolean).pop())
+    || '';
   const bloqueado = await checkRateLimit(ip);
   if (bloqueado) {
     return new Response(JSON.stringify({ error: 'Muitas tentativas. Aguarde 1 minuto.' }), { status: 429, headers });

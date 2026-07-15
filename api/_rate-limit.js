@@ -83,23 +83,23 @@ export async function checkRateLimit(key, limit, windowMs = 60_000) {
   };
 }
 
-/** Extrai IP do request (Edge ou Node.js) */
+/** Extrai IP do request (Edge ou Node.js).
+ * SEGURANÇA: na Vercel, `x-real-ip` e `x-vercel-forwarded-for` são preenchidos pela
+ * PLATAFORMA com o IP real da conexão e o cliente não os falsifica. Já o
+ * `x-forwarded-for` tem o IP real ANEXADO no FIM, mas o cliente pode injetar valores
+ * à esquerda — por isso NÃO usamos o primeiro item dele (dava para furar rate-limit
+ * mandando um X-Forwarded-For novo a cada request). Preferimos os headers confiáveis
+ * e, no fallback, pegamos o ÚLTIMO item do x-forwarded-for. */
 export function getIP(req) {
-  // Edge Runtime (Request padrão)
-  if (req.headers?.get) {
-    return (
-      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      req.headers.get('x-real-ip') ||
-      'unknown'
-    );
+  const get = req.headers?.get ? (h) => req.headers.get(h) : (h) => req.headers[h];
+  const real = get('x-real-ip') || get('x-vercel-forwarded-for');
+  if (real) return String(real).split(',')[0].trim();
+  const xff = get('x-forwarded-for');
+  if (xff) {
+    const parts = String(xff).split(',').map((s) => s.trim()).filter(Boolean);
+    if (parts.length) return parts[parts.length - 1];
   }
-  // Node.js Runtime
-  return (
-    (req.headers['x-forwarded-for'] || '').split(',')[0]?.trim() ||
-    req.headers['x-real-ip'] ||
-    req.socket?.remoteAddress ||
-    'unknown'
-  );
+  return req.socket?.remoteAddress || 'unknown';
 }
 
 /**

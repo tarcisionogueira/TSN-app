@@ -369,35 +369,13 @@ export default async function handler(req, res) {
 
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
 
-    // Realimenta o SCORE do imóvel com o veredito REAL desta análise (valor de
-    // mercado estimado + viabilidade por ROI), para o card não mostrar "boa nota"
-    // num imóvel que a análise reprovou. Best-effort (não bloqueia a resposta).
-    try {
-      const roi = Number(parecerInputs?.metricas?.roi);
-      const usoProprio = parecerInputs?.d?.objetivoCompra === 'uso_proprio';
-      // Meta de viabilidade: 30% de ROI para investimento; para uso próprio a
-      // régua é a economia (qualquer desconto real relevante já vale).
-      const meta = usoProprio ? 0 : 30;
-      const viavel = isFinite(roi) ? roi >= meta : null;
-      // score_financeiro REAL (0–100) derivado do ROE/ROI da análise — substitui a
-      // proxy determinística do desconto vs. avaliação da Caixa (que dava nota alta
-      // a imóvel ruim). A régua (meta) vira o ponto neutro 50; abaixo dela cai,
-      // acima sobe. Assim a camada Financeiro do Score fica assertiva.
-      const scoreFin = isFinite(roi)
-        ? Math.max(0, Math.min(100, Math.round(50 + (roi - meta) * 1.5)))
-        : null;
-      if (imovelId && (valorMercado || viavel != null)) {
-        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
-          method: 'PATCH', headers: { Prefer: 'return=minimal' },
-          body: JSON.stringify({
-            ...(valorMercado ? { valor_mercado: valorMercado } : {}),
-            ...(viavel != null ? { analise_viavel: viavel } : {}),
-            ...(scoreFin != null ? { score_financeiro: scoreFin } : {}),
-            analise_em: new Date().toISOString(),
-          }),
-        });
-      }
-    } catch { /* realimentação do score é best-effort */ }
+    // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.
+    // roi (parecerInputs.metricas) e areaM2 (mercadoInputs) vêm do CLIENTE e são
+    // por-cenário — assim um usuário conseguia ENVENENAR score_financeiro/analise_viavel/
+    // valor_mercado que TODOS veem naquele imóvel. O score do catálogo é calculado pelo
+    // processo confiável (api/calcular-score.js) a partir dos dados do PRÓPRIO imóvel,
+    // nunca por input de usuário. A análise individual continua salva acima (upsertAnalise)
+    // e visível só para quem a gerou.
     res.status(200).json({ ok: true, result, cota });
   } catch (e) {
     const timeout = String(e?.message) === 'tempo_limite';
