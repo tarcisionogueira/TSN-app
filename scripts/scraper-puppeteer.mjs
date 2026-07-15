@@ -2657,14 +2657,21 @@ function mapLoteLeilofy(raw, id) {
   // enquanto o lance está fixado em R$ 130.000,00..."), não numa tabela rótulo:valor.
   // Então: pega TODO "R$ x" com o contexto imediatamente anterior e classifica.
   // (Evita [^R] com flag /i, que também exclui 'r' e quebrava o casamento do lance.)
-  const money = [...text.matchAll(/([^\n$]{0,40})R\$\s*([\d.]+(?:,\d{2})?)/gi)]
+  const money = [...text.matchAll(/([^\n$]{0,55})R\$\s*([\d.]+(?:,\d{2})?)/gi)]
     .map(m => ({ ctx: (m[1] || '').toLowerCase(), val: parseBRL(m[2]) }))
     .filter(o => o.val > 0);
-  const avaliacao = (money.find(o => /avalia/.test(o.ctx)) || {}).val || 0;
+  let avaliacao = (money.find(o => /avalia/.test(o.ctx)) || {}).val || 0;
   // Lance mínimo: contexto com "lance" e SEM "condicional"; prefere o que traz
   // fixado/mínimo/inicial/1º; senão o primeiro "lance" não-condicional.
   const lanceCand = money.filter(o => /lance/.test(o.ctx) && !/condicional/.test(o.ctx));
   const lance = (lanceCand.find(o => /fixad|m[íi]nim|inicial|est[áa]|1[ºoª]|primeir/.test(o.ctx)) || lanceCand[0] || {}).val || 0;
+  // Muitos lotes não trazem a avaliação explícita — só o lance e o % de desconto
+  // sobre ela. Recupera a avaliação pelo desconto exibido: aval = lance / (1 − d).
+  if (!avaliacao && lance) {
+    const dM = text.match(/(\d{1,2}(?:[.,]\d)?)\s*%\s*(?:de\s+)?(?:desconto|abaixo|des[áa]gio)/i);
+    const desc = dM ? Number(dM[1].replace(',', '.')) : 0;
+    if (desc > 0 && desc < 95) avaliacao = Math.round(lance / (1 - desc / 100));
+  }
   const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
   const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
   const areaCon = q(/[ÁA]rea constru[íi]da:\s*([\d.,]+)/i);
