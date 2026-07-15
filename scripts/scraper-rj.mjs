@@ -85,6 +85,11 @@ function parseDetalhe(html, url) {
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
   const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
+  // cidade/UF: padrão "CIDADE/UF" no título/endereço (ex.: "ARACAJU/SE"). Sem hífen na
+  // classe p/ não capturar o nome da rua antes do " - CIDADE/UF".
+  const loc = ((base.titulo || '') + ' ' + txt).match(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'. ]{1,30})\/([A-Z]{2})\b/);
+  const cidade = loc ? loc[1].trim().replace(/\s+/g, ' ') : null;
+  const estado = loc ? loc[2] : null;
   const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
 
   // Documentos: PDFs e links rotulados (matrícula/edital/laudo).
@@ -101,6 +106,8 @@ function parseDetalhe(html, url) {
 
   return {
     titulo: (base.titulo || '').slice(0, 180) || null,
+    cidade,
+    estado,
     link_foto: base.link_foto,
     valor_avaliacao: avaliacao,
     valor_minimo: valorMinimo,
@@ -129,6 +136,8 @@ function montarRow(url, det) {
     titulo: det.titulo || `Imóvel RJ ${id}`,
     tipo: inferirTipo(det.titulo || ''),
     modalidade: det.modalidade,
+    cidade: det.cidade || null,
+    estado: det.estado || null,
     valor_avaliacao: va,
     valor_minimo: vm,
     area_m2: det.area_m2 || 0,
