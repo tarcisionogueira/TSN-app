@@ -32,13 +32,11 @@ function sb(path, opts = {}) {
   });
 }
 
+import { isCronAuthorized } from './_auth.js';
+
 export default async function handler(req, resp) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return resp.status(403).json({ error: 'CRON_SECRET não configurado' });
-  const auth = (req.headers.get ? req.headers.get('authorization') : req.headers['authorization']) || '';
-  const sent = (req.headers.get ? req.headers.get('x-cron-secret') : req.headers['x-cron-secret'])
-    || auth.replace(/^Bearer\s+/i, ''); // sem ?secret= por query string (vazaria em logs)
-  if (sent !== cronSecret) return resp.status(401).json({ error: 'Não autorizado' });
+  // Auth de cron em tempo CONSTANTE (helper compartilhado isCronAuthorized).
+  if (!isCronAuthorized(req)) return resp.status(401).json({ error: 'Não autorizado' });
   if (!SUPABASE_URL || !SERVICE_KEY) return resp.status(500).json({ error: 'Supabase env vars ausentes' });
 
   const corte = new Date(Date.now() - 14 * 86400000).toISOString();

@@ -61,6 +61,22 @@ export default async function handler(req) {
     }
   } catch { /* mostrador some se falhar */ }
 
+  // Última auditoria de segurança (o "bug bounty" contínuo) — mostrador do dashboard.
+  // 0 crítico/atenção = postura íntegra; qualquer achado indica regressão a revisar.
+  try {
+    const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const KEY = process.env.SUPABASE_SERVICE_KEY;
+    if (SB && KEY) {
+      const r = await fetch(`${SB}/rest/v1/seguranca_auditoria?select=gerado_em,total,criticos,atencao,achados&order=gerado_em.desc&limit=1`, {
+        headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+      });
+      if (r.ok) {
+        const [row] = await r.json();
+        if (row) status.seguranca = { gerado_em: row.gerado_em, total: row.total, criticos: row.criticos, atencao: row.atencao, achados: row.achados || [] };
+      }
+    }
+  } catch { /* mostrador some se falhar */ }
+
   return new Response(JSON.stringify(status), {
     status: 200,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' },

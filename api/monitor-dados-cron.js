@@ -22,12 +22,11 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const LIMITE = { coord: 0.60, valor: 0.40, area: 0.50 };
 const MIN_AMOSTRA = 20; // não alerta com pouca coleta recente (evita falso positivo)
 
+import { isCronAuthorized } from './_auth.js';
+
 export default async function handler(req, res) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) { res.status(503).json({ error: 'CRON_SECRET não configurado' }); return; }
-  const auth = (req.headers.authorization || '').replace('Bearer ', '');
-  const sent = req.headers['x-cron-secret'] || auth; // sem ?secret= (vazaria o segredo em logs)
-  if (sent !== cronSecret) { res.status(401).json({ error: 'Não autorizado' }); return; }
+  // Auth de cron em tempo CONSTANTE (helper compartilhado isCronAuthorized).
+  if (!isCronAuthorized(req)) { res.status(401).json({ error: 'Não autorizado' }); return; }
 
   let stats = null;
   try {

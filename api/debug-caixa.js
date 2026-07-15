@@ -2,10 +2,11 @@ export const config = { runtime: 'edge' };
 
 const UFS_VALIDAS = new Set(['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']);
 
+import { isCronAuthorized } from './_auth.js';
+
 export default async function handler(req) {
-  const CRON_SECRET = process.env.CRON_SECRET;
-  const sent = req.headers.get('x-cron-secret') || (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '') || ''; // sem ?secret= (vazaria em logs)
-  if (!CRON_SECRET || sent !== CRON_SECRET) {
+  // Auth de cron em tempo CONSTANTE (helper compartilhado isCronAuthorized).
+  if (!isCronAuthorized(req)) {
     return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 

@@ -4,6 +4,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { geocodificarCascata } from './_geo.js';
+import { isCronAuthorized } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -123,19 +124,9 @@ export default async function handler(req, resp) {
     return resp.status(405).send('Method not allowed');
   }
 
-  // Protege contra chamadas externas não autorizadas — falha fechado se CRON_SECRET não configurado
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    console.error('[geocodificar] CRON_SECRET não configurado — acesso bloqueado');
-    return resp.status(403).json({ error: 'Não autorizado' });
-  }
-  const _url = new URL(req.url, 'http://localhost');
-  // Vercel cron envia: Authorization: Bearer <CRON_SECRET>. Chamadas manuais:
-  // x-cron-secret header. Sem ?secret= por query string (vazaria em logs).
-  const authHeader = (req.headers.get ? req.headers.get('authorization') : req.headers['authorization']) || '';
-  const sent = (req.headers.get ? req.headers.get('x-cron-secret') : req.headers['x-cron-secret'])
-    || authHeader.replace(/^Bearer\s+/i, '');
-  if (sent !== cronSecret) return resp.status(401).json({ error: 'Não autorizado' });
+  // Auth de cron em tempo CONSTANTE (helper compartilhado isCronAuthorized) — falha
+  // fechado se o CRON_SECRET não estiver configurado.
+  if (!isCronAuthorized(req)) return resp.status(401).json({ error: 'Não autorizado' });
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     return resp.status(500).json({ error: 'Supabase env vars not configured' });
