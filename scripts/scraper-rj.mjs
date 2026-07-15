@@ -67,11 +67,19 @@ function parseDetalhe(html, url) {
   const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
 
-  // Valores: todos os "R$ x.xxx,xx" plausíveis (avaliação=maior, lance=menor);
-  // filtra pequenos (taxas, R$/m²). Robusto ao fraseado (lição do LEILOFY).
-  const valores = [...txt.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map(m => num(m[1])).filter(v => v >= 1000 && v <= 500_000_000);
-  const avaliacao = valores.length ? Math.max(...valores) : 0;
-  const valorMinimo = valores.length ? Math.min(...valores) : 0;
+  // Preço pelos RÓTULOS do SOLEON (limpos): "Lance Inicial: R$ X" e "Valor de
+  // Avaliação: R$ X". Evita pegar Incremento/Comissão/Total (o min() cego pegava o
+  // Incremento de R$ 2.000). Fallback robusto se o rótulo faltar.
+  const plaus = v => (v >= 1000 && v <= 500_000_000) ? v : 0;
+  const rotLance = plaus(num((txt.match(/lance\s*(?:inicial|m[íi]nimo)[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+  const rotAval = plaus(num((txt.match(/avalia[çc][ãa]o[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+  const grandes = [...txt.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map(m => num(m[1])).filter(v => v >= 10000 && v <= 500_000_000);
+  const avaliacao = rotAval || (grandes.length ? Math.max(...grandes) : 0);
+  let valorMinimo = rotLance;
+  if (!valorMinimo && grandes.length) {
+    const semAval = grandes.filter(v => v !== avaliacao);
+    valorMinimo = semAval.length ? Math.min(...semAval) : avaliacao;
+  }
 
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
