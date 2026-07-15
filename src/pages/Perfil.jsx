@@ -412,12 +412,20 @@ export default function Perfil() {
   const [showSaqueForm, setShowSaqueForm] = useState(false);
   const [solicitandoSaque, setSolicitandoSaque] = useState(false);
   const [msgSaque, setMsgSaque] = useState(null);
+  const [proximaLiberacao, setProximaLiberacao] = useState(null); // data da próxima sexta de pagamento
+
+  // "sexta-feira, 18/07" — data calculada no servidor (fuso Bahia) e devolvida pela API.
+  const fmtLiberacao = (iso) => {
+    if (!iso) return null;
+    try { return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }).format(new Date(iso)); }
+    catch { return null; }
+  };
 
   const carregarSaldo = async () => {
     try {
       const res = await apiCall('/api/saque');
       const data = await res.json();
-      if (res.ok) setSaldoSaque(Number(data.saldo || 0));
+      if (res.ok) { setSaldoSaque(Number(data.saldo || 0)); setProximaLiberacao(data.proxima_liberacao || null); }
     } catch { /* ignora */ }
   };
 
@@ -435,7 +443,8 @@ export default function Perfil() {
       const res = await apiCall('/api/saque', { method: 'POST', body: JSON.stringify({ valor }) });
       const data = await res.json();
       if (res.ok) {
-        setMsgSaque({ tipo: 'sucesso', texto: `Saque solicitado! Saldo restante: ${fmtBRL(data.saldo_restante)}` });
+        const lib = fmtLiberacao(proximaLiberacao);
+        setMsgSaque({ tipo: 'sucesso', texto: `Saque solicitado! Liberação ${lib ? `na ${lib}` : 'na próxima sexta'}. Saldo restante: ${fmtBRL(data.saldo_restante)}` });
         setValorSaque('');
         setShowSaqueForm(false);
         carregarSaldo();
@@ -686,11 +695,30 @@ export default function Perfil() {
         {/* Card Comissões (apenas para papéis com repasse) */}
         {temComissao && (
           <div style={{ background: 'white', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 12 }}>MINHAS COMISSÕES</div>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 12 }}>SAQUE & COMISSÕES</div>
             <div style={{ textAlign: 'center', marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: '#0D63DB', fontWeight: 700 }}>SALDO DISPONÍVEL</div>
               <div style={{ fontSize: 24, fontWeight: 900, color: '#111111' }}>
                 {saldoSaque !== null ? fmtBRL(saldoSaque) : '—'}
+              </div>
+            </div>
+
+            {/* Regras e prazos do saque — explícitos para o profissional entender */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Como funciona o saque</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#475569', lineHeight: 1.7 }}>
+                <li>Você pode solicitar saques <strong>quando quiser</strong> durante a semana (valores avulsos).</li>
+                <li>Os pagamentos são feitos <strong>toda sexta-feira</strong>, via PIX.</li>
+                <li><strong>Corte às sextas, 12h:</strong> pedidos até o meio-dia de sexta entram <strong>naquela sexta</strong>; após o corte, na <strong>sexta seguinte</strong>.</li>
+                <li>É preciso ter a <strong>chave PIX cadastrada</strong> (nos dados cadastrais, abaixo).</li>
+              </ul>
+              {proximaLiberacao && (
+                <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>
+                  📅 Próxima liberação: {fmtLiberacao(proximaLiberacao)}
+                </div>
+              )}
+              <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: chavePix ? '#16a34a' : '#d97706' }}>
+                {chavePix ? '✓ Chave PIX cadastrada' : '⚠ Cadastre sua chave PIX abaixo para poder sacar'}
               </div>
             </div>
 
