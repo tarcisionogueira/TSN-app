@@ -2708,7 +2708,6 @@ function mapLoteLeilofy(raw, id) {
     // (4 de 21 na 1ª coleta), cai para o og:image da página — desde que não seja
     // logo/ícone/placeholder (senão gravaria a marca do site como foto do imóvel).
     link_foto: fotos[0] || ogFoto || null,
-    fotos: ogFoto && !fotos.length ? [ogFoto] : fotos,
     anexos,
     leiloeiro: 'Leiloaria Smart',
     // Data do leilão: reusa o extrator ancorado (procura dd/mm/aaaa perto de
@@ -2766,9 +2765,8 @@ async function scraperLeilofy(browser) {
       if (!det) continue;
       const row = mapLoteLeilofy(det, id);
       if (row && row.valor_minimo) imoveis.push(row);
-      else if (i <= 4) console.log(`    [leilofy diag] ${id}: valor=${row?.valor_minimo || 0} rsVals=${JSON.stringify([...(det.text || '').matchAll(/R\$\s*[\d.]+(?:,\d{2})?/g)].map(m => m[0]).slice(0, 10))} docs=${(det.docs || []).length}`);
-    } catch (e) { if (i <= 4) console.log(`    [leilofy diag] ${id}: erro ${String(e.message).slice(0, 60)}`); }
-    await sleep(900); // gentileza entre páginas (evita rate-limit no loop de 24 detalhes)
+    } catch { /* lote a lote; nunca derruba o scrape */ }
+    await sleep(300);
   }
   await page.close().catch(() => {});
   console.log(`    Leilofy: ${imoveis.length} imóveis mapeados`);
