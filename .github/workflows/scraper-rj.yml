@@ -1,9 +1,13 @@
 name: Scraper RJ Leilões (Bright Data)
 
 # RJ Leilões está 100% atrás de Cloudflare (Puppeteer barrado até no Actions), então
-# a coleta usa o Bright Data Web Unlocker. Dispatch-only até validar (recon → dry-run).
-# Custo: cada request = 1 chamada Bright Data (teto semanal + sub-cota 'rj' em _brightdata.js).
+# a coleta usa o Bright Data Web Unlocker. Validado (recon → dry-run → gravação).
+# Custo: ~13 requests/coleta (RJ é pequeno, ~12 imóveis) — teto semanal + sub-cota 'rj'.
+# Agendado 2x/semana (ter/sex) + manual. No cron GRAVA; no dispatch manual é dry-run
+# por padrão (passe dryrun=0 p/ gravar manualmente).
 on:
+  schedule:
+    - cron: '0 11 * * 2,5'   # terça e sexta, 11 UTC (após os scrapes da manhã)
   workflow_dispatch:
     inputs:
       debug:
@@ -41,6 +45,7 @@ jobs:
           BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
           BRIGHTDATA_MAX_RJ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_RJ_SEMANA }}
           RJ_DEBUG: ${{ github.event.inputs.debug || '0' }}
-          RJ_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
+          # cron (sem inputs) → '' → grava; dispatch manual sem dryrun → default '1' (dry-run).
+          RJ_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           RJ_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
         run: node scripts/scraper-rj.mjs
