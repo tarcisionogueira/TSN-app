@@ -142,47 +142,41 @@ function montarRow(url, det) {
   };
 }
 
-// RECON: dumpa sitemap + 1 lote p/ afinar o parser (gasta ~2-3 requests Bright Data).
+// RECON: plataforma SOLEON — os imóveis ficam na listagem /lotes/categoria/imoveis
+// (o sitemap só tem categorias). Dumpa o padrão de URL do lote + paginação + 1 detalhe.
 async function debugRecon() {
-  console.log('🔎 RJ RECON (via Bright Data) — mapeando estrutura\n');
-  const candidatos = ['/robots.txt', '/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml'];
-  let urlsLote = [];
-  for (const path of candidatos) {
-    const body = await bd(`${BASE}${path}`, { timeoutMs: 90000 });
-    if (!body) continue;
-    console.log(`\n── ${path} (${body.length} bytes) — amostra:`);
-    console.log('   ' + body.slice(0, 1200).replace(/\s+/g, ' '));
-    // sitemap-index → segue os sub-sitemaps
-    const subs = [...body.matchAll(/<loc>\s*([^<]+?\.xml[^<]*)\s*<\/loc>/gi)].map(m => m[1].trim());
-    for (const sub of subs.slice(0, 5)) {
-      const sb = await bd(sub, { timeoutMs: 90000 });
-      if (sb) { console.log(`   ↳ sub-sitemap ${sub}: ${sb.length}b`); urlsLote.push(...extrairUrlsDeLote(sb)); }
-      await sleep(300);
-    }
-    urlsLote.push(...extrairUrlsDeLote(body));
-    if (path === '/robots.txt') {
-      const sm = [...body.matchAll(/Sitemap:\s*(\S+)/gi)].map(m => m[1]);
-      console.log(`   robots → sitemaps: ${JSON.stringify(sm)}`);
-    }
-    await sleep(300);
-  }
-  urlsLote = [...new Set(urlsLote)];
-  console.log(`\n▓▓ URLs de lote candidatas encontradas: ${urlsLote.length}`);
-  console.log('   ' + urlsLote.slice(0, 8).join('\n   '));
+  console.log('🔎 RJ RECON v2 (via Bright Data) — plataforma SOLEON\n');
+  const LIST = `${BASE}/lotes/categoria/imoveis`;
+  const html = await bd(LIST, { timeoutMs: 90000 });
+  if (!html) { console.log('listagem de imóveis não veio (teto BD?).'); return; }
+  console.log(`listagem ${LIST}: ${html.length} bytes`);
 
-  if (urlsLote.length) {
-    const alvo = urlsLote[0];
-    console.log(`\n── DETALHE de amostra: ${alvo}`);
-    const html = await bd(alvo, { timeoutMs: 90000 });
-    if (html) {
-      const det = parseDetalhe(html, alvo);
+  const hrefs = [...new Set([...html.matchAll(/href=["']([^"']+)["']/gi)].map(m => m[1]))];
+  const loteHrefs = hrefs.filter(h => /lote/i.test(h) && /\d/.test(h) && !/categoria/i.test(h));
+  console.log(`\n▓▓ hrefs de LOTE (com dígito, fora de categoria) — ${loteHrefs.length}:`);
+  console.log('   ' + loteHrefs.slice(0, 25).join('\n   '));
+  const pag = hrefs.filter(h => /page|pagina|[?&]p=|offset|start=/i.test(h));
+  console.log(`\n▓▓ candidatos a PAGINAÇÃO — ${pag.length}:`);
+  console.log('   ' + pag.slice(0, 10).join('\n   '));
+
+  const alvo = loteHrefs[0] ? new URL(loteHrefs[0], BASE).href : null;
+  if (alvo) {
+    console.log(`\n── DETALHE amostra: ${alvo}`);
+    const dh = await bd(alvo, { timeoutMs: 90000 });
+    if (dh) {
+      const det = parseDetalhe(dh, alvo);
       console.log('   parseDetalhe →', JSON.stringify({ ...det, anexos: (det.anexos || []).length + ' docs' }, null, 2));
-      const txt = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-      console.log('   contexto R$:');
-      for (const m of txt.matchAll(/(.{0,40})R\$\s*([\d.]+,\d{2})/g)) console.log(`     …${m[1].trim()} » R$ ${m[2]}`);
+      const t = dh.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+      console.log('   R$ contexto:');
+      for (const m of t.matchAll(/(.{0,45})R\$\s*([\d.]+,\d{2})/g)) console.log(`     …${m[1].trim()} » R$ ${m[2]}`);
+      console.log('   matrícula ctx:', (t.match(/.{0,25}matr[íi]cula.{0,45}/i) || [''])[0].trim());
+      console.log('   docs href amostra:', JSON.stringify([...dh.matchAll(/href=["']([^"']*(?:\.pdf|edital|matricula|laudo)[^"']*)["']/gi)].map(m => m[1]).slice(0, 6)));
     }
+  } else {
+    console.log('\n⚠️ nenhum href de lote na listagem — dump de hrefs p/ inspeção:');
+    console.log('   ' + hrefs.slice(0, 30).join('\n   '));
   }
-  console.log('\n✅ RECON concluído. Ajuste parseDetalhe/enumeração conforme o dump e rode RJ_DRYRUN=1.');
+  console.log('\n✅ RECON v2 concluído.');
 }
 
 async function main() {
