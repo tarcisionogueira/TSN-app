@@ -36,12 +36,18 @@ function limparNome(n) {
   return uniq.slice(0, 60);
 }
 // Classifica o documento pelo nome/URL para gravar o tipo certo.
-function classificar(url, nome = '') {
+function classificar(url, nome = '', fonte = '') {
   const s = `${url} ${nome}`.toLowerCase();
   if (/matric/.test(s)) return 'matricula';
   if (/edital/.test(s)) return 'edital';
   if (/laudo|avalia/.test(s)) return 'laudo';
   if (/regras|condi|como.?comprar/.test(s)) return 'regras_venda';
+  // REGRA APRENDIDA (auditoria de docs 15/07/2026): BIASI publica 1 doc por-lote em
+  // /file/loteanexo/ e ESSE doc É a matrícula — mas vem com nome numérico, que não bate
+  // em /matric/ e caía como 'outro' (só 42% tinham matrícula). Rotula como matrícula p/
+  // não regredir os 96,5% do backfill. (Extras de lotes multi-doc voltam a 'outro' no
+  // chamador, então nenhum documento é descartado.)
+  if (fonte === 'BIASI' && /loteanexo/i.test(url)) return 'matricula';
   return 'outro';
 }
 
@@ -162,7 +168,11 @@ async function processar(browser, item) {
   let nOutro = 0;               // índice p/ vários 'outro' (paths únicos)
   const salvar = async (buf, url, nome) => {
     if (urlsSalvas.has(url)) return;
-    const tipo = classificar(url, nome);
+    let tipo = classificar(url, nome, im.fonte);
+    // BIASI: o 1º /loteanexo/ vira matrícula; se a matrícula já foi salva, os anexos
+    // extras do mesmo lote voltam a 'outro' (salvos como linha própria, não descartados).
+    // Não altera o comportamento das demais fontes.
+    if (tipo === 'matricula' && im.fonte === 'BIASI' && salvos.has('matricula')) tipo = 'outro';
     // Classificados: 1 por tipo. 'outro' é genérico → pode haver vários (edital +
     // matrícula que não classificaram); cada um vira uma linha própria.
     if (tipo !== 'outro' && salvos.has(tipo)) return;
