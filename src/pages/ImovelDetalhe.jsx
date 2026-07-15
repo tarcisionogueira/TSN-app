@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Tag, Building2, FileText, ExternalLink, BarChart2, AlertTriangle, CheckCircle, Clock, Home, Banknote, Paperclip, Upload, Trash2, ChevronDown, ChevronUp, UserCheck, ScrollText, ShieldCheck, Share2, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
@@ -684,8 +684,27 @@ export default function ImovelDetalhe() {
   const [filaDocs, setFilaDocs] = useState(null); // status da fila de captura CEF (persiste no F5)
   const [loading, setLoading] = useState(!loc.state?.imovel);
   const [imgIdx, setImgIdx] = useState(0); // índice do candidato de foto atual (fallback em cascata)
+  const [compartilhado, setCompartilhado] = useState(false); // feedback "link copiado"
 
   const id = loc.state?.imovel?.id || paramId;
+
+  // Compartilhar o imóvel: usa o menu nativo do celular (WhatsApp etc.) quando existe;
+  // no desktop copia o link. O link é a URL atual (/#/imovel/:id) — quem recebe sem
+  // conta cai no teaser (ImovelGate) e entra/cadastra para ver.
+  const compartilhar = async () => {
+    const url = window.location.href;
+    const titulo = imovel?.titulo || 'Imóvel em leilão — BidPro Brasil';
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ title: titulo, text: `Veja este imóvel em leilão: ${titulo}`, url }); }
+      catch { /* usuário cancelou — sem ação */ }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCompartilhado(true);
+      setTimeout(() => setCompartilhado(false), 2500);
+    } catch { /* clipboard indisponível */ }
+  };
 
   // Abre sempre no TOPO (foto primeiro) — não herda a rolagem da lista/busca.
   useEffect(() => { window.scrollTo(0, 0); }, [id]);
@@ -951,6 +970,10 @@ export default function ImovelDetalhe() {
           </button>
           <span style={{ color: '#334155', fontSize: 13 }}>/</span>
           <span style={{ color: '#64748b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>{imovel.titulo || 'Imóvel'}</span>
+          <button onClick={compartilhar} title="Compartilhar este imóvel"
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, background: compartilhado ? '#16a34a' : 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.18)', color: compartilhado ? '#fff' : '#e2e8f0', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, padding: '6px 12px', borderRadius: 8, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {compartilhado ? <><Check size={14} /> Link copiado</> : <><Share2 size={14} /> Compartilhar</>}
+          </button>
         </div>
       </div>
 

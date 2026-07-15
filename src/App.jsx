@@ -18,6 +18,7 @@ import Termos from './pages/Termos';
 import Privacidade from './pages/Privacidade';
 import Busca from './pages/Busca';
 import ImovelDetalhe from './pages/ImovelDetalhe';
+import ImovelGate from './pages/ImovelGate';
 import Analise from './pages/Analise';
 import MinhasAnalises from './pages/MinhasAnalises';
 import Arrematados from './pages/Arrematados';
@@ -186,6 +187,16 @@ function PrivateRoute({ children, roles }) {
   return children;
 }
 
+// Imóvel: logado vê a página completa; VISITANTE (link compartilhado) vê o teaser
+// embaçado com CTA de login/cadastro (ImovelGate), em vez de ser jogado direto no
+// login. Depois de entrar, o ?next leva de volta a este mesmo imóvel.
+function ImovelRota() {
+  const { isLoggedIn, loading } = useAuth();
+  if (loading) return null;
+  if (!isLoggedIn) return <ImovelGate />;
+  return <PrivateRoute><ImovelDetalhe /></PrivateRoute>;
+}
+
 function RouteTracker() {
   const loc = useLocation();
   useEffect(() => { trackPageView(loc.pathname); }, [loc.pathname]);
@@ -242,7 +253,7 @@ function MainLayout() {
           <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
-          <Route path="/imovel/:id" element={<PrivateRoute><ImovelDetalhe /></PrivateRoute>} />
+          <Route path="/imovel/:id" element={<ImovelRota />} />
           <Route path="/mapa" element={<PrivateRoute><MapaImoveis /></PrivateRoute>} />
           <Route path="/analise" element={<PrivateRoute><Analise /></PrivateRoute>} />
           <Route path="/analises" element={<PrivateRoute><MinhasAnalises /></PrivateRoute>} />

@@ -612,7 +612,14 @@ export default function Busca() {
   const [raioAtivo, setRaioAtivo] = useState(false);
   const [centroRaio, setCentroRaio] = useState(null);
   const [distancias, setDistancias] = useState({});
-  const [vista, setVista] = useState('mapa'); // padrão: mapa estilo Google (com lista lateral)
+  // Padrão de apresentação POR DISPOSITIVO: no celular a LISTA abre por padrão (mapa em
+  // tela pequena não é confortável); no desktop, o mapa estilo Google. A escolha do
+  // usuário no alternador fica salva (localStorage) e vira o padrão dele no próximo acesso.
+  const [vista, setVista] = useState(() => {
+    try { const s = localStorage.getItem('busca_vista'); if (s === 'lista' || s === 'mapa') return s; } catch { /* ignore */ }
+    return (typeof window !== 'undefined' && window.innerWidth < 768) ? 'lista' : 'mapa';
+  });
+  const escolherVista = (v) => { setVista(v); try { localStorage.setItem('busca_vista', v); } catch { /* ignore */ } };
   const [listaSobreMapa, setListaSobreMapa] = useState(true); // painel lista recolhível na vista Mapa (estilo Google)
 
   // Snapshot dos filtros/raio no momento do último clique em Buscar
@@ -1583,11 +1590,11 @@ export default function Busca() {
             </div>
             {/* Alternador Lista / Mapa */}
             <div style={{ display:'flex', background:'#f1f5f9', borderRadius:10, padding:3, gap:2 }}>
-              <button onClick={() => setVista('lista')}
+              <button onClick={() => escolherVista('lista')}
                 style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='lista' ? 'white' : 'transparent', color: vista==='lista' ? '#111111' : '#64748b', boxShadow: vista==='lista' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 ☰ Lista
               </button>
-              <button onClick={() => setVista('mapa')}
+              <button onClick={() => escolherVista('mapa')}
                 style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='mapa' ? 'white' : 'transparent', color: vista==='mapa' ? '#111111' : '#64748b', boxShadow: vista==='mapa' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 🗺️ Mapa
               </button>
