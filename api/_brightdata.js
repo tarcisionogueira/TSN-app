@@ -23,6 +23,10 @@ const TETO     = parseInt(process.env.BRIGHTDATA_MAX_REQ_SEMANA || '450', 10);
 // banco) continua sendo o fail-safe DURO de custo — isto é só um repartidor.
 const SUBCOTAS = {
   ljud: parseInt(process.env.BRIGHTDATA_MAX_LJUD_SEMANA || '180', 10),
+  // Captura de documentos (caminho 3 do captura-documentos.mjs): teto semanal próprio
+  // p/ desbloquear leiloeiros anti-bot (ex.: PECINI) sem devorar o orçamento dos
+  // demais propósitos (datas/geo/scrapers). O teto global (RPC) segue como trava dura.
+  docs: parseInt(process.env.BRIGHTDATA_MAX_DOCS_SEMANA || '150', 10),
 };
 // Contagem por propósito na semana corrente, mantida na memória do processo. A
 // paginação profunda (o caso que estoura a cota) roda numa única invocação, então

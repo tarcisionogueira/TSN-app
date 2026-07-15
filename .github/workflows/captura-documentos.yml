@@ -40,4 +40,11 @@ jobs:
           # 40/run (~13s por lote → ~9 min; teto seguro no timeout de 45 min). O */15
           # é throttled pelo GitHub p/ ~1-2h, então cada run precisa render mais.
           DOCS_LOTE: '40'
+          # CAMINHO 3 (Bright Data Web Unlocker): desbloqueia leiloeiros anti-bot
+          # (PECINI etc.) quando o Puppeteer é barrado. Sem estes segredos o caminho 3
+          # simplesmente não roda (fallback seguro) — os caminhos 1/2 seguem normais.
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          BRIGHTDATA_MAX_DOCS_SEMANA: ${{ secrets.BRIGHTDATA_MAX_DOCS_SEMANA }}
         run: node scripts/captura-documentos.mjs

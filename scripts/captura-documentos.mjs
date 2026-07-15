@@ -1,16 +1,22 @@
 /**
- * Captura GENÉRICA de documentos por navegador real (qualquer leiloeiro que não a
- * Caixa — essa tem o script próprio captura-matricula-cef.mjs). Lê `documentos_fila`
- * (status=pendente), abre a página do lote com Puppeteer, ENCONTRA e BAIXA os PDFs
- * (edital/matrícula/laudo/regras) por 2 caminhos:
- *   1) interceptação de rede: qualquer resposta application/pdf que a página carregar;
- *   2) varredura de links <a href="*.pdf"> e botões de download na página renderizada.
+ * Captura GENÉRICA de documentos com MÚLTIPLOS CAMINHOS por leiloeiro (qualquer
+ * fonte que não a Caixa — essa tem o script próprio captura-matricula-cef.mjs).
+ * Lê `documentos_fila` (status=pendente) e, para cada imóvel, tenta em CASCATA por
+ * custo (para no 1º caminho que traz documento — economia pelo resultado):
+ *   CAMINHO 1 — fetch DIRETO dos links já conhecidos (link_matricula/edital/regras
+ *               e anexos[].url). Grátis, sem navegador; resolve quem já tem o PDF.
+ *   CAMINHO 2 — Puppeteer (navegador real): renderiza JS, abre abas/acordeões,
+ *               intercepta PDFs de rede e varre <a href> rotulados como documento.
+ *   CAMINHO 3 — Bright Data Web Unlocker: SÓ quando o navegador é BLOQUEADO
+ *               (Cloudflare/403, ex.: PECINI). Respeita o teto semanal de custo
+ *               (proposito 'docs') → nunca estoura o orçamento.
  * Guarda no Storage (bucket 'documentos') e registra em `imovel_anexos` (com
  * storage_path) — que a análise documental já lê PRIMEIRO. Roda no GitHub Actions.
  */
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { Buffer } from 'buffer';
+import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -59,17 +65,59 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0) {
 
 const ehPdfBuf = (buf, ct) => buf && buf.length > 1500 && ((ct || '').includes('pdf') || buf.slice(0, 5).toString('latin1') === '%PDF-');
 
-async function baixarPdf(page, url, referer) {
-  // 1) Node fetch (SEM CORS) — funciona cross-origin, essencial para os PDFs que
-  //    ficam num CDN (ex.: cdn1.megaleiloes.com.br), onde o fetch da página é
-  //    bloqueado por CORS. page.goto() num PDF dá net::ERR_ABORTED, por isso não é usado.
+// Download DIRETO (Node fetch, sem navegador). Base do CAMINHO 1 e primeira tentativa
+// do baixarPdf. Funciona cross-origin (essencial p/ PDFs em CDN, ex.: megaleiloes),
+// onde o fetch da página é bloqueado por CORS. Só retorna se for REALMENTE PDF.
+async function baixarPdfDireto(url, referer) {
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*', ...(referer ? { Referer: referer } : {}) }, redirect: 'follow', signal: AbortSignal.timeout(25000) });
     if (r.ok) {
       const buf = Buffer.from(await r.arrayBuffer());
       if (ehPdfBuf(buf, r.headers.get('content-type'))) return buf;
     }
-  } catch { /* tenta pela página */ }
+  } catch { /* chamador tenta outro caminho */ }
+  return null;
+}
+
+// Download via Bright Data (CAMINHO 3): para PDFs cujo host também barra o fetch
+// direto (Cloudflare no CDN do leiloeiro). Respeita o teto semanal (proposito 'docs').
+async function baixarPdfBD(url, referer) {
+  if (!brightDataDisponivel()) return null;
+  const resp = await fetchViaBrightData(url, { proposito: 'docs', timeoutMs: 45000, headers: referer ? { Referer: referer } : null });
+  if (!resp || !resp.ok) return null;
+  try {
+    const buf = Buffer.from(await resp.arrayBuffer());
+    return ehPdfBuf(buf, resp.headers.get('content-type')) ? buf : null;
+  } catch { return null; }
+}
+
+// Extrai links de documentos (edital/matrícula/laudo/anexos) de um HTML CRU — usado
+// no CAMINHO 3, onde não há DOM/navegador. Espelha o filtro do scan por Puppeteer:
+// pega .pdf OU âncora rotulada como documento; ignora material institucional.
+function linksDocDeHtml(html, base) {
+  if (!html) return [];
+  const out = [];
+  const vistos = new Set();
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let href = m[1];
+    try { href = new URL(href, base).href; } catch { continue; }
+    if (vistos.has(href)) continue;
+    const txt = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const alvo = `${txt} ${href}`;
+    const ehPdf = /\.pdf(\?|#|$)/i.test(href);
+    const ehDoc = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(alvo);
+    const ehGenerico = /modelo|proposta|como.?comprar|termos|pol[ií]tica|privacidade|cadastr|manual|passo.?a.?passo|transpar[êe]ncia|igualdade.?salarial|quem.?somos|imprensa|investidor|carreira|institucional|c[óo]digo.?de.?[ée]tica|governan[çc]a/i.test(alvo);
+    if ((!ehPdf && !ehDoc) || ehGenerico) continue;
+    vistos.add(href);
+    out.push({ href, txt });
+  }
+  return out;
+}
+
+async function baixarPdf(page, url, referer) {
+  // 1) Node fetch direto (SEM CORS) — cobre a maioria dos PDFs cross-origin.
+  const direto = await baixarPdfDireto(url, referer);
+  if (direto) return direto;
   // 2) Fetch DENTRO da página (usa a sessão validada) — cobre PDFs same-origin que a
   //    origem só serve com cookie/sessão.
   try {
@@ -90,7 +138,7 @@ async function baixarPdf(page, url, referer) {
 
 async function processar(browser, item) {
   const { data: im } = await supabase.from('imoveis_leilao')
-    .select('link_edital, link_matricula, link_regras_venda, anexos, fonte').eq('id', item.imovel_id).single();
+    .select('link_edital, link_matricula, link_regras_venda, anexos, fonte, url_lote').eq('id', item.imovel_id).single();
   if (!im) throw new Error('imovel_nao_encontrado');
 
   const page = await browser.newPage();
@@ -124,8 +172,29 @@ async function processar(browser, item) {
     capturados.push(tipo);
   };
 
-  // Abre a página do lote (link_edital costuma ser a página; ou os links diretos).
-  const paginaLote = ehUrl(im.link_edital) ? im.link_edital : (ehUrl(im.link_regras_venda) ? im.link_regras_venda : null);
+  // Página do lote (referer + navegação): link_edital costuma ser a própria página;
+  // senão a url_lote; senão as regras de venda.
+  const paginaLote = ehUrl(im.link_edital) ? im.link_edital
+    : (ehUrl(im.url_lote) ? im.url_lote : (ehUrl(im.link_regras_venda) ? im.link_regras_venda : null));
+
+  // ─── CAMINHO 1 — fetch DIRETO dos links já conhecidos (grátis, sem navegador) ───
+  // Resolve de imediato quem já tem o PDF (link_matricula real, anexos[].url). O
+  // baixarPdfDireto só aceita application/pdf, então uma página HTML em link_edital
+  // é ignorada de graça. Quem já tiver documento aqui nem aciona os caminhos 2/3.
+  const conhecidos = [];
+  if (ehUrl(im.link_matricula)) conhecidos.push({ url: im.link_matricula, nome: 'matricula' });
+  if (ehUrl(im.link_edital) && /\.pdf(\?|#|$)/i.test(im.link_edital)) conhecidos.push({ url: im.link_edital, nome: 'edital' });
+  if (ehUrl(im.link_regras_venda) && /\.pdf(\?|#|$)/i.test(im.link_regras_venda)) conhecidos.push({ url: im.link_regras_venda, nome: 'regras venda' });
+  for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) if (ehUrl(a?.url)) conhecidos.push({ url: a.url, nome: a?.nome || '' });
+  for (const c of conhecidos) {
+    if (capturados.length >= 8) break;
+    if (urlsSalvas.has(c.url)) continue;
+    const buf = await baixarPdfDireto(c.url, paginaLote);
+    if (buf) { try { await salvar(buf, c.url, limparNome(c.nome)); } catch { /* */ } }
+  }
+
+  // ─── CAMINHO 2 — Puppeteer (renderiza JS, abre abas/acordeões, intercepta PDFs) ───
+  let bloqueado = false; // vira true se o navegador for barrado (anti-bot) → escala p/ CAMINHO 3
   if (paginaLote) {
     try {
       await page.goto(paginaLote, { waitUntil: 'networkidle2', timeout: 45000 });
@@ -136,6 +205,15 @@ async function processar(browser, item) {
         if (/just a moment|um momento|verificando|attention required|checking your browser/i.test(t)) return false;
         return document.querySelectorAll('a[href]').length > 5;
       }, { timeout: 12000 }).catch(() => {});
+      // O desafio anti-bot resolveu ou a página segue bloqueada? Se sim, o CAMINHO 3
+      // (Bright Data) assume — o navegador direto não vence Cloudflare/403 (ex.: PECINI).
+      try {
+        bloqueado = await page.evaluate(() => {
+          const t = document.body?.innerText || '';
+          return /just a moment|um momento|verificando|attention required|checking your browser|acesso negado|forbidden/i.test(t)
+            || document.querySelectorAll('a[href]').length <= 5;
+        });
+      } catch { bloqueado = true; }
       await new Promise(r => setTimeout(r, 1500));
       // CONTRAMEDIDA (docs atrás de aba/acordeão): muitos leiloeiros — SUPERBID em
       // especial — escondem edital/matrícula/anexos numa aba ("Documentos", "Edital
@@ -166,7 +244,7 @@ async function processar(browser, item) {
         });
         await new Promise(r => setTimeout(r, 1200));
       } catch { /* segue */ }
-    } catch { /* segue */ }
+    } catch { bloqueado = true; /* goto falhou (timeout/403) → tenta o CAMINHO 3 */ }
   }
 
   // 2) Links de PDF/documento na página renderizada (rótulo OU extensão).
@@ -226,15 +304,37 @@ async function processar(browser, item) {
     // certo mesmo quando a URL é opaca (hash sem "edital"/"matric").
     if (buf) { try { await salvar(buf, l.href, limparNome(`${l.txt} ${l.ctx || ''}`)); } catch { /* */ } }
   }
-  // Também os anexos que o scrape já tinha registrado como URL (baixa e guarda).
+  // Também os anexos que o scrape já registrou como URL (retenta pela SESSÃO da
+  // página os que o fetch direto do CAMINHO 1 não pegou — ex.: PDF só servido com cookie).
   for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) {
     if (capturados.length >= 8) break;
-    if (!ehUrl(a?.url)) continue;
+    if (!ehUrl(a?.url) || urlsSalvas.has(a.url)) continue;
     const buf = await baixarPdf(page, a.url, paginaLote);
     if (buf) { try { await salvar(buf, a.url, limparNome(a.nome || '')); } catch { /* */ } }
   }
 
   await page.close();
+
+  // ─── CAMINHO 3 — Bright Data Web Unlocker (só quando o navegador foi BLOQUEADO) ───
+  // Escala ao proxy pago APENAS se o caminho barato foi barrado E ainda não temos
+  // documento — desbloqueia fontes como o PECINI (Cloudflare 403). Baixa o HTML do
+  // lote, extrai os links de documento e busca cada PDF (direto → e, se o host também
+  // barrar, via Bright Data). Respeita o teto semanal de custo (proposito 'docs').
+  if (!capturados.length && bloqueado && paginaLote && brightDataDisponivel()) {
+    const resp = await fetchViaBrightData(paginaLote, { proposito: 'docs', timeoutMs: 45000 });
+    if (resp && resp.ok) {
+      const html = await resp.text().catch(() => '');
+      const cands = linksDocDeHtml(html, paginaLote);
+      console.log(`[docs] ${item.imovel_id} ${im.fonte || ''}: CAMINHO 3 (Bright Data) — ${cands.length} candidato(s)`);
+      for (const l of cands) {
+        if (capturados.length >= 8) break;
+        let buf = await baixarPdfDireto(l.href, paginaLote);
+        if (!buf) buf = await baixarPdfBD(l.href, paginaLote);
+        if (buf) { try { await salvar(buf, l.href, limparNome(l.txt)); } catch { /* */ } }
+      }
+    }
+  }
+
   if (!capturados.length) throw new Error('nenhum_documento_encontrado');
   return capturados;
 }
