@@ -1,0 +1,46 @@
+name: Scraper RJ Leilões (Bright Data)
+
+# RJ Leilões está 100% atrás de Cloudflare (Puppeteer barrado até no Actions), então
+# a coleta usa o Bright Data Web Unlocker. Dispatch-only até validar (recon → dry-run).
+# Custo: cada request = 1 chamada Bright Data (teto semanal + sub-cota 'rj' em _brightdata.js).
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: '1 = RECON (dumpa sitemap + 1 lote p/ afinar o parser)'
+        required: false
+        default: '0'
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '1'
+      max_lotes:
+        description: 'Máx. de lotes por execução'
+        required: false
+        default: '40'
+
+jobs:
+  scraper-rj:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper RJ
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          BRIGHTDATA_MAX_RJ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_RJ_SEMANA }}
+          RJ_DEBUG: ${{ github.event.inputs.debug || '0' }}
+          RJ_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
+          RJ_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
+        run: node scripts/scraper-rj.mjs

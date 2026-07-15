@@ -1,0 +1,250 @@
+/**
+ * Scraper RJ Leilões (rjleiloes.com.br) — imóveis via Bright Data Web Unlocker.
+ * ────────────────────────────────────────────────────────────────────────────
+ * Por que Bright Data (pago): o recon provou que o RJ está 100% atrás de Cloudflare
+ * — TODO caminho responde 403 "Just a moment..." mesmo pelo Puppeteer no GitHub
+ * Actions. Não há via grátis; o Web Unlocker é o único que resolve o desafio. Isso
+ * segue o plano do agente: grátis primeiro (falhou), pago como SUPORTE necessário.
+ *
+ * SEGURANÇA DE CUSTO (cada request = 1 chamada Bright Data):
+ *   - RJ_MAX_LOTES (default 40): teto de lotes por execução.
+ *   - RJ_DRYRUN (default '1'): NÃO grava — só busca/parseia e loga o que inseriria.
+ *   - RJ_DEBUG  (default '0'): dumpa a ESTRUTURA (sitemap + 1 lote) p/ afinar o parser
+ *     — método recon-first. Roda com RJ_DEBUG=1 na 1ª vez (gasta ~2-3 requests).
+ *   - fetchViaBrightData respeita o teto semanal global + sub-cota 'rj' → nunca estoura.
+ *
+ * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
+ */
+import { createClient } from '@supabase/supabase-js';
+import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
+
+const BASE = 'https://www.rjleiloes.com.br';
+const MAX_LOTES = Number(process.env.RJ_MAX_LOTES || 40);
+const DRYRUN = process.env.RJ_DRYRUN !== '0'; // default: dry-run (não grava)
+const DEBUG = process.env.RJ_DEBUG === '1';
+const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+
+if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
+const supabase = createClient(SB_URL, SB_KEY);
+
+// Busca crua via Web Unlocker (com teto de custo). Retorna o corpo (HTML/XML) ou null.
+async function bd(url, { timeoutMs = 60000 } = {}) {
+  const r = await fetchViaBrightData(url, { proposito: 'rj', timeoutMs });
+  if (!r) { if (DEBUG) console.log(`  bd ${url} → null (teto/config)`); return null; }
+  const body = await r.text().catch(() => null);
+  if (DEBUG) console.log(`  bd ${url} → HTTP ${r.status} · ${body ? body.length : 0} bytes`);
+  if (!r.ok) return null;
+  return body;
+}
+
+function inferirTipo(titulo = '') {
+  const t = titulo.toLowerCase();
+  if (/apartament|apto|flat|kitnet|studio/.test(t)) return 'apartamento';
+  if (/casa|sobrado|residenc/.test(t)) return 'casa';
+  if (/terreno|lote|gleba|[áa]rea/.test(t)) return 'terreno';
+  if (/comercial|loja|sala|gal[pã]|pr[ée]dio|escrit[óo]rio/.test(t)) return 'comercial';
+  if (/rural|fazenda|s[íi]tio|ch[áa]cara/.test(t)) return 'rural';
+  return 'outros';
+}
+
+// Enumeração: procura URLs de lote/imóvel em qualquer XML/HTML (sitemap ou listagem).
+// Padrões comuns de plataformas de leilão: /imovel/{id}, /lote/{...}, /leilao/{...}.
+function extrairUrlsDeLote(txt) {
+  const urls = new Set();
+  for (const m of txt.matchAll(/https?:\/\/[^\s"'<>]*\/(?:imovel|imoveis|lote|lotes|leilao|leiloes|item|bem)[\/-][^\s"'<>]*/gi)) {
+    urls.add(m[0].replace(/[.,)]+$/, '').split('#')[0]);
+  }
+  return [...urls];
+}
+
+// Parseia a página de detalhe: base genérica (og/ld+json/valores) + refinamentos RJ.
+function parseDetalhe(html, url) {
+  const base = extrairGenerico(html, url) || {};
+  const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+
+  // Valores: todos os "R$ x.xxx,xx" plausíveis (avaliação=maior, lance=menor);
+  // filtra pequenos (taxas, R$/m²). Robusto ao fraseado (lição do LEILOFY).
+  const valores = [...txt.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map(m => num(m[1])).filter(v => v >= 1000 && v <= 500_000_000);
+  const avaliacao = valores.length ? Math.max(...valores) : 0;
+  const valorMinimo = valores.length ? Math.min(...valores) : 0;
+
+  const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
+    : /extrajudicial/i.test(txt) ? 'extrajudicial'
+    : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
+  const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
+  const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
+
+  // Documentos: PDFs e links rotulados (matrícula/edital/laudo).
+  const docs = [];
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = m[1]; const label = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/\.pdf(\?|#|$)/i.test(href) || /edital|matr[íi]cula|laudo/i.test(label)) {
+      let abs; try { abs = new URL(href, url).href; } catch { continue; }
+      docs.push({ url: abs, label: label.slice(0, 60) });
+    }
+  }
+  const findDoc = re => (docs.find(d => re.test(d.label) || re.test(d.url)) || {}).url || null;
+  const anexos = docs.map(d => ({ tipo: /matr[íi]cula/i.test(d.label + d.url) ? 'matricula' : (/edital/i.test(d.label + d.url) ? 'edital' : (/laudo/i.test(d.label + d.url) ? 'laudo' : 'outro')), nome: (d.label || 'Documento').slice(0, 80), url: d.url }));
+
+  return {
+    titulo: (base.titulo || '').slice(0, 180) || null,
+    link_foto: base.link_foto,
+    valor_avaliacao: avaliacao,
+    valor_minimo: valorMinimo,
+    modalidade,
+    area_m2: area,
+    descricao: (base.descricao || '').slice(0, 500) || null,
+    data_leilao: base.data_leilao || extrairData(html),
+    numero_matricula: mat,
+    link_edital: findDoc(/edital/i),
+    link_matricula: findDoc(/matr[íi]cula/i),
+    anexos,
+  };
+}
+
+function idDaUrl(url) {
+  const m = String(url).match(/\/(?:imovel|imoveis|lote|lotes|leilao|leiloes|item|bem)[\/-]([\w-]+)/i);
+  return m ? m[1] : String(url).split('/').filter(Boolean).pop();
+}
+
+function montarRow(url, det) {
+  const va = det.valor_avaliacao || 0, vm = det.valor_minimo || 0;
+  const id = idDaUrl(url);
+  return {
+    fonte: 'RJLEILOES',
+    fonte_id: `rj_${id}`,
+    titulo: det.titulo || `Imóvel RJ ${id}`,
+    tipo: inferirTipo(det.titulo || ''),
+    modalidade: det.modalidade,
+    valor_avaliacao: va,
+    valor_minimo: vm,
+    area_m2: det.area_m2 || 0,
+    descricao: det.descricao,
+    link_edital: det.link_edital || url,
+    url_lote: url,
+    link_foto: det.link_foto || null,
+    numero_matricula: det.numero_matricula,
+    link_matricula: det.link_matricula,
+    anexos: det.anexos,
+    leiloeiro: 'RJ Leilões',
+    data_leilao: det.data_leilao || null,
+    forma_pagamento: 'a_vista',
+    ativo: true,
+    viavel: va > 0 ? (1 - vm / va) >= 0.3 : null,
+    score_viabilidade: va > 0 ? Math.min(100, Math.round((1 - vm / va) * 150)) : 30,
+    desconto_percentual: va > 0 ? Math.round((1 - vm / va) * 100) : null,
+    atualizado_em: new Date().toISOString(),
+  };
+}
+
+// RECON: dumpa sitemap + 1 lote p/ afinar o parser (gasta ~2-3 requests Bright Data).
+async function debugRecon() {
+  console.log('🔎 RJ RECON (via Bright Data) — mapeando estrutura\n');
+  const candidatos = ['/robots.txt', '/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml'];
+  let urlsLote = [];
+  for (const path of candidatos) {
+    const body = await bd(`${BASE}${path}`, { timeoutMs: 90000 });
+    if (!body) continue;
+    console.log(`\n── ${path} (${body.length} bytes) — amostra:`);
+    console.log('   ' + body.slice(0, 1200).replace(/\s+/g, ' '));
+    // sitemap-index → segue os sub-sitemaps
+    const subs = [...body.matchAll(/<loc>\s*([^<]+?\.xml[^<]*)\s*<\/loc>/gi)].map(m => m[1].trim());
+    for (const sub of subs.slice(0, 5)) {
+      const sb = await bd(sub, { timeoutMs: 90000 });
+      if (sb) { console.log(`   ↳ sub-sitemap ${sub}: ${sb.length}b`); urlsLote.push(...extrairUrlsDeLote(sb)); }
+      await sleep(300);
+    }
+    urlsLote.push(...extrairUrlsDeLote(body));
+    if (path === '/robots.txt') {
+      const sm = [...body.matchAll(/Sitemap:\s*(\S+)/gi)].map(m => m[1]);
+      console.log(`   robots → sitemaps: ${JSON.stringify(sm)}`);
+    }
+    await sleep(300);
+  }
+  urlsLote = [...new Set(urlsLote)];
+  console.log(`\n▓▓ URLs de lote candidatas encontradas: ${urlsLote.length}`);
+  console.log('   ' + urlsLote.slice(0, 8).join('\n   '));
+
+  if (urlsLote.length) {
+    const alvo = urlsLote[0];
+    console.log(`\n── DETALHE de amostra: ${alvo}`);
+    const html = await bd(alvo, { timeoutMs: 90000 });
+    if (html) {
+      const det = parseDetalhe(html, alvo);
+      console.log('   parseDetalhe →', JSON.stringify({ ...det, anexos: (det.anexos || []).length + ' docs' }, null, 2));
+      const txt = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+      console.log('   contexto R$:');
+      for (const m of txt.matchAll(/(.{0,40})R\$\s*([\d.]+,\d{2})/g)) console.log(`     …${m[1].trim()} » R$ ${m[2]}`);
+    }
+  }
+  console.log('\n✅ RECON concluído. Ajuste parseDetalhe/enumeração conforme o dump e rode RJ_DRYRUN=1.');
+}
+
+async function main() {
+  if (!brightDataDisponivel()) {
+    console.error('BRIGHTDATA_API_TOKEN/ZONE ausentes — RJ só é acessível via Web Unlocker. Abortado.');
+    process.exit(1);
+  }
+  if (DEBUG) { await debugRecon(); return; }
+
+  console.log(`RJ LEILÕES ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · max ${MAX_LOTES} lote(s)/run`);
+
+  // 1) Enumeração via sitemap (1-poucos requests). Segue sitemap-index se houver.
+  let urlsLote = [];
+  for (const path of ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml']) {
+    const body = await bd(`${BASE}${path}`, { timeoutMs: 90000 });
+    if (!body) continue;
+    const subs = [...body.matchAll(/<loc>\s*([^<]+?\.xml[^<]*)\s*<\/loc>/gi)].map(m => m[1].trim())
+      .filter(u => /imovel|imoveis|lote|leilao|product|post/i.test(u));
+    for (const sub of subs.slice(0, 10)) { const sb = await bd(sub, { timeoutMs: 90000 }); if (sb) urlsLote.push(...extrairUrlsDeLote(sb)); await sleep(300); }
+    urlsLote.push(...extrairUrlsDeLote(body));
+    if (urlsLote.length) break;
+  }
+  urlsLote = [...new Set(urlsLote)];
+  if (!urlsLote.length) { console.error('Nenhuma URL de lote encontrada no sitemap. Rode RJ_DEBUG=1 p/ inspecionar.'); return; }
+  console.log(`Enumerados ${urlsLote.length} lote(s).`);
+
+  // Prioriza os NOVOS (fonte_id ainda não no banco).
+  const ids = urlsLote.map(u => `rj_${idDaUrl(u)}`);
+  const existentes = new Set();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
+    for (const r of data || []) existentes.add(r.fonte_id);
+  }
+  const novos = urlsLote.filter(u => !existentes.has(`rj_${idDaUrl(u)}`));
+  const alvo = (novos.length ? novos : urlsLote).slice(0, MAX_LOTES);
+  console.log(`no banco: ${existentes.size} · novos: ${novos.length} · processando: ${alvo.length}`);
+
+  // 2) Detalhe de cada lote alvo.
+  const prontos = [];
+  let sem = 0, reprov = 0;
+  for (const url of alvo) {
+    const html = await bd(url, { timeoutMs: 90000 });
+    if (!html) { sem++; continue; }
+    const row = montarRow(url, parseDetalhe(html, url));
+    const q = checarQualidade(row, { estrito: false });
+    console.log(`  ${idDaUrl(url)} · aval R$${row.valor_avaliacao} · min R$${row.valor_minimo} · foto ${row.link_foto ? 'sim' : 'NÃO'} · ${row.modalidade}${q.descartar ? ' · DESCARTADO(' + q.faltando.join(',') + ')' : (q.faltando.length ? ' · faltando ' + q.faltando.join(',') : ' · OK')}`);
+    if (q.descartar) { reprov++; continue; }
+    prontos.push(row);
+    await sleep(400);
+  }
+  console.log(`\nResumo: ${prontos.length} prontos · ${reprov} descartados · ${sem} sem detalhe.`);
+  if (!prontos.length) { console.log('nada a gravar.'); return; }
+
+  if (DRYRUN) {
+    console.log('DRY-RUN: não gravei. Amostra:');
+    console.log(JSON.stringify(prontos.slice(0, 2), null, 2));
+    console.log('\nPara gravar, rode com RJ_DRYRUN=0.');
+    return;
+  }
+  const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
+  if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
+  console.log(`✅ ${prontos.length} imóveis RJ Leilões gravados/atualizados.`);
+}
+
+main().catch(e => { console.error(e); process.exit(1); });

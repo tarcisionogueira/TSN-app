@@ -27,6 +27,9 @@ const SUBCOTAS = {
   // p/ desbloquear leiloeiros anti-bot (ex.: PECINI) sem devorar o orçamento dos
   // demais propósitos (datas/geo/scrapers). O teto global (RPC) segue como trava dura.
   docs: parseInt(process.env.BRIGHTDATA_MAX_DOCS_SEMANA || '150', 10),
+  // Scraper RJ Leilões (100% Cloudflare → só via Web Unlocker): sub-cota própria p/
+  // o RJ não monopolizar o teto semanal compartilhado.
+  rj: parseInt(process.env.BRIGHTDATA_MAX_RJ_SEMANA || '120', 10),
 };
 // Contagem por propósito na semana corrente, mantida na memória do processo. A
 // paginação profunda (o caso que estoura a cota) roda numa única invocação, então
