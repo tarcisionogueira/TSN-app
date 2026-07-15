@@ -137,30 +137,59 @@ async function handler(req) {
   // E-mail NÃO fica em perfis (fica em auth.users) — o select anterior por
   // `perfis.email` FALHAVA no PostgREST e o cron nunca enviava nada. Buscamos os
   // e-mails em lote pela Admin API do GoTrue (service role) e mapeamos por id.
-  async function mapaEmails() {
-    const map = new Map();
-    for (let page = 1; page <= 30; page++) {
-      let users = [];
-      try {
-        const r = await fetch(`${URL_}/auth/v1/admin/users?page=${page}&per_page=200`, { headers: hdr, signal: AbortSignal.timeout(15000) });
-        if (!r.ok) break;
-        const data = await r.json();
-        users = Array.isArray(data) ? data : (data?.users || []);
-      } catch { break; }
-      for (const u of users) if (u?.id && u?.email) map.set(u.id, String(u.email).toLowerCase());
-      if (users.length < 200) break;
+  // ── ESCALA: processa os destinatários em LOTES por CURSOR (id crescente) ──────────
+  // O antigo limit=1000 + loop 100% serial DROPAVA usuários em silêncio a partir de ~1000
+  // e ESTOURAVA o tempo (300s) por volta de ~120 usuários. Agora cada invocação processa
+  // só BATCH usuários e, se o lote veio cheio, DISPARA a próxima invocação (continuação
+  // encadeada) — nenhum usuário fica sem e-mail e nenhuma invocação estoura o tempo. Os
+  // e-mails são buscados só do LOTE (não mais 30 páginas do GoTrue a cada invocação).
+  const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+  // Em teste (?email=), varre um lote grande p/ achar o alvo (não encadeia). Normal: 120.
+  const BATCH = testeEmail ? 1000 : Math.min(300, Math.max(20, Number(qs.get('batch')) || 120));
+  const cursor = (qs.get('cursor') || '').trim();
+
+  const perfisRaw = await sbGet(`perfis?select=id,nome,endereco_cidade,endereco_uf,created_at&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
+  const loteCheio = Array.isArray(perfisRaw) && perfisRaw.length === BATCH;
+  const ultimoIdLote = perfisRaw.length ? perfisRaw[perfisRaw.length - 1].id : null; // cursor avança mesmo p/ quem não tem e-mail
+
+  // E-mails SÓ do lote (auth.users via GoTrue admin, por id, com concorrência limitada).
+  async function emailsDoLote(lista) {
+    const map = new Map(); const CONC = 8;
+    for (let i = 0; i < lista.length; i += CONC) {
+      const res = await Promise.all(lista.slice(i, i + CONC).map(async (p) => {
+        try {
+          const r = await fetch(`${URL_}/auth/v1/admin/users/${p.id}`, { headers: hdr, signal: AbortSignal.timeout(10000) });
+          if (!r.ok) return null;
+          const u = await r.json();
+          return u?.email ? [p.id, String(u.email).toLowerCase()] : null;
+        } catch { return null; }
+      }));
+      for (const e of res) if (e) map.set(e[0], e[1]);
     }
     return map;
   }
-  const emailMap = await mapaEmails();
+  const emailMap = await emailsDoLote(perfisRaw);
 
-  // Destinatários: perfis nos ROLES (o e-mail vem do emailMap). opt-out/último-envio via alertas_email.
-  let perfis = await sbGet(`perfis?select=id,nome,endereco_cidade,endereco_uf,created_at&role=in.(${ROLES})&limit=1000`);
-  if (Array.isArray(perfis)) perfis = perfis.filter(p => emailMap.has(p.id)); // só quem tem e-mail conhecido
-  if (testeEmail) perfis = (perfis || []).filter(p => emailMap.get(p.id) === testeEmail); // modo teste: só esse e-mail
-  if (!Array.isArray(perfis) || !perfis.length) return new Response(JSON.stringify({ ok: true, enviados: 0, total: 0, emails_conhecidos: emailMap.size }), { headers: { 'Content-Type': 'application/json' } });
+  // Continuação encadeada: dispara a PRÓXIMA invocação (best-effort; o timeout curto só
+  // garante que a próxima já foi acionada — ela roda independente). Não encadeia em teste.
+  async function continuar() {
+    const CRON = process.env.CRON_SECRET;
+    if (!loteCheio || !ultimoIdLote || testeEmail || !CRON) return;
+    const q = new URLSearchParams({ cursor: ultimoIdLote, batch: String(BATCH) });
+    if (forcar) q.set('forcar', '1');
+    // Força www: o apex responde 308 e o redirect pode perder o header x-cron-secret.
+    const selfBase = String(BASE).replace(/:\/\/(www\.)?bidprobrasil\.com\.br/, '://www.bidprobrasil.com.br');
+    try { await fetch(`${selfBase}/api/enviar-alertas-cron?${q.toString()}`, { method: 'GET', headers: { 'x-cron-secret': CRON }, signal: AbortSignal.timeout(3000) }); } catch { /* acionamento best-effort */ }
+  }
+
+  let perfis = perfisRaw.filter(p => emailMap.has(p.id)); // só quem tem e-mail conhecido
+  if (testeEmail) perfis = perfis.filter(p => emailMap.get(p.id) === testeEmail); // modo teste: só esse e-mail
+  if (!perfis.length) {
+    await continuar(); // lote sem destinatários válidos → segue para o próximo
+    return new Response(JSON.stringify({ ok: true, enviados: 0, lote: perfisRaw.length, cursor_proximo: loteCheio ? ultimoIdLote : null }), { headers: { 'Content-Type': 'application/json' } });
+  }
   // Só UUIDs válidos entram na lista in.(...) — defesa contra interpolação indevida.
-  const ids = perfis.map(p => p.id).filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '')));
+  const ids = perfis.map(p => p.id).filter(isUuid);
   const inList = `(${ids.join(',')})`;
 
   // Dedup: imóveis já enviados nos últimos 60 dias (mais antigos podem repetir).
@@ -421,5 +450,6 @@ async function handler(req) {
     }
   }
 
-  return new Response(JSON.stringify({ ok: true, enviados, total: perfis.length }), { headers: { 'Content-Type': 'application/json' } });
+  await continuar(); // aciona o próximo lote (se houver), depois de processar este
+  return new Response(JSON.stringify({ ok: true, enviados, lote: perfis.length, cursor_proximo: loteCheio ? ultimoIdLote : null }), { headers: { 'Content-Type': 'application/json' } });
 }
