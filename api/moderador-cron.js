@@ -15,9 +15,31 @@ const RESEND_KEY   = process.env.RESEND_API_KEY;
 const FROM_EMAIL   = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
 const ADMIN_EMAIL  = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
 
+const CLAUDE_KEY = process.env.CLAUDE_KEY;
 const COR = { critico: '#dc2626', atencao: '#d97706', info: '#0D63DB' };
 
-async function enviarRelatorio(insights) {
+// Camada LLM (economia: 1 chamada Haiku/semana, só se CLAUDE_KEY existir). Sintetiza
+// os insights determinísticos num parecer executivo + direcionamentos por especialista.
+async function sintetizarComIA(insights) {
+  if (!CLAUDE_KEY || !insights.length) return null;
+  const prompt = `Você é o AGENTE MODERADOR de uma plataforma de leilões. Abaixo, insights determinísticos da semana (JSON). Escreva em PT-BR, curto e acionável:
+1) Um parecer executivo (2-3 frases) do estado da operação.
+2) Até 3 DIRECIONAMENTOS concretos no formato "→ [agente]: [ação]".
+Não invente dados além dos insights. Insights:\n${JSON.stringify(insights).slice(0, 6000)}`;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return (d?.content?.[0]?.text || '').trim() || null;
+  } catch { return null; }
+}
+
+async function enviarRelatorio(insights, sintese) {
   if (!RESEND_KEY || !insights.length) return false;
   const linhas = insights.map(i => `
     <tr>
@@ -33,6 +55,7 @@ async function enviarRelatorio(insights) {
         subject: `🧭 Moderador — relatório semanal (${insights.length} insights)`,
         html: `<div style="font-family:sans-serif;max-width:640px">
           <h2 style="color:#0D63DB">🧭 Agente Moderador</h2>
+          ${sintese ? `<div style="background:#f8fafc;border-left:3px solid #0D63DB;padding:10px 14px;margin:8px 0;white-space:pre-wrap;font-size:14px;color:#334155">${String(sintese).replace(/</g, '&lt;')}</div>` : ''}
           <p style="color:#475569">Padrões destilados da operação — direcionamentos por especialista.</p>
           <table style="border-collapse:collapse;width:100%;font-size:14px">${linhas}</table>
           <p style="color:#94a3b8;font-size:12px;margin-top:16px">Gerado automaticamente. Fonte: moderador_insights.</p></div>`,
@@ -63,9 +86,18 @@ export default async function handler(req, res) {
     const todos = cr.ok ? (await cr.json().catch(() => [])) : [];
     const ordem = { critico: 0, atencao: 1, info: 2 };
     todos.sort((a, b) => (ordem[a.severidade] ?? 9) - (ordem[b.severidade] ?? 9));
-    const emailEnviado = await enviarRelatorio(todos);
+    const sintese = await sintetizarComIA(todos);
+    if (sintese) {
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/moderador_insights`, {
+          method: 'POST', headers: { ...h, Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({ chave: 'sintese:semana', categoria: 'sintese', severidade: 'info', agente: 'moderador', titulo: 'Parecer semanal (IA)', detalhe: sintese.slice(0, 2000), gerado_em: new Date().toISOString() }),
+        });
+      } catch { /* opcional */ }
+    }
+    const emailEnviado = await enviarRelatorio(todos, sintese);
     const relevantes = todos.filter(i => i.severidade === 'atencao' || i.severidade === 'critico');
-    return res.status(200).json({ ok: true, insights_total: total, email: emailEnviado, relevantes });
+    return res.status(200).json({ ok: true, insights_total: total, email: emailEnviado, sintese_ia: !!sintese, relevantes });
   } catch (e) {
     return res.status(500).json({ error: String(e.message).slice(0, 200) });
   }
