@@ -12,6 +12,8 @@ export const config = { runtime: 'nodejs' };
 
 import { getUser, getUserRoleById } from './_auth.js';
 import { decryptCpf, maskCpf } from './_cpf.js';
+import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
+import { auditLog } from './_audit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -39,6 +41,11 @@ export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user?.id) return res.status(401).json({ error: 'Não autorizado' });
 
+  // Rate limit por ATOR: bloqueia deanonimização em massa (cada request revela até 200).
+  const ip = getIP(req);
+  const rl = await checkRateLimit(`cpf-revelar:${user.id}`, 15, 60_000);
+  if (!rl.ok) return rateLimitedRes(res, rl.resetAt);
+
   const full = req.body?.full === true;
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => UUID_RE.test(x)).slice(0, 200) : [];
   if (!ids.length) return res.status(200).json({ cpfs: {} });
@@ -58,6 +65,13 @@ export default async function handler(req, res) {
     } else {
       if (ehDono || podeMascara) out[row.id] = maskCpf(claro); // máscara: dono ou equipe
     }
+  }
+  // LGPD — registro de processamento: quem revelou, quantos e se foi CPF CHEIO (nunca
+  // grava o CPF em si). Dá rastro de auditoria para a deanonimização.
+  const revelados = Object.keys(out);
+  if (revelados.length) {
+    auditLog({ acao: full ? 'cpf_revelar_cheio' : 'cpf_revelar_mascara', user_id: user.id, ip,
+      detalhes: { solicitados: ids.length, revelados: revelados.length, ids: revelados, role }, sucesso: true });
   }
   return res.status(200).json({ cpfs: out });
 }

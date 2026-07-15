@@ -42,7 +42,11 @@ export default async function handler(req, res) {
 
   // Fail-closed: sem segredo de assinatura, não valida nenhum token (evita forja).
   if (!SECRET) { res.status(500).send(page('Erro', 'Não foi possível processar agora. Tente novamente mais tarde.')); return; }
-  if (!userId || !sig || assinarUnsub(userId).split('.')[1] !== sig) {
+  // Comparação da assinatura em TEMPO CONSTANTE (evita timing attack na forja do token).
+  const sigEsperado = Buffer.from(assinarUnsub(userId).split('.')[1] || '');
+  const sigRecebido = Buffer.from(String(sig || ''));
+  const sigOk = sigEsperado.length === sigRecebido.length && crypto.timingSafeEqual(sigEsperado, sigRecebido);
+  if (!userId || !sig || !sigOk) {
     res.status(400).send(page('Link inválido', 'Este link de descadastro é inválido ou expirou. Você pode gerenciar suas preferências entrando na plataforma.'));
     return;
   }

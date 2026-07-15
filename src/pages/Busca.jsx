@@ -998,7 +998,9 @@ export default function Busca() {
       {
         const offset = (paginaAlvo - 1) * POR_PAGINA;
         const [{ count }, { data, error }] = await Promise.all([
-          buildQuery(supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true })),
+          // count 'estimated' (planner): exato p/ conjuntos pequenos, estimativa barata p/
+          // grandes — evita um COUNT(*) cheio do catálogo a cada busca (escala com 10k users).
+          buildQuery(supabase.from('imoveis_leilao').select('*', { count: 'estimated', head: true })),
           buildQuery(supabase.from('imoveis_leilao').select('*'))
             .order(coluna, { ascending: dir, nullsFirst: false })
             .range(offset, offset + POR_PAGINA - 1),
