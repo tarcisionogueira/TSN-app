@@ -79,7 +79,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
     if (!imovelId) { setDocs([]); setDocsLoading(false); return; }
     setDocsLoading(true);
     const { data } = await supabase.from('imovel_anexos')
-      .select('id,tipo,nome,storage_path,validacao,criado_em')
+      .select('id,tipo,nome,storage_path,validacao,criado_em,role_criador')
       .eq('imovel_id', imovelId).order('criado_em', { ascending: true });
     setDocs(Array.isArray(data) ? data : []);
     setDocsLoading(false);
@@ -177,11 +177,17 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
       if (j.url) window.open(j.url, '_blank', 'noopener'); else alert(j.error || 'Não foi possível abrir o documento.');
     } catch { alert('Não foi possível abrir o documento.'); }
   };
+  // Exclusão SEMPRE via endpoint — assim toda remoção fica rastreada (quem/quando)
+  // em anexo_auditoria, além de apagar o arquivo do storage.
   const delDoc = async (d) => {
-    if (!confirm(`Remover "${d.nome}"? Use quando o anexo não tiver a ver com esta arrematação.`)) return;
-    const { error } = await supabase.from('imovel_anexos').delete().eq('id', d.id);
-    if (error) { alert('Não foi possível remover o documento.'); return; }
-    setDocs(prev => prev.filter(x => x.id !== d.id));
+    if (!confirm(`Remover "${d.nome}"? Use quando o anexo não tiver a ver com esta arrematação. A remoção fica registrada no histórico.`)) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/anexo-excluir', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: JSON.stringify({ anexo_id: d.id }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(j.error || 'Não foi possível remover o documento.'); return; }
+      setDocs(prev => prev.filter(x => x.id !== d.id));
+    } catch { alert('Não foi possível remover o documento.'); }
   };
 
   const inp = { width: '100%', padding: '9px 11px', border: '1px solid #e2e8f0', borderRadius: 9, fontSize: 13, boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' };
@@ -304,6 +310,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
                           {d.validacao?.status === 'coerente' && <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d', background: '#dcfce7', padding: '1px 7px', borderRadius: 20 }}>✓ confere</span>}
                           {d.validacao?.status === 'divergente' && <span title={d.validacao?.motivo || ''} style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', background: '#fee2e2', padding: '1px 7px', borderRadius: 20 }}>⚠️ não parece desta arrematação</span>}
                           {d.validacao?.status === 'indeterminado' && <span style={{ fontSize: 10, fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 7px', borderRadius: 20 }}>? indeterminado</span>}
+                          {d.criado_em && <span style={{ fontSize: 10, color: '#94a3b8' }}>· enviado em {new Date(d.criado_em).toLocaleDateString('pt-BR')}{['admin', 'analista', 'advogado', 'consultor'].includes(d.role_criador) ? ' pela equipe' : ''}</span>}
                         </div>
                       </div>
                       <button onClick={() => abrirDoc(d)} title="Abrir" style={{ background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer' }}><ExternalLink size={15} /></button>

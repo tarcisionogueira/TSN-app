@@ -6,6 +6,10 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { extrairDadosDocumento } from '../utils/claude';
 
+// Rótulos das ações de auditoria de anexos (log de quem incluiu/removeu/validou).
+const ACAO_ICON = { upload: '📎', substituicao: '♻️', exclusao: '🗑', validacao: '🤖' };
+const ACAO_LABEL = { upload: 'Anexou', substituicao: 'Substituiu', exclusao: 'Removeu', validacao: 'IA validou' };
+
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
 
@@ -507,6 +511,12 @@ function UsuariosTab() {
   const [atribExtraindo, setAtribExtraindo] = useState('');   // '' | 'lendo' | 'ok' | 'erro'
   const [atribDocs, setAtribDocs] = useState([]);             // [{ nome, status }] dos anexos lidos
   const atribFilesRef = useRef([]);                           // File[] p/ persistir no imóvel-âncora
+  // Arremates JÁ atribuídos ao usuário (para anexar mais documentos ao longo do fluxo
+  // e ver o log de auditoria). Carregados quando o popup abre.
+  const [atribArrem, setAtribArrem] = useState(null);         // null = não carregado
+  const [atribArremLoad, setAtribArremLoad] = useState(false);
+  const [atribExpand, setAtribExpand] = useState(null);       // id do arremate expandido
+  const [atribAnexando, setAtribAnexando] = useState(null);   // id do arremate em upload
 
   // tipo do anexo a partir do nome do arquivo (o ciclo do arremate alimenta a IA).
   const inferirTipoAnexo = (nome) => {
@@ -751,6 +761,83 @@ function UsuariosTab() {
     } finally { setAtribLoad(false); }
   }
 
+  // ── Arremates já atribuídos: listar + anexar mais docs + histórico ──────────
+  // Lê via RLS de equipe (arrematados_select_staff / imovel_anexos_select /
+  // anexo_auditoria_select_staff). imovel_anexos.imovel_id é uuid; arrematados
+  // .imovel_id é text (mesmo valor) — as chaves batem na hora de agrupar.
+  const carregarAtribArrem = useCallback(async (userId) => {
+    if (!userId) return;
+    setAtribArremLoad(true);
+    try {
+      const { data: arrs } = await supabase.from('arrematados')
+        .select('id,imovel_id,titulo,cidade,estado,valor_arrematacao,status,data_arrematacao')
+        .eq('user_id', userId).order('updated_at', { ascending: false });
+      const lista = Array.isArray(arrs) ? arrs : [];
+      const imIds = [...new Set(lista.map(a => a.imovel_id).filter(Boolean))];
+      const anexosByIm = {}; const histByIm = {};
+      if (imIds.length) {
+        const { data: ax } = await supabase.from('imovel_anexos')
+          .select('id,imovel_id,tipo,nome,validacao,criado_em,role_criador')
+          .in('imovel_id', imIds).order('criado_em', { ascending: true });
+        (ax || []).forEach(a => { (anexosByIm[a.imovel_id] ||= []).push(a); });
+        const { data: hist } = await supabase.from('anexo_auditoria')
+          .select('id,imovel_id,anexo_nome,anexo_tipo,acao,ator_nome,ator_role,em')
+          .in('imovel_id', imIds).order('em', { ascending: false }).limit(200);
+        (hist || []).forEach(h => { (histByIm[h.imovel_id] ||= []).push(h); });
+      }
+      setAtribArrem(lista.map(a => ({ ...a, anexos: anexosByIm[a.imovel_id] || [], hist: histByIm[a.imovel_id] || [] })));
+    } catch { setAtribArrem([]); }
+    finally { setAtribArremLoad(false); }
+  }, []);
+
+  // Carrega/limpa quando o popup abre/fecha.
+  useEffect(() => {
+    if (atribUser) { setAtribArrem(null); setAtribExpand(null); carregarAtribArrem(atribUser.id); }
+    else { setAtribArrem(null); setAtribExpand(null); }
+  }, [atribUser, carregarAtribArrem]);
+
+  // Anexa mais documentos a um arremate já atribuído (equipe). Persiste no imóvel-
+  // âncora, marca como permanente e dispara a validação da IA. Fica auditado.
+  const anexarNoArremate = async (arremate, files) => {
+    const lista = Array.from(files || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
+    if (!lista.length) { if ((files?.length || 0) > 0) alert('Envie os documentos em PDF.'); return; }
+    if (!arremate.imovel_id) { alert('Este arremate ainda não tem imóvel-âncora — anexe pela conta do cliente (Meus Arrematados) para criá-lo.'); return; }
+    setAtribAnexando(arremate.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const auth = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+      for (const file of lista) {
+        try {
+          const fd = new FormData();
+          fd.append('file', file); fd.append('imovel_id', String(arremate.imovel_id));
+          fd.append('tipo', inferirTipoAnexo(file.name)); fd.append('arrematado', 'true');
+          const res = await fetch('/api/upload-anexo', { method: 'POST', headers: auth, body: fd });
+          const d = await res.json().catch(() => ({}));
+          if (res.ok && d.anexo_id) { try { await apiCall('/api/validar-anexos-arremate', { method: 'POST', body: JSON.stringify({ anexo_id: d.anexo_id }) }); } catch { /* validação best-effort */ } }
+        } catch { /* segue com os demais */ }
+      }
+      await carregarAtribArrem(atribUser.id);
+    } finally { setAtribAnexando(null); }
+  };
+  // Remove um anexo (via endpoint → apaga arquivo + registra a exclusão no log).
+  const removerAnexoArremate = async (anexo) => {
+    if (!window.confirm(`Remover "${anexo.nome}"? A remoção fica registrada no histórico.`)) return;
+    try {
+      const res = await apiCall('/api/anexo-excluir', { method: 'POST', body: JSON.stringify({ anexo_id: anexo.id }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(d.error || 'Não foi possível remover.'); return; }
+      await carregarAtribArrem(atribUser.id);
+    } catch { alert('Não foi possível remover.'); }
+  };
+  // Abre o documento (URL assinada sob demanda).
+  const abrirAnexoArrem = async (anexo) => {
+    try {
+      const res = await apiCall('/api/anexo-url', { method: 'POST', body: JSON.stringify({ anexo_id: anexo.id }) });
+      const d = await res.json().catch(() => ({}));
+      if (d.url) window.open(d.url, '_blank', 'noopener'); else alert(d.error || 'Não foi possível abrir.');
+    } catch { alert('Não foi possível abrir.'); }
+  };
+
   const filtered = users.filter(u => {
     if (!busca) return true;
     const q = busca.toLowerCase();
@@ -832,11 +919,11 @@ function UsuariosTab() {
                                 onClick={() => abrirAuditoria(u)}>
                                 🔍 Auditoria
                               </button>
-                              {u.role !== 'assessorado' && (
+                              {!['admin', 'analista', 'advogado', 'consultor'].includes(u.role) && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#fef9c3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#a16207', cursor: 'pointer' }}
                                   onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '' }); setAtribExtraindo(''); setAtribDocs([]); atribFilesRef.current = []; }}
-                                  title="Atribuir uma arrematação a este usuário e torná-lo Assessorado (habilita o acompanhamento e os lançamentos)">
+                                  title="Atribuir uma arrematação a este usuário, ver os arremates já atribuídos e anexar documentos (habilita o acompanhamento e os lançamentos)">
                                   🏷 Atribuir arremate
                                 </button>
                               )}
@@ -898,12 +985,15 @@ function UsuariosTab() {
       {atribUser && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={e => { if (e.target === e.currentTarget) setAtribUser(null); }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#111', marginBottom: 4 }}>🏷 Atribuir arremate</div>
             <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
-              Promove <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> a <b>Assessorado</b> — sem cobrança.
+              {atribUser?.role === 'assessorado'
+                ? <>Atribua uma nova arrematação a <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> ou anexe documentos aos arremates já atribuídos.</>
+                : <>Atribua uma arrematação e promova <b>{atribUser?.nome || atribUser?.cpf || 'o usuário'}</b> a <b>Assessorado</b> — sem cobrança.</>}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>Nova atribuição</div>
               {/* Anexos (matrícula, edital, outros). A IA lê e preenche o resto sozinha. */}
               <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6 }}>📎 Anexos do arremate</div>
@@ -935,12 +1025,80 @@ function UsuariosTab() {
                 <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Valor arrematado (R$)</label>
                 <input value={atribForm.valor} onChange={e => setAtribForm(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" style={S.input} />
               </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button onClick={atribuirArremate} disabled={atribLoad || (!atribDocs.length && !atribForm.valor && !atribForm.endereco)}
+                  style={{ flex: 1, padding: '10px', background: (atribLoad || (!atribDocs.length && !atribForm.valor && !atribForm.endereco)) ? '#e2e8f0' : '#a16207', color: (atribLoad || (!atribDocs.length && !atribForm.valor && !atribForm.endereco)) ? '#94a3b8' : 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: atribLoad ? 'default' : 'pointer' }}>
+                  {atribLoad ? 'Atribuindo…' : (atribUser?.role === 'assessorado' ? 'Atribuir novo arremate' : 'Atribuir e tornar Assessorado')}
+                </button>
+              </div>
             </div>
+
+            {/* ── Arremates já atribuídos: anexar mais documentos + histórico ── */}
+            <div style={{ borderTop: '1px solid #eef2f7', paddingTop: 16, marginTop: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>📂 Arremates atribuídos deste usuário</div>
+              {atribArremLoad ? (
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>Carregando…</div>
+              ) : !atribArrem || atribArrem.length === 0 ? (
+                <div style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.5 }}>Nenhum arremate atribuído ainda. Ao atribuir acima, ele aparece aqui — a cada etapa você anexa os próximos documentos (auto/carta, contrato do banco, escritura, matrícula registrada…).</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {atribArrem.map(a => {
+                    const aberto = atribExpand === a.id;
+                    return (
+                      <div key={a.id} style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+                        <button type="button" onClick={() => setAtribExpand(aberto ? null : a.id)} style={{ width: '100%', textAlign: 'left', background: '#f8fafc', border: 'none', padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Arremate'}</span>
+                            <span style={{ fontSize: 10.5, color: '#64748b' }}>{[a.cidade, a.estado].filter(Boolean).join('/')}{[a.cidade, a.estado].filter(Boolean).length ? ' · ' : ''}{a.anexos.length} doc{a.anexos.length !== 1 ? 's' : ''}</span>
+                          </span>
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>{aberto ? '▲' : '▼'}</span>
+                        </button>
+                        {aberto && (
+                          <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {a.imovel_id ? (
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', padding: '7px 12px', background: atribAnexando === a.id ? '#e2e8f0' : '#0D63DB', color: atribAnexando === a.id ? '#94a3b8' : 'white', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: atribAnexando === a.id ? 'default' : 'pointer' }}>
+                                {atribAnexando === a.id ? '⏳ Enviando…' : '📎 Anexar documento (PDF)'}
+                                <input type="file" accept="application/pdf,.pdf" multiple disabled={atribAnexando === a.id} onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ''; anexarNoArremate(a, fs); }} style={{ display: 'none' }} />
+                              </label>
+                            ) : (
+                              <div style={{ fontSize: 11, color: '#b45309' }}>Sem imóvel-âncora — anexe pela conta do cliente (Meus Arrematados) para criá-lo.</div>
+                            )}
+                            {a.anexos.length === 0 ? (
+                              <div style={{ fontSize: 11.5, color: '#94a3b8' }}>Nenhum documento anexado.</div>
+                            ) : a.anexos.map(x => (
+                              <div key={x.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, background: x.validacao?.status === 'divergente' ? '#fef2f2' : 'white', border: `1px solid ${x.validacao?.status === 'divergente' ? '#fecaca' : '#f1f5f9'}`, borderRadius: 7, padding: '5px 8px' }}>
+                                <button type="button" onClick={() => abrirAnexoArrem(x)} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', color: '#1e3a8a', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.nome}</button>
+                                {x.validacao?.status === 'coerente' && <span title="A IA confirmou que é desta arrematação" style={{ color: '#15803d', fontSize: 11 }}>✓</span>}
+                                {x.validacao?.status === 'divergente' && <span title={x.validacao?.motivo || 'A IA sinalizou que não parece desta arrematação'} style={{ color: '#b91c1c', fontSize: 11 }}>⚠️</span>}
+                                <span style={{ color: '#94a3b8', fontSize: 10 }}>{x.criado_em ? new Date(x.criado_em).toLocaleDateString('pt-BR') : ''}</span>
+                                <button type="button" onClick={() => removerAnexoArremate(x)} title="Remover (fica no histórico)" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>🗑</button>
+                              </div>
+                            ))}
+                            {a.hist.length > 0 && (
+                              <details style={{ marginTop: 2 }}>
+                                <summary style={{ fontSize: 11, color: '#64748b', cursor: 'pointer', fontWeight: 700 }}>🕓 Histórico de alterações ({a.hist.length})</summary>
+                                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  {a.hist.map(h => (
+                                    <div key={h.id} style={{ fontSize: 10.5, color: '#475569', display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                                      <span>{ACAO_ICON[h.acao] || '•'}</span>
+                                      <span style={{ flex: 1, minWidth: 0 }}><b>{ACAO_LABEL[h.acao] || h.acao}</b> {h.anexo_nome ? `“${h.anexo_nome}”` : ''} — {h.ator_nome || 'sistema'}{h.ator_role ? ` (${h.ator_role})` : ''}</span>
+                                      <span style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{h.em ? new Date(h.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-              <button onClick={() => setAtribUser(null)} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={atribuirArremate} disabled={atribLoad} style={{ flex: 2, padding: '10px', background: atribLoad ? '#cbd5e1' : '#a16207', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: atribLoad ? 'default' : 'pointer' }}>
-                {atribLoad ? 'Atribuindo…' : 'Atribuir e tornar Assessorado'}
-              </button>
+              <button onClick={() => setAtribUser(null)} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
             </div>
           </div>
         </div>

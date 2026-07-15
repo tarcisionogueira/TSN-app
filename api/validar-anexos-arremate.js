@@ -1,6 +1,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 import { getUser, getUserRoleById } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
+import { logAnexoAudit } from './_anexo-audit.js';
 
 // POST /api/validar-anexos-arremate { imovel_id }  → valida todos os anexos
 //      /api/validar-anexos-arremate { anexo_id }   → valida só um (ao anexar)
@@ -111,6 +112,15 @@ export default async function handler(req, res) {
     try {
       await sb(`imovel_anexos?id=eq.${a.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ validacao: { status: out.status, confianca: out.confianca, motivo: out.motivo, em: new Date().toISOString() } }) });
     } catch { /* best-effort */ }
+    // Rastreio da validação da IA — só no caminho "1 anexo" (logo após o upload),
+    // para não inflar o log quando revalida o imóvel inteiro em lote.
+    if (soUmAnexo) {
+      await logAnexoAudit({
+        imovel_id: imovelId, anexo_id: a.id, anexo_nome: a.nome, anexo_tipo: a.tipo,
+        acao: 'validacao', ator_id: user.id, ator_nome: 'IA', ator_role: 'ia',
+        detalhe: { status: out.status, confianca: out.confianca, motivo: out.motivo },
+      });
+    }
     resultados.push(out);
   }
 

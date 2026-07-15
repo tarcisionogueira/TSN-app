@@ -21,6 +21,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
+import { logAnexoAudit } from './_anexo-audit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -79,7 +80,7 @@ export default async function handler(req) {
   // analisando — sem os documentos ele não consegue gerar os relatórios nem
   // agendar. O arquivo também vira CACHE (beneficia as próximas análises). A
   // equipe segue com as mesmas permissões; o tipo/tamanho é validado abaixo.
-  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role`)).json();
+  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role,nome`)).json();
   if (!perfil) return json({ error: 'Perfil não encontrado.' }, 403);
 
   let form;
@@ -203,6 +204,14 @@ export default async function handler(req) {
     }
     [anexo] = await ins.json();
   }
+
+  // Rastreio: registra a inclusão/substituição do anexo (best-effort — não bloqueia).
+  await logAnexoAudit({
+    imovel_id, anexo_id: anexo?.id, anexo_nome: baseNome, anexo_tipo: tipo,
+    acao: anterior ? 'substituicao' : 'upload',
+    ator_id: user.id, ator_nome: perfil.nome || null, ator_role: perfil.role || null,
+    detalhe: { tamanho_kb: Math.round(buffer.byteLength / 1024), arrematado: arrematadoPerm },
+  });
 
   return json({ anexo_id: anexo?.id, url_publica: urlPublica, storage_path: storagePath, replaced: !!anterior });
 }
