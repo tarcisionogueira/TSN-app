@@ -1,109 +1,197 @@
-# Plano — Agente Scraper com Conhecimento (auto-aprendiz, auto-corretivo, custo-mínimo)
+# Plano COMPLETO — Agente Scraper com Conhecimento
 
-> Planejamento a pedido do dono (15/07). O agente deve: **aprender com as integrações
-> que já temos**; **detectar mudanças de estrutura e se autocorrigir** para evitar
-> quebras; **garantir o resultado por todos os meios — grátis primeiro, pago por
-> último**; e **revalidar periodicamente** se surgiu um caminho mais fácil/grátis
-> para documentos e fotos.
+> Planejamento a pedido do dono (15/07), na versão **executável** ("fazer já com
+> eficiência"). O agente deve: **aprender com as integrações que já temos**;
+> **detectar mudanças de estrutura e se autocorrigir**; **garantir o resultado por
+> todos os meios — grátis primeiro, pago por último**; **revalidar periodicamente**
+> se surgiu um caminho mais fácil/grátis para documentos e fotos.
+>
+> **Regra de ouro do custo (definição do dono):** o agente **se corrige sozinho no
+> grátis**. Quando precisar **escalar para um meio PAGO** (Bright Data), ele mantém o
+> resultado, mas **emite um alerta CRÍTICO informando o custo estimado da operação**,
+> para você avaliar. Nunca gasta em silêncio.
 
-## 1. O que JÁ existe (aproveitar, não reinventar)
+---
 
-O motor está ~80% montado. As peças:
+## 1. O que JÁ existe (o motor está ~80% pronto — vamos fechar o loop)
 
-| Peça | Onde | Papel no agente |
+| Peça | Onde | Papel |
 |---|---|---|
-| `leiloeiros_fontes` | migração `add_leiloeiros_fontes.sql` | **registro** por leiloeiro: url_base, paginação, `perfil_parser` (generico/json_api/custom), **`canal_preferido` (api→scraper com fallback)**, prioridade, qualidade |
-| `fonte_saude` | `add_fonte_saude.sql` | **telemetria por run**: `estrategia` que venceu (fetch-credentials/listener/brightdata), %uf/valor/link/foto, status ok/degradado/falhou |
-| `monitor-fontes-cron.js` | `api/` | **detecção de regressão**: alerta quando fonte que funcionava cai/degrada (>36h, 0 imóveis, queda de qualidade) |
-| `proxy_uso` + `_brightdata.js` | migração + `api/` | **controle de custo**: teto semanal, sub-cotas por propósito, alertas 80/100% |
-| `recon-novos-leiloeiros.mjs` / `recon-docs-leiloeiro.mjs` / `recon-login-leiloeiro.mjs` | `scripts/` | **mapeamento** de listagem, documentos e login de um site novo |
-| `scraper-core.mjs` → `extrairGenerico` + `extrairComIA` (Claude) + `checarQualidade` | `scripts/lib/` | **extração heurística com fallback de IA** + validação de qualidade |
-| Cascata de documentos (commit `0181f0e`) | `captura-documentos.mjs` | **acesso grátis→pago** já implementado para documentos (direto→Puppeteer→Bright Data) |
-| `solicitacoes` tipo `leiloeiro_sugerido` + `Admin.jsx` | migração + `src/pages/` | **gancho de intake** para o campo self-service na plataforma |
-| `add_scraper_retry.sql` | migração | **infra de retentativa** |
+| `leiloeiros_fontes` | `add_leiloeiros_fontes.sql` | registro por leiloeiro: url_base, paginação, `perfil_parser`, **`canal_preferido` (api→scraper c/ fallback)**, prioridade, qualidade |
+| `fonte_saude` | `add_fonte_saude.sql` | telemetria por run: **`estrategia` vencedora**, %uf/valor/link/foto, status ok/degradado/falhou |
+| `monitor-fontes-cron.js` | `api/` | detecção de regressão (alerta quando fonte que funcionava cai/degrada) |
+| `proxy_uso` + `_brightdata.js` | migração + `api/` | custo: teto semanal, sub-cotas por propósito, alertas 80/100%, `PROXY_CUSTO_POR_MIL` |
+| `recon-novos-leiloeiros.mjs` / `recon-docs-leiloeiro.mjs` / `recon-login-leiloeiro.mjs` | `scripts/` | mapeamento de listagem, documentos e login |
+| `scraper-core.mjs` (`extrairGenerico`+`extrairComIA`+`checarQualidade`) | `scripts/lib/` | extração heurística + fallback de IA + validação |
+| Cascata de documentos (`0181f0e`) | `captura-documentos.mjs` | acesso grátis→pago **já implementado** para documentos |
+| `solicitacoes` tipo `leiloeiro_sugerido` + `Admin.jsx` | migração + `src/` | gancho de intake self-service |
+| `add_scraper_retry.sql` | migração | infra de retentativa |
 
-**Conclusão:** não falta um motor; falta **fechar o loop** — dar memória ao agente,
-transformar o monitor (que só alerta) em **auto-corretivo**, e adicionar a
-**re-otimização** que devolve fontes ao caminho grátis.
+**O que falta = 4 blocos:** dar **memória** ao agente, um **executor em cascata
+universal**, **auto-correção** sobre o monitor e **re-otimização** periódica.
 
-## 2. Arquitetura — 4 blocos
+---
 
-### Bloco A — Base de conhecimento (o "conhecimento sobre todos")
-Enriquecer o registro com a **escada de acesso por estágio**. Cada leiloeiro passa a
-ter, para cada estágio (`listagem`, `detalhe`, `documento`, `foto`), uma lista de
-estratégias **ordenada por custo**:
+## 2. Bloco A — Base de conhecimento (o "conhecimento sobre todos")
+
+Nova tabela `leiloeiro_estrategia` (companheira de `leiloeiros_fontes`), 1 linha por
+**fonte × estágio**. Estágios: `listagem`, `detalhe`, `documento`, `foto`.
+
+```sql
+create table public.leiloeiro_estrategia (
+  id             bigint generated always as identity primary key,
+  fonte          text not null,            -- ex.: 'PECINI' (casa com imoveis_leilao.fonte)
+  estagio        text not null,            -- listagem | detalhe | documento | foto
+  -- ESCADA de acesso ordenada por custo (grátis→pago). Cada degrau:
+  --   { metodo, custo_unit_usd, ativo, params:{endpoint|seletores|regex|headers} }
+  escada         jsonb not null default '[]',
+  estrategia_atual text,                   -- metodo que está vencendo agora
+  anti_bot       text default 'nenhum',    -- nenhum | cloudflare | login | rate_limit
+  qualidade      numeric(4,3) default 0,   -- última medição 0..1 (checarQualidade)
+  custo_medio_usd numeric(10,5) default 0, -- custo/ítem na estratégia atual
+  validado_em    timestamptz,              -- última revalidação (re-otimização)
+  versao_anterior jsonb,                   -- snapshot p/ rollback do auto-heal
+  observacao     text,
+  unique (fonte, estagio)
+);
+```
+
+**Escada padrão (custo crescente):**
 
 ```
-GRÁTIS   1. csv / api_json      (mais barato: dados estruturados oficiais)
-         2. fetch_direto        (HTTP simples)
-         3. puppeteer           (navegador real; JS/anti-bot leve)
-PAGO     4. brightdata          (Web Unlocker — ÚLTIMO recurso)
+GRÁTIS   1. api_json     (dados estruturados oficiais — custo 0)
+         2. fetch_direto (HTTP simples — custo 0)
+         3. puppeteer    (navegador no GitHub Actions — custo 0)
+PAGO     4. brightdata   (Web Unlocker — ÚLTIMO recurso, custo > 0)
 ```
 
-Por estágio guardamos: **estratégia vencedora atual**, seletores/endpoints
-aprendidos, sinal de anti-bot, custo médio, qualidade e **data da última validação**.
-Implementação: tabela companheira `leiloeiro_estrategia` (fonte, estagio, escada
-jsonb, estrategia_atual, aprendido_em) — ou colunas jsonb em `leiloeiros_fontes`.
-**Semear** a partir do que já roda hoje + do histórico `fonte_saude.estrategia`
-(o dado de "quem venceu" já está gravado).
+**Aprender com o que já temos (seed):** um script de seed lê o histórico
+`fonte_saude.estrategia` (que já grava quem venceu por fonte) + a config atual dos
+scrapers e **pré-preenche** `estrategia_atual`/`escada` de cada fonte existente (CEF,
+SUPERBID, MEGA, ZUK, LJUD, PECINI, LEILOFY…). Zero descoberta do zero — o
+conhecimento já existe, só não estava consolidado.
 
-### Bloco B — Executor em cascata (garantir o resultado, grátis→pago)
-Generalizar a cascata (já pronta para documentos) para **todos os estágios**: tenta a
-estratégia que a base indica como mais barata que funciona; se falhar, **desce a
-escada** até o Bright Data; grava a vencedora em `fonte_saude`. Assim o resultado é
-garantido "por todos os meios" sem gastar proxy quando o grátis resolve.
+---
 
-### Bloco C — Auto-correção (self-heal sobre o monitor)
-Hoje `monitor-fontes-cron` **só alerta o humano**. Passa a, quando
-`status = degradado/falhou`:
-1. **Re-mapear**: roda o recon (`recon-novos-leiloeiros`/`recon-docs`) + `extrairComIA`
-   para **re-derivar** seletores/endpoints e atualizar a base (o site mudou → aprende
-   a nova estrutura).
-2. **Escalar a escada** de acesso (grátis→pago) até restabelecer o resultado.
-3. **Validar** com `checarQualidade` antes de reativar; **guarda a versão anterior do
-   perfil** para rollback.
-4. **Só alerta o dono** se o auto-heal falhar — com o diagnóstico do que tentou.
+## 3. Bloco B — Executor em cascata universal (garantir resultado, grátis→pago)
 
-### Bloco D — Re-otimização periódica (voltar ao mais barato)
-Novo job **semanal**: para fontes hoje em estratégia **cara** (ex.: `brightdata`),
-**retesta os degraus grátis**; se um voltou a funcionar, **rebaixa** o perfil
-(economia real e contínua). Idem para **documentos/fotos**: revalida se há caminho
-grátis novo (ex.: a Caixa voltou a aceitar o IP? o lote passou a expor `og:image`?).
-Registra a mudança e o ganho de custo.
+Generalizar a cascata (pronta p/ documentos) para **todos os estágios**, dirigida pela
+base. Núcleo em `scripts/lib/agente-scraper.mjs`:
 
-## 3. Intake — como um leiloeiro novo entra (faseado)
+```
+executarEstagio(fonte, estagio, alvo):
+  escada = leiloeiro_estrategia[fonte][estagio].escada            # ordenada por custo
+  para cada degrau ATIVO na escada (do mais barato ao mais caro):
+     resultado = tentar(degrau.metodo, alvo)
+     se resultado passa em checarQualidade:
+        registrar vencedor em fonte_saude + custo em proxy_uso
+        se degrau é PAGO → emitirAlertaCritico(custo estimado)     # regra de ouro
+        return resultado
+  return FALHA → aciona Bloco C (auto-heal)
+```
+
+Já feito para `documento`. Passos seguintes aplicam o mesmo a `foto` e `detalhe`.
+
+---
+
+## 4. Bloco C — Auto-correção (self-heal sobre o monitor)
+
+Hoje `monitor-fontes-cron` **só alerta**. Passa a agir quando `status ∈
+{degradado, falhou}` (novo `api/autoheal-fontes-cron.js`, disparado após o monitor):
+
+```
+autoHeal(fonte, estagio):
+  1. RE-MAPEAR (grátis): roda recon (recon-novos-leiloeiros/recon-docs) +
+     extrairComIA → re-deriva seletores/endpoints (o site mudou → aprende o novo).
+  2. Guardar versao_anterior (rollback) e atualizar a escada com o aprendido.
+  3. RE-EXECUTAR a cascata (Bloco B), do mais barato ao mais caro.
+  4. VALIDAR com checarQualidade.
+     ├─ recuperou num degrau GRÁTIS  → reativa SOZINHO, registra, sem alerta crítico.
+     ├─ só recuperou no PAGO (brightdata):
+     │     • mantém o resultado (não deixa quebrar), MAS
+     │     • ALERTA CRÍTICO ao dono com o CUSTO ESTIMADO (ver Bloco E), e
+     │     • se o custo projetado > teto configurável → NÃO auto-gasta: segura em
+     │       'aguardando_aprovacao' e pede seu OK.
+     └─ não recuperou em nenhum meio → alerta CRÍTICO "fonte fora do ar" + diagnóstico.
+```
+
+Princípios de segurança: **sempre** valida com `checarQualidade` antes de reativar;
+**sempre** guarda `versao_anterior` para rollback; reusa `add_scraper_retry`.
+
+---
+
+## 5. Bloco D — Re-otimização periódica (voltar ao mais barato)
+
+Novo `api/reotimizar-fontes-cron.js` (**semanal**):
+
+```
+para cada fonte cujo estrategia_atual é PAGO (brightdata):
+   reteste os degraus GRÁTIS da escada (api_json/fetch_direto/puppeteer)
+   se um deles agora passa em checarQualidade → REBAIXA a estratégia (economia real)
+para documento/foto:
+   revalida se surgiu caminho grátis (ex.: Caixa voltou a aceitar o IP? lote passou a
+   expor og:image? PDF ficou público?) → rebaixa e registra o ganho
+sempre: grava validado_em e o delta de custo economizado.
+```
+
+Isso é o que faz o custo **cair com o tempo** em vez de só crescer.
+
+---
+
+## 6. Bloco E — Modelo de custo e sinalização (a "regra de ouro")
+
+- **Custo por método:** `api_json`/`fetch_direto`/`puppeteer` = **US$ 0** (compute no
+  GitHub Actions, grátis). `brightdata` = `nº_requests × PROXY_CUSTO_POR_MIL / 1000`
+  (já parametrizado em `scraper-core.mjs`; contabilizado em `proxy_uso`).
+- **Estimativa da operação:** ao escalar uma fonte para pago, custo estimado =
+  `itens_do_ciclo × requests_por_item × custo_unit`. Ex.: 1.500 lotes × 1 req ×
+  US$0,0015 = **~US$ 2,25/ciclo**.
+- **Alerta CRÍTICO (novo template):** assunto `🔴 CRÍTICO — fonte X caiu para meio
+  PAGO`, corpo com: motivo (o grátis quebrou / anti-bot novo), **custo estimado por
+  ciclo e por semana**, uso atual vs. teto semanal (`proxy_uso`), e ação sugerida
+  (aprovar / manter grátis degradado / desativar fonte). Reusa `enviarAlerta` do
+  `scraper-core.mjs`, mas com prioridade crítica.
+- **Teto de auto-gasto:** env `AUTOHEAL_TETO_USD_SEMANA`. Abaixo do teto, auto-gasta e
+  só avisa; acima, **segura e pede aprovação**.
+
+---
+
+## 7. Intake — como um leiloeiro novo entra (faseado)
 
 - **FASE 1 (agora): acionado por aqui.** Você passa a URL; o agente roda
-  recon → escolhe a escada mais barata → escreve o perfil na base → valida → ativa
-  (`ativo=true`). Cada integração **alimenta o conhecimento**.
-- **FASE 2 (depois): campo no Admin.** Colar a URL cria uma `solicitacoes`
-  (`leiloeiro_sugerido`) e dispara o **mesmo motor**. Se a plataforma for reconhecida
-  (`perfil_parser` já conhecido — ex.: outro WordPress-leilão, outro Superbid-like),
-  **auto-integra**; se for nova/difícil, **cai para revisão por aqui**. O campo é uma
-  casca fina sobre um motor já provado.
+  recon → escolhe a escada mais barata → escreve o perfil em `leiloeiro_estrategia`
+  → valida → ativa (`leiloeiros_fontes.ativo=true`). Cada integração alimenta a base.
+- **FASE 2 (depois): campo no Admin.** Colar a URL cria `solicitacoes`
+  (`leiloeiro_sugerido`) e chama `api/integrar-leiloeiro.js`, que dispara o **mesmo
+  motor**. Plataforma reconhecida (`perfil_parser` conhecido) → auto-integra; nova/
+  difícil → cai para revisão por aqui. Casca fina sobre motor provado.
 
-## 4. Custo & Segurança
-- **Grátis-primeiro** minimiza Bright Data; sub-cotas + teto semanal + `proxy_uso` (já
-  existem). A **re-otimização** derruba o custo ao longo do tempo.
-- Todo acesso é **service-role**; recon roda no **GitHub Actions** (egress liberado).
-- Auto-remap por IA **sempre** passa por `checarQualidade` antes de ativar, com
-  **rollback** para o perfil anterior — evita "aprender errado" e quebrar em silêncio.
+---
 
-## 5. Roadmap incremental (cada passo entrega sozinho e valida antes do próximo)
-1. **Base de conhecimento**: migração `leiloeiro_estrategia` + seed a partir de
-   `fonte_saude`/scrapers atuais. *(aprender com o que já temos)*
-2. **Cascata universal**: estender a cascata (feita p/ docs) a foto/detalhe/listagem.
-   *(garantir resultado grátis→pago)*
-3. **Self-heal**: `monitor-fontes-cron` re-mapeia (recon+IA) e escala a escada;
-   alerta só se falhar. *(autocorreção)*
-4. **Re-otimização semanal**: rebaixa fontes caras p/ grátis; revalida docs/fotos.
-   *(menor custo contínuo)*
-5. **Campo no Admin** (FASE 2): intake self-service reusando o motor.
+## 8. Roadmap executável (cada passo entrega e valida sozinho)
 
-## 6. Decisões em aberto (do dono)
-- **Onde guardar a escada**: tabela nova `leiloeiro_estrategia` (recomendado, mais
-  limpo) vs. colunas jsonb em `leiloeiros_fontes`.
-- **Agressividade do self-heal**: reativar automático após auto-remap validado, ou
-  exigir 1 confirmação sua na primeira vez de cada fonte?
-- **Bright Data**: manter só Web Unlocker grátis (com teto) ou avaliar plano pago se o
-  volume de fontes crescer (a re-otimização deve segurar o custo).
+| # | Passo | Arquivos | Entrega | Validação |
+|---|---|---|---|---|
+| 1 | **Base de conhecimento + seed** | migração `leiloeiro_estrategia.sql`; `scripts/seed-estrategias.mjs` | conhecimento consolidado das fontes atuais | SELECT mostra escada/estratégia de cada fonte |
+| 2 | **Cascata universal** | `scripts/lib/agente-scraper.mjs`; estender `captura-*` p/ foto/detalhe | resultado garantido grátis→pago em todos os estágios | run de captura registra o degrau vencedor em `fonte_saude` |
+| 3 | **Auto-heal** | `api/autoheal-fontes-cron.js`; hook no `monitor-fontes-cron` | fonte quebrada se recupera sozinha; pago vira alerta crítico c/ custo | simular quebra (mudar seletor) → agente re-mapeia e reativa |
+| 4 | **Re-otimização** | `api/reotimizar-fontes-cron.js`; `vercel.json` (semanal) | fontes caras voltam ao grátis; docs/fotos revalidados | log de rebaixamentos + custo economizado |
+| 5 | **Campo no Admin (FASE 2)** | `api/integrar-leiloeiro.js`; `src/pages/Admin.jsx` | integração self-service por URL | colar URL de teste → integra ou cai p/ revisão |
+
+**Eficiência:** passos 1–2 são a fundação; 3–4 são o diferencial (autocorreção +
+economia contínua); 5 é a conveniência. Cada um vai para produção sozinho.
+
+---
+
+## 9. Decisões já tomadas (dono, 15/07)
+- **Auto-heal:** corrige-se sozinho no grátis; ao escalar para pago, **alerta CRÍTICO
+  com o custo estimado** e, acima do teto, pede aprovação. ✅
+- **Intake:** faseado — por aqui agora, campo no Admin depois. ✅
+
+## 10. Decisões em aberto
+- **Storage da escada:** tabela `leiloeiro_estrategia` (recomendado) vs. jsonb em
+  `leiloeiros_fontes`. *(recomendo a tabela — mais limpo e versionável)*
+- **`AUTOHEAL_TETO_USD_SEMANA`:** qual valor? (sugestão inicial: alinhar ao teto atual
+  do Bright Data — `BRIGHTDATA_MAX_REQ_SEMANA` × custo unit).
+- **Bright Data:** manter só Web Unlocker grátis (com teto) ou avaliar plano pago se o
+  volume crescer (a re-otimização deve segurar o custo).
