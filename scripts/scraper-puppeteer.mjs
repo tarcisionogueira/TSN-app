@@ -2727,7 +2727,15 @@ async function scraperLeilofy(browser) {
     if (i++ >= 300) break;
     try {
       await page.goto(`https://leiloariasmart.com.br/imovel/${id}`, { waitUntil: 'networkidle2', timeout: 40000 });
-      await sleep(1000);
+      // O detalhe é um SPA: preço/descrição renderizam DEPOIS do networkidle. Espera o
+      // conteúdo real aparecer (senão o texto sai sem "R$", valor_minimo=0 e o lote é
+      // descartado — causa de "0 mapeados" quando o site está lento). Teto de 8s;
+      // adaptativo (só espera o necessário) em vez do sleep(1000) fixo que ficou curto.
+      await page.waitForFunction(
+        () => /Detalhes do Im[óo]vel|Documentos do lote|R\$\s*[\d.]/i.test(document.body?.innerText || ''),
+        { timeout: 8000 }
+      ).catch(() => {});
+      await sleep(400);
       const det = await page.evaluate(() => {
         const text = (document.body?.innerText || '').slice(0, 9000);
         const titulo = (document.querySelector('h1,h2,.titulo,.title')?.innerText || '').trim();
