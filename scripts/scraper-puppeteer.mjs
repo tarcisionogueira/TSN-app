@@ -2653,9 +2653,18 @@ async function reconLeilofy(browser) {
 function mapLoteLeilofy(raw, id) {
   const text = String(raw?.text || '');
   const q = (re) => { const m = text.match(re); return m ? m[1].trim() : ''; };
-  // cents opcionais — o site pode exibir "R$ 225.000,00" ou "R$ 225.000".
-  const avaliacao = parseBRL(q(/avalia[çc][ãa]o[^R]{0,40}R\$\s*([\d.]+(?:,\d{2})?)/i));
-  const lance = parseBRL(q(/lance[^R]{0,50}R\$\s*([\d.]+(?:,\d{2})?)/i));
+  // Os valores vêm em PROSA ("...o valor de avaliação do imóvel é de R$ 225.000,00,
+  // enquanto o lance está fixado em R$ 130.000,00..."), não numa tabela rótulo:valor.
+  // Então: pega TODO "R$ x" com o contexto imediatamente anterior e classifica.
+  // (Evita [^R] com flag /i, que também exclui 'r' e quebrava o casamento do lance.)
+  const money = [...text.matchAll(/([^\n$]{0,40})R\$\s*([\d.]+(?:,\d{2})?)/gi)]
+    .map(m => ({ ctx: (m[1] || '').toLowerCase(), val: parseBRL(m[2]) }))
+    .filter(o => o.val > 0);
+  const avaliacao = (money.find(o => /avalia/.test(o.ctx)) || {}).val || 0;
+  // Lance mínimo: contexto com "lance" e SEM "condicional"; prefere o que traz
+  // fixado/mínimo/inicial/1º; senão o primeiro "lance" não-condicional.
+  const lanceCand = money.filter(o => /lance/.test(o.ctx) && !/condicional/.test(o.ctx));
+  const lance = (lanceCand.find(o => /fixad|m[íi]nim|inicial|est[áa]|1[ºoª]|primeir/.test(o.ctx)) || lanceCand[0] || {}).val || 0;
   const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
   const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
   const areaCon = q(/[ÁA]rea constru[íi]da:\s*([\d.,]+)/i);
@@ -2735,15 +2744,8 @@ async function scraperLeilofy(browser) {
       }).catch(() => null);
       if (!det) continue;
       const row = mapLoteLeilofy(det, id);
-      // Debug dos 3 primeiros lotes: confirma que o parse pega os valores após o render.
-      if (i <= 3) console.log(`    Leilofy debug #${id}: aval=${row?.valor_avaliacao} lance=${row?.valor_minimo} end="${(row?.endereco || '').slice(0, 50)}" textLen=${(det.text || '').length}`);
-      // Dump dos rótulos ao redor de cada "R$" no 1º lote — revela como o lance é
-      // rotulado (label antes/depois do valor) p/ acertar o regex.
-      if (i === 1) {
-        const t = det.text || '';
-        const ctx = [...t.matchAll(/(.{28})R\$\s*([\d.]+(?:,\d{2})?)/gi)].slice(0, 12).map(m => `[${m[1].replace(/\n/g, '⏎').trim()}] R$ ${m[2]}`);
-        console.log(`    Leilofy MONEY: ${ctx.join('  ||  ')}`);
-      }
+      // Debug enxuto dos 3 primeiros lotes: confirma o parse dos valores pós-render.
+      if (i <= 3) console.log(`    Leilofy #${id}: aval=${row?.valor_avaliacao} lance=${row?.valor_minimo} end="${(row?.endereco || '').slice(0, 45)}"`);
       if (row && row.valor_minimo) imoveis.push(row);
     } catch { /* lote a lote; nunca derruba o scrape */ }
     await sleep(120);
