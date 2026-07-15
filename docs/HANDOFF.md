@@ -2,7 +2,11 @@
 
 > Cole este documento no início de uma nova sessão do Claude Code (com o **conector Supabase ativo**) para continuar com acesso total ao banco. Peça primeiro uma **auditoria completa dos fluxos** e depois siga pelos "Próximos passos".
 
-> 🩺 **Ritual de início de sessão** (ver `CLAUDE.md` → "Ritual de início de sessão"): antes dos próximos passos, o Claude deve entregar um diagnóstico de **saúde + segurança + escala**. A postura de segurança tem um auditor contínuo — rode `select public.auditoria_seguranca();` (ou leia a última linha de `seguranca_auditoria`); `0 crítico / 0 atenção` = íntegro. Última auditoria ofensiva completa (3 agentes): **15/07/2026** — 15 correções aplicadas (pagamentos, PII, oráculos, SSRF, poisoning, comissão). Refazer a ofensiva sempre que entrarem rotas/pagamento/RLS novos.
+> 🩺 **Segurança — automação em 2 camadas (não depende de sessão manual):**
+> 1. **DB/RLS/grants (determinística):** cron `seguranca-auditoria-cron` (semanal, servidor) roda `auditoria_seguranca()` e **e-mail só se regredir**. Cobre AUTOMATICAMENTE objetos novos de banco.
+> 2. **Código (ofensiva):** Rotina agendada `Auditoria de segurança BidPro (mensal)` acorda uma sessão sozinha, roda os 3 agentes ofensivos sobre o repo e **notifica o dono** (sem MCP → não faz a parte de banco, coberta pela camada 1; não faz push automático).
+> Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
+> **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
 ## 1. Projeto & infraestrutura
 - **App:** BidPro Brasil — plataforma de leilões de imóveis (React + Vite → Vercel).
