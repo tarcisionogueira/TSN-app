@@ -3,7 +3,7 @@
 // Pública VAPID: deve ser IGUAL à VAPID_PUBLIC_KEY do servidor (api/push-send.js) e
 // à VITE_VAPID_PUBLIC_KEY. O fallback embutido garante consistência mesmo se a env
 // VITE_ não for recompilada no build.
-const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BPh_NvzDB_OuiqNCN_Jhjb15IMDGpKIDU8Gv3cnrzTEXeFsEbVs-hrKV4AKwduCb_-g1ZBkIF2CsGj-d2nZOANA';
+const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BIeVd7AP0tOwgXDjF-wuirh8OBSjr-0-tp2jOjPNiablBj7n3Z3whO5aZqEeHdc5Tf4Fov4gG1be_7x4F3kgxGw';
 
 function urlB64ToUint8(b64) {
   const pad = b64.replace(/-/g, '+').replace(/_/g, '/');

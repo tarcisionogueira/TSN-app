@@ -165,11 +165,13 @@ async function handler(req) {
 
   // Dedup: imóveis já enviados nos últimos 60 dias (mais antigos podem repetir).
   const sessentaDias = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
-  const [alertasArr, fsalvosArr, arremArr, enviadosArr] = await Promise.all([
+  const [alertasArr, fsalvosArr, arremArr, enviadosArr, fbArr] = await Promise.all([
     sbGet(`alertas_email?user_id=in.${inList}&select=user_id,ativo,ultimo_envio,filtros,total_enviados`),
     sbGet(`filtros_salvos?user_id=in.${inList}&select=user_id,filtros,criado_em&order=criado_em.desc`),
     sbGet(`arrematacoes?user_id=in.${inList}&select=user_id,imovel_id`),
     sbGet(`alertas_enviados?user_id=in.${inList}&enviado_em=gte.${sessentaDias}&select=user_id,imovel_id`),
+    // Aprendizado: imóveis marcados "sem interesse" no widget/tela → excluir do e-mail.
+    sbGet(`feedback_imovel?user_id=in.${inList}&sinal=eq.sem_interesse&select=user_id,imovel_id`),
   ]);
   const alertaMap = {}; for (const a of alertasArr || []) alertaMap[a.user_id] = a;
   // TODOS os filtros salvos por usuário (mais recentes primeiro), até 6 — o e-mail
@@ -177,6 +179,8 @@ async function handler(req) {
   const filtroListMap = {}; for (const f of fsalvosArr || []) { const l = (filtroListMap[f.user_id] = filtroListMap[f.user_id] || []); if (l.length < 6 && f.filtros) l.push(f.filtros); }
   const arremMap = {}; for (const a of arremArr || []) (arremMap[a.user_id] = arremMap[a.user_id] || []).push(a.imovel_id);
   const enviadosMap = {}; for (const e of enviadosArr || []) (enviadosMap[e.user_id] = enviadosMap[e.user_id] || new Set()).add(e.imovel_id);
+  // "Sem interesse" do widget entra na MESMA exclusão dos já-enviados: não reaparece no e-mail.
+  for (const f of fbArr || []) (enviadosMap[f.user_id] = enviadosMap[f.user_id] || new Set()).add(f.imovel_id);
 
   // Tipos/estados dos imóveis já arrematados (para "similares")
   const arremImovelIds = [...new Set((arremArr || []).map(a => a.imovel_id).filter(Boolean))];

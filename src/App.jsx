@@ -10,6 +10,7 @@ import Footer from './components/Footer';
 import TourGuia from './components/TourGuia';
 import ContratoObrigatorio from './components/ContratoObrigatorio';
 import ChatSuporte from './components/ChatSuporte';
+import SugestaoImovel from './components/SugestaoImovel';
 import Landing from './pages/Landing';
 import MeusChamados from './pages/MeusChamados';
 import Atendimento from './pages/Atendimento';
@@ -231,6 +232,7 @@ function MainLayout() {
       {showBonus && <PopupBonusAnalises userId={user.id} onFechar={() => setShowBonus(false)} />}
       {isLoggedIn && <TourGuia />}
       {user && <ContratoObrigatorio userId={user.id} />}
+      {isLoggedIn && <SugestaoImovel />}
       <ChatSuporte />
       <main style={{ flex: 1 }}>
         <Routes>
