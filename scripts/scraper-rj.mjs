@@ -51,12 +51,12 @@ function inferirTipo(titulo = '') {
   return 'outros';
 }
 
-// Enumeração: procura URLs de lote/imóvel em qualquer XML/HTML (sitemap ou listagem).
-// Padrões comuns de plataformas de leilão: /imovel/{id}, /lote/{...}, /leilao/{...}.
+// Enumeração — plataforma SOLEON: a página do lote é /item/{id}/detalhes.
+// Extrai da listagem (ou de qualquer HTML) as URLs de detalhe, normalizando (sem ?page).
 function extrairUrlsDeLote(txt) {
   const urls = new Set();
-  for (const m of txt.matchAll(/https?:\/\/[^\s"'<>]*\/(?:imovel|imoveis|lote|lotes|leilao|leiloes|item|bem)[\/-][^\s"'<>]*/gi)) {
-    urls.add(m[0].replace(/[.,)]+$/, '').split('#')[0]);
+  for (const m of txt.matchAll(/\/item\/(\d+)\/detalhes/gi)) {
+    urls.add(`${BASE}/item/${m[1]}/detalhes`);
   }
   return [...urls];
 }
@@ -108,8 +108,8 @@ function parseDetalhe(html, url) {
 }
 
 function idDaUrl(url) {
-  const m = String(url).match(/\/(?:imovel|imoveis|lote|lotes|leilao|leiloes|item|bem)[\/-]([\w-]+)/i);
-  return m ? m[1] : String(url).split('/').filter(Boolean).pop();
+  const m = String(url).match(/\/item\/(\d+)/i);
+  return m ? m[1] : String(url).replace(/[?#].*/, '').split('/').filter(Boolean).pop();
 }
 
 function montarRow(url, det) {
@@ -151,15 +151,11 @@ async function debugRecon() {
   if (!html) { console.log('listagem de imóveis não veio (teto BD?).'); return; }
   console.log(`listagem ${LIST}: ${html.length} bytes`);
 
-  const hrefs = [...new Set([...html.matchAll(/href=["']([^"']+)["']/gi)].map(m => m[1]))];
-  const loteHrefs = hrefs.filter(h => /lote/i.test(h) && /\d/.test(h) && !/categoria/i.test(h));
-  console.log(`\n▓▓ hrefs de LOTE (com dígito, fora de categoria) — ${loteHrefs.length}:`);
-  console.log('   ' + loteHrefs.slice(0, 25).join('\n   '));
-  const pag = hrefs.filter(h => /page|pagina|[?&]p=|offset|start=/i.test(h));
-  console.log(`\n▓▓ candidatos a PAGINAÇÃO — ${pag.length}:`);
-  console.log('   ' + pag.slice(0, 10).join('\n   '));
+  const lotes = extrairUrlsDeLote(html);
+  console.log(`\n▓▓ lotes /item/{id}/detalhes na página 1 — ${lotes.length}:`);
+  console.log('   ' + lotes.slice(0, 25).join('\n   '));
 
-  const alvo = loteHrefs[0] ? new URL(loteHrefs[0], BASE).href : null;
+  const alvo = lotes[0] || null;
   if (alvo) {
     console.log(`\n── DETALHE amostra: ${alvo}`);
     const dh = await bd(alvo, { timeoutMs: 90000 });
@@ -173,8 +169,8 @@ async function debugRecon() {
       console.log('   docs href amostra:', JSON.stringify([...dh.matchAll(/href=["']([^"']*(?:\.pdf|edital|matricula|laudo)[^"']*)["']/gi)].map(m => m[1]).slice(0, 6)));
     }
   } else {
-    console.log('\n⚠️ nenhum href de lote na listagem — dump de hrefs p/ inspeção:');
-    console.log('   ' + hrefs.slice(0, 30).join('\n   '));
+    console.log('\n⚠️ nenhum /item/{id}/detalhes na listagem — amostra do HTML p/ inspeção:');
+    console.log('   ' + html.slice(0, 1500).replace(/\s+/g, ' '));
   }
   console.log('\n✅ RECON v2 concluído.');
 }
@@ -188,19 +184,21 @@ async function main() {
 
   console.log(`RJ LEILÕES ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · max ${MAX_LOTES} lote(s)/run`);
 
-  // 1) Enumeração via sitemap (1-poucos requests). Segue sitemap-index se houver.
-  let urlsLote = [];
-  for (const path of ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml']) {
-    const body = await bd(`${BASE}${path}`, { timeoutMs: 90000 });
-    if (!body) continue;
-    const subs = [...body.matchAll(/<loc>\s*([^<]+?\.xml[^<]*)\s*<\/loc>/gi)].map(m => m[1].trim())
-      .filter(u => /imovel|imoveis|lote|leilao|product|post/i.test(u));
-    for (const sub of subs.slice(0, 10)) { const sb = await bd(sub, { timeoutMs: 90000 }); if (sb) urlsLote.push(...extrairUrlsDeLote(sb)); await sleep(300); }
-    urlsLote.push(...extrairUrlsDeLote(body));
-    if (urlsLote.length) break;
+  // 1) Enumeração: listagem de imóveis paginada (SOLEON: /lotes/categoria/imoveis?page=N).
+  //    Para quando uma página não traz lote novo ou atinge o teto de páginas.
+  const MAX_PAGES = Number(process.env.RJ_MAX_PAGES || 6);
+  const setUrls = new Set();
+  for (let p = 1; p <= MAX_PAGES; p++) {
+    const body = await bd(`${BASE}/lotes/categoria/imoveis?page=${p}`, { timeoutMs: 90000 });
+    if (!body) break;
+    const antes = setUrls.size;
+    for (const u of extrairUrlsDeLote(body)) setUrls.add(u);
+    console.log(`  página ${p}: +${setUrls.size - antes} lote(s) (total ${setUrls.size})`);
+    if (setUrls.size === antes) break; // página sem novidade → fim
+    await sleep(400);
   }
-  urlsLote = [...new Set(urlsLote)];
-  if (!urlsLote.length) { console.error('Nenhuma URL de lote encontrada no sitemap. Rode RJ_DEBUG=1 p/ inspecionar.'); return; }
+  const urlsLote = [...setUrls];
+  if (!urlsLote.length) { console.error('Nenhum lote na listagem. Rode RJ_DEBUG=1 p/ inspecionar.'); return; }
   console.log(`Enumerados ${urlsLote.length} lote(s).`);
 
   // Prioriza os NOVOS (fonte_id ainda não no banco).
