@@ -57,49 +57,54 @@ async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
   } catch { /* nunca bloqueia o relatório */ }
 }
 
-// Correção SOB DEMANDA da avaliação (só quando um relatório é pedido — sem varredura em
-// massa): alguns leiloeiros (ex.: GrupoLance judicial) não trazem a avaliação no card, só
-// no detalhe. Busca no detalhe agora, corrige no banco (com desconto/score) e, se não
-// achar, SINALIZA a anomalia p/ a saúde. Retorna a avaliação (0 se não obteve).
-async function garantirAvaliacao(imovelId) {
+// Confirmação SOB DEMANDA de VALORES no detalhe/edital (só quando um relatório é pedido —
+// sem varredura em massa). Cobre dois casos:
+//  - AVALIAÇÃO ausente (ex.: GrupoLance judicial — só vem no detalhe);
+//  - LANCE MÍNIMO ausente/sentinela (ex.: o scraper anulou um 999999999 — regra do dono:
+//    "se vier valor assim, acessar o edital pra confirmar o valor da venda").
+// Corrige no banco (com desconto/score) e, o que não confirmar, SINALIZA como anomalia.
+// Sem teto de valor absoluto (imóvel caro é válido) — só sanidade avaliação >= mínimo.
+async function garantirValores(imovelId) {
   let im = null;
   try {
     const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,url_lote,link_edital,valor_avaliacao,valor_minimo&limit=1`)).json();
     im = Array.isArray(rows) ? rows[0] : null;
-  } catch { return 0; }
-  if (!im) return 0;
-  if ((Number(im.valor_avaliacao) || 0) > 0) return Number(im.valor_avaliacao);
+  } catch { return; }
+  if (!im) return;
+  const SENT = new Set([999999999, 99999999, 9999999999, 111111111, 123456789]);
+  const limpo = (v) => { const n = Number(v) || 0; return SENT.has(n) ? 0 : n; };
+  let aval = limpo(im.valor_avaliacao);
+  let vmin = limpo(im.valor_minimo);
+  const faltaAval = aval <= 0, faltaMin = vmin <= 0;
+  if (!faltaAval && !faltaMin) return; // nada a confirmar
+
   const url = im.url_lote || im.link_edital;
-  const min = Number(im.valor_minimo) || 0;
-  let aval = 0;
   if (url && /^https?:\/\//.test(url)) {
     try {
       const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(15000) });
       if (r.ok) {
         const txt = (await r.text()).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
-        let melhor = 0;
-        for (const m of txt.matchAll(/avalia[çc][aã]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi)) {
-          const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.')) || 0;
-          if (v > melhor) melhor = v;
-        }
-        if (melhor >= 1000 && melhor < 100_000_000 && (min === 0 || melhor >= min)) aval = melhor;
+        const maiorPorRotulo = (re) => { let best = 0; for (const m of txt.matchAll(re)) { const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.')) || 0; if (v > best) best = v; } return best; };
+        if (faltaAval) { const a = maiorPorRotulo(/avalia[çc][aã]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi); if (a >= 1000) aval = a; }
+        if (faltaMin)  { const mn = maiorPorRotulo(/(?:lance\s*m[íi]nimo|valor\s*m[íi]nimo|lance\s*inicial|1[ºoª°]?\s*(?:leil[aã]o|pra[çc]a)|2[ºoª°]?\s*(?:leil[aã]o|pra[çc]a))[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi); if (mn >= 1000) vmin = mn; }
       }
     } catch { /* segue */ }
   }
-  if (aval > 0) {
-    await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, {
-      method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        valor_avaliacao: aval,
-        desconto_percentual: min > 0 ? Math.round((1 - min / aval) * 100) : null,
-        viavel: min > 0 ? (1 - min / aval) >= 0.3 : null,
-        score_viabilidade: min > 0 ? Math.min(100, Math.round((1 - min / aval) * 150)) : 30,
-      }),
-    });
-    return aval;
+
+  const patch = {};
+  if (faltaAval && aval > 0) patch.valor_avaliacao = aval;
+  if (faltaMin && vmin > 0) patch.valor_minimo = vmin;
+  const par = aval > 0 && vmin > 0 && aval >= vmin; // desconto só faz sentido com avaliação >= mínimo
+  if (par && (patch.valor_avaliacao != null || patch.valor_minimo != null)) {
+    patch.desconto_percentual = Math.round((1 - vmin / aval) * 100);
+    patch.viavel = (1 - vmin / aval) >= 0.3;
+    patch.score_viabilidade = Math.min(100, Math.round((1 - vmin / aval) * 150));
   }
-  await registrarAnomalia('avaliacao_ausente', im.fonte, imovelId, 'valor_avaliacao', `Avaliação não encontrada no detalhe (${url || 'sem url'}).`);
-  return 0;
+  if (Object.keys(patch).length) {
+    await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
+  }
+  if (aval <= 0) await registrarAnomalia('avaliacao_ausente', im.fonte, imovelId, 'valor_avaliacao', `Avaliação não confirmada no detalhe/edital (${url || 'sem url'}).`);
+  if (vmin <= 0) await registrarAnomalia('valor_minimo_ausente', im.fonte, imovelId, 'valor_minimo', `Lance mínimo não confirmado no detalhe/edital (${url || 'sem url'}).`);
 }
 // Pesquisa de mercado recente do MESMO imóvel (de qualquer usuário). Reaproveitada
 // para não refazer a busca cara a cada pedido — só a data é renovada. O laudo
@@ -322,9 +327,9 @@ export default async function handler(req, res) {
     }
   } catch { /* checagem de cota nunca bloqueia quem tem direito */ }
 
-  // Correção sob demanda: garante a avaliação (ex.: GrupoLance) ANTES de gerar — assim o
-  // desconto/score do imóvel deixam de sair zerados; se não obtiver, sinaliza a anomalia.
-  try { await garantirAvaliacao(String(imovelId)); } catch { /* nunca bloqueia o relatório */ }
+  // Confirmação sob demanda dos VALORES (avaliação + lance mínimo) no detalhe/edital ANTES
+  // de gerar — corrige avaliação zerada e valor sentinela; o que não confirmar vira anomalia.
+  try { await garantirValores(String(imovelId)); } catch { /* nunca bloqueia o relatório */ }
 
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
