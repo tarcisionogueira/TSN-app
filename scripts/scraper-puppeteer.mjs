@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos } from '../api/_doc-scan.js';
+import MUNICIPIOS from '../api/_municipios.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -63,6 +64,21 @@ const UFS_BR = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','
 // UF vazia é tolerada (lote BR sem UF extraída — backfill à parte); UF preenchida tem de
 // ser brasileira. Descarta estrangeiro (Peru/Paraguai/Argentina) e estado corrompido.
 const ehBRouSemUF = (uf) => { const u = String(uf || '').trim().toUpperCase(); return u === '' || UFS_BR.has(u); };
+// Reforço da regra "só Brasil" para o vazamento de estrangeiros com UF VAZIA: fontes da
+// rede Superbid (SUPERBID/SBID9/SBID21/SOLD) têm inventário internacional (Paraguai/
+// Argentina) que chega sem UF e escapa da tolerância acima. Se a UF está vazia e a CIDADE
+// existe mas NÃO é município brasileiro (dataset IBGE), é estrangeiro → descarta. Mesma
+// normalização de api/_geo.js (minúsculas, sem acento) para bater com as chaves "UF|cidade".
+const normCidadeBR = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const CIDADES_BR = new Set(Object.keys(MUNICIPIOS).map(k => normCidadeBR(k.split('|')[1])));
+const FONTES_INTERNACIONAIS = new Set(['SUPERBID', 'SBID9', 'SBID21', 'SOLD']);
+const baseFonte = (f) => String(f || '').trim().toUpperCase().replace(/\s+\d.*$/, ''); // "SBID9 1-500" → "SBID9"
+const ehEstrangeiroSemUF = (fonte, uf, cidade) => {
+  if (String(uf || '').trim() !== '') return false;              // com UF: já coberto por ehBRouSemUF
+  if (!FONTES_INTERNACIONAIS.has(baseFonte(fonte))) return false; // só as fontes com inventário internacional
+  const c = normCidadeBR(cidade);
+  return c.length >= 3 && !CIDADES_BR.has(c);                     // cidade preenchida e não é município BR ⇒ estrangeiro
+};
 // Sentinela de preço: placeholder que alguns scrapers gravam quando NÃO leram o valor.
 // NUNCA armazenar — mostrar R$999.999.999 é falha crítica e perde confiabilidade. Anula
 // (o lote fica "sem lance" até o valor ser confirmado no edital).
@@ -72,8 +88,9 @@ const semSentinela = (v) => (SENTINELAS_VALOR.has(Number(v)) ? null : v);
 async function salvarImoveis(imoveis, fonte) {
   if (!imoveis.length) return;
   // Guarda 1: só BRASIL. Descarta estrangeiros / estado inválido ANTES de salvar.
+  // Inclui o caso UF-vazia + cidade estrangeira (rede Superbid) via ehEstrangeiroSemUF.
   const totalBruto = imoveis.length;
-  imoveis = imoveis.filter(im => ehBRouSemUF(im.estado));
+  imoveis = imoveis.filter(im => ehBRouSemUF(im.estado) && !ehEstrangeiroSemUF(fonte, im.estado, im.cidade));
   if (imoveis.length < totalBruto) console.log(`  [${fonte}] ${totalBruto - imoveis.length} lote(s) descartado(s) — fora do Brasil / estado inválido.`);
   if (!imoveis.length) return;
 
