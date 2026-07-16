@@ -23,6 +23,8 @@
 
 **Residual (sinalizar ao dono):** 6 lotes LEILOTECH (white-label vmleiloes/spencer/bringel) sem cidade parseável — **não adivinhei UF** (foi assim que surgiu o erro Ibiúna/AP). 1 deles é "Escavadeira Komatsu PC200" (equipamento, **não é imóvel**) — candidato a desativar/filtro de tipo.
 
+**Bug de cliente (RLS) — corrigido:** investidora relatou "new row violates row-level security policy for table casos" + "Algo deu errado" ao clicar em **"tenho interesse"** num imóvel. Causa: `casos` só tinha políticas de SELECT (cliente/analista/advogado) + ALL admin; **faltava a política de INSERT do cliente** (provável perda no hardening de RLS de 15/07 — bate com o "tem alguns dias"). O front cria o caso client-side (`src/pages/Caso.jsx` → `insert({ cliente_id: user.id, … })`). Fix: migração `casos_cliente_insert_rls.sql` — `create policy casos_cliente_insert for insert with check (auth.uid() = cliente_id)`. Testado sob RLS (positivo: cria o próprio; negativo: não cria p/ terceiro). **Aplicado no banco.**
+
 ## 🆕 Sessão 15–16/07/2026 — o que mudou (tudo em `main`)
 > Branch de dev desta sessão: **`claude/document-inventory-validation-bstmk5`** (mesclada em `main`).
 
