@@ -333,8 +333,17 @@ mercado, custos elevados, margem insuficiente) e recomende NÃO avançar. Não a
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-  const user = await getUser(req);
-  if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
+  // REGERAÇÃO AUTOMÁTICA (regenerar-relatorios-cron): reprocessa relatório com vício,
+  // com orçamento fresco. Autentica pelo CRON_SECRET (não passa por getUser nem cota).
+  const isCron = !!process.env.CRON_SECRET && req.headers['x-cron-secret'] === process.env.CRON_SECRET;
+  let user;
+  if (isCron) {
+    if (!req.body?.paraUserId) { res.status(400).json({ error: 'paraUserId obrigatório no cron' }); return; }
+    user = { id: String(req.body.paraUserId) };
+  } else {
+    user = await getUser(req);
+    if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
+  }
   if (!CLAUDE_KEY) { res.status(500).json({ error: 'CLAUDE_KEY ausente' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 
@@ -367,7 +376,7 @@ export default async function handler(req, res) {
   try {
     const jaConcluida = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
     const isNovo = !(Array.isArray(jaConcluida) && jaConcluida.length);
-    if (isNovo && !onBehalf) {
+    if (isNovo && !onBehalf && !isCron) {
       const rc = await sb('rpc/consumir_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null);
       if (cota && cota.ok === false) {

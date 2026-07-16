@@ -133,21 +133,31 @@ Retorne APENAS este JSON (sem markdown):
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-  const user = await getUser(req);
-  if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
-  // O laudo de viabilidade consolida a documental/jurídica — mesmo gate: a partir
-  // do Investidor Pro (explorador não tem a documental para consolidar).
-  try {
-    const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
-    if (!perfil || perfil.role === 'explorador' || perfil.role == null) {
-      res.status(402).json({ error: 'O laudo de viabilidade está disponível a partir do plano Investidor Pro.', upgrade: true });
+  // REGERAÇÃO AUTOMÁTICA (regenerar-relatorios-cron): reprocessa com orçamento fresco.
+  // Autentica pelo CRON_SECRET (não passa por getUser nem pelo gate de plano — o laudo
+  // regenerado já pertence a um usuário que teve acesso).
+  const isCron = !!process.env.CRON_SECRET && req.headers['x-cron-secret'] === process.env.CRON_SECRET;
+  let user;
+  if (isCron) {
+    if (!req.body?.paraUserId) { res.status(400).json({ error: 'paraUserId obrigatório no cron' }); return; }
+    user = { id: String(req.body.paraUserId) };
+  } else {
+    user = await getUser(req);
+    if (!user) { res.status(401).json({ error: 'Não autenticado' }); return; }
+    // O laudo de viabilidade consolida a documental/jurídica — mesmo gate: a partir
+    // do Investidor Pro (explorador não tem a documental para consolidar).
+    try {
+      const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role&limit=1`)).json();
+      if (!perfil || perfil.role === 'explorador' || perfil.role == null) {
+        res.status(402).json({ error: 'O laudo de viabilidade está disponível a partir do plano Investidor Pro.', upgrade: true });
+        return;
+      }
+    } catch {
+      // FAIL-CLOSED: se a checagem de plano falhar, NÃO liberamos (evita laudo pago grátis
+      // num erro transitório). Retornável para quem tem direito.
+      res.status(503).json({ error: 'Não foi possível validar seu plano agora. Tente novamente em instantes.' });
       return;
     }
-  } catch {
-    // FAIL-CLOSED: se a checagem de plano falhar, NÃO liberamos (evita laudo pago grátis
-    // num erro transitório). Retornável para quem tem direito.
-    res.status(503).json({ error: 'Não foi possível validar seu plano agora. Tente novamente em instantes.' });
-    return;
   }
   if (!CLAUDE_KEY) { res.status(500).json({ error: 'CLAUDE_KEY ausente' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
