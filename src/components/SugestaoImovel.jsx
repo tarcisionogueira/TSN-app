@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,62 +6,101 @@ import { useAuth } from '../contexts/AuthContext';
 /**
  * Sugestão de imóvel — card discreto no canto inferior direito (não atrapalha a
  * operação). Mostra 1 imóvel por vez: "Ver imóvel" (interesse) ou "Não tenho
- * interesse". O feedback vai para feedback_imovel e VIRA APRENDIZADO: o e-mail das
- * oportunidades exclui o que foi marcado "sem interesse". Some após 3 dispensas/sessão.
+ * interesse". O feedback vai para feedback_imovel e VIRA APRENDIZADO.
+ *
+ * Regras:
+ *  - Teto de 3 sugestões por JANELA DE 24h (persistente por navegador) — não fica
+ *    reaparecendo várias vezes no mesmo acesso.
+ *  - Não repete imóvel: exclui o que a pessoa já avaliou (feedback) E o que já tem
+ *    relatório gerado (já está no monitoramento, na tela de análise).
+ *  - MODO SUPORTE (admin/analista impersonando): pode aparecer, mas a seleção do
+ *    suporte NÃO grava feedback — não pode influenciar o cliente.
  */
-const MAX_SESSAO = 3;
+const LIMITE_24H = 3;
+const HIST_KEY = 'bidpro_sugestao_hist';
 const brl = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
 
-export default function SugestaoImovel() {
-  const { user, isLoggedIn } = useAuth();
-  const navigate = useNavigate();
-  const [fila, setFila] = useState([]);   // candidatos ainda não mostrados
-  const [atual, setAtual] = useState(null);
-  const [dispensas, setDispensas] = useState(0);
-  const [visivel, setVisivel] = useState(false);
+// Timestamps das sugestões mostradas nas últimas 24h (persistente por navegador).
+function lerHist() {
+  try {
+    const a = JSON.parse(localStorage.getItem(HIST_KEY) || '[]');
+    const lim = Date.now() - 24 * 3600 * 1000;
+    return (Array.isArray(a) ? a : []).filter(t => Number(t) > lim);
+  } catch { return []; }
+}
+function registrarMostrado() {
+  try { const h = lerHist(); h.push(Date.now()); localStorage.setItem(HIST_KEY, JSON.stringify(h)); } catch { /* */ }
+}
 
-  // Carrega candidatos: imóveis ativos atrativos que a pessoa AINDA não avaliou.
+export default function SugestaoImovel() {
+  const { user, isLoggedIn, effectiveUserId, impersonate } = useAuth();
+  const navigate = useNavigate();
+  const suporte = !!impersonate; // modo suporte não influencia o cliente
+  const [fila, setFila] = useState([]);
+  const [atual, setAtual] = useState(null);
+  const [visivel, setVisivel] = useState(false);
+  const restantesRef = useRef(0); // quantas ainda podem aparecer nesta janela de 24h
+
+  // Carrega candidatos: imóveis ativos atrativos que a pessoa AINDA não avaliou nem
+  // analisou (relatórios). Usa effectiveUserId (o cliente, quando em suporte).
   useEffect(() => {
-    if (!isLoggedIn || !user?.id) return;
+    if (!isLoggedIn || !effectiveUserId) return;
+    const restantes = LIMITE_24H - lerHist().length;
+    restantesRef.current = restantes;
+    if (restantes <= 0) return; // já atingiu o teto de 3/24h
     let vivo = true;
     (async () => {
       try {
-        const { data: fb } = await supabase.from('feedback_imovel').select('imovel_id').eq('user_id', user.id);
-        const vistos = new Set((fb || []).map(x => x.imovel_id));
+        const uid = effectiveUserId;
+        const [fb, rel, laudo, doc, merc] = await Promise.all([
+          supabase.from('feedback_imovel').select('imovel_id').eq('user_id', uid),
+          supabase.from('relatorios').select('imovel_id').eq('user_id', uid),
+          supabase.from('analises_laudo').select('imovel_id').eq('user_id', uid),
+          supabase.from('analises_documental').select('imovel_id').eq('user_id', uid),
+          supabase.from('analises_mercado').select('imovel_id').eq('user_id', uid),
+        ]);
+        const excl = new Set();
+        for (const arr of [fb.data, rel.data, laudo.data, doc.data, merc.data]) {
+          for (const x of (arr || [])) if (x?.imovel_id) excl.add(String(x.imovel_id));
+        }
         const { data } = await supabase
           .from('imoveis_leilao')
           .select('id,titulo,cidade,estado,valor_minimo,desconto_percentual,link_foto')
           .eq('ativo', true).gt('valor_minimo', 0).not('link_foto', 'is', null)
           .gte('desconto_percentual', 35)
-          .order('desconto_percentual', { ascending: false }).limit(40);
-        const cand = (data || []).filter(i => !vistos.has(i.id));
-        // embaralha levemente p/ não repetir sempre os mesmos topos
+          .order('desconto_percentual', { ascending: false }).limit(60);
+        const cand = (data || []).filter(i => !excl.has(String(i.id)));
         for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cand[i], cand[j]] = [cand[j], cand[i]]; }
         if (vivo && cand.length) { setFila(cand); setTimeout(() => vivo && setVisivel(true), 9000); }
       } catch { /* silencioso */ }
     })();
     return () => { vivo = false; };
-  }, [isLoggedIn, user?.id]);
+  }, [isLoggedIn, effectiveUserId]);
 
-  // Puxa o próximo da fila quando fica visível ou após uma ação.
+  // Puxa o próximo da fila quando fica visível ou após uma ação — respeitando o teto de 24h.
   useEffect(() => {
-    if (visivel && !atual && fila.length) { setAtual(fila[0]); setFila(f => f.slice(1)); }
+    if (visivel && !atual && fila.length && restantesRef.current > 0) {
+      setAtual(fila[0]);
+      setFila(f => f.slice(1));
+      registrarMostrado();
+      restantesRef.current -= 1;
+    }
   }, [visivel, atual, fila]);
 
   const registrar = useCallback(async (imovelId, sinal) => {
-    if (!user?.id) return;
+    // Em modo SUPORTE não grava nada — a seleção do suporte não pode influenciar o cliente.
+    if (suporte || !user?.id) return;
     try {
       await supabase.from('feedback_imovel')
         .upsert({ user_id: user.id, imovel_id: imovelId, sinal, contexto: 'sugestao_widget' }, { onConflict: 'user_id,imovel_id,sinal' });
     } catch { /* silencioso */ }
-  }, [user?.id]);
+  }, [suporte, user?.id]);
 
   const proximo = useCallback((sinal) => {
     if (atual) registrar(atual.id, sinal);
-    const d = dispensas + 1; setDispensas(d);
     setAtual(null);
-    if (d >= MAX_SESSAO || fila.length === 0) setVisivel(false);
-  }, [atual, dispensas, fila.length, registrar]);
+    if (restantesRef.current <= 0 || fila.length === 0) setVisivel(false);
+  }, [atual, fila.length, registrar]);
 
   if (!visivel || !atual) return null;
 
@@ -73,6 +112,11 @@ export default function SugestaoImovel() {
         <span style={{ position: 'absolute', top: 8, left: 8, background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 800, padding: '2px 8px', borderRadius: 20 }}>
           {atual.desconto_percentual ? `${atual.desconto_percentual}% OFF` : 'Oportunidade'}
         </span>
+        {suporte && (
+          <span style={{ position: 'absolute', bottom: 8, left: 8, background: 'rgba(15,23,42,.75)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>
+            modo suporte · não registra
+          </span>
+        )}
         <button onClick={() => proximo('visto')} aria-label="Fechar" style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, border: 'none', background: 'rgba(0,0,0,.45)', color: '#fff', cursor: 'pointer', fontSize: 14, lineHeight: '24px' }}>×</button>
       </div>
       <div style={{ padding: '10px 12px' }}>

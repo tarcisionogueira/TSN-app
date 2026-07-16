@@ -192,13 +192,15 @@ async function handler(req) {
   const ids = perfis.map(p => p.id).filter(isUuid);
   const inList = `(${ids.join(',')})`;
 
-  // Dedup: imóveis já enviados nos últimos 60 dias (mais antigos podem repetir).
-  const sessentaDias = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
+  // Dedup: o e-mail NUNCA repete um imóvel já enviado a este usuário (regra do dono:
+  // sempre trazer NOVAS oportunidades). Janela de 180 dias cobre qualquer leilão ativo
+  // (nenhum fica ativo tanto tempo) sem deixar a consulta crescer sem limite na escala.
+  const janelaDedup = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString();
   const [alertasArr, fsalvosArr, arremArr, enviadosArr, fbArr] = await Promise.all([
     sbGet(`alertas_email?user_id=in.${inList}&select=user_id,ativo,ultimo_envio,filtros,total_enviados`),
     sbGet(`filtros_salvos?user_id=in.${inList}&select=user_id,filtros,criado_em&order=criado_em.desc`),
     sbGet(`arrematacoes?user_id=in.${inList}&select=user_id,imovel_id`),
-    sbGet(`alertas_enviados?user_id=in.${inList}&enviado_em=gte.${sessentaDias}&select=user_id,imovel_id`),
+    sbGet(`alertas_enviados?user_id=in.${inList}&enviado_em=gte.${janelaDedup}&select=user_id,imovel_id`),
     // Aprendizado: imóveis marcados "sem interesse" no widget/tela → excluir do e-mail.
     sbGet(`feedback_imovel?user_id=in.${inList}&sinal=eq.sem_interesse&select=user_id,imovel_id`),
   ]);
@@ -290,16 +292,15 @@ async function handler(req) {
       const LIMITE = 12;
       const pool = new Map();
       const add = (im, isNovo) => { if (im && im.id && !pool.has(im.id)) pool.set(im.id, { im, isNovo }); };
-      // Prioriza NÃO-repetidos; só usa repetido quando falta novidade. Cada fonte já
-      // vem ordenada por maior desconto (os >40% lideram — é o que fecha 30% líquido).
+      // O e-mail SÓ leva imóveis NOVOS (nunca enviados a este usuário) — sempre novas
+      // oportunidades, sem repetir. Se não houver novidade suficiente, manda menos (não
+      // recicla). Cada fonte já vem ordenada por maior desconto (>40% lideram).
       const despejar = (lista, limite) => {
-        const arr = (lista || []).filter(im => im && im.id);
-        const frescos = arr.filter(im => !enviadosSet.has(im.id));
-        const repetidos = arr.filter(im => enviadosSet.has(im.id));
+        const frescos = (lista || []).filter(im => im && im.id && !enviadosSet.has(im.id));
         let n = 0;
-        for (const im of [...frescos, ...repetidos]) {
+        for (const im of frescos) {
           if (n >= limite || pool.size >= LIMITE) break;
-          if (!pool.has(im.id)) { add(im, !enviadosSet.has(im.id)); n++; }
+          if (!pool.has(im.id)) { add(im, true); n++; }
         }
       };
 
