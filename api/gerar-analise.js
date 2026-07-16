@@ -103,7 +103,9 @@ do endereço para complementar (mantendo o mesmo tipo de imóvel). Meta: 8+ vend
 ═══ NÍVEL 2 — VIZINHANÇA (bairro e adjacências, ~1km) ═══
 Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências (~1km). Meta: 15+ vendas e 8+ locações.
 
-FONTES: ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
+FONTES (grandes portais): ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
+
+FONTES LOCAIS (OBRIGATÓRIO — frequentemente MAIS confiáveis): além dos grandes portais, busque também ANÚNCIOS DE IMOBILIÁRIAS DA PRÓPRIA CIDADE de ${cidade}/${estado}. Pesquise por "imobiliária ${cidade}", "imóveis à venda ${cidade}" (e o bairro, se houver) e abra os sites das imobiliárias locais — os anúncios delas costumam refletir MELHOR o preço praticado na praça e podem ser COMPLEMENTARES ou até DECISIVOS na composição do valor. Inclua essas amostras nos níveis 1/2 com "fonte" = nome da imobiliária local, e dê PESO ao menos igual ao dos grandes portais quando forem recentes e do mesmo tipo/microrregião.
 
 DATA DO ANÚNCIO: para CADA amostra, capture a data no campo "data" (formato "AAAA-MM"; senão "recente").
 RECÊNCIA (IMPORTANTE): priorize FORTEMENTE anúncios do ANO CORRENTE e dos últimos ~12 meses. EVITE anúncios com mais de ~18 meses, a menos que não haja recentes suficientes — o preço muda rápido. Na média, dê MENOS peso às amostras antigas. Se a maioria das amostras for antiga (ex.: de anos anteriores), diga isso EXPLICITAMENTE no "comentario" e trate a estimativa como menos precisa (alargue precoMinM2/precoMaxM2).

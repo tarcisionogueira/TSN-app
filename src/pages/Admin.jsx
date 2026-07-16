@@ -4083,11 +4083,15 @@ function DashboardTab() {
       if (acao === 'liberar_chamados_presos') {
         const limite = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
         const { data: presos } = await supabase.from('chamados').select('id').eq('status', 'aberto').lt('criado_em', limite);
-        if (presos?.length) {
-          const ids = presos.map(c => c.id);
-          await supabase.from('chamados').update({ status: 'finalizado', obs_interna: 'Finalizado manualmente via painel de ações' }).in('id', ids);
+        if (!presos?.length) { setAcaoStatus(s => ({ ...s, [label]: 'nenhum chamado preso' })); return; }
+        // Confirmação: chamados abertos são reclamações REAIS — revisar antes de fechar em lote.
+        if (!window.confirm(`Finalizar ${presos.length} chamado(s) aberto(s) há +7 dias? São reclamações reais de clientes — revise na aba Suporte antes. Confirmar o fechamento em lote?`)) {
+          setAcaoStatus(s => ({ ...s, [label]: '' })); return;
         }
-        setAcaoStatus(s => ({ ...s, [label]: `ok — ${presos?.length || 0} chamado(s) finalizados` }));
+        const ids = presos.map(c => c.id);
+        // Sem obs_interna (coluna inexistente) — a versão antiga falhava calada e mentia "ok".
+        const { error } = await supabase.from('chamados').update({ status: 'finalizado', atualizado_em: new Date().toISOString() }).in('id', ids);
+        setAcaoStatus(s => ({ ...s, [label]: error ? `erro: ${error.message}` : `ok — ${ids.length} chamado(s) finalizados` }));
       } else if (acao === 'rodar_health') {
         await rodarHealthCheck();
         setAcaoStatus(s => ({ ...s, [label]: 'ok — executado' }));

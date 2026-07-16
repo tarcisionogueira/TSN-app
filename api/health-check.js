@@ -97,22 +97,19 @@ export default async function handler(req) {
     }));
   }
 
-  // ── 3. Supabase: registros presos (chamados abertos há mais de 7 dias) ──
+  // ── 3. Supabase: chamados de suporte sem resposta há mais de 7 dias ──
+  // NÃO fecha automaticamente. Um chamado aberto é uma reclamação REAL do cliente
+  // (ex.: "deu erro no meu relatório"). Fechar sozinho ESCONDE o problema e prejudica
+  // o atendimento (era, inclusive, uma ação quebrada: gravava obs_interna, coluna que
+  // não existe). Aqui só SINALIZA para um humano revisar na aba Suporte.
   itens.push(await check('Supabase — chamados presos', async () => {
     const limite = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-    const r = await sb(`chamados?select=id&status=eq.aberto&criado_em=lt.${limite}&limit=50`);
+    const r = await sb(`chamados?select=id,titulo,criado_em&status=eq.aberto&criado_em=lt.${limite}&order=criado_em.asc&limit=50`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const presos = await r.json();
-    if (presos.length === 0) return { status: 'ok', detalhe: 'Nenhum chamado preso' };
-    // Tenta fechar automaticamente
-    const ids = presos.map(c => c.id);
-    const fix = await sb(`chamados?id=in.(${ids.join(',')})`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: 'finalizado', obs_interna: 'Fechado automaticamente pelo health-check (sem atividade >7 dias)' }),
-      headers: { Prefer: 'return=minimal' },
-    });
-    if (fix.ok) return { status: 'aviso', detalhe: `${presos.length} chamado(s) preso(s) — fechados automaticamente`, corrigido: true };
-    return { status: 'aviso', detalhe: `${presos.length} chamado(s) preso(s) — falha ao fechar automaticamente` };
+    if (presos.length === 0) return { status: 'ok', detalhe: 'Nenhum chamado sem resposta' };
+    const antigo = presos[0]?.criado_em ? new Date(presos[0].criado_em).toLocaleDateString('pt-BR') : '';
+    return { status: 'aviso', detalhe: `${presos.length} chamado(s) aberto(s) há +7 dias — REVISAR na aba Suporte (não fecho sozinho; mais antigo: ${antigo}).` };
   }));
 
   // ── 4. Supabase: clientes/leads sem consultor há >3 dias ──

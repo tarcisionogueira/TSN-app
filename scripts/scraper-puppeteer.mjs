@@ -2556,11 +2556,31 @@ async function relatorioCapitacao() {
 // Bounded por cap + deadline: preenche progressivamente entre as execuções diárias
 // (mesmo ritmo do CEF). NUNCA lança — enriquece em memória; se um lote falhar, ele
 // segue com o que já tinha e o scrape/salvamento continua normalmente.
+// Extrai o VALOR DE AVALIAÇÃO da página de detalhe quando o card de listagem NÃO o traz
+// (ex.: GrupoLance, 100% judicial — a avaliação só aparece no detalhe). Pega o maior
+// "avaliação ... R$ X" e só aceita valor PLAUSÍVEL (>= lance mínimo, < R$100mi) para não
+// corromper o desconto. REGRA APRENDIDA: card de leilão nem sempre tem a avaliação.
+function extrairAvaliacaoDetalhe(html, valorMinimo = 0) {
+  if (!html) return 0;
+  const txt = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  let melhor = 0;
+  for (const m of txt.matchAll(/avalia[çc][aã]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi)) {
+    const v = parseBRL(m[1]);
+    if (v > melhor) melhor = v;
+  }
+  const min = Number(valorMinimo) || 0;
+  if (melhor >= 1000 && melhor < 100_000_000 && (min === 0 || melhor >= min)) return melhor;
+  return 0;
+}
+
 async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineMs = 8 * 60 * 1000 } = {}) {
   const alvos = (imoveis || []).filter(im => {
     const url = im.url_lote || im.link_edital;
     const jaTem = im.link_matricula || (Array.isArray(im.anexos) && im.anexos.length);
-    return url && /^https?:\/\//.test(url) && !jaTem;
+    // Também re-visita lotes SEM avaliação (o valor está no detalhe, não no card) —
+    // assim o desconto deixa de sair zerado (ex.: GrupoLance judicial).
+    const precisaAval = (Number(im.valor_avaliacao) || 0) <= 0;
+    return url && /^https?:\/\//.test(url) && (!jaTem || precisaAval);
   }).slice(0, cap);
   if (!alvos.length) return 0;
 
@@ -2576,6 +2596,12 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
       try {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
         const html = await page.content(); // DOM RENDERIZADO (docs montados por JS aparecem aqui)
+        // Preenche a AVALIAÇÃO faltante a partir do detalhe (salvarEFinalizar recalcula o
+        // desconto/score). Piggyback nesta visita — sem page-load extra.
+        if ((Number(im.valor_avaliacao) || 0) <= 0) {
+          const aval = extrairAvaliacaoDetalhe(html, Number(im.valor_minimo) || 0);
+          if (aval > 0) { im.valor_avaliacao = aval; enr++; }
+        }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);
         const achouAlgo = docs.matricula || docs.laudo || (Array.isArray(docs.anexos) && docs.anexos.length);
         if (achouAlgo) {

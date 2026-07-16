@@ -264,8 +264,13 @@ Meta: o máximo possível — idealmente 8+ amostras de venda e 5+ de locação.
 Busque o máximo de anúncios similares (mesmo tipo) no bairro e adjacências (raio ~1km).
 Meta: o máximo possível — idealmente 15+ amostras de venda e 8+ de locação.
 
-FONTES: ZAP Imóveis, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão,
-Net Imóveis, DF Imóveis, anúncios diretos de imobiliárias. Cruze várias fontes.
+FONTES (grandes portais): ZAP Imóveis, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i,
+Chaves na Mão, Net Imóveis, DF Imóveis. Cruze várias fontes.
+FONTES LOCAIS (OBRIGATÓRIO — frequentemente MAIS confiáveis): busque também ANÚNCIOS DE
+IMOBILIÁRIAS DA PRÓPRIA CIDADE (pesquise "imobiliária <cidade>", "imóveis à venda <cidade>"
+e abra os sites das imobiliárias locais). Os anúncios locais costumam refletir melhor o preço
+praticado na praça e podem ser COMPLEMENTARES ou DECISIVOS na composição do valor — inclua
+essas amostras com "fonte" = nome da imobiliária local e dê peso ao menos igual ao dos portais.
 
 DATA DO ANÚNCIO: para CADA amostra, capture a data do anúncio no campo "data"
 (formato "AAAA-MM"; se a fonte só indicar o mês/ano, use-o; se não houver data,
