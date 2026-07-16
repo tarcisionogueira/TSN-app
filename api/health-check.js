@@ -112,6 +112,20 @@ export default async function handler(req) {
     return { status: 'aviso', detalhe: `${presos.length} chamado(s) aberto(s) há +7 dias — REVISAR na aba Suporte (não fecho sozinho; mais antigo: ${antigo}).` };
   }));
 
+  // ── 3b. Anomalias detectadas ao gerar RELATÓRIOS (o agente que aprende sinaliza) ──
+  // Ex.: avaliação ausente no leiloeiro (desconto sai zerado), CNJ sem retorno no
+  // documental. Só SINALIZA para revisão — não gera relatório (custo zero).
+  itens.push(await check('Relatórios — anomalias detectadas', async () => {
+    const r = await sb(`relatorio_anomalias?select=tipo,fonte&resolvido=eq.false&limit=200`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const an = await r.json();
+    if (!Array.isArray(an) || an.length === 0) return { status: 'ok', detalhe: 'Nenhuma anomalia em relatórios' };
+    const porTipo = {};
+    for (const a of an) porTipo[a.tipo] = (porTipo[a.tipo] || 0) + 1;
+    const resumo = Object.entries(porTipo).sort((x, y) => y[1] - x[1]).map(([t, n]) => `${t}: ${n}`).join(' · ');
+    return { status: 'aviso', detalhe: `${an.length} anomalia(s) em relatórios — ${resumo}. Revisar (o gerador de relatório sinalizou automaticamente).` };
+  }));
+
   // ── 4. Supabase: clientes/leads sem consultor há >3 dias ──
   itens.push(await check('Comercial — clientes sem consultor', async () => {
     const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();

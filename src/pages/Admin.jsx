@@ -4081,17 +4081,10 @@ function DashboardTab() {
     setAcaoStatus(s => ({ ...s, [label]: 'executando' }));
     try {
       if (acao === 'liberar_chamados_presos') {
-        const limite = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-        const { data: presos } = await supabase.from('chamados').select('id').eq('status', 'aberto').lt('criado_em', limite);
-        if (!presos?.length) { setAcaoStatus(s => ({ ...s, [label]: 'nenhum chamado preso' })); return; }
-        // Confirmação: chamados abertos são reclamações REAIS — revisar antes de fechar em lote.
-        if (!window.confirm(`Finalizar ${presos.length} chamado(s) aberto(s) há +7 dias? São reclamações reais de clientes — revise na aba Suporte antes. Confirmar o fechamento em lote?`)) {
-          setAcaoStatus(s => ({ ...s, [label]: '' })); return;
-        }
-        const ids = presos.map(c => c.id);
-        // Sem obs_interna (coluna inexistente) — a versão antiga falhava calada e mentia "ok".
-        const { error } = await supabase.from('chamados').update({ status: 'finalizado', atualizado_em: new Date().toISOString() }).in('id', ids);
-        setAcaoStatus(s => ({ ...s, [label]: error ? `erro: ${error.message}` : `ok — ${ids.length} chamado(s) finalizados` }));
+        // O certo NÃO é fechar em lote (esconde reclamação real): o admin deve VER e
+        // RESPONDER. Abre a aba Suporte, onde vê todas as mensagens e responde.
+        window.location.hash = '#/atendimento';
+        setAcaoStatus(s => ({ ...s, [label]: 'abrindo Suporte…' }));
       } else if (acao === 'rodar_health') {
         await rodarHealthCheck();
         setAcaoStatus(s => ({ ...s, [label]: 'ok — executado' }));
@@ -4158,7 +4151,7 @@ function DashboardTab() {
                     <button onClick={() => executarAcao(labelAcao, item.nome)}
                       disabled={acaoStatus[item.nome] === 'executando'}
                       style={{ fontSize: 11, padding: '4px 12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, width: '100%' }}>
-                      {acaoStatus[item.nome] === 'executando' ? 'Executando…' : acaoStatus[item.nome] ? acaoStatus[item.nome] : item.nome === 'Supabase — chamados presos' ? '▶ Liberar chamados presos' : '▶ Ver leads sem consultor'}
+                      {acaoStatus[item.nome] === 'executando' ? 'Executando…' : acaoStatus[item.nome] ? acaoStatus[item.nome] : item.nome === 'Supabase — chamados presos' ? '▶ Ver na aba Suporte' : '▶ Ver leads sem consultor'}
                     </button>
                   )}
                 </div>

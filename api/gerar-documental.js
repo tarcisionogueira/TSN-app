@@ -30,6 +30,16 @@ function sb(path, opts = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
+// O agente que aprende com os relatórios SINALIZA anomalias (ex.: CNJ sem retorno) para a
+// verificação de saúde — sem custo, sem gerar relatório. Idempotente por (tipo, imóvel).
+async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
+  try {
+    await sb('rpc/registrar_anomalia_relatorio', {
+      method: 'POST',
+      body: JSON.stringify({ p_tipo: tipo, p_fonte: fonte || '', p_imovel_id: String(imovelId || ''), p_campo: campo || '', p_detalhe: detalhe || '' }),
+    });
+  } catch { /* nunca bloqueia o relatório */ }
+}
 async function upsertDoc(row) {
   await sb('analises_documental?on_conflict=user_id,imovel_id', {
     method: 'POST',
@@ -827,6 +837,12 @@ export default async function handler(req, res) {
         execDoc = String(passivo.documento).replace(/\D/g, ''); ex.executadoDoc = execDoc; docOk = true;
         if (!execNome && passivo.nome) { execNome = passivo.nome; ex.executadoNome = passivo.nome; }
       }
+    }
+    // Anomalia (aprendizado): esperava-se processo no CNJ (lote judicial, ou com nº/parte)
+    // mas a consulta voltou VAZIA — sinaliza p/ a saúde do sistema revisar (token/fonte/nº).
+    const esperavaCNJ = /judicial/i.test(im.modalidade || '') || !!procNum || (execNome && execNome.length >= 6);
+    if (esperavaCNJ && !(cnj && cnj.total)) {
+      registrarAnomalia('cnj_vazio', im.fonte, imovelId, 'cnj', `CNJ sem retorno (modalidade=${im.modalidade || '?'}, proc=${procNum || ex.numeroProcesso || '-'}).`).catch(() => {});
     }
     const procFontes = procNum || ex.numeroProcesso || (cnj?.processos?.[0]?.numero) || null;
     let fontesTxt = '', fontesExternas = null;

@@ -45,6 +45,62 @@ export function parseJSON(text) {
   if (obj) { try { return JSON.parse(obj[0]); } catch {} }
   return null;
 }
+
+// O agente que aprende com os relatórios SINALIZA anomalias (o gerador achou algo errado
+// nos dados) para a verificação de saúde — sem custo, sem gerar relatório.
+async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
+  try {
+    await sb('rpc/registrar_anomalia_relatorio', {
+      method: 'POST',
+      body: JSON.stringify({ p_tipo: tipo, p_fonte: fonte || '', p_imovel_id: String(imovelId || ''), p_campo: campo || '', p_detalhe: detalhe || '' }),
+    });
+  } catch { /* nunca bloqueia o relatório */ }
+}
+
+// Correção SOB DEMANDA da avaliação (só quando um relatório é pedido — sem varredura em
+// massa): alguns leiloeiros (ex.: GrupoLance judicial) não trazem a avaliação no card, só
+// no detalhe. Busca no detalhe agora, corrige no banco (com desconto/score) e, se não
+// achar, SINALIZA a anomalia p/ a saúde. Retorna a avaliação (0 se não obteve).
+async function garantirAvaliacao(imovelId) {
+  let im = null;
+  try {
+    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,url_lote,link_edital,valor_avaliacao,valor_minimo&limit=1`)).json();
+    im = Array.isArray(rows) ? rows[0] : null;
+  } catch { return 0; }
+  if (!im) return 0;
+  if ((Number(im.valor_avaliacao) || 0) > 0) return Number(im.valor_avaliacao);
+  const url = im.url_lote || im.link_edital;
+  const min = Number(im.valor_minimo) || 0;
+  let aval = 0;
+  if (url && /^https?:\/\//.test(url)) {
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(15000) });
+      if (r.ok) {
+        const txt = (await r.text()).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+        let melhor = 0;
+        for (const m of txt.matchAll(/avalia[çc][aã]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi)) {
+          const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.')) || 0;
+          if (v > melhor) melhor = v;
+        }
+        if (melhor >= 1000 && melhor < 100_000_000 && (min === 0 || melhor >= min)) aval = melhor;
+      }
+    } catch { /* segue */ }
+  }
+  if (aval > 0) {
+    await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, {
+      method: 'PATCH', headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        valor_avaliacao: aval,
+        desconto_percentual: min > 0 ? Math.round((1 - min / aval) * 100) : null,
+        viavel: min > 0 ? (1 - min / aval) >= 0.3 : null,
+        score_viabilidade: min > 0 ? Math.min(100, Math.round((1 - min / aval) * 150)) : 30,
+      }),
+    });
+    return aval;
+  }
+  await registrarAnomalia('avaliacao_ausente', im.fonte, imovelId, 'valor_avaliacao', `Avaliação não encontrada no detalhe (${url || 'sem url'}).`);
+  return 0;
+}
 // Pesquisa de mercado recente do MESMO imóvel (de qualquer usuário). Reaproveitada
 // para não refazer a busca cara a cada pedido — só a data é renovada. O laudo
 // (parecer) continua sendo gerado por pedido, pois depende do lance/cenário de cada um.
@@ -265,6 +321,10 @@ export default async function handler(req, res) {
       }
     }
   } catch { /* checagem de cota nunca bloqueia quem tem direito */ }
+
+  // Correção sob demanda: garante a avaliação (ex.: GrupoLance) ANTES de gerar — assim o
+  // desconto/score do imóvel deixam de sair zerados; se não obtiver, sinaliza a anomalia.
+  try { await garantirAvaliacao(String(imovelId)); } catch { /* nunca bloqueia o relatório */ }
 
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
