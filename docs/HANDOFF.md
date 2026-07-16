@@ -37,8 +37,14 @@
 **PR aberto:** #126 (branch `claude/bidpro-brasil-health-diagnostics-y6cupy` → main) com o guard "só Brasil" do scraper + todas as migrações de RLS + detector de saúde.
 
 **Loop de aprendizado (combinado com o dono) — EM ANDAMENTO:**
-- ✅ **Aprender na emissão — MERCADOLÓGICO feito.** Migração `agente_aprendizado_emissao.sql` (tabela unificada `agente_aprendizado`, durável e separada de `analises_*` — validado: 0 FK, fora da RPC de limpeza). `gerar-analise.js`: `aprenderNaEmissao()` grava corpus (avaliação/mínimo/desconto do scraper + preço m²/aluguel/FipeZAP da pesquisa) + qualidade ao concluir, POISON-RESISTENTE (nunca guarda valor derivado de input do usuário); `corpusDaRegiao()` realimenta o prompt com o corpus da mesma região/tipo (fecha o loop, sem IA).
-- ⏳ **Falta:** replicar `aprenderNaEmissao` em `gerar-documental.js` e `gerar-laudo-viabilidade.js`; **moderador supervisiona** cada agente (frescor/volume em `agente_aprendizado`); **auto-refazer** o relatório ao corrigir anomalia crítica (dedupe, econômico).
+- ✅ **Aprender na emissão — TODOS os 3 relatórios.** Tabela unificada `agente_aprendizado` (durável, separada de `analises_*` — validado: 0 FK, fora da RPC de limpeza). Módulo compartilhado `api/_aprendizado.js` (`aprenderNaEmissao` + `vicioRegen`). Cada gerador grava, ao concluir, corpus + qualidade/vícios, POISON-RESISTENTE (nunca valor derivado de input do usuário):
+  - `gerar-analise.js` (mercado): avaliação/mínimo/desconto + preço m²/aluguel/FipeZAP; `corpusDaRegiao()` realimenta o prompt (fecha o loop, sem IA).
+  - `gerar-documental.js`: CNJ consultado, matrícula/edital lidos, nº riscos + vícios (matricula_nao_lida, cnj_nao_consultado, modalidade_indefinida…).
+  - `gerar-laudo-viabilidade.js`: usa o próprio `controleQualidade` (recomendaRevisao/contradições/lacunas) como vício.
+- ✅ **Apontamento para regerar:** colunas `regen_motivo`/`regen_em`/`regen_tentativas` nos 3 relatórios; documental e laudo já gravam `regen_motivo` na emissão (mercado grava via `vicioRegen` do módulo — falta plugar 1 linha no upsert dele).
+- ⏳ **Falta (próximo bloco):**
+  1. **Execução da regeração** (`api/regenerar-relatorios-cron.js` + entrada no `vercel.json`): pega `regen_motivo != null` com `regen_tentativas < 3` (economia), re-dispara a geração; se a causa-raiz foi resolvida, o vício some. **Pré-requisito:** só `gerar-documental` tem bypass de cron (`x-cron-secret`); é preciso adicioná-lo a `gerar-analise` e `gerar-laudo-viabilidade` (espelhar `gerar-documental.js` linhas ~394-402) — `getUser` não aceita cron-secret.
+  2. **Moderador supervisiona** cada agente: estender `moderador-cron` p/ ler `agente_aprendizado` (frescor/volume por agente, vícios recorrentes, regens pendentes) e apontar quem não aprende.
 
 ## 🆕 Sessão 15–16/07/2026 — o que mudou (tudo em `main`)
 > Branch de dev desta sessão: **`claude/document-inventory-validation-bstmk5`** (mesclada em `main`).
