@@ -131,6 +131,21 @@ export default async function handler(req) {
     };
   }));
 
+  // ── 3c. Uso — gaps de RLS que quebram a AÇÃO do usuário (proativo) ──
+  // Detecta a classe do bug "new row violates row-level security policy": tabela de
+  // dados do usuário (com coluna de dono) com RLS ligada mas SEM política de escrita
+  // para ele — só admin ou nenhuma. Pega a regressão ANTES de o usuário topar com o
+  // erro. Cobre AUTOMATICAMENTE qualquer tabela nova (RPC auditoria_uso no banco).
+  itens.push(await check('Uso — RLS de escrita do usuário', async () => {
+    const r = await sb('rpc/auditoria_uso', { method: 'POST', body: '{}' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const total = d?.total || 0;
+    if (total === 0) return { status: 'ok', detalhe: 'Nenhuma tabela de usuário sem política de escrita' };
+    const lista = (d.gaps || []).map(g => `${g.tabela}(${g.coluna_dono})`).join(', ');
+    return { status: 'aviso', detalhe: `${total} tabela(s) com RLS mas SEM escrita do usuário — pode quebrar o uso: ${lista}. Adicionar política de INSERT/UPDATE do dono (ou incluir na allowlist se for só-servidor).` };
+  }));
+
   // ── 4. Supabase: clientes/leads sem consultor há >3 dias ──
   itens.push(await check('Comercial — clientes sem consultor', async () => {
     const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
