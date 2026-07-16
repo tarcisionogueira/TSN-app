@@ -36,7 +36,9 @@
 
 **PR aberto:** #126 (branch `claude/bidpro-brasil-health-diagnostics-y6cupy` → main) com o guard "só Brasil" do scraper + todas as migrações de RLS + detector de saúde.
 
-**PENDENTE (loop de aprendizado — combinado com o dono):** unificar aprendizado dos agentes (2·5·6·7·8) num loop: **aprender na emissão** de cada relatório (corpus + sinais de qualidade — mesmo só o mercadológico), lição **durável** (já sobrevive à exclusão do relatório — `limpar-analises-cron` não toca nas tabelas `*_aprendizado`), **auto-refazer** o relatório ao corrigir um erro, e **moderador supervisiona** cada agente. Desenhar econômico (sem chamada de IA extra na emissão).
+**Loop de aprendizado (combinado com o dono) — EM ANDAMENTO:**
+- ✅ **Aprender na emissão — MERCADOLÓGICO feito.** Migração `agente_aprendizado_emissao.sql` (tabela unificada `agente_aprendizado`, durável e separada de `analises_*` — validado: 0 FK, fora da RPC de limpeza). `gerar-analise.js`: `aprenderNaEmissao()` grava corpus (avaliação/mínimo/desconto do scraper + preço m²/aluguel/FipeZAP da pesquisa) + qualidade ao concluir, POISON-RESISTENTE (nunca guarda valor derivado de input do usuário); `corpusDaRegiao()` realimenta o prompt com o corpus da mesma região/tipo (fecha o loop, sem IA).
+- ⏳ **Falta:** replicar `aprenderNaEmissao` em `gerar-documental.js` e `gerar-laudo-viabilidade.js`; **moderador supervisiona** cada agente (frescor/volume em `agente_aprendizado`); **auto-refazer** o relatório ao corrigir anomalia crítica (dedupe, econômico).
 
 ## 🆕 Sessão 15–16/07/2026 — o que mudou (tudo em `main`)
 > Branch de dev desta sessão: **`claude/document-inventory-validation-bstmk5`** (mesclada em `main`).
