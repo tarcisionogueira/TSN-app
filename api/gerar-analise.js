@@ -57,6 +57,59 @@ async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
   } catch { /* nunca bloqueia o relatório */ }
 }
 
+// APRENDER NA EMISSÃO: ao emitir o relatório, grava uma lição DURÁVEL (corpus + sinais de
+// qualidade) em agente_aprendizado — SEM chamada de IA extra (custo zero). Sobrevive à
+// exclusão do relatório (tabela separada de analises_*). Guarda só dado POISON-RESISTENTE:
+// valores do imóvel (scraper) e da pesquisa (servidor) — nunca derivados de input do
+// usuário (ex.: valorMercado depende de areaM2 do cliente), p/ não envenenar o coletivo.
+async function aprenderNaEmissao(imovel, mercado, temParecer) {
+  try {
+    const aval = Number(imovel?.valor_avaliacao) || null;
+    const min  = Number(imovel?.valor_minimo) || null;
+    const nAmostras = mercado?.amostras?.length || mercado?.comparaveis?.length || mercado?.anuncios?.length || 0;
+    const precoM2 = Number(mercado?.precoMedioM2) || null;
+    const corpus = {
+      valor_avaliacao: aval, valor_minimo: min,
+      desconto_pct: (aval > 0 && min > 0) ? Math.round((1 - min / aval) * 100) : null,
+      preco_medio_m2: precoM2,
+      aluguel_medio: Number(mercado?.aluguelMedio) || null,
+      fipe_zap_m2: Number(mercado?.referenciaFipeZap?.precoMedioM2) || null,
+      n_amostras: nAmostras,
+    };
+    const qualidade = {
+      avaliacao_ausente: !(aval > 0),
+      minimo_ausente: !(min > 0),
+      mercado_vazio: !(precoM2 > 0) && nAmostras === 0,
+      sem_parecer: !temParecer,
+    };
+    await sb('agente_aprendizado', {
+      method: 'POST', headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        agente: 'mercadologico', imovel_id: String(imovel?.id || ''),
+        cidade: imovel?.cidade || null, uf: imovel?.estado || null,
+        tipo: imovel?.tipo || null, modalidade: imovel?.modalidade || null,
+        corpus, qualidade,
+      }),
+    });
+  } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
+}
+
+// Corpus coletivo (emissões anteriores) da MESMA região/tipo, como referência
+// observacional no prompt. Só valores poison-resistentes (pesquisa/scraper). Custo: 1 SELECT.
+async function corpusDaRegiao(uf, tipo) {
+  try {
+    if (!uf || !tipo) return '';
+    const rows = await (await sb(`agente_aprendizado?agente=eq.mercadologico&uf=eq.${encodeURIComponent(uf)}&tipo=eq.${encodeURIComponent(tipo)}&select=corpus&order=criado_em.desc&limit=40`)).json();
+    if (!Array.isArray(rows)) return '';
+    const m2 = rows.map(r => Number(r?.corpus?.preco_medio_m2)).filter(v => v > 0);
+    if (m2.length < 3) return '';
+    const desc = rows.map(r => Number(r?.corpus?.desconto_pct)).filter(v => v >= 0);
+    const med = Math.round(m2.reduce((a, b) => a + b, 0) / m2.length);
+    const descMed = desc.length ? Math.round(desc.reduce((a, b) => a + b, 0) / desc.length) : null;
+    return `\n\nCORPUS DA REGIÃO (${tipo} em ${uf}, ${m2.length} análises recentes, referência OBSERVACIONAL): preço médio observado ~R$ ${med}/m²${descMed != null ? `, desconto médio ~${descMed}%` : ''}. Use como sanity-check, nunca como verdade absoluta.`;
+  } catch { return ''; }
+}
+
 // Confirmação SOB DEMANDA de VALORES no detalhe/edital (só quando um relatório é pedido —
 // sem varredura em massa). Cobre dois casos:
 //  - AVALIAÇÃO ausente (ex.: GrupoLance judicial — só vem no detalhe);
@@ -416,6 +469,8 @@ export default async function handler(req, res) {
         } catch { /* aprendizado é best-effort */ }
         // Calibração por ARREMATES REAIS (previsto×realizado, por modalidade).
         try { aprendizadoMercado += await resumoAprendizadoTexto(imovel?.modalidade || null); } catch { /* best-effort */ }
+        // Corpus coletivo da MESMA região/tipo (aprendizado das emissões anteriores).
+        try { aprendizadoMercado += await corpusDaRegiao(imovel?.estado || null, imovel?.tipo || null); } catch { /* best-effort */ }
         const pData = await anthropic({
           model: MODEL, max_tokens: 8000,
           system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado,
@@ -435,6 +490,8 @@ export default async function handler(req, res) {
     })()]);
 
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
+    // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
+    await aprenderNaEmissao(imovel, mercado, !!parecer);
 
     // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.
     // roi (parecerInputs.metricas) e areaM2 (mercadoInputs) vêm do CLIENTE e são
