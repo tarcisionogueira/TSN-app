@@ -123,7 +123,12 @@ export default async function handler(req) {
     const porTipo = {};
     for (const a of an) porTipo[a.tipo] = (porTipo[a.tipo] || 0) + 1;
     const resumo = Object.entries(porTipo).sort((x, y) => y[1] - x[1]).map(([t, n]) => `${t}: ${n}`).join(' · ');
-    return { status: 'aviso', detalhe: `${an.length} anomalia(s) em relatórios — ${resumo}. Revisar (o gerador de relatório sinalizou automaticamente).` };
+    // Valor sentinela (ex.: R$999.999.999) é FALHA CRÍTICA de confiabilidade — escala p/ erro.
+    const critico = !!porTipo['valor_sentinela'];
+    return {
+      status: critico ? 'erro' : 'aviso',
+      detalhe: `${an.length} anomalia(s) — ${resumo}.${critico ? ' CRÍTICO: valor sentinela — confirmar o valor no edital antes de exibir.' : ' Revisar (sinalizado automaticamente pelo gerador).'}`,
+    };
   }));
 
   // ── 4. Supabase: clientes/leads sem consultor há >3 dias ──

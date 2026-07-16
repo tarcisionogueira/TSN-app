@@ -58,7 +58,23 @@ function parseBRL(str) {
   return parseFloat(String(str).replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.').trim()) || 0;
 }
 
+// Só imóveis do BRASIL (legislação) e sem valores placeholder. UFs válidas do país:
+const UFS_BR = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
+// UF vazia é tolerada (lote BR sem UF extraída — backfill à parte); UF preenchida tem de
+// ser brasileira. Descarta estrangeiro (Peru/Paraguai/Argentina) e estado corrompido.
+const ehBRouSemUF = (uf) => { const u = String(uf || '').trim().toUpperCase(); return u === '' || UFS_BR.has(u); };
+// Sentinela de preço: placeholder que alguns scrapers gravam quando NÃO leram o valor.
+// NUNCA armazenar — mostrar R$999.999.999 é falha crítica e perde confiabilidade. Anula
+// (o lote fica "sem lance" até o valor ser confirmado no edital).
+const SENTINELAS_VALOR = new Set([999999999, 99999999, 9999999999, 111111111, 123456789]);
+const semSentinela = (v) => (SENTINELAS_VALOR.has(Number(v)) ? null : v);
+
 async function salvarImoveis(imoveis, fonte) {
+  if (!imoveis.length) return;
+  // Guarda 1: só BRASIL. Descarta estrangeiros / estado inválido ANTES de salvar.
+  const totalBruto = imoveis.length;
+  imoveis = imoveis.filter(im => ehBRouSemUF(im.estado));
+  if (imoveis.length < totalBruto) console.log(`  [${fonte}] ${totalBruto - imoveis.length} lote(s) descartado(s) — fora do Brasil / estado inválido.`);
   if (!imoveis.length) return;
 
   // MESCLAGEM de documentos (fix de raiz): o upsert por fonte_id sobrescreve a linha
@@ -80,16 +96,20 @@ async function salvarImoveis(imoveis, fonte) {
   }
 
   const rows = imoveis.map(im => {
+    // Guarda 2: anula valores sentinela (placeholder) — nunca vira preço exibido.
+    const vMin = semSentinela(im.valor_minimo);
+    const vAval = semSentinela(im.valor_avaliacao);
+    // Desconto/viabilidade SÓ com os dois valores presentes (>0). Sem isto, mínimo nulo
+    // com avaliação preenchida virava "100% de desconto" (falso).
+    const temPar = Number(vAval) > 0 && Number(vMin) > 0;
     const row = {
       ...im,
+      valor_minimo: vMin,
+      valor_avaliacao: vAval,
       ativo: true, // coletado agora ⇒ está ativo (reativa lotes que voltaram)
-      viavel: im.valor_avaliacao > 0 ? (1 - im.valor_minimo / im.valor_avaliacao) >= 0.3 : null,
-      score_viabilidade: im.valor_avaliacao > 0
-        ? Math.min(100, Math.round((1 - im.valor_minimo / im.valor_avaliacao) * 150))
-        : 30,
-      desconto_percentual: im.valor_avaliacao > 0
-        ? Math.round((1 - im.valor_minimo / im.valor_avaliacao) * 100)
-        : null,
+      viavel: temPar ? (1 - vMin / vAval) >= 0.3 : null,
+      score_viabilidade: temPar ? Math.min(100, Math.round((1 - vMin / vAval) * 150)) : 30,
+      desconto_percentual: temPar ? Math.round((1 - vMin / vAval) * 100) : null,
       atualizado_em: new Date().toISOString(),
     };
     const prev = im.fonte_id ? existentes.get(im.fonte_id) : null;
