@@ -42,9 +42,10 @@
   - `gerar-documental.js`: CNJ consultado, matrícula/edital lidos, nº riscos + vícios (matricula_nao_lida, cnj_nao_consultado, modalidade_indefinida…).
   - `gerar-laudo-viabilidade.js`: usa o próprio `controleQualidade` (recomendaRevisao/contradições/lacunas) como vício.
 - ✅ **Apontamento para regerar:** colunas `regen_motivo`/`regen_em`/`regen_tentativas` nos 3 relatórios; documental e laudo já gravam `regen_motivo` na emissão (mercado grava via `vicioRegen` do módulo — falta plugar 1 linha no upsert dele).
-- ⏳ **Falta (próximo bloco):**
-  1. **Execução da regeração** (`api/regenerar-relatorios-cron.js` + entrada no `vercel.json`): pega `regen_motivo != null` com `regen_tentativas < 3` (economia), re-dispara a geração; se a causa-raiz foi resolvida, o vício some. **Pré-requisito:** só `gerar-documental` tem bypass de cron (`x-cron-secret`); é preciso adicioná-lo a `gerar-analise` e `gerar-laudo-viabilidade` (espelhar `gerar-documental.js` linhas ~394-402) — `getUser` não aceita cron-secret.
-  2. **Moderador supervisiona** cada agente: estender `moderador-cron` p/ ler `agente_aprendizado` (frescor/volume por agente, vícios recorrentes, regens pendentes) e apontar quem não aprende.
+- ✅ **Execução da regeração — FEITO.** Bypass de cron (`x-cron-secret`) aditivo em `gerar-analise` e `gerar-laudo` (espelha o documental; caminho do usuário intocado; cron pula getUser/gate/cota). `api/regenerar-relatorios-cron.js` (a cada 6h, registrado no `vercel.json`): pega `regen_motivo != null` com `regen_tentativas < 3`, incrementa a tentativa ANTES de disparar e re-dispara a geração (fire-and-forget). Travas de economia: teto 3, lote 2/tipo, assentamento 2h, corte 72h. Escopo documental+laudo (mercado se auto-corrige no `garantirValores`). Validado: 0 elegíveis agora (seguro).
+- ✅ **Moderador supervisiona — FEITO.** RPC `moderador_supervisao_aprendizado()` (determinística, zero IA) escreve insights em `moderador_insights` (agentes parados >14d, regens pendentes, volume 7/30d por agente); `moderador-cron` (semanal) já chama e envia no relatório. Testado.
+
+**LOOP DE APRENDIZADO COMPLETO** (emissão→aprende nos 3 · vício→aponta→regenera→aprende o erro · moderador supervisiona). Tudo no PR #126.
 
 ## 🆕 Sessão 15–16/07/2026 — o que mudou (tudo em `main`)
 > Branch de dev desta sessão: **`claude/document-inventory-validation-bstmk5`** (mesclada em `main`).
