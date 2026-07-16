@@ -13,6 +13,7 @@ export const config = { runtime: 'nodejs', maxDuration: 180 };
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
+import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -257,7 +258,18 @@ export default async function handler(req, res) {
     return result;
     })()]);
 
-    await upsertLaudo({ ...baseRow, status: 'concluida', erro: null, result });
+    // APRENDER NA EMISSÃO (durável, sem IA): o próprio controleQualidade do laudo já
+    // sinaliza vícios (revisão/contradição/lacuna) → aprende e aponta regeração.
+    const cq = result.controleQualidade || {};
+    const qualLaudo = {
+      recomenda_revisao: !!cq.recomendaRevisao,
+      tem_contradicoes: Array.isArray(cq.contradicoes) && cq.contradicoes.length > 0,
+      tem_lacunas_criticas: Array.isArray(cq.lacunasCriticas) && cq.lacunasCriticas.length > 0,
+    };
+    await upsertLaudo({ ...baseRow, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualLaudo), regen_em: new Date().toISOString() });
+    await aprenderNaEmissao(sb, { agente: 'laudo', imovel: { id: imovelId, cidade: im.cidade, estado: im.estado, tipo: im.tipo, modalidade: imovel?.modalidade },
+      corpus: { veredito: result.veredito, confianca_mercado: cq.confiancaMercadologico ?? null, confianca_documental: cq.confiancaDocumental ?? null },
+      qualidade: qualLaudo });
     // Com os 3 relatórios prontos, atualiza o corpus previsto×realizado deste arremate
     // (no-op se não for um arremate atribuído). Best-effort, não bloqueia a resposta.
     try { await recalcularArremate(String(imovelId)); } catch { /* best-effort */ }

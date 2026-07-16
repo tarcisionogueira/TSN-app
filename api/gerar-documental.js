@@ -13,6 +13,7 @@ import { fetchViaBrightData } from './_brightdata.js';
 import { capturarDocsLoginOnDemand } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
 import { buscarProcessosCNJ } from './_cnj.js';
+import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
@@ -1062,7 +1063,17 @@ export default async function handler(req, res) {
       raioX: parsed.raioX || null,
       geradoEm: new Date().toISOString(),
     };
-    await upsertDoc({ ...base, status: 'concluida', erro: null, result });
+    // APRENDER NA EMISSÃO (durável, sem IA) + apontar regeração se houver vício.
+    const qualDoc = {
+      matricula_nao_lida: !da.matricula,
+      edital_nao_lido: !da.edital,
+      cnj_nao_consultado: !!(procNum || procNome) && !temProc,
+      modalidade_indefinida: !im.modalidade,
+    };
+    await upsertDoc({ ...base, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualDoc), regen_em: new Date().toISOString() });
+    await aprenderNaEmissao(sb, { agente: 'documental', imovel: { id: imovelId, cidade: row?.cidade, estado: row?.estado, tipo: row?.tipo, modalidade: im.modalidade },
+      corpus: { tem_cnj: temProc, n_processos: cnj?.total || 0, matricula_lida: !!da.matricula, edital_lido: !!da.edital, n_riscos: (result.riscos || []).length },
+      qualidade: qualDoc });
 
     // Alimenta a camada JURÍDICO do Score BidPro no acervo (antes ficava 0/acervo:
     // só o fluxo staff gravava). Deriva 0–100 do nível de risco + severidade dos
