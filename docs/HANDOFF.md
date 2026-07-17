@@ -10,8 +10,20 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🆕 Sessão 17/07/2026 — Merge do #126 + rede anti-recorrência (saúde/segurança)
+> Branch de dev: **`claude/bidprobrasil-handoff-diagnostics-lqttm2`**. Banco aplicado via MCP; código em PR novo → `main`.
+
+- **PR #126 MESCLADO em `main`** (deploy de produção READY) — loop de aprendizado + RLS do fluxo Caso.jsx + detector `auditoria_uso()` agora rodam em produção.
+- **Erros de runtime do cliente → SAÚDE (fecha o furo amplo do "caso Alessandra").** Antes o `log-erro-cliente` só ia para os Runtime Logs (efêmero, invisível à saúde). Agora:
+  - Nova tabela **`erros_cliente`** (dedup por fingerprint = hash de msg+rota normalizadas; recorrência só incrementa `ocorrencias` — não cresce sem limite). Escrita só por service key via RPC `registrar_erro_cliente` (security definer); leitura só admin; sem grant a authenticated (não é flagrada pelo `auditoria_uso`).
+  - `api/log-erro-cliente.js` persiste + resolve `user_id` do assinante (Bearer, best-effort) — liga o erro a quem foi afetado.
+  - **Front captura também erros ASSÍNCRONOS** (`window.onerror`/`unhandledrejection`) via `src/utils/reportarErro.js` (dedup/teto/filtro de ruído), além do ErrorBoundary de render.
+  - `api/health-check.js`: novo item **"Uso — erros de runtime do cliente"** — sinaliza erros não resolvidos nas últimas 24h (auto-limpa quando param), escala p/ ERRO se amplo ou se atinge usuário logado.
+- **Falso-positivo do auditor corrigido.** `auditoria_seguranca()` acusava as triggers anti-escalação (`returns trigger`) como RPC-definer-anon. Adicionada exclusão `p.prorettype <> 'trigger'` — futuro-prova novas triggers protetoras. **Agora `select public.auditoria_seguranca()` = 0 crítico / 0 atenção.**
+- Migrações: `erros_cliente_saude.sql`, `auditoria_seguranca_ignora_triggers.sql`.
+
 ## 🆕 Sessão 16/07/2026 (tarde) — Diagnóstico de saúde + correções
-> Branch de dev desta sessão: **`claude/bidpro-brasil-health-diagnostics-y6cupy`** (ainda NÃO mesclada em `main`).
+> Branch de dev desta sessão: **`claude/bidpro-brasil-health-diagnostics-y6cupy`** (mesclada em `main` em 17/07 — PR #126).
 
 ### 🔚 Encerramento de hoje (resumo p/ a próxima sessão)
 **Estado:** Segurança íntegra (0 crítico / 0 atenção). Saúde: 0 anomalias abertas, 0 gaps de RLS de usuário (`auditoria_uso()` limpo). Tudo abaixo está no **PR #126** (`claude/bidpro-brasil-health-diagnostics-y6cupy` → `main`) e as correções de banco/RLS/detector já valem em produção (aplicadas via MCP).

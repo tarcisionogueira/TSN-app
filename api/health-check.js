@@ -146,6 +146,29 @@ export default async function handler(req) {
     return { status: 'aviso', detalhe: `${total} tabela(s) com RLS mas SEM escrita do usuário — pode quebrar o uso: ${lista}. Adicionar política de INSERT/UPDATE do dono (ou incluir na allowlist se for só-servidor).` };
   }));
 
+  // ── 3d. Uso — erros de runtime do cliente (proativo, além de RLS) ──
+  // ErrorBoundary + handlers globais persistem em erros_cliente (dedup por
+  // fingerprint). Aqui a saúde enxerga QUALQUER quebra que atingiu o usuário nas
+  // últimas 24h — não só a classe RLS. Auto-limpa quando o erro para de ocorrer
+  // (sai da janela de 24h). Escala p/ ERRO se for amplo ou atingir usuário logado.
+  itens.push(await check('Uso — erros de runtime do cliente', async () => {
+    const limite = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const r = await sb(`erros_cliente?select=msg,rota,ocorrencias,user_id&resolvido=eq.false&ultima_em=gte.${limite}&order=ocorrencias.desc&limit=50`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const erros = await r.json();
+    if (!Array.isArray(erros) || erros.length === 0) return { status: 'ok', detalhe: 'Nenhum erro de runtime do cliente nas últimas 24h' };
+    const totalOcorr = erros.reduce((s, e) => s + (e.ocorrencias || 1), 0);
+    const afetaLogado = erros.some(e => e.user_id);
+    const pior = erros[0];
+    // Amplo (muitas ocorrências do mesmo erro) OU atingindo usuário logado = crítico.
+    const critico = (pior?.ocorrencias || 0) >= 25 || (afetaLogado && totalOcorr >= 10);
+    const top = erros.slice(0, 3).map(e => `"${String(e.msg || '').slice(0, 60)}"${e.rota ? ` @${e.rota}` : ''} ×${e.ocorrencias}`).join(' · ');
+    return {
+      status: critico ? 'erro' : 'aviso',
+      detalhe: `${erros.length} erro(s) distinto(s) / ${totalOcorr} ocorrência(s) em 24h${afetaLogado ? ' (afeta usuário logado)' : ''} — ${top}. Investigar em erros_cliente.`,
+    };
+  }));
+
   // ── 4. Supabase: clientes/leads sem consultor há >3 dias ──
   itens.push(await check('Comercial — clientes sem consultor', async () => {
     const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();

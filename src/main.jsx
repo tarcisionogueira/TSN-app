@@ -6,11 +6,17 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import './index.css'
 import { registrarServiceWorker } from './utils/push.js'
+import { reportarErroCliente, instalarCapturaErros } from './utils/reportarErro.js'
 
 // Registra o service worker em produção
 if (import.meta.env.PROD) {
   registrarServiceWorker().catch(() => {});
 }
+
+// Captura erros de runtime ASSÍNCRONOS (window.onerror / unhandledrejection) que o
+// ErrorBoundary de render não pega — para a saúde do sistema enxergar QUALQUER quebra
+// que atinja o usuário, não só a de RLS.
+instalarCapturaErros();
 
 class RootErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -28,20 +34,14 @@ class RootErrorBoundary extends React.Component {
     window.removeEventListener('hashchange', this._reset);
   }
   componentDidCatch(error, info) {
-    // Registra o erro no servidor (Runtime Logs da Vercel) p/ diagnóstico — em
-    // produção o boundary não mostra o stack ao usuário, então sem isso ficamos cegos.
-    try {
-      fetch('/api/log-erro-cliente', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          msg: String(error?.message || error),
-          stack: `${error?.stack || ''}\n--- componentStack ---${info?.componentStack || ''}`,
-          url: typeof location !== 'undefined' ? location.href : '',
-          ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-        }),
-        keepalive: true,
-      }).catch(() => {});
-    } catch { /* ignore */ }
+    // Registra o erro no servidor (persiste em erros_cliente + Runtime Logs) p/ a saúde
+    // enxergar — em produção o boundary não mostra o stack ao usuário, então sem isso
+    // ficamos cegos. Centralizado em reportarErroCliente (dedup/teto/token do usuário).
+    reportarErroCliente({
+      msg: String(error?.message || error),
+      stack: `${error?.stack || ''}\n--- componentStack ---${info?.componentStack || ''}`,
+      url: typeof location !== 'undefined' ? location.href : '',
+    });
   }
   render() {
     if (this.state.error) {
