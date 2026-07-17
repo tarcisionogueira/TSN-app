@@ -10,6 +10,60 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🆕 Sessão 16/07/2026 (tarde) — Diagnóstico de saúde + correções
+> Branch de dev desta sessão: **`claude/bidpro-brasil-health-diagnostics-y6cupy`** (ainda NÃO mesclada em `main`).
+
+### 🔚 Encerramento de hoje (resumo p/ a próxima sessão)
+**Estado:** Segurança íntegra (0 crítico / 0 atenção). Saúde: 0 anomalias abertas, 0 gaps de RLS de usuário (`auditoria_uso()` limpo). Tudo abaixo está no **PR #126** (`claude/bidpro-brasil-health-diagnostics-y6cupy` → `main`) e as correções de banco/RLS/detector já valem em produção (aplicadas via MCP).
+
+**Entregue hoje:**
+1. **Saúde:** sentinela SUPERBID resolvido · 6 estrangeiros SBID9 desativados + guard de raiz no scraper · UF vazia 19→6 · geo (Ibiúna AP→SP, FRAZAO re-enfileirados).
+2. **RLS — auditoria completa do fluxo Caso.jsx:** `casos` (INSERT/UPDATE), `analise_jobs`, `cotas_analise`, `arrematacoes`, `procuracoes`, `analise_juridica` + 2 triggers de proteção (atribuição / honorários). Camada `api/` sem gaps.
+3. **Auditoria de saúde proativa:** RPC `auditoria_uso()` no `health-check` pega a classe do bug antes do usuário.
+4. **Loop de aprendizado COMPLETO:** os 3 relatórios aprendem na emissão (durável, poison-resistente) · vício → aponta → regenera (cron 6h, teto 3, econômico) → aprende o erro · moderador supervisiona (RPC determinística no cron semanal).
+5. **Alessandra:** plano correto (Investidor Pro pago); travava era o RLS, resolvido.
+
+**Pendências (dono / próxima sessão):**
+- [ ] **Aprovar o prompt de permissão** para eu vigiar o PR #126 (inscrição em tempo real + check-in horário) — ficou pendente de aprovação no app.
+- [ ] **Mesclar o PR #126** em `main` quando quiser (deploy Vercel automático).
+- [ ] **Pós-deploy:** o aprender-na-emissão e o cron de regeração só produzem dados após novos relatórios reais — conferir `agente_aprendizado` enchendo e o relatório semanal do moderador.
+- [ ] **PECINI** (validação de captura, do handoff anterior) segue pendente.
+- [ ] *(Opcional)* plugar o `regen_motivo` também no mercado (deixado fora de propósito — vícios de mercado já se auto-corrigem no `garantirValores`).
+
+**Diagnóstico:** Segurança íntegra (`auditoria_seguranca()` = 0 crítico / 0 atenção). O health-check estava em **ERRO crítico** por 3 anomalias `valor_sentinela` abertas.
+
+**Correções (banco + código):**
+- **Health CRÍTICO resolvido:** 3 lotes SUPERBID (Uberaba/Uberlândia/Mairiporã) com `valor_sentinela` — o valor já estava neutralizado (nulo → "sem lance") e o `%` de desconto vem do card SUPERBID (preservado). Marcadas `resolvido=true` em `relatorio_anomalias`. Se o sentinela recorrer, `registrar_anomalia_relatorio` reabre sozinho. **Anomalias abertas: 0.**
+- **Regra "só Brasil" (dado + raiz):** desativei **6 lotes SBID9 do Paraguai** (Asunción, Caaguazú, Paraguarí, Toro Blanco ×3) que entravam com UF vazia. **Fix de raiz** em `scripts/scraper-puppeteer.mjs`: novo guard `ehEstrangeiroSemUF` barra, nas fontes da rede Superbid (SUPERBID/SBID9/SBID21/SOLD), lotes com **UF vazia + cidade que não é município IBGE** (mesma normalização de `api/_geo.js`). Testado (12 casos: Paraguai descartado, BR preservado).
+- **Backfill de UF (HANDOFF passo #3):** 7 lotes (BIASI/LEILOTECH/PESTANA/WEBLEILOES) tinham a UF **no título** mas coluna vazia → preenchi UF+cidade (SP/SC/GO/PR/RS/AP) e re-enfileirei o geocoder. **UF vazia ativa: 19 → 6.**
+- **Geo:** MEGA "Ibiúna" estava com UF **AP** (Ibiúna é **SP**) → corrigido + re-geocode; 3 FRAZAO `geocod_nivel='falhou'` re-enfileirados (`refazer`).
+
+**Residual (sinalizar ao dono):** 6 lotes LEILOTECH (white-label vmleiloes/spencer/bringel) sem cidade parseável — **não adivinhei UF** (foi assim que surgiu o erro Ibiúna/AP). 1 deles é "Escavadeira Komatsu PC200" (equipamento, **não é imóvel**) — candidato a desativar/filtro de tipo.
+
+**Bug de cliente (RLS) — corrigido:** investidora relatou "new row violates row-level security policy for table casos" + "Algo deu errado" ao clicar em **"tenho interesse"** num imóvel. Causa: `casos` só tinha políticas de SELECT (cliente/analista/advogado) + ALL admin; **faltava a política de INSERT do cliente** (provável perda no hardening de RLS de 15/07 — bate com o "tem alguns dias"). O front cria o caso client-side (`src/pages/Caso.jsx` → `insert({ cliente_id: user.id, … })`). Fix: migração `casos_cliente_insert_rls.sql` — `create policy casos_cliente_insert for insert with check (auth.uid() = cliente_id)`. Testado sob RLS (positivo: cria o próprio; negativo: não cria p/ terceiro). **Aplicado no banco.**
+
+**Auditoria RLS completa do fluxo de assessoria (Caso.jsx) — corrigido.** O bug do `casos` era a ponta: TODO o fluxo do Caso.jsx tinha mutações client-side sem política. Migrações aplicadas + no repo:
+- `rls_fluxo_caso_analise.sql`: `analise_jobs` (solicitar análise) e `cotas_analise` (contador) — eram erro visível ao cliente.
+- `rls_fluxo_caso_assessoria.sql`: `casos UPDATE` (participante), `arrematacoes` (arrematante), `procuracoes` (cliente), `analise_juridica` (analista) + **2 triggers de segurança**: `casos_protege_atribuicao` (cliente não reatribui equipe → não vaza o caso) e `arrematacoes_protege_honorarios` (cliente não marca honorários 'distribuido' → sem calote; servidor/gestor livres). Tudo validado sob RLS+trigger.
+- **Camada api/ auditada: SEM gaps** (tudo service key; clients de usuário são só-leitura).
+
+**Auditoria de saúde agora pega essa classe de falha (proativo).** Migração `auditoria_uso_rls_detector.sql`: RPC `auditoria_uso()` acha tabela de dados do usuário com RLS ligada mas SEM política de escrita do dono (o padrão do bug casos), com allowlist das 17 tabelas só-servidor. `api/health-check.js` chama e sinaliza (e-mail ao admin). Roda hoje: **0 gaps**. *(Pendente: captura runtime de erros de cliente — persistir `log-erro-cliente` p/ a saúde ver QUALQUER erro de uso, não só RLS.)*
+
+**Alessandra (investidora):** plano **correto** — `role='top2'` É o "Investidor Pro" (R$49,90, pago 07/07 via MP). `plano='gratuito'` é coluna **legada** (todos os 14 usuários têm; o acesso real é o `role`). O que a travava era só o RLS, já corrigido.
+
+**PR aberto:** #126 (branch `claude/bidpro-brasil-health-diagnostics-y6cupy` → main) com o guard "só Brasil" do scraper + todas as migrações de RLS + detector de saúde.
+
+**Loop de aprendizado (combinado com o dono) — EM ANDAMENTO:**
+- ✅ **Aprender na emissão — TODOS os 3 relatórios.** Tabela unificada `agente_aprendizado` (durável, separada de `analises_*` — validado: 0 FK, fora da RPC de limpeza). Módulo compartilhado `api/_aprendizado.js` (`aprenderNaEmissao` + `vicioRegen`). Cada gerador grava, ao concluir, corpus + qualidade/vícios, POISON-RESISTENTE (nunca valor derivado de input do usuário):
+  - `gerar-analise.js` (mercado): avaliação/mínimo/desconto + preço m²/aluguel/FipeZAP; `corpusDaRegiao()` realimenta o prompt (fecha o loop, sem IA).
+  - `gerar-documental.js`: CNJ consultado, matrícula/edital lidos, nº riscos + vícios (matricula_nao_lida, cnj_nao_consultado, modalidade_indefinida…).
+  - `gerar-laudo-viabilidade.js`: usa o próprio `controleQualidade` (recomendaRevisao/contradições/lacunas) como vício.
+- ✅ **Apontamento para regerar:** colunas `regen_motivo`/`regen_em`/`regen_tentativas` nos 3 relatórios; documental e laudo já gravam `regen_motivo` na emissão (mercado grava via `vicioRegen` do módulo — falta plugar 1 linha no upsert dele).
+- ✅ **Execução da regeração — FEITO.** Bypass de cron (`x-cron-secret`) aditivo em `gerar-analise` e `gerar-laudo` (espelha o documental; caminho do usuário intocado; cron pula getUser/gate/cota). `api/regenerar-relatorios-cron.js` (a cada 6h, registrado no `vercel.json`): pega `regen_motivo != null` com `regen_tentativas < 3`, incrementa a tentativa ANTES de disparar e re-dispara a geração (fire-and-forget). Travas de economia: teto 3, lote 2/tipo, assentamento 2h, corte 72h. Escopo documental+laudo (mercado se auto-corrige no `garantirValores`). Validado: 0 elegíveis agora (seguro).
+- ✅ **Moderador supervisiona — FEITO.** RPC `moderador_supervisao_aprendizado()` (determinística, zero IA) escreve insights em `moderador_insights` (agentes parados >14d, regens pendentes, volume 7/30d por agente); `moderador-cron` (semanal) já chama e envia no relatório. Testado.
+
+**LOOP DE APRENDIZADO COMPLETO** (emissão→aprende nos 3 · vício→aponta→regenera→aprende o erro · moderador supervisiona). Tudo no PR #126.
+
 ## 🆕 Sessão 15–16/07/2026 — o que mudou (tudo em `main`)
 > Branch de dev desta sessão: **`claude/document-inventory-validation-bstmk5`** (mesclada em `main`).
 
