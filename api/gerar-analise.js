@@ -500,7 +500,9 @@ export default async function handler(req, res) {
 
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
-    await aprenderNaEmissao(imovel, mercado, !!parecer);
+    // mercado/parecer vivem DENTRO do Promise.race acima; aqui usamos o result (que os
+    // carrega) para não referenciar variável fora de escopo (bug "mercado is not defined").
+    await aprenderNaEmissao(imovel, result.mercado, !!result.parecer);
 
     // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.
     // roi (parecerInputs.metricas) e areaM2 (mercadoInputs) vêm do CLIENTE e são
