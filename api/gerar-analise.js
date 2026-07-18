@@ -192,14 +192,19 @@ ${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
 REGRA OBRIGATÓRIA — MESMO TIPO: considere SOMENTE imóveis do MESMO TIPO (${tipoImovel}).
 Descarte qualquer amostra de tipo diferente. Compare sempre ${tipoImovel} com ${tipoImovel}.
 
-MÉTODO DE AVALIAÇÃO POR TIPO (aplique o adequado ao tipo "${tipoImovel}"):
-- Residencial (casa, apartamento): preço por m² de área privativa/construída, mesmo padrão e região.
-- Terreno/lote: preço por m² de TERRENO (nunca de construção).
-- Comercial (sala, loja, conjunto): preço por m² comercial na mesma vocação/região.
-- Galpão/industrial: preço por m² de área CONSTRUÍDA, considerando pé-direito, docas e localização logística; use comparáveis de galpões, jamais residenciais.
-- Rural (fazenda, sítio, chácara): avalie por HECTARE (não por m² de construção), considerando aptidão do solo (lavoura/pasto), recursos hídricos, benfeitorias e acesso; use comparáveis RURAIS da região.
-- Atípico/outros (posto, hotel, imóvel especial, terreno de marinha): o mercado comparável é RASO. Busque o tipo específico; se não houver ao menos 3 a 4 amostras coerentes, diga EXPLICITAMENTE que a estimativa é apenas INDICATIVA, alargue a faixa (precoMinM2/precoMaxM2) e recomende laudo de avaliação presencial. NUNCA force uma média residencial de m² num imóvel atípico ou rural.
-Se o tipo exigir outra unidade que não o m² de construção (ex.: rural por hectare, terreno por m² de lote), use essa unidade em precoMedioM2 e EXPLIQUE a unidade adotada em "comentario".
+MÉTODO DE AVALIAÇÃO POR TIPO (DIRECIONE a avaliação pelo tipo "${tipoImovel}" — cada tipo tem
+uma BASE DE CÁLCULO e itens próprios; usar a régua errada gera valor irreal):
+- Apartamento / unidade em CONDOMÍNIO: preço por m² PRIVATIVO de aptos do mesmo condomínio/edifício e região; ajuste por andar, nº de VAGAS, estado, lazer.
+- Casa de rua (urbana): preço por m² CONSTRUÍDO da região/padrão (o terreno padrão já está embutido no comparável de casas); ajuste por padrão construtivo, idade e garagem.
+- Imóvel com TERRENO EXCEDENTE (edificação em lote MUITO acima do padrão da quadra): avalie a CONSTRUÇÃO por m² construído E SOME, À PARTE, a ÁREA DE TERRENO EXCEDENTE (o que passa do padrão) por R$/m² de TERRENO. NUNCA multiplique o R$/m² de construção pela área total do lote. Considere potencial de desmembramento/incorporação (zoneamento).
+- Terreno / lote urbano: preço por m² de TERRENO (nunca de construção); considere ZONEAMENTO/coeficiente de aproveitamento (potencial construtivo), frente, esquina e topografia.
+- Áreas / GLEBAS (grande porte): por m² OU por hectare conforme o porte; considere potencial de PARCELAMENTO/loteamento, infraestrutura e restrições ambientais.
+- Comercial (sala, loja, conjunto): preço por m² COMERCIAL na mesma vocação/região; considere ponto/fluxo, vaga e potencial de LOCAÇÃO (cap rate comercial).
+- Galpão / INDÚSTRIA / logística: preço por m² de área CONSTRUÍDA do galpão (+ terreno quando relevante), considerando PÉ-DIREITO, docas, piso/carga, ZONEAMENTO industrial, acesso rodoviário e energia; comparáveis de galpões, JAMAIS residenciais.
+- Rural (FAZENDA, sítio, chácara): avalie por HECTARE (terra nua) + BENFEITORIAS à parte, considerando aptidão do solo (lavoura/pasto), recursos hídricos, CAR/georreferenciamento, culturas e acesso; comparáveis RURAIS (por ha) da região.
+- Vaga de garagem / box: por UNIDADE, com comparáveis de vagas/boxes da região.
+- Atípico/especial (posto, hotel, imóvel de uso específico, terreno de marinha): mercado RASO. Busque o tipo específico; sem ao menos 3–4 amostras coerentes, diga EXPLICITAMENTE que a estimativa é apenas INDICATIVA, alargue a faixa (precoMinM2/precoMaxM2) e recomende laudo presencial. NUNCA force média residencial num imóvel atípico/rural.
+Se o tipo exigir outra unidade que não o m² de construção (rural por hectare, terreno por m² de lote, vaga por unidade), use essa unidade em precoMedioM2, informe em "consolidado.unidadeValor" e explique a conta em "consolidado.baseCalculo".
 
 REGRA OBRIGATÓRIA — NADA DE LEILÃO NA AMOSTRA: descarte QUALQUER anúncio de leilão, praça,
 hasta pública, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou
@@ -234,15 +239,37 @@ houver dado confiável, marque "encontrado": false (não invente número).
 ═══ ZONEAMENTO URBANO (uso do solo) ═══
 Consulte o ZONEAMENTO OFICIAL do endereço no órgão municipal (Plano Diretor / Lei de Uso e Ocupação do Solo; em capitais use o GIS oficial: GeoSampa/SP, Data.Rio, IPPUC/Curitiba, BHMap/PBH etc.). Informe a ZONA e o que ela permite (residencial/comercial/misto; e gabarito/coeficiente de aproveitamento se constar) SOMENTE se achar em FONTE OFICIAL — e cite a fonte. Se NÃO houver fonte oficial confiável, marque "encontrado": false e diga exatamente ONDE obter (Secretaria de Urbanismo/Planejamento da Prefeitura, pelo endereço ou inscrição imobiliária). NUNCA invente ou especule a zona.
 
+VALOR ESTIMADO DO IMÓVEL (OBRIGATÓRIO — é o número que sustenta o relatório): em
+"consolidado.valorEstimadoImovel" calcule o valor de mercado CONSERVADOR do imóvel pelo MÉTODO
+DO TIPO acima (não apenas preço/m² × área quando o tipo não for por m² privativo). Preencha também
+"unidadeValor", "areaConsiderada" (a medida que multiplicou: m² privativo/construído/terreno OU
+hectares OU unidades) e "baseCalculo" (a conta em texto). Para imóvel com TERRENO EXCEDENTE, some
+a construção + o terreno excedente e detalhe em "terrenoExcedente". Se a área da métrica não for
+confiável (ex.: veio a área TOTAL no lugar da privativa), DIGA no "comentario" e seja conservador.
+
 Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
   "nivel2": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
-  "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "descontoArremate": null },
+  "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
   "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a ADERÊNCIA da média dos anúncios ao FipeZAP (se divergirem >15%, explique por quê)."
 }`;
+}
+
+// BASE DE CÁLCULO por tipo de imóvel (direciona a avaliação — ver docs/AVALIACAO_POR_TIPO.md).
+// Só as bases por m² PRIVATIVO ('residencial'/'comercial') sofrem a guarda de coerência
+// área-total×privativa; terreno/rural/indústria/unidade têm métrica própria (m² de terreno,
+// hectare, unidade) e usam o valorEstimadoImovel type-correct da IA.
+function baseAvaliacaoPorTipo(tipo) {
+  const t = String(tipo || '').toLowerCase();
+  if (/vaga|garagem|\bbox\b/.test(t)) return 'unidade';
+  if (/fazenda|s[íi]tio|ch[aá]cara|rural|agro|gleba/.test(t)) return 'rural';        // R$/hectare
+  if (/terreno|lote|\b[aá]rea\b/.test(t)) return 'terreno';                          // R$/m² de terreno
+  if (/gal[pn]|ind[uú]stri|log[íi]stic|barrac[aã]o|armaz[eé]m/.test(t)) return 'industrial'; // m² construído galpão
+  if (/sala|loja|comercial|conjunto|escrit[óo]rio|laje/.test(t)) return 'comercial'; // m² privativo comercial
+  return 'residencial'; // apto/casa: m² privativo/construído
 }
 
 // Bloco de débitos/encargos JÁ INFORMADOS que serão assumidos (entram como CUSTO
@@ -458,15 +485,24 @@ export default async function handler(req, res) {
       const aDoc = Number(imDb?.ficha_juridica?.areaPrivativaM2) || 0;
       if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
     } catch { /* segue com a área informada */ }
-    let valorMercado = (precoM2 && areaM2) ? Math.round(precoM2 * areaM2 * 0.9) : null;
-    // COERÊNCIA — se o R$/m² dos comparáveis divergir MUITO do R$/m² implícito na AVALIAÇÃO
-    // (área provável TOTAL/terreno, não privativa: 121 m² × R$10.980 = R$1,3M vs avaliação
-    // R$329k gerava desconto/ROI irreais), ancoramos o mercado na AVALIAÇÃO (conservador),
-    // sinalizamos o alerta p/ o front pedir a privativa e registramos anomalia. Não se aplica
-    // quando a área já veio da matrícula (areaFonte='matricula') — aí a base é confiável.
+    // VALOR type-correct: o avaliador (IA) calcula valorEstimadoImovel pelo MÉTODO DO TIPO
+    // (m² privativo/construído, m² de terreno, hectare, terreno excedente à parte) — preferimos
+    // esse número. Só caímos no m²×área quando a IA não o forneceu E a base é por m² construído/
+    // privativo (residencial/comercial/industrial); terreno/rural sem estimativa ficam sem valor
+    // (o front pede o dado) em vez de multiplicar a régua errada.
+    const baseTipo = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
+    const vEstIA = Number(mercado?.consolidado?.valorEstimadoImovel) || 0;
+    let valorMercado = null;
+    if (vEstIA > 0) valorMercado = Math.round(vEstIA);
+    else if (precoM2 && areaM2 && ['residencial', 'comercial', 'industrial'].includes(baseTipo)) valorMercado = Math.round(precoM2 * areaM2 * 0.9);
+    // COERÊNCIA (só bases por m² privativo/construído) — se o R$/m² dos comparáveis divergir
+    // MUITO do R$/m² implícito na AVALIAÇÃO (área provável TOTAL/terreno, não privativa: 121 m²
+    // × R$10.980 = R$1,3M vs avaliação R$329k gerava desconto/ROI irreais), ancoramos o mercado
+    // na AVALIAÇÃO (conservador), sinalizamos o alerta p/ o front pedir a privativa e registramos
+    // anomalia. Não se aplica quando a área veio da matrícula nem a terreno/rural/unidade.
     let areaAlerta = null;
     try {
-      if (valorMercado && avalDb > 0 && areaM2 > 0 && precoM2 > 0 && areaFonte !== 'matricula') {
+      if (valorMercado && avalDb > 0 && areaM2 > 0 && precoM2 > 0 && areaFonte !== 'matricula' && (baseTipo === 'residencial' || baseTipo === 'comercial')) {
         const avalM2 = avalDb / areaM2;
         if (precoM2 > 3 * avalM2) {
           const areaPriv = Math.round(avalDb / precoM2);

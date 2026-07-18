@@ -705,7 +705,8 @@ export default function Analise() {
     const dSnap = { ...d };
     const mercadoInputs = {
       endereco: dSnap.endereco || dSnap.cidade, tipoImovel: dSnap.tipo,
-      areaM2: dSnap.areaM2, cidade: dSnap.cidade, estado: dSnap.estado,
+      areaM2: dSnap.areaM2, areaTerrenoM2: dSnap.areaTerrenoM2 || 0,
+      cidade: dSnap.cidade, estado: dSnap.estado,
       nomeCondominio: dSnap.nomeCondominio || '',
     };
     const parecerInputs = { d: dSnap, metricas, teto, cenario: isAVista ? 'À Vista' : 'Alavancado' };
@@ -2361,6 +2362,10 @@ export default function Analise() {
               {areaSuspeita ? (
                 <div style={{ fontSize:10.5, marginTop:10, lineHeight:1.5, background:'rgba(250,204,21,0.16)', border:'1px solid rgba(250,204,21,0.55)', borderRadius:8, padding:'8px 10px' }}>
                   ⚠️ A área informada ({fmt(area)} m²) parece ser a área <strong>total/terreno</strong>, não a privativa: os comparáveis (R$ {fmt(pm2)}/m²) indicam cerca de <strong>{fmt(areaPrivativaImplicita)} m²</strong> privativos. Informe a <strong>Área Privativa (m²)</strong> do edital para estimar o mercado por comparáveis. Enquanto isso, a análise usa a <strong>avaliação do leilão</strong> como referência (não multiplicamos o R$/m² pela área total).
+                </div>
+              ) : mercado?.consolidado?.baseCalculo ? (
+                <div style={{ fontSize:10.5, opacity:0.85, marginTop:10, lineHeight:1.5 }}>
+                  Base de mercado ({(mercado?.consolidado?.unidadeValor || '').replace(/_/g,' ') || 'por tipo'}): {mercado.consolidado.baseCalculo}.{nAmostras > 0 ? ` Média de ${nAmostras} comparáve${nAmostras > 1 ? 'is' : 'l'} do mesmo tipo/região.` : ''} Valor conservador para revenda em prazo saudável.
                 </div>
               ) : valorMedia>0 && (
                 <div style={{ fontSize:10.5, opacity:0.8, marginTop:10, lineHeight:1.5 }}>
