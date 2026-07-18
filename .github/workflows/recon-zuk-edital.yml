@@ -1,0 +1,36 @@
+name: Recon Edital ZUK (grátis, dispatch)
+
+# Descobre o padrão do link do EDITAL na página do lote do Zuk, para plugar a captura.
+# Puppeteer no runner do GitHub = GRÁTIS (sem Bright Data). Só dispatch — não agenda.
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: 'Quantos lotes ZUK visitar'
+        required: false
+        default: '8'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon edital ZUK
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RECON_ZUK_N: ${{ github.event.inputs.n || '8' }}
+        run: node scripts/recon-zuk-edital.mjs

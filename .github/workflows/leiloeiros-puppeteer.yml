@@ -2,7 +2,7 @@ name: Leiloeiros — Scraper Puppeteer Diário
 
 on:
   schedule:
-    - cron: '0 10 * * *'   # 7h BRT (10h UTC) — após o scraper CEF das 9h
+    - cron: '0 10 * * 1,4'   # 2x/semana (seg e qui), 10h UTC — após o CEF; fontes grátis
   workflow_dispatch:
     inputs:
       fontes:

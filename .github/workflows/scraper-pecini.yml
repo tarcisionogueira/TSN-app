@@ -8,7 +8,7 @@ name: Scraper PECINI (Bright Data)
 # isso o Pecini ficou parado desde 14/07 apesar do cron existir.)
 on:
   schedule:
-    - cron: '0 9 * * 1,4'
+    - cron: '0 9 * * 1'   # 1x/semana (seg), 9h UTC — fonte PAGA (Bright Data)
   workflow_dispatch:
     inputs:
       dryrun:

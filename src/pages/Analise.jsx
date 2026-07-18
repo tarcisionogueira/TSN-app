@@ -1048,6 +1048,13 @@ export default function Analise() {
   };
 
   const descontoArremate = d.valorAvaliacao>0 ? ((1 - d.valorArrematacao/d.valorAvaliacao)*100) : 0;
+  // A MAIORIA dos leilões NÃO divulga avaliação (só CEF/MEGA a têm; LJUD/GrupoLance/
+  // Pestana/Biasi/Frazão/VIP/Sodré = 100% sem). Sem ela, o desconto vs avaliação sai 0%
+  // e o relatório parece "sem oportunidade" — enganoso para o assinante. Ancoramos o
+  // número PRINCIPAL no MERCADO (que a pesquisa sempre estima) quando não há avaliação.
+  const descontoMercado = (d.valorMercado>0 && d.valorArrematacao>0) ? (1 - d.valorArrematacao/d.valorMercado)*100 : 0;
+  const descontoPrincipal = descontoArremate > 0 ? descontoArremate : descontoMercado;
+  const descontoPrincipalVsMercado = !(descontoArremate > 0) && descontoMercado > 0;
 
   return (
     <div style={{ maxWidth: 1280, margin:'0 auto', padding: isMobile ? '12px' : '20px', display:'flex', flexDirection:'column', gap:14 }}>
@@ -2292,7 +2299,7 @@ export default function Analise() {
         <div style={{ background:'linear-gradient(135deg,#0B48A6,#0D63DB)', borderRadius:16, padding:'18px 22px', color:'white' }}>
           <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', opacity:0.85 }}>Relatório · BidPro Brasil</div>
           <div style={{ fontSize:18, fontWeight:900, marginTop:2 }}>Mercadológico e Viabilidade Financeira</div>
-          <div style={{ fontSize:12, opacity:0.9, marginTop:4 }}>{d.nome||'Imóvel'}{[d.cidade,d.estado].filter(Boolean).length ? ` · ${[d.cidade,d.estado].filter(Boolean).join(', ')}` : ''} · Desconto {fmtPct(descontoArremate)}</div>
+          <div style={{ fontSize:12, opacity:0.9, marginTop:4 }}>{d.nome||'Imóvel'}{[d.cidade,d.estado].filter(Boolean).length ? ` · ${[d.cidade,d.estado].filter(Boolean).join(', ')}` : ''}{descontoPrincipal>0 ? ` · Desconto ${fmtPct(descontoPrincipal)}${descontoPrincipalVsMercado ? ' vs mercado' : ''}` : ''}</div>
         </div>
       )}
       {relSel === 'mercado' && (<>
@@ -2325,8 +2332,8 @@ export default function Analise() {
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:12 }}>
                 <div style={card}>
                   <div style={rot}>Avaliação do leilão</div>
-                  <div style={num}>{vAval>0 ? `R$ ${fmt(vAval)}` : '—'}</div>
-                  <div style={sub}>valor que o leilão atribuiu ao imóvel</div>
+                  <div style={num}>{vAval>0 ? `R$ ${fmt(vAval)}` : 'Não informada'}</div>
+                  <div style={sub}>{vAval>0 ? 'valor que o leilão atribuiu ao imóvel' : 'o leilão não divulgou avaliação; a análise usa o valor de mercado'}</div>
                 </div>
                 <div style={card}>
                   <div style={rot}>Lance mínimo (praça atual)</div>
