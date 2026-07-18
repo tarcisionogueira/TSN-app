@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
   ExternalLink, RefreshCw, MapPin,
-  ArrowRight, X,
+  ArrowRight, X, Plus,
 } from 'lucide-react';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { buscarCidadesEstado, buscarTodasCidades, RAIOS_KM } from '../data/cidades';
@@ -593,6 +593,7 @@ export default function Busca() {
   const [bairrosGrupos, setBairrosGrupos] = useState([]); // [{ label, chave, valores[], count }]
   const [bairrosCarregando, setBairrosCarregando] = useState(false);
   const [buscaBairro, setBuscaBairro] = useState('');
+  const [bairrosCustom, setBairrosCustom] = useState([]); // bairros digitados p/ monitorar (sem lote no banco)
   // Quantitativo de imóveis ATIVOS por cidade (cidade_norm → total) do estado atual,
   // para o selo ao navegar. Não impede selecionar cidade sem imóveis (monitoramento).
   const [cidadeCounts, setCidadeCounts] = useState({});
@@ -654,6 +655,7 @@ export default function Busca() {
   const cidadesKey = (filtros.cidades || []).join('|');
   useEffect(() => {
     const cidades = filtros.cidades || [];
+    setBairrosCustom([]); // bairros custom são por-seleção-de-cidade; zeram ao trocar
     if (!filtros.estado || cidades.length === 0) { setBairrosGrupos([]); return; }
     let cancelled = false;
     setBairrosCarregando(true);
@@ -697,10 +699,11 @@ export default function Busca() {
     const selecionados = filtros.bairros || [];
     if (!selecionados.length) return;
     if (bairrosCarregando) return;
-    const validos = new Set(bairrosGrupos.flatMap(g => g.valores));
+    // Bairros válidos = os do banco (com/sem lote) + os custom digitados p/ monitorar.
+    const validos = new Set([...bairrosGrupos.flatMap(g => g.valores), ...bairrosCustom]);
     const limpos = selecionados.filter(v => validos.has(v));
     if (limpos.length !== selecionados.length) up('bairros', limpos);
-  }, [bairrosGrupos]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bairrosGrupos, bairrosCustom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ao trocar para mapa com cidade selecionada, geocodifica para auto-zoom
   useEffect(() => {
@@ -1331,9 +1334,15 @@ export default function Busca() {
                 // REMOVIDO do grid, os demais filtros se reempacotam e "pulam de lugar".
                 // Renderizamos SEMPRE um item de grid (placeholder vazio quando oculto)
                 // para o layout ficar estável ao ligar o raio ou trocar de cidade.
-                const mostrarBairros = !raioAtivo && filtros.cidades.length > 0 && (bairrosCarregando || bairrosGrupos.length > 0);
+                const mostrarBairros = !raioAtivo && filtros.cidades.length > 0;
                 if (!mostrarBairros) return <div aria-hidden style={{ minWidth: 0 }} />;
                 const selecionados = filtros.bairros || [];
+                // Grupos exibidos = bairros do banco (com/sem lote) + os custom digitados
+                // p/ monitorar (que não constam no banco). Mesmo shape {label,chave,valores,count}.
+                const custosGrupos = bairrosCustom
+                  .filter(b => !bairrosGrupos.some(g => g.chave === normCidade(b)))
+                  .map(b => ({ label: b, chave: normCidade(b), valores: [b], count: 0, custom: true }));
+                const gruposExibidos = [...bairrosGrupos, ...custosGrupos];
                 const isGrupoSel = (g) => g.valores.some(v => selecionados.includes(v));
                 const toggleGrupo = (g) => {
                   const sel = isGrupoSel(g);
@@ -1342,22 +1351,35 @@ export default function Busca() {
                 };
                 const buscaNorm = normCidade(buscaBairro);
                 const filtrados = buscaBairro
-                  ? bairrosGrupos.filter(g => g.chave.includes(buscaNorm))
-                  : bairrosGrupos;
-                const gruposSel = bairrosGrupos.filter(isGrupoSel);
+                  ? gruposExibidos.filter(g => g.chave.includes(buscaNorm))
+                  : gruposExibidos;
+                const gruposSel = gruposExibidos.filter(isGrupoSel);
+                // Texto digitado que não bate em nenhum bairro conhecido → oferece MONITORAR.
+                const podeAdicionar = buscaBairro.trim().length >= 2
+                  && !gruposExibidos.some(g => g.chave === buscaNorm);
+                const adicionarCustom = () => {
+                  const raw = buscaBairro.trim();
+                  const chave = normCidade(raw);
+                  if (!raw || !chave) return;
+                  const existente = gruposExibidos.find(g => g.chave === chave);
+                  if (existente) { if (!isGrupoSel(existente)) toggleGrupo(existente); setBuscaBairro(''); return; }
+                  setBairrosCustom(prev => prev.some(b => normCidade(b) === chave) ? prev : [...prev, raw]);
+                  up('bairros', [...selecionados, raw]);
+                  setBuscaBairro('');
+                };
                 return (
                   <div>
                     <label style={lbl}>Bairro(s), opcional</label>
                     <div style={{ fontSize:10, color:'#94a3b8', marginBottom:6 }}>
                       {bairrosCarregando
                         ? 'Carregando bairros…'
-                        : `${bairrosGrupos.filter(g => g.count > 0).length} com imóveis agora · o número é a oferta atual. Bairro em 0 pode ser salvo para monitorar (avisamos por e-mail).`}
+                        : 'Digite para buscar ou monitorar um bairro/praça, mesmo sem imóvel agora (avisamos por e-mail quando surgir). O número é a oferta atual.'}
                     </div>
                     {gruposSel.length > 0 && (
                       <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
                         {gruposSel.map(g => (
                           <span key={g.chave} style={{ display:'flex', alignItems:'center', gap:3, background:'#dcfce7', color:'#15803d', fontSize:11, fontWeight:700, padding:'3px 8px', borderRadius:20 }}>
-                            {g.label}
+                            {g.label}{g.count === 0 ? ' · monitorar' : ''}
                             <button onClick={() => toggleGrupo(g)}
                               style={{ background:'none', border:'none', cursor:'pointer', color:'#15803d', padding:0, display:'flex' }}>
                               <X size={10}/>
@@ -1366,14 +1388,19 @@ export default function Busca() {
                         ))}
                       </div>
                     )}
-                    {bairrosGrupos.length > 6 && (
-                      <input
-                        value={buscaBairro}
-                        onChange={e => setBuscaBairro(e.target.value)}
-                        placeholder="Buscar bairro…"
-                        style={{ ...inp, marginBottom:6 }}
-                        autoComplete="off"
-                      />
+                    <input
+                      value={buscaBairro}
+                      onChange={e => setBuscaBairro(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && podeAdicionar) { e.preventDefault(); adicionarCustom(); } }}
+                      placeholder="Buscar ou digitar um bairro para monitorar…"
+                      style={{ ...inp, marginBottom:6 }}
+                      autoComplete="off"
+                    />
+                    {podeAdicionar && (
+                      <button onClick={adicionarCustom}
+                        style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, width:'100%', padding:'8px', marginBottom:6, borderRadius:8, border:'1px dashed #16a34a', background:'#f0fdf4', color:'#15803d', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                        <Plus size={13}/> Monitorar “{buscaBairro.trim()}”
+                      </button>
                     )}
                     <div style={{ display:'flex', flexWrap:'wrap', gap:4, maxHeight:132, overflowY:'auto' }}>
                       {filtrados.map(g => {
@@ -1385,8 +1412,10 @@ export default function Busca() {
                           </button>
                         );
                       })}
-                      {!bairrosCarregando && filtrados.length === 0 && (
-                        <div style={{ padding:'6px 2px', fontSize:11, color:'#94a3b8' }}>Nenhum bairro encontrado</div>
+                      {!bairrosCarregando && filtrados.length === 0 && !podeAdicionar && (
+                        <div style={{ padding:'6px 2px', fontSize:11, color:'#94a3b8' }}>
+                          {bairrosGrupos.length === 0 ? 'Sem bairros cadastrados nesta cidade — digite acima para monitorar.' : 'Nenhum bairro encontrado — digite para monitorar.'}
+                        </div>
                       )}
                     </div>
                   </div>
