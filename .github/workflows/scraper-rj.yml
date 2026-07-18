@@ -7,7 +7,7 @@ name: Scraper RJ Leilões (Bright Data)
 # por padrão (passe dryrun=0 p/ gravar manualmente).
 on:
   schedule:
-    - cron: '0 11 * * 2,5'   # terça e sexta, 11 UTC (após os scrapes da manhã)
+    - cron: '0 11 * * 2'   # 1x/semana (terça), 11 UTC — fonte PAGA (Bright Data)
   workflow_dispatch:
     inputs:
       debug:
