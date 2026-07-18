@@ -41,11 +41,22 @@
    - Migração `cliente_360_erros_navegacao.sql`: `admin_usuario_360` retorna `erros` (msg, rota, url, ocorrências, primeira/última, resolvido — não-resolvidos primeiro) e `erros_abertos`; `admin_360_estatisticas` ganha `erros_abertos_total` e `clientes_com_erro`; `admin_busca_usuarios` ganha `tem_erro` por linha. Todas SECURITY DEFINER `search_path ''` (bypassa a leitura só-admin de `erros_cliente`). Aplicada via MCP + no repo.
    - `src/pages/Cliente360.jsx`: card **"Erros de navegação"** na ficha (mensagem, rota, nº vezes, quando, badge aberto/resolvido), tile **"Clientes c/ erro"** nas estatísticas e badge **⚠ erro** na lista (spot de clientes com problema sem abrir a ficha). Validado: a ficha do cliente que bateu o `q.rpc().catch` já mostra o erro; a lista o marca.
 
-**➡️ FOLLOW-UPS de código pendentes (não dependem do dono):**
-- **Replicar o padrão anchor-por-texto** (edital PDF) para outras fontes cujo `link_edital` hoje é a URL do lote (o `vasculharDocumentos` genérico já classifica, mas só roda no cap de docs; ZUK ganhou a captura na própria visita de datas).
-- **(Comercial, opcional)** priorizar fontes/cobertura para Santana de Parnaíba, Barueri e Arujá (alta demanda, baixo estoque); avaliar sugerir alerta automático nas buscas de zero-resultado.
+### 🔚 Encerramento 18/07 (tarde) — decisões do dono (no computador)
+- **Health Check ERRO de 16/07 (3 `valor_sentinela` CRÍTICO): RESOLVIDO** — conferido: `relatorio_anomalias` = **0 abertos / 3 resolvidos** (os 3 SUPERBID Uberaba/Uberlândia/Mairiporã neutralizados na sessão de 16/07). Se recorrer, `registrar_anomalia_relatorio` reabre e o health-check alerta.
+- **Lotes ambíguos de UF — decididos:**
+  - **DESATIVADOS** (via MCP): "Escavadeira Komatsu" (**equipamento** — regra do dono: equipamento NÃO entra no sistema), "direitos creditórios APARTAMENTO" (**direito creditório não dá direito à matrícula** → não é imóvel/oportunidade; ≠ direito **aquisitivo**, que ENTRA), "PARTE IDEAL 50%" (**parte ideal não é oportunidade válida** — "pegadinha p/ novatos").
+  - **Itanhaém → SP/Itanhaém** (imóvel legítimo, único município com o nome) + geo re-enfileirado.
+  - **Ficam p/ enriquecer da fonte (NÃO adivinhar UF):** "Sobrado no Sitio Cercado", "TERRENO no Afonso Pena", "TERRENO NO TATUQUARA" (LEILOTECH white-label). Regra do dono: buscar a localização do **leiloeiro** (site/endereço) ou dos **documentos** — precisa de mecanismo (ver follow-ups).
+- **Classificação de TIPO (regra do dono):** o tipo (rural/urbano/etc.) deve **espelhar como veio do leiloeiro/documentação** — NÃO forçar pela minha suposição. Ao gerar relatório, **reconciliar com o documento**. Zoneamento/averbação errados são **comuns e podem virar oportunidade** — não "consertar" às cegas.
+- **PR #143: MESCLADO** em `main` (deploy de produção). **Asaas/Upstash:** o dono fará depois (mantidos em `PENDENCIAS_DONO.md`). **PECINI:** aguardar o cron de **seg 07-20** e monitorar. **Pagos** (Resend/compute/senha-vazada): no momento certo.
 
-**Pendências do dono (inalteradas):** validar **PECINI** (cron seg 07-20, +Bright Data; hoje 23 ativos, última 14/07) e conferir **BIASI** (segue 173 após o fix de paginação → **é o acervo real do site**, não regressão). Ambíguos de UF acima. Merge desta branch → `main` quando quiser (o fix do bug só vale em produção após o deploy).
+**➡️ FOLLOW-UPS de código pendentes (não dependem do dono):**
+- **⚠️ FILTROS DE INGESTÃO NO SCRAPER (prioritário — senão os lotes desativados VOLTAM no próximo scrape LEILOTECH).** Regras do dono a plugar no `salvarImoveis`/mapeadores: (a) **equipamento não entra** (escavadeira, máquina, veículo/…); (b) **parte ideal não entra** (título com "parte ideal"/"% do imóvel"/fração); (c) **direito creditório não entra**, mas **direito aquisitivo entra** (distinguir no título/descrição). Hoje desativei os 3 na mão — sem o filtro, o upsert diário reativa.
+- **Enriquecer localização de LEILOTECH** (white-label vmleiloes/spencer/bringel): capturar cidade/UF da página do leiloeiro (Afonso Pena/Sitio Cercado/Tatuquara ficaram sem UF por isso). Sem isso, não dá p/ geocodificar nem filtrar por região.
+- **Replicar o padrão anchor-por-texto** (edital PDF) para outras fontes cujo `link_edital` hoje é a URL do lote (o `vasculharDocumentos` genérico já classifica, mas só roda no cap de docs; ZUK ganhou a captura na própria visita de datas).
+- **(Comercial, opcional)** priorizar fontes/cobertura para Santana de Parnaíba, Barueri e Arujá (alta demanda, baixo estoque); avaliar alerta automático nas buscas de zero-resultado.
+
+**Pendências do dono (aguardando):** **PECINI** (cron seg 07-20, +conferir gasto Bright Data; hoje 23 ativos, última 14/07 — monitorar segunda). **Asaas** (reativar webhook) e **Upstash Redis** (provisionar) — em `PENDENCIAS_DONO.md`, fará depois. **BIASI** = 173 é o **acervo real** (não regressão). Pagos (Resend/compute/senha-vazada) no momento certo.
 
 ## 🆕 Sessão 18/07/2026 — Linha de base da captura + recon edital ZUK (encerramento)
 > Branch de dev: **`claude/bidprobrasil-handoff-diagnostics-lqttm2`**. Banco aplicado via MCP; código em PR novo → `main`. Segurança íntegra (`auditoria_seguranca()` = 0 crítico / 0 atenção, conferido nesta sessão).
