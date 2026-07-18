@@ -889,7 +889,7 @@ async function enriquecerDatasZuk(browser, imoveis) {
       else req.continue();
     });
   } catch { /* segue sem interceptar */ }
-  let ok = 0, feitos = 0;
+  let ok = 0, edt = 0, feitos = 0;
   for (const im of imoveis) {
     if (Date.now() > DEADLINE) { console.log('    PortalZuk: teto de tempo das datas atingido'); break; }
     if (!im.link_edital) continue;
@@ -910,12 +910,37 @@ async function enriquecerDatasZuk(browser, imoveis) {
       const areaZuk = utilTxt ? parseBRL(utilTxt) : (totalTxt ? parseBRL(totalTxt) : (ext.area_m2 || 0));
       if (areaZuk && !im.area_m2) im.area_m2 = areaZuk;
       if (ext.ocupacao && !im.ocupacao) im.ocupacao = ext.ocupacao;
+      // EDITAL PDF real (recon 18/07): na ZUK o link_edital é a PÁGINA do lote, não o
+      // PDF. O <a> "Edital de venda" aponta p/ o PDF em documentacaoleilao.portalzuk;
+      // "Condições de venda" → PDF de regras. Gravamos em anexos (o relatório documental
+      // passa a ler o PDF certo, não a página) e em link_regras_venda — SEM tocar em
+      // link_edital, que segue sendo a página do lote usada NESTA re-visita (sobrescrever
+      // quebraria a próxima visita e o botão "Acessar leiloeiro"). O filtro por PDF/host
+      // ignora "Matrícula do Imóvel", cujo anchor aponta p/ a própria página do lote.
+      const docsZuk = await page.evaluate(() => {
+        const ehPdf = (u) => /\.pdf(?:[?#]|$)/i.test(u || '') || /documentacaoleilao\.portalzuk\.com\.br/i.test(u || '');
+        const acha = (re) => {
+          for (const el of document.querySelectorAll('a[href]')) {
+            const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+            if (re.test(t) && ehPdf(el.href)) return el.href;
+          }
+          return null;
+        };
+        return { edital: acha(/edital/i), regras: acha(/condi[cç][õo]es\s*de\s*venda|regras/i) };
+      });
+      if (docsZuk.edital || docsZuk.regras) {
+        if (!Array.isArray(im.anexos)) im.anexos = [];
+        const jaTem = (u) => im.anexos.some(x => x?.url === u);
+        if (docsZuk.edital && !jaTem(docsZuk.edital)) { im.anexos.push({ nome: 'Edital de venda', url: docsZuk.edital, tipo: 'edital' }); edt++; }
+        if (docsZuk.regras && !jaTem(docsZuk.regras)) im.anexos.push({ nome: 'Condições de venda', url: docsZuk.regras, tipo: 'regras' });
+        if (docsZuk.regras && !im.link_regras_venda) im.link_regras_venda = docsZuk.regras;
+      }
     } catch { /* best-effort */ }
     feitos++;
     if (feitos % 50 === 0) console.log(`    PortalZuk datas: ${feitos}/${imoveis.length} · ${ok} ok`);
   }
   try { await page.close(); } catch {}
-  console.log(`    PortalZuk: datas preenchidas ${ok}/${imoveis.length}`);
+  console.log(`    PortalZuk: datas preenchidas ${ok}/${imoveis.length} · editais PDF ${edt}`);
   return imoveis;
 }
 

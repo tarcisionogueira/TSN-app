@@ -724,7 +724,7 @@ export default function ImovelDetalhe() {
       p_estado: imovel.estado || null,
       p_tipo: imovel.tipo || null,
       p_valor: imovel.valorMinimo ?? imovel.valorAvaliacao ?? null,
-    }).catch(() => {});
+    }).then(() => {}).catch(() => {});
   }, [user, role, id, imovel]);
 
   useEffect(() => {
