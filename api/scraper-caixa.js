@@ -348,6 +348,11 @@ export default async function handler(req, res) {
     canonical: 'scripts/scraper.js',
   });
 
+  /* eslint-disable no-unreachable -- Implementação do scraper CEF LEGADO, inalcançável
+     de propósito (o endpoint retorna 410 acima). Mantida só para REFERÊNCIA de como
+     reativar (ver comentário acima); o scraper vivo é scripts/scraper.js. Silenciamos
+     no-unreachable neste bloco morto para o lint ficar verde sem apagar a referência. */
+
   // Protege contra chamadas externas não autorizadas.
   // Aceita: (1) CRON_SECRET via x-cron-secret header ou Authorization: Bearer, (2) JWT de admin.
   const cronSecret = process.env.CRON_SECRET;
