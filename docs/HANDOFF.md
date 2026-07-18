@@ -50,6 +50,11 @@
 - **`docs/AVALIACAO_POR_TIPO.md`** — referência: itens + base de cálculo por tipo (condomínio, casa de rua, **terreno excedente**, terreno, gleba/áreas, **rural/fazenda por hectare**, comercial, **indústria/galpão**, vaga, atípico).
 - **`api/gerar-analise.js`** (`promptMercado`): método explícito por tipo + exige `consolidado.valorEstimadoImovel` (calculado pelo MÉTODO DO TIPO), `unidadeValor`, `areaConsiderada`, `baseCalculo` e `terrenoExcedente`. O servidor **prefere o `valorEstimadoImovel` type-correct** da IA; a guarda de coerência (área total×privativa) só age nas bases por **m² privativo** (residencial/comercial). Helper `baseAvaliacaoPorTipo()` classifica o tipo.
 - **`src/pages/Analise.jsx`**: passa `areaTerrenoM2` e mostra o `baseCalculo` (a conta que sustenta o número) no card de mercado.
+- **Invalidação de cache type-aware (auto-cura):** uma pesquisa de mercado ANTIGA (anterior à avaliação por tipo) não traz `valorEstimadoImovel`/`baseCalculo`. Para bases por m² (residencial/comercial/industrial) tudo bem (cai no `precoM2×área`); mas para **terreno/rural/vaga** não há esse fallback — então o gerador **ignora o cache antigo e refaz a busca** só nesses tipos (recalcula pelo método certo). Reaproveitamento residencial segue valendo (sem custo extra de busca). Após 1 geração, o cache vira type-aware sozinho.
+
+### 🔚 Encerramento 18/07 (resumo p/ a próxima sessão)
+Merges do dia em `main`: **#138** (linha de base + monitor de regressão + recon ZUK), **#139** (área total×privativa não infla o mercado), **#140** (metragem autoritativa da matrícula/edital), **#141** (avaliação direcionada por tipo) + esta invalidação de cache. Segurança íntegra (`auditoria_seguranca()` = 0/0). Docs novos: `BASELINE_CAPTURA_LEILOEIROS.md`, `AVALIACAO_POR_TIPO.md`.
+**Pendências do dono:** validar PECINI (cron seg 07-20, +Bright Data), conferir BIASI (~370). **Follow-ups de código:** plugar a captura do EDITAL PDF ZUK (padrão do recon: anchor "Edital de venda"); capturar metragem útil/privativa da ZUK no scraper (hoje corrigida via documental).
 
 **Lembretes do dono (quando estiver no computador):**
 - **Recon ZUK: nada a fazer** — já rodou; o pendente é o passo de código acima (posso fazer na próxima sessão).

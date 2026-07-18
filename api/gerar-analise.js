@@ -433,9 +433,18 @@ export default async function handler(req, res) {
   try {
     const { result, valorMercado } = await Promise.race([prazo, (async () => {
     // 1) Mercado — reaproveita pesquisa recente do mesmo imóvel (se houver), senão busca.
+    // INVALIDAÇÃO type-aware: uma pesquisa antiga (anterior à avaliação por tipo) NÃO traz
+    // consolidado.valorEstimadoImovel/baseCalculo. Para bases por m² construído/privativo
+    // (residencial/comercial/industrial) isso é ok — o cálculo cai no precoM2×área. Mas para
+    // TERRENO/RURAL/UNIDADE não há esse fallback (a régua é m² de terreno/hectare/unidade),
+    // então reaproveitar o cache antigo deixaria o valor VAZIO. Nesses tipos, se o cache não
+    // for type-aware, IGNORAMOS e refazemos a busca (recalcula com o método do tipo).
     let mercado, reaproveitado = false;
     const recente = await mercadoRecente(String(imovelId));
-    if (recente) {
+    const baseReuso = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
+    const cacheTypeAware = (c) => !!(c?.consolidado?.baseCalculo) || Number(c?.consolidado?.valorEstimadoImovel) > 0;
+    const reusoValido = recente && (cacheTypeAware(recente.mercado) || ['residencial', 'comercial', 'industrial'].includes(baseReuso));
+    if (reusoValido) {
       mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
       reaproveitado = true;
     } else {
