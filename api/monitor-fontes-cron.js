@@ -30,6 +30,34 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 const FONTES_SEM_SAUDE = { PECINI: 5, RJLEILOES: 7 };
 const MAX_IDADE_H = 48; // sem coleta há mais que isso = alerta
 
+// LINHA DE BASE por leiloeiro (ver docs/BASELINE_CAPTURA_LEILOEIROS.md — mantenha os dois
+// em sincronia). `min` = piso de acervo ativo (abaixo disso o scrape encolheu). `campos` =
+// cobertura mínima aceitável (%) dos campos que ESSA fonte entrega de forma confiável
+// (folga de ~15pts sobre o baseline medido); campo fora do mapa NÃO é esperado (não alerta).
+// Chaves de campo = colunas de public.fonte_cobertura(): foto/valor/area/data/matricula/edital/avaliacao.
+const BASELINE_FONTES = {
+  CEF:        { min: 20000, campos: { foto: 85, valor: 95, area: 90, matricula: 90, avaliacao: 90 } },
+  SUPERBID:   { min: 900,   campos: { foto: 85, valor: 95, data: 90, edital: 90 } },
+  LJUD:       { min: 600,   campos: { valor: 95, data: 90, matricula: 80, edital: 90 } },
+  ZUK:        { min: 550,   campos: { foto: 90, valor: 95, data: 70, edital: 90, avaliacao: 90 } },
+  MEGA:       { min: 400,   campos: { foto: 90, valor: 95, area: 80, data: 90, matricula: 90, edital: 90, avaliacao: 90 } },
+  GRUPOLANCE: { min: 250,   campos: { foto: 90, valor: 95, area: 75, matricula: 80, edital: 90 } },
+  PESTANA:    { min: 120,   campos: { foto: 80, valor: 95, area: 75, data: 90, matricula: 75, edital: 90 } },
+  BIASI:      { min: 150,   campos: { foto: 90, valor: 95, matricula: 85, edital: 90 } },
+  FRAZAO:     { min: 90,    campos: { foto: 90, valor: 95, data: 90, matricula: 90, edital: 90 } },
+  WEBLEILOES: { min: 60,    campos: { foto: 90, valor: 95, area: 80, matricula: 80, edital: 90 } },
+  LEILOTECH:  { min: 60,    campos: { valor: 95, data: 90, matricula: 70, edital: 90, avaliacao: 80 } },
+  SOLD:       { min: 55,    campos: { foto: 90, valor: 95, area: 75, data: 90, edital: 90 } },
+  VIP:        { min: 40,    campos: { foto: 90, valor: 95, matricula: 80, edital: 90 } },
+  SBID9:      { min: 20,    campos: { foto: 90, valor: 95, data: 90, edital: 90 } },
+  LEILOFY:    { min: 15,    campos: { foto: 90, valor: 95, data: 90, matricula: 90, edital: 90 } },
+  SODRE:      { min: 15,    campos: { foto: 90, valor: 95, area: 85, data: 90, matricula: 85, edital: 90 } },
+  PECINI:     { min: 15,    campos: { foto: 90, valor: 95, edital: 90, avaliacao: 90 } },
+  RJLEILOES:  { min: 8,     campos: { foto: 90, valor: 95, data: 90, matricula: 80, edital: 90, avaliacao: 90 } },
+  VENDASGOV:  { min: 2,     campos: { foto: 90, valor: 95, edital: 90 } },
+  SBID21:     { min: 1,     campos: {} },
+};
+
 // IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
 // Node da Vercel, `export default` é tratado como assinatura Express `(req, res)` e o
 // `Response` retornado é IGNORADO — a função nunca sinaliza fim e trava até o maxDuration
@@ -97,6 +125,27 @@ async function handler(req) {
       problemas.push({ fonte, tipo: 'coleta parada (silenciosa)', detalhe: `acervo sem atualização há ${idadeD.toFixed(0)}d — scraper próprio não reporta saúde` });
     }
   }
+
+  // C) LINHA DE BASE (docs/BASELINE_CAPTURA_LEILOEIROS.md): o scraper roda mas REGREDIU —
+  //    acervo encolheu abaixo do piso, ou um campo que vinha alto sumiu. Pega a degradação
+  //    SILENCIOSA que atingia assinantes (relatório sem área/data/avaliação). Aditivo: se a
+  //    RPC falhar, nunca derruba o monitor (as seções A/B seguem valendo).
+  try {
+    const { data: cobertura } = await supabase.rpc('fonte_cobertura');
+    for (const row of cobertura || []) {
+      const base = BASELINE_FONTES[row.fonte];
+      if (!base) continue;
+      if (typeof row.ativos === 'number' && row.ativos < base.min) {
+        problemas.push({ fonte: row.fonte, tipo: 'acervo abaixo da linha de base', detalhe: `${row.ativos} ativos (piso ${base.min})` });
+      }
+      for (const [campo, minPct] of Object.entries(base.campos || {})) {
+        const atual = row[campo];
+        if (typeof atual === 'number' && atual < minPct) {
+          problemas.push({ fonte: row.fonte, tipo: `campo "${campo}" regrediu`, detalhe: `${atual}% (linha de base ≥ ${minPct}%)` });
+        }
+      }
+    }
+  } catch { /* baseline é aditivo — não bloqueia o restante do monitor */ }
 
   if (!problemas.length) {
     return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length }), {
