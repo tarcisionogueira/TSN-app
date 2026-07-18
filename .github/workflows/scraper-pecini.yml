@@ -3,7 +3,9 @@ name: Scraper PECINI (Bright Data)
 # Parsing VALIDADO ao vivo (23 imóveis com valor/avaliação/foto em 2026-07-14).
 # Cada lote = 1 request Bright Data (cota semanal com teto de custo em _brightdata.js).
 # Cron modesto 2x/semana (seg e qui, 09h UTC) — prioriza lotes NOVOS e refresca os
-# existentes, dentro do teto. Dispatch manual continua disponível (dryrun=1 p/ testar).
+# existentes, dentro do teto. Execução AGENDADA GRAVA (dryrun=0); dispatch manual pode
+# passar dryrun=1 p/ testar. (Antes, o cron caía no fallback '1' e nunca gravava — por
+# isso o Pecini ficou parado desde 14/07 apesar do cron existir.)
 on:
   schedule:
     - cron: '0 9 * * 1,4'
@@ -45,7 +47,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
-          PECINI_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
+          PECINI_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           PECINI_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
           PECINI_DEBUG: ${{ github.event.inputs.debug || '0' }}
         run: node scripts/scraper-pecini.mjs

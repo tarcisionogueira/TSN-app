@@ -1965,19 +1965,28 @@ async function scraperBiasi(browser) {
           const el = document.getElementById('leilao-lista-lote');
           return { total: Number((el && el.getAttribute('total')) || 0), limit: Number((el && el.getAttribute('limit')) || 48) };
         }).catch(() => ({ total: 0, limit: 48 }));
-        const pages = meta.limit ? Math.min(20, Math.max(1, Math.ceil((meta.total || 0) / meta.limit))) : 1;
-        for (let p = 1; p <= pages; p++) {
+        // Paginação ROBUSTA: NÃO depende do atributo `total` (se ele sumir/zerar, o
+        // cálculo antigo dava pages=1 e perdia todas as páginas seguintes — causa
+        // provável da queda 369→173 em 07/2026). Clica "próxima" (por índice OU botão
+        // next) e para quando 2 páginas seguidas não trazem lote NOVO, o clique falha,
+        // ou no teto de 25 páginas. void meta p/ manter compat (limit/total ainda lidos).
+        void meta;
+        let semNovos = 0;
+        for (let p = 1; p <= 25; p++) {
           if (p > 1) {
             const clicked = await page.evaluate((idx) => {
-              const link = document.querySelector(`.nav-paging a[index="${idx}"]`);
-              if (link) { link.click(); return true; }
+              const byIdx = document.querySelector(`.nav-paging a[index="${idx}"]`);
+              const next = byIdx || document.querySelector('.nav-paging a[rel="next"], .nav-paging a.next, .nav-paging li.next a');
+              if (next) { next.click(); return true; }
               return false;
             }, p).catch(() => false);
             if (!clicked) break;
-            await new Promise(r => setTimeout(r, 2200)); // espera o AJAX re-renderizar
+            await new Promise(r => setTimeout(r, 2500)); // espera o AJAX re-renderizar
           }
+          const antes = bens.size;
           const lotes = await biasiParsePagina(page);
           for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
+          if (bens.size === antes) { if (++semNovos >= 2) break; } else semNovos = 0;
         }
       } catch { /* leilão a leilão; nunca derruba o scrape */ }
       await new Promise(r => setTimeout(r, 150));
