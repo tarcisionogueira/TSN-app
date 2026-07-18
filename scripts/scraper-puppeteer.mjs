@@ -901,7 +901,14 @@ async function enriquecerDatasZuk(browser, imoveis) {
       // Mesma visita: captura área e ocupação do texto do lote (grátis) — o Zuk
       // não traz área na listagem, só na página interna.
       const ext = extrairDaDescricao(txt);
-      if (ext.area_m2 && !im.area_m2) im.area_m2 = ext.area_m2;
+      // ÁREA: o Zuk mostra "Metragem total" E "Metragem útil". Para preço/m² usar a
+      // ÚTIL (privativa) — a total infla a área e SUBESTIMA o R$/m², o que fazia o
+      // relatório de mercado SUPERESTIMAR o valor (usava a total). Cai p/ total, e só
+      // então para a área genérica da descrição.
+      const utilTxt  = (txt.match(/metragem\s*[úu]til[^\d]*([\d.,]+)\s*m/i) || [])[1];
+      const totalTxt = (txt.match(/metragem\s*total[^\d]*([\d.,]+)\s*m/i) || [])[1];
+      const areaZuk = utilTxt ? parseBRL(utilTxt) : (totalTxt ? parseBRL(totalTxt) : (ext.area_m2 || 0));
+      if (areaZuk && !im.area_m2) im.area_m2 = areaZuk;
       if (ext.ocupacao && !im.ocupacao) im.ocupacao = ext.ocupacao;
     } catch { /* best-effort */ }
     feitos++;
@@ -1109,7 +1116,9 @@ async function scraperSodre(browser) {
       const titulo = r.lot_title || r.lot_description?.slice(0, 120) || 'Imóvel Sodré';
       const ufMatch = (titulo.match(/-\s*([A-Za-z]{2})\s*$/) || [])[1];
       const uf = (ufMatch || '').toUpperCase();
-      const area = parseFloat(r.lot_total_area || r.lot_useful_area || 0) || 0;
+      // Área ÚTIL (privativa) primeiro para o preço/m² não sair subestimado; cai para a
+      // total quando não houver útil (ex.: terreno). Mesmo princípio do Zuk.
+      const area = parseFloat(r.lot_useful_area || r.lot_total_area || 0) || 0;
       return {
         fonte: 'SODRE',
         fonte_id: `sodre_${r.lot_id || r.id}`,
