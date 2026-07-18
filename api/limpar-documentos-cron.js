@@ -85,9 +85,26 @@ async function handler(req) {
     body: JSON.stringify({ storage_path: null, url: null }),
   });
 
+  // Zera TAMBÉM o link denormalizado imoveis_leilao.link_matricula quando o ARQUIVO da
+  // matrícula é apagado. Sem isto o botão "Matrícula" fica 404 (arquivo removido, link
+  // mantido) — bug real reportado em 07/2026. Deriva o imovel_id do path
+  // 'casos/{id}/...matricula...pdf'; só zera links não-nulos desses imóveis.
+  const idsMatricula = [...new Set(paths
+    .map(p => (String(p).match(/^casos\/([0-9a-f-]{36})\/[^/]*matr[ií]cul[^/]*\.pdf$/i) || [])[1])
+    .filter(Boolean))];
+  let linkRes = { ok: true };
+  if (idsMatricula.length) {
+    linkRes = await sb(`imoveis_leilao?id=in.(${idsMatricula.join(',')})&link_matricula=not.is.null`, {
+      method: 'PATCH',
+      body: JSON.stringify({ link_matricula: null }),
+    });
+  }
+
   return new Response(JSON.stringify({
     removidos: paths.length,
     storage_ok: delStorage.ok,
     banco_ok: updateRes.ok,
+    links_matricula_zerados: idsMatricula.length,
+    links_ok: linkRes.ok,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
