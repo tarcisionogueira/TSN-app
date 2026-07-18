@@ -1056,6 +1056,18 @@ export default function Analise() {
   const descontoPrincipal = descontoArremate > 0 ? descontoArremate : descontoMercado;
   const descontoPrincipalVsMercado = !(descontoArremate > 0) && descontoMercado > 0;
 
+  // ÁREA SUSPEITA (provável TOTAL/terreno, não a privativa): a base do valor de mercado é a
+  // área privativa. O gerador sinaliza via mercado.areaAlerta; como reforço, detectamos aqui
+  // quando os comparáveis passam de 3× o R$/m² implícito na avaliação (ex.: 121 m² × R$10.980
+  // = R$1,3M vs avaliação R$329k, que ~30 m² privativos explicariam). Nesse caso não exibimos a
+  // base pm²×área inflada: pedimos a Área Privativa e usamos a avaliação como referência.
+  const areaAlerta = mercado?.areaAlerta || null;
+  const _aArea = Number(d.areaM2) || Number(d.areaTerrenoM2) || 0;
+  const _aPm2 = Number(mercado?.precoMedioM2) || 0;
+  const _aAvalM2 = Number(d.valorAvaliacao) > 0 && _aArea > 0 ? Number(d.valorAvaliacao) / _aArea : 0;
+  const areaSuspeita = !!areaAlerta || (_aAvalM2 > 0 && _aPm2 > 0 && _aPm2 > 3 * _aAvalM2);
+  const areaPrivativaImplicita = areaAlerta?.areaPrivativaImplicita || (_aPm2 > 0 && Number(d.valorAvaliacao) > 0 ? Math.round(Number(d.valorAvaliacao) / _aPm2) : 0);
+
   return (
     <div style={{ maxWidth: 1280, margin:'0 auto', padding: isMobile ? '12px' : '20px', display:'flex', flexDirection:'column', gap:14 }}>
 
@@ -2346,7 +2358,11 @@ export default function Analise() {
                   <div style={sub}>quanto tende a vender no mercado (conservador)</div>
                 </div>
               </div>
-              {valorMedia>0 && (
+              {areaSuspeita ? (
+                <div style={{ fontSize:10.5, marginTop:10, lineHeight:1.5, background:'rgba(250,204,21,0.16)', border:'1px solid rgba(250,204,21,0.55)', borderRadius:8, padding:'8px 10px' }}>
+                  ⚠️ A área informada ({fmt(area)} m²) parece ser a área <strong>total/terreno</strong>, não a privativa: os comparáveis (R$ {fmt(pm2)}/m²) indicam cerca de <strong>{fmt(areaPrivativaImplicita)} m²</strong> privativos. Informe a <strong>Área Privativa (m²)</strong> do edital para estimar o mercado por comparáveis. Enquanto isso, a análise usa a <strong>avaliação do leilão</strong> como referência (não multiplicamos o R$/m² pela área total).
+                </div>
+              ) : valorMedia>0 && (
                 <div style={{ fontSize:10.5, opacity:0.8, marginTop:10, lineHeight:1.5 }}>
                   Base de mercado: {pm2 && area ? `R$ ${fmt(pm2)}/m² × ${fmt(area)} m² = R$ ${fmt(valorMedia)}` : `R$ ${fmt(valorMedia)}`}{nAmostras > 0 ? ` — média de ${nAmostras} anúncio${nAmostras > 1 ? 's' : ''} comparáve${nAmostras > 1 ? 'is' : 'l'} (mesmo condomínio/endereço + raio de ~1 km)` : ' (média dos anúncios)'}.{descSugerido > 0 ? ` A venda estimada (R$ ${fmt(sugerido)}) fica ${descSugerido}% abaixo dessa média — margem conservadora para revenda em prazo saudável.` : ' A venda estimada aplica margem conservadora para revenda em prazo saudável.'}
                 </div>
@@ -2364,7 +2380,7 @@ export default function Analise() {
           </div>
           <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:10 }}>
             {[
-              ['Desconto vs. mercado', d.valorMercado>0 ? fmtPct((1-(d.valorArrematacao||0)/d.valorMercado)*100) : '—', '#0D63DB'],
+              [areaSuspeita ? 'Desconto vs. avaliação' : 'Desconto vs. mercado', d.valorMercado>0 ? fmtPct((1-(d.valorArrematacao||0)/d.valorMercado)*100) : '—', '#0D63DB'],
               [isAVista?'Retorno (ROI)':'Retorno (ROE)', fmtPct(metricas.roi), metricas.roi>=0?'#10b981':'#ef4444'],
               ['Rentabilidade anual (TIR)', indicadores.tir!=null ? fmtPct(indicadores.tir)+' a.a.' : '—', '#7c3aed'],
             ].map(([l,v,c])=>(

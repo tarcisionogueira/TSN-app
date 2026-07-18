@@ -36,6 +36,11 @@
 
 **Reagendamento dos scrapers (confirmado, já em `main` via #137):** grátis (CEF, leiloeiros-puppeteer) **2×/sem** (seg/qui); pagas (PECINI, RJLEILOES) **1×/sem**. Reexecução consecutiva só após correção de falha.
 
+**🔧 Correção (noite) — mercado inflado por área TOTAL x PRIVATIVA.** Um relatório ZUK (Apart./Flats, Av. Aníbal Correia 1.629, Barueri) mostrava "venda estimada" R$1,3M, "desconto vs mercado" 86% e **ROI 353%** — irreal. Causa: `area_m2=121,22` é a **área total/terreno**, não a **privativa** (avaliação R$329k ÷ comps R$10.980/m² ⇒ ~30 m² privativos; é um flat). O relatório fazia `comps × 121 m²`. Regra do dono: **a base do mercado é a área privativa; terreno excedente entra à parte**.
+- **`api/gerar-analise.js`**: quando os comparáveis passam de **3× o R$/m² implícito na avaliação** (área provável total), ancora o `valorMercado` na **avaliação** (conservador), anexa `mercado.areaAlerta` e registra anomalia **`mercado_area_incoerente`** (o agente/saúde enxergam). Cobre **qualquer fonte** com avaliação.
+- **`src/pages/Analise.jsx`**: detecta a mesma incoerência e, no card de mercado, troca a base `pm²×área` por um **aviso** pedindo a **Área Privativa** do edital (relabela "Desconto vs. avaliação"). Regerando o relatório, ROI/desconto ficam coerentes.
+- **FOLLOW-UP (scraper):** capturar a **metragem útil/privativa** da ZUK (recon da seção de características do lote) para não cair no fallback de área total. Registrado no `leiloeiro_conhecimento` da ZUK.
+
 **Lembretes do dono (quando estiver no computador):**
 - **Recon ZUK: nada a fazer** — já rodou; o pendente é o passo de código acima (posso fazer na próxima sessão).
 - **PECINI** (pago): validar a 1ª gravação do cron **seg 07-20** (esperado > 23 ativos) **e conferir o gasto Bright Data**.
