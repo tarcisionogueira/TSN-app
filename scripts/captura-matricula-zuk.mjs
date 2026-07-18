@@ -20,7 +20,10 @@ const COOLDOWN_DIAS = 14; // negative-cache: re-tenta um lote "sem matrícula" s
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 
 async function jaTemMatricula(imovelId) {
-  const { data } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('tipo', 'matricula').limit(1);
+  // Só conta anexo COM arquivo (storage_path não-nulo). Um anexo "limpo" pela retenção
+  // (storage_path nulo) NÃO deve bloquear a recaptura — senão o imóvel ficaria com a
+  // matrícula 404 para sempre depois que o cleanup apaga o PDF.
+  const { data } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('tipo', 'matricula').not('storage_path', 'is', null).limit(1);
   return !!data?.length;
 }
 
