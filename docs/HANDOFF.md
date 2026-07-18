@@ -17,6 +17,26 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🆕 Sessão 18/07/2026 (tarde) — Bug vivo do detalhe + edital PDF ZUK + limpeza estrangeiros
+> Branch de dev: **`claude/ultimo-handoff-6lxk6j`**. Banco aplicado via MCP; código na branch (pronto p/ PR → `main`). Diagnóstico do ritual: **segurança íntegra** (`auditoria_seguranca()` = 0 crítico / 0 atenção), deploy #142 READY, 33.283 imóveis ativos, geo 0 pendente.
+
+**Contexto:** o dono pediu "faça o que não depende de mim + siga o ritual das validações". O ritual achou 1 erro de cliente REAL de hoje na saúde; corrigido + 2 follow-ups da ZUK + limpeza de dados.
+
+**Entregue hoje:**
+1. **BUG VIVO corrigido (`src/pages/ImovelDetalhe.jsx`)** — erro de cliente de hoje `q.rpc(...).catch is not a function` (rota `/imovel/:id`, assinante logado, 3 ocorrências). O builder do `supabase.rpc()` é *thenable* mas **não tem `.catch()`**; no bundle minificado `supabase`→`q`. Fix: `registrar_imovel_visto` passa a usar `.then(()=>{}).catch(()=>{})` (mesmo padrão já usado no `Painel.jsx`, que converte o builder num Promise real). Auditei todo `src/` — **era o único** `.rpc(...).catch` direto; os demais usam `.then().catch()` ou são Promises reais (`supabase.auth`). O erro em `erros_cliente` **auto-limpa** quando parar de ocorrer após o deploy (health-check limpa em 24h). Build OK.
+2. **EDITAL PDF da ZUK plugado (`scripts/scraper-puppeteer.mjs`, `enriquecerDatasZuk`)** — follow-up #1 do handoff anterior. Na MESMA visita que já busca a data (custo zero), captura o `<a>` "Edital de venda" → PDF (`documentacaoleilao.portalzuk.com.br`) e "Condições de venda" → PDF de regras, gravando em **`anexos`** (`{nome,url,tipo}`, mesclado por URL no `salvarImoveis`) + `link_regras_venda`. **NÃO toca em `link_edital`** (segue sendo a página do lote da re-visita). Filtro por `.pdf`/host ignora a "Matrícula do Imóvel" (que aponta p/ a própria página). Lógica validada em teste isolado (edital+regras capturados; página do lote ignorada). Assim o relatório documental passa a ler o PDF certo.
+3. **Metragem útil/privativa da ZUK — já estava feita (#136, 17/07).** Confirmei: `enriquecerDatasZuk` já prefere "metragem útil" sobre "total" (linhas ~904-911). Follow-up #2 do handoff **encerrado** (era resíduo de doc desatualizada).
+4. **Limpeza "só Brasil" + backfill de UF (via MCP, dados):** o ritual achou 17 lotes ativos sem UF (era 6).
+   - **6 lotes SBID9 do Paraguai DESATIVADOS** (Caaguazú, Toro Blanco ×3, Paraguarí, Asunción) — regra documentada "só Brasil". **Causa-raiz diagnosticada:** o guard `ehEstrangeiroSemUF` (scraper) funciona quando a cidade está preenchida (testei c/ dataset real: retorna `true` p/ as 4 cidades), mas **falha aberto quando a cidade chega VAZIA no save** — esses entraram com cidade/UF vazias (17/07 11:44, mesmo horário do scrape) e a cidade foi preenchida depois. **Verifiquei que o conjunto ativo está limpo** (nenhum outro estrangeiro nas fontes Superbid/SBID9/21/SOLD).
+   - **4 lotes com UF EXPLÍCITA no título backfillados** + geo re-enfileirado (`geocod_nivel='refazer'`): GOIÂNIA/GO, Palmeira/PR, Rio Negrinho/SC, Selbach/RS. (`cidade_norm` é coluna GERADA — recalcula sozinha.)
+   - **7 ambíguos deixados p/ o dono** (não adivinho UF — lição do Ibiúna/AP): "Escavadeira Komatsu PC200" (**não é imóvel** — candidato a desativar), "Terreno em Itanhaém" (provável SP, sem sufixo), Tatuquara, Afonso Pena, Sitio Cercado, "PARTE IDEAL 50%", "direitos creditórios APARTAMENTO" (todos LEILOTECH).
+
+**➡️ FOLLOW-UPS de código (não dependem do dono):**
+- **Fechar o furo do guard estrangeiro (cidade-vazia-no-save):** o `ehEstrangeiroSemUF` não pega estrangeiro quando a cidade chega vazia e é preenchida depois. Opções: (a) extrair `country` da API Superbid (`offer-query.superbid.net`) em `scraperSuperbidNet` e descartar não-Brasil na origem (precisa recon do campo real da API); ou (b) **varredura periódica** (ex.: no `monitor-fontes-cron`) que desativa lotes das fontes Superbid cuja cidade JÁ preenchida não é município BR (mesma lógica do guard, aplicada pós-geocode — provadamente correta). Recomendo (b) por ser robusta a qualquer momento em que a cidade apareça.
+- **Replicar o padrão anchor-por-texto** (edital PDF) para outras fontes cujo `link_edital` hoje é a URL do lote (o `vasculharDocumentos` genérico já classifica, mas só roda no cap de docs; ZUK ganhou a captura na própria visita de datas).
+
+**Pendências do dono (inalteradas):** validar **PECINI** (cron seg 07-20, +Bright Data; hoje 23 ativos, última 14/07) e conferir **BIASI** (segue 173 após o fix de paginação → **é o acervo real do site**, não regressão). Ambíguos de UF acima. Merge desta branch → `main` quando quiser (o fix do bug só vale em produção após o deploy).
+
 ## 🆕 Sessão 18/07/2026 — Linha de base da captura + recon edital ZUK (encerramento)
 > Branch de dev: **`claude/bidprobrasil-handoff-diagnostics-lqttm2`**. Banco aplicado via MCP; código em PR novo → `main`. Segurança íntegra (`auditoria_seguranca()` = 0 crítico / 0 atenção, conferido nesta sessão).
 
