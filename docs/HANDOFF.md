@@ -41,6 +41,11 @@
 - **`src/pages/Analise.jsx`**: detecta a mesma incoerência e, no card de mercado, troca a base `pm²×área` por um **aviso** pedindo a **Área Privativa** do edital (relabela "Desconto vs. avaliação"). Regerando o relatório, ROI/desconto ficam coerentes.
 - **FOLLOW-UP (scraper):** capturar a **metragem útil/privativa** da ZUK (recon da seção de características do lote) para não cair no fallback de área total. Registrado no `leiloeiro_conhecimento` da ZUK.
 
+**🧭 Melhor caminho p/ a metragem — fonte autoritativa = MATRÍCULA/EDITAL (implementado).** A metragem confiável está na **matrícula** (área privativa/construída) e no **edital**, não só no site do leiloeiro. O relatório **documental** já lê esses PDFs (`lerDoc`, com Bright Data fallback). Agora ele **extrai a área** (privativa/total/terreno) e **grava a privativa em `imoveis_leilao.area_m2`** (base do mercadológico) + detalhamento em `ficha_juridica`:
+- `api/gerar-documental.js`: novos campos `areaPrivativaM2/areaTotalM2/areaTerrenoM2` na extração (matrícula prevalece sobre edital); persiste a privativa em `area_m2` quando plausível/coerente com a avaliação (200–200.000 R$/m²) e materialmente diferente da atual.
+- `api/gerar-analise.js`: passa a **preferir a área privativa confirmada** (`ficha_juridica.areaPrivativaM2`) sobre a área do site/cliente; a coerência (âncora na avaliação) só age quando a área NÃO veio da matrícula.
+- Fluxo: gerando o **documental**, a `area_m2` é corrigida na fonte → o **mercadológico** passa a estimar por comparáveis com a metragem certa. Sem documental ainda, a guarda de coerência evita o número inflado. **Cobre qualquer leiloeiro** (não só ZUK).
+
 **Lembretes do dono (quando estiver no computador):**
 - **Recon ZUK: nada a fazer** — já rodou; o pendente é o passo de código acima (posso fazer na próxima sessão).
 - **PECINI** (pago): validar a 1ª gravação do cron **seg 07-20** (esperado > 23 ativos) **e conferir o gasto Bright Data**.

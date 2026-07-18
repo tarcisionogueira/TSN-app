@@ -331,6 +331,10 @@ DADOS-CHAVE DA MATRÍCULA (quando constarem — preencha em "extracao"; se não 
 - "dataConsolidacao": data da CONSOLIDAÇÃO DA PROPRIEDADE em nome do credor fiduciário (típico de alienação fiduciária/Lei 9.514, na averbação "Av-"), formato AAAA-MM-DD. É determinante para os prazos do ex-mutuário — capture se houver.
 - "indisponibilidadePenhora": há INDISPONIBILIDADE, PENHORA, ARRESTO ou bloqueio ATIVO na matrícula? Responda "sim", "nao" ou "nao_consta".
 - "condominioNome" e "condominioCnpj": nome do condomínio e CNPJ, se o imóvel for em condomínio (útil para levantar o débito condominial).
+- ÁREA (METRAGEM) — base do valor de mercado, extraia com atenção da MATRÍCULA (fonte de verdade) e confira com o edital/laudo:
+  • "areaPrivativaM2": ÁREA PRIVATIVA (apartamento/flat/sala) ou ÁREA CONSTRUÍDA (casa), em m², SÓ O NÚMERO. A matrícula descreve o imóvel com essa área ("área privativa de X m²", "área real privativa", "área construída de Y m²"). É a base da avaliação mercadológica. NÃO confunda com a área TOTAL (privativa + comum) nem com a área do TERRENO/lote/fração ideal — usar a total infla o valor por m². Se o edital divergir da matrícula, PREVALECE a matrícula.
+  • "areaTotalM2": área total (privativa + comum), se constar. "areaTerrenoM2": área do terreno/lote (o terreno em si, não a fração ideal), se constar. Terreno excedente pode agregar valor, mas é modelado à parte, nunca multiplicando o R$/m² pela área total.
+  • Se a área não constar de forma legível, deixe 0 — NÃO invente.
 
 CUSTOS DO EDITAL (importantes p/ a projeção financeira): capture a comissão do leiloeiro e, SE HOUVER, a TAXA ADMINISTRATIVA do leilão/portal (percentual sobre a arrematação, ALÉM da comissão do leiloeiro — comum na Superbid) em "taxaAdministrativaPercentual", e eventuais DESPESAS ADMINISTRATIVAS de valor fixo em "despesasAdministrativas". Se o edital não mencionar, deixe 0.
 
@@ -369,7 +373,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM ABAIXO — "extracao", "parecer" e "riscos" são os mais importantes e vêm PRIMEIRO; o "raioX" (enriquecimento) vem por último. Seja objetivo para o JSON caber na resposta:
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. LINGUAGEM PARA LEIGO (obrigatório): escreva para QUALQUER pessoa sem formação jurídica entender; frases curtas e, sempre que usar um termo técnico inevitável (ex.: propter rem, usufruto, penhora, hipoteca, alienação fiduciária, imissão de posse, indisponibilidade), explique em 3 a 6 palavras entre parênteses o que significa. FORMATO CHECKLIST (obrigatório — o relatório é a RESPOSTA do checklist jurídico de arrematação, item a item, NÃO um texto corrido): em cada seção, responda CADA item do checklist iniciando a linha com o RÓTULO do item seguido de dois-pontos e a resposta objetiva, e DISCORRA em 1 a 3 frases o que aquilo significa e o impacto para o arrematante. Se o dado não constar nos documentos, responda 'não consta na documentação analisada' e diga ONDE confirmar (nunca invente). Use EXATAMENTE estas seções e rótulos: § SEÇÃO: 1. IDENTIFICAÇÃO BÁSICA (Nº do Processo: ...; Vara/Tribunal: ...; Partes (Exequente vs. Executado): ...; Nº da Matrícula: ...; Nº do Edital: ...); § SEÇÃO: 2. ANÁLISE DAS REGRAS (EDITAL) (Forma de Pagamento: à vista/parcelado, prazos e condições; Comissão do Leiloeiro: percentual e prazo; Estado de Ocupação (declarado no edital): ...; Venda Ad Corpus: sim/não e o que significa; Responsabilidade por Débitos: arrematante assume os propter rem OU são sub-rogados no preço, citando o texto do edital); § SEÇÃO: 3. ANÁLISE DA PROPRIEDADE (MATRÍCULA) (Titularidade: o executado é o proprietário atual da matrícula?; Penhoras Concorrentes: outras penhoras (trabalhista/fiscal) com preferência de crédito?; Hipotecas/Alienação Fiduciária: há credor fiduciário/hipotecário e ele foi intimado?; Gravames Sérios: indisponibilidade, inalienabilidade, usufruto, locação com cláusula de vigência?; Descrição do Imóvel: área/vagas conferem com laudo e edital?); § SEÇÃO: 4. ANÁLISE PROCESSUAL (RISCO DE ANULAÇÃO)${temProc ? ' (com base no CNJ consultado)' : ''} (Citação do Executado: válida?; Intimação sobre o Leilão: o executado foi intimado?; Intimação do Cônjuge: quando o regime de bens exigir; Recursos Pendentes: embargos/agravo/ação anulatória que afetem o leilão?; Efeito Suspensivo: há decisão suspendendo o leilão?; Atualização da Avaliação: risco de 'preço vil'?; Preço Mínimo: a 2ª praça respeita o mínimo legal, art. 891 CPC?; em leilão extrajudicial da Lei 9.514, informe se há AÇÃO do ex-mutuário contra o credor); § SEÇÃO: 5. ANÁLISE DE CUSTOS E RESPONSABILIDADES (Débitos de IPTU e Condomínio: valor e de quem é a responsabilidade após a arrematação; Hierarquia de Pagamento: em sub-rogação, o valor cobre o credor principal E os propter rem?; Custos e Prazo de Desocupação: se ocupado, estimativa de tempo/custo da imissão na posse); § SEÇÃO: 6. PARECER FINAL DO JURÍDICO (Pontos de Atenção (Red Flags): vícios que podem gerar nulidade; Nível de Risco da Operação: Baixo/Médio/Alto; Ações Pós-Arremate Requeridas: ex. baixa de penhoras, mandado de imissão na posse; Recomendação: RECOMENDO a arrematação / RECOMENDO com ressalvas / NÃO RECOMENDO, com a justificativa objetiva). As certidões recomendadas vão no campo 'raioX.certidoesRecomendadas' (renderizadas ao final do relatório), não repita a lista dentro do parecer.",
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "nivelRisco": "verde|amarelo|vermelho",
@@ -457,7 +461,7 @@ export default async function handler(req, res) {
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
   try {
-    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao&limit=1`)).json();
+    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,area_m2,valor_avaliacao&limit=1`)).json();
     row = r || null;
   } catch { /* segue com o que veio no body */ }
 
@@ -1170,6 +1174,9 @@ export default async function handler(req, res) {
         segundaPraca: rx.cronogramaLeilao?.segundaPraca || null,
         prazoPagamento: rx.cronogramaLeilao?.prazoPagamento || null,
         certidoesPendentes: Array.isArray(rx.certidoesRecomendadas) ? rx.certidoesRecomendadas.length : 0,
+        areaPrivativaM2: Number(parsed.extracao?.areaPrivativaM2) || null,
+        areaTotalM2: Number(parsed.extracao?.areaTotalM2) || null,
+        areaTerrenoM2: Number(parsed.extracao?.areaTerrenoM2) || null,
         atualizadoEm: new Date().toISOString(),
       };
       await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
@@ -1189,6 +1196,31 @@ export default async function handler(req, res) {
         await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
           method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ data_leilao: iso }),
         });
+      }
+    } catch { /* não bloqueia o laudo */ }
+
+    // ÁREA PRIVATIVA da MATRÍCULA/EDITAL = base AUTORITATIVA do valor de mercado. O site do
+    // leiloeiro às vezes traz a área TOTAL/terreno (ex.: ZUK caía no fallback total) e inflava o
+    // mercadológico. A matrícula qualifica a área privativa/construída — quando a extração traz
+    // uma privativa plausível e MATERIALMENTE diferente da atual, corrige imoveis_leilao.area_m2
+    // (que o mercadológico usa como base). Coerência: se houver avaliação, só aceita a nova área
+    // se aproximar o R$/m² implícito de um patamar plausível (evita OCR ruim piorar o dado).
+    try {
+      const aPriv = Number(parsed.extracao?.areaPrivativaM2) || 0;
+      if (aPriv >= 5 && aPriv <= 100000) {
+        const atual = Number(row?.area_m2) || 0;
+        const difMaterial = atual <= 0 || Math.abs(aPriv - atual) / Math.max(atual, aPriv) > 0.03;
+        // Se temos avaliação, a área da matrícula não pode gerar um R$/m² absurdo (proteção
+        // contra número mal lido): aceita quando 200 <= avaliação/área <= 200000 R$/m².
+        const aval = Number(row?.valor_avaliacao) || 0;
+        const m2Novo = aval > 0 ? aval / aPriv : 0;
+        const coerente = aval <= 0 || (m2Novo >= 200 && m2Novo <= 200000);
+        if (difMaterial && coerente) {
+          await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ area_m2: aPriv }),
+          }).catch(() => {});
+          console.log(`[documental] área privativa da matrícula/edital → imóvel ${imovelId}: ${atual || '—'} → ${aPriv} m² (base do mercadológico corrigida)`);
+        }
       }
     } catch { /* não bloqueia o laudo */ }
 

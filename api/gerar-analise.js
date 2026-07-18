@@ -442,26 +442,31 @@ export default async function handler(req, res) {
       if (semAmostras(mercado)) mercado = await buscarMercado();
     }
 
-    const areaM2 = Number(mercadoInputs.areaM2) || 0;
     const precoM2 = Number(mercado.precoMedioM2) || 0;
+    // A base do valor de mercado é a ÁREA PRIVATIVA (útil). Fonte de verdade da metragem é a
+    // MATRÍCULA/EDITAL: quando o documental já leu e extraiu a privativa (ficha_juridica.
+    // areaPrivativaM2), ela PREVALECE sobre a área do site (que às vezes é a total/terreno) e
+    // sobre a área do cliente. Sem documental ainda, usa a área informada e a coerência abaixo
+    // protege o número. Também lemos avaliação/fonte para a checagem de coerência.
+    let areaM2 = Number(mercadoInputs.areaM2) || 0;
+    let avalDb = 0, fonteDb = '', areaFonte = 'informada';
+    try {
+      const [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,area_m2,ficha_juridica&limit=1`)).json();
+      const n = Number(imDb?.valor_avaliacao) || 0;
+      avalDb = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n) ? 0 : n;
+      fonteDb = imDb?.fonte || '';
+      const aDoc = Number(imDb?.ficha_juridica?.areaPrivativaM2) || 0;
+      if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
+    } catch { /* segue com a área informada */ }
     let valorMercado = (precoM2 && areaM2) ? Math.round(precoM2 * areaM2 * 0.9) : null;
-    // COERÊNCIA — a base do valor de mercado é a área PRIVATIVA (útil). Se o R$/m² dos
-    // comparáveis divergir MUITO do R$/m² implícito na AVALIAÇÃO do leilão, a área usada é
-    // provavelmente a TOTAL/terreno (não a privativa): 121 m² × R$10.980 = R$1,3M vs avaliação
-    // R$329k gerava "desconto vs mercado" e ROI irreais para o assinante. Nesse caso ancoramos
-    // o mercado na AVALIAÇÃO (conservador), sinalizamos o alerta p/ o front pedir a privativa e
-    // registramos anomalia p/ o agente corrigir a área na fonte. (Terreno excedente, se houver,
-    // deve ser modelado à parte — nunca multiplicando o R$/m² de apartamento pela área total.)
+    // COERÊNCIA — se o R$/m² dos comparáveis divergir MUITO do R$/m² implícito na AVALIAÇÃO
+    // (área provável TOTAL/terreno, não privativa: 121 m² × R$10.980 = R$1,3M vs avaliação
+    // R$329k gerava desconto/ROI irreais), ancoramos o mercado na AVALIAÇÃO (conservador),
+    // sinalizamos o alerta p/ o front pedir a privativa e registramos anomalia. Não se aplica
+    // quando a área já veio da matrícula (areaFonte='matricula') — aí a base é confiável.
     let areaAlerta = null;
     try {
-      let avalDb = 0, fonteDb = '';
-      try {
-        const [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao&limit=1`)).json();
-        const n = Number(imDb?.valor_avaliacao) || 0;
-        avalDb = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n) ? 0 : n;
-        fonteDb = imDb?.fonte || '';
-      } catch { /* segue sem avaliação de banco */ }
-      if (valorMercado && avalDb > 0 && areaM2 > 0 && precoM2 > 0) {
+      if (valorMercado && avalDb > 0 && areaM2 > 0 && precoM2 > 0 && areaFonte !== 'matricula') {
         const avalM2 = avalDb / areaM2;
         if (precoM2 > 3 * avalM2) {
           const areaPriv = Math.round(avalDb / precoM2);
