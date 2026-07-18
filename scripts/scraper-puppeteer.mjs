@@ -1498,6 +1498,7 @@ function mapLoteLJUD_pp(it) {
 }
 // Coleta LJUD por um endpoint, fazendo o fetch DENTRO da página (TLS de Chrome).
 async function scraperLJUD_navegador(browser, endpoint) {
+  const LJUD_FOTO_MAX = Number(process.env.LJUD_FOTO_MAX || 60); // lotes/ run p/ backfill de foto
   const page = await browser.newPage();
   const bens = new Map();
   try {
@@ -1553,6 +1554,32 @@ async function scraperLJUD_navegador(browser, endpoint) {
     if (!row.valor_minimo || seen.has(row.fonte_id)) continue;
     seen.add(row.fonte_id); imoveis.push(row);
   }
+  // BACKFILL DE FOTO (og:image) — APRENDIZADO 2026-07-18: o get-lotes devolve fotos:[]
+  // p/ ~38% dos lotes (foto só na PÁGINA do lote). Visitamos os SEM foto (todos têm
+  // url_lote) e lemos og:image (path S3 fotos/imoveis) — mesma tática comprovada do
+  // SODRE. Bounded por run (LJUD_FOTO_MAX): ao longo dos scrapes diários cobre a cauda;
+  // fonte_saude.foto_pct do LJUD confirma o ganho. Best-effort: nunca bloqueia o lote.
+  const semFoto = imoveis.filter(i => !i.link_foto && i.url_lote).slice(0, LJUD_FOTO_MAX);
+  let fotoOk = 0;
+  for (const im of semFoto) {
+    let p2;
+    try {
+      p2 = await browser.newPage();
+      await p2.setUserAgent(USER_AGENT);
+      await p2.goto(im.url_lote, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      const og = await p2.evaluate(() => {
+        const meta = document.querySelector('meta[property="og:image"]')?.getAttribute('content');
+        if (meta) return meta;
+        const hit = document.documentElement.innerHTML.match(/https?:\/\/[^"'\s)]*fotos\/imoveis\/[^"'\s)]+/);
+        return hit ? hit[0] : null;
+      });
+      // Só aceita a foto REAL do imóvel (path S3 fotos/imoveis) — rejeita logo/og genérico.
+      if (og && /^https?:\/\/\S+fotos\/imoveis\//.test(og)) { im.link_foto = og.replace('/196x146/', '/640x480/'); fotoOk++; }
+    } catch { /* segue: foto é best-effort */ }
+    finally { try { if (p2) await p2.close(); } catch {} }
+    await new Promise(r => setTimeout(r, 150));
+  }
+  if (semFoto.length) console.log(`    LJUD: foto backfill ${fotoOk}/${semFoto.length} via og:image`);
   console.log(`    LJUD/${endpoint}: ${imoveis.length} imóveis mapeados (com data: ${imoveis.filter(i => i.data_leilao).length})`);
   return imoveis;
 }
