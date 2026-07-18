@@ -20,11 +20,15 @@ const FROM_EMAIL  = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
 const APP_URL     = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 
-// Fontes com coleta DIÁRIA que devem reportar saúde a cada execução. CEF (maior
-// acervo) e LJUD (reativado via navegador real, page.evaluate) incluídos — se a
-// coleta grátis quebrar (site mudou/fingerprint), o admin é avisado para agir.
-const FONTES_ESPERADAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRAZAO', 'LJUD'];
-const MAX_IDADE_H = 36; // sem coleta há mais que isso = alerta
+// Fontes internas (não são leiloeiros) — nunca alertar.
+const FONTES_INTERNAS = ['SUPORTE', 'atribuido_manual'];
+// Fontes CRÍTICAS que DEVEM reportar saúde sempre — se sumirem do fonte_saude, alerta.
+const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRAZAO', 'LJUD'];
+// Scrapers PRÓPRIOS que NÃO escrevem fonte_saude (ponto-cego histórico): checados pelo
+// FRESCOR do acervo (imoveis_leilao.atualizado_em). PECINI/RJLEILOES são PAGOS (Bright
+// Data) — coleta parada = pagar sem coletar. Valor = dias de tolerância de frescor.
+const FONTES_SEM_SAUDE = { PECINI: 5, RJLEILOES: 7 };
+const MAX_IDADE_H = 48; // sem coleta há mais que isso = alerta
 
 // IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
 // Node da Vercel, `export default` é tratado como assinatura Express `(req, res)` e o
@@ -39,7 +43,9 @@ async function handler(req) {
   }
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-  const desde = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+  // 15 dias: cobre TODAS as fontes que reportam saúde (não só uma allowlist de 8 —
+  // BIASI/PESTANA/etc. degradavam e passavam batido). Última linha por fonte = estado.
+  const desde = new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString();
   const { data: linhas, error } = await supabase
     .from('fonte_saude')
     .select('fonte,total,status,motivo,estrategia,uf_pct,valor_pct,link_pct,foto_pct,executado_em')
@@ -47,15 +53,15 @@ async function handler(req) {
     .order('executado_em', { ascending: false });
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 
-  // Última linha por fonte.
   const ultima = {};
   for (const l of linhas || []) if (!ultima[l.fonte]) ultima[l.fonte] = l;
 
   const agoraMs = Date.now();
   const problemas = [];
-  for (const fonte of FONTES_ESPERADAS) {
-    const u = ultima[fonte];
-    if (!u) { problemas.push({ fonte, tipo: 'sem coleta', detalhe: `nenhuma execução nos últimos 5 dias` }); continue; }
+
+  // A) TODAS as fontes que reportam saúde: coleta parada / falhou / degradado.
+  for (const [fonte, u] of Object.entries(ultima)) {
+    if (FONTES_INTERNAS.includes(fonte)) continue;
     const idadeH = (agoraMs - new Date(u.executado_em).getTime()) / 3600000;
     if (idadeH > MAX_IDADE_H) {
       problemas.push({ fonte, tipo: 'coleta parada', detalhe: `última coleta há ${idadeH.toFixed(0)}h (${u.total} imóveis)` });
@@ -63,6 +69,32 @@ async function handler(req) {
       problemas.push({ fonte, tipo: 'falhou (0 imóveis)', detalhe: u.motivo || 'coleta zerada' });
     } else if (u.status === 'degradado') {
       problemas.push({ fonte, tipo: 'degradado', detalhe: `${u.total} imóveis — ${u.motivo || 'qualidade abaixo do critério'}` });
+    }
+  }
+
+  // A2) Fontes CRÍTICAS que sumiram do fonte_saude (nem apareceram em 15 dias).
+  for (const fonte of FONTES_CRITICAS) {
+    if (!ultima[fonte] && !problemas.some(p => p.fonte === fonte)) {
+      problemas.push({ fonte, tipo: 'sem coleta', detalhe: 'nenhuma execução nos últimos 15 dias' });
+    }
+  }
+
+  // B) Scrapers PRÓPRIOS que não escrevem fonte_saude (ponto-cego): FRESCOR do acervo.
+  //    Cobre a falha SILENCIOSA (o scraper parou e nem reporta) — caso PECINI (pago).
+  for (const [fonte, diasTol] of Object.entries(FONTES_SEM_SAUDE)) {
+    const { data: mx } = await supabase
+      .from('imoveis_leilao')
+      .select('atualizado_em')
+      .eq('fonte', fonte).eq('ativo', true)
+      .order('atualizado_em', { ascending: false }).limit(1);
+    const ultimoAt = mx?.[0]?.atualizado_em;
+    if (!ultimoAt) {
+      problemas.push({ fonte, tipo: 'sem acervo ativo', detalhe: 'scraper próprio (pago?) sem imóvel ativo' });
+      continue;
+    }
+    const idadeD = (agoraMs - new Date(ultimoAt).getTime()) / 86400000;
+    if (idadeD > diasTol) {
+      problemas.push({ fonte, tipo: 'coleta parada (silenciosa)', detalhe: `acervo sem atualização há ${idadeD.toFixed(0)}d — scraper próprio não reporta saúde` });
     }
   }
 
