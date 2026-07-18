@@ -443,7 +443,36 @@ export default async function handler(req, res) {
     }
 
     const areaM2 = Number(mercadoInputs.areaM2) || 0;
-    const valorMercado = (mercado.precoMedioM2 && areaM2) ? Math.round(mercado.precoMedioM2 * areaM2 * 0.9) : null;
+    const precoM2 = Number(mercado.precoMedioM2) || 0;
+    let valorMercado = (precoM2 && areaM2) ? Math.round(precoM2 * areaM2 * 0.9) : null;
+    // COERÊNCIA — a base do valor de mercado é a área PRIVATIVA (útil). Se o R$/m² dos
+    // comparáveis divergir MUITO do R$/m² implícito na AVALIAÇÃO do leilão, a área usada é
+    // provavelmente a TOTAL/terreno (não a privativa): 121 m² × R$10.980 = R$1,3M vs avaliação
+    // R$329k gerava "desconto vs mercado" e ROI irreais para o assinante. Nesse caso ancoramos
+    // o mercado na AVALIAÇÃO (conservador), sinalizamos o alerta p/ o front pedir a privativa e
+    // registramos anomalia p/ o agente corrigir a área na fonte. (Terreno excedente, se houver,
+    // deve ser modelado à parte — nunca multiplicando o R$/m² de apartamento pela área total.)
+    let areaAlerta = null;
+    try {
+      let avalDb = 0, fonteDb = '';
+      try {
+        const [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao&limit=1`)).json();
+        const n = Number(imDb?.valor_avaliacao) || 0;
+        avalDb = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n) ? 0 : n;
+        fonteDb = imDb?.fonte || '';
+      } catch { /* segue sem avaliação de banco */ }
+      if (valorMercado && avalDb > 0 && areaM2 > 0 && precoM2 > 0) {
+        const avalM2 = avalDb / areaM2;
+        if (precoM2 > 3 * avalM2) {
+          const areaPriv = Math.round(avalDb / precoM2);
+          areaAlerta = { areaUsada: areaM2, compM2: Math.round(precoM2), avalM2: Math.round(avalM2), areaPrivativaImplicita: areaPriv, motivo: 'area_provavel_total_nao_privativa' };
+          valorMercado = Math.round(avalDb); // âncora conservadora (avaliação), não o comps×área inflado
+          await registrarAnomalia('mercado_area_incoerente', fonteDb, imovelId, 'area_m2',
+            `Comparáveis R$${Math.round(precoM2)}/m² vs avaliação R$${Math.round(avalM2)}/m² (${(precoM2 / avalM2).toFixed(1)}x) — área ${areaM2} m² provável TOTAL, não privativa (~${areaPriv} m²). Mercado ancorado na avaliação.`);
+        }
+      }
+    } catch { /* coerência é best-effort: nunca bloqueia o relatório */ }
+    mercado.areaAlerta = areaAlerta; // null quando coerente (limpa alerta antigo em reaproveitamento)
     const valorLocacao = mercado.aluguelMedio ? Math.round(mercado.aluguelMedio) : null;
 
     // 2) Laudo (parecer). Carrega os docs do lote para o parecer poder dizer se os
