@@ -8,12 +8,39 @@
 > 1. **PECINI** — o cron gravava em DRY-RUN (fallback `|| '1'` no workflow); corrigido p/ `'0'`. Próximo cron **seg 07-20 09h UTC** deve GRAVAR. Conferir: `select count(*) from imoveis_leilao where fonte='PECINI' and atualizado_em > now()-interval '1 day';` (esperado > 23) **e o gasto Bright Data** (é pago).
 > 2. **BIASI** — paginação estava presa na 1ª página (dependia do atributo `total`); tornei robusta. Conferir se o scrape volta a ~370 (não 173): `select total, status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ~173, é acervo real do site.
 > 3. Ambas as fontes agora entram no **monitor-fontes-cron** (expandido para todas as fontes + falha silenciosa dos scrapers pagos) — o e-mail avisa se regredir.
+> 4. **LINHA DE BASE por leiloeiro (novo):** `docs/BASELINE_CAPTURA_LEILOEIROS.md` + `BASELINE_FONTES` no monitor + RPC `fonte_cobertura()`. O monitor agora alerta **regressão silenciosa** (acervo abaixo do piso OU campo que vinha alto sumindo). Calibrado para **0 falso-positivo** no acervo atual. Ao evoluir um parser (área/data/edital), **re-medir e atualizar** os dois + `leiloeiro_conhecimento`.
+> 5. **Recon edital ZUK: EXECUTADO (não precisa do dono p/ rodar).** Padrão do PDF descoberto — ver bloco 18/07. Próximo passo é **código** (plugar a captura), não uma ação manual do dono.
 
 > 🩺 **Segurança — automação em 2 camadas (não depende de sessão manual):**
 > 1. **DB/RLS/grants (determinística):** cron `seguranca-auditoria-cron` (semanal, servidor) roda `auditoria_seguranca()` e **e-mail só se regredir**. Cobre AUTOMATICAMENTE objetos novos de banco.
 > 2. **Código (ofensiva):** Rotina agendada `Auditoria de segurança BidPro (mensal)` acorda uma sessão sozinha, roda os 3 agentes ofensivos sobre o repo e **notifica o dono** (sem MCP → não faz a parte de banco, coberta pela camada 1; não faz push automático).
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
+
+## 🆕 Sessão 18/07/2026 — Linha de base da captura + recon edital ZUK (encerramento)
+> Branch de dev: **`claude/bidprobrasil-handoff-diagnostics-lqttm2`**. Banco aplicado via MCP; código em PR novo → `main`. Segurança íntegra (`auditoria_seguranca()` = 0 crítico / 0 atenção, conferido nesta sessão).
+
+**Contexto:** vários relatórios de assinantes falharam por **degradação silenciosa** da captura (área/data/avaliação/edital faltando sem o scraper "quebrar"). O dono pediu uma **linha de base por leiloeiro** para o agente responsável ver "o que está funcionando e o que não está".
+
+**Entregue hoje:**
+1. **Linha de base da captura — `docs/BASELINE_CAPTURA_LEILOEIROS.md`** (referência única). Define os campos essenciais em 3 níveis — **críticos** (título, cidade/UF, `valor_minimo`, foto, tipo, modalidade), **esperados** (área útil, data, edital, matrícula) e **condicionais por fonte** (avaliação, regras de venda — ausência é NORMAL) — e a **quantidade + cobertura esperada por leiloeiro** (20 fontes), com os **caveats** que evitam "falso conserto".
+2. **Ligado ao agente de monitoramento (o "agente responsável"):**
+   - `api/monitor-fontes-cron.js` ganhou `BASELINE_FONTES` (piso de acervo + cobertura mínima por campo que a fonte entrega) e a **Seção C**: alerta **acervo abaixo do piso** e **campo que regrediu** (folga ~15pts). Aditivo (se a RPC falhar, não derruba o monitor). Calibrado p/ **0 falso-positivo** no acervo de hoje.
+   - Migração `fonte_cobertura_baseline.sql`: RPC `public.fonte_cobertura()` (cobertura por fonte em 1 round-trip; `security invoker`, só `service_role` — **não** aparece no auditor).
+   - `leiloeiro_conhecimento.observacao` de **todas as 20 fontes** carrega a meta (piso + campos + gaps) — o agente scraper passa a ter o alvo.
+3. **Recon edital ZUK — RODEI (posso rodar sozinho; não depende do dono).** Run `29627025136` (workflow `recon-zuk-edital`, grátis via Puppeteer) concluiu OK. **Padrão descoberto:** na página do lote, o `<a>` com texto **"Edital de venda"** aponta para o **PDF real** em `https://documentacaoleilao.portalzuk.com.br/AAAA/MM/<hash>.pdf`; **"Condições de venda"** → outro PDF (regras); **"Matrícula do Imóvel"** → aponta para a **própria página do lote** (não é PDF → segue no fluxo `captura-matricula-zuk`). Registrado em `leiloeiro_conhecimento.docs_estrategia` da ZUK.
+
+**⚠️ Por que o "edital=100%" era enganoso:** hoje `link_edital` de quase toda fonte guarda a **URL da página do lote** (não o PDF). Foi por isso que "o edital não abriu" num lote ZUK. CEF (~37%) é a exceção — lá é o PDF real.
+
+**➡️ PRÓXIMO PASSO (código, não ação do dono):** plugar a captura do edital ZUK em `enriquecerDatasZuk` (`scripts/scraper-puppeteer.mjs`) — pegar o href do anchor **"Edital de venda"** e gravar o PDF em **`anexos`** (ou campo próprio) **SEM sobrescrever `link_edital`** (que é a URL do lote usada pela própria visita — sobrescrever quebraria a re-visita e viraria retrabalho). Validar com dry-run antes de gravar. Depois, replicar o padrão de anchor-por-texto para as demais fontes cujo edital hoje é URL de lote.
+
+**Reagendamento dos scrapers (confirmado, já em `main` via #137):** grátis (CEF, leiloeiros-puppeteer) **2×/sem** (seg/qui); pagas (PECINI, RJLEILOES) **1×/sem**. Reexecução consecutiva só após correção de falha.
+
+**Lembretes do dono (quando estiver no computador):**
+- **Recon ZUK: nada a fazer** — já rodou; o pendente é o passo de código acima (posso fazer na próxima sessão).
+- **PECINI** (pago): validar a 1ª gravação do cron **seg 07-20** (esperado > 23 ativos) **e conferir o gasto Bright Data**.
+- **BIASI**: conferir se o acervo volta a ~370 após o fix de paginação (senão, 173 é o real do site).
+- Decisões de fontes pagas (PECINI/RJ) e demais pendências em `docs/PENDENCIAS_DONO.md`.
 
 ## 🆕 Sessão 17/07/2026 — Merge do #126 + rede anti-recorrência (saúde/segurança)
 > Branch de dev: **`claude/bidprobrasil-handoff-diagnostics-lqttm2`**. Banco aplicado via MCP; código em PR novo → `main`.
