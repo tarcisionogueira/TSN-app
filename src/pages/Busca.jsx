@@ -1062,6 +1062,7 @@ export default function Busca() {
           estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipos?.join(',') || null,
           valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
           valor_max: filtrosAtivos.valorMax ? Number(filtrosAtivos.valorMax) : null,
+          desconto_min: filtrosAtivos.descontoMin ? Number(filtrosAtivos.descontoMin) : null,
           pagamento_tipos: filtrosAtivos.pagamento?.length > 0 ? filtrosAtivos.pagamento : null,
           sort_usado: sortAtivo,
         }).then(() => {}).catch(() => {});

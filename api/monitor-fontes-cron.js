@@ -14,6 +14,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
+import MUNICIPIOS from './_municipios.js';
 
 const RESEND_KEY  = process.env.RESEND_API_KEY;
 const FROM_EMAIL  = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
@@ -146,6 +147,48 @@ async function handler(req) {
       }
     }
   } catch { /* baseline é aditivo — não bloqueia o restante do monitor */ }
+
+  // D) VARREDURA "só Brasil" pós-geocode (rede Superbid). O guard do scraper
+  //    (ehEstrangeiroSemUF) só reconhece estrangeiro quando a CIDADE já vem preenchida;
+  //    lotes internacionais (Paraguai/Argentina) que chegam com cidade VAZIA passam o
+  //    guard e a cidade é preenchida DEPOIS (geocode) — furo confirmado em 18/07 (6 lotes
+  //    do Paraguai). Aqui, com a cidade já resolvida, aplicamos a MESMA lógica e
+  //    DESATIVAMOS quem não é município BR. Só olha lotes com UF vazia (foreign com UF
+  //    válida já é barrado no save). Teto de 50 evita que um erro de dataset zere o acervo.
+  try {
+    const FONTES_INTL = ['SUPERBID', 'SBID9', 'SBID21', 'SOLD'];
+    const normCidadeBR = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const CIDADES_BR = new Set(Object.keys(MUNICIPIOS).map(k => normCidadeBR(k.split('|')[1])));
+    const { data: candidatos } = await supabase
+      .from('imoveis_leilao')
+      .select('id, fonte, cidade, estado')
+      .eq('ativo', true)
+      .in('fonte', FONTES_INTL)
+      .or('estado.is.null,estado.eq.')       // só UF vazia (foreign com UF válida já é barrado no save)
+      .not('cidade', 'is', null)
+      .neq('cidade', '');
+    const estrangeiros = (candidatos || []).filter(im => {
+      if (String(im.estado || '').trim() !== '') return false;   // reforço em JS
+      const c = normCidadeBR(im.cidade);
+      return c.length >= 3 && !CIDADES_BR.has(c);
+    });
+    if (estrangeiros.length && estrangeiros.length <= 50) {
+      const { error: eDesat } = await supabase
+        .from('imoveis_leilao')
+        .update({ ativo: false })
+        .in('id', estrangeiros.map(im => im.id));
+      if (!eDesat) {
+        const porFonte = {};
+        for (const im of estrangeiros) porFonte[im.fonte] = (porFonte[im.fonte] || 0) + 1;
+        for (const [fonte, n] of Object.entries(porFonte)) {
+          problemas.push({ fonte, tipo: 'lote estrangeiro desativado', detalhe: `${n} lote(s) fora do Brasil (cidade não é município BR) desativado(s) automaticamente` });
+        }
+      }
+    } else if (estrangeiros.length > 50) {
+      // Muitos de uma vez = provável erro de dataset/normalização. NÃO desativa; só alerta.
+      problemas.push({ fonte: 'rede Superbid', tipo: 'varredura estrangeiros suspensa', detalhe: `${estrangeiros.length} lotes marcados como não-BR (acima do teto de 50) — verificar dataset antes de desativar` });
+    }
+  } catch { /* varredura é aditiva — nunca derruba o monitor */ }
 
   if (!problemas.length) {
     return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length }), {
