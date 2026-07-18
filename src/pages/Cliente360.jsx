@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiCall } from '../utils/apiCall';
-import { MapPin, Search, Mail, MessageCircle, User, FileText, Scale, ClipboardCheck } from 'lucide-react';
+import { MapPin, Search, Mail, MessageCircle, User, FileText, Scale, ClipboardCheck, AlertTriangle } from 'lucide-react';
 
 // Fase B — Monitoramento 360º do cliente (admin/analista).
 // Busca um usuário e mostra: perfil + último acesso, intenção (triagem), os 3
@@ -192,6 +192,7 @@ export default function Cliente360() {
               ['Relat. mercado', stats.relatorios?.mercado, '#059669'],
               ['Relat. documental', stats.relatorios?.documental, '#059669'],
               ['Relat. laudo', stats.relatorios?.laudo, '#059669'],
+              ['Clientes c/ erro', stats.clientes_com_erro, stats.clientes_com_erro > 0 ? '#dc2626' : '#059669'],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 22, fontWeight: 900, color: c }}>{v ?? 0}</div>
@@ -283,6 +284,7 @@ export default function Cliente360() {
                     <div style={{ fontSize: 12, color: '#64748b' }}>{u.email}{u.telefone ? ` · ${u.telefone}` : ''}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {u.tem_erro && <span title="Tem erro de navegação em aberto" style={{ fontSize: 10.5, fontWeight: 700, color: '#b91c1c', background: '#fee2e2', padding: '3px 8px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 3 }}><AlertTriangle size={11} /> erro</span>}
                     {u.perfil_investidor
                       ? <span style={{ fontSize: 10.5, fontWeight: 700, color: '#5b21b6', background: '#ede9fe', padding: '3px 8px', borderRadius: 20 }}>{PERFIL_LABEL[u.perfil_investidor] || u.perfil_investidor}</span>
                       : <span style={{ fontSize: 10.5, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '3px 8px', borderRadius: 20 }}>sem perfil</span>}
@@ -407,6 +409,40 @@ export default function Cliente360() {
                       <span style={{ color: '#94a3b8' }}>· {b.resultados_count ?? 0} result.</span>
                     </span>
                     <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(b.criado_em)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Erros de navegação — telas de erro / inconsistências que o cliente bateu
+              (window.onerror / unhandledrejection / ErrorBoundary → erros_cliente). */}
+          <div style={card}>
+            <div style={{ ...label, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={12} color={dados.erros_abertos > 0 ? '#dc2626' : '#94a3b8'} />
+              Erros de navegação ({(dados.erros || []).length}){dados.erros_abertos > 0 ? ` · ${dados.erros_abertos} aberto(s)` : ''}
+            </div>
+            {(dados.erros || []).length === 0 ? (
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum erro registrado — navegação sem incidentes.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {dados.erros.map((e, i) => (
+                  <div key={i} style={{ borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 6 : 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: e.resolvido ? '#64748b' : '#b91c1c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {e.msg || '(erro sem mensagem)'}
+                      </span>
+                      <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                        {e.ocorrencias > 1 && <span style={{ fontSize: 10, fontWeight: 700, color: '#0D63DB' }}>{e.ocorrencias}×</span>}
+                        {e.resolvido
+                          ? <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#dcfce7', color: '#15803d' }}>resolvido</span>
+                          : <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#fee2e2', color: '#b91c1c' }}>aberto</span>}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.rota || '—'}</span>
+                      <span style={{ flexShrink: 0 }}>{dataHoraBR(e.ultima_em)}</span>
+                    </div>
                   </div>
                 ))}
               </div>
