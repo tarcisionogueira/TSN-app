@@ -960,7 +960,7 @@ export default function ImovelDetalhe() {
     : `https://www.google.com/maps/search/?api=1&query=${qEndereco}`;
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: 80 }}>
+    <div className="detalhe-page" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: 80 }}>
 
       {/* Breadcrumb */}
       <div style={{ background: '#111111', padding: '12px 20px' }}>
@@ -1429,10 +1429,49 @@ export default function ImovelDetalhe() {
 
       {/* Seção Arrematação removida desta tela, a arrematação é registrada no Caso. */}
 
+      {/* Barra de ação FIXA no mobile — os CTAs principais ("Acessar leiloeiro" e
+          "Solicitar Análise") ficam sempre à mão, sem o usuário precisar rolar até o
+          fim. No desktop a sidebar sticky já resolve, então a barra fica oculta. */}
+      <div className="acoes-mobile-bar">
+        {imovel.urlLote && (
+          <a href={imovel.urlLote} target="_blank" rel="noopener noreferrer"
+            style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 16px', background: '#111111', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 14, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            <ExternalLink size={16} /> Leiloeiro
+          </a>
+        )}
+        {user ? (
+          podeFazerAnalise ? (
+            <button onClick={() => nav('/analise', { state: { imovel } })}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              <BarChart2 size={16} /> Solicitar Análise
+            </button>
+          ) : (
+            <button onClick={() => nav('/planos')}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              <BarChart2 size={16} /> Fazer upgrade
+            </button>
+          )
+        ) : (
+          <button onClick={() => nav('/login')}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+            <BarChart2 size={16} /> Entrar para analisar
+          </button>
+        )}
+      </div>
+
       <style>{`
+        .acoes-mobile-bar { display: none; }
         @media (max-width: 900px) {
           .detalhe-grid { grid-template-columns: 1fr !important; }
           .detalhe-sidebar { position: static !important; }
+          .detalhe-page { padding-bottom: 96px !important; }
+          .acoes-mobile-bar {
+            display: flex; gap: 10px; align-items: stretch;
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+            padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+            background: rgba(255,255,255,0.97); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+            border-top: 1px solid #e2e8f0; box-shadow: 0 -4px 20px rgba(0,0,0,0.10);
+          }
         }
       `}</style>
     </div>
