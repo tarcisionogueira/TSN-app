@@ -169,6 +169,37 @@ export default async function handler(req) {
     };
   }));
 
+  // ── 3e. Relatórios — FALHAS DE GERAÇÃO (status='erro') ──
+  // Quando um gerador lança exceção, a análise fica com status='erro' (ex.: o
+  // ReferenceError "mercado is not defined"). Isso NÃO aparecia na saúde — só o
+  // cliente via "Erro ao gerar". Agora a saúde conta as falhas recentes de cada
+  // gerador; uma MESMA mensagem repetida = regressão sistêmica → escala p/ ERRO
+  // (teria pego este bug no mesmo dia). Timeout pontual fica como aviso leve.
+  itens.push(await check('Relatórios — falhas de geração', async () => {
+    const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const tabelas = { mercado: 'analises_mercado', documental: 'analises_documental', laudo: 'analises_laudo' };
+    const contas = await Promise.all(Object.entries(tabelas).map(async ([nome, tab]) => {
+      const r = await sb(`${tab}?select=erro&status=eq.erro&updated_at=gte.${desde}&limit=200`);
+      if (!r.ok) throw new Error(`HTTP ${r.status} em ${tab}`);
+      const rows = await r.json();
+      const porMsg = {};
+      for (const x of rows) { const m = String(x.erro || '?').slice(0, 80); porMsg[m] = (porMsg[m] || 0) + 1; }
+      return { nome, total: rows.length, porMsg };
+    }));
+    const total = contas.reduce((s, c) => s + c.total, 0);
+    if (total === 0) return { status: 'ok', detalhe: 'Nenhuma falha de geração de relatório nas últimas 24h' };
+    // Mesma mensagem repetida em 3+ relatórios = bug sistêmico de geração (não timeout pontual).
+    const piorRepeticao = Math.max(0, ...contas.flatMap(c => Object.values(c.porMsg)));
+    const resumo = contas.filter(c => c.total).map(c => {
+      const top = Object.entries(c.porMsg).sort((a, b) => b[1] - a[1])[0];
+      return `${c.nome}: ${c.total}${top ? ` ("${top[0]}" ×${top[1]})` : ''}`;
+    }).join(' · ');
+    return {
+      status: piorRepeticao >= 3 ? 'erro' : 'aviso',
+      detalhe: `${total} falha(s) de geração em 24h — ${resumo}.${piorRepeticao >= 3 ? ' Mesma mensagem repetida = provável bug de geração, investigar AGORA.' : ' Revisar (pode ser timeout pontual).'}`,
+    };
+  }));
+
   // ── 4. Supabase: clientes/leads sem consultor há >3 dias ──
   itens.push(await check('Comercial — clientes sem consultor', async () => {
     const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
