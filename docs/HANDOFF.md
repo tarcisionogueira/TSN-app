@@ -33,9 +33,13 @@
 4. **Backfill único** (via MCP): semeei o índice a partir dos 25 relatórios residenciais concluídos (24 imóveis) → **36 linhas `relatorio` (15 bairro + 21 grid), TODAS com aluguel** (1ª vez que o índice tem locação). As 4 cidades dos relatórios agora resolvem venda+aluguel.
 - **Build (vite) OK.** Segurança 0/0 após as RPCs novas.
 
+**Entregue hoje (parte 2) — timeout resolvido na RAIZ + consulta ao edital p/ assertividade:**
+5. **TIMEOUT (causa-raiz + self-heal) — `api/gerar-analise.js`.** O killer era o `anthropicFetch` com **`retries:1`**: cada `buscarMercado()` podia rodar **2×200s** e, com o retry por "sem amostras", somar >400s, estourando o deadline (foi o que derrubou o SITIO CAIUBURA). Correção:
+   - **Orçamento de tempo GLOBAL** (`restante()`, `HARD_MS=285s`): edital, busca de mercado e parecer usam só o tempo restante — nunca inicia uma chamada que não caiba. Busca agora é **`retries:0`** (1 tentativa) com timeout = restante − reserva do parecer; a 2ª busca só dispara se **couber** (`restante()>150s`). Se a busca FALHAR (abort/timeout), marca **transitório** (`tempo_limite`) em vez de virar erro genérico. Se faltar tempo p/ o parecer, **entrega o mercado SEM o parecer** (melhor que perder tudo). O deadline virou backstop.
+   - **Self-heal — `api/regenerar-relatorios-cron.js`**: relatório de mercado em `erro` por *tempo_limite* é **re-tentado 1×** (teto p/ economia) com orçamento fresco, relendo o `inputs` da própria linha. Assim o cliente não fica com erro preso (o SITIO CAIUBURA será regerado sozinho pós-deploy).
+6. **Consulta ao EDITAL quando a avaliação/valor está pendente (assertividade) — `garantirValores`.** Antes só raspava a **página do lote** (SPA de LJUD/GRUPOLANCE → regex falha). Agora percorre **edital → matrícula → anexos → página do lote** (fetch DIRETO, grátis): HTML por regex; **PDF por IA focada** (extrai só avaliação + lance mínimo, `max_tokens:300`). Bright Data (pago) fica no documental. Orçado (fração do tempo, sem roubar do mercado) e só dispara quando o valor falta (economia). Corrige no banco (desconto/score) e o que não confirmar segue como anomalia.
+
 **➡️ Follow-ups desta frente (não dependem do dono):**
-- **Relatório SITIO CAIUBURA (Praia Grande) falhou por timeout** — é transitório (deadline 270s de web search). Ao regerar com sucesso, semeia o próprio grid. O regen-cron NÃO cobre mercado (auto-corrige no `garantirValores`); regerar manualmente na tela.
-- **`avaliacao_ausente` (Caraguatatuba/LJUD, Bertioga/GRUPOLANCE)**: a avaliação não está na página do leiloeiro. Candidato a capturar do edital/matrícula (documental) — sem isso, o relatório sai pelo mercado (correto), mas sem "% desconto vs avaliação".
 - **Caminho client legado** (`analisarMercadoClick` → `src/utils/claude.js`) não recebe o índice (é gerado no cliente, não persiste); o fluxo principal (servidor `gerar-analise`) é o que importa e está coberto.
 - **fator_calibracao** do índice segue 1.0 (venda do acervo = mediana de avaliação de leilão, abaixo do mercado); os valores de `relatorio` já são de mercado. Calibrar quando houver volume.
 

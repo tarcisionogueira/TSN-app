@@ -144,17 +144,46 @@ async function lerIndiceBidPro(imDb) {
   } catch { return null; }
 }
 
-// Confirmação SOB DEMANDA de VALORES no detalhe/edital (só quando um relatório é pedido —
+// Anti-SSRF simples: as URLs vêm do banco (leiloeiro/anexos) — bloqueia destinos internos/
+// metadados; libera o resto. Evita que um anexo com host interno vire uma requisição indevida.
+function hostExterno(u) {
+  try {
+    const h = new URL(u).hostname.toLowerCase();
+    if (h === 'localhost' || h.endsWith('.internal') || h.endsWith('.local')) return false;
+    if (/^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(h)) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
+    if (h === '::1' || h === 'metadata.google.internal') return false;
+    return true;
+  } catch { return false; }
+}
+// EDITAL/MATRÍCULA em PDF: extração FOCADA via IA (só avaliação + lance mínimo) — barata e curta,
+// disparada apenas quando o valor falta E o documento é PDF (o fetch grátis não dá pra regex).
+async function extrairValoresPdf(base64, deadline) {
+  const budget = deadline - Date.now();
+  if (budget < 12000) return null; // sem tempo suficiente p/ a IA ler o PDF
+  const data = await anthropic({
+    model: MODEL, max_tokens: 300,
+    system: 'Você lê documentos de leilão de imóvel. Responda SOMENTE JSON válido, sem markdown.',
+    messages: [{ role: 'user', content: [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 }, title: 'documento do lote' },
+      { type: 'text', text: 'Extraia do edital/matrícula: {"avaliacao": number, "lanceMinimo": number}. avaliacao = valor de AVALIAÇÃO do imóvel (auto/laudo de avaliação) em reais; lanceMinimo = menor lance admitido (1º leilão/praça) em reais. SÓ números (sem "R$", sem pontos de milhar). Se não constar no documento, use 0. NUNCA invente.' },
+    ] }],
+  }, false, { retries: 0, timeoutMs: Math.min(30000, budget - 3000), noFallback: true });
+  return parseJSON(extractText(data));
+}
+
+// Confirmação SOB DEMANDA de VALORES consultando o EDITAL (só quando um relatório é pedido —
 // sem varredura em massa). Cobre dois casos:
-//  - AVALIAÇÃO ausente (ex.: GrupoLance judicial — só vem no detalhe);
+//  - AVALIAÇÃO ausente (ex.: GrupoLance/LJUD judicial — só vem no edital/laudo, não no card);
 //  - LANCE MÍNIMO ausente/sentinela (ex.: o scraper anulou um 999999999 — regra do dono:
 //    "se vier valor assim, acessar o edital pra confirmar o valor da venda").
-// Corrige no banco (com desconto/score) e, o que não confirmar, SINALIZA como anomalia.
-// Sem teto de valor absoluto (imóvel caro é válido) — só sanidade avaliação >= mínimo.
-async function garantirValores(imovelId) {
+// ASSERTIVIDADE: consulta VÁRIAS fontes (edital, matrícula, anexos, página do lote), não só o
+// card — HTML por regex; PDF por IA focada. Fetch DIRETO (grátis); o Bright Data (pago) fica para
+// o relatório documental. Corrige no banco (com desconto/score) e o que não confirmar vira anomalia.
+async function garantirValores(imovelId, deadline) {
   let im = null;
   try {
-    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,url_lote,link_edital,valor_avaliacao,valor_minimo&limit=1`)).json();
+    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=fonte,url_lote,link_edital,link_matricula,anexos,valor_avaliacao,valor_minimo&limit=1`)).json();
     im = Array.isArray(rows) ? rows[0] : null;
   } catch { return; }
   if (!im) return;
@@ -164,18 +193,41 @@ async function garantirValores(imovelId) {
   let vmin = limpo(im.valor_minimo);
   const faltaAval = aval <= 0, faltaMin = vmin <= 0;
   if (!faltaAval && !faltaMin) return; // nada a confirmar
+  const jaTem = () => (!faltaAval || aval > 0) && (!faltaMin || vmin > 0);
 
-  const url = im.url_lote || im.link_edital;
-  if (url && /^https?:\/\//.test(url)) {
+  // Fontes candidatas, do documento mais provável (edital/matrícula/anexos = onde a avaliação
+  // realmente consta) para o menos (página do lote, em geral SPA sem o valor). Dedup + externas.
+  const anexosUrls = Array.isArray(im.anexos) ? im.anexos.map(a => a?.url).filter(Boolean) : [];
+  const candidatos = [...new Set([im.link_edital, im.link_matricula, ...anexosUrls, im.url_lote])]
+    .filter(u => u && /^https?:\/\//.test(u) && hostExterno(u));
+
+  let usei = im.url_lote || im.link_edital || '';
+  for (const url of candidatos) {
+    if (jaTem() || Date.now() > deadline) break;
+    usei = url;
+    let doc = null;
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(15000) });
-      if (r.ok) {
-        const txt = (await r.text()).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
-        const maiorPorRotulo = (re) => { let best = 0; for (const m of txt.matchAll(re)) { const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.')) || 0; if (v > best) best = v; } return best; };
-        if (faltaAval) { const a = maiorPorRotulo(/avalia[çc][aã]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi); if (a >= 1000) aval = a; }
-        if (faltaMin)  { const mn = maiorPorRotulo(/(?:lance\s*m[íi]nimo|valor\s*m[íi]nimo|lance\s*inicial|1[ºoª°]?\s*(?:leil[aã]o|pra[çc]a)|2[ºoª°]?\s*(?:leil[aã]o|pra[çc]a))[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi); if (mn >= 1000) vmin = mn; }
-      }
-    } catch { /* segue */ }
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(12000) });
+      if (!r.ok) continue;
+      const ct = r.headers.get('content-type') || '';
+      const buf = Buffer.from(await r.arrayBuffer().catch(() => new ArrayBuffer(0)));
+      if (!buf.length) continue;
+      const ehPdf = /pdf/i.test(ct) || buf.slice(0, 5).toString('latin1') === '%PDF-';
+      if (ehPdf) doc = { kind: 'pdf', base64: buf.length <= 6_500_000 ? buf.toString('base64') : null };
+      else doc = { kind: 'text', text: buf.toString('utf8').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ') };
+    } catch { continue; } // fonte inacessível → tenta a próxima
+    if (doc.kind === 'text' && doc.text) {
+      const txt = doc.text;
+      const maior = (re) => { let best = 0; for (const m of txt.matchAll(re)) { const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.')) || 0; if (v > best) best = v; } return best; };
+      if (faltaAval && aval <= 0) { const a = maior(/avalia[çc][aã]o[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi); if (a >= 1000) aval = a; }
+      if (faltaMin && vmin <= 0) { const mn = maior(/(?:lance\s*m[íi]nimo|valor\s*m[íi]nimo|lance\s*inicial|1[ºoª°]?\s*(?:leil[aã]o|pra[çc]a)|2[ºoª°]?\s*(?:leil[aã]o|pra[çc]a))[^R]{0,40}R\$\s*([\d.]+,\d{2})/gi); if (mn >= 1000) vmin = mn; }
+    } else if (doc.kind === 'pdf' && doc.base64 && Date.now() < deadline) {
+      try {
+        const ext = await extrairValoresPdf(doc.base64, deadline);
+        if (faltaAval && aval <= 0 && Number(ext?.avaliacao) >= 1000) aval = Number(ext.avaliacao);
+        if (faltaMin && vmin <= 0 && Number(ext?.lanceMinimo) >= 1000) vmin = Number(ext.lanceMinimo);
+      } catch { /* IA falhou nesta fonte → tenta a próxima */ }
+    }
   }
 
   const patch = {};
@@ -190,8 +242,8 @@ async function garantirValores(imovelId) {
   if (Object.keys(patch).length) {
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
   }
-  if (aval <= 0) await registrarAnomalia('avaliacao_ausente', im.fonte, imovelId, 'valor_avaliacao', `Avaliação não confirmada no detalhe/edital (${url || 'sem url'}).`);
-  if (vmin <= 0) await registrarAnomalia('valor_minimo_ausente', im.fonte, imovelId, 'valor_minimo', `Lance mínimo não confirmado no detalhe/edital (${url || 'sem url'}).`);
+  if (aval <= 0) await registrarAnomalia('avaliacao_ausente', im.fonte, imovelId, 'valor_avaliacao', `Avaliação não confirmada no edital/matrícula/anexos (${usei || 'sem url'}).`);
+  if (vmin <= 0) await registrarAnomalia('valor_minimo_ausente', im.fonte, imovelId, 'valor_minimo', `Lance mínimo não confirmado no edital/matrícula/anexos (${usei || 'sem url'}).`);
 }
 // Pesquisa de mercado recente do MESMO imóvel (de qualquer usuário). Reaproveitada
 // para não refazer a busca cara a cada pedido — só a data é renovada. O laudo
@@ -451,19 +503,24 @@ export default async function handler(req, res) {
     }
   } catch { /* checagem de cota nunca bloqueia quem tem direito */ }
 
-  // Confirmação sob demanda dos VALORES (avaliação + lance mínimo) no detalhe/edital ANTES
-  // de gerar — corrige avaliação zerada e valor sentinela; o que não confirmar vira anomalia.
-  try { await garantirValores(String(imovelId)); } catch { /* nunca bloqueia o relatório */ }
+  // ORÇAMENTO DE TEMPO GLOBAL (< maxDuration 300s). Toda etapa cara (edital, busca de mercado,
+  // parecer) é limitada ao tempo RESTANTE — nunca inicia uma chamada que não caberia antes do
+  // corte da Vercel. Foi o que resolveu o timeout: antes, o anthropicFetch com retries:1 podia
+  // rodar 2×200s por chamada (+ um retry por "sem amostras") e estourar o deadline de 270s;
+  // agora cada busca é 1 tentativa (retries:0) com timeout = tempo restante e o retry só ocorre
+  // se couber. O deadline vira BACKSTOP (não mais a 1ª linha de defesa).
+  const T0 = Date.now();
+  const HARD_MS = 285000; // < maxDuration 300s, deixa ~15s p/ gravar 'erro'/'concluida' e responder
+  const restante = () => HARD_MS - (Date.now() - T0);
+
+  // Confirmação sob demanda dos VALORES (avaliação + lance mínimo) consultando EDITAL/MATRÍCULA/
+  // ANEXOS (não só a página do lote) — corrige avaliação zerada e valor sentinela; o que não
+  // confirmar vira anomalia. Limitada a uma fração do orçamento p/ não roubar tempo do mercado.
+  try { await garantirValores(String(imovelId), Date.now() + Math.min(45000, Math.max(0, restante() - 215000))); } catch { /* nunca bloqueia o relatório */ }
 
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
-  // DEADLINE interno < maxDuration (300s). Sem isto, se a pesquisa de mercado (web
-  // search, até 6 buscas) + o parecer passarem de 5 min, a Vercel MATA a função no
-  // meio e o catch abaixo NUNCA roda — a linha fica presa em 'gerando' para sempre
-  // (foi o que travou o relatório do Igor). Com o deadline, perdemos a corrida ANTES
-  // do corte e gravamos 'erro' com mensagem clara, para o cliente poder tentar de novo.
-  const DEADLINE_MS = 270000; // < maxDuration 300s, com folga p/ gravar 'erro' e responder
-  const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), DEADLINE_MS));
+  const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), Math.max(20000, restante())));
 
   try {
     const { result, valorMercado } = await Promise.race([prazo, (async () => {
@@ -483,34 +540,42 @@ export default async function handler(req, res) {
       mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
       reaproveitado = true;
     } else {
-      // A busca de mercado (web search) é a etapa lenta. O timeout PADRÃO do
-      // anthropicFetch é 120s — CURTO DEMAIS para 5 buscas + geração: a chamada
-      // abortava aos 120s e re-tentava, sem NUNCA concluir (era o motivo do erro
-      // recorrente). Aqui damos uma janela real de ~200s numa tentativa só, dentro
-      // do deadline de 270s (a etapa do parecer, curta, cabe no resto).
-      const buscarMercado = async () => {
-        const mData = await anthropic({
-          model: MODEL, max_tokens: 8000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
-          system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
-          messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
-        }, true, { retries: 1, timeoutMs: 200000, noFallback: true });
-        const m = parseJSON(extractText(mData)) || {};
-        m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;
-        m.aluguelMedio = m.consolidado?.aluguelMedio || 0;
-        m.yieldBruto = m.consolidado?.yieldBruto || 0;
-        m.yieldLiquido = m.consolidado?.yieldLiquido || 0;
-        m.vendas = m.nivel2?.vendas || [];
-        m.locacoes = m.nivel2?.locacoes || [];
-        m.pesquisaEm = new Date().toISOString();
-        return m;
+      // A busca de mercado (web search, até 5 buscas) é a etapa lenta. UMA tentativa por
+      // chamada (retries:0) com timeout = tempo RESTANTE reservando o parecer — assim duas
+      // buscas NUNCA somam mais que o orçamento. Se a chamada abortar/falhar, devolve
+      // { __falhou:true } (o chamador decide re-tentar ou marcar transitório p/ self-heal).
+      const RESERVA_PARECER = 60000; // guarda p/ o parecer + a escrita final
+      const buscarMercado = async (msBudget) => {
+        try {
+          const mData = await anthropic({
+            model: MODEL, max_tokens: 8000,
+            tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+            system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
+            messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
+          }, true, { retries: 0, timeoutMs: Math.max(45000, msBudget), noFallback: true });
+          const m = parseJSON(extractText(mData)) || {};
+          m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;
+          m.aluguelMedio = m.consolidado?.aluguelMedio || 0;
+          m.yieldBruto = m.consolidado?.yieldBruto || 0;
+          m.yieldLiquido = m.consolidado?.yieldLiquido || 0;
+          m.vendas = m.nivel2?.vendas || [];
+          m.locacoes = m.nivel2?.locacoes || [];
+          m.pesquisaEm = new Date().toISOString();
+          return m;
+        } catch { return { __falhou: true }; } // abort/timeout/erro → o chamador trata
       };
       const semAmostras = (m) => ((m.vendas?.length || 0) + (m.locacoes?.length || 0)) === 0 && !(m.precoMedioM2 > 0);
-      // Contramedida "mercadológico sem amostras": uma resposta VÁLIDA mas vazia (a
-      // busca web falhou/rate-limit) não pode virar relatório final. Uma resposta vazia
-      // costuma voltar rápido, então cabe UMA nova tentativa dentro do deadline.
-      mercado = await buscarMercado();
-      if (semAmostras(mercado)) mercado = await buscarMercado();
+      // 1ª busca: quase todo o tempo restante, guardando a reserva do parecer.
+      mercado = await buscarMercado(Math.min(190000, restante() - RESERVA_PARECER));
+      // Re-tenta SÓ se (vazio OU falhou) E ainda há orçamento p/ outra busca + parecer —
+      // nunca dispara a 2ª busca sem tempo (era o que estourava o deadline).
+      if ((semAmostras(mercado) || mercado.__falhou) && restante() > 150000) {
+        mercado = await buscarMercado(Math.min(160000, restante() - RESERVA_PARECER));
+      }
+      // A busca FALHOU (abort/timeout/erro), não é "mercado vazio de verdade": trata como
+      // TRANSITÓRIO → grava 'erro' com tempo_limite e o self-heal (cron) re-tenta com orçamento
+      // fresco. Um mercado genuinamente vazio (JSON válido sem amostras) SEGUE e vira relatório.
+      if (mercado.__falhou) throw new Error('tempo_limite');
     }
 
     const precoM2 = Number(mercado.precoMedioM2) || 0;
@@ -578,7 +643,10 @@ export default async function handler(req, res) {
     // 2) Laudo (parecer). Carrega os docs do lote para o parecer poder dizer se os
     // débitos informados já constam na documentação (ou apontar onde buscar).
     let parecer = '';
-    if (parecerInputs?.d) {
+    // Só gera o parecer se ainda houver orçamento (a pesquisa de mercado é a etapa cara e já
+    // rodou). Sem tempo, ENTREGA o relatório de mercado SEM o parecer — melhor que estourar o
+    // deadline e perder TUDO. O parecer curto (regen) pode vir depois.
+    if (parecerInputs?.d && restante() > 25000) {
       try {
         let docs = null;
         try {
@@ -613,7 +681,7 @@ export default async function handler(req, res) {
           model: MODEL, max_tokens: 8000,
           system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado,
           messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs) }],
-        }, false, { retries: 1, timeoutMs: 55000, noFallback: true });
+        }, false, { retries: 0, timeoutMs: Math.min(55000, restante() - 12000), noFallback: true });
         parecer = extractText(pData);
       } catch { /* laudo é complementar */ }
     }
