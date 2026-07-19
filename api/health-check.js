@@ -117,7 +117,7 @@ export default async function handler(req) {
   // absurdos (R$/m² fora de 200–50.000 = contaminação de área total×privativa). Não escala p/
   // erro se estiver só desatualizado (ele se compõe pelos relatórios; não depende de cron).
   itens.push(await check('Índice de mercado — cobertura por cidade', async () => {
-    const rc = await sb('cidade_indicadores?select=count', { headers: { Prefer: 'count=exact' } });
+    const rc = await sb('cidade_indicadores?select=count&nivel=eq.cidade', { headers: { Prefer: 'count=exact' } });
     if (!rc.ok) throw new Error(`HTTP ${rc.status}`);
     const cnt = (await rc.json())?.[0]?.count ?? 0;
     if (cnt === 0) return { status: 'aviso', detalhe: 'Índice de mercado vazio — nenhuma cidade indexada ainda.' };
