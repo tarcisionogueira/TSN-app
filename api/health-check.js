@@ -112,6 +112,23 @@ export default async function handler(req) {
     return { status: 'aviso', detalhe: `${presos.length} chamado(s) aberto(s) há +7 dias — REVISAR na aba Suporte (não fecho sozinho; mais antigo: ${antigo}).` };
   }));
 
+  // ── 3a2. Índice PRÓPRIO de mercado (cidade_indicadores) — base dos filtros revenda/locação ──
+  // Coloca sob a saúde o índice criado nesta frente: precisa estar POPULADO e SEM valores
+  // absurdos (R$/m² fora de 200–50.000 = contaminação de área total×privativa). Não escala p/
+  // erro se estiver só desatualizado (ele se compõe pelos relatórios; não depende de cron).
+  itens.push(await check('Índice de mercado — cobertura por cidade', async () => {
+    const rc = await sb('cidade_indicadores?select=count', { headers: { Prefer: 'count=exact' } });
+    if (!rc.ok) throw new Error(`HTTP ${rc.status}`);
+    const cnt = (await rc.json())?.[0]?.count ?? 0;
+    if (cnt === 0) return { status: 'aviso', detalhe: 'Índice de mercado vazio — nenhuma cidade indexada ainda.' };
+    const ro = await sb('cidade_indicadores?select=cidade_norm,uf,venda_m2&or=(venda_m2.gt.50000,venda_m2.lt.200)&limit=20');
+    const out = ro.ok ? await ro.json() : [];
+    if (Array.isArray(out) && out.length) {
+      return { status: 'aviso', detalhe: `${cnt} cidades indexadas; ${out.length} com R$/m² fora de 200–50k (contaminação de área — revisar/calibrar).` };
+    }
+    return { status: 'ok', detalhe: `${cnt} cidades no índice de venda, R$/m² dentro do esperado.` };
+  }));
+
   // ── 3b. Anomalias detectadas ao gerar RELATÓRIOS (o agente que aprende sinaliza) ──
   // Ex.: avaliação ausente no leiloeiro (desconto sai zerado), CNJ sem retorno no
   // documental. Só SINALIZA para revisão — não gera relatório (custo zero).
