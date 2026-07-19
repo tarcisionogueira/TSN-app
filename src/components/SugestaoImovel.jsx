@@ -52,24 +52,55 @@ export default function SugestaoImovel() {
     (async () => {
       try {
         const uid = effectiveUserId;
-        const [fb, rel, laudo, doc, merc] = await Promise.all([
+        // Exclusões (já avaliados / com relatório) + REGIÃO de referência do cliente.
+        // A sugestão segue as MESMAS regras do e-mail de oportunidades: filtro salvo
+        // mais recente → senão cidade/UF do cadastro. Antes a query não tinha recorte
+        // geográfico nenhum e sugeria o maior desconto do Brasil inteiro — mostrava
+        // imóvel de outro estado (ex.: RJ p/ cliente de SP). Agora NUNCA sai do estado.
+        const [fb, rel, laudo, doc, merc, perfilRes, filtrosRes] = await Promise.all([
           supabase.from('feedback_imovel').select('imovel_id').eq('user_id', uid),
           supabase.from('relatorios').select('imovel_id').eq('user_id', uid),
           supabase.from('analises_laudo').select('imovel_id').eq('user_id', uid),
           supabase.from('analises_documental').select('imovel_id').eq('user_id', uid),
           supabase.from('analises_mercado').select('imovel_id').eq('user_id', uid),
+          supabase.from('perfis').select('endereco_cidade,endereco_uf').eq('id', uid).maybeSingle(),
+          supabase.from('filtros_salvos').select('filtros').eq('user_id', uid).order('criado_em', { ascending: false }).limit(1),
         ]);
         const excl = new Set();
         for (const arr of [fb.data, rel.data, laudo.data, doc.data, merc.data]) {
           for (const x of (arr || [])) if (x?.imovel_id) excl.add(String(x.imovel_id));
         }
-        const { data } = await supabase
-          .from('imoveis_leilao')
-          .select('id,titulo,cidade,estado,valor_minimo,desconto_percentual,link_foto')
-          .eq('ativo', true).gt('valor_minimo', 0).not('link_foto', 'is', null)
-          .gte('desconto_percentual', 35)
-          .order('desconto_percentual', { ascending: false }).limit(60);
-        const cand = (data || []).filter(i => !excl.has(String(i.id)));
+        const filtro = filtrosRes.data?.[0]?.filtros || {};
+        const perfil = perfilRes.data || {};
+        const uf = filtro.estado || perfil.endereco_uf || '';
+        const cidadesRef = (Array.isArray(filtro.cidades) && filtro.cidades.length ? filtro.cidades : [perfil.endereco_cidade]).filter(Boolean);
+        const descMin = Math.max(35, Number(filtro.descontoMin) || 0);
+        const tipos = Array.isArray(filtro.tipos) ? filtro.tipos.filter(Boolean) : [];
+        // Sem NENHUM sinal de região (sem UF e sem filtro salvo): não sugere nada, para
+        // não recair no acervo nacional e mostrar imóvel irrelevante. Melhor nada que ruim.
+        if (!uf && !cidadesRef.length) return;
+        const normCid = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+        const base = () => {
+          let q = supabase.from('imoveis_leilao')
+            .select('id,titulo,cidade,estado,valor_minimo,desconto_percentual,link_foto')
+            .eq('ativo', true).gt('valor_minimo', 0).not('link_foto', 'is', null)
+            .gte('desconto_percentual', descMin);
+          if (uf) q = q.eq('estado', uf);                       // trava geográfica: nunca sai do estado
+          if (tipos.length) q = q.in('tipo', [...tipos, 'imovel']);
+          return q;
+        };
+        // Prefere a(s) cidade(s) de referência; se render pouco, completa DENTRO do estado.
+        let cand = [];
+        if (cidadesRef.length) {
+          const { data } = await base().in('cidade_norm', cidadesRef.map(normCid)).order('desconto_percentual', { ascending: false }).limit(60);
+          cand = (data || []);
+        }
+        if (cand.length < 12 && uf) {
+          const { data } = await base().order('desconto_percentual', { ascending: false }).limit(60);
+          const jaTem = new Set(cand.map(c => String(c.id)));
+          for (const im of (data || [])) if (!jaTem.has(String(im.id))) cand.push(im);
+        }
+        cand = cand.filter(i => !excl.has(String(i.id)));
         for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cand[i], cand[j]] = [cand[j], cand[i]]; }
         if (vivo && cand.length) { setFila(cand); setTimeout(() => vivo && setVisivel(true), 9000); }
       } catch { /* silencioso */ }
