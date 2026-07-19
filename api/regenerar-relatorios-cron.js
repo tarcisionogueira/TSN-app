@@ -13,9 +13,11 @@
  * 'gerando' preso >15min é destravado pelo limpar-analises-cron). ECONÔMICO: teto de
  * tentativas + lote pequeno + janela de assentamento + corte de 72h + roda a cada 6h.
  *
- * Escopo: documental e laudo (vícios claramente regeneráveis). O mercado fica de fora —
- * seus vícios (avaliação/mínimo ausentes) já se auto-corrigem no garantirValores a cada
- * geração. Autorizado por CRON_SECRET (Bearer). Registrado no vercel.json.
+ * Escopo: documental e laudo (vícios regeneráveis por regen_motivo) + MERCADO que falhou por
+ * TIMEOUT (transitório) — este é re-tentado UMA vez com orçamento fresco (self-heal), para o
+ * cliente não ficar com um 'erro' preso sem reagir. Os vícios de valor do mercado (avaliação/
+ * mínimo ausentes) seguem se auto-corrigindo no garantirValores a cada geração.
+ * Autorizado por CRON_SECRET (Bearer). Registrado no vercel.json.
  */
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
@@ -81,6 +83,39 @@ export default async function handler(req, res) {
     }));
     out[tabela] = rows.length;
   }
+
+  // SELF-HEAL do MERCADO: relatório que falhou por TIMEOUT (transitório) é re-tentado UMA vez
+  // (teto 1 = economia) com orçamento fresco. O gerador de mercado exige mercadoInputs → relemos
+  // do `inputs` gravado na própria linha. Mesma janela de assentamento/corte dos demais.
+  let mktRetry = 0;
+  try {
+    const q = `analises_mercado?status=eq.erro&erro=ilike.*tempo*limite*&regen_tentativas=lt.1`
+      + `&updated_at=lt.${encodeURIComponent(settle)}&updated_at=gt.${encodeURIComponent(janela)}`
+      + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,regen_tentativas`;
+    const rows = await (await sb(q)).json();
+    if (Array.isArray(rows)) {
+      await Promise.allSettled(rows.map(async (r) => {
+        if (!r?.inputs?.mercadoInputs) return; // sem os inputs originais não dá p/ regerar
+        try {
+          await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ regen_tentativas: (r.regen_tentativas || 0) + 1, regen_em: new Date().toISOString() }),
+          });
+        } catch { /* segue mesmo assim */ }
+        await fetch(`${BASE}/api/gerar-analise`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+          body: JSON.stringify({
+            imovelId: r.imovel_id, paraUserId: r.user_id, titulo: r.titulo, cidade: r.cidade, estado: r.estado,
+            imovel: r.imovel || null, mercadoInputs: r.inputs.mercadoInputs, parecerInputs: r.inputs.parecerInputs,
+          }),
+          signal: AbortSignal.timeout(9000),
+        }).catch(() => {});
+        mktRetry++;
+      }));
+    }
+  } catch { /* self-heal best-effort: nunca derruba o cron */ }
+  out.analises_mercado_timeout = mktRetry;
 
   res.status(200).json({ ok: true, regenerados: out });
 }

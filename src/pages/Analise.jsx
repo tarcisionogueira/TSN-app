@@ -2492,6 +2492,30 @@ export default function Analise() {
                 );
               })()}
 
+              {/* Índice BidPro — nossa base própria de mercado por microrregião (venda + locação) */}
+              {mercado.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0) && (() => {
+                const ib = mercado.indiceBidPro;
+                const nivelLabel = ib.nivel === 'bairro' ? `bairro ${ib.bairro_norm || ''}`.trim()
+                  : ib.nivel === 'grid' ? 'microrregião (~1 km)' : 'cidade';
+                const yieldIdx = (Number(ib.venda_m2) > 0 && Number(ib.aluguel_m2) > 0) ? (Number(ib.aluguel_m2) * 12 / Number(ib.venda_m2) * 100) : 0;
+                return (
+                  <div style={{ borderRadius:12, border:'1px solid #c7d2fe', background:'#eef2ff', padding:'12px 16px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+                      <Award size={14} color="#4f46e5"/>
+                      <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Índice BidPro (nossa base)</span>
+                      <span style={{ fontSize:10.5, color:'#64748b' }}>{nivelLabel} · {ib.n_amostras || 0} amostras</span>
+                      <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:999, background:'#e0e7ff', color:'#3730a3' }}>{ib.fonte === 'relatorio' ? 'consolidado dos relatórios' : 'base do acervo'}</span>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, fontSize:12 }}>
+                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>VENDA R$/m²</div><div style={{ fontWeight:800, color:'#4f46e5' }}>{Number(ib.venda_m2) > 0 ? `R$ ${fmt(ib.venda_m2)}` : '—'}</div></div>
+                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>LOCAÇÃO R$/m²/mês</div><div style={{ fontWeight:800, color:'#7c3aed' }}>{Number(ib.aluguel_m2) > 0 ? `R$ ${fmt(ib.aluguel_m2)}` : 'em formação'}</div></div>
+                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>YIELD ÍNDICE</div><div style={{ fontWeight:800, color:'#059669' }}>{yieldIdx > 0 ? fmtPct(yieldIdx)+' a.a.' : '—'}</div></div>
+                    </div>
+                    <div style={{ fontSize:10.5, color:'#6366f1', marginTop:8, lineHeight:1.5 }}>Índice proprietário BidPro por microrregião, referência independente para <strong>venda</strong> e <strong>locação</strong>, consolidada das análises da plataforma (complementar ao FipeZAP e aos anúncios). O aluguel é semeado à medida que os relatórios da região são gerados.</div>
+                  </div>
+                );
+              })()}
+
               {/* Nível 1, Mesmo Condomínio */}
               <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
                 <div style={{ background:'#0D63DB', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>

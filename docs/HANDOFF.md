@@ -17,6 +17,32 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🆕 Sessão 19/07/2026 — Índice BidPro nos relatórios (venda + locação) + verificação dos 4 relatórios
+> Branch de dev: **`claude/verify-reports-bidpro-index-mq4lct`**. Banco aplicado via MCP; código na branch (pronto p/ PR → `main`). Ritual: **segurança íntegra** (`auditoria_seguranca()` = 0 crítico / 0 atenção, conferido no início e no fim).
+
+**Contexto:** o dono gerou 4 relatórios e (a) viu erros e (b) NÃO encontrou o **Índice BidPro** (`cidade_indicadores`, criado no #146) em lugar nenhum — deveria constar no relatório tanto para **venda** quanto para **locação**.
+
+**Diagnóstico:** o índice estava **órfão** — `cidade_indicadores` existia (872 bairro + 355 cidade + 1058 grid, só VENDA do acervo) mas **nunca foi ligado** ao `gerar-analise.js` nem à tela/PDF; e o `aluguel_m2`, que a migração previa "semeado pelos relatórios", estava **100% vazio** (o loop nunca foi implementado). Os 4 relatórios (todos SP litoral): Caraguatatuba ✅, Bertioga 720m² terreno ✅, **Praia Grande SITIO CAIUBURA ❌ (timeout)**, Praia Grande Canto do Forte ✅ (reaproveitado). 3 anomalias `avaliacao_ausente` (Caraguatatuba/LJUD, Bertioga/GRUPOLANCE ×2 — avaliação não exposta na página do leiloeiro; relatórios saíram pelo mercado, sem base de desconto). Cidades litorâneas têm acervo escasso com avaliação válida (< piso 5) → sem índice de cidade — exatamente o caso que a **semeadura por relatório** resolve.
+
+**Entregue hoje — LOOP do Índice BidPro fechado (migração `indice_bidpro_loop_relatorios.sql`):**
+1. **RPCs (SECURITY DEFINER, search_path '', só `service_role` — não aparecem no auditor):**
+   - `semear_indice_relatorio(...)`: cada relatório mercadológico ALIMENTA a microrregião com **venda R$/m²** (`precoMedioM2`) e **aluguel R$/m²** (`aluguelMedio/área`) REAIS de anúncios. Semeia **só bairro + grid** (níveis específicos, onde o preço do imóvel é válido); o nível **cidade fica ancorado na mediana ampla do acervo** — assim um imóvel premium (ex.: flat de R$10.980/m² em Barueri) **NÃO infla a cidade inteira** (bug de qualidade evitado; validado: Barueri cidade=R$2.718 acervo, grid=R$10.980 relatorio). `relatorio` prevalece sobre `acervo` no mesmo nível; re-semeaduras suavizam por EMA 0.5. Guarda de faixa (venda 200–50k, aluguel 1–1000 R$/m²).
+   - `indice_bidpro_regiao(...)`: LÊ o nível mais específico disponível (bairro > grid > cidade), preferindo `relatorio`. Normalização de bairro/grid idêntica ao bootstrap (`_bairro_norm`, grid ~1km). **cidade_norm remove espaços/acentos** (Praia Grande → `praiagrande`).
+2. **`api/gerar-analise.js`**: após a pesquisa de mercado, SEMEIA + LÊ o índice e anexa `mercado.indiceBidPro` (só residencial — terreno/rural têm régua própria e contaminariam a base por m² privativo). O `promptParecer` ganhou a referência "Índice BidPro" ao lado do FipeZAP (consta no TEXTO do parecer também).
+3. **`src/pages/Analise.jsx`**: card **"Índice BidPro (nossa base)"** após a validação FipeZAP — venda R$/m², **locação R$/m²/mês** e yield do índice, com nível (bairro/microrregião/cidade) e nº de amostras. `src/components/RelatorioPDF.jsx`: mesma linha no PDF.
+4. **Backfill único** (via MCP): semeei o índice a partir dos 25 relatórios residenciais concluídos (24 imóveis) → **36 linhas `relatorio` (15 bairro + 21 grid), TODAS com aluguel** (1ª vez que o índice tem locação). As 4 cidades dos relatórios agora resolvem venda+aluguel.
+- **Build (vite) OK.** Segurança 0/0 após as RPCs novas.
+
+**Entregue hoje (parte 2) — timeout resolvido na RAIZ + consulta ao edital p/ assertividade:**
+5. **TIMEOUT (causa-raiz + self-heal) — `api/gerar-analise.js`.** O killer era o `anthropicFetch` com **`retries:1`**: cada `buscarMercado()` podia rodar **2×200s** e, com o retry por "sem amostras", somar >400s, estourando o deadline (foi o que derrubou o SITIO CAIUBURA). Correção:
+   - **Orçamento de tempo GLOBAL** (`restante()`, `HARD_MS=285s`): edital, busca de mercado e parecer usam só o tempo restante — nunca inicia uma chamada que não caiba. Busca agora é **`retries:0`** (1 tentativa) com timeout = restante − reserva do parecer; a 2ª busca só dispara se **couber** (`restante()>150s`). Se a busca FALHAR (abort/timeout), marca **transitório** (`tempo_limite`) em vez de virar erro genérico. Se faltar tempo p/ o parecer, **entrega o mercado SEM o parecer** (melhor que perder tudo). O deadline virou backstop.
+   - **Self-heal — `api/regenerar-relatorios-cron.js`**: relatório de mercado em `erro` por *tempo_limite* é **re-tentado 1×** (teto p/ economia) com orçamento fresco, relendo o `inputs` da própria linha. Assim o cliente não fica com erro preso (o SITIO CAIUBURA será regerado sozinho pós-deploy).
+6. **Consulta ao EDITAL quando a avaliação/valor está pendente (assertividade) — `garantirValores`.** Antes só raspava a **página do lote** (SPA de LJUD/GRUPOLANCE → regex falha). Agora percorre **edital → matrícula → anexos → página do lote** (fetch DIRETO, grátis): HTML por regex; **PDF por IA focada** (extrai só avaliação + lance mínimo, `max_tokens:300`). Bright Data (pago) fica no documental. Orçado (fração do tempo, sem roubar do mercado) e só dispara quando o valor falta (economia). Corrige no banco (desconto/score) e o que não confirmar segue como anomalia.
+
+**➡️ Follow-ups desta frente (não dependem do dono):**
+- **Caminho client legado** (`analisarMercadoClick` → `src/utils/claude.js`) não recebe o índice (é gerado no cliente, não persiste); o fluxo principal (servidor `gerar-analise`) é o que importa e está coberto.
+- **fator_calibracao** do índice segue 1.0 (venda do acervo = mediana de avaliação de leilão, abaixo do mercado); os valores de `relatorio` já são de mercado. Calibrar quando houver volume.
+
 ## 🆕 Sessão 18/07/2026 (tarde) — Bug vivo + edital ZUK + varredura estrangeiros + Cliente 360
 > Branch de dev: **`claude/ultimo-handoff-6lxk6j`**. Banco aplicado via MCP; código na branch (pronto p/ PR → `main`). Diagnóstico do ritual: **segurança íntegra** (`auditoria_seguranca()` = 0 crítico / 0 atenção), deploy #142 READY, 33.283 imóveis ativos, geo 0 pendente.
 
