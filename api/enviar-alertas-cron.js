@@ -318,7 +318,10 @@ async function handler(req) {
       //    referência: começa perto e vai ABRINDO o raio até fechar as 12 vagas
       //    (50km → 100 → 200 → 400 → 800 → ~nacional). Prefere o imóvel mais próximo;
       //    só amplia quando ainda falta. Cada anel dedupa (despejar ignora repetidos).
-      const RAIOS_M = [50000, 100000, 200000, 400000, 800000, 2000000];
+      // Raio MÁXIMO ~400km: mantém a oportunidade geograficamente próxima. NÃO usar
+      // 800km/2000km (quase nacional) — era o que colava imóvel de outro estado (ex.: RJ
+      // p/ cliente de SP) só p/ preencher as 12 vagas. Melhor mandar menos que irrelevante.
+      const RAIOS_M = [50000, 100000, 200000, 400000];
       for (const cid of cidadesRef.slice(0, 3)) {
         if (pool.size >= LIMITE) break;
         const cen = centroide(cid, uf);
@@ -343,10 +346,12 @@ async function handler(req) {
         }
       }
 
-      // 4) Rede final: se AINDA faltar p/ fechar as 12, completa com as melhores
-      //    oportunidades do país (maior desconto), sem restrição geográfica — é o
-      //    limite do "aumentar o raio até preencher".
-      if (pool.size < LIMITE) {
+      // 4) Rede final: completa com as melhores do país (maior desconto, sem geografia)
+      //    APENAS para quem NÃO tem nenhuma referência de região (sem cidade E sem filtro
+      //    salvo). Para quem TEM região, NÃO caímos no acervo nacional — melhor mandar
+      //    menos que mandar imóvel de outro estado (push/e-mail seguem cidade+filtros).
+      const temRegiao = !!(uf || (cidadesRef && cidadesRef.length));
+      if (pool.size < LIMITE && !temRegiao) {
         despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.${DESC_MIN}&order=desconto_percentual.desc&limit=40`), LIMITE - pool.size);
       }
 

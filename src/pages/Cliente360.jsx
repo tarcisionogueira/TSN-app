@@ -81,6 +81,7 @@ export default function Cliente360() {
   const [aprend, setAprend] = useState(null);   // corpus de aprendizado dos arremates
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
+  const [verInteresses, setVerInteresses] = useState(false); // interesses gerados sob demanda
 
   // Estatísticas (triagem) — carrega uma vez ao abrir a tela.
   useEffect(() => {
@@ -497,6 +498,52 @@ export default function Cliente360() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Imóveis enviados (e-mail/push) — auditoria da seleção: bate com cidade/UF e filtros? */}
+          <div style={card}>
+            <div style={{ ...label, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              📤 Imóveis enviados por e-mail/push ({dados.enviados_total ?? (dados.enviados || []).length})
+            </div>
+            {(dados.enviados || []).length === 0 ? (
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum imóvel enviado ainda. Aqui você audita se os imóveis encaminhados batem com a cidade/UF e os filtros do cliente.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {dados.enviados.map((im, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 6 : 0 }}>
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <b>{[im.cidade, im.estado].filter(Boolean).join('/') || '—'}</b> · {im.titulo || 'Imóvel'}
+                    </span>
+                    <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                      {im.desconto_percentual ? <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#f0fdf4', color: '#059669' }}>{Math.round(im.desconto_percentual)}% OFF</span> : null}
+                      <span style={{ color: '#94a3b8' }}>{dataHoraBR(im.enviado_em)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Interesse × desinteresse — gerado sob demanda (sem painel fixo). O que o cliente
+                curtiu/rejeitou no widget "Sugestão para você" e vira aprendizado da seleção. */}
+            <div style={{ marginTop: 12, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
+              <button onClick={() => setVerInteresses(v => !v)}
+                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, color: '#475569', cursor: 'pointer' }}>
+                {verInteresses ? 'Ocultar' : '↓ Gerar'} interesses do cliente · {(dados.interesses || []).length} ✔ / {(dados.sem_interesse || []).length} ✕
+              </button>
+              {verInteresses && (
+                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <div style={{ ...label, marginBottom: 4, color: '#059669' }}>✔ Demonstrou interesse</div>
+                    {(dados.interesses || []).length === 0 ? <div style={{ fontSize: 11.5, color: '#94a3b8' }}>Nenhum registrado.</div> :
+                      (dados.interesses || []).map((im, i) => (<div key={i} style={{ fontSize: 11.5, color: '#334155', padding: '3px 0' }}>{[im.cidade, im.estado].filter(Boolean).join('/')} · {im.titulo || im.tipo || 'Imóvel'}</div>))}
+                  </div>
+                  <div>
+                    <div style={{ ...label, marginBottom: 4, color: '#b91c1c' }}>✕ Sem interesse</div>
+                    {(dados.sem_interesse || []).length === 0 ? <div style={{ fontSize: 11.5, color: '#94a3b8' }}>Nenhum registrado.</div> :
+                      (dados.sem_interesse || []).map((im, i) => (<div key={i} style={{ fontSize: 11.5, color: '#334155', padding: '3px 0' }}>{[im.cidade, im.estado].filter(Boolean).join('/')} · {im.titulo || im.tipo || 'Imóvel'}</div>))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
