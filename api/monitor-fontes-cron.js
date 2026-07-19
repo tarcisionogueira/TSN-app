@@ -3,12 +3,13 @@
  *
  * Lê a tabela fonte_saude (1 linha por fonte por execução do scraper) e alerta
  * por e-mail quando uma conexão que já funcionava quebra ou piora:
- *   - fonte esperada sem coleta recente (>36h) → scraper parou / seletor mudou
+ *   - fonte esperada sem coleta recente (> MAX_IDADE_H) → scraper parou / seletor mudou
  *   - status 'falhou' (0 imóveis) ou 'degradado' (validação de qualidade reprovou)
  *   - queda de volume registrada pelo próprio scraper
  * Só envia e-mail se houver problema. Idempotente. Autorizado por CRON_SECRET.
  *
- * Roda 1x/dia após o scraper diário (vercel.json).
+ * Roda 1x/dia às 11h UTC (vercel.json). Os scrapers grátis rodam 2x/semana (seg/qui) —
+ * o threshold de frescor (MAX_IDADE_H) tolera o gap de fim de semana; ver nota abaixo.
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
@@ -29,7 +30,15 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 // FRESCOR do acervo (imoveis_leilao.atualizado_em). PECINI/RJLEILOES são PAGOS (Bright
 // Data) — coleta parada = pagar sem coletar. Valor = dias de tolerância de frescor.
 const FONTES_SEM_SAUDE = { PECINI: 5, RJLEILOES: 7 };
-const MAX_IDADE_H = 48; // sem coleta há mais que isso = alerta
+// Frescor máximo tolerado (h) para as fontes grátis que reportam saúde (Seção A).
+// Elas rodam 2x/semana — seg e qui (cron '1,4' em scraper.yml e leiloeiros-puppeteer.yml).
+// O MAIOR gap NORMAL é quinta→segunda = 96h; com este monitor às 11h UTC e o scrape às
+// 9-10h UTC, o pior frescor legítimo num check ≈ 96h + eventual atraso do Actions. 108h
+// (4,5 dias) limpa esse gap com folga e AINDA alerta quando uma execução agendada é pulada
+// (fica > 108h). NÃO baixar para ~48h: dispara falso-positivo todo sáb/dom/seg (o "coleta
+// parada" fantasma). A regressão de VOLUME (scraper rodou mas coletou pouco) é pega à parte
+// pela linha de base (Seção C), independente do frescor — este teto cobre só "não rodou".
+const MAX_IDADE_H = 108;
 
 // LINHA DE BASE por leiloeiro (ver docs/BASELINE_CAPTURA_LEILOEIROS.md — mantenha os dois
 // em sincronia). `min` = piso de acervo ativo (abaixo disso o scrape encolheu). `campos` =
