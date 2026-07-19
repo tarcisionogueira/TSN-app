@@ -110,6 +110,40 @@ async function corpusDaRegiao(uf, tipo) {
   } catch { return ''; }
 }
 
+// ÍNDICE BIDPRO — base própria de mercado por microrregião (cidade_indicadores). Cada relatório
+// SEMEIA (aprende) e LÊ o índice consolidado, sem depender de fonte externa. Best-effort: nunca
+// bloqueia o relatório. Recebe cidade_norm JÁ normalizado (coluna gerada) + bairro/lat/lng crus.
+async function semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras) {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return;
+    const venda = Number(precoM2) > 0 ? Number(precoM2) : null;
+    const aluguel = Number(aluguelM2) > 0 ? Number(aluguelM2) : null;
+    if (venda == null && aluguel == null) return;
+    await sb('rpc/semear_indice_relatorio', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_bairro: imDb.bairro || '',
+        p_lat: imDb.latitude ?? null, p_lng: imDb.longitude ?? null,
+        p_tipo: 'residencial', p_venda_m2: venda, p_aluguel_m2: aluguel, p_n: Number(nAmostras) || 0,
+      }),
+    });
+  } catch { /* semeadura best-effort */ }
+}
+async function lerIndiceBidPro(imDb) {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return null;
+    const r = await sb('rpc/indice_bidpro_regiao', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_bairro: imDb.bairro || '',
+        p_lat: imDb.latitude ?? null, p_lng: imDb.longitude ?? null, p_tipo: 'residencial',
+      }),
+    });
+    const j = await r.json().catch(() => null);
+    return (j && (Number(j.venda_m2) > 0 || Number(j.aluguel_m2) > 0)) ? j : null;
+  } catch { return null; }
+}
+
 // Confirmação SOB DEMANDA de VALORES no detalhe/edital (só quando um relatório é pedido —
 // sem varredura em massa). Cobre dois casos:
 //  - AVALIAÇÃO ausente (ex.: GrupoLance judicial — só vem no detalhe);
@@ -330,6 +364,7 @@ MERCADO:
 - Preço médio/m² (média dos anúncios): R$ ${brl(mercado?.precoMedioM2)}
 - Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
 ${mercado?.referenciaFipeZap?.encontrado ? `- Referência FipeZAP (${mercado.referenciaFipeZap.localidade || inp.cidade || ''}, ${mercado.referenciaFipeZap.mesReferencia || 'recente'}): R$ ${brl(mercado.referenciaFipeZap.precoMedioM2)}/m² · valorização 12m: ${(Number(mercado.referenciaFipeZap.valorizacao12m) || 0).toFixed(1)}%. Compare com a média dos anúncios acima: se divergirem muito, comente e use a mais conservadora na defesa.` : ''}
+${mercado?.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0) ? `- Índice BidPro (nossa base própria por microrregião, nível ${mercado.indiceBidPro.nivel})${Number(mercado.indiceBidPro.venda_m2) > 0 ? `: venda R$ ${brl(mercado.indiceBidPro.venda_m2)}/m²` : ''}${Number(mercado.indiceBidPro.aluguel_m2) > 0 ? ` · locação R$ ${brl(mercado.indiceBidPro.aluguel_m2)}/m²/mês` : ''}. Referência interna independente (venda e locação), consolidada das análises da plataforma — use como sanity-check adicional junto ao FipeZAP.` : ''}
 ${mercado?.comentario ? `- Leitura de mercado: ${mercado.comentario}` : ''}
 
 AQUISIÇÃO E RETORNO:
@@ -486,8 +521,9 @@ export default async function handler(req, res) {
     // protege o número. Também lemos avaliação/fonte para a checagem de coerência.
     let areaM2 = Number(mercadoInputs.areaM2) || 0;
     let avalDb = 0, fonteDb = '', areaFonte = 'informada';
+    let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
-      const [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,area_m2,ficha_juridica&limit=1`)).json();
+      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
       avalDb = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n) ? 0 : n;
       fonteDb = imDb?.fonte || '';
@@ -524,6 +560,20 @@ export default async function handler(req, res) {
     } catch { /* coerência é best-effort: nunca bloqueia o relatório */ }
     mercado.areaAlerta = areaAlerta; // null quando coerente (limpa alerta antigo em reaproveitamento)
     const valorLocacao = mercado.aluguelMedio ? Math.round(mercado.aluguelMedio) : null;
+
+    // ÍNDICE BIDPRO (loop com os relatórios — fecha o ciclo de cidade_indicadores):
+    // (1) SEMEIA a microrregião com venda R$/m² e aluguel R$/m² REAIS deste relatório;
+    // (2) LÊ o índice consolidado (bairro > grid > cidade) para CONSTAR no relatório
+    //     (venda e locação). Só residencial: o índice é por m² privativo — terreno/rural
+    //     têm régua própria (m² de terreno/hectare) e contaminariam a base residencial.
+    mercado.indiceBidPro = null;
+    if (baseTipo === 'residencial') {
+      const nAmostras = (Number(mercado.nivel1?.totalAmostras) || 0) + (Number(mercado.nivel2?.totalAmostras) || 0)
+        || ((mercado.vendas?.length || 0) + (mercado.locacoes?.length || 0));
+      const aluguelM2 = (Number(mercado.aluguelMedio) > 0 && areaM2 > 0) ? Number(mercado.aluguelMedio) / areaM2 : null;
+      await semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras);
+      mercado.indiceBidPro = await lerIndiceBidPro(imDb);
+    }
 
     // 2) Laudo (parecer). Carrega os docs do lote para o parecer poder dizer se os
     // débitos informados já constam na documentação (ou apontar onde buscar).

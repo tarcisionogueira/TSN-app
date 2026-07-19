@@ -262,6 +262,7 @@ ${mercado?`<div class="av">
      ['Rentab. Líquida',fmtPct(mercado.yieldLiquido||0),'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
+${mercado.indiceBidPro && ((mercado.indiceBidPro.venda_m2||0)>0 || (mercado.indiceBidPro.aluguel_m2||0)>0)?`<div style="font-size:10px;color:#3730a3;margin:0 0 10px;background:#eef2ff;border:1px solid #c7d2fe;padding:8px 10px;border-radius:4px;"><b>Índice BidPro (nossa base própria, ${mercado.indiceBidPro.nivel==='bairro'?'bairro':mercado.indiceBidPro.nivel==='grid'?'microrregião':'cidade'} · ${mercado.indiceBidPro.n_amostras||0} amostras):</b> ${(mercado.indiceBidPro.venda_m2||0)>0?`venda R$ ${fmt(mercado.indiceBidPro.venda_m2)}/m²`:''}${(mercado.indiceBidPro.aluguel_m2||0)>0?` · locação R$ ${fmt(mercado.indiceBidPro.aluguel_m2)}/m²/mês`:''}. Referência independente da plataforma para venda e locação, complementar ao FipeZAP.</div>`:''}
 ${mercado.comentario?`<p style="font-size:10px;color:#475569;margin:0 0 10px;background:#f8fafc;padding:8px;border-radius:4px;">${mercado.comentario}</p>`:''}
 ${mercado.zoneamento?`<div style="font-size:10px;color:#334155;margin:0 0 10px;background:#f0f9ff;border:1px solid #dbeafe;padding:8px 10px;border-radius:4px;"><b>Zoneamento (uso do solo):</b> ${mercado.zoneamento.encontrado
   ? `${mercado.zoneamento.zona||'—'}${mercado.zoneamento.resumoUso?', '+mercado.zoneamento.resumoUso:''} <span style="color:#64748b">· fonte: ${mercado.zoneamento.fonte||'órgão oficial'}</span>`
