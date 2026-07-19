@@ -91,6 +91,17 @@ async function aprenderNaEmissao(imovel, mercado, temParecer) {
         corpus, qualidade,
       }),
     });
+    // GANCHO índice próprio (cidade_indicadores): o MESMO agente apura o índice na
+    // microrregião do imóvel (bairro→grid→cidade). venda_m2 = preço/m² dos comparáveis
+    // (já é MERCADO) · aluguel_m2 = aluguel médio ÷ área. fonte='relatorio' (autoritativo).
+    const areaHook = Number(imovel?.area_m2) || null;
+    const aluguelM2 = (Number(mercado?.aluguelMedio) > 0 && areaHook > 0) ? Math.round(Number(mercado.aluguelMedio) / areaHook) : null;
+    if (precoM2 > 0 && imovel?.id) {
+      await sb('rpc/registrar_indice_relatorio', {
+        method: 'POST', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ p_imovel_id: String(imovel.id), p_venda_m2: precoM2, p_aluguel_m2: aluguelM2 }),
+      });
+    }
   } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
 }
 
@@ -577,6 +588,14 @@ export default async function handler(req, res) {
       return { result, valorMercado };
     })()]);
 
+    // ÍNDICE BIDPRO (nosso) junto ao FipeZAP: compõe/compara o preço médio de mercado.
+    // Resolve a microrregião do imóvel (bairro→grid→cidade). Best-effort — nunca bloqueia.
+    try {
+      if (imovel?.id && result?.mercado) {
+        const bp = await (await sb('rpc/indice_microrregiao', { method: 'POST', body: JSON.stringify({ p_imovel_id: String(imovel.id) }) })).json();
+        if (bp && Number(bp.precoMedioM2) > 0) result.mercado.referenciaBidpro = bp;
+      }
+    } catch { /* referência BidPro é best-effort */ }
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
     // mercado/parecer vivem DENTRO do Promise.race acima; aqui usamos o result (que os

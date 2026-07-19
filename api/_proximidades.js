@@ -6,14 +6,22 @@ const OVERPASS = 'https://overpass-api.de/api/interpreter';
 const RAIO = 4000; // metros
 
 // Categorias → tags OSM. Chaves iguais às usadas na UI (CATS_PROX).
+// Base dos scores de atratividade (revenda/locação/temporada). Positivos + NEGATIVOS
+// (deságio). classifica() devolve a 1ª categoria que casar — 'negativo' fica por último.
 export const CATEGORIAS = [
-  { key: 'praia',      tags: [['natural', 'beach']] },
-  { key: 'transporte', tags: [['highway', 'bus_stop'], ['railway', 'station'], ['station', 'subway'], ['railway', 'subway_entrance']] },
-  { key: 'mercado',    tags: [['shop', 'supermarket']] },
-  { key: 'farmacia',   tags: [['amenity', 'pharmacy']] },
-  { key: 'saude',      tags: [['amenity', 'hospital'], ['amenity', 'clinic']] },
-  { key: 'escola',     tags: [['amenity', 'school']] },
-  { key: 'shopping',   tags: [['shop', 'mall']] },
+  { key: 'praia',        tags: [['natural', 'beach']] },
+  { key: 'transporte',   tags: [['highway', 'bus_stop'], ['railway', 'station'], ['station', 'subway'], ['railway', 'subway_entrance']] },
+  { key: 'mercado',      tags: [['shop', 'supermarket']] },
+  { key: 'farmacia',     tags: [['amenity', 'pharmacy']] },
+  // saude: hospital + UPA + posto/UBS (tagueamento BR é irregular → rede ampla).
+  { key: 'saude',        tags: [['amenity', 'hospital'], ['amenity', 'clinic'], ['amenity', 'doctors'], ['healthcare', 'centre']] },
+  { key: 'escola',       tags: [['amenity', 'school']] },   // pública + particular (OSM não separa)
+  { key: 'universidade', tags: [['amenity', 'university'], ['amenity', 'college']] },
+  { key: 'shopping',     tags: [['shop', 'mall']] },
+  { key: 'turismo',      tags: [['tourism', 'attraction'], ['tourism', 'museum'], ['tourism', 'theme_park'], ['tourism', 'viewpoint'], ['historic', 'monument'], ['historic', 'castle']] },
+  { key: 'eventos',      tags: [['amenity', 'events_venue'], ['amenity', 'conference_centre'], ['leisure', 'stadium'], ['tourism', 'hotel']] },
+  // NEGATIVOS (deságio no score): presídio, aterro/lixão, ETE (Sabesp), subestação, cemitério.
+  { key: 'negativo',     tags: [['amenity', 'prison'], ['landuse', 'landfill'], ['man_made', 'wastewater_plant'], ['power', 'substation'], ['landuse', 'cemetery'], ['amenity', 'grave_yard']] },
 ];
 
 export function haversine(lat1, lon1, lat2, lon2) {
