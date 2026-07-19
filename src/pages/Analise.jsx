@@ -2492,6 +2492,24 @@ export default function Analise() {
                 );
               })()}
 
+              {/* Índice BidPro (nosso) — compõe/compara com o FipeZAP o preço médio de mercado */}
+              {mercado.referenciaBidpro && Number(mercado.referenciaBidpro.precoMedioM2) > 0 && (
+                <div style={{ borderRadius:12, border:'1px solid #dbeafe', background:'#f8fafc', padding:'12px 16px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+                    <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Índice BidPro</span>
+                    <span style={{ fontSize:10.5, color:'#64748b' }}>
+                      por {mercado.referenciaBidpro.nivel === 'bairro' ? 'bairro' : mercado.referenciaBidpro.nivel === 'grid' ? 'microrregião' : 'cidade'} · {mercado.referenciaBidpro.n_amostras || 0} amostras · {mercado.referenciaBidpro.fonte === 'relatorio' ? 'validado por relatórios' : 'base do acervo'}
+                    </span>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, fontSize:12 }}>
+                    <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>BIDPRO R$/m² (venda)</div><div style={{ fontWeight:800, color:'#0D63DB' }}>R$ {fmt(mercado.referenciaBidpro.precoMedioM2)}</div></div>
+                    {Number(mercado.referenciaBidpro.aluguelM2) > 0 && (
+                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>BIDPRO R$/m² (locação)</div><div style={{ fontWeight:800, color:'#8b5cf6' }}>R$ {fmt(mercado.referenciaBidpro.aluguelM2)}/mês</div></div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Nível 1, Mesmo Condomínio */}
               <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
                 <div style={{ background:'#0D63DB', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>

@@ -17,6 +17,60 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🆕 Sessão 19/07/2026 — Alertas por região + Índice próprio de mercado + base do filtro Revenda/Locação/Temporada
+> Branch de dev: **`claude/gifted-meitner-g71ied`**. Banco aplicado via MCP; código em PRs → `main`. Diagnóstico do ritual: **segurança 0 crítico / 0 atenção** (reconferida várias vezes — a auditoria inclusive pegou uma função definer nova exposta a anon e foi corrigida na hora). Deploy READY, 33.274 imóveis ativos, geo 0 pendente. `ativos_24h=0` é ESPERADO (scrapers seg/qui; próxima seg 07-20).
+
+**Contexto:** o dono rodou o ritual, verificou os e-mails de saúde/fontes, e depois desenhamos comigo o **filtro Revenda/Locação/Temporada** (grande diferencial). Vários blocos já construídos; o filtro em si (scores + UI) fica para as próximas sessões.
+
+**E-mails verificados (nenhum era incidente ativo):**
+- `q.rpc().catch` → já corrigido no #143 (deploy 18/07 20:25); as ocorrências (18/07 09:46, do novo usuário **José Domiciano**) eram resíduo pré-deploy. Auto-limpa.
+- `avaliacao_ausente:1` e `Importing a module script failed` → benignos (anomalia de 1 relatório; chunk velho pós-deploy).
+- **"coleta parada" (CEF/WEBLEILOES/GRUPOLANCE)** → FALSO-POSITIVO do fim de semana: o monitor usava `MAX_IDADE_H=48h` mas os scrapers viraram 2×/semana (seg/qui, gap normal até 96h). **BIASI degradado (173)** → acervo real já validado.
+
+**Mesclado em produção hoje:**
+- **#144** — `monitor-fontes-cron`: `MAX_IDADE_H` 48h→**108h** (fim do falso-positivo de fim de semana sem perder detecção de parada real).
+- **#145** — `SugestaoImovel.jsx` (widget "Sugestão para você"): **trava geográfica** — seguia o maior desconto do BRASIL (51/60 eram RJ → mostrava RJ p/ cliente de SP). Agora segue cidade/UF + filtros salvos do cliente (mesma regra do e-mail).
+- **#146** — (a) **e-mail de alertas por região**: raio capado em 400km + fallback nacional só p/ quem não tem região; (b) **Cliente 360**: card "Imóveis enviados" (auditoria da seleção) + interesse×desinteresse sob demanda (RPC `admin_usuario_360` estendida); (c) **índice próprio** `cidade_indicadores` (bairro/grid/cidade); (d) health-check monitora o índice.
+
+**🧭 ÍNDICE PRÓPRIO DE MERCADO (`cidade_indicadores`) — construído e no ar:**
+- Tabela em **3 níveis** (o mais específico vence no consumo): `bairro` (cidade+bairro, ~84% cobertura) · `grid` (célula ~1km, cobre os sem bairro) · `cidade` (piso). Populado: **355 cidades + 872 bairros + 1.058 grids** (bootstrap = mediana avaliação/m² do acervo residencial). Prova: RJ varia por bairro (Santa Cruz 3401, Campo Grande 3707, Bangu 2787).
+- **`venda_m2` bruto (avaliação, abaixo do mercado)** → `venda_m2_mercado` = venda_m2 × `fator_calibracao` (default 1.0; a calibrar dos relatórios/FipeZAP).
+- **GANCHO relatório→índice LIGADO (mesmo agente):** `aprenderNaEmissao` (api/gerar-analise.js) chama a RPC **`registrar_indice_relatorio(imovel_id, venda_m2, aluguel_m2)`** — grava o valor de mercado VALIDADO (comparáveis) na microrregião, `fonte='relatorio'` (autoritativo). O `recalcular_cidade_indicadores()` (bootstrap) NÃO sobrescreve linha de relatório (on conflict do nothing). **Não há cron de recálculo** — compõe pelos relatórios (decisão do dono).
+- **BidPro no relatório JUNTO ao FipeZAP:** RPC **`indice_microrregiao(imovel_id)`** resolve o índice (bairro→grid→cidade); `gerar-analise.js` anexa em `result.mercado.referenciaBidpro`; `Analise.jsx` mostra o card "Índice BidPro" (venda/locação R$/m², nível, nº amostras, estimado/validado) ao lado do "Validação FipeZAP".
+- **Índice externo:** FipeZAP é o único completo (R$/m² venda+locação por cidade), grátis (PDF mensal), oficial — entra só como **conferência** das cidades grandes. IVAR/FGV = só variação %. **Índice próprio já cobre 355 cidades > 56 do FipeZAP** → sem dependência.
+
+**📍 POIs estendidos (`api/_proximidades.js`) — ⚠️ precisa re-enriquecer:**
+- Adicionadas categorias: **universidade** (`amenity=university/college`), **saúde ampliada** (hospital+UPA+posto: `clinic/doctors/healthcare=centre`), **turismo** (`tourism=attraction/museum/…`, `historic`), **eventos** (`events_venue/conference_centre/stadium/hotel`), **NEGATIVOS** (`prison/landfill/wastewater_plant/substation/cemetery`). Escola já cobre pública+particular.
+- **O cron `enriquecer-proximidades` só processa `proximidades_em IS NULL`** → as categorias novas só valem para imóveis novos. **BACKFILL pendente:** resetar `proximidades_em=null` em lotes p/ re-enriquecer os 65% já mapeados (custo: tempo de Overpass; fazer em lotes pequenos).
+
+**🧩 DESENHO do filtro Revenda/Locação/Temporada (para construir):**
+- **3 objetivos** (Revenda · Locação · Temporada), como valores de um seletor "Objetivo" no Busca — compõe com TODOS os outros filtros (é ORDENAÇÃO + slider de score/confiança mínimos por cima dos `WHERE`).
+- **2 camadas:** (A) **atratividade de mercado** intrínseca (POI georreferenciado + índice por microrregião — o yield 0,2%–1%/mês) · (B) **vantagem do leilão** (desconto vs. mercado). Score = A × B, pesos diferentes por objetivo.
+- **Pesos dos POIs (travados pelo dono):** ver tabela na conversa — Locação lidera com transporte 25% + universidade 20% + saúde 15%; Temporada com praia 30% + turismo 25% + densidade comercial 20%; Revenda com densidade comercial 20% + desconto/liquidez. Negativos: −20% revenda / −15% locação/temporada.
+- **"Sweet spot"** (faixa ideal, não "quanto mais perto melhor") p/ transporte/eventos (barulho). **Densidade comercial** = contar no raio (mudança estrutural no enriquecimento — hoje é só "o mais próximo").
+- **Relatório:** seção **"Localização — a favor e contra"** listando POIs positivos **E negativos** com distância e o **motivo** (pedido do dono). Vale p/ os 3 objetivos (explicabilidade do score).
+- **Temporada:** 3º filtro com **descritivo curto do porquê** ("200m da praia, cidade turística, alta ocupação no verão").
+- **Ordem sugerida:** Revenda + Temporada primeiro (POI-driven, prontos); Locação quando `aluguel_m2` encher via relatórios.
+- **Segmentação por bairro APROVADA** — conferir numa cidade-piloto (litoral) se os valores por bairro fazem sentido antes de publicar.
+
+**🩺 Mapa de agentes (tudo de hoje sob monitoramento — validado com o dono):**
+- **Segurança:** `auditoria_seguranca()` (cron semanal) — auto-cobre objeto novo de banco (pegou/corrigiu a função definer hoje).
+- **Saúde:** `health-check.js` (diário) — ganhou o item **"Índice de mercado — cobertura por cidade"** (alerta se vazio / R$/m² fora de 200–50k = contaminação de área).
+- **Aprendizado:** `aprenderNaEmissao`→`agente_aprendizado` (corpus por região) — **o MESMO agente agora apura o índice** (registrar_indice_relatorio); supervisão `moderador_supervisao_aprendizado()` (semanal); `feedback_imovel` (interesse/sem-interesse do widget → realimenta seleção). Regra: cada bloco novo da feature nasce com seu monitor.
+
+**Igor duplicado:** **mantido** (decisão do dono) — emails e cpf_hash distintos (typo de 1 letra: `igorqueirozim@` vs `igorqueirozimo@`), então não é "mesmos dados".
+
+**➡️ PRÓXIMOS PASSOS (código, não dependem do dono):**
+1. **Backfill de POI** (resetar `proximidades_em` em lotes p/ re-enriquecer com as categorias novas).
+2. **Densidade comercial** (contar POIs no raio, não só o mais próximo) — mudança no `_proximidades.js`/enriquecimento.
+3. **Scores** `score_revenda`/`score_locacao`/`score_temporada` por imóvel (colunas + cron leve OU cálculo on-the-fly) a partir do índice + POI, com **confiança** e **"porquê"**.
+4. **UI do seletor "Objetivo"** no Busca (ordenação + slider) + o **descritivo de temporada**.
+5. **Seção "Localização — a favor e contra"** no relatório (positivos e negativos com motivo).
+6. **Fator de calibração** do índice (aprender dos relatórios/FipeZAP p/ converter avaliação→mercado) e **parser do PDF FipeZAP** (conferência grátis das cidades grandes).
+7. **Nudge de zero-resultado** no Busca (detalhado na conversa — afrouxar filtro / avise-me quando aparecer) — o dono quer co-desenhar.
+
+**Pendências do dono:** validar PECINI (cron seg 07-20 + gasto Bright Data), Asaas (webhook), Upstash. **Console Anthropic:** pagamento de créditos falhando — provável bloqueio de compra internacional do cartão BR (habilitar internacional / cartão multimoeda / suporte Anthropic).
+
 ## 🆕 Sessão 18/07/2026 (tarde) — Bug vivo + edital ZUK + varredura estrangeiros + Cliente 360
 > Branch de dev: **`claude/ultimo-handoff-6lxk6j`**. Banco aplicado via MCP; código na branch (pronto p/ PR → `main`). Diagnóstico do ritual: **segurança íntegra** (`auditoria_seguranca()` = 0 crítico / 0 atenção), deploy #142 READY, 33.283 imóveis ativos, geo 0 pendente.
 
