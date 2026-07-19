@@ -58,6 +58,57 @@ function contagemLeilao(d) {
 }
 
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
+
+// ── INTENÇÃO DA BUSCA (Revenda / Locação / Temporada) — filtra o acervo pelo OBJETIVO ──
+// Sem plano documentado prévio: critérios são defaults sensatos e AJUSTÁVEIS.
+//  • revenda   = imóveis líquidos com boa margem de flip (desconto ≥ 30% + tipos líquidos).
+//  • locacao   = residencial (o que se aluga a longo prazo: apto/casa).
+//  • temporada = residencial em cidade litorânea/turística (lista curada abaixo).
+const INTENCAO_OPTS = [
+  ['revenda',   '🔁 Revenda',   'Maior margem de flip (desconto ≥ 30%)'],
+  ['locacao',   '🏠 Locação',   'Residencial para renda de aluguel'],
+  ['temporada', '🏖️ Temporada', 'Residencial em litoral / turístico'],
+];
+const TIPOS_RESIDENCIAL = ['apartamento', 'casa', 'imovel'];              // locação/temporada
+const TIPOS_LIQUIDOS    = ['apartamento', 'casa', 'comercial', 'imovel']; // revenda (flip)
+const REVENDA_DESCONTO_MIN = 30; // piso de lucro do sistema (viável = desconto ≥ 30%)
+// Cidades de temporada (cidade_norm — sem espaços/acentos). Curada a partir do acervo real
+// (litoral + destinos turísticos). AJUSTÁVEL: acrescente/remova conforme a operação crescer.
+const CIDADES_TEMPORADA = [
+  // SP
+  'guaruja','praiagrande','saovicente','bertioga','saosebastiao','ubatuba','caraguatatuba','ilhabela','itanhaem','mongagua','peruibe',
+  // RJ
+  'cabofrio','armacaodosbuzios','angradosreis','paraty','macae','arraialdocabo','marica','saopedrodaaldeia','niteroi',
+  // SC
+  'florianopolis','balneariocamboriu','itapema','bombinhas','garopaba','itajai','navegantes','portobelo','saofranciscodosul',
+  // BA
+  'portoseguro','ilheus','itacare','valenca','maragogi',
+  // AL / PE
+  'maceio','ipojuca','cabodesantoagostinho','tamandare',
+  // ES
+  'vilavelha','guarapari','marataizes','anchieta',
+  // RS
+  'torres','capaodacanoa','tramandai','imbe','xangrila',
+  // PR
+  'guaratuba','matinhos','pontaldoparana',
+  // RN / CE
+  'natal','extremoz','fortaleza','aquiraz','caucaia','beberibe',
+];
+// Traduz a intenção para as restrições de tipo/desconto que ambos os caminhos (query direta e
+// RPC de raio) entendem. Interseção com os tipos já escolhidos pelo usuário; se ficar vazia,
+// devolve um sentinela que não casa nada (contradição → 0 resultados, em vez de "todos").
+function ajustarFiltrosPorIntencao(intencao, tiposUsuario, descontoMinUsuario) {
+  const base = Array.isArray(tiposUsuario) ? tiposUsuario : [];
+  const interseccao = (lista) => {
+    if (!base.length) return lista;
+    const inter = base.filter(t => lista.includes(t));
+    return inter.length ? inter : ['__sem_tipo__'];
+  };
+  let tipos = base, descontoMin = Number(descontoMinUsuario) || 0;
+  if (intencao === 'revenda')   { tipos = interseccao(TIPOS_LIQUIDOS);   descontoMin = Math.max(descontoMin, REVENDA_DESCONTO_MIN); }
+  else if (intencao === 'locacao' || intencao === 'temporada') { tipos = interseccao(TIPOS_RESIDENCIAL); }
+  return { tipos, descontoMin };
+}
 const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', venda_direta:'Venda Direta', licitacao_aberta:'Licitação Aberta', judicial:'Judicial', extrajudicial:'Extrajudicial' };
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
@@ -141,6 +192,10 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro) {
   if (f.valorMin) q = q.gte('valor_minimo', Number(String(f.valorMin).replace(/\D/g, '')));
   if (f.valorMax) q = q.lte('valor_minimo', Number(String(f.valorMax).replace(/\D/g, '')));
   if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
+  // Intenção da busca — filtra DE FATO pelo objetivo (combina em AND com os demais filtros).
+  if (f.intencao === 'revenda')        q = q.in('tipo', TIPOS_LIQUIDOS).gte('desconto_percentual', REVENDA_DESCONTO_MIN);
+  else if (f.intencao === 'locacao')   q = q.in('tipo', TIPOS_RESIDENCIAL);
+  else if (f.intencao === 'temporada') q = q.in('tipo', TIPOS_RESIDENCIAL).in('cidade_norm', CIDADES_TEMPORADA);
   if (cidadesFiltro?.length) q = q.in('cidade_norm', cidadesFiltro.map(normCidade));
   // Bairros: valores EXATOS do banco (vindos da própria listagem de bairros da
   // cidade), então o `.in` casa sem depender de normalização no servidor. Só filtra
@@ -492,7 +547,7 @@ export default function Busca() {
       });
   }, [effectiveUserId, limiteAnalises]);
   const analisesRestantes = limiteAnalises != null ? Math.max(0, limiteAnalises - analisesUsadas) : null;
-  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0 };
+  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'' };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
     if (!_urlParams.estado) return null;
@@ -918,19 +973,22 @@ export default function Busca() {
     try {
       // ── Modo raio: PostGIS server-side (sem trazer 5000 registros pro browser) ──
       if (raioAtivoBusca && centro) {
+        // Intenção da busca no modo RAIO: traduz p/ os params que a RPC já entende (tipo/desconto).
+        // Obs.: 'temporada' não restringe por cidade aqui (o raio já delimita a geografia) — aplica residencial.
+        const ajInt = ajustarFiltrosPorIntencao(filtrosAtivos.intencao, filtrosAtivos.tipos || [], filtrosAtivos.descontoMin ? Number(filtrosAtivos.descontoMin) : 0);
         const body = {
           lat: centro.lat, lng: centro.lng, raioKm: raioKmBusca,
           pagina: paginaAlvo, porPagina: POR_PAGINA,
           filtros: {
             // Todos os filtros aplicados no servidor (RPC v2): múltiplos tipos,
             // modalidades e formas de pagamento — Financiado + Hipotecado juntos.
-            tipos: filtrosAtivos.tipos || [],
+            tipos: ajInt.tipos,
             estado: filtrosAtivos.estado || '',
             modalidades: filtrosAtivos.modalidades || [],
             pagamento: pagamentoParaCanon(filtrosAtivos.pagamento || []),
             valorMin: filtrosAtivos.valorMin ? Number(String(filtrosAtivos.valorMin).replace(/\D/g, '')) : 0,
             valorMax: filtrosAtivos.valorMax ? Number(String(filtrosAtivos.valorMax).replace(/\D/g, '')) : 9999999999,
-            descontoMin: filtrosAtivos.descontoMin ? Number(filtrosAtivos.descontoMin) : 0,
+            descontoMin: ajInt.descontoMin,
           },
         };
         const resp = await fetch('/api/busca-raio', {
@@ -1193,6 +1251,26 @@ export default function Busca() {
           </button>
           {showFiltros && (
             <div style={{ padding:14, display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:16, alignItems:'start' }}>
+              <div>
+                <label style={lbl}>Intenção da busca</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {INTENCAO_OPTS.map(([val, label, desc]) => {
+                    const ativo = filtros.intencao === val;
+                    return (
+                      <button key={val} title={desc}
+                        onClick={() => setFiltrosPersist(p => ({ ...p, intencao: ativo ? '' : val }))}
+                        style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${ativo ? '#0D63DB' : '#e2e8f0'}`, background: ativo ? '#0D63DB' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize: 12, fontWeight: ativo ? 700 : 400, cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {filtros.intencao && (
+                  <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 5, lineHeight: 1.4 }}>
+                    {INTENCAO_OPTS.find(o => o[0] === filtros.intencao)?.[2]}
+                  </div>
+                )}
+              </div>
               <div>
                 <label style={lbl}>Tipo de Imóvel</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
