@@ -104,7 +104,9 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
       coords = coordCache[key];
       fromCache = true;
     } else {
-      coords = await geocodificarCascata(im, { deadline });
+      // Cron em LOTE: só rotas GRATUITAS (Nominatim/IBGE/BrasilAPI). O Google (pago) fica
+      // reservado ao on-demand da página do imóvel — contém o custo do backlog inteiro.
+      coords = await geocodificarCascata(im, { deadline, permitirPago: false });
       // Salva no cache só nível bairro/cidade (sem endereço), para reutilizar em imóveis do mesmo bairro
       if (coords && coords.nivel !== 'endereco' && !im.endereco?.trim()) coordCache[key] = coords;
     }

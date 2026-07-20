@@ -14,6 +14,10 @@ on:
         description: 'Máximo de imóveis (0 = todos)'
         required: false
         default: '0'
+      recheck_nulos:
+        description: 'Re-checar CEF com link_foto NULO (1) — resgata fotos publicadas depois'
+        required: false
+        default: '0'
   schedule:
     - cron: '0 9 * * *'
 
@@ -34,5 +38,6 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BACKFILL_SO_ATRATIVOS: ${{ github.event.inputs.so_atrativos || '0' }}
           BACKFILL_LIMITE: ${{ github.event.inputs.limite || '0' }}
+          RECHECK_NULOS: ${{ github.event.inputs.recheck_nulos || '0' }}
           BACKFILL_CONCURRENCIA: '8'
         run: node scripts/backfill-fotos-caixa.mjs

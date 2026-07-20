@@ -12,7 +12,7 @@
  * distância plausível do centróide do município); fora disso, é descartado.
  */
 import MUNICIPIOS from './_municipios.js';
-import { registrarUso } from './_uso.js';
+import { registrarUso, unidadesUsadasHoje } from './_uso.js';
 
 // UF → nome por extenso (para o parâmetro `state=` do Nominatim) + bounding box
 // generosa (validação de "está no estado certo?"). [latMin, latMax, lngMin, lngMax]
@@ -191,6 +191,13 @@ export async function googleGeocode(enderecoCompleto) {
   // do front por definição do Vite → chave paga exposta a qualquer visitante).
   const key = (process.env.GOOGLE_MAPS_API_KEY || '').trim();
   if (!key || !enderecoCompleto || !enderecoCompleto.trim()) return null;
+  // TRAVA DE CUSTO — teto DIÁRIO de geocodes pagos do Google. Batido o teto do dia, a
+  // função vira no-op (return null) e a cascata segue nas rotas GRATUITAS (Nominatim/
+  // IBGE/BrasilAPI). Combinada com o cron rodando `permitirPago:false` (Google só
+  // on-demand na página do imóvel), contém o custo: o tier grátis do Google é ~10k/MÊS.
+  // Ajuste por env GOOGLE_GEOCODE_MAX_DIA (0 = sem teto).
+  const LIMITE_DIA = Number(process.env.GOOGLE_GEOCODE_MAX_DIA ?? 10000);
+  if (LIMITE_DIA > 0 && (await unidadesUsadasHoje('google_geocode')) >= LIMITE_DIA) return null;
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(enderecoCompleto)}&region=br&language=pt-BR&key=${key}`;
   try {
     const res = await fetchGeo(url, { signal: AbortSignal.timeout(8000) });
@@ -262,7 +269,7 @@ export async function geocoderPago(enderecoCompleto) {
  * coordenada (busca estruturada + validação). Retorna { lat, lng, nivel, cep? }
  * ou null. `sleepMs`=0 desliga as pausas (uso on-demand de 1 imóvel).
  */
-export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1100 } = {}) {
+export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1100, permitirPago = true } = {}) {
   const { endereco, bairro, cidade, estado, cep } = im;
   const ufNome = UFS[String(estado || '').trim().toUpperCase()]?.nome || estado;
   // Tolerância ao centróide do município POR PRECISÃO. Antes era 80 km fixo — frouxo
@@ -280,7 +287,11 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
     [via, numero].filter(Boolean).join(', ') || endereco,
     bairro, cidade, estado ? `${estado}` : '', cep ? `CEP ${cep}` : '', 'Brasil',
   ].filter(Boolean).join(', ');
-  if (Date.now() < deadline) {
+  // `permitirPago` (default true) libera as rotas PAGAS (Google/LocationIQ). O cron de
+  // geocodificação em LOTE passa `false` → usa só as rotas gratuitas (Nominatim/IBGE/
+  // BrasilAPI), reservando o Google para o on-demand (página do imóvel), onde a
+  // precisão importa e o volume é limitado. É a metade "sob demanda" da contenção de custo.
+  if (permitirPago && Date.now() < deadline) {
     const g = aceita(await googleGeocode(enderecoGoogle), 60); // Google é padrão-ouro: tolera endereço real distante
     if (g) return { ...g, cep: cep || null };
   }
@@ -288,7 +299,7 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
   // Nível 0.5 — GEOCODER PAGO (LocationIQ), pronto para ativar via GEOCODER_KEY.
   // Sem a chave é no-op. Roda depois do Google e antes das rotas públicas do
   // Nominatim, pois quando ativo é mais confiável que os provedores gratuitos.
-  if (Date.now() < deadline) {
+  if (permitirPago && Date.now() < deadline) {
     const p = aceita(await geocoderPago(enderecoGoogle), 55);
     if (p) return { ...p, cep: cep || null };
   }

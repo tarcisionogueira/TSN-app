@@ -53,6 +53,24 @@ export async function registrarUso(provedor, operacao, dados = {}) {
   } catch { /* medição nunca quebra o fluxo principal */ }
 }
 
+// Soma as UNIDADES já usadas HOJE (UTC) de um provedor — para travas de custo
+// (ex.: teto diário de geocodes pagos do Google). Best-effort: retorna 0 se o
+// Supabase estiver indisponível (falha ABERTO — nunca bloqueia o fluxo por erro de
+// medição; a trava só age quando consegue LER um número acima do limite).
+export async function unidadesUsadasHoje(provedor) {
+  if (!SUPABASE_URL || !SERVICE_KEY) return 0;
+  const hoje = new Date().toISOString().slice(0, 10);
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/uso_integracoes?provedor=eq.${encodeURIComponent(provedor)}&dia=eq.${hoje}&select=unidades`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) return 0;
+    const rows = await r.json();
+    return Array.isArray(rows) ? rows.reduce((s, x) => s + (Number(x.unidades) || 0), 0) : 0;
+  } catch { return 0; }
+}
+
 // Mede uma resposta do Claude (Anthropic) a partir de um CLONE do Response, sem
 // perturbar o corpo lido pelo caller. Conta tokens e buscas web (metradas).
 export async function medirClaude(options, resClone) {

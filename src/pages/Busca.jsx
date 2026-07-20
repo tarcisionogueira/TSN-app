@@ -438,11 +438,10 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const map = leafletRef.current;
       if (!map) return;
       try { map.invalidateSize(); } catch {}
-      if (raioAtivo && centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
-        const z = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
-        try { map.setView([centroRaio.lat, centroRaio.lng], z); } catch {}
-        return;
-      }
+      // AUTOZOOM: enquadra os RESULTADOS (pins) PRIMEIRO — vale inclusive no modo raio.
+      // Antes o raio centralizava cego no centro (ex.: Ubatuba) com zoom fixo, e o único
+      // resultado (ex.: Caraguatatuba) ficava fora de quadro → parecia "sem autozoom". Só
+      // caímos no centro do raio/cidade quando NÃO há nenhum pino com coordenada.
       if (pts.length > 0) {
         // Ignora OUTLIERS de coordenada (cidade certa, lat/lng errada) só no zoom.
         let fit = pts;
@@ -457,7 +456,16 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           const inliers = pts.filter((p, i) => dists[i] <= thr);
           if (inliers.length >= Math.ceil(pts.length * 0.6)) fit = inliers;
         }
-        try { map.fitBounds(fit, { padding: [40, 40], maxZoom: 13 }); } catch { /* mapa ainda sem tamanho válido */ }
+        // No modo raio, não aproxima MAIS que o zoom do raio (mantém o contexto da área);
+        // fora do raio, um único resultado pode chegar a nível de rua (maxZoom 13).
+        const maxZoom = raioAtivo ? (raioKm <= 20 ? 13 : raioKm <= 50 ? 12 : raioKm <= 100 ? 11 : 10) : 13;
+        try { map.fitBounds(fit, { padding: [40, 40], maxZoom }); } catch { /* mapa ainda sem tamanho válido */ }
+        return;
+      }
+      // Sem pinos: centraliza no raio/cidade (fallback).
+      if (raioAtivo && centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {
+        const z = raioKm <= 20 ? 12 : raioKm <= 50 ? 10 : raioKm <= 100 ? 9 : 8;
+        try { map.setView([centroRaio.lat, centroRaio.lng], z); } catch {}
         return;
       }
       if (centroRaio && isFinite(centroRaio.lat) && isFinite(centroRaio.lng)) {

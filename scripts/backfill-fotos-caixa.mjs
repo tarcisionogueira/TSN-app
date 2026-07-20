@@ -19,6 +19,11 @@ const BUCKET = 'imoveis-fotos';
 const CONCURRENCIA = Number(process.env.BACKFILL_CONCURRENCIA || 8);
 const LIMITE = Number(process.env.BACKFILL_LIMITE || 0); // 0 = tudo
 const SO_ATRATIVOS = process.env.BACKFILL_SO_ATRATIVOS === '1';
+// RECHECK_NULOS: re-tenta os CEF com link_foto NULO (marcados "sem foto" numa run
+// anterior). A Caixa publica fotos DEPOIS (comum em venda direta) — uma foto que não
+// existia pode existir agora. Passe único e limitado (eles seguem nulos, então um
+// while-loop os traria de volta pra sempre). Rode periodicamente p/ resgatar novas fotos.
+const RECHECK_NULOS = process.env.RECHECK_NULOS === '1' || process.argv.includes('--recheck-nulos');
 
 if (!SUPABASE_URL || !SERVICE_KEY) { console.error('env VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY ausente'); process.exit(1); }
 
@@ -46,10 +51,13 @@ async function fetchRetry(url, { timeoutMs = 20000, ...opts } = {}, tentativas =
 // Busca um lote de imóveis CEF ainda não migrados (link_foto na Caixa).
 async function proximoLote(qtd) {
   const cond = SO_ATRATIVOS ? '&desconto_percentual=gte.40' : '';
+  // Padrão: link_foto ainda na Caixa (não migrados). RECHECK_NULOS: link_foto nulo.
+  const filtroFoto = RECHECK_NULOS ? '&link_foto=is.null' : '&link_foto=like.*venda-imoveis.caixa.gov.br*';
+  const ordem = RECHECK_NULOS ? 'atualizado_em.desc' : 'desconto_percentual.desc.nullslast';
   const url = `${SUPABASE_URL}/rest/v1/imoveis_leilao`
     + `?select=id,fonte_id,link_foto&fonte=eq.CEF`
-    + `&link_foto=like.*venda-imoveis.caixa.gov.br*${cond}`
-    + `&order=desconto_percentual.desc.nullslast&limit=${qtd}`;
+    + `${filtroFoto}${cond}`
+    + `&order=${ordem}&limit=${qtd}`;
   const r = await fetchRetry(url, { headers: hdr, timeoutMs: 20000 });
   if (!r.ok) throw new Error(`select falhou: ${r.status}`);
   return r.json();
@@ -116,20 +124,32 @@ async function emLotes(itens, n, fn) {
 }
 
 (async () => {
-  console.log(`Backfill fotos Caixa → Storage (concorrência ${CONCURRENCIA}${SO_ATRATIVOS ? ', só atrativos' : ''}${LIMITE ? `, limite ${LIMITE}` : ''})`);
+  console.log(`Backfill fotos Caixa → Storage (${RECHECK_NULOS ? 're-check de link_foto NULO' : 'não migrados'}; concorrência ${CONCURRENCIA}${SO_ATRATIVOS ? ', só atrativos' : ''}${LIMITE ? `, limite ${LIMITE}` : ''})`);
   let ok = 0, semFoto = 0, erro = 0, processados = 0;
   const t0 = Date.now();
-  while (true) {
-    const restante = LIMITE ? Math.min(500, LIMITE - processados) : 500;
-    if (restante <= 0) break;
-    const lote = await proximoLote(restante);
-    if (!lote.length) break;
+  if (RECHECK_NULOS) {
+    // Passe ÚNICO: os nulos são poucos e PERMANECEM nulos quando a Caixa segue sem foto —
+    // um while-loop os traria de volta pra sempre. Uma varredura por execução (o teto
+    // limita o custo); as que ganharam foto viram URL do Storage e saem do conjunto.
+    const teto = LIMITE || 5000;
+    const lote = await proximoLote(teto);
+    console.log(`… ${lote.length} CEF com link_foto nulo p/ re-checar`);
     const r = await emLotes(lote, CONCURRENCIA, processar);
     for (const x of r) { if (x === 'ok') ok++; else if (x === 'sem_foto') semFoto++; else erro++; }
-    processados += lote.length;
-    const dt = ((Date.now() - t0) / 1000).toFixed(0);
-    console.log(`… ${processados} processados | ok=${ok} sem_foto=${semFoto} erro=${erro} | ${dt}s`);
-    if (LIMITE && processados >= LIMITE) break;
+    processados = lote.length;
+  } else {
+    while (true) {
+      const restante = LIMITE ? Math.min(500, LIMITE - processados) : 500;
+      if (restante <= 0) break;
+      const lote = await proximoLote(restante);
+      if (!lote.length) break;
+      const r = await emLotes(lote, CONCURRENCIA, processar);
+      for (const x of r) { if (x === 'ok') ok++; else if (x === 'sem_foto') semFoto++; else erro++; }
+      processados += lote.length;
+      const dt = ((Date.now() - t0) / 1000).toFixed(0);
+      console.log(`… ${processados} processados | ok=${ok} sem_foto=${semFoto} erro=${erro} | ${dt}s`);
+      if (LIMITE && processados >= LIMITE) break;
+    }
   }
   console.log(`\n✅ Concluído: ${ok} migradas, ${semFoto} sem foto na Caixa, ${erro} erros.`);
 })();
