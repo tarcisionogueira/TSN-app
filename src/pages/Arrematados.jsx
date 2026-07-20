@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { useIsMobile } from '../utils/useIsMobile';
+import FotoImovel from '../components/FotoImovel';
 
 const brl = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const STATUS = {
@@ -31,16 +32,6 @@ const DOC_TIPOS = [
   ['outro', 'Outro documento'],
 ];
 const DOC_TIPO_LABEL = Object.fromEntries(DOC_TIPOS.map(([v, l]) => [v, l]));
-
-function fotoImovel(im) {
-  if (!im) return null;
-  const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
-  const id = (im.fonteId || im.fonte_id || '').replace(/^(caixa_|cef_)/, '');
-  if (isCef && id) return `https://venda-imoveis.caixa.gov.br/fotos/F${id}21.jpg`;
-  const f = im.foto || im.link_foto;
-  if (!f) return null;
-  return (f.includes('supabase.co') || f.startsWith('/')) ? f : `/api/img-proxy?url=${encodeURIComponent(f)}`;
-}
 
 // Números da operação: avaliação, valor de mercado (relatório), arrematação, lucro.
 function StatOp({ label, valor, cor, sub }) {
@@ -528,7 +519,6 @@ export default function Arrematados() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {arrematados.map(a => {
-            const foto = fotoImovel(a.imovel);
             const st = STATUS[a.status] || STATUS.arrematado;
             const saldo = saldos[a.id] || 0;
             const docsCount = a.imovel_id ? (nDocs[a.imovel_id] || 0) : (Array.isArray(a.documentos) ? a.documentos.length : 0);
@@ -543,7 +533,7 @@ export default function Arrematados() {
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.08)'; }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}>
                 <div style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {foto ? <img src={foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.currentTarget.style.display = 'none'; }} /> : <Building2 size={22} color="#cbd5e1" />}
+                  <FotoImovel imovel={a.imovel} iconSize={22} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Imóvel'}</div>

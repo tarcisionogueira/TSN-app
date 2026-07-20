@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import FotoImovel from './FotoImovel';
 
 /**
  * Sugestão de imóvel — card discreto no canto inferior direito (não atrapalha a
@@ -82,7 +83,7 @@ export default function SugestaoImovel() {
         const normCid = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
         const base = () => {
           let q = supabase.from('imoveis_leilao')
-            .select('id,titulo,cidade,estado,valor_minimo,desconto_percentual,link_foto')
+            .select('id,titulo,cidade,estado,valor_minimo,desconto_percentual,link_foto,fonte,fonte_id')
             .eq('ativo', true).gt('valor_minimo', 0).not('link_foto', 'is', null)
             .gte('desconto_percentual', descMin);
           if (uf) q = q.eq('estado', uf);                       // trava geográfica: nunca sai do estado
@@ -139,7 +140,7 @@ export default function SugestaoImovel() {
     <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 900, width: 300, maxWidth: 'calc(100vw - 32px)',
       background: '#fff', borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,.18)', border: '1px solid #e2e8f0', overflow: 'hidden', fontFamily: 'inherit' }}>
       <div style={{ position: 'relative', height: 130, background: '#f1f5f9' }}>
-        {atual.link_foto && <img src={atual.link_foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
+        <FotoImovel imovel={atual} iconSize={30} />
         <span style={{ position: 'absolute', top: 8, left: 8, background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 800, padding: '2px 8px', borderRadius: 20 }}>
           {atual.desconto_percentual ? `${atual.desconto_percentual}% OFF` : 'Oportunidade'}
         </span>
