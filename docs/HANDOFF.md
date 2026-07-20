@@ -17,6 +17,28 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ⏭️ COMEÇAR AQUI NA PRÓXIMA SESSÃO — 3 pedidos do dono (20/07, fim do dia)
+> Investigado e CONFIRMADO nesta sessão; **resolver na próxima**. Ordem sugerida: (3) filtro é rápido → (1) captura → (2) diagnóstico.
+
+**(1) Captura dos leiloeiros mais robusta + aprendizado — o agente deveria captar tipo/foto/edital/matrícula/anexo.**
+- **Tipologia (`tipo`) fraca → gera o bug do filtro (item 3).** Muitos lotes ficam no balde genérico `imovel` mesmo dando p/ classificar. Escopo (ativos): ~276 `imovel` genéricos — **LJUD 79 (21 com título "terreno/lote/gleba/área"), ZUK 50, SUPERBID 44 (11), LEILOTECH 38 (10), SBID9 22 (6), GRUPOLANCE 15**, CEF 11…
+  - **GRUPOLANCE tem a categoria na URL** (`url_lote` = `/imoveis/<categoria>/…`: `terrenos-e-lotes` 99, `glebas` 3, `vagas-de-garagem`, `imoveis-comerciais/-rurais/-industriais`, `casas`, `apartamentos`) e **o scraper ignora**. **Fix:** derivar `tipo` do segmento de categoria da URL → `normalizarTipo` (`api/_tipo.js`). Mapa: terrenos-e-lotes/glebas→`terreno`, casas→`casa`, apartamentos→`apartamento`, imoveis-comerciais/-industriais/galpoes/predios→`comercial`, imoveis-rurais→`rural`, vagas-de-garagem→`imovel`(ou novo tipo).
+  - **Outros leiloeiros:** o título muitas vezes JÁ diz "terreno/lote/gleba/área" mas o `tipo` ficou `imovel` → garantir que o scraper **passe título+categoria por `normalizarTipo`**, e fallback: `tipo` genérico + título casa keyword de terreno → `terreno`.
+  - **Glitch de título:** há "**sImóvel**, 12.796,46m²…" (GRUPOLANCE) — artefato de scraping (char extra). Limpar/trim no parser.
+- **Foto/Edital/Matrícula/Anexo (contexto desta sessão):** foto de CDN externo agora passa pelo `/api/img-proxy` (display OK) — a captura poderia **backfillar a foto p/ o nosso Storage** (confiável). Edital: `link_edital` = página do lote em ~todos não-CEF; o edital-PDF real está nos **anexos** (a UI já prefere ele). Matrícula GRUPOLANCE: **auto-derivada/fantasma** (ver "PENDÊNCIA" abaixo) — script já endurecido (hash vs edital) p/ NÃO gravar edital-como-matrícula.
+- **Arquivos:** `scripts/scraper-puppeteer.mjs` (framework; `normalizarTipo` inline; config por fonte ~L209), `api/_tipo.js` (classificador canônico). **Aprendizado:** documentar o mapa de categorias por leiloeiro (tipo/foto/doc) em `leiloeiro_conhecimento` + `docs/BASELINE_CAPTURA_LEILOEIROS.md` ao evoluir cada parser.
+
+**(2) O DIAGNÓSTICO deveria ter pego isso.** O `monitor-fontes-cron` (`BASELINE_FONTES` + RPC `fonte_cobertura()`) só mede **COBERTURA (campo não-nulo %)**, não **QUALIDADE/CORREÇÃO**:
+- matrícula que é **página** (não arquivo) ou que é o **edital** conta como "tem matrícula" → passa; a matrícula **fantasma** do Grupo Lance até **infla** a cobertura (parece 80% quando é falsa).
+- **não há métrica de tipologia** (% `imovel` genérico por fonte).
+- **Fix:** o RPC **`admin_docs_por_leiloeiro`** (criado nesta sessão) já calcula as confusões (ed=matríc, ed=lote, matríc=lote, matríc-não-arquivo) — **plugar essas métricas + `% imovel genérico` no `fonte_cobertura()`/monitor** e alertar por regressão/limite. Assim o e-mail de saúde pega documento trocado e tipologia fraca, não só campo vazio.
+
+**(3) Filtro de LOCAÇÃO mostrando terrenos/áreas em Bertioga — CONFIRMADO: é erro de filtro/classificação, NÃO têm viabilidade de locação.** Os 7 resultados de Bertioga são `tipo='imovel'` genérico, **608–20.698 m²**, categoria de URL `terrenos-e-lotes` (GRUPOLANCE) — terrenos, sem viabilidade de aluguel residencial.
+- **Causa:** `TIPOS_RESIDENCIAL = ['apartamento','casa','imovel']` (`src/pages/Busca.jsx` L72) inclui o balde genérico `imovel` → terrenos não classificados entram na Locação/Temporada.
+- **Fix (2 camadas):** (a) **upstream** = classificação do item 1 (melhor); (b) **defesa downstream** = na intenção **locação/temporada**, excluir `imovel` cujo **título** casa `terreno|lote|gleba|área` OU `area_m2` acima de um teto residencial (ex.: > 600–1000 m²). Aplicar nos DOIS caminhos: `aplicarFiltrosImoveis` (L196-198) e `ajustarFiltrosPorIntencao` (L100-109). **Revenda mantém `imovel`** (terreno é flipável). Escopo do vazamento: ~50+ claramente terrenos entre os 276 genéricos.
+
+---
+
 ## 🆕 Sessão 20/07/2026 — Correções pós-produção + relatório em 4 blocos + gates de documento
 > Branch de dev: **`claude/verify-reports-bidpro-index-mq4lct`** (reiniciada de `origin/main` após o merge do #149). **PR #150 mergeado** (fotos/edital/datas/MRR) e um 2º commit (relatório/gates/auditoria) na branch. Deploys Vercel READY. Banco: RPC nova aplicada via MCP.
 
