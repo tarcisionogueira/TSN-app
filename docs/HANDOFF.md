@@ -43,6 +43,20 @@
 - **Caminho client legado** (`analisarMercadoClick` → `src/utils/claude.js`) não recebe o índice (é gerado no cliente, não persiste); o fluxo principal (servidor `gerar-analise`) é o que importa e está coberto.
 - **fator_calibracao** do índice segue 1.0 (venda do acervo = mediana de avaliação de leilão, abaixo do mercado); os valores de `relatorio` já são de mercado. Calibrar quando houver volume.
 
+**Entregue hoje (parte 3) — Intenção da busca + classificação no relatório + correções:**
+7. **Filtro de INTENÇÃO na tela de Leilões (`src/pages/Busca.jsx`)** — Revenda / Locação / Temporada, filtra DE FATO o acervo: revenda = tipos líquidos + desconto ≥ 30%; locação = residencial; temporada = residencial em cidade litorânea/turística. Nos dois caminhos (query direta + modo raio traduzido p/ a RPC). Já grava no `busca_historico` (analytics de demanda por intenção). Contagens: revenda 21.708, locação 29.751, temporada 951.
+8. **`api/_temporada.js` (novo)** — lista curada + **motivos de atratividade** dos destinos de temporada do Brasil (validados na web: Florianópolis/Búzios/BC 85–90% ocupação, Ubatuba, Pipa, Porto de Galinhas, etc.). Espelha a lista do Busca.jsx (manter em sync).
+9. **Classificação de INTENÇÃO no relatório (`gerar-analise.js`)** — `mercado.classificacaoIntencao` (revenda/locação/temporada, pode ser vários) com o PORQUÊ; injetada no `promptParecer` (nova §SEÇÃO "Adequação por objetivo" + defesa da temporada com a atratividade da cidade). O agente **APRENDE** (corpus `intencao` em `aprenderNaEmissao`). Exibida na `Analise.jsx` (card "Indicado para") e no PDF.
+10. **Datas do relatório na tela (`Analise.jsx` + `AnalisesContext`)** — "Gerado em X · Expira em Y" (regra do cron: 15 dias após o leilão, ou 60 dias após a criação, se não arrematado).
+11. **Correções de relatório:**
+    - **`garantirValores` — sanidade do valor lido do edital:** avaliação lida > 10× o lance (desconto > 90%) é MIS-READ → descarta + anomalia `avaliacao_incoerente`. Bug real: o terreno de Bertioga tinha virado avaliação R$8,7M → **94% de desconto FALSO** no card. **Revertido** no banco; sanity-check impede recorrência.
+    - **Timeout v2:** 2 buscas de mercado mais curtas (135s + 110s) em vez de 1 longa (um search que trava aborta e a 2ª conclui); reserva do `garantirValores` reduzida (30s) p/ não roubar tempo. Bertioga (terreno) volta a caber; self-heal como rede.
+
+**➡️ Roadmap (pedidos do dono — próximas frentes):**
+- **(futuro) Comparativo desconto (avaliação × leilão) × Índice BidPro** por metragem e TIPO do imóvel → panorama de desconto mais real, validado depois pelo mercadológico; agente aprendendo a cada relatório (aumenta a base). Ainda não implementado (pedido explícito de "futuramente").
+- **Dashboard admin — números de cobertura:** quantidade de **imóveis, cidades e estados com relatório gerado**, quantos imóveis analisados e quantos usados de base (amostras). Vai na próxima leva do dashboard (junto com o redesenho + correções de fidelidade).
+- **Data-quality:** **18 imóveis ativos com desconto ≥ 90% (avaliação > 10× o lance)** — possíveis mis-reads do scraper (pré-existentes). Candidato a um detector no health-check / limpeza.
+
 ## 🆕 Sessão 18/07/2026 (tarde) — Bug vivo + edital ZUK + varredura estrangeiros + Cliente 360
 > Branch de dev: **`claude/ultimo-handoff-6lxk6j`**. Banco aplicado via MCP; código na branch (pronto p/ PR → `main`). Diagnóstico do ritual: **segurança íntegra** (`auditoria_seguranca()` = 0 crítico / 0 atenção), deploy #142 READY, 33.283 imóveis ativos, geo 0 pendente.
 

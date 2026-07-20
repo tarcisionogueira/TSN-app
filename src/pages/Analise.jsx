@@ -2453,6 +2453,46 @@ export default function Analise() {
           {mercado && (
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
+              {/* Datas do relatório: quando foi gerado e quando expira (removido se não arrematado) */}
+              {(() => {
+                const ent = analiseEntry;
+                const fmtD = (ms) => ms ? new Date(ms).toLocaleDateString('pt-BR') : '—';
+                const dl = ent?.dataLeilao || imovelInicial?.dataLeilao || d.dataLeilao;
+                const dlMs = dl && !isNaN(Date.parse(dl)) ? Date.parse(dl) : null;
+                // Regra do cron: 15 dias após o leilão (se há data) OU 60 dias após a criação.
+                const expMs = dlMs ? dlMs + 15 * 864e5 : (ent?.startedAt ? ent.startedAt + 60 * 864e5 : null);
+                const geradoMs = ent?.updatedAt || null;
+                return (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'center', fontSize:11.5, color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'8px 14px' }}>
+                    <span>🗓️ Gerado em <strong style={{ color:'#334155' }}>{fmtD(geradoMs)}</strong></span>
+                    {expMs && <span>· ⏳ Expira em <strong style={{ color:'#334155' }}>{fmtD(expMs)}</strong> <span style={{ color:'#94a3b8' }}>({dlMs ? '15 dias após o leilão' : '60 dias'}, se não arrematado)</span></span>}
+                  </div>
+                );
+              })()}
+
+              {/* Classificação por objetivo — para QUE o imóvel é bom (Revenda / Locação / Temporada) */}
+              {mercado.classificacaoIntencao?.algum && (() => {
+                const c = mercado.classificacaoIntencao;
+                const chips = [
+                  c.revenda && ['🔁 Revenda', c.motivos?.revenda, '#0D63DB', '#eff6ff'],
+                  c.locacao && ['🏠 Locação', c.motivos?.locacao, '#7c3aed', '#f5f3ff'],
+                  c.temporada && ['🏖️ Temporada', c.motivos?.temporada, '#0891b2', '#ecfeff'],
+                ].filter(Boolean);
+                return (
+                  <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:12, padding:'12px 16px' }}>
+                    <div style={{ fontSize:11, fontWeight:800, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Indicado para</div>
+                    <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : `repeat(${chips.length},1fr)`, gap:8 }}>
+                      {chips.map(([label, motivo, cor, bg]) => (
+                        <div key={label} style={{ background:bg, border:`1px solid ${cor}30`, borderRadius:10, padding:'10px 12px' }}>
+                          <div style={{ fontSize:13, fontWeight:800, color:cor }}>{label}</div>
+                          {motivo && <div style={{ fontSize:11, color:'#475569', marginTop:3, lineHeight:1.45 }}>{motivo}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* KPIs consolidados */}
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
                 {[
