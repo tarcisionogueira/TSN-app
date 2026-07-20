@@ -145,29 +145,39 @@ async function emLotes(itens, n, fn) {
   console.log(`Backfill fotos Caixa → Storage (${RECHECK_NULOS ? 're-check de link_foto NULO' : 'não migrados'}; concorrência ${CONCURRENCIA}${SO_ATRATIVOS ? ', só atrativos' : ''}${LIMITE ? `, limite ${LIMITE}` : ''})`);
   let ok = 0, semFoto = 0, erro = 0, processados = 0;
   const t0 = Date.now();
-  if (RECHECK_NULOS) {
-    // Passe ÚNICO: os nulos são poucos e PERMANECEM nulos quando a Caixa segue sem foto —
-    // um while-loop os traria de volta pra sempre. Uma varredura por execução (o teto
-    // limita o custo); as que ganharam foto viram URL do Storage e saem do conjunto.
-    const teto = LIMITE || 5000;
-    const lote = await proximoLote(teto);
-    console.log(`… ${lote.length} CEF com link_foto nulo p/ re-checar`);
-    const r = await emLotes(lote, CONCURRENCIA, processar);
-    for (const x of r) { if (x === 'ok') ok++; else if (x === 'sem_foto') semFoto++; else erro++; }
-    processados = lote.length;
-  } else {
-    while (true) {
-      const restante = LIMITE ? Math.min(500, LIMITE - processados) : 500;
-      if (restante <= 0) break;
-      const lote = await proximoLote(restante);
-      if (!lote.length) break;
+  try {
+    if (RECHECK_NULOS) {
+      // Passe ÚNICO: os nulos são poucos e PERMANECEM nulos quando a Caixa segue sem foto —
+      // um while-loop os traria de volta pra sempre. Uma varredura por execução (o teto
+      // limita o custo); as que ganharam foto viram URL do Storage e saem do conjunto.
+      const teto = LIMITE || 5000;
+      const lote = await proximoLote(teto);
+      console.log(`… ${lote.length} CEF com link_foto nulo p/ re-checar`);
       const r = await emLotes(lote, CONCURRENCIA, processar);
       for (const x of r) { if (x === 'ok') ok++; else if (x === 'sem_foto') semFoto++; else erro++; }
-      processados += lote.length;
-      const dt = ((Date.now() - t0) / 1000).toFixed(0);
-      console.log(`… ${processados} processados | ok=${ok} sem_foto=${semFoto} erro=${erro} | ${dt}s`);
-      if (LIMITE && processados >= LIMITE) break;
+      processados = lote.length;
+    } else {
+      while (true) {
+        const restante = LIMITE ? Math.min(500, LIMITE - processados) : 500;
+        if (restante <= 0) break;
+        const lote = await proximoLote(restante);
+        if (!lote.length) break;
+        const r = await emLotes(lote, CONCURRENCIA, processar);
+        for (const x of r) { if (x === 'ok') ok++; else if (x === 'sem_foto') semFoto++; else erro++; }
+        processados += lote.length;
+        const dt = ((Date.now() - t0) / 1000).toFixed(0);
+        console.log(`… ${processados} processados | ok=${ok} sem_foto=${semFoto} erro=${erro} | ${dt}s`);
+        if (LIMITE && processados >= LIMITE) break;
+      }
     }
+  } catch (e) {
+    // ENDURECIMENTO: um erro do SELECT (ex.: HTTP 500 transitório do PostgREST — comum sob
+    // throttle de plano) NÃO deve derrubar o job com alarme falso. Loga, preserva o parcial
+    // e sai GRACIOSO (exit 0). A próxima execução retoma de onde parou (idempotente).
+    console.error(`\n⚠️ Backfill interrompido por erro transitório (parcial preservado): ${String(e?.message || e).slice(0, 160)}`);
+    console.log(`Parcial: ${ok} migradas, ${semFoto} sem foto, ${erro} erros, ${processados} processados.`);
+    process.exitCode = 0;
+    return;
   }
   console.log(`\n✅ Concluído: ${ok} migradas, ${semFoto} sem foto na Caixa, ${erro} erros.`);
 })();

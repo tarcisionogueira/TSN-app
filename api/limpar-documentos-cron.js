@@ -55,56 +55,45 @@ export const POST = handler;
 async function handler(req) {
   if (!isCronAuthorized(req)) return new Response('Unauthorized', { status: 401 });
 
-  // A regra em camadas (com/sem reunião) vive na RPC anexos_expirados — junta
-  // imovel_anexos × reunioes × casos, o que o filtro PostgREST não faz sozinho.
-  const rpcRes = await sb('rpc/anexos_expirados', {
-    method: 'POST',
-    body: JSON.stringify({ p_limite: 200 }),
-  });
-  if (!rpcRes.ok) {
-    return new Response(JSON.stringify({ error: 'Erro ao apurar anexos expirados', detalhe: await rpcRes.text().catch(() => '') }), { status: 500 });
-  }
+  // LOOP até DRENAR o backlog (antes apagava só 200/dia e o acervo crescia mais rápido
+  // → Storage acumulava ~10GB). A cada volta pega até 500 (teto da RPC), apaga do bucket
+  // e zera storage_path (aí saem do próximo `storage_path is not null`). Para quando não
+  // há mais elegíveis, no teto de tempo (~250s de 300s) ou de iterações. Idempotente.
+  const DEADLINE = Date.now() + 250_000;
+  let removidos = 0, linksZerados = 0, iteracoes = 0, ultimoErro = null;
 
-  const anexos = await rpcRes.json().catch(() => []);
-  if (!Array.isArray(anexos) || !anexos.length) {
-    return new Response(JSON.stringify({ msg: 'Nenhum documento para limpar' }), { status: 200 });
-  }
+  while (Date.now() < DEADLINE && iteracoes < 40) {
+    iteracoes++;
+    // A regra em camadas (arrematado/relatório/ativo/reunião) vive na RPC anexos_expirados.
+    const rpcRes = await sb('rpc/anexos_expirados', { method: 'POST', body: JSON.stringify({ p_limite: 500 }) });
+    if (!rpcRes.ok) { ultimoErro = await rpcRes.text().catch(() => ''); break; }
+    const anexos = await rpcRes.json().catch(() => []);
+    if (!Array.isArray(anexos) || !anexos.length) break; // drenado
 
-  const paths = anexos.map(a => a.storage_path).filter(Boolean);
-  const ids   = anexos.map(a => a.id);
+    const paths = anexos.map(a => a.storage_path).filter(Boolean);
+    const ids   = anexos.map(a => a.id);
 
-  // Remove os arquivos do bucket em lote (best-effort).
-  const delStorage = await storage(`object/${BUCKET}`, {
-    method: 'DELETE',
-    body: JSON.stringify({ prefixes: paths }),
-  });
+    // Remove os arquivos do bucket em lote (best-effort) + zera storage_path/url no banco
+    // (mantém a linha para auditoria).
+    await storage(`object/${BUCKET}`, { method: 'DELETE', body: JSON.stringify({ prefixes: paths }) });
+    await sb(`imovel_anexos?id=in.(${ids.join(',')})`, { method: 'PATCH', body: JSON.stringify({ storage_path: null, url: null }) });
 
-  // Zera storage_path/url no banco (mantém a linha para auditoria).
-  const updateRes = await sb(`imovel_anexos?id=in.(${ids.join(',')})`, {
-    method: 'PATCH',
-    body: JSON.stringify({ storage_path: null, url: null }),
-  });
+    // Zera TAMBÉM o link denormalizado imoveis_leilao.link_matricula quando o ARQUIVO da
+    // matrícula é apagado (senão o botão "Matrícula" fica 404). Deriva o imovel_id do path.
+    const idsMatricula = [...new Set(paths
+      .map(p => (String(p).match(/^casos\/([0-9a-f-]{36})\/[^/]*matr[ií]cul[^/]*\.pdf$/i) || [])[1])
+      .filter(Boolean))];
+    if (idsMatricula.length) {
+      await sb(`imoveis_leilao?id=in.(${idsMatricula.join(',')})&link_matricula=not.is.null`, { method: 'PATCH', body: JSON.stringify({ link_matricula: null }) });
+      linksZerados += idsMatricula.length;
+    }
 
-  // Zera TAMBÉM o link denormalizado imoveis_leilao.link_matricula quando o ARQUIVO da
-  // matrícula é apagado. Sem isto o botão "Matrícula" fica 404 (arquivo removido, link
-  // mantido) — bug real reportado em 07/2026. Deriva o imovel_id do path
-  // 'casos/{id}/...matricula...pdf'; só zera links não-nulos desses imóveis.
-  const idsMatricula = [...new Set(paths
-    .map(p => (String(p).match(/^casos\/([0-9a-f-]{36})\/[^/]*matr[ií]cul[^/]*\.pdf$/i) || [])[1])
-    .filter(Boolean))];
-  let linkRes = { ok: true };
-  if (idsMatricula.length) {
-    linkRes = await sb(`imoveis_leilao?id=in.(${idsMatricula.join(',')})&link_matricula=not.is.null`, {
-      method: 'PATCH',
-      body: JSON.stringify({ link_matricula: null }),
-    });
+    removidos += paths.length;
+    if (anexos.length < 500) break; // último lote (menos que o teto)
   }
 
   return new Response(JSON.stringify({
-    removidos: paths.length,
-    storage_ok: delStorage.ok,
-    banco_ok: updateRes.ok,
-    links_matricula_zerados: idsMatricula.length,
-    links_ok: linkRes.ok,
+    removidos, iteracoes, links_matricula_zerados: linksZerados,
+    drenado: !ultimoErro && removidos >= 0, erro: ultimoErro || undefined,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
