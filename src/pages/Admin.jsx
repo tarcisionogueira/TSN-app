@@ -3911,7 +3911,7 @@ function PainelCoberturaRelatorios() {
   if (erro) return null;
   const fmtN = (v) => Number(v || 0).toLocaleString('pt-BR');
   if (!m) return <div style={{ ...S.card, color: '#94a3b8', fontSize: 13 }}>Carregando cobertura de relatórios…</div>;
-  const cob = m.cobertura || {}, rel = m.relatorios || {}, bus = m.buscas || {}, idx = m.indice || {};
+  const cob = m.cobertura || {}, rel = m.relatorios || {}, bus = m.buscas || {}, idx = m.indice || {}, mat = m.indice_maturidade || {};
   const totalRel = (rel.mercado || 0) + (rel.documental || 0) + (rel.laudo || 0);
   const zeroPct = bus.total ? Math.round((bus.zero_resultado / bus.total) * 100) : 0;
   const cards = [
@@ -3921,6 +3921,7 @@ function PainelCoberturaRelatorios() {
     ['Amostras de mercado', fmtN(m.amostras), 'anúncios usados como base', '#7c3aed'],
     ['Buscas realizadas', fmtN(bus.total), `${zeroPct}% sem resultado · ${fmtN(bus.ult_7d)} em 7d`, zeroPct > 40 ? '#f59e0b' : '#64748b'],
     ['Índice BidPro', `${fmtN(idx.cidades)} cidades`, `${fmtN(idx.com_aluguel)} microrreg. c/ locação`, '#4f46e5'],
+    ['Cidades maduras (Índice)', fmtN(mat.maduras), `${fmtN(mat.em_progresso)} em progresso · libera desconto×índice`, (mat.maduras || 0) > 0 ? '#059669' : '#94a3b8'],
   ];
   return (
     <div style={S.card}>
