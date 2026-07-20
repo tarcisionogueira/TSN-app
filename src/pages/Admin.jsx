@@ -3894,6 +3894,54 @@ function PainelAuditoriaSistema() {
   );
 }
 
+// Painel de COBERTURA de relatórios & inteligência — quantos imóveis/cidades/estados já tiveram
+// relatório, quantas amostras de mercado serviram de base, buscas e cobertura do Índice BidPro.
+// Dado real via RPC admin_metricas_negocio (admin-gated). É o "o que ocorre no sistema".
+function PainelCoberturaRelatorios() {
+  const [m, setM] = React.useState(null);
+  const [erro, setErro] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    supabase.rpc('admin_metricas_negocio').then(({ data, error }) => {
+      if (!vivo) return;
+      if (error || !data) setErro(true); else setM(data);
+    });
+    return () => { vivo = false; };
+  }, []);
+  if (erro) return null;
+  const fmtN = (v) => Number(v || 0).toLocaleString('pt-BR');
+  if (!m) return <div style={{ ...S.card, color: '#94a3b8', fontSize: 13 }}>Carregando cobertura de relatórios…</div>;
+  const cob = m.cobertura || {}, rel = m.relatorios || {}, bus = m.buscas || {}, idx = m.indice || {}, mat = m.indice_maturidade || {};
+  const totalRel = (rel.mercado || 0) + (rel.documental || 0) + (rel.laudo || 0);
+  const zeroPct = bus.total ? Math.round((bus.zero_resultado / bus.total) * 100) : 0;
+  const cards = [
+    ['Imóveis analisados', fmtN(cob.imoveis), 'com relatório gerado', '#0D63DB'],
+    ['Cidades · Estados', `${fmtN(cob.cidades)} · ${fmtN(cob.estados)}`, 'cobertura geográfica', '#0891b2'],
+    ['Relatórios gerados', fmtN(totalRel), `${fmtN(rel.mercado)} merc · ${fmtN(rel.documental)} doc · ${fmtN(rel.laudo)} laudo`, '#10b981'],
+    ['Amostras de mercado', fmtN(m.amostras), 'anúncios usados como base', '#7c3aed'],
+    ['Buscas realizadas', fmtN(bus.total), `${zeroPct}% sem resultado · ${fmtN(bus.ult_7d)} em 7d`, zeroPct > 40 ? '#f59e0b' : '#64748b'],
+    ['Índice BidPro', `${fmtN(idx.cidades)} cidades`, `${fmtN(idx.com_aluguel)} microrreg. c/ locação`, '#4f46e5'],
+    ['Cidades maduras (Índice)', fmtN(mat.maduras), `${fmtN(mat.em_progresso)} em progresso · libera desconto×índice`, (mat.maduras || 0) > 0 ? '#059669' : '#94a3b8'],
+  ];
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>📊 Cobertura de relatórios & inteligência</div>
+        {rel.mercado_erro > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '3px 10px', borderRadius: 20 }}>{fmtN(rel.mercado_erro)} em erro</span>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+        {cards.map(([label, val, sub, cor]) => (
+          <div key={label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 6 }}>{label}</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: cor, lineHeight: 1 }}>{val}</div>
+            <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 5 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DashboardTab() {
   const planosCtx = usePlanos();
   const pNome = (key) => planosCtx?.[key]?.nome || key;
@@ -3983,8 +4031,10 @@ function DashboardTab() {
         supabase.from('reembolsos_garantia').select('id', { count: 'exact', head: true }).eq('status', 'solicitado'),
       ]);
 
-      const contagem = { admin: 0, explorador: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0 };
-      (perfis || []).forEach(p => { if (p.role in contagem) contagem[p.role]++; });
+      // Conta TODOS os perfis. Planos ANUAIS (top2_anual etc.) somam ao plano-base (p/ o MRR
+      // e a contagem não os perderem); roles fora do conjunto conhecido caem em "outros".
+      const contagem = { admin: 0, explorador: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0, outros: 0 };
+      (perfis || []).forEach(p => { const r = String(p.role || '').replace(/_anual$/, ''); if (r in contagem) contagem[r]++; else contagem.outros++; });
 
       const mrr = (contagem.top2 * 49.90) + (contagem.assessorado * 500) + (contagem.clube * 5000);
       const taxaPix = mrr * 0.01;
@@ -3992,7 +4042,7 @@ function DashboardTab() {
 
       setDados({
         contagem,
-        total: Object.values(contagem).reduce((s, v) => s + v, 0),
+        total: (perfis || []).length, // total REAL de perfis (inclui anuais/leiloeiro/pacote/outros)
         mrr,
         taxaPix,
         liquido,
@@ -4263,6 +4313,9 @@ function DashboardTab() {
         {statCard('Inadimplentes', fmtN(dados.inadimplentes || 0), dados.inadimplentes ? 'assinaturas com pagamento em falha' : 'nenhum em atraso', dados.inadimplentes ? '#f59e0b' : '#94a3b8')}
         {statCard('Reembolsos pendentes', fmtN(dados.reembolsosPendentes || 0), dados.reembolsosPendentes ? 'garantia 7 dias — ação em Prestação de contas' : 'nenhum pendente', dados.reembolsosPendentes ? '#dc2626' : '#94a3b8')}
       </div>
+
+      {/* Cobertura de relatórios & inteligência (o que ocorre no sistema — dado real) */}
+      <PainelCoberturaRelatorios />
 
       {/* Custos & Uso das integrações pagas (marcadores de teto/orçamento) */}
       <PainelCustosUso />

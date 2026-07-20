@@ -7,6 +7,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
+import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -75,6 +76,11 @@ async function aprenderNaEmissao(imovel, mercado, temParecer) {
       aluguel_medio: Number(mercado?.aluguelMedio) || null,
       fipe_zap_m2: Number(mercado?.referenciaFipeZap?.precoMedioM2) || null,
       n_amostras: nAmostras,
+      // Particularidade do imóvel (objetivo p/ que serve): revenda/locação/temporada — o agente
+      // aprende o perfil de adequação por região/tipo. Derivado de desconto/yield/cidade (poison-resistente).
+      intencao: mercado?.classificacaoIntencao
+        ? { revenda: !!mercado.classificacaoIntencao.revenda, locacao: !!mercado.classificacaoIntencao.locacao, temporada: !!mercado.classificacaoIntencao.temporada }
+        : null,
     };
     const qualidade = {
       avaliacao_ausente: !(aval > 0),
@@ -142,6 +148,30 @@ async function lerIndiceBidPro(imDb) {
     const j = await r.json().catch(() => null);
     return (j && (Number(j.venda_m2) > 0 || Number(j.aluguel_m2) > 0)) ? j : null;
   } catch { return null; }
+}
+
+// CLASSIFICAÇÃO DE INTENÇÃO — o mesmo objetivo dos filtros da busca (revenda/locação/temporada),
+// agora DENTRO do relatório: diz para QUÊ o imóvel é bom (um, vários ou os três) e POR QUÊ.
+// Alimenta a defesa do parecer e o aprendizado. Critérios ancorados nos dados que já temos.
+function classificarIntencao({ baseTipo, desconto, yieldBruto, cidadeNorm }) {
+  const residencial = baseTipo === 'residencial';
+  const liquido = baseTipo === 'residencial' || baseTipo === 'comercial';
+  const cls = { revenda: false, locacao: false, temporada: false, motivos: {} };
+  if (liquido && Number(desconto) >= 30) {
+    cls.revenda = true;
+    cls.motivos.revenda = `Desconto de ${Math.round(desconto)}% frente à avaliação: margem de revenda (flip) saudável e boa liquidez do tipo.`;
+  }
+  const y = Number(yieldBruto) || 0;
+  if (residencial && y >= 6) {
+    cls.locacao = true;
+    cls.motivos.locacao = `Yield bruto de locação ~${y.toFixed(1)}% a.a.: renda de aluguel atrativa para o perfil de renda.`;
+  }
+  if (residencial && ehCidadeTemporada(cidadeNorm)) {
+    cls.temporada = true;
+    cls.motivos.temporada = motivoTemporada(cidadeNorm) || 'Cidade de destino turístico: potencial de aluguel por temporada (curta duração).';
+  }
+  cls.algum = cls.revenda || cls.locacao || cls.temporada;
+  return cls;
 }
 
 // Anti-SSRF simples: as URLs vêm do banco (leiloeiro/anexos) — bloqueia destinos internos/
@@ -228,6 +258,15 @@ async function garantirValores(imovelId, deadline) {
         if (faltaMin && vmin <= 0 && Number(ext?.lanceMinimo) >= 1000) vmin = Number(ext.lanceMinimo);
       } catch { /* IA falhou nesta fonte → tenta a próxima */ }
     }
+  }
+
+  // SANIDADE do valor LIDO do edital: uma avaliação muito acima do lance mínimo (desconto
+  // implícito > 90%) é quase sempre MIS-READ (a IA/regex pegou um total de vários lotes, outra
+  // métrica, ou erro) — não pode virar um "94% de desconto" FALSO no card. Descarta e sinaliza.
+  if (faltaAval && aval > 0 && vmin > 0 && aval > vmin * 10) {
+    await registrarAnomalia('avaliacao_incoerente', im.fonte, imovelId, 'valor_avaliacao',
+      `Avaliação lida R$${Math.round(aval)} vs lance mínimo R$${Math.round(vmin)} (${(aval / vmin).toFixed(1)}x = desconto ~${Math.round((1 - vmin / aval) * 100)}%) — provável leitura errada do edital. Descartada (mantém sem avaliação).`);
+    aval = 0;
   }
 
   const patch = {};
@@ -417,6 +456,15 @@ MERCADO:
 - Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
 ${mercado?.referenciaFipeZap?.encontrado ? `- Referência FipeZAP (${mercado.referenciaFipeZap.localidade || inp.cidade || ''}, ${mercado.referenciaFipeZap.mesReferencia || 'recente'}): R$ ${brl(mercado.referenciaFipeZap.precoMedioM2)}/m² · valorização 12m: ${(Number(mercado.referenciaFipeZap.valorizacao12m) || 0).toFixed(1)}%. Compare com a média dos anúncios acima: se divergirem muito, comente e use a mais conservadora na defesa.` : ''}
 ${mercado?.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0) ? `- Índice BidPro (nossa base própria por microrregião, nível ${mercado.indiceBidPro.nivel})${Number(mercado.indiceBidPro.venda_m2) > 0 ? `: venda R$ ${brl(mercado.indiceBidPro.venda_m2)}/m²` : ''}${Number(mercado.indiceBidPro.aluguel_m2) > 0 ? ` · locação R$ ${brl(mercado.indiceBidPro.aluguel_m2)}/m²/mês` : ''}. Referência interna independente (venda e locação), consolidada das análises da plataforma — use como sanity-check adicional junto ao FipeZAP.` : ''}
+${(() => {
+  const c = mercado?.classificacaoIntencao;
+  if (!c || !c.algum) return '';
+  const bons = [];
+  if (c.revenda) bons.push(`REVENDA — ${c.motivos.revenda}`);
+  if (c.locacao) bons.push(`LOCAÇÃO — ${c.motivos.locacao}`);
+  if (c.temporada) bons.push(`TEMPORADA — ${c.motivos.temporada}`);
+  return `ADEQUAÇÃO POR OBJETIVO (CLASSIFIQUE e DEFENDA no parecer para quais objetivos este imóvel é bom — pode ser um, dois ou os três): ${bons.join(' | ')}. Na seção de posicionamento/defesa, diga EXPLICITAMENTE se o imóvel é bom para REVENDA, LOCAÇÃO e/ou TEMPORADA, usando esses argumentos.${c.temporada ? ' Para TEMPORADA, sustente a ATRATIVIDADE TURÍSTICA da cidade (demanda de alta temporada, ocupação, perfil do público) como diferencial de renda frente à locação tradicional.' : ''}`;
+})()}
 ${mercado?.comentario ? `- Leitura de mercado: ${mercado.comentario}` : ''}
 
 AQUISIÇÃO E RETORNO:
@@ -435,6 +483,7 @@ ${usoProprio
 
 Escreva em português formal, texto simples (sem markdown/asteriscos e SEM travessão "—"; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto gerado por IA e reduz a confiança do cliente). Estruture com "§ SEÇÃO:":
 § SEÇÃO: POSICIONAMENTO ESTRATÉGICO (mercado × valor de aquisição; desconto real frente ao mercado)
+${mercado?.classificacaoIntencao?.algum ? '§ SEÇÃO: ADEQUAÇÃO POR OBJETIVO (diga para QUAIS objetivos o imóvel é bom, entre Revenda, Locação e Temporada, podendo ser mais de um, com o porquê de cada; sendo cidade turística, DEFENDA a temporada como diferencial de renda)' : ''}
 § SEÇÃO: CENÁRIOS DE LANCE (sem disputa e com disputa; até onde dá para subir o lance mantendo ${usoProprio ? 'a economia' : 'o piso de 30%'})
 § SEÇÃO: PROJEÇÃO DE RENTABILIDADE (projeção de 12 MESES considerando o pagamento em parcelas até a revenda; deixe claro que VENDER ANTES dos 12 meses AUMENTA o lucro; cite ROI/ROE, yield de locação como alternativa e payback)${debitos ? '\n§ SEÇÃO: DÉBITOS E ENCARGOS ASSUMIDOS (liste os débitos informados que entram como custo; diga se constam na documentação do lote; para os que não constarem, aponte as referências de onde obter/confirmar)' : ''}
 § SEÇÃO: DEFESA DA OPERAÇÃO (argumentos objetivos de por que ${usoProprio ? 'a compra para uso compensa' : 'o investimento compensa'})
@@ -516,7 +565,7 @@ export default async function handler(req, res) {
   // Confirmação sob demanda dos VALORES (avaliação + lance mínimo) consultando EDITAL/MATRÍCULA/
   // ANEXOS (não só a página do lote) — corrige avaliação zerada e valor sentinela; o que não
   // confirmar vira anomalia. Limitada a uma fração do orçamento p/ não roubar tempo do mercado.
-  try { await garantirValores(String(imovelId), Date.now() + Math.min(45000, Math.max(0, restante() - 215000))); } catch { /* nunca bloqueia o relatório */ }
+  try { await garantirValores(String(imovelId), Date.now() + Math.min(30000, Math.max(0, restante() - 235000))); } catch { /* nunca bloqueia o relatório */ }
 
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
@@ -544,7 +593,7 @@ export default async function handler(req, res) {
       // chamada (retries:0) com timeout = tempo RESTANTE reservando o parecer — assim duas
       // buscas NUNCA somam mais que o orçamento. Se a chamada abortar/falhar, devolve
       // { __falhou:true } (o chamador decide re-tentar ou marcar transitório p/ self-heal).
-      const RESERVA_PARECER = 60000; // guarda p/ o parecer + a escrita final
+      const RESERVA_PARECER = 55000; // guarda p/ o parecer + a escrita final
       const buscarMercado = async (msBudget) => {
         try {
           const mData = await anthropic({
@@ -565,12 +614,12 @@ export default async function handler(req, res) {
         } catch { return { __falhou: true }; } // abort/timeout/erro → o chamador trata
       };
       const semAmostras = (m) => ((m.vendas?.length || 0) + (m.locacoes?.length || 0)) === 0 && !(m.precoMedioM2 > 0);
-      // 1ª busca: quase todo o tempo restante, guardando a reserva do parecer.
-      mercado = await buscarMercado(Math.min(190000, restante() - RESERVA_PARECER));
-      // Re-tenta SÓ se (vazio OU falhou) E ainda há orçamento p/ outra busca + parecer —
-      // nunca dispara a 2ª busca sem tempo (era o que estourava o deadline).
-      if ((semAmostras(mercado) || mercado.__falhou) && restante() > 150000) {
-        mercado = await buscarMercado(Math.min(160000, restante() - RESERVA_PARECER));
+      // 1ª busca: guarda a reserva do parecer E ~80s p/ uma 2ª tentativa (uma busca que TRAVA
+      // aborta antes e a re-tentativa costuma concluir — 2 ataques mais curtos > 1 longo).
+      mercado = await buscarMercado(Math.min(135000, restante() - RESERVA_PARECER - 80000));
+      // Re-tenta se (vazio OU falhou) E ainda há orçamento p/ outra busca + parecer.
+      if ((semAmostras(mercado) || mercado.__falhou) && restante() > RESERVA_PARECER + 40000) {
+        mercado = await buscarMercado(Math.min(110000, restante() - RESERVA_PARECER));
       }
       // A busca FALHOU (abort/timeout/erro), não é "mercado vazio de verdade": trata como
       // TRANSITÓRIO → grava 'erro' com tempo_limite e o self-heal (cron) re-tenta com orçamento
@@ -588,7 +637,7 @@ export default async function handler(req, res) {
     let avalDb = 0, fonteDb = '', areaFonte = 'informada';
     let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
-      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
+      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,valor_minimo,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
       avalDb = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n) ? 0 : n;
       fonteDb = imDb?.fonte || '';
@@ -639,6 +688,15 @@ export default async function handler(req, res) {
       await semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras);
       mercado.indiceBidPro = await lerIndiceBidPro(imDb);
     }
+
+    // CLASSIFICAÇÃO DE INTENÇÃO (revenda/locação/temporada) — consta no relatório e vira defesa no
+    // parecer. Desconto pela avaliação confirmada (avalDb) × lance mínimo; yield do mercado ou índice.
+    const vminImovel = Number(imDb?.valor_minimo) || 0;
+    const descontoImovel = (avalDb > 0 && vminImovel > 0 && avalDb >= vminImovel) ? (1 - vminImovel / avalDb) * 100 : 0;
+    const yieldParaCls = Number(mercado.yieldBruto) > 0 ? Number(mercado.yieldBruto)
+      : (Number(mercado.indiceBidPro?.aluguel_m2) > 0 && Number(mercado.indiceBidPro?.venda_m2) > 0
+        ? Number(mercado.indiceBidPro.aluguel_m2) * 12 / Number(mercado.indiceBidPro.venda_m2) * 100 : 0);
+    mercado.classificacaoIntencao = classificarIntencao({ baseTipo, desconto: descontoImovel, yieldBruto: yieldParaCls, cidadeNorm: imDb?.cidade_norm });
 
     // 2) Laudo (parecer). Carrega os docs do lote para o parecer poder dizer se os
     // débitos informados já constam na documentação (ou apontar onde buscar).
