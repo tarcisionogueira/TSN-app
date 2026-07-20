@@ -29,7 +29,13 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 // Scrapers PRÓPRIOS que NÃO escrevem fonte_saude (ponto-cego histórico): checados pelo
 // FRESCOR do acervo (imoveis_leilao.atualizado_em). PECINI/RJLEILOES são PAGOS (Bright
 // Data) — coleta parada = pagar sem coletar. Valor = dias de tolerância de frescor.
-const FONTES_SEM_SAUDE = { PECINI: 5, RJLEILOES: 7 };
+// AMBOS rodam 1x/SEMANA (PECINI seg 09h UTC, RJ ter 11h UTC — ver .github/workflows).
+// A tolerância PRECISA cobrir a cadência semanal (7d) + atraso do GitHub Actions/Bright
+// Data: o run de segunda pode só GRAVAR ~11:37 UTC (depois deste monitor), então 5d/7d
+// disparava um falso "coleta parada" toda semana — o monitor lia o acervo da semana
+// anterior ANTES de o run novo terminar. 9d dá folga sobre 1 ciclo semanal e ainda pega
+// um run inteiro PULADO (frescor > 9d = scraper realmente parou).
+const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9 };
 // Frescor máximo tolerado (h) para as fontes grátis que reportam saúde (Seção A).
 // Elas rodam 2x/semana — seg e qui (cron '1,4' em scraper.yml e leiloeiros-puppeteer.yml).
 // O MAIOR gap NORMAL é quinta→segunda = 96h; com este monitor às 11h UTC e o scrape às
@@ -67,6 +73,23 @@ const BASELINE_FONTES = {
   VENDASGOV:  { min: 2,     campos: { foto: 90, valor: 95, edital: 90 } },
   SBID21:     { min: 1,     campos: {} },
 };
+
+// Dedup de e-mail: só envia quando o CONJUNTO de fontes-problema (fonte:tipo) muda, ou
+// quando um OUTAGE sério persiste além de REENVIO_DIAS. Mata o e-mail diário repetindo a
+// mesma condição já conhecida/aceita (ex.: "BIASI degradado 173<369" — 173 é o acervo
+// real do site, decisão do dono). Estado em public.alerta_estado (chave 'monitor_fontes').
+const REENVIO_DIAS = 3;
+async function lerEstadoAlerta(supabase, chave) {
+  try {
+    const { data } = await supabase.from('alerta_estado').select('assinatura,enviado_em').eq('chave', chave).maybeSingle();
+    return data || null;
+  } catch { return null; }
+}
+async function gravarEstadoAlerta(supabase, chave, assinatura, enviadoEm) {
+  const row = { chave, assinatura, atualizado_em: new Date().toISOString() };
+  if (enviadoEm) row.enviado_em = enviadoEm;
+  try { await supabase.from('alerta_estado').upsert(row, { onConflict: 'chave' }); } catch { /* aditivo — nunca derruba o monitor */ }
+}
 
 // IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
 // Node da Vercel, `export default` é tratado como assinatura Express `(req, res)` e o
@@ -200,13 +223,26 @@ async function handler(req) {
   } catch { /* varredura é aditiva — nunca derruba o monitor */ }
 
   if (!problemas.length) {
+    // condição limpa: zera o estado p/ que uma recorrência futura volte a avisar.
+    const st = await lerEstadoAlerta(supabase, 'monitor_fontes');
+    if (!st || st.assinatura !== '') await gravarEstadoAlerta(supabase, 'monitor_fontes', '', null);
     return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
+  // Dedup: assinatura = conjunto ordenado de (fonte:tipo). Ignora o texto volátil do
+  // detalhe (contadores de horas/imóveis) p/ não parecer "mudança" a cada dia.
+  const assinatura = problemas.map(p => `${p.fonte}:${p.tipo}`).sort().join('|');
+  const estado = await lerEstadoAlerta(supabase, 'monitor_fontes');
+  const mudou = !estado || estado.assinatura !== assinatura;
+  const outageSerio = problemas.some(p => /coleta parada|falhou|sem coleta|sem acervo/i.test(p.tipo));
+  const heartbeat = outageSerio && estado?.enviado_em &&
+    (Date.now() - new Date(estado.enviado_em).getTime()) > REENVIO_DIAS * 86400000;
+  const enviar = mudou || heartbeat;
+
   const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  if (RESEND_KEY) {
+  if (enviar && RESEND_KEY) {
     const linhasHtml = problemas.map(p => `
       <tr>
         <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:700">${p.fonte}</td>
@@ -239,7 +275,9 @@ async function handler(req) {
     } catch (e) { /* não bloqueia o retorno */ }
   }
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, detalhes: problemas }), {
+  if (enviar) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
+
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: enviar, detalhes: problemas }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

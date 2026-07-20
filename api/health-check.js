@@ -51,6 +51,30 @@ function sb(path, opts = {}) {
   });
 }
 
+// ── Dedup de e-mail: só notifica quando o CONJUNTO de problemas MUDA (ou ERRO
+//    persistente, re-enviado a cada REENVIO_ERRO_DIAS). Estado em public.alerta_estado.
+//    Assim uma condição conhecida que se repete todo dia (anomalia já vista, chamado
+//    preso) para de gerar e-mail diário — mas um problema NOVO ou um ERRO real avisam na
+//    hora. O painel Admin e o health_check_logs seguem com o estado completo diariamente.
+const REENVIO_ERRO_DIAS = 3;
+async function lerEstadoAlerta(chave) {
+  try {
+    const r = await sb(`alerta_estado?chave=eq.${chave}&select=assinatura,enviado_em`);
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return Array.isArray(rows) ? (rows[0] || null) : null;
+  } catch { return null; }
+}
+async function gravarEstadoAlerta(chave, assinatura, enviadoEm) {
+  const body = { chave, assinatura, atualizado_em: new Date().toISOString() };
+  if (enviadoEm) body.enviado_em = enviadoEm;
+  await sb('alerta_estado', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+  });
+}
+
 async function check(nome, fn) {
   const t0 = Date.now();
   try {
@@ -278,8 +302,31 @@ export default async function handler(req) {
     headers: { Prefer: 'return=minimal' },
   });
 
-  // ── Envia alerta por e-mail se há erro ou aviso ──
-  await enviarAlertaEmail(statusGeral, resumo, itens);
+  // ── Envia alerta por e-mail — SÓ quando o conjunto de problemas MUDA (ou ERRO
+  //    persistente a cada REENVIO_ERRO_DIAS). Evita o e-mail diário repetindo a mesma
+  //    condição já conhecida. A assinatura ignora contadores voláteis (usa nome+status
+  //    do item), então "4 anomalias" vs "5 anomalias" não conta como mudança — mas uma
+  //    verificação NOVA ficando amarela/vermelha, ou escalar aviso→erro, avisa na hora.
+  try {
+    if (statusGeral === 'ok') {
+      const st = await lerEstadoAlerta('health_check');
+      if (!st || st.assinatura !== '') await gravarEstadoAlerta('health_check', '', null);
+    } else {
+      const assinatura = statusGeral + '::' + itens
+        .filter(i => i.status !== 'ok')
+        .map(i => `${i.nome}=${i.status}`)
+        .sort()
+        .join('|');
+      const st = await lerEstadoAlerta('health_check');
+      const mudou = !st || st.assinatura !== assinatura;
+      const heartbeat = statusGeral === 'erro' && st?.enviado_em &&
+        (Date.now() - new Date(st.enviado_em).getTime()) > REENVIO_ERRO_DIAS * 86400000;
+      if (mudou || heartbeat) {
+        await enviarAlertaEmail(statusGeral, resumo, itens);
+        await gravarEstadoAlerta('health_check', assinatura, new Date().toISOString());
+      }
+    }
+  } catch { /* dedup nunca deve derrubar o health-check */ }
 
   return new Response(JSON.stringify({ status: statusGeral, resumo, itens, duracao_ms: Date.now() - inicio }), {
     status: 200,
