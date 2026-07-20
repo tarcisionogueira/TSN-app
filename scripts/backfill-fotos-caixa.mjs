@@ -63,15 +63,33 @@ async function proximoLote(qtd) {
   return r.json();
 }
 
+// Tenta os PADRÕES conhecidos de URL de foto da Caixa (mesma lista do /api/img-caixa).
+// Antes só tentava F<num>21.jpg — venda direta e alguns imóveis publicam a foto em outro
+// caminho, então caíam como "sem foto" mesmo TENDO foto no portal. Retorna o 1º que baixar.
+function urlsFotoCaixa(num) {
+  const B = 'https://venda-imoveis.caixa.gov.br';
+  return [
+    `${B}/fotos/F${num}21.jpg`,
+    `${B}/fotos/F${num}1.jpg`,
+    `${B}/fotos/F${num}.jpg`,
+    `${B}/sistema/imgs/foto_imovel/${num}_1.jpg`,
+    `${B}/sistema/imgs/foto_imovel/${num}.jpg`,
+    `${B}/fotos/${num}_1.jpg`,
+  ];
+}
 async function baixarFoto(num) {
-  const url = `https://venda-imoveis.caixa.gov.br/fotos/F${num}21.jpg`;
-  const r = await fetch(url, { headers: { 'User-Agent': UA, Referer: REF, Accept: 'image/*' }, signal: AbortSignal.timeout(15000) });
-  if (!r.ok) return null;
-  const ct = r.headers.get('content-type') || '';
-  if (!ct.startsWith('image/')) return null;
-  const buf = Buffer.from(await r.arrayBuffer());
-  if (buf.length < 800) return null; // placeholder/erro
-  return buf;
+  for (const url of urlsFotoCaixa(num)) {
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': UA, Referer: REF, Accept: 'image/*' }, signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const ct = r.headers.get('content-type') || '';
+      if (!ct.startsWith('image/')) continue;
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length < 800) continue; // placeholder/erro
+      return buf;
+    } catch { /* tenta o próximo padrão */ }
+  }
+  return null;
 }
 
 async function subirStorage(num, buf) {

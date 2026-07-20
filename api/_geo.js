@@ -12,7 +12,7 @@
  * distância plausível do centróide do município); fora disso, é descartado.
  */
 import MUNICIPIOS from './_municipios.js';
-import { registrarUso, unidadesUsadasHoje } from './_uso.js';
+import { registrarUso, unidadesUsadasHoje, unidadesUsadasMes } from './_uso.js';
 
 // UF → nome por extenso (para o parâmetro `state=` do Nominatim) + bounding box
 // generosa (validação de "está no estado certo?"). [latMin, latMax, lngMin, lngMax]
@@ -191,12 +191,15 @@ export async function googleGeocode(enderecoCompleto) {
   // do front por definição do Vite → chave paga exposta a qualquer visitante).
   const key = (process.env.GOOGLE_MAPS_API_KEY || '').trim();
   if (!key || !enderecoCompleto || !enderecoCompleto.trim()) return null;
-  // TRAVA DE CUSTO — teto DIÁRIO de geocodes pagos do Google. Batido o teto do dia, a
-  // função vira no-op (return null) e a cascata segue nas rotas GRATUITAS (Nominatim/
-  // IBGE/BrasilAPI). Combinada com o cron rodando `permitirPago:false` (Google só
-  // on-demand na página do imóvel), contém o custo: o tier grátis do Google é ~10k/MÊS.
-  // Ajuste por env GOOGLE_GEOCODE_MAX_DIA (0 = sem teto).
-  const LIMITE_DIA = Number(process.env.GOOGLE_GEOCODE_MAX_DIA ?? 10000);
+  // TRAVA DE CUSTO — teto MENSAL alinhado ao tier GRÁTIS do Google (~10k/MÊS). Batido o
+  // teto do mês, a função vira no-op (return null) e a cascata segue nas rotas GRATUITAS
+  // (Nominatim/IBGE/BrasilAPI) — garante custo ~US$0. Combinada com o cron rodando
+  // `permitirPago:false` (Google só on-demand na página do imóvel), o consumo mensal fica
+  // bem abaixo do teto. GOOGLE_GEOCODE_MAX_DIA (default 0/desligado) é um sub-teto DIÁRIO
+  // opcional anti-spike/smoothing; 0 em qualquer um = sem aquele teto.
+  const LIMITE_MES = Number(process.env.GOOGLE_GEOCODE_MAX_MES ?? 10000);
+  if (LIMITE_MES > 0 && (await unidadesUsadasMes('google_geocode')) >= LIMITE_MES) return null;
+  const LIMITE_DIA = Number(process.env.GOOGLE_GEOCODE_MAX_DIA ?? 0);
   if (LIMITE_DIA > 0 && (await unidadesUsadasHoje('google_geocode')) >= LIMITE_DIA) return null;
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(enderecoCompleto)}&region=br&language=pt-BR&key=${key}`;
   try {
