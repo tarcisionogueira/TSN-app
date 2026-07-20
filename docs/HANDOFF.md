@@ -54,7 +54,7 @@
 
 **➡️ Roadmap (pedidos do dono — próximas frentes):**
 - **(futuro) Comparativo desconto (avaliação × leilão) × Índice BidPro** por metragem e TIPO do imóvel → panorama de desconto mais real, validado depois pelo mercadológico; agente aprendendo a cada relatório (aumenta a base). Ainda não implementado (pedido explícito de "futuramente").
-- **Dashboard admin — números de cobertura:** quantidade de **imóveis, cidades e estados com relatório gerado**, quantos imóveis analisados e quantos usados de base (amostras). Vai na próxima leva do dashboard (junto com o redesenho + correções de fidelidade).
+- **Dashboard admin — números de cobertura: FEITO (parte 4).** `PainelCoberturaRelatorios` (novo, no `Dashboard`) + RPC `admin_metricas_negocio()` (SECURITY DEFINER, admin-gated): imóveis/cidades/estados com relatório (50/33/10), relatórios por tipo, **amostras de mercado usadas** (1.202), buscas + % zero-resultado, cobertura do Índice BidPro. **Fidelidade:** "Total de usuários" passa a contar TODOS os perfis (antes só 8 roles; anuais/leiloeiro/pacote sumiam) e planos anuais somam ao plano-base no MRR. Aplicado via MCP; segurança 0/0. **Pendente do redesenho maior:** reorganizar em faixas (pulso/saúde/acervo/pessoas/infra) + demais correções de fidelidade (MRR lendo `planos_config`, custos de infra que hoje são estimativa chumbada).
 - **Data-quality:** **18 imóveis ativos com desconto ≥ 90% (avaliação > 10× o lance)** — possíveis mis-reads do scraper (pré-existentes). Candidato a um detector no health-check / limpeza.
 
 ## 🆕 Sessão 18/07/2026 (tarde) — Bug vivo + edital ZUK + varredura estrangeiros + Cliente 360
