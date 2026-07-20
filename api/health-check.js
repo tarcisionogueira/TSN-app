@@ -283,6 +283,28 @@ export default async function handler(req) {
     }));
   }
 
+  // ── 8. Infra — armazenamento (Storage + banco) vs teto do plano ──
+  // Vigia o uso ANTES de bater o limite do plano Supabase (o que gerava o e-mail
+  // "urgente" com pausa em 3 dias). O Storage costuma estourar primeiro (PDFs de
+  // edital/matrícula no bucket `documentos` + fotos). Teto por env STORAGE_LIMITE_GB
+  // (ajuste ao plano: free ~1, Pro ~8). Aponta o bucket dominante para a limpeza.
+  itens.push(await check('Infra — armazenamento (Storage + DB)', async () => {
+    const r = await sb('rpc/infra_uso_storage', { method: 'POST', body: '{}' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const gb = (b) => Number(b || 0) / 1073741824;
+    const stG = gb(d.storage_bytes), dbG = gb(d.db_bytes);
+    const buckets = d.por_bucket || {};
+    const maior = Object.entries(buckets).sort((a, b) => (b[1] || 0) - (a[1] || 0))[0];
+    const maiorTxt = maior ? ` — maior bucket: ${maior[0]} ${gb(maior[1]).toFixed(1)}GB` : '';
+    const limiteGb = Number(process.env.STORAGE_LIMITE_GB || 8);
+    const pct = limiteGb > 0 ? Math.round((stG / limiteGb) * 100) : 0;
+    const base = `Storage ${stG.toFixed(1)}GB · DB ${dbG.toFixed(2)}GB (teto ${limiteGb}GB → ${pct}%)${maiorTxt}.`;
+    if (limiteGb > 0 && stG >= limiteGb) return { status: 'erro', detalhe: `${base} ACIMA do teto do plano — risco de bloqueio/pausa. Upgrade do plano OU limpeza do bucket dominante.` };
+    if (pct >= 80) return { status: 'aviso', detalhe: `${base} Perto do teto — planejar upgrade/limpeza.` };
+    return { status: 'ok', detalhe: base };
+  }));
+
   // ── Compila resultado ──
   const temErro  = itens.some(i => i.status === 'erro');
   const temAviso = itens.some(i => i.status === 'aviso');
