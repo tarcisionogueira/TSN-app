@@ -8,6 +8,9 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { Buffer } from 'buffer';
+import { createHash } from 'crypto';
+
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -54,7 +57,7 @@ async function main() {
     const anexos = Array.isArray(l.anexos) ? l.anexos : [];
     const edital = anexos.find((a) => /edital/i.test(a.tipo || a.nome || '') && /\.pdf/i.test(a.url || ''))?.url;
     const matUrl = urlMatricula(edital);
-    return matUrl ? { id: l.id, matUrl } : null;
+    return matUrl ? { id: l.id, matUrl, editalUrl: edital } : null;
   }).filter(Boolean).slice(0, LOTE);
   if (!lotes.length) { console.log('Nenhum lote Grupo Lance pendente COM edital-PDF.'); return; }
   console.log(`Grupo Lance: ${lotes.length} lote(s) com edital-PDF para tentar matrícula (cap ${LOTE}).`);
@@ -68,6 +71,22 @@ async function main() {
       if (!resp.ok) { semMat++; console.log(`- ${l.id}: sem matrícula pública (HTTP ${resp.status})`); continue; }
       const buf = Buffer.from(await resp.arrayBuffer());
       if (buf.length < 1000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') { erro++; console.log(`- ${l.id}: não é PDF (${buf.length}b)`); continue; }
+      // ANTI-CONFUSÃO (edital↔matrícula): a URL de "matrícula" é DERIVADA da do edital por
+      // substituição de string. Alguns CDNs devolvem o PRÓPRIO EDITAL nesse caminho (fallback),
+      // e aí salvaríamos o edital ROTULADO como matrícula — foi exatamente o caso reportado
+      // (Grupo Lance, Bertioga). Se o PDF "matrícula" for IDÊNTICO ao edital, NÃO salva.
+      if (l.editalUrl) {
+        try {
+          const er = await fetch(l.editalUrl, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' }, redirect: 'follow', signal: AbortSignal.timeout(25000) });
+          if (er.ok) {
+            const ebuf = Buffer.from(await er.arrayBuffer());
+            if (ebuf.length === buf.length && sha256(ebuf) === sha256(buf)) {
+              semMat++; console.log(`- ${l.id}: "matrícula" derivada é IDÊNTICA ao edital — ignorada (não é matrícula)`);
+              continue;
+            }
+          }
+        } catch { /* se o edital não baixar, segue com a matrícula (melhor esforço) */ }
+      }
       await salvarMatricula(l.id, buf);
       ok++; console.log(`✓ ${l.id}: matrícula salva (${Math.round(buf.length / 1024)}kb)`);
       await new Promise(s => setTimeout(s, 400));

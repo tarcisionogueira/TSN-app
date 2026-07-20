@@ -14,7 +14,12 @@ import { fotoCandidatos } from '../utils/foto';
 // Botões de documento só aparecem quando o valor é uma URL real — o scraper da
 // Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
 const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim());
-const ehMatriculaValida = (v) => ehUrl(v) && !/matricula\.asp/i.test(v);
+// Documento REAL = ARQUIVO (PDF, com ou sem querystring) ou objeto no NOSSO Storage.
+// Uma PÁGINA (matricula.asp, detalhe-imovel.asp, /imoveis/…) NÃO é documento — a
+// auditoria por leiloeiro mostrou milhares de "matrículas"/"editais" que na verdade
+// são a página do lote. Sem isto, o botão "Matrícula"/"Edital" abre um site, não o doc.
+const ehDocArquivo = (v) => ehUrl(v) && (/\.pdf(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v));
+const ehMatriculaValida = (v) => ehDocArquivo(v) && !/matricula\.asp/i.test(v);
 // "Regras de venda" só é um DOCUMENTO de verdade quando não é a própria página do
 // anúncio no portal (detalhe-imovel.asp da Caixa = mesmo destino do url_lote, já
 // coberto pelo botão "Ver no portal"). Senão o botão abre o site, não um arquivo.
@@ -906,16 +911,29 @@ export default function ImovelDetalhe() {
   // azul "?" do portal). Preferimos ele — é o documento de fato, não a página.
   const caixaRegras = isVendaDireta ? caixaRegrasVendaUrl({ fonte: imovel.fonte }) : null;
   const docRegrasRaw = isVendaDireta ? imovel.linkRegrasVenda : imovel.linkEdital;
-  // Se o "edital" resolveu para o MESMO arquivo da MATRÍCULA (CEF grava link_edital = matrícula
-  // em licitação/leilão), NÃO é um edital de verdade — descarta p/ o botão "Edital" não abrir a
-  // matrícula. Cai para a página do lote ("Acessar leiloeiro"), que é honesto.
-  const docRegras = (docRegrasRaw && matriculaUrl && docRegrasRaw === matriculaUrl) ? null : docRegrasRaw;
-  const regrasEhDocReal = !!caixaRegras || ehRegrasDoc(docRegras, imovel.urlLote);
-  const regrasEditalUrl = caixaRegras
-    ? caixaRegras
-    : regrasEhDocReal
-      ? docRegras
-      : (ehUrl(docRegras) ? docRegras : (ehUrl(imovel.urlLote) && imovel.urlLote !== matriculaUrl ? imovel.urlLote : null));
+  // Descarta o "edital" que na verdade é a MATRÍCULA (CEF grava link_edital = matrícula
+  // em licitação/leilão) — senão o botão "Edital" abriria a matrícula.
+  const ehMesmaMatricula = (v) => !!(v && matriculaUrl && v === matriculaUrl);
+  const docRegras = ehMesmaMatricula(docRegrasRaw) ? null : docRegrasRaw;
+  // Edital REAL a partir dos anexos, quando o link_edital não é um ARQUIVO (é a página do
+  // lote — padrão da maioria dos leiloeiros: a auditoria mostrou link_edital = url_lote em
+  // ~100% de SUPERBID/GRUPOLANCE/BIASI/SOLD/VIP…). Prioriza o PDF capturado no nosso Storage.
+  const editalDeAnexo = (!isVendaDireta && !ehDocArquivo(docRegras)) ? (
+    (Array.isArray(anexosDocs) ? anexosDocs : []).find(a => /edital/i.test(a.tipo || a.nome || '') && ehDocArquivo(a.url) && !ehMesmaMatricula(a.url))?.url
+    || (Array.isArray(imovel.anexos) ? imovel.anexos : []).find(a => /edital/i.test(a.tipo || a.nome || '') && ehDocArquivo(a.url) && !ehMesmaMatricula(a.url))?.url
+    || null
+  ) : null;
+  // Documento OFICIAL (arquivo): venda direta = regras da Caixa (ou página de regras online);
+  // leilão = edital-PDF (do link_edital OU dos anexos). Só então rotula "Regras"/"Edital";
+  // caso contrário o botão é honesto "Acessar leiloeiro" (abre a página, não finge ser doc).
+  const docOficial = caixaRegras
+    || (isVendaDireta
+        ? (ehRegrasDoc(docRegras, imovel.urlLote) ? docRegras : null)
+        : (ehDocArquivo(docRegras) ? docRegras : editalDeAnexo));
+  const regrasEhDocReal = !!docOficial;
+  const regrasEditalUrl = docOficial
+    || ((ehUrl(docRegras) && !ehMesmaMatricula(docRegras)) ? docRegras
+        : (ehUrl(imovel.urlLote) && imovel.urlLote !== matriculaUrl ? imovel.urlLote : null));
   const regrasEditalLabel = regrasEhDocReal
     ? (isVendaDireta ? 'Regras de venda online' : 'Edital')
     : 'Acessar leiloeiro';

@@ -3966,6 +3966,82 @@ function PainelCoberturaRelatorios() {
   );
 }
 
+// Cobertura DOCUMENTAL por leiloeiro (RPC admin_docs_por_leiloeiro): imóveis, fotos,
+// matrículas, editais, regras, anexos + sinalizadores de CONFUSÃO de documento (edital=
+// matrícula, edital=página do lote, matrícula=página). Nasceu do caso "botão Edital abria
+// a Matrícula" — aqui o admin vê, por leiloeiro, onde os documentos podem estar trocados.
+function PainelDocsLeiloeiro() {
+  const [d, setD] = React.useState(null);
+  const [erro, setErro] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    supabase.rpc('admin_docs_por_leiloeiro').then(({ data, error }) => {
+      if (!vivo) return;
+      if (error || !data) setErro(true); else setD(data);
+    });
+    return () => { vivo = false; };
+  }, []);
+  if (erro) return null;
+  const fmtN = (v) => Number(v || 0).toLocaleString('pt-BR');
+  if (!d) return <div style={{ ...S.card, color: '#94a3b8', fontSize: 13 }}>Carregando cobertura documental…</div>;
+  const fontes = Array.isArray(d.fontes) ? d.fontes : [];
+  const totalConfusao = fontes.reduce((s, f) => s + (f.edital_eq_matricula || 0) + (f.matricula_eq_lote || 0), 0);
+  // % de cobertura para colorir a célula (verde alto, âmbar médio, vermelho baixo).
+  const pctCor = (n, tot) => { const p = tot ? n / tot : 0; return p >= 0.8 ? '#059669' : p >= 0.4 ? '#d97706' : '#dc2626'; };
+  const cel = { padding: '7px 10px', fontSize: 12, textAlign: 'right', whiteSpace: 'nowrap', borderBottom: '1px solid #f1f5f9' };
+  const th = { ...cel, color: '#64748b', fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.3, borderBottom: '2px solid #e2e8f0' };
+  const alerta = (n) => (n > 0 ? { color: '#b91c1c', fontWeight: 800, background: '#fef2f2' } : { color: '#cbd5e1' });
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>🗂️ Cobertura documental por leiloeiro</div>
+        {totalConfusao > 0
+          ? <span style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', background: '#fef2f2', padding: '3px 10px', borderRadius: 20 }}>⚠ {fmtN(totalConfusao)} possíveis confusões edital↔matrícula</span>
+          : <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#f0fdf4', padding: '3px 10px', borderRadius: 20 }}>✓ sem edital↔matrícula/lote</span>}
+      </div>
+      <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 12 }}>
+        {fmtN(d.total_imoveis)} imóveis ativos. <b>Ed=Matríc.</b> e <b>Matríc=Lote</b> são confusões (documento trocado); <b>Ed=Lote</b> é normal (o edital-PDF real vem dos anexos) e <b>Matríc. página</b> = matrícula que aponta para página, não arquivo.
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, textAlign: 'left' }}>Leiloeiro</th>
+              <th style={th}>Imóveis</th>
+              <th style={th}>Fotos</th>
+              <th style={th}>Matrículas</th>
+              <th style={th}>Editais</th>
+              <th style={th}>Regras</th>
+              <th style={th}>Anexos</th>
+              <th style={th}>Ed=Matríc.</th>
+              <th style={th}>Matríc=Lote</th>
+              <th style={th}>Matríc. página</th>
+              <th style={th}>Ed=Lote</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fontes.map((f) => (
+              <tr key={f.fonte}>
+                <td style={{ ...cel, textAlign: 'left', fontWeight: 700, color: '#111' }}>{f.fonte}</td>
+                <td style={{ ...cel, fontWeight: 700, color: '#111' }}>{fmtN(f.imoveis)}</td>
+                <td style={{ ...cel, color: pctCor(f.com_foto, f.imoveis) }}>{fmtN(f.com_foto)}</td>
+                <td style={{ ...cel, color: pctCor(f.com_matricula, f.imoveis) }}>{fmtN(f.com_matricula)}</td>
+                <td style={{ ...cel, color: pctCor(f.com_edital, f.imoveis) }}>{fmtN(f.com_edital)}</td>
+                <td style={cel}>{fmtN(f.com_regras)}</td>
+                <td style={{ ...cel, color: pctCor(f.com_anexos, f.imoveis) }}>{fmtN(f.com_anexos)}</td>
+                <td style={{ ...cel, ...alerta(f.edital_eq_matricula) }}>{fmtN(f.edital_eq_matricula)}</td>
+                <td style={{ ...cel, ...alerta(f.matricula_eq_lote) }}>{fmtN(f.matricula_eq_lote)}</td>
+                <td style={{ ...cel, color: (f.matricula_nao_arquivo > 0 ? '#d97706' : '#cbd5e1'), fontWeight: f.matricula_nao_arquivo > 0 ? 700 : 400 }}>{fmtN(f.matricula_nao_arquivo)}</td>
+                <td style={{ ...cel, color: '#94a3b8' }}>{fmtN(f.edital_eq_lote)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DashboardTab() {
   const planosCtx = usePlanos();
   const pNome = (key) => planosCtx?.[key]?.nome || key;
@@ -4344,6 +4420,9 @@ function DashboardTab() {
 
       {/* Cobertura de relatórios & inteligência (o que ocorre no sistema — dado real) */}
       <PainelCoberturaRelatorios />
+
+      {/* Cobertura documental por leiloeiro + sinalizadores de confusão de documento */}
+      <PainelDocsLeiloeiro />
 
       {/* Custos & Uso das integrações pagas (marcadores de teto/orçamento) */}
       <PainelCustosUso />
