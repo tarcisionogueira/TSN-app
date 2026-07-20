@@ -328,7 +328,13 @@ async function scraperCEFcsv(uf) {
       const formaPagamento = formaPagamentoCEF(m.descricao_csv, m.modalidade, m.financiamento);
 
       const numeroLimpo = m.id.replace(/\s/g, '');
-      const linkDetalhe = m.link || `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroLimpo}`;
+      const detalhePagina = `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdniip=${numeroLimpo}`;
+      // O "Link de acesso" do CSV (m.link) às vezes É o PDF da MATRÍCULA (/editais/matricula/…)
+      // — nunca pode virar link_edital (o botão "Edital" abriria a matrícula: bug real de
+      // 07/2026, ~775 lotes). Só aceita m.link como página do lote quando NÃO é um PDF de
+      // matrícula; caso contrário usa a página de detalhe. A matrícula segue no link_matricula.
+      const linkEhMatriculaPdf = m.link && (/\/editais\/matricula\//i.test(m.link) || /matr[íi]cula[^/]*\.pdf/i.test(m.link));
+      const linkDetalhe = (m.link && !linkEhMatriculaPdf) ? m.link : detalhePagina;
       // Matrícula: PDF estático em /editais/matricula/<UF>/<numero>.pdf. O antigo
       // matricula.asp?hdniip= foi REMOVIDO pela Caixa (HTTP 404).
       const linkMatricula = (uf && numeroLimpo)

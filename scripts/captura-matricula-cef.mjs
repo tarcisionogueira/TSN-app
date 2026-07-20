@@ -118,17 +118,25 @@ async function processar(page, item) {
             await new Promise(r => setTimeout(r, 600));
           }
         }
-        // 3a) Edital em PDF linkado na página (se ainda não capturado).
+        // 3a) Edital em PDF linkado na página (se ainda não capturado). O edital COLETIVO
+        //     da Caixa é /editais/EL<NNNN><MMYY><UNID>.PDF (ver leiloeiro_conhecimento CEF).
+        //     NUNCA pega a MATRÍCULA (/editais/matricula/…) como edital — foi a origem do
+        //     bug "Edital abre matrícula" (removida a antiga heurística "qualquer PDF").
         if (!capturados.includes('edital')) {
           const editalPdf = await page.evaluate(() => {
             const as = Array.from(document.querySelectorAll('a[href]'));
-            const hit = as.find(a => /\.pdf(\?|#|$)/i.test(a.href) && /edital/i.test(`${a.href} ${a.textContent || ''}`))
-                     || as.find(a => /\.pdf(\?|#|$)/i.test(a.href));
+            const ehMatricula = a => /matr[íi]cula/i.test(`${a.href} ${a.textContent || ''}`) || /\/editais\/matricula\//i.test(a.href);
+            const hit = as.find(a => /\/editais\/E[A-Z]\w+\.pdf/i.test(a.href))                                   // padrão canônico do edital coletivo
+                     || as.find(a => /\.pdf(\?|#|$)/i.test(a.href) && /edital/i.test(`${a.href} ${a.textContent || ''}`) && !ehMatricula(a)); // PDF rotulado "edital", não-matrícula
             return hit ? hit.href : null;
           });
           if (editalPdf) {
             const ed = await capturarUrl(page, editalPdf).catch(() => null);
             if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
+            // Grava a URL REAL do edital em link_edital → o botão "Edital" abre o PDF direto
+            // no navegador do usuário (hotlink, IP residencial atendido pela Caixa; sem custo
+            // de Storage). Antes link_edital era só a página do lote ("Acessar leiloeiro").
+            await supabase.from('imoveis_leilao').update({ link_edital: editalPdf }).eq('id', item.imovel_id).then(() => {}, () => {});
             await page.goto(detalheUrl, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
             await new Promise(r => setTimeout(r, 600));
           }
