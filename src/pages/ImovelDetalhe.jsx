@@ -736,8 +736,13 @@ export default function ImovelDetalhe() {
     // A busca por raio passa o imóvel no state SEM edital/matrícula/descrição.
     // Se esses documentos faltam, busca o registro completo no banco (o state
     // serve só para o paint imediato, sem spinner).
-    // Já temos ESTE imóvel com documentos? então não precisa buscar.
-    const jaCarregado = imovel && imovel.id === id && (imovel.linkEdital || imovel.linkMatricula || imovel.descricao);
+    // Já temos ESTE imóvel COMPLETO (linha inteira do banco)? então não precisa buscar.
+    // Antes o guard usava linkEdital/descrição — mas o objeto vindo da BUSCA tem esses
+    // campos e NÃO tem `anexos` (a busca não seleciona), então o guard cortava o fetch e o
+    // EDITAL-PDF dos anexos nunca carregava (ex.: GRUPOLANCE → botão virava "Acessar
+    // leiloeiro" em vez de abrir o edital). `anexos` só existe (array OU null) depois do
+    // .select('*') abaixo → é o sinal fiel de "linha completa carregada".
+    const jaCarregado = imovel && imovel.id === id && imovel.anexos !== undefined;
     if (jaCarregado) return;
     if (!id) { nav('/buscar'); return; }
     // Navegou para outro imóvel (ex.: card de similares) → recarrega do zero.

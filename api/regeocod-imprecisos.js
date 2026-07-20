@@ -40,12 +40,15 @@ export default async function handler(req, resp) {
   if (!SUPABASE_URL || !SERVICE_KEY) return resp.status(500).json({ error: 'Supabase env vars ausentes' });
 
   const corte = new Date(Date.now() - 14 * 86400000).toISOString();
-  // Imprecisos (bairro/cidade) ou que falharam, ainda não reprocessados neste ciclo.
-  // Ordena por DESCONTO desc: corrige primeiro os imóveis atrativos (topo da busca /
-  // e-mail das 8h), que são os mais vistos no mapa. O guard de 14 dias fica no WHERE
-  // (geocod_reproc_em), então trocar a ordenação não re-martela os mesmos.
+  // Só os PIORES (cidade/falhou), NÃO 'bairro'. Desde que o cron de geocode passou a
+  // rodar 100% GRÁTIS (Google reservado ao on-demand da página do imóvel), o reprocesso
+  // em lote usa só Nominatim/IBGE/BrasilAPI — que raramente sobe 'bairro' → 'rua/endereço'
+  // (isso é trabalho do Google, agora on-demand). Re-tentar 'bairro' (já um pino OK) só
+  // martelava o Nominatim grátis à toa. Focar em cidade/falhou (onde o CEP grátis AINDA
+  // melhora) reduz a carga sem perder ganho. Ordena por DESCONTO desc (imóveis mais vistos
+  // primeiro); o guard de 14 dias (geocod_reproc_em) evita re-martelar os mesmos.
   const sel = `imoveis_leilao?select=id&ativo=eq.true`
-    + `&geocod_nivel=in.(bairro,cidade,falhou)`
+    + `&geocod_nivel=in.(cidade,falhou)`
     + `&or=(geocod_reproc_em.is.null,geocod_reproc_em.lt.${corte})`
     + `&order=desconto_percentual.desc.nullslast&limit=${LIMITE}`;
   const r = await sb(sel);

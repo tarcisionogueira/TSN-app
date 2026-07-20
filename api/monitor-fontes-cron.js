@@ -8,8 +8,10 @@
  *   - queda de volume registrada pelo próprio scraper
  * Só envia e-mail se houver problema. Idempotente. Autorizado por CRON_SECRET.
  *
- * Roda 1x/dia às 11h UTC (vercel.json). Os scrapers grátis rodam 2x/semana (seg/qui) —
- * o threshold de frescor (MAX_IDADE_H) tolera o gap de fim de semana; ver nota abaixo.
+ * Roda 1x/dia às 15h UTC (vercel.json) — DEPOIS dos scrapers (grátis ~12:30-13:05 UTC;
+ * pagos ~11:37) e da 1ª leva de captura de documentos, para não flagrar estado
+ * TRANSITÓRIO de meio-de-coleta (ex.: matrícula ainda enriquecendo → % baixo momentâneo).
+ * Os scrapers grátis rodam 2x/semana (seg/qui); MAX_IDADE_H tolera o gap; ver nota abaixo.
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
@@ -55,7 +57,7 @@ const BASELINE_FONTES = {
   CEF:        { min: 20000, campos: { foto: 85, valor: 95, area: 90, matricula: 90, avaliacao: 90 } },
   SUPERBID:   { min: 900,   campos: { foto: 85, valor: 95, data: 90, edital: 90 } },
   LJUD:       { min: 600,   campos: { valor: 95, data: 90, matricula: 80, edital: 90 } },
-  ZUK:        { min: 550,   campos: { foto: 90, valor: 95, data: 70, edital: 90, avaliacao: 90 } },
+  ZUK:        { min: 420,   campos: { foto: 90, valor: 95, data: 70, edital: 90, avaliacao: 90 } },
   MEGA:       { min: 400,   campos: { foto: 90, valor: 95, area: 80, data: 90, matricula: 90, edital: 90, avaliacao: 90 } },
   GRUPOLANCE: { min: 250,   campos: { foto: 90, valor: 95, area: 75, matricula: 80, edital: 90 } },
   PESTANA:    { min: 120,   campos: { foto: 80, valor: 95, area: 75, data: 90, matricula: 75, edital: 90 } },
