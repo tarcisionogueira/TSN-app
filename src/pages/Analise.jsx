@@ -105,6 +105,20 @@ function KpiCard({ label, value, sub, color, bg, icon: Icon, large }) {
   );
 }
 
+// Cabeçalho de "banda" do relatório mercadológico — organiza a informação (antes era
+// uma pilha vertical longa) em 4 blocos numerados: Resumo, Referências de preço,
+// Amostras/comparativos e Metodologia. Mantém a MESMA informação, só agrupada.
+function BandaMercado({ n, titulo, sub, cor = '#0D63DB' }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:2 }}>
+      <span style={{ width:22, height:22, borderRadius:7, background:cor, color:'white', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, flexShrink:0 }}>{n}</span>
+      <span style={{ fontSize:12.5, fontWeight:800, color:'#0f172a', textTransform:'uppercase', letterSpacing:0.5 }}>{titulo}</span>
+      {sub && <span style={{ fontSize:11, color:'#94a3b8', fontWeight:600 }}>· {sub}</span>}
+      <span style={{ flex:1, height:1, background:'#e2e8f0' }} />
+    </div>
+  );
+}
+
 // Limite de relatórios mercadológicos+viabilidade por plano/mês (espelha limite_ia
 // no banco). Explorador: 5/mês, sem documental/jurídico. Todos os acessos têm cota;
 // só o admin é ilimitado. Equipe (analista/advogado) NÃO gera relatórios (só
@@ -1187,6 +1201,11 @@ export default function Analise() {
               // Links válidos: matricula.asp e detalhe-imovel.asp são páginas do
               // portal (dão 404 / não são arquivo) — não viram link de documento.
               const ehArquivo = (v) => /^https?:\/\//i.test(v||'') && !/matricula\.asp|detalhe-imovel\.asp/i.test(v);
+              // DOCUMENTO de verdade = ARQUIVO (PDF ou objeto no nosso Storage). Uma PÁGINA
+              // (link_edital = página do lote na maioria dos leiloeiros; link_matricula = página)
+              // NÃO é doc — se cair aqui, o item vira "via página do leiloeiro" (honesto), não
+              // finge ser a matrícula/edital. Espelha o gate da tela do imóvel.
+              const ehDocArquivo = (v) => /^https?:\/\//i.test(v||'') && (/\.pdf(\?|#|$)/i.test((v||'').trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v||''));
               // Matrícula CEF: PDF estático em /editais/matricula/<UF>/<num>.pdf.
               const matriculaCef = caixaMatriculaUrl({ fonte: imovelInicial?.fonte, estado: imovelInicial?.estado, fonteId: imovelInicial?.fonteId });
               // Fallback "nunca sem documento": se o ARQUIVO não foi coletado, o
@@ -1201,20 +1220,22 @@ export default function Analise() {
                   // Prefere o PDF estático da Caixa (limpo, abre igual à tela do
                   // imóvel) ao anexo capturado — que às vezes é um "print" de
                   // visualizador, com baixa legibilidade. Anexo só como fallback.
-                  fileUrl = matriculaCef || anexoUrl || (ehArquivo(imovelInicial?.linkMatricula) ? imovelInicial.linkMatricula : null);
+                  fileUrl = matriculaCef || anexoUrl || (ehDocArquivo(imovelInicial?.linkMatricula) ? imovelInicial.linkMatricula : null);
                 } else if (t === 'regras_venda') {
                   // "Regras da Venda Online": PDF padrão da Caixa (o link azul do
                   // portal). É o ARQUIVO de regras de fato — preferido ao anexo.
                   fileUrl = (isVendaDireta && caixaRegrasVendaUrl({ fonte: imovelInicial?.fonte }))
-                    || anexoUrl || (ehArquivo(imovelInicial?.linkRegrasVenda) ? imovelInicial.linkRegrasVenda : null);
+                    || anexoUrl || (ehDocArquivo(imovelInicial?.linkRegrasVenda) ? imovelInicial.linkRegrasVenda : null);
                 } else if (t === 'laudo') {
                   // Laudo de avaliação: só existe como anexo capturado (sem coluna
                   // dedicada). Não cai na página do lote — se não há arquivo, não mostra.
                   fileUrl = anexoUrl;
                 } else {
-                  // Guard: se link_edital é o MESMO arquivo da matrícula (CEF grava assim em
-                  // licitação/leilão), NÃO é edital — descarta p/ o botão não abrir a matrícula.
-                  const editalArq = (ehArquivo(imovelInicial?.linkEdital) && imovelInicial.linkEdital !== matriculaCef) ? imovelInicial.linkEdital : null;
+                  // Guard: link_edital só vira "Edital" se for ARQUIVO (PDF/Storage) E não for a
+                  // matrícula (CEF grava link_edital = matrícula). A maioria dos leiloeiros grava
+                  // link_edital = página do lote → não é arquivo → cai p/ o anexo (edital-PDF real)
+                  // ou p/ a página do leiloeiro. Nunca finge ser edital, nem abre a matrícula.
+                  const editalArq = (ehDocArquivo(imovelInicial?.linkEdital) && imovelInicial.linkEdital !== matriculaCef) ? imovelInicial.linkEdital : null;
                   fileUrl = anexoUrl || editalArq;
                 }
                 // Edital/regra/matrícula sempre com destino: arquivo, senão a página do leiloeiro.
@@ -2454,30 +2475,10 @@ export default function Analise() {
           </button>
 
           {mercado && (
-            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
 
-              {/* Datas do relatório: quando foi gerado e quando expira (removido se não arrematado) */}
-              {(() => {
-                const ent = analiseEntry;
-                const fmtD = (ms) => ms ? new Date(ms).toLocaleDateString('pt-BR') : null;
-                const dl = ent?.dataLeilao || imovelInicial?.dataLeilao || d.dataLeilao;
-                const dlMs = dl && !isNaN(Date.parse(dl)) ? Date.parse(dl) : null;
-                // Gerado: usa updatedAt do relatório; se faltar (ex.: cache antigo), cai no
-                // pesquisaEm do próprio resultado (sempre presente) e por fim no startedAt.
-                const geradoMs = ent?.updatedAt
-                  || (mercado?.pesquisaEm && !isNaN(Date.parse(mercado.pesquisaEm)) ? Date.parse(mercado.pesquisaEm) : null)
-                  || ent?.startedAt || null;
-                const baseCriacao = ent?.startedAt || geradoMs;
-                // Regra do cron: 15 dias após o leilão (se há data) OU 60 dias após a criação.
-                const expMs = dlMs ? dlMs + 15 * 864e5 : (baseCriacao ? baseCriacao + 60 * 864e5 : null);
-                if (!geradoMs && !expMs) return null; // sem nada a mostrar (não deixa "—" vazio)
-                return (
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'center', fontSize:11.5, color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'8px 14px' }}>
-                    {geradoMs && <span>🗓️ Gerado em <strong style={{ color:'#334155' }}>{fmtD(geradoMs)}</strong></span>}
-                    {expMs && <span>· ⏳ Expira em <strong style={{ color:'#334155' }}>{fmtD(expMs)}</strong> <span style={{ color:'#94a3b8' }}>({dlMs ? '15 dias após o leilão' : '60 dias'}, se não arrematado)</span></span>}
-                  </div>
-                );
-              })()}
+              {/* ═══════════ BANDA 1 — RESUMO: para que serve + números-chave ═══════════ */}
+              <BandaMercado n={1} titulo="Resumo" sub="para que serve e números-chave" cor="#0D63DB" />
 
               {/* Classificação por objetivo — para QUE o imóvel é bom (Revenda / Locação / Temporada) */}
               {mercado.classificacaoIntencao?.algum && (() => {
@@ -2516,6 +2517,11 @@ export default function Analise() {
                   </div>
                 ))}
               </div>
+
+              {/* ═══════════ BANDA 2 — REFERÊNCIAS DE PREÇO: validação cruzada ═══════════ */}
+              {(mercado.referenciaFipeZap?.encontrado || (mercado.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0))) && (
+                <BandaMercado n={2} titulo="Referências de preço" sub="FipeZAP + Índice BidPro (validação cruzada)" cor="#4f46e5" />
+              )}
 
               {/* Validação FipeZAP, média dos anúncios × índice independente */}
               {mercado.referenciaFipeZap?.encontrado && mercado.referenciaFipeZap.precoMedioM2 > 0 && (() => {
@@ -2564,6 +2570,19 @@ export default function Analise() {
                   </div>
                 );
               })()}
+
+              {/* ═══════════ BANDA 3 — AMOSTRAS E COMPARATIVOS (recolhível) ═══════════ */}
+              {/* A "muita informação" ficava aberta o tempo todo e poluía. Agora as amostras
+                  brutas vêm num <details> fechado por padrão — o resumo/refs ficam à vista e
+                  quem quer o detalhe expande. As tabelas continuam idênticas. */}
+              <details style={{ border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
+                <summary style={{ cursor:'pointer', listStyle:'none', padding:'12px 16px', background:'#f8fafc', display:'flex', alignItems:'center', gap:10, fontSize:12.5, fontWeight:800, color:'#0f172a' }}>
+                  <span style={{ width:22, height:22, borderRadius:7, background:'#10b981', color:'white', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, flexShrink:0 }}>3</span>
+                  <span style={{ textTransform:'uppercase', letterSpacing:0.5 }}>Amostras e comparativos</span>
+                  <span style={{ fontSize:11, color:'#64748b', fontWeight:600 }}>· Nível 1: {mercado.nivel1?.totalAmostras||0} · Nível 2: {mercado.nivel2?.totalAmostras||0} amostras</span>
+                  <span style={{ marginLeft:'auto', fontSize:11, color:'#0D63DB', fontWeight:700 }}>ver detalhes ▾</span>
+                </summary>
+                <div style={{ display:'flex', flexDirection:'column', gap:14, padding:'14px' }}>
 
               {/* Nível 1, Mesmo Condomínio */}
               <div style={{ borderRadius:12, border:'2px solid #0D63DB', overflow:'hidden' }}>
@@ -2678,6 +2697,35 @@ export default function Analise() {
                   )}
                 </div>
               </div>
+
+                </div>
+              </details>
+
+              {/* ═══════════ BANDA 4 — METODOLOGIA E OBSERVAÇÕES ═══════════ */}
+              <BandaMercado n={4} titulo="Metodologia e observações" sub="datas, fontes e ressalvas" cor="#64748b" />
+
+              {/* Datas do relatório: quando foi gerado e quando expira (removido se não arrematado) */}
+              {(() => {
+                const ent = analiseEntry;
+                const fmtD = (ms) => ms ? new Date(ms).toLocaleDateString('pt-BR') : null;
+                const dl = ent?.dataLeilao || imovelInicial?.dataLeilao || d.dataLeilao;
+                const dlMs = dl && !isNaN(Date.parse(dl)) ? Date.parse(dl) : null;
+                // Gerado: usa updatedAt do relatório; se faltar (ex.: cache antigo), cai no
+                // pesquisaEm do próprio resultado (sempre presente) e por fim no startedAt.
+                const geradoMs = ent?.updatedAt
+                  || (mercado?.pesquisaEm && !isNaN(Date.parse(mercado.pesquisaEm)) ? Date.parse(mercado.pesquisaEm) : null)
+                  || ent?.startedAt || null;
+                const baseCriacao = ent?.startedAt || geradoMs;
+                // Regra do cron: 15 dias após o leilão (se há data) OU 60 dias após a criação.
+                const expMs = dlMs ? dlMs + 15 * 864e5 : (baseCriacao ? baseCriacao + 60 * 864e5 : null);
+                if (!geradoMs && !expMs) return null; // sem nada a mostrar (não deixa "—" vazio)
+                return (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'center', fontSize:11.5, color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'8px 14px' }}>
+                    {geradoMs && <span>🗓️ Gerado em <strong style={{ color:'#334155' }}>{fmtD(geradoMs)}</strong></span>}
+                    {expMs && <span>· ⏳ Expira em <strong style={{ color:'#334155' }}>{fmtD(expMs)}</strong> <span style={{ color:'#94a3b8' }}>({dlMs ? '15 dias após o leilão' : '60 dias'}, se não arrematado)</span></span>}
+                  </div>
+                );
+              })()}
 
               {mercado.comentario && (
                 <div style={{ background:'#f8fafc', borderRadius:10, padding:'14px 16px', borderLeft:'4px solid #10b981' }}>
