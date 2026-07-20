@@ -5,6 +5,7 @@ import { useAnalises } from '../contexts/AnalisesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
+import FotoImovel from '../components/FotoImovel';
 
 // Etapa do acompanhamento assistido (caso) em rótulo curto para o cliente.
 const ETAPA_CURTA = {
@@ -14,17 +15,6 @@ const ETAPA_CURTA = {
   segunda_reuniao: '2ª reunião', arrematado: 'Arrematado', honorarios_pagos: 'Concluído',
   procuracao_assinada: 'Procuração assinada', pos_arrematacao: 'Pós-arrematação',
 };
-
-// Miniatura do imóvel (CEF tem hotlink direto; demais usam o proxy de imagem).
-function fotoImovel(im) {
-  if (!im) return null;
-  const isCef = im.fonte === 'CEF' || im.fonte === 'caixa';
-  const id = (im.fonteId || im.fonte_id || '').replace(/^(caixa_|cef_)/, '');
-  if (isCef && id) return `https://venda-imoveis.caixa.gov.br/fotos/F${id}21.jpg`;
-  const f = im.foto || im.link_foto;
-  if (!f) return null;
-  return (f.includes('supabase.co') || f.startsWith('/')) ? f : `/api/img-proxy?url=${encodeURIComponent(f)}`;
-}
 
 // Tela inicial das Análises: lista de imóveis analisados (mercado + documental por
 // imóvel). Clicar num imóvel abre a análise específica dele (relatórios + agenda
@@ -148,16 +138,13 @@ export default function MinhasAnalises() {
           {itens.map(a => {
             const s = statusGeral(a);
             const chips = chipsDe(a);
-            const foto = fotoImovel(a.imovel);
             return (
               <div key={a.imovelId} onClick={() => abrir(a)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, cursor: 'pointer', transition: 'box-shadow .15s, border-color .15s' }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
                 <div style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {foto
-                    ? <img src={foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
-                    : <Building2 size={22} color="#cbd5e1" />}
+                  <FotoImovel imovel={a.imovel} iconSize={22} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Imóvel'}</div>

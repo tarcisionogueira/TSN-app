@@ -1,6 +1,6 @@
 export const config = { runtime: 'edge' };
 
-import { ALLOWED_HOSTS } from './_allowed-hosts.js';
+import { hostExternoSeguro } from './_allowed-hosts.js';
 
 export default async function handler(req) {
   const { searchParams } = new URL(req.url);
@@ -14,19 +14,22 @@ export default async function handler(req) {
   } catch {
     return new Response('Invalid url', { status: 400 });
   }
-  // Match exato — impede bypass via evil-venda-imoveis.caixa.gov.br
-  if (!ALLOWED_HOSTS.has(targetUrl.hostname)) {
-    return new Response('Domain not allowed', { status: 403 });
-  }
-  // Só HTTPS
+  // Só HTTPS.
   if (targetUrl.protocol !== 'https:') {
     return new Response('Only HTTPS allowed', { status: 403 });
   }
+  // Anti-SSRF: bloqueia rede interna/metadados de nuvem, mas LIBERA qualquer CDN público de
+  // leiloeiro. A allowlist EXATA (host por host) escondia quase todas as fotos — cada leiloeiro
+  // usa um subdomínio de CDN diferente (cdn1.megaleiloes, ms.sbwebservices.net, imagens.portalzuk,
+  // s3-sa-east-1, ged.pestanaleiloes, cdn-biasi.blueintra, …). O proxy só devolve IMAGEM (abaixo),
+  // então não vira open-proxy de conteúdo arbitrário.
+  if (!hostExternoSeguro(url)) {
+    return new Response('Domain not allowed', { status: 403 });
+  }
 
-  // OBS: para a Caixa (venda-imoveis.caixa.gov.br) este proxy NÃO resolve no e-mail — a
-  // Caixa recusa o IP da Vercel (edge e node) e devolve 404. As fotos da Caixa são
-  // hospedadas no nosso Storage pelo backfill (scripts/backfill-fotos-caixa.mjs); este
-  // proxy segue útil para os demais hosts da whitelist.
+  // OBS: para a Caixa (venda-imoveis.caixa.gov.br) este proxy NÃO resolve — a Caixa recusa o IP
+  // da Vercel e devolve 404. As fotos da Caixa vão para o nosso Storage pelo backfill; este proxy
+  // serve os demais hosts.
   try {
     const res = await fetch(url, {
       headers: {
@@ -39,7 +42,9 @@ export default async function handler(req) {
 
     if (!res.ok) return new Response('Image not found', { status: 404 });
 
-    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const contentType = res.headers.get('content-type') || '';
+    // SEGURANÇA: só repassa IMAGEM (impede usar o proxy p/ conteúdo arbitrário/HTML de negação).
+    if (!/^image\//i.test(contentType)) return new Response('Not an image', { status: 415 });
     const body = await res.arrayBuffer();
 
     return new Response(body, {

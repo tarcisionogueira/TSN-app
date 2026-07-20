@@ -905,13 +905,17 @@ export default function ImovelDetalhe() {
   // Venda direta da Caixa: o ARQUIVO de regras é o PDF padrão da Caixa (o link
   // azul "?" do portal). Preferimos ele — é o documento de fato, não a página.
   const caixaRegras = isVendaDireta ? caixaRegrasVendaUrl({ fonte: imovel.fonte }) : null;
-  const docRegras = isVendaDireta ? imovel.linkRegrasVenda : imovel.linkEdital;
+  const docRegrasRaw = isVendaDireta ? imovel.linkRegrasVenda : imovel.linkEdital;
+  // Se o "edital" resolveu para o MESMO arquivo da MATRÍCULA (CEF grava link_edital = matrícula
+  // em licitação/leilão), NÃO é um edital de verdade — descarta p/ o botão "Edital" não abrir a
+  // matrícula. Cai para a página do lote ("Acessar leiloeiro"), que é honesto.
+  const docRegras = (docRegrasRaw && matriculaUrl && docRegrasRaw === matriculaUrl) ? null : docRegrasRaw;
   const regrasEhDocReal = !!caixaRegras || ehRegrasDoc(docRegras, imovel.urlLote);
   const regrasEditalUrl = caixaRegras
     ? caixaRegras
     : regrasEhDocReal
       ? docRegras
-      : (ehUrl(docRegras) ? docRegras : (ehUrl(imovel.urlLote) ? imovel.urlLote : null));
+      : (ehUrl(docRegras) ? docRegras : (ehUrl(imovel.urlLote) && imovel.urlLote !== matriculaUrl ? imovel.urlLote : null));
   const regrasEditalLabel = regrasEhDocReal
     ? (isVendaDireta ? 'Regras de venda online' : 'Edital')
     : 'Acessar leiloeiro';

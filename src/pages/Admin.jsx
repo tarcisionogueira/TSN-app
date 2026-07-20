@@ -3564,20 +3564,44 @@ function ScrapersMonitor() {
   );
 }
 
+// Receita MENSAL-equivalente de um plano, a partir do planos_config. ÚNICA regra de
+// MRR do dashboard — antes o marcador do topo e o detalhe por plano divergiam: o
+// detalhe rotulava a Assessoria (pacote de R$6.000/12m) e o Leilão Club (R$60.000)
+// como "/mês" e somava o valor CHEIO, fazendo o MRR de UM plano (R$6.000) superar o
+// MRR TOTAL do topo (R$599,80). Aqui: pacote de prazo fixo (acesso_meses>1) =
+// preço/meses; recorrente barato (≤R$200) = o próprio preço; preço alto sem meses
+// (clube) = preço/12. Fallback no valor atual se o config ainda não carregou.
+function mrrMensalPlano(plano, fallback = 0) {
+  const preco = Number(plano?.preco);
+  if (!(preco > 0)) return fallback;
+  const meses = Number(plano?.acesso_meses) || 0;
+  if (meses > 1) return preco / meses;
+  if (preco <= 200) return preco;
+  return preco / 12;
+}
+
 function UsuariosPlanoDetalhe({ planoKey }) {
   const [usuarios, setUsuarios] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
   const planosCtx = usePlanos();
   const pNome = (key) => planosCtx?.[key]?.nome || key;
+  const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Mensal-equivalente por plano — mesma conta do marcador do topo (mrrMensalPlano).
+  const PRECO = {
+    explorador: 0,
+    top2: mrrMensalPlano(planosCtx?.top2, 49.90),
+    assessorado: mrrMensalPlano(planosCtx?.assessorado, 500),
+    clube: mrrMensalPlano(planosCtx?.clube, 5000),
+  };
+  // "eq." nos pacotes de prazo fixo (Assessoria/Club) deixa claro que é mensal-equivalente,
+  // não uma cobrança recorrente de fato — some a divergência com o valor cheio do pacote.
   const LABEL = {
     explorador: 'Explorador (Grátis)',
-    top2: `${pNome('top2')} (R$${planosCtx?.top2?.preco?.toFixed(2) || '49,90'}/mês)`,
-    assessorado: `${pNome('assessorado')} (R$${planosCtx?.assessorado?.preco?.toFixed(2) || '500'}/mês)`,
-    clube: `${pNome('clube')} (R$${planosCtx?.clube?.preco ? (planosCtx.clube.preco/1000).toFixed(0)+'k' : '5k'}/mês)`,
+    top2: `${pNome('top2')} (R$ ${fmt(PRECO.top2)}/mês)`,
+    assessorado: `${pNome('assessorado')} (R$ ${fmt(PRECO.assessorado)}/mês eq.)`,
+    clube: `${pNome('clube')} (R$ ${fmt(PRECO.clube)}/mês eq.)`,
   };
-  const PRECO = { explorador: 0, top2: planosCtx?.top2?.preco || 49.90, assessorado: planosCtx?.assessorado?.preco || 500, clube: planosCtx?.clube?.preco || 5000 };
-  const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   React.useEffect(() => {
     supabase.from('perfis')
@@ -4036,7 +4060,11 @@ function DashboardTab() {
       const contagem = { admin: 0, explorador: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0, outros: 0 };
       (perfis || []).forEach(p => { const r = String(p.role || '').replace(/_anual$/, ''); if (r in contagem) contagem[r]++; else contagem.outros++; });
 
-      const mrr = (contagem.top2 * 49.90) + (contagem.assessorado * 500) + (contagem.clube * 5000);
+      // MRR por preço REAL do planos_config (mrrMensalPlano — a MESMA conta do detalhe por
+      // plano, p/ não divergirem). Normaliza tudo p/ mensal-equivalente.
+      const mrr = (contagem.top2 * mrrMensalPlano(planosCtx?.top2, 49.90))
+        + (contagem.assessorado * mrrMensalPlano(planosCtx?.assessorado, 500))
+        + (contagem.clube * mrrMensalPlano(planosCtx?.clube, 5000));
       const taxaPix = mrr * 0.01;
       const liquido = mrr - taxaPix;
 

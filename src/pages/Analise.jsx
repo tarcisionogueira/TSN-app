@@ -1212,7 +1212,10 @@ export default function Analise() {
                   // dedicada). Não cai na página do lote — se não há arquivo, não mostra.
                   fileUrl = anexoUrl;
                 } else {
-                  fileUrl = anexoUrl || (ehArquivo(imovelInicial?.linkEdital) ? imovelInicial.linkEdital : null);
+                  // Guard: se link_edital é o MESMO arquivo da matrícula (CEF grava assim em
+                  // licitação/leilão), NÃO é edital — descarta p/ o botão não abrir a matrícula.
+                  const editalArq = (ehArquivo(imovelInicial?.linkEdital) && imovelInicial.linkEdital !== matriculaCef) ? imovelInicial.linkEdital : null;
+                  fileUrl = anexoUrl || editalArq;
                 }
                 // Edital/regra/matrícula sempre com destino: arquivo, senão a página do leiloeiro.
                 const url = fileUrl || paginaLeiloeiro;
@@ -2456,15 +2459,21 @@ export default function Analise() {
               {/* Datas do relatório: quando foi gerado e quando expira (removido se não arrematado) */}
               {(() => {
                 const ent = analiseEntry;
-                const fmtD = (ms) => ms ? new Date(ms).toLocaleDateString('pt-BR') : '—';
+                const fmtD = (ms) => ms ? new Date(ms).toLocaleDateString('pt-BR') : null;
                 const dl = ent?.dataLeilao || imovelInicial?.dataLeilao || d.dataLeilao;
                 const dlMs = dl && !isNaN(Date.parse(dl)) ? Date.parse(dl) : null;
+                // Gerado: usa updatedAt do relatório; se faltar (ex.: cache antigo), cai no
+                // pesquisaEm do próprio resultado (sempre presente) e por fim no startedAt.
+                const geradoMs = ent?.updatedAt
+                  || (mercado?.pesquisaEm && !isNaN(Date.parse(mercado.pesquisaEm)) ? Date.parse(mercado.pesquisaEm) : null)
+                  || ent?.startedAt || null;
+                const baseCriacao = ent?.startedAt || geradoMs;
                 // Regra do cron: 15 dias após o leilão (se há data) OU 60 dias após a criação.
-                const expMs = dlMs ? dlMs + 15 * 864e5 : (ent?.startedAt ? ent.startedAt + 60 * 864e5 : null);
-                const geradoMs = ent?.updatedAt || null;
+                const expMs = dlMs ? dlMs + 15 * 864e5 : (baseCriacao ? baseCriacao + 60 * 864e5 : null);
+                if (!geradoMs && !expMs) return null; // sem nada a mostrar (não deixa "—" vazio)
                 return (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'center', fontSize:11.5, color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'8px 14px' }}>
-                    <span>🗓️ Gerado em <strong style={{ color:'#334155' }}>{fmtD(geradoMs)}</strong></span>
+                    {geradoMs && <span>🗓️ Gerado em <strong style={{ color:'#334155' }}>{fmtD(geradoMs)}</strong></span>}
                     {expMs && <span>· ⏳ Expira em <strong style={{ color:'#334155' }}>{fmtD(expMs)}</strong> <span style={{ color:'#94a3b8' }}>({dlMs ? '15 dias após o leilão' : '60 dias'}, se não arrematado)</span></span>}
                   </div>
                 );
