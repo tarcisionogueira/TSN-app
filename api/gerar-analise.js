@@ -646,7 +646,16 @@ export default async function handler(req, res) {
     try {
       [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,valor_minimo,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
-      avalDb = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n) ? 0 : n;
+      const vminDb = Number(imDb?.valor_minimo) || 0;
+      const sentinela = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n);
+      // TRAVA DE CREDIBILIDADE: avaliação que implica desconto >= 88% (aval > 8,3x o mínimo) é
+      // quase sempre mis-read do edital ou valor "grudado" de outro lote pelo scraper. NÃO pode
+      // virar um "95% OFF" falso no relatório do cliente → trata como ausente (mostra "a
+      // confirmar" em vez de mentir). O card/busca é protegido pela limpeza de dados + monitor.
+      const implausivel = n > 0 && vminDb > 0 && (1 - vminDb / n) >= 0.88;
+      avalDb = (sentinela || implausivel) ? 0 : n;
+      if (implausivel) { try { await registrarAnomalia('avaliacao_implausivel', imDb?.fonte || '', imovelId, 'valor_avaliacao',
+        `Avaliação R$${Math.round(n)} vs mínimo R$${Math.round(vminDb)} = desconto ~${Math.round((1 - vminDb / n) * 100)}% — implausível/grudada; ignorada no relatório.`); } catch { /* log best-effort */ } }
       fonteDb = imDb?.fonte || '';
       const aDoc = Number(imDb?.ficha_juridica?.areaPrivativaM2) || 0;
       if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
