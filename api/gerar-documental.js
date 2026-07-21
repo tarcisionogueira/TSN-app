@@ -373,7 +373,7 @@ RAIO-X JURÍDICO (preencha o objeto "raioX" a partir da matrícula, do edital e 
 
 Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM ABAIXO — "extracao", "parecer" e "riscos" são os mais importantes e vêm PRIMEIRO; o "raioX" (enriquecimento) vem por último. Seja objetivo para o JSON caber na resposta:
 {
-  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
+  "extracao": { "numeroMatricula": "", "cartorio": "(nome do Cartório/Serventia de Registro de Imóveis onde a matrícula está registrada — inclua o Ofício, ex.: '2º Ofício de Registro de Imóveis'; extraia do CABEÇALHO da matrícula, se constar)", "comarca": "(comarca/município do registro de imóveis, do cabeçalho da matrícula, se constar)", "areaPrivativaM2": 0, "areaTotalM2": 0, "areaTerrenoM2": 0, "numeroEdital": "", "numeroProcesso": "(número do processo judicial no padrão CNJ, se constar no EDITAL ou na matrícula/averbações — extraia do texto; senão vazio)", "executadoNome": "(nome do executado/devedor/ex-mutuário/proprietário atual — varra a matrícula e o edital; preencha sempre que houver)", "executadoDoc": "(CPF ou CNPJ do executado/devedor/ex-mutuário/proprietário, SÓ dígitos — extraia da qualificação nos registros da matrícula; preencha sempre que houver qualquer um legível)", "dataConsolidacao": "(AAAA-MM-DD da consolidação da propriedade pelo credor fiduciário, se constar; senão vazio)", "indisponibilidadePenhora": "sim|nao|nao_consta", "condominioNome": "", "condominioCnpj": "", "enderecoImovel": "(logradouro e NÚMERO do imóvel objeto da matrícula, ex.: 'Rua das Flores, 123' ou 'Avenida Brasil, 456, apto 72'; a matrícula SEMPRE descreve o imóvel com o endereço completo — extraia da descrição do imóvel; inclua o número quando constar; se não houver número, traga o logradouro; NÃO invente)", "bairroImovel": "(bairro do imóvel, se constar)", "municipioImovel": "(município/CIDADE onde o IMÓVEL está localizado, conforme a DESCRIÇÃO DO IMÓVEL na matrícula — é a cidade do imóvel, NÃO a comarca do registro nem o endereço de qualquer pessoa; extraia com atenção; senão vazio)", "ufImovel": "(UF do imóvel, 2 letras maiúsculas, se constar)", "cepImovel": "(CEP do imóvel, só dígitos, se constar)", "origem": "judicial|extrajudicial", "dataLeilao": "AAAA-MM-DD (data do leilão/praça OU prazo final das propostas na licitação/venda — o que constar no edital; senão vazio)", "ocupacao": "", "responsavelDesocupacao": "", "debitosDiscriminados": [{"tipo":"","valor":0,"responsavel":"","constaNaDoc":true}], "responsabilidadeDebitos": "", "formaPagamento": "", "comissaoLeiloeiro": "", "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0 },
   "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. LINGUAGEM PARA LEIGO (obrigatório): escreva para QUALQUER pessoa sem formação jurídica entender; frases curtas e, sempre que usar um termo técnico inevitável (ex.: propter rem, usufruto, penhora, hipoteca, alienação fiduciária, imissão de posse, indisponibilidade), explique em 3 a 6 palavras entre parênteses o que significa. FORMATO CHECKLIST (obrigatório — o relatório é a RESPOSTA do checklist jurídico de arrematação, item a item, NÃO um texto corrido): em cada seção, responda CADA item do checklist iniciando a linha com o RÓTULO do item seguido de dois-pontos e a resposta objetiva, e DISCORRA em 1 a 3 frases o que aquilo significa e o impacto para o arrematante. Se o dado não constar nos documentos, responda 'não consta na documentação analisada' e diga ONDE confirmar (nunca invente). Use EXATAMENTE estas seções e rótulos: § SEÇÃO: 1. IDENTIFICAÇÃO BÁSICA (Nº do Processo: ...; Vara/Tribunal: ...; Partes (Exequente vs. Executado): ...; Nº da Matrícula: ...; Nº do Edital: ...); § SEÇÃO: 2. ANÁLISE DAS REGRAS (EDITAL) (Forma de Pagamento: à vista/parcelado, prazos e condições; Comissão do Leiloeiro: percentual e prazo; Estado de Ocupação (declarado no edital): ...; Venda Ad Corpus: sim/não e o que significa; Responsabilidade por Débitos: arrematante assume os propter rem OU são sub-rogados no preço, citando o texto do edital); § SEÇÃO: 3. ANÁLISE DA PROPRIEDADE (MATRÍCULA) (Titularidade: o executado é o proprietário atual da matrícula?; Penhoras Concorrentes: outras penhoras (trabalhista/fiscal) com preferência de crédito?; Hipotecas/Alienação Fiduciária: há credor fiduciário/hipotecário e ele foi intimado?; Gravames Sérios: indisponibilidade, inalienabilidade, usufruto, locação com cláusula de vigência?; Descrição do Imóvel: área/vagas conferem com laudo e edital?); § SEÇÃO: 4. ANÁLISE PROCESSUAL (RISCO DE ANULAÇÃO)${temProc ? ' (com base no CNJ consultado)' : ''} (Citação do Executado: válida?; Intimação sobre o Leilão: o executado foi intimado?; Intimação do Cônjuge: quando o regime de bens exigir; Recursos Pendentes: embargos/agravo/ação anulatória que afetem o leilão?; Efeito Suspensivo: há decisão suspendendo o leilão?; Atualização da Avaliação: risco de 'preço vil'?; Preço Mínimo: a 2ª praça respeita o mínimo legal, art. 891 CPC?; em leilão extrajudicial da Lei 9.514, informe se há AÇÃO do ex-mutuário contra o credor); § SEÇÃO: 5. ANÁLISE DE CUSTOS E RESPONSABILIDADES (Débitos de IPTU e Condomínio: valor e de quem é a responsabilidade após a arrematação; Hierarquia de Pagamento: em sub-rogação, o valor cobre o credor principal E os propter rem?; Custos e Prazo de Desocupação: se ocupado, estimativa de tempo/custo da imissão na posse); § SEÇÃO: 6. PARECER FINAL DO JURÍDICO (Pontos de Atenção (Red Flags): vícios que podem gerar nulidade; Nível de Risco da Operação: Baixo/Médio/Alto; Ações Pós-Arremate Requeridas: ex. baixa de penhoras, mandado de imissão na posse; Recomendação: RECOMENDO a arrematação / RECOMENDO com ressalvas / NÃO RECOMENDO, com a justificativa objetiva). As certidões recomendadas vão no campo 'raioX.certidoesRecomendadas' (renderizadas ao final do relatório), não repita a lista dentro do parecer.",
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "nivelRisco": "verde|amarelo|vermelho",
@@ -1129,28 +1129,38 @@ export default async function handler(req, res) {
       const ex = parsed.extracao || {};
       const via = String(ex.enderecoImovel || '').replace(/\s+/g, ' ').trim();
       const temVia = via.length > 5 && /(rua|r\.|av|avenida|travessa|tv\.|alameda|al\.|estrada|estr\.|rodovia|rod\.|pra[çc]a|largo|quadra|lote|via|rma)\b/i.test(via);
-      const atualSemNum = !(String(row?.endereco || '').match(/\d/));
-      if (temVia && atualSemNum) {
-        const [imGeo] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep&limit=1`)).json();
-        if (imGeo) {
-          const bairro = String(ex.bairroImovel || imGeo.bairro || '').trim();
-          const cep = (String(ex.cepImovel || '').replace(/\D/g, '').slice(0, 8)) || imGeo.cep || null;
-          // Grava já o endereço (mesmo sem recoordenar): enriquece o registro e permite
-          // o /geocodificar-imovel refinar depois se aqui faltar tempo.
-          const patch = { endereco: via, ...(bairro && !imGeo.bairro ? { bairro } : {}), ...(cep && !imGeo.cep ? { cep } : {}) };
-          const nivelAtual = imGeo.geocod_nivel || (imGeo.latitude ? 'cidade' : null);
-          // Geocodifica AQUI só se sobrar tempo com folga (senão o on-demand faz depois).
-          if (Date.now() < hardDeadline - 14000 && rankNivel(nivelAtual) < rankNivel('endereco')) {
-            let coords = null;
-            try { coords = await geocodificarCascata({ ...imGeo, endereco: via, bairro, cep }, { sleepMs: 0, deadline: Date.now() + 10000 }); } catch { /* */ }
-            if (coords && coordValida(coords.lat, coords.lng, imGeo.estado, imGeo.cidade) && rankNivel(coords.nivel) > rankNivel(nivelAtual)) {
-              Object.assign(patch, { latitude: coords.lat, longitude: coords.lng, geocod_nivel: coords.nivel, pontos_proximos: null, proximidades_em: null });
-            }
-          }
-          await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
-            method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch),
-          });
+      const muniMat = String(ex.municipioImovel || '').replace(/\s+/g, ' ').trim();
+      const ufMat = String(ex.ufImovel || '').trim().toUpperCase();
+      const normC = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const [imGeo] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep&limit=1`)).json();
+      // A matrícula é a FONTE DE VERDADE do endereço. Corrige a CIDADE quando o município do
+      // IMÓVEL (da descrição da matrícula) diverge do gravado — na inclusão/atribuição manual, o
+      // endereço do COMPRADOR (comprovante) às vezes era digitado no lugar do imóvel, gerando
+      // pesquisa de mercado na cidade ERRADA. Também deixa o endereço da matrícula sobrescrever um
+      // endereço numerado quando a cidade diverge (senão o guarda antigo travava a correção).
+      const cidadeDivergente = !!imGeo && muniMat.length >= 3 && /^[A-Z]{2}$/.test(ufMat) && normC(muniMat) !== normC(imGeo.cidade);
+      const atualSemNum = !(String(imGeo?.endereco || '').match(/\d/));
+      if (imGeo && temVia && (atualSemNum || cidadeDivergente)) {
+        const bairro = String(ex.bairroImovel || (cidadeDivergente ? '' : imGeo.bairro) || '').trim();
+        const cep = (String(ex.cepImovel || '').replace(/\D/g, '').slice(0, 8)) || (cidadeDivergente ? null : imGeo.cep) || null;
+        const patch = { endereco: via, ...(bairro ? { bairro } : {}), ...(cep ? { cep } : {}) };
+        if (cidadeDivergente) {
+          patch.cidade = muniMat; patch.estado = ufMat;
+          // cidade mudou → zera geocode/proximidades (estavam na cidade errada); re-geocodifica.
+          Object.assign(patch, { latitude: null, longitude: null, geocod_nivel: null, pontos_proximos: null, proximidades_em: null });
+          console.log(`[documental] CIDADE corrigida pela matrícula → imóvel ${imovelId}: "${imGeo.cidade}/${imGeo.estado}" → "${muniMat}/${ufMat}" (regenerar o mercadológico: a pesquisa anterior usou a cidade errada)`);
         }
+        const nivelAtual = cidadeDivergente ? null : (imGeo.geocod_nivel || (imGeo.latitude ? 'cidade' : null));
+        if (Date.now() < hardDeadline - 14000 && rankNivel(nivelAtual) < rankNivel('endereco')) {
+          let coords = null;
+          try { coords = await geocodificarCascata({ ...imGeo, ...patch, endereco: via, bairro, cep }, { sleepMs: 0, deadline: Date.now() + 10000 }); } catch { /* */ }
+          if (coords && coordValida(coords.lat, coords.lng, patch.estado || imGeo.estado, patch.cidade || imGeo.cidade) && rankNivel(coords.nivel) > rankNivel(nivelAtual)) {
+            Object.assign(patch, { latitude: coords.lat, longitude: coords.lng, geocod_nivel: coords.nivel, pontos_proximos: null, proximidades_em: null });
+          }
+        }
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch),
+        });
       }
     } catch { /* geo pela matrícula é best-effort */ }
 
