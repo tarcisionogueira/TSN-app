@@ -119,6 +119,25 @@ async function handler(req) {
   const t0 = Date.now();
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
+  // ── AUTO-AJUSTE + RESILIÊNCIA (o DJEN cai com frequência) ──────────────────────────────
+  // O cron roda a cada 4h, mas SÓ trabalha até obter um pull BEM-SUCEDIDO do DJEN no dia. Se o
+  // DJEN estiver fora do ar, o run grava o erro e o PRÓXIMO (4h depois) TENTA de novo, até
+  // conseguir; após um sucesso no dia, os runs seguintes SAEM CEDO (quase de graça) → economia
+  // + garantia de captura. "Sucesso" = o DJEN respondeu sem erro (mesmo com 0 editais no dia).
+  // Bypass manual com ?forcar=1.
+  const forcar = /[?&]forcar=1/.test(req.url || '');
+  if (!forcar) {
+    try {
+      const { data: ok } = await supabase.from('monitor_runs')
+        .select('id').eq('fonte', 'radar-editais-djen').is('erro', null)
+        .gte('ran_at', ymd(new Date()) + 'T00:00:00Z').limit(1);
+      if (ok && ok.length) {
+        return new Response(JSON.stringify({ ok: true, skip: 'pull do DJEN já obtido hoje' }),
+          { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch { /* se a checagem falhar, roda normalmente */ }
+  }
+
   // Janela deslizante de 3 dias (pega itens carregados com atraso; dedup resolve repetição).
   const hoje = new Date();
   const ini = ymd(new Date(hoje.getTime() - 3 * 86400000));

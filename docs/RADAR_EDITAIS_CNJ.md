@@ -13,7 +13,7 @@
 **Complemento SP (se preciso) — DEJESP/e-SAJ:** o TJSP lançou o DEJESP (23/07/2025); parte dos editais de SP pode sair no diário estadual e não no DJEN. **Validar empiricamente 2–4 semanas** (DJEN × e-SAJ "Consulta de Editais"); se houver lacuna, add scraper leve do e-SAJ. **Fallback pago** (só se o público limitar): Escavador/Digesto (monitoramento por palavra + callbacks, barato).
 
 ## 🔧 Plano de monitoramento (Supabase + Vercel cron)
-- **Cron 2×/dia útil** (~11h e ~17h BRT), janela deslizante de 3 dias (pega itens carregados com atraso; dedup resolve repetição).
+- **Cron a cada 4h com auto-ajuste**: roda 6×/dia, mas só TRABALHA até obter um pull bem-sucedido do DJEN no dia (checa `monitor_runs`: se já houve run sem erro hoje, sai cedo ~de graça). Se o DJEN cair — o que é comum — o run grava o erro e o PRÓXIMO (4h depois) tenta de novo, até conseguir. Janela deslizante de 3 dias (pega itens carregados com atraso; dedup resolve repetição). Bypass manual: `?forcar=1`.
 - 1 request por `tribunal × termo` (TJSP/TRT15 × termos de leilão), paginando até esgotar `count`. Filtra por `tipoDocumento=Edital` + regex no corpo (corta falso-positivo). UA de browser + backoff.
 - **Dedup:** `djen_id` (UNIQUE) + hash defensivo `(tribunal+processo+tipoDoc+data+sha1(texto))`; nível-evento `(processo + data_praca_1 + leiloeiro_norm)` p/ não reprocessar reagendamento.
 - **Parse:** regex-âncora ("Leiloeiro Oficial", "JUCESP", "matrícula nº", "1ª praça", "lance mínimo") + IA nos difíceis; normaliza o leiloeiro e valida contra o cadastro TJSP (Auxiliares da Justiça).

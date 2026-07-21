@@ -8687,7 +8687,8 @@ function RadarEditaisTab() {
       {loading ? <div style={{ color:'#64748b' }}>Carregando…</div> :
        editais.length === 0 ? (
         <div style={{ background:'#f8fafc', border:'1px dashed #cbd5e1', borderRadius:12, padding:24, textAlign:'center', color:'#64748b', fontSize:13 }}>
-          Nenhum edital ainda. O cron <code>radar-editais-cron</code> (2×/dia) popula a partir do DJEN.
+          Nenhum edital ainda. O cron <code>radar-editais-cron</code> roda a cada 4h, mas só trabalha
+          até obter um pull bem-sucedido do DJEN no dia (se o DJEN cair, tenta de novo automaticamente).
           <br/>Validar o 1º run em produção (o proxy de dev bloqueia <code>pje.jus.br</code>).
         </div>
        ) : (

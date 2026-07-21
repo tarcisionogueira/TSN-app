@@ -2,7 +2,7 @@ name: Matrícula CEF — captura automática
 
 on:
   schedule:
-    - cron: '*/10 * * * *'   # a cada 10 min processa a fila pendente
+    - cron: '*/30 * * * *'   # a cada 30 min drena a fila pendente (fila ~0 no normal — economia)
   workflow_dispatch:
 
 concurrency:
