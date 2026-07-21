@@ -352,6 +352,29 @@ export default function Analise() {
   // Abre uma seção e rola até ela (usado pela barra lateral)
   const irPara = (k, id) => { setOpenSec(p => ({ ...p, [k]: true })); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); };
 
+  // Abre o COMPROVANTE de certidão renderizado (não em código): busca o HTML e reabre num Blob
+  // FORÇANDO text/html — a URL do Storage às vezes exibe o comprovante como CÓDIGO-FONTE em vez de
+  // renderizar a página. Injeta charset e, quando dá p/ detectar, um <base> no domínio do órgão
+  // (p/ o CSS/JS relativo carregar). Reserva a aba no clique; se falhar, cai na URL original.
+  const verComprovante = useCallback(async (e, url) => {
+    e.preventDefault();
+    const w = window.open('', '_blank');
+    try {
+      const res = await fetch(url);
+      let html = await res.text();
+      if (!/<base\b/i.test(html)) {
+        const orig = (html.match(/https?:\/\/[a-z0-9.-]+\.(?:jus|gov|org|com)\.br/i) || [])[0];
+        const inj = `<meta charset="utf-8">${orig ? `<base href="${orig}/">` : ''}`;
+        html = /<head[^>]*>/i.test(html) ? html.replace(/<head([^>]*)>/i, `<head$1>${inj}`) : `<!doctype html><head>${inj}</head>${html}`;
+      }
+      const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+      if (w) w.location.href = blobUrl; else window.open(blobUrl, '_blank', 'noopener');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch {
+      if (w) w.location.href = url; else window.open(url, '_blank', 'noopener');
+    }
+  }, []);
+
   // Abre um anexo do nosso Storage RE-ASSINANDO na hora: as signed URLs do bucket `documentos`
   // EXPIRAM, então a URL gravada em imovel_anexos dá erro ("invalid signature") depois de um tempo.
   // Reserva a aba já no clique (evita bloqueio de popup) e navega quando a URL fresca chega do
@@ -1685,7 +1708,7 @@ export default function Analise() {
                             </div>
                             <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.5 }}>{c.detalhe}</div>
                             {c.comprovante && (
-                              <a href={c.comprovante} target="_blank" rel="noopener noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:3, fontSize:11, fontWeight:700, color:'#1e3a8a', textDecoration:'none' }}>📄 Ver comprovante da consulta</a>
+                              <a href={c.comprovante} target="_blank" rel="noopener noreferrer" onClick={(e) => verComprovante(e, c.comprovante)} style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:3, fontSize:11, fontWeight:700, color:'#1e3a8a', textDecoration:'none' }}>📄 Ver comprovante da consulta</a>
                             )}
                           </div>
                         </div>
