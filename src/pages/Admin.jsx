@@ -755,9 +755,9 @@ function UsuariosTab() {
       // atribuído exigem). Roteamento: abrir a análise deste arremate (chave = IMÓVEL-
       // ÂNCORA) para gerar os 3 relatórios EM NOME DO cliente — o material real
       // alimenta o aprendizado da IA.
-      if ((imovelId || casoId) && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nAbrir a análise deste arremate (como o cliente) para gerar os relatórios?')) {
+      if ((imovelId || casoId) && window.confirm('Arremate atribuído e usuário promovido a Assessorado.\n\nAbrir a análise e GERAR OS 3 RELATÓRIOS automaticamente (mercadológico → documental → laudo), lendo os anexos?')) {
         iniciarSuporte({ id: alvoId, nome: alvoNome, role: 'assessorado' });
-        navSup('/analise', { state: { manual: true, paraUserId: alvoId, imovel: { id: imovelId || casoId, endereco: end, cidade: cid, estado: est, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
+        navSup('/analise', { state: { manual: true, autoGerar: true, paraUserId: alvoId, imovel: { id: imovelId || casoId, endereco: end, cidade: cid, estado: est, valorMinimo: valorNum, modalidade: /judicial/i.test(tipo) ? 'judicial' : 'extrajudicial' } } });
       }
     } catch (e) {
       alert('Erro ao atribuir arremate: ' + (e.message || e));
