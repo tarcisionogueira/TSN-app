@@ -5,6 +5,7 @@
 // oculto → diálogo do navegador → "Salvar como PDF"), sem depender de pop-up.
 
 import { imprimirHtml } from './pdfImprimir';
+import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -30,12 +31,12 @@ export const ESTILOS_DOCUMENTAL = `
   ul{margin:4px 0 0;padding-left:18px;} li{font-size:11.5px;color:#1e293b;line-height:1.65;margin-bottom:3px;}
   .sec{margin-bottom:10px;}
   .foot{margin-top:22px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:9.5px;color:#94a3b8;line-height:1.55;}
-`;
+` + ESTILOS_CABECALHO;
 
 // Corpo (conteúdo do <body>) da análise documental — exportado para o PDF
 // combinado. O gerador individual (gerarDocumentalPDF) empacota isto num
 // documento completo e imprime.
-export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb = null }) {
+export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb = null, cab = {} }) {
   const risco = P.nivelRisco || 'amarelo';
   const R = {
     verde:    { txt: 'RISCO BAIXO',   cor: '#065f46', bg: '#d1fae5', bd: '#10b981' },
@@ -82,7 +83,8 @@ export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb 
     return `<div style="display:flex;gap:9px;align-items:flex-start;margin-bottom:7px;">
       <span style="color:${cor};font-weight:900;width:12px;flex-shrink:0;">${ic}</span>
       <div><div style="font-size:11.5px;font-weight:700;color:#111;">${esc(c.label)}</div>
-      <div style="font-size:11px;color:#64748b;line-height:1.5;">${esc(c.detalhe)}</div></div>
+      <div style="font-size:11px;color:#64748b;line-height:1.5;">${esc(c.detalhe)}</div>
+      ${c.comprovante ? `<div style="font-size:10px;margin-top:2px;">📄 <a href="${esc(c.comprovante)}" style="color:#1e3a8a;">Ver comprovante da consulta</a></div>` : ''}</div>
     </div>`;
   }).join('')}
 </div>` : '';
@@ -145,19 +147,17 @@ export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb 
   const geradoEm = (() => { try { return new Date(P.geradoEm || Date.now()).toLocaleDateString('pt-BR'); } catch { return new Date().toLocaleDateString('pt-BR'); } })();
 
   return `
-<div class="hdr av">
-  <div>
-    <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">BidPro Brasil</div>
-    <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Aquisição em Leilão &amp; Investimentos Estratégicos</div>
-    <div style="font-size:13px;font-weight:900;margin-bottom:3px;">ANÁLISE DOCUMENTAL E JURÍDICA</div>
-    <div style="font-size:11px;color:#475569;">${esc((d.tipo || '').toUpperCase())}${d.endereco ? ', ' + esc(d.endereco) : ''}${local ? ' · ' + esc(local) : ''}</div>
-  </div>
-  <div style="text-align:right;flex-shrink:0;">
-    <div style="font-size:10px;font-weight:700;margin-bottom:3px;">Data: ${geradoEm}</div>
-    <div style="font-size:9px;color:#64748b;">Documento 2 de 3</div>
-    <div style="font-size:9px;color:#64748b;">Leitura de documentos + processo</div>
-  </div>
-</div>
+${cabecalhoBidPro({
+  titulo: 'Análise Documental e Jurídica',
+  subtitulo: 'Leitura de documentos + processo',
+  docSeq: 'Documento 2 de 3',
+  imovel: d,
+  matricula: cab.matricula || (P.extracao && P.extracao.numeroMatricula) || '',
+  executado: cab.executado || (P.extracao && P.extracao.executadoNome) || '',
+  processo: cab.processo || (P.extracao && P.extracao.numeroProcesso) || '',
+  solicitante: cab.solicitante || {},
+  geradoEm: P.geradoEm,
+})}
 
 <div class="av" style="border:2px solid ${R.bd};background:${R.bg};border-radius:8px;padding:12px 16px;text-align:center;margin-bottom:14px;">
   <div style="font-size:15px;font-weight:900;color:${R.cor};">${R.txt}</div>

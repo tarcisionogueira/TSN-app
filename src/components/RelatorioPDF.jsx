@@ -1,5 +1,6 @@
 import { fmt, fmtPct } from '../utils/calculos';
 import { imprimirHtml } from './pdfImprimir';
+import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
 
 // CSS do documento (exportado para o PDF combinado reaproveitar). O `.bl` aqui é
 // "texto azul" (helper de tabela); o parecer final usa `.blk` para blocos, para
@@ -26,11 +27,11 @@ export const ESTILOS_MERCADOLOGICO = `
   .card{background:#f8fafc;border-radius:5px;padding:8px 10px;text-align:center;}
   .card-v{font-size:16px;font-weight:900;margin-top:2px;}
   .card-l{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;}
-`;
+` + ESTILOS_CABECALHO;
 
 // Corpo (conteúdo do <body>) do relatório mercadológico — exportado para o PDF
 // combinado. O gerador individual (gerarPDF) empacota isto num documento completo.
-export function corpoMercadologico({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores: ind }) {
+export function corpoMercadologico({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores: ind, cab = {} }) {
   const parseSecoes = (txt) => {
     if (!txt) return {};
     const res = {};
@@ -63,22 +64,17 @@ export function corpoMercadologico({ d, metricas: m, metricasTeto: mt, teto, isA
   const valorVendaPretendido = Number(m?.valorRef) || 0;
 
   return `
-<div class="hdr av">
-  <div>
-    <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">BidPro Brasil</div>
-    <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Aquisição em Leilão & Investimentos Estratégicos</div>
-    <div style="font-size:13px;font-weight:900;margin-bottom:3px;">ANÁLISE DE VIABILIDADE DE ARREMATAÇÃO</div>
-    <div style="font-size:10px;color:#475569;">${(d.tipo||'').toUpperCase()}, ${d.endereco||''} ${d.cidade?'· '+d.cidade:''} ${d.estado?'/'+d.estado:''}</div>
-    ${d.leiloeiro?`<div style="font-size:9px;color:#64748b;margin-top:3px;">Leiloeiro: ${d.leiloeiro}${d.dataLeilao?' · '+d.dataLeilao:''}</div>`:''}
-  </div>
-  <div style="text-align:right;flex-shrink:0;">
-    <div style="font-size:10px;font-weight:700;margin-bottom:3px;">Data: ${new Date().toLocaleDateString('pt-BR')}</div>
-    <div style="font-size:9px;color:#64748b;">Cenário: ${isAVista?'À VISTA':'ALAVANCADO (SAC/PRICE)'}</div>
-    <div style="font-size:9px;color:#64748b;">Objetivo: ${isUsoProprio?'USO PRÓPRIO':'INVESTIMENTO'}</div>
-    <div style="font-size:9px;color:#64748b;">Área: ${d.areaM2||0}m² (priv.) / ${d.areaTerrenoM2||0}m² (terreno)</div>
-    <div style="font-size:9px;color:#64748b;margin-top:3px;">Honorários Jurídicos: 10%</div>
-  </div>
-</div>
+${cabecalhoBidPro({
+  titulo: 'Análise de Viabilidade de Arrematação',
+  subtitulo: `Cenário: ${isAVista ? 'À vista' : 'Alavancado (SAC/PRICE)'} · ${isUsoProprio ? 'Uso próprio' : 'Investimento'}`,
+  docSeq: 'Documento 1 de 3',
+  imovel: d,
+  matricula: cab.matricula || '',
+  executado: cab.executado || '',
+  processo: cab.processo || '',
+  solicitante: cab.solicitante || {},
+  geradoEm: cab.geradoEm,
+})}
 
 ${(() => {
   // QUADRO-RESUMO — leitura rápida no topo (imóvel, lances das praças, valor
