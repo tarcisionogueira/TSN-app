@@ -53,26 +53,31 @@ const MAX_IDADE_H = 108;
 // cobertura mínima aceitável (%) dos campos que ESSA fonte entrega de forma confiável
 // (folga de ~15pts sobre o baseline medido); campo fora do mapa NÃO é esperado (não alerta).
 // Chaves de campo = colunas de public.fonte_cobertura(): foto/valor/area/data/matricula/edital/avaliacao.
+// Pisos RECALIBRADOS contra a métrica REAL de edital/matrícula (fonte_cobertura agora mede
+// o DOCUMENTO de verdade, não "coluna não nula"). Threshold ~15pts abaixo da cobertura real
+// (0 falso-positivo). `edital` foi REMOVIDO das fontes com lacuna genuína de origem/WIP —
+// SUPERBID (captura em validação), SOLD/SBID9/VENDASGOV (source/login-gated), PECINI (Bright
+// Data) — para não naguear sobre gap conhecido. Re-adicionar quando a captura estabilizar.
 const BASELINE_FONTES = {
-  CEF:        { min: 20000, campos: { foto: 85, valor: 95, area: 90, matricula: 90, avaliacao: 90 } },
-  SUPERBID:   { min: 900,   campos: { foto: 85, valor: 95, data: 90, edital: 90 } },
-  LJUD:       { min: 600,   campos: { valor: 95, data: 90, matricula: 80, edital: 90 } },
-  ZUK:        { min: 420,   campos: { foto: 90, valor: 95, data: 70, edital: 90, avaliacao: 90 } },
-  MEGA:       { min: 400,   campos: { foto: 90, valor: 95, area: 80, data: 90, matricula: 90, edital: 90, avaliacao: 90 } },
-  GRUPOLANCE: { min: 250,   campos: { foto: 90, valor: 95, area: 75, matricula: 80, edital: 90 } },
-  PESTANA:    { min: 120,   campos: { foto: 80, valor: 95, area: 75, data: 90, matricula: 75, edital: 90 } },
-  BIASI:      { min: 150,   campos: { foto: 90, valor: 95, matricula: 85, edital: 90 } },
-  FRAZAO:     { min: 90,    campos: { foto: 90, valor: 95, data: 90, matricula: 90, edital: 90 } },
-  WEBLEILOES: { min: 60,    campos: { foto: 90, valor: 95, area: 80, matricula: 80, edital: 90 } },
-  LEILOTECH:  { min: 60,    campos: { valor: 95, data: 90, matricula: 70, edital: 90, avaliacao: 80 } },
-  SOLD:       { min: 55,    campos: { foto: 90, valor: 95, area: 75, data: 90, edital: 90 } },
-  VIP:        { min: 40,    campos: { foto: 90, valor: 95, matricula: 80, edital: 90 } },
-  SBID9:      { min: 20,    campos: { foto: 90, valor: 95, data: 90, edital: 90 } },
-  LEILOFY:    { min: 15,    campos: { foto: 90, valor: 95, data: 90, matricula: 90, edital: 90 } },
-  SODRE:      { min: 15,    campos: { foto: 90, valor: 95, area: 85, data: 90, matricula: 85, edital: 90 } },
-  PECINI:     { min: 15,    campos: { foto: 90, valor: 95, edital: 90, avaliacao: 90 } },
-  RJLEILOES:  { min: 8,     campos: { foto: 90, valor: 95, data: 90, matricula: 80, edital: 90, avaliacao: 90 } },
-  VENDASGOV:  { min: 2,     campos: { foto: 90, valor: 95, edital: 90 } },
+  CEF:        { min: 20000, campos: { foto: 85, valor: 95, area: 90, matricula: 55, avaliacao: 90 } },
+  SUPERBID:   { min: 900,   campos: { foto: 85, valor: 95, data: 90 } },
+  LJUD:       { min: 600,   campos: { valor: 95, data: 90, matricula: 78, edital: 70 } },
+  ZUK:        { min: 420,   campos: { foto: 90, valor: 95, data: 70, edital: 85, avaliacao: 90 } },
+  MEGA:       { min: 400,   campos: { foto: 90, valor: 95, area: 80, data: 90, matricula: 85, edital: 85, avaliacao: 90 } },
+  GRUPOLANCE: { min: 250,   campos: { foto: 90, valor: 95, area: 75, matricula: 78, edital: 85 } },
+  PESTANA:    { min: 120,   campos: { foto: 80, valor: 95, area: 75, data: 90, matricula: 78, edital: 85 } },
+  BIASI:      { min: 150,   campos: { foto: 90, valor: 95, matricula: 83, edital: 85 } },
+  FRAZAO:     { min: 90,    campos: { foto: 90, valor: 95, data: 90, matricula: 85, edital: 85 } },
+  WEBLEILOES: { min: 60,    campos: { foto: 90, valor: 95, area: 80, matricula: 78, edital: 78 } },
+  LEILOTECH:  { min: 60,    campos: { valor: 95, data: 90, matricula: 68, edital: 60, avaliacao: 80 } },
+  SOLD:       { min: 55,    campos: { foto: 90, valor: 95, area: 75, data: 90 } },
+  VIP:        { min: 40,    campos: { foto: 90, valor: 95, matricula: 75, edital: 85 } },
+  SBID9:      { min: 20,    campos: { foto: 90, valor: 95, data: 90 } },
+  LEILOFY:    { min: 15,    campos: { foto: 90, valor: 95, data: 90, matricula: 85, edital: 85 } },
+  SODRE:      { min: 15,    campos: { foto: 90, valor: 95, area: 85, data: 90, matricula: 82, edital: 85 } },
+  PECINI:     { min: 15,    campos: { foto: 90, valor: 95, avaliacao: 90 } },
+  RJLEILOES:  { min: 8,     campos: { foto: 90, valor: 95, data: 90, matricula: 78, edital: 78 } },
+  VENDASGOV:  { min: 2,     campos: { foto: 90, valor: 95 } },
   SBID21:     { min: 1,     campos: {} },
 };
 
