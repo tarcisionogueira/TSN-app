@@ -225,8 +225,16 @@ async function handler(req) {
   //     estrangeiros da Seção D (que reduz `ativos`, não o total do scrape). Pega a regressão
   //     GROSSA e SILENCIOSA (ex.: 369->26) que um piso fixo obsoleto deixaria passar. Também
   //     grava o snapshot diário de métricas (a matéria-prima do aprendizado). 100% aditivo.
+  // Snapshot (matéria-prima do aprendizado) em try/catch PRÓPRIO: se fonte_cobertura/
+  // fonte_qualidade mudarem de assinatura, o INSERT lança — logamos e seguimos, sem
+  // mascarar a comparação de baseline (que nem depende do snapshot).
   try {
-    await supabase.rpc('snapshot_metricas_fontes');            // alimenta o histórico
+    const { error: eSnap } = await supabase.rpc('snapshot_metricas_fontes');
+    if (eSnap) console.error('snapshot_metricas_fontes:', eSnap.message);
+  } catch (e) { console.error('snapshot_metricas_fontes:', e?.message); }
+  // Comparação com o piso APRENDIDO (mediana*0.5; tem_baseline já exige volume >= 20 p/ não
+  // falsar em fonte minúscula). Compara o TOTAL do último scrape (imune à Seção D).
+  try {
     const { data: aprend } = await supabase.rpc('fonte_baseline_aprendida');
     for (const b of aprend || []) {
       if (!b.tem_baseline) continue;

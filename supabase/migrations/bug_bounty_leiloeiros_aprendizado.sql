@@ -7,10 +7,17 @@
 --      aprendizado (histórico rico p/ além do que o fonte_saude guarda).
 --   2) snapshot_metricas_fontes(): grava o snapshot do dia (chamado pelo monitor-fontes-cron).
 --   3) fonte_baseline_aprendida(): aprende, do fonte_saude (série de acervo por run), o PISO
---      de acervo de cada fonte = min(runs saudáveis) * 0.65. Usa o MÍNIMO (não percentil) p/
---      acompanhar quedas legítimas de acervo (auctions encerram) sem falso-positivo; a folga
---      de 35% pega só regressão GROSSA (o alvo: 369->26 silencioso). Só emite com >= p_min
---      amostras -> leiloeiro novo auto-onboarda após alguns runs.
+--      de acervo de cada fonte = MEDIANA(runs saudáveis) * 0.5. Usa a MEDIANA (não o mínimo):
+--      o mínimo afundaria junto com o próprio run em regressão (o run 369->26, se 'ok',
+--      viraria o novo min e o alerta nunca dispararia); a mediana é robusta a 1-2 runs baixos
+--      -> pega a regressão GROSSA (26 < 0.5*260=130) sem falso-positivo numa queda legítima
+--      sustentada (a mediana só desce quando o novo patamar domina o histórico). tem_baseline
+--      exige >= p_min amostras E mediana >= 20 (gate de volume: fonte minúscula fica com o
+--      piso hardcoded, senão o clamp faria o piso exceder o acervo normal 1-2). Leiloeiro novo
+--      auto-onboarda após alguns runs.
+--      OBS: os campos ativos_* aqui são o TOTAL DO SCRAPE (fonte_saude.total), NÃO o count de
+--      ativos do banco (fonte_cobertura().ativos); a C3 compara total-vs-total de propósito
+--      (imune à varredura anti-estrangeiro da Seção D, que poda `ativos` mas não o total).
 
 -- 1) Histórico diário de métricas por fonte -----------------------------------------------
 create table if not exists public.fonte_metricas_hist (
@@ -65,7 +72,7 @@ language sql set search_path to 'public' as $fn$
     from hist group by fonte
   )
   select fonte, n, round(vmin)::int, round(mediana)::int,
-    greatest(round(vmin * 0.65)::int, 3), (n >= p_min)
+    greatest(round(mediana * 0.5)::int, 3), (n >= p_min and mediana >= 20)
   from agg;
 $fn$;
 revoke execute on function public.fonte_baseline_aprendida(integer,integer) from public, anon, authenticated;
