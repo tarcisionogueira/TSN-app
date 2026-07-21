@@ -1176,6 +1176,19 @@ export default function Analise() {
         </div>
       )}
 
+      {/* DIVERGÊNCIA DE DOCUMENTAÇÃO (≠ risco jurídico): os documentos descrevem um imóvel
+          DIFERENTE do informado p/ análise. Não reprova a operação — pede REGERAR com o dado certo. */}
+      {Array.isArray(parecerDocumental?.divergenciasImovel) && parecerDocumental.divergenciasImovel.length>0 && (
+        <div style={{ background:'#fffbeb', border:'2px solid #f59e0b', borderRadius:14, padding:'14px 18px', display:'flex', gap:12 }}>
+          <FileText size={22} color="#d97706" style={{flexShrink:0,marginTop:2}}/>
+          <div>
+            <div style={{ fontWeight:900, color:'#92400e', fontSize:14, marginBottom:6 }}>⚠️ DIVERGÊNCIA DE DOCUMENTAÇÃO — não é risco jurídico</div>
+            {parecerDocumental.divergenciasImovel.map((dv,i)=><div key={i} style={{color:'#92400e',fontSize:12,marginBottom:2}}>• {dv.descricao || dv.titulo}</div>)}
+            <div style={{ fontSize:11.5, color:'#78350f', marginTop:6 }}>Os documentos descrevem um imóvel diferente do informado para análise (endereço/cidade/lote). A matrícula é a fonte de verdade — <strong>regere o relatório com os dados corretos</strong> (use “Corrigir e regerar” abaixo, quando aparecer).</div>
+          </div>
+        </div>
+      )}
+
       {/* ===== 2 COLUNAS: barra lateral (status/ações) + central (etapas) ===== */}
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr', gap:16, alignItems:'start' }}>
 
@@ -1877,7 +1890,7 @@ export default function Analise() {
             );
           })()}
 
-          {relSel === 'documental' && isStaffAnalise && modoManual && (<>
+          {relSel === 'documental' && isStaffAnalise && modoManual && !relDocumentalGerado && (<>
 
       {/* ── ETAPA 1: DOCUMENTO ── */}
       <Section id="sec-doc" step="1" title="Edital" icon={FileText} color="#0D63DB" open={openSec.doc} onToggle={()=>toggleSec('doc')} badge="Upload ou cole o texto">
@@ -1945,7 +1958,7 @@ export default function Analise() {
           equipe LIGAR "Incluir URL / arquivos" (modoManual) — para leiloeiro não
           integrado ou refino. Por padrão é 1 clique: a IA lê os docs e consulta o CNJ
           e as certidões no servidor, sem tela intermediária. */}
-      {relSel === 'documental' && isStaffAnalise && modoManual && (<>
+      {relSel === 'documental' && isStaffAnalise && modoManual && !relDocumentalGerado && (<>
 
       {/* ── ETAPA 1C: CONSULTA JURÍDICA CNJ, apenas roles com CNJ ── */}
       {!temCNJ && (

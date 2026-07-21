@@ -721,6 +721,20 @@ export default async function handler(req, res) {
     // Rebaixa para "alerta" — o bloqueante fica só para risco concreto e comprovado.
     if (Array.isArray(parsed.riscos)) {
       const rotineiro = /penhora|execu[çc]|hipotec|indisponibil|bacenjud|renajud|arresto|ocupa|imiss|bloqueio/i;
+      // DIVERGÊNCIA DE IDENTIDADE DO IMÓVEL não é RISCO JURÍDICO: quando os documentos descrevem
+      // um imóvel DIFERENTE do informado p/ análise (endereço/município/lote trocado — ex.: a
+      // matrícula é de Feira de Santana e o cadastro dizia Alagoinhas), é um problema de DADO. O
+      // certo é REGERAR o relatório com os dados corretos, não "reprovar" por risco jurídico. Tira
+      // esses itens de `riscos` (p/ não derrubar o score, não virar bloqueante nem o banner de risco)
+      // e os encaminha para o canal de DIVERGÊNCIA — a tela oferece regerar (dono pediu).
+      const ehDivergencia = (t) => /diverg[êe]nci|(?:endere[çc]o|munic[íi]pio|cidade|bairro|logradouro|im[óo]vel|bem|lote|matr[íi]cula)[^.]{0,60}(?:diferente|divergente|distint|divers|trocad|n[ãa]o (?:corresponde|confere|bate|coincide|[ée] o mesmo))|n[ãa]o (?:[ée]|se trata d)o mesmo (?:im[óo]vel|bem|lote)|confus[ãa]o[^.]{0,20}lote|erro[^.]{0,20}identifica[çc]|identifica[çc][ãa]o[^.]{0,40}(?:diferente|divergente|incorret)/i.test(t);
+      const divergencias = [];
+      parsed.riscos = parsed.riscos.filter((r) => {
+        const txt = `${r?.categoria || ''} ${r?.descricao || ''}`;
+        if (ehDivergencia(txt)) { divergencias.push({ titulo: r?.categoria || 'Divergência de identificação do imóvel', descricao: String(r?.descricao || txt).trim() }); return false; }
+        return true;
+      });
+      if (divergencias.length) parsed._divergenciasDoc = divergencias;
       for (const r of parsed.riscos) {
         if (!r || r.severidade !== 'bloqueante') continue;
         const txt = `${r.categoria || ''} ${r.descricao || ''}`;
@@ -1065,6 +1079,9 @@ export default async function handler(req, res) {
       checklist,
       pendencias,
       raioX: parsed.raioX || null,
+      // Divergência de IDENTIDADE do imóvel (docs descrevem outro imóvel) — NÃO é risco jurídico;
+      // a tela mostra um aviso próprio e oferece regerar com os dados corretos.
+      divergenciasImovel: parsed._divergenciasDoc || [],
       geradoEm: new Date().toISOString(),
     };
     // APRENDER NA EMISSÃO (durável, sem IA) + apontar regeração se houver vício.
