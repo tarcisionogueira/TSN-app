@@ -1234,6 +1234,40 @@ export default async function handler(req, res) {
       }
     } catch { /* não bloqueia o laudo */ }
 
+    // ITEM 2 — CORREÇÃO COM IMPACTO: se a matrícula/edital corrige um dado que o MERCADOLÓGICO
+    // já usou (cidade, metragem), NÃO regera em silêncio — registra a correção + o IMPACTO na
+    // análise de mercado p/ a tela OFERECER regerar ao usuário (o dono pediu: informar o impacto
+    // e dar a opção). A proveniência vem da matrícula/edital (lidos por IA acima).
+    try {
+      const ex = parsed.extracao || {};
+      const muni = String(ex.municipioImovel || '').trim();
+      const uf = String(ex.ufImovel || '').trim().toUpperCase();
+      const aPriv = Number(ex.areaPrivativaM2) || 0;
+      const normC = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      let merc = null;
+      try { [merc] = await (await sb(`analises_mercado?imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=id,imovel,created_at&order=created_at.desc&limit=1`)).json(); } catch { /* sem mercadológico ainda */ }
+      if (merc) {
+        const usouCidade = String(merc.imovel?.cidade || '').trim();
+        const usouArea = Number(merc.imovel?.areaM2 || merc.imovel?.area_m2) || 0;
+        const correcoes = [];
+        if (muni.length >= 3 && /^[A-Z]{2}$/.test(uf) && usouCidade && normC(muni) !== normC(usouCidade)) {
+          correcoes.push({ campo: 'cidade', de: usouCidade, para: `${muni}/${uf}`,
+            impacto: `A pesquisa de mercado foi feita em ${usouCidade}, mas a matrícula indica que o imóvel fica em ${muni}/${uf}. Isso muda os comparáveis e o valor de mercado — recomenda-se regerar o relatório.` });
+        }
+        if (aPriv >= 5 && aPriv <= 100000 && usouArea > 0 && Math.abs(aPriv - usouArea) / Math.max(aPriv, usouArea) > 0.05) {
+          correcoes.push({ campo: 'metragem', de: `${usouArea} m²`, para: `${aPriv} m²`,
+            impacto: `A metragem usada foi ${usouArea} m², mas a matrícula indica ${aPriv} m². O valor de mercado é calculado por R$/m² × área — o valor estimado muda proporcionalmente.` });
+        }
+        if (correcoes.length) {
+          result.correcoesMercado = correcoes; // devolve à tela p/ oferecer regerar na hora
+          await sb(`analises_mercado?id=eq.${encodeURIComponent(merc.id)}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ correcoes_sugeridas: { detectado_em: new Date().toISOString(), fonte: 'documental', correcoes } }),
+          }).catch(() => {});
+        }
+      }
+    } catch { /* detecção de impacto é best-effort, nunca bloqueia o laudo */ }
+
     return result;
     })()]);
 

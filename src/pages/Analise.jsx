@@ -734,6 +734,9 @@ export default function Analise() {
   // Aplica o resultado da geração (que rodou em segundo plano) ao reabrir/voltar
   // à tela: mercado, valores e laudo. Roda uma vez por conclusão.
   const aplicadoRef = React.useRef(null);
+  // Item 2: correções que o documental achou nos docs e que impactam o mercadológico já gerado
+  // (ex.: cidade/metragem diferentes) — a tela informa o IMPACTO e oferece regerar ao usuário.
+  const [correcoesMercado, setCorrecoesMercado] = useState(null);
   useEffect(() => {
     const entry = getAnalise(analiseImovelId);
     if (entry?.status === 'gerando') return;
@@ -895,6 +898,8 @@ export default function Analise() {
     }
     // Espelha a consulta CNJ que rodou no servidor, no console de CNJ da tela.
     if (r.cnj) setCnjResultados({ processos: r.cnj.processos || [], total: r.cnj.total || 0, tribunais_consultados: r.cnj.tribunais || [], parecer: r.cnj.parecer });
+    // Item 2: o documental leu os docs e achou dado que corrige o mercadológico → informa o impacto.
+    if (Array.isArray(r.correcoesMercado) && r.correcoesMercado.length) setCorrecoesMercado(r.correcoesMercado);
     if (!r.parecer && !(r.documentosLidos || []).length) {
       setDocMsg('Não foi possível ler documentos automaticamente. Anexe a matrícula/edital ou cole o texto/nº do processo e gere novamente.');
     }
@@ -2457,6 +2462,39 @@ export default function Analise() {
           </div>
         </div>
       </div>
+
+      {/* Item 2 — CORREÇÃO COM IMPACTO: a leitura dos documentos (documental) achou dado que
+          corrige o mercadológico já gerado. Informa o impacto e OFERECE regerar (dono pediu). */}
+      {Array.isArray(correcoesMercado) && correcoesMercado.length > 0 && (
+        <div style={{ background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:12, padding:'14px 16px', marginBottom:14 }}>
+          <div style={{ fontSize:13, fontWeight:800, color:'#92400e', marginBottom:6 }}>
+            ⚠️ A leitura dos documentos corrigiu dados que impactam a Avaliação Mercadológica
+          </div>
+          <ul style={{ margin:'6px 0 10px', paddingLeft:18, fontSize:12.5, color:'#78350f', lineHeight:1.6 }}>
+            {correcoesMercado.map((c, i) => (
+              <li key={i}><strong style={{textTransform:'capitalize'}}>{c.campo}:</strong> {c.de} → <strong>{c.para}</strong>. {c.impacto}</li>
+            ))}
+          </ul>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <button onClick={() => {
+              const cs = correcoesMercado || [];
+              setD(p => { const np = { ...p };
+                for (const c of cs) {
+                  if (c.campo === 'cidade') { const m = String(c.para).match(/(.+?)[\/,]\s*([A-Za-z]{2})\s*$/); if (m) { np.cidade = m[1].trim(); np.estado = m[2].toUpperCase(); } }
+                  if (c.campo === 'metragem') { const n = parseFloat(String(c.para).replace(/[^0-9,.]/g,'').replace(/\./g,'').replace(',', '.')); if (n>0) np.areaM2 = n; }
+                }
+                return np; });
+              setCorrecoesMercado(null);
+              setTimeout(() => analisarMercadoClick(), 150); // deixa o setD aplicar antes de regerar
+            }} style={{ padding:'8px 14px', background:'#d97706', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:12.5, cursor:'pointer' }}>
+              Corrigir e regerar a avaliação
+            </button>
+            <button onClick={() => setCorrecoesMercado(null)} style={{ padding:'8px 14px', background:'transparent', color:'#92400e', border:'1px solid #fcd34d', borderRadius:8, fontWeight:700, fontSize:12.5, cursor:'pointer' }}>
+              Manter como está
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── ETAPA 3: AVALIAÇÃO MERCADOLÓGICA ── */}
       <Section id="sec-mercado" step="3" title="Avaliação Mercadológica" icon={BarChart3} color="#10b981" open={openSec.mercado} onToggle={()=>toggleSec('mercado')}
