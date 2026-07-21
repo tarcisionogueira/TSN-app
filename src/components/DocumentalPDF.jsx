@@ -76,7 +76,8 @@ export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb 
   // Evolução das consultas (checklist)
   const checklistHtml = (Array.isArray(P.checklist) && P.checklist.length) ? `
 <div class="av" style="border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;padding:14px 16px;margin:12px 0;">
-  <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;color:#475569;margin-bottom:10px;">Evolução das consultas</div>
+  <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;color:#475569;margin-bottom:2px;">Fontes e comprovantes das informações</div>
+  <div style="font-size:9.5px;color:#94a3b8;margin-bottom:10px;">De onde vieram os dados deste relatório — documentos lidos e consultas públicas, com o comprovante de cada uma.</div>
   ${P.checklist.map(c => {
     const cor = c.status === 'feito' ? '#16a34a' : c.status === 'pendente' ? '#b45309' : '#94a3b8';
     const ic = c.status === 'feito' ? '✓' : c.status === 'pendente' ? '•' : '—';

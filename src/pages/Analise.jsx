@@ -1469,8 +1469,10 @@ export default function Analise() {
             )}
 
             {/* ── Inclusão manual / imóvel de outro leiloeiro (URL + anexos) ──
-                Sobe pro topo do centro quando o modo manual está ativo. */}
-            {modoManual && (
+                Sobe pro topo do centro quando o modo manual está ativo. NÃO aparece quando o
+                relatório documental JÁ foi gerado (ex.: arremate atribuído manualmente) — aí o
+                imóvel já está na base e "incluir imóvel de outro leiloeiro" só confunde. */}
+            {modoManual && !relDocumentalGerado && (
               <div style={{ border:'1px dashed #c4b5fd', background:'#faf5ff', borderRadius:16, padding: isMobile?'16px 18px':'20px 22px' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                   <Building2 size={17} color="#7c3aed"/>
@@ -1689,13 +1691,16 @@ export default function Analise() {
               )}
               {(parecerDocumental.checklist || []).length > 0 && (
                 <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
-                  <div style={{ fontSize:12, fontWeight:800, color:'#334155', marginBottom:10, display:'flex', alignItems:'center', gap:7 }}>
-                    📋 Evolução das consultas
+                  <div style={{ fontSize:12, fontWeight:800, color:'#334155', marginBottom:2, display:'flex', alignItems:'center', gap:7 }}>
+                    📋 Fontes e comprovantes das informações
                     {parecerDocumental.pendencias > 0 && (
                       <span style={{ marginLeft:'auto', fontSize:10.5, fontWeight:800, color:'#92400e', background:'#fef3c7', padding:'2px 8px', borderRadius:20 }}>
                         {parecerDocumental.pendencias} pendente(s)
                       </span>
                     )}
+                  </div>
+                  <div style={{ fontSize:11, color:'#94a3b8', lineHeight:1.5, marginBottom:10 }}>
+                    De onde vieram os dados deste relatório — documentos lidos e consultas públicas, com o comprovante de cada uma.
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                     {parecerDocumental.checklist.map((c, i) => {
