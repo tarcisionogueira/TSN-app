@@ -18,6 +18,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import { fetchViaBrightData, brightDataDisponivel } from './_brightdata.js';
+import { iaGeminiPrimary } from './_claude.js';
 
 const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 // Tribunais monitorados — CONFIGURÁVEL por env RADAR_TRIBUNAIS (Item 5: "todos os estados").
@@ -95,6 +96,88 @@ function parseEdital(texto) {
   };
 }
 
+// FILTRO DURO: a busca por texto no DJEN traz MUITO despacho/decisão que só CITA "leilão"
+// (validação: de 612 comunicações, só ~14-30 eram editais reais). Só entra o que é EDITAL DE
+// LEILÃO de verdade: tipoDocumento=Edital OU (estrutura de praça/hasta + um valor em R$). A IA
+// depois confirma (marca 'nao_edital' o que passar por engano). Corta ~97% do ruído na origem.
+function ehEditalReal(texto, tipoDoc) {
+  const t = String(texto || '');
+  if (/edital/i.test(String(tipoDoc || ''))) return true; // tipoDocumento é o sinal autoritativo
+  const temEstrutura = /(1[ªa]|primeir|2[ªa]|segund)[^.\n]{0,25}(pra[çc]a|leil[ãa]o|hasta)/i.test(t)
+                    || /hasta\s+p[úu]blica/i.test(t)
+                    || /leil[ãa]o\s+(?:p[úu]blico|judicial|eletr[ôo]nico|extrajudicial)/i.test(t);
+  const temValor = /(lance|valor)\s+(?:m[íi]nim|inicial)[^\dR]{0,25}R\$\s*[\d.]+,\d{2}/i.test(t)
+                || /avalia(?:d[oa]|[çc][ãa]o)[^\dR]{0,25}R\$\s*[\d.]+,\d{2}/i.test(t);
+  return temEstrutura && temValor;
+}
+
+// Extração por IA (Gemini-primário / Claude-Haiku fallback — barato, não-crítico) do texto do
+// edital: robusta onde a regex falha (leiloeiro, avaliação). Só nos editais REAIS e poucos por
+// run (economia). Devolve o objeto ou null.
+async function extrairEditalIA(texto) {
+  const apiKey = process.env.CLAUDE_KEY;
+  if (!apiKey) return null;
+  const prompt = `Extraia do EDITAL DE LEILÃO JUDICIAL abaixo os campos e responda APENAS um JSON válido (sem markdown, sem comentários) com estas chaves (use null quando não houver):
+{"leiloeiro_nome":string|null,"valor_avaliacao":number|null,"lance_minimo":number|null,"data_praca_1":"YYYY-MM-DD"|null,"data_praca_2":"YYYY-MM-DD"|null,"imovel_matricula":string|null,"imovel_endereco":string|null,"imovel_cidade":string|null,"imovel_uf":string|null,"ocupacao":"ocupado"|"desocupado"|null,"area_m2":number|null}
+Regras: valores como número puro (ex: 150000.50, sem "R$" nem pontos de milhar). leiloeiro_nome = a pessoa/empresa LEILOEIRA oficial (nunca o juiz, as partes ou advogados). Se o texto NÃO for um edital de leilão de imóvel, responda exatamente {"nao_edital":true}.
+
+EDITAL:
+${String(texto || '').slice(0, 8000)}`;
+  const res = await iaGeminiPrimary({
+    method: 'POST',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
+  });
+  const data = await res.json().catch(() => null);
+  const txt = String(data?.content?.[0]?.text || '').trim();
+  const m = txt.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try { return JSON.parse(m[0]); } catch { return null; }
+}
+
+const IA_LOTE = 10;        // teto de editais por run (economia; drena a fila em poucos runs)
+const IA_HARD_MS = 240000; // orçamento de tempo p/ a IA (deixa folga no maxDuration 300s)
+
+// Enriquece por IA os editais ainda não extraídos (fila via flag ia_extraido). Best-effort:
+// roda MESMO quando o pull do dia foi pulado (auto-ajuste), então a fila drena a cada 4h.
+async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
+  if (!process.env.CLAUDE_KEY) return 0;
+  let feitos = 0;
+  let pend;
+  try {
+    ({ data: pend } = await supabase.from('editais_leilao')
+      .select('id, texto_integral').eq('ia_extraido', false)
+      .order('data_disponibilizacao', { ascending: false }).limit(IA_LOTE));
+  } catch { return 0; }
+  const numOk = (v) => (typeof v === 'number' && isFinite(v) && v > 0) ? v : null;
+  const dataOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? new Date(s + 'T12:00:00Z').toISOString() : null;
+  for (const e of pend || []) {
+    if (Date.now() - t0 > IA_HARD_MS) break;
+    let out = null;
+    try { out = await extrairEditalIA(e.texto_integral); } catch { /* segue */ }
+    const upd = { ia_extraido: true };
+    if (out && out.nao_edital) {
+      upd.status = 'nao_edital'; // IA confirmou que é despacho/decisão, não edital → telas ignoram
+    } else if (out) {
+      const nome = String(out.leiloeiro_nome || '').trim().slice(0, 120) || null;
+      if (nome) { upd.leiloeiro_nome = nome; upd.leiloeiro_nome_norm = norm(nome); upd.leiloeiro_integrado = ehIntegrado(nome); }
+      if (numOk(out.valor_avaliacao)) upd.valor_avaliacao = out.valor_avaliacao;
+      if (numOk(out.lance_minimo)) upd.lance_minimo = out.lance_minimo;
+      if (numOk(out.area_m2)) upd.imovel_area_m2 = out.area_m2;
+      if (dataOk(out.data_praca_1)) upd.data_praca_1 = dataOk(out.data_praca_1);
+      if (dataOk(out.data_praca_2)) upd.data_praca_2 = dataOk(out.data_praca_2);
+      if (out.imovel_matricula) upd.imovel_matricula = String(out.imovel_matricula).slice(0, 40);
+      if (out.imovel_endereco) upd.imovel_endereco = String(out.imovel_endereco).slice(0, 200);
+      if (out.imovel_cidade) upd.imovel_cidade = String(out.imovel_cidade).slice(0, 80);
+      if (out.imovel_uf && /^[A-Za-z]{2}$/.test(out.imovel_uf)) upd.imovel_uf = String(out.imovel_uf).toUpperCase();
+      if (out.ocupacao === 'ocupado' || out.ocupacao === 'desocupado') upd.ocupacao = out.ocupacao;
+      upd.status = 'processado';
+    }
+    try { await supabase.from('editais_leilao').update(upd).eq('id', e.id); feitos++; } catch { /* segue */ }
+  }
+  return feitos;
+}
+
 // Campos do item DJEN vêm com nomes variados entre versões — pega o 1º que existir.
 const g = (o, ...ks) => { for (const k of ks) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
 
@@ -150,16 +233,14 @@ async function handler(req) {
   // + garantia de captura. "Sucesso" = o DJEN respondeu sem erro (mesmo com 0 editais no dia).
   // Bypass manual com ?forcar=1.
   const forcar = /[?&]forcar=1/.test(req.url || '');
+  let pulouPull = false; // pull do DJEN já feito hoje → pula a captura, mas a IA ainda enriquece
   if (!forcar) {
     try {
       const { data: ok } = await supabase.from('monitor_runs')
         .select('id').eq('fonte', 'radar-editais-djen').is('erro', null)
         .gte('ran_at', ymd(new Date()) + 'T00:00:00Z').limit(1);
-      if (ok && ok.length) {
-        return new Response(JSON.stringify({ ok: true, skip: 'pull do DJEN já obtido hoje' }),
-          { headers: { 'Content-Type': 'application/json' } });
-      }
-    } catch { /* se a checagem falhar, roda normalmente */ }
+      if (ok && ok.length) pulouPull = true;
+    } catch { /* se a checagem falhar, roda o pull normalmente */ }
   }
 
   // Janela deslizante de 3 dias (pega itens carregados com atraso; dedup resolve repetição).
@@ -180,8 +261,9 @@ async function handler(req) {
     return false;
   };
 
-  let vistos = 0, novos = 0, erroGeral = null;
-  try {
+  let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0;
+  if (!pulouPull) {
+   try {
     for (const tribunal of TRIBUNAIS) {
       for (const termo of TERMOS) {
         if (Date.now() - t0 > HARD_MS) break;
@@ -195,6 +277,8 @@ async function handler(req) {
         const linhas = items.map((it) => {
           const djenId = String(g(it, 'id', 'numeroComunicacao', 'hash', 'idComunicacao') || '');
           const texto = String(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo') || '');
+          const tipoDoc = g(it, 'tipoDocumento', 'tipoComunicacao', 'tipo');
+          if (!ehEditalReal(texto, tipoDoc)) return null; // FILTRO DURO: fora despacho/decisão que só cita "leilão"
           const p = parseEdital(texto);
           const orgao = g(it, 'nomeOrgao', 'orgao', 'nomeVara');
           const nomeLeiloeiro = p.leiloeiro_nome;
@@ -205,7 +289,7 @@ async function handler(req) {
             numero_processo: g(it, 'numeroProcesso', 'numero_processo', 'numeroprocessocommascara'),
             orgao, comarca: orgao, uf: 'SP',
             classe: g(it, 'nomeClasse', 'classe'),
-            tipo_documento: g(it, 'tipoDocumento', 'tipoComunicacao', 'tipo'),
+            tipo_documento: tipoDoc,
             data_disponibilizacao: (String(g(it, 'data_disponibilizacao', 'dataDisponibilizacao', 'datadisponibilizacao') || fim)).slice(0, 10),
             data_praca_1: p.data_praca_1, data_praca_2: p.data_praca_2,
             leiloeiro_nome: nomeLeiloeiro, leiloeiro_nome_norm: nomeLeiloeiro ? norm(nomeLeiloeiro) : null,
@@ -220,7 +304,8 @@ async function handler(req) {
             payload: it,
             status: p.status,
           };
-        }).filter((r) => r.djen_id || r.hash_dedup);
+        }).filter((r) => r && (r.djen_id || r.hash_dedup));
+        descartados += items.length - linhas.length;
 
         // Só as inéditas (evita reprocessar): confere djen_id já existentes.
         const ids = linhas.map((r) => r.djen_id).filter(Boolean);
@@ -239,23 +324,28 @@ async function handler(req) {
         }
       }
     }
-  } catch (e) {
+   } catch (e) {
     erroGeral = String(e.message).slice(0, 120);
+   }
+
+    // INGESTÃO: usa os editais p/ preencher avaliação faltante do acervo (chave forte: lance ==
+    // valor mínimo do lote). Conservador; nunca sobrescreve avaliação existente. Aditivo.
+    try { const { data } = await supabase.rpc('editais_enriquecer_acervo'); enriquecidos = Number(data) || 0; } catch { /* aditivo */ }
+
+    try {
+      await supabase.from('monitor_runs').insert({
+        fonte: 'radar-editais-djen', janela_inicio: ini, janela_fim: fim,
+        itens_vistos: vistos, itens_novos: novos, duracao_ms: Date.now() - t0, erro: erroGeral,
+      });
+    } catch { /* nunca quebra por causa do log */ }
   }
 
-  // INGESTÃO: usa os editais p/ preencher avaliação faltante do acervo (chave forte: lance ==
-  // valor mínimo do lote). Conservador; nunca sobrescreve avaliação existente. Aditivo.
-  let enriquecidos = 0;
-  try { const { data } = await supabase.rpc('editais_enriquecer_acervo'); enriquecidos = Number(data) || 0; } catch { /* aditivo */ }
+  // ENRIQUECIMENTO POR IA — roda SEMPRE (mesmo com o pull pulado), best-effort, capado e
+  // time-boxed: drena a fila de editais reais ainda não extraídos, a cada 4h, barato.
+  let iaExtraidos = 0;
+  try { iaExtraidos = await enriquecerEditaisComIA(supabase, ehIntegrado, t0); } catch { /* best-effort */ }
 
-  try {
-    await supabase.from('monitor_runs').insert({
-      fonte: 'radar-editais-djen', janela_inicio: ini, janela_fim: fim,
-      itens_vistos: vistos, itens_novos: novos, duracao_ms: Date.now() - t0, erro: erroGeral,
-    });
-  } catch { /* nunca quebra por causa do log */ }
-
-  return new Response(JSON.stringify({ ok: true, vistos, novos, enriquecidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  return new Response(JSON.stringify({ ok: true, pull: pulouPull ? 'pulado (já obtido hoje)' : 'executado', vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
