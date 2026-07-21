@@ -17,7 +17,23 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## ⏭️ COMEÇAR AQUI (21/07) — estado + pendências vivas
+## ⏭️ COMEÇAR AQUI (21/07 — sessão 2) — tipologia na raiz + BIASI + BUG BOUNTY auto-aprendido
+> Tudo em `main` (PR **#153** mesclado). Segurança **0/0** o tempo todo. Branch: `claude/session-1hpqy6`.
+
+**Entregue:**
+1. **Tipologia na RAIZ (pedidos 1 e 3 do dono):** helper **`reforcarTipo()`** central no `salvarImoveis` (deriva o tipo da categoria da `url_lote` — autoritativa no Grupo Lance — e do título; só *upgrade* do balde `imovel`, nunca sobrescreve). `normalizarTipo` inline alinhado ao canônico (`'area'` cru saiu). **Backfill: 106 lotes reclassificados** → terrenos saem da intenção **Locação** (bug de Bertioga resolvido) SEM tocar no filtro/3 caminhos.
+2. **Diagnóstico de qualidade (pedido 2):** RPC `fonte_qualidade()` + **Seção C2** no monitor (tipologia fraca / edital=matrícula / matrícula=página), 0 falso-positivo.
+3. **BIASI — regressão 369→26 resolvida e VALIDADA** (run real: **26→144, status ok**). Causa: reescrita de 17/07 ignorava `total` + dedup GLOBAL entre leilões. Novo scraper 2 camadas (listagem agregada `?pagina=N` + fallback home→leilão com dedup por leilão), *safe-by-construction*.
+4. **🆕 BUG BOUNTY DOS LEILOEIROS — monitor AUTO-APRENDIDO** (migração `bug_bounty_leiloeiros_aprendizado.sql`): o monitor **aprende o piso de acervo de cada leiloeiro do próprio histórico** (`fonte_baseline_aprendida()` = mín. dos runs saudáveis × 0,65) e alerta na Seção **C3** — **auto-calibra os atuais e ONBOARDA os futuros, sem hardcode** (fim do "recalibrar piso na mão"). Compara com o TOTAL do último scrape (imune à varredura anti-estrangeiro). Snapshot diário em `fonte_metricas_hist` (base do aprendizado). Ritual de início (CLAUDE.md item 2) + **Rotina mensal "Bug bounty dos leiloeiros"** (`trig_01P7HVmW4SMUrUEsaiZ5tH9V`, recon ofensivo web×código) fecham o ciclo. **Revisado adversarialmente:** o piso usa a MEDIANA (não o mín., que afundaria junto com o run em regressão e nunca dispararia) × 0,5 + gate de volume (mediana ≥ 20, senão fonte minúscula falsava). Validado: **0 falso-positivo** hoje e uma queda BIASI→26 dispararia (26 < piso 130).
+
+**PENDÊNCIAS / AGUARDANDO O DONO:**
+- **GRUPOLANCE — 145 "matrículas fantasma"** (botão Matrícula falso): limpeza REVERSÍVEL pronta (nullar `link_matricula` auto-derivado + remover anexos `%grupolance_auto.pdf%`; mantém arquivos no Storage). Aguarda seu OK — ou a versão por hash (matrícula×edital).
+- **Telas admin** (última da lista): reposicionar Scrapers → "Operação de Coleta", encolher aba Geocodificação (100% + on-demand), de-duplicar KPIs com o Dashboard.
+- **Storage** 13,5 GB (upgrade Pro pendente) · **PECINI** ok (36, cron gravou) · Bright Data (conferir gasto).
+
+---
+
+## ⏭️ (Sessão 1) 21/07 — estado + pendências vivas
 > Sessão longa 20–21/07 (madrugada). **Tudo mesclado em `main`** (deploys Vercel READY). Segurança **0/0** o tempo todo.
 
 **Estado do sistema:**

@@ -216,6 +216,38 @@ async function handler(req) {
     }
   } catch { /* qualidade é aditiva — nunca derruba o monitor */ }
 
+  // C3) BUG BOUNTY dos leiloeiros — piso de acervo AUTO-APRENDIDO (pedido do dono). O piso
+  //     hardcoded de BASELINE_FONTES fica obsoleto (foi preciso recalibrar o BIASI 150->120
+  //     na mão). Aqui o piso é APRENDIDO do próprio histórico de cada fonte
+  //     (fonte_baseline_aprendida = min dos runs SAUDÁVEIS * 0.65): auto-calibra os leiloeiros
+  //     atuais e ONBOARDA os futuros — sem hardcode. Compara com o TOTAL do último scrape
+  //     (fonte_saude), a MESMA métrica que aprendeu, então é imune à desativação de
+  //     estrangeiros da Seção D (que reduz `ativos`, não o total do scrape). Pega a regressão
+  //     GROSSA e SILENCIOSA (ex.: 369->26) que um piso fixo obsoleto deixaria passar. Também
+  //     grava o snapshot diário de métricas (a matéria-prima do aprendizado). 100% aditivo.
+  // Snapshot (matéria-prima do aprendizado) em try/catch PRÓPRIO: se fonte_cobertura/
+  // fonte_qualidade mudarem de assinatura, o INSERT lança — logamos e seguimos, sem
+  // mascarar a comparação de baseline (que nem depende do snapshot).
+  try {
+    const { error: eSnap } = await supabase.rpc('snapshot_metricas_fontes');
+    if (eSnap) console.error('snapshot_metricas_fontes:', eSnap.message);
+  } catch (e) { console.error('snapshot_metricas_fontes:', e?.message); }
+  // Comparação com o piso APRENDIDO (mediana*0.5; tem_baseline já exige volume >= 20 p/ não
+  // falsar em fonte minúscula). Compara o TOTAL do último scrape (imune à Seção D).
+  try {
+    const { data: aprend } = await supabase.rpc('fonte_baseline_aprendida');
+    for (const b of aprend || []) {
+      if (!b.tem_baseline) continue;
+      if (problemas.some(p => p.fonte === b.fonte)) continue;  // já sinalizado (A/B/C) — não empilha
+      const u = ultima[b.fonte];
+      if (!u || typeof u.total !== 'number') continue;
+      if (u.total < b.ativos_piso) {
+        problemas.push({ fonte: b.fonte, tipo: 'acervo abaixo do normal aprendido',
+          detalhe: `último scrape ${u.total} < piso aprendido ${b.ativos_piso} (normal ~${b.ativos_mediana}, mín ${b.ativos_min} em ${b.n_amostras} runs)` });
+      }
+    }
+  } catch { /* aprendizado é aditivo — nunca derruba o monitor */ }
+
   // D) VARREDURA "só Brasil" pós-geocode (rede Superbid). O guard do scraper
   //    (ehEstrangeiroSemUF) só reconhece estrangeiro quando a CIDADE já vem preenchida;
   //    lotes internacionais (Paraguai/Argentina) que chegam com cidade VAZIA passam o

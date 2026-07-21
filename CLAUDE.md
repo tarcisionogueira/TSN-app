@@ -6,17 +6,31 @@ curto (5–8 linhas) antes de seguir:
 
 1. **Saúde** (MCP Supabase/Vercel): imóveis ativos e atualizados nas últimas 24h, fila de
    geocode, últimos deploys (`state=READY`?), crons com timeout recente.
-2. **Segurança — postura**: rode `select public.auditoria_seguranca();` (ou leia a última
+2. **Captura — bug bounty dos leiloeiros (AUTO-APRENDIDO)**: o monitor APRENDE o "normal" de
+   cada leiloeiro do próprio histórico (`fonte_baseline_aprendida()` = mín. dos runs saudáveis
+   × 0,65) e alerta quando o último scrape cai abaixo — **auto-calibra os ATUAIS e ONBOARDA os
+   FUTUROS, sem hardcode** (NÃO recalibre pisos de acervo na mão; deixe o histórico aprender).
+   O `monitor-fontes-cron` faz isso todo dia (Seção C3) + grava o snapshot em `fonte_metricas_hist`.
+   Cheque rápido no início:
+   `select b.fonte,b.ativos_piso,b.ativos_mediana,u.total from public.fonte_baseline_aprendida() b
+   join lateral (select total from fonte_saude s where s.fonte=b.fonte order by executado_em desc limit 1) u on true
+   where b.tem_baseline and u.total < b.ativos_piso;` → vazio = íntegro. Rode a **OFENSIVA de
+   captura** (recon da estrutura VIVA do site × premissas do scraper — como o recon que achou a
+   regressão do BIASI: dedup global + `?pagina` desconhecido) quando: uma fonte regredir, um
+   leiloeiro NOVO for integrado, ou houver suspeita de mudança estrutural. Depois, atualize
+   `leiloeiro_conhecimento` + `docs/BASELINE_CAPTURA_LEILOEIROS.md`. A Rotina mensal
+   **"Bug bounty dos leiloeiros"** já faz essa ofensiva sozinha e notifica o dono.
+3. **Segurança — postura**: rode `select public.auditoria_seguranca();` (ou leia a última
    linha de `seguranca_auditoria`). `0 crítico / 0 atenção` = íntegro; qualquer achado =
    investigar e corrigir ANTES de seguir. Este auditor cobre AUTOMATICAMENTE qualquer
    objeto novo de banco (tabela com PII sem RLS, função SECURITY DEFINER exposta a anon,
    bucket sensível público, política ampla no bucket `documentos`, trigger anti-escalação
    sumindo) — **não precisa lembrar de incluir nada**.
-3. **Segurança — ofensiva** (quando houve mudança substancial): se desde a última auditoria
+4. **Segurança — ofensiva** (quando houve mudança substancial): se desde a última auditoria
    entraram rotas novas OU mudanças em pagamento/webhook/RLS/upload/tokens, rode os 3 agentes
    ofensivos (verificação+lacunas · auth/tokens/contratos/KYC/convites · injeção/SSRF/XSS) e
-   só considere "seguro" depois. Lógica de NEGÓCIO nova NÃO é coberta pelo item 2 — exige isto.
-4. **Escala (rumo a 10 mil usuários)**: relembre os gaps pendentes do HANDOFF (índices,
+   só considere "seguro" depois. Lógica de NEGÓCIO nova NÃO é coberta pelo item 3 — exige isto.
+5. **Escala (rumo a 10 mil usuários)**: relembre os gaps pendentes do HANDOFF (índices,
    chunking de crons, quotas) e sinalize o que precisa antes de crescer.
 
 ## Stack
