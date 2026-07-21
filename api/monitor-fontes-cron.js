@@ -248,6 +248,20 @@ async function handler(req) {
     }
   } catch { /* aprendizado é aditivo — nunca derruba o monitor */ }
 
+  // C4) INVARIANTES DE FUNCIONALIDADE (QA — "bug bounty" de features). Asserções por
+  //     botão/feature (RPC qa_invariantes) com LIMITE calibrado p/ 0 falso-positivo hoje;
+  //     alerta quando um invariante REGRIDE: documento trocado, avaliação mis-read, valor
+  //     sentinela, perfil sem role, ou uma lacuna de captura que CRESCEU além do teto.
+  //     Complementa a Seção C (acervo/quantidade) com CORRETUDE por funcionalidade. Aditivo.
+  try {
+    const { data: inv } = await supabase.rpc('qa_invariantes');
+    for (const i of inv || []) {
+      if (i.status !== 'alerta') continue;
+      problemas.push({ fonte: 'QA', tipo: `invariante ${i.chave}`,
+        detalhe: `${i.titulo}: ${i.valor} (limite ${i.limite}; ${i.gravidade})` });
+    }
+  } catch { /* QA é aditivo — nunca derruba o monitor */ }
+
   // D) VARREDURA "só Brasil" pós-geocode (rede Superbid). O guard do scraper
   //    (ehEstrangeiroSemUF) só reconhece estrangeiro quando a CIDADE já vem preenchida;
   //    lotes internacionais (Paraguai/Argentina) que chegam com cidade VAZIA passam o

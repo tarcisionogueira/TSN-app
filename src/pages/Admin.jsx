@@ -8725,7 +8725,62 @@ function RadarEditaisTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Central da Equipe', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Comercial', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Editais', 'Financeiro', 'Prestação de contas', 'Configurações'];
+// ═══════════════════════════════════════════════════════════════════════════════
+// QUALIDADE — invariantes de funcionalidade (Camada 1 do "bug bounty" de features)
+// ═══════════════════════════════════════════════════════════════════════════════
+function QualidadeTab() {
+  const [inv, setInv] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [erro, setErro] = React.useState('');
+  const carregar = React.useCallback(() => {
+    setLoading(true); setErro('');
+    supabase.rpc('admin_qa_invariantes')
+      .then(({ data, error }) => { if (error) setErro(error.message); else setInv(data || []); })
+      .catch(e => setErro(String(e.message))).finally(() => setLoading(false));
+  }, []);
+  React.useEffect(() => { carregar(); }, [carregar]);
+  const alertas = (inv || []).filter(i => i.status === 'alerta');
+  return (
+    <div style={{ maxWidth: 920 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:8, flexWrap:'wrap' }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:18 }}>✅ Qualidade — invariantes de funcionalidade</h2>
+          <div style={{ fontSize:12, color:'#64748b' }}>"Bug bounty" de features: cada linha é uma asserção com limite calibrado. Regressão dispara alerta no monitor diário.</div>
+        </div>
+        <button onClick={carregar} style={{ padding:'6px 10px', borderRadius:8, border:'1px solid #e2e8f0', background:'white', cursor:'pointer' }}>↻</button>
+      </div>
+      {erro && <div style={{ background:'#fef2f2', color:'#b91c1c', padding:10, borderRadius:8, marginBottom:12, fontSize:13 }}>Erro: {erro}</div>}
+      <div style={{ marginBottom:12, fontSize:14, fontWeight:800, color: alertas.length ? '#b91c1c' : '#059669' }}>
+        {loading ? 'Carregando…' : alertas.length ? `⚠ ${alertas.length} invariante(s) em ALERTA` : '✓ Tudo dentro do limite'}
+      </div>
+      {!loading && (
+        <div style={{ overflowX:'auto', border:'1px solid #e2e8f0', borderRadius:12 }}>
+          <table style={{ borderCollapse:'collapse', width:'100%', fontSize:12 }}>
+            <thead><tr style={{ background:'#f8fafc' }}>
+              {['','Invariante','Categoria','Tipo','Valor','Limite'].map((h,i)=>(
+                <th key={i} style={{ padding:'8px 10px', textAlign:'left', fontWeight:700, color:'#475569', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {(inv || []).map(i=>(
+                <tr key={i.chave} style={{ borderBottom:'1px solid #f1f5f9', background: i.status==='alerta' ? '#fef2f2' : 'white' }}>
+                  <td style={{ padding:'8px 10px' }}>{i.status==='alerta' ? '⚠' : '✓'}</td>
+                  <td style={{ padding:'8px 10px' }}>{i.titulo}</td>
+                  <td style={{ padding:'8px 10px', color:'#64748b' }}>{i.categoria}</td>
+                  <td style={{ padding:'8px 10px' }}><span style={{ fontSize:10, background: i.gravidade==='bug'?'#fee2e2':'#fef3c7', color: i.gravidade==='bug'?'#991b1b':'#92400e', padding:'1px 6px', borderRadius:6 }}>{i.gravidade}</span></td>
+                  <td style={{ padding:'8px 10px', fontWeight:800 }}>{i.valor}</td>
+                  <td style={{ padding:'8px 10px', color:'#94a3b8' }}>{i.limite}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TABS = ['Dashboard', 'Central da Equipe', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Comercial', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Financeiro', 'Prestação de contas', 'Configurações'];
 
 // Menus agrupados por área — navegação mais fácil que a lista corrida de abas.
 const GRUPOS_ADMIN = [
@@ -8733,7 +8788,7 @@ const GRUPOS_ADMIN = [
   { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'Comercial', 'Contratos'] },
   { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
   { nome: 'Equipe',              tabs: ['Central da Equipe', 'Equipe', 'Agenda'] },
-  { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais'] },
+  { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade'] },
   { nome: 'Financeiro',          tabs: ['Financeiro', 'Prestação de contas'] },
   { nome: 'Sistema',             tabs: ['Configurações'] },
 ];
@@ -8745,6 +8800,7 @@ const ROTULO_TAB = {
   CNJ: '⚖️ CNJ',
   Registros: '🗂️ Registros',
   Editais: '📜 Radar de Editais',
+  Qualidade: '✅ Qualidade',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -9358,6 +9414,7 @@ export default function Admin() {
         {tab === 'Registros'      && <RegistrosTab />}
         {tab === 'CNJ'            && <CnjTab />}
         {tab === 'Editais'        && <RadarEditaisTab />}
+        {tab === 'Qualidade'      && <QualidadeTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Financeiro'     && <FinanceiroTab />}
         {tab === 'Central da Equipe' && <CentralEquipeTab />}

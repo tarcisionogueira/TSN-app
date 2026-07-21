@@ -230,6 +230,13 @@ async function garantirValores(imovelId, deadline) {
   const anexosUrls = Array.isArray(im.anexos) ? im.anexos.map(a => a?.url).filter(Boolean) : [];
   const candidatos = [...new Set([im.link_edital, im.link_matricula, ...anexosUrls, im.url_lote])]
     .filter(u => u && /^https?:\/\//.test(u) && hostExterno(u));
+  // Prioriza DOCUMENTOS (PDF / endpoint de edital) sobre PÁGINAS de lote: a página costuma ser
+  // SPA (Grupo Lance/LJUD) — o valor é renderizado por JS e NÃO está no HTML cru do fetch, além
+  // de a leitura por IA do PDF exigir ≥12s de orçamento. Tentar o PDF PRIMEIRO garante que ele
+  // pegue o tempo (era o bug: o edital-PDF vinha por último e ficava sem orçamento → avaliação
+  // "não informada" mesmo com o edital em mãos, ex.: terreno Grupo Lance de Santana de Parnaíba).
+  const ehDoc = (u) => /\.pdf(\?|#|$)|\/edital|documentacao/i.test(u) ? 0 : 1;
+  candidatos.sort((a, b) => ehDoc(a) - ehDoc(b));
 
   let usei = im.url_lote || im.link_edital || '';
   for (const url of candidatos) {

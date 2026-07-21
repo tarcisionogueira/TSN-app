@@ -19,7 +19,11 @@ import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 
 const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
-const TRIBUNAIS = ['TJSP', 'TRT15'];
+// Tribunais monitorados — CONFIGURÁVEL por env RADAR_TRIBUNAIS (Item 5: "todos os estados").
+// Default = SP (validar primeiro). Para abrir p/ o Brasil, setar a env, ex.:
+//   TJSP,TJRJ,TJMG,TJRS,TJPR,TJSC,TJBA,TJGO,TJDFT,TJPE,TJCE,TJES,TJMT,TJMS,TJPA,TJMA,TJPB,
+//   TJRN,TJAL,TJSE,TJPI,TJAM,TJRO,TJAC,TJAP,TJRR,TJTO,TRT1,TRT2,TRT15 ... (DJEN é nacional).
+const TRIBUNAIS = (process.env.RADAR_TRIBUNAIS || 'TJSP,TRT15').split(',').map(s => s.trim()).filter(Boolean);
 const TERMOS = ['edital de leilão', 'hasta pública', 'leilão judicial'];
 const UA = 'Mozilla/5.0 (compatible; BidProRadar/1.0; +https://bidprobrasil.com.br)';
 const MAX_PAGINAS = 8;           // teto por (tribunal×termo): 8×100 = 800 itens
@@ -57,12 +61,25 @@ function parseEdital(texto) {
   const praca2 = pega(/(?:2[ªa]?|segund[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   const matricula = pega(/matr[íi]cula\s*(?:n[ºo.]?\s*)?([\d.\-]{3,15})/i);
   const plataforma = pega(/https?:\/\/([a-z0-9.\-]+\.(?:com|net|br)[^\s"'<>)]*)/i);
+  // Info ADICIONAL do edital (o DJEN não traz a certidão da matrícula, mas o edital descreve
+  // o imóvel/ônus): área, ocupação, cartório (CRI), débitos, endereço, cidade/UF.
+  const area = pega(/[áa]rea\s*(?:total|constru[íi]da|privativa|do\s+terreno|de)?\s*[:\-]?\s*([\d.]+,\d{2})\s*m/i);
+  const ocupacao = /desocupad|livre\s+de\s+ocupa|n[ãa]o\s+ocupad/i.test(t) ? 'desocupado' : (/ocupad/i.test(t) ? 'ocupado' : null);
+  const cartorio = pega(/(\d{0,2}[ºoª°]?\s*(?:cart[óo]rio|of[íi]cio)\s+de\s+registro\s+de\s+im[óo]veis[^,.\n]{0,35})/i);
+  const debitos = /d[ée]bito|IPTU|condom[íi]ni|ônus|onus|hipotec|penhora/i.test(t) ? 'edital menciona débitos/ônus (IPTU/condomínio/hipoteca/penhora) — conferir no texto' : null;
+  const endereco = pega(/(?:situad[oa]|localizad[oa])\s+(?:[àa]|na|no|em)\s+([A-ZÀ-Ý0-9][^,\n]{6,90})/i);
+  const cidadeUf = t.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ.'\s]{2,40})\s*[\/\-]\s*([A-Z]{2})\b/);
   const parsedAlgo = !!(leiloeiro || jucesp || av || lance || praca1);
   return {
     leiloeiro_nome: leiloeiro, leiloeiro_jucesp: jucesp,
     valor_avaliacao: parseBRL(av), lance_minimo: parseBRL(lance),
     data_praca_1: parseDataBR(praca1), data_praca_2: parseDataBR(praca2),
     imovel_matricula: matricula, leilao_plataforma_url: plataforma ? ('https://' + plataforma) : null,
+    imovel_area_m2: area ? (parseFloat(area.replace(/\./g, '').replace(',', '.')) || null) : null,
+    ocupacao, cartorio, debitos,
+    imovel_endereco: endereco ? endereco.replace(/\s+/g, ' ').trim().slice(0, 200) : null,
+    imovel_cidade: cidadeUf ? cidadeUf[1].replace(/\s+/g, ' ').trim().slice(0, 80) : null,
+    imovel_uf: cidadeUf ? cidadeUf[2] : null,
     status: parsedAlgo ? 'processado' : 'erro_parse',
   };
 }
@@ -152,7 +169,9 @@ async function handler(req) {
             leiloeiro_jucesp: p.leiloeiro_jucesp, leilao_plataforma_url: p.leilao_plataforma_url,
             leiloeiro_integrado: nomeLeiloeiro ? ehIntegrado(nomeLeiloeiro) : false,
             valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
-            imovel_matricula: p.imovel_matricula,
+            imovel_matricula: p.imovel_matricula, imovel_area_m2: p.imovel_area_m2,
+            imovel_cidade: p.imovel_cidade, imovel_uf: p.imovel_uf || 'SP', imovel_endereco: p.imovel_endereco,
+            debitos: p.debitos, ocupacao: p.ocupacao, cartorio: p.cartorio,
             texto_integral: texto.slice(0, 20000),
             hash_dedup: djenId ? null : norm(`${tribunal}|${g(it, 'numeroProcesso') || ''}|${texto.slice(0, 200)}`),
             payload: it,
@@ -181,6 +200,11 @@ async function handler(req) {
     erroGeral = String(e.message).slice(0, 120);
   }
 
+  // INGESTÃO: usa os editais p/ preencher avaliação faltante do acervo (chave forte: lance ==
+  // valor mínimo do lote). Conservador; nunca sobrescreve avaliação existente. Aditivo.
+  let enriquecidos = 0;
+  try { const { data } = await supabase.rpc('editais_enriquecer_acervo'); enriquecidos = Number(data) || 0; } catch { /* aditivo */ }
+
   try {
     await supabase.from('monitor_runs').insert({
       fonte: 'radar-editais-djen', janela_inicio: ini, janela_fim: fim,
@@ -188,7 +212,7 @@ async function handler(req) {
     });
   } catch { /* nunca quebra por causa do log */ }
 
-  return new Response(JSON.stringify({ ok: true, vistos, novos, erro: erroGeral, janela: [ini, fim] }), {
+  return new Response(JSON.stringify({ ok: true, vistos, novos, enriquecidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
