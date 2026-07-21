@@ -4053,6 +4053,7 @@ function DashboardTab() {
   const [loading, setLoading] = useState(true);
   const [asaasLoading, setAsaasLoading] = useState(true);
   const [fotoStats, setFotoStats] = useState({ total: 0, noStorage: 0 });
+  const [custos, setCustos] = useState(null); // /api/uso-integracoes (câmbio real + custo real de IA)
   const [usuariosDetalhe, setUsuariosDetalhe] = useState(false);
   const [healthLogs, setHealthLogs] = useState([]);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -4176,9 +4177,20 @@ function DashboardTab() {
       } catch { setMpSaldo({ error: 'Falha de conexão com Mercado Pago' }); }
     }
 
+    async function loadCustos() {
+      // Câmbio real (usd_brl) + custo REAL de IA/integrações do mês (total_mes.custo_brl), p/ o
+      // "custo mensal estimado de infra" refletir o gasto de verdade, não um número chumbado.
+      try {
+        const res = await apiCall('/api/uso-integracoes');
+        const data = await res.json();
+        setCustos(res.ok ? data : null);
+      } catch { setCustos(null); }
+    }
+
     load();
     loadAsaas();
     loadMp();
+    loadCustos();
     loadHealth();
     if (equipeDetalhe) loadEquipeDetalhe(equipeDetalhe, periodo, dataInicio, dataFim);
   }, [periodo, dataInicio, dataFim]);
@@ -4198,6 +4210,14 @@ function DashboardTab() {
   const marco = marcoAsaas(dados.mrr);
   const proximo = dados.mrr < 10000 ? 10000 : dados.mrr < 30000 ? 30000 : dados.mrr < 100000 ? 100000 : null;
   const progresso = proximo ? Math.min(100, (dados.mrr / proximo) * 100) : 100;
+
+  // Custos de infra (fidelidade): câmbio REAL do /api/uso-integracoes (env APP_USD_BRL, ~5,4) em
+  // vez de um valor chumbado; custo REAL de IA/integrações do mês; storage das fotos calculado com
+  // o câmbio real. Ficam em escopo do componente p/ o card de Storage E o "Total" usarem o MESMO.
+  const cambioUsdBrl = custos?.usd_brl ?? 5.4;
+  const custoIABrl = custos?.total_mes?.custo_brl || 0;         // Claude/Gemini/geocode/Resend/etc.
+  const custoIAProjBrl = custos?.total_mes?.projecao_custo_brl ?? null;
+  const storageCustoBRL = (fotoStats.noStorage * 0.00015) * 0.021 * cambioUsdBrl; // ~150 KB/foto · $0,021/GB
 
   const statCard = (label, value, sub, cor = '#0D63DB') => (
     <div style={{ background: '#111111', borderRadius: 12, padding: '20px 22px', flex: 1, minWidth: 160 }}>
@@ -4724,8 +4744,7 @@ function DashboardTab() {
 
             {/* Scrapers & Storage operacional */}
             {(() => {
-              const fotosGB = (fotoStats.noStorage * 0.00015); // ~150 KB média por foto
-              const storageCustoBRL = fotosGB * 0.021 * 6.0; // $0.021/GB × câmbio ~6.0
+              // storageCustoBRL já calculado em escopo do componente com o câmbio REAL (usd_brl).
               const semFoto = fotoStats.total - fotoStats.noStorage;
               const pctFotos = fotoStats.total > 0 ? Math.round((fotoStats.noStorage / fotoStats.total) * 100) : 0;
               return (
@@ -4783,14 +4802,23 @@ function DashboardTab() {
               {dados.mrr > 8000 && <div style={{ marginTop: 6, fontSize: 11, color: '#d97706', fontWeight: 600 }}>⚠️ MRR acima de R$ 10k: contatar comercial Asaas para reduzir taxa para ~0,7%</div>}
             </div>
 
-            {/* Total mensal */}
+            {/* Total mensal — agora com o custo REAL de IA/integrações do mês (não mais um fixo
+                de R$3): Supabase (degrau do plano Pro) + storage das fotos + IA/integrações + PIX. */}
             {(() => {
-              const totalMensal = (dados.dbSizeMB > 400 || dados.total > 40000 ? 150 : 0) + 3 + dados.taxaPix;
+              const supabaseFix = (dados.dbSizeMB > 400 || dados.total > 40000 ? 150 : 0);
+              const totalMensal = supabaseFix + storageCustoBRL + custoIABrl + dados.taxaPix;
               const cor = totalMensal > 200 ? '#d97706' : '#10b981';
               return (
-                <div style={{ marginTop: 14, padding: '12px 14px', background: '#111111', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>Custo mensal estimado de infra</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: cor }}>R$ {fmt(totalMensal)}</div>
+                <div style={{ marginTop: 14, padding: '12px 14px', background: '#111111', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>Custo mensal estimado de infra</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: cor }}>R$ {fmt(totalMensal)}</div>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 6, textAlign: 'right' }}>
+                    Supabase R$ {fmt(supabaseFix)} · Storage R$ {fmt(storageCustoBRL)} · IA/integrações R$ {fmt(custoIABrl)}
+                    {custoIAProjBrl != null && ` (projeção mês R$ ${fmt(custoIAProjBrl)})`} · PIX R$ {fmt(dados.taxaPix)}
+                    {!custos && ' · ⏳ custo de IA carregando…'}
+                  </div>
                 </div>
               );
             })()}
