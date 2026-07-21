@@ -1,0 +1,86 @@
+# 🎯 Backlog — Leiloeiros homologados TRT-15 (integrar aos poucos até zerar)
+
+> Objetivo do dono: **mais imóveis** na plataforma, com **máxima segurança, eficiência e economia** na extração. Lista de leiloeiros homologados do TRT-15 (Campinas/SP). Marque `[x]` ao integrar/confirmar.
+
+## 🔑 Estratégia (economia máxima — NÃO fazer 58 scrapers)
+A maioria dos leiloeiros judiciais de SP **publica em portais AGREGADORES que já raspamos**:
+- **LJUD** (`leiloesjudiciais.com.br`) — portal NACIONAL, já traz **40+ leiloeiros / ~1.000 imóveis**. É a maior alavanca.
+- **LEILOTECH** (white-label), **SUPORTE** (white-label), **SUPERBID/SOLD** (rede).
+
+**Ordem de ataque (custo crescente):**
+1. **Confirmar cobertura via portal** — antes de escrever qualquer scraper novo, checar se o leiloeiro já cai no LJUD/LEILOTECH/SUPORTE/SUPERBID (muitos judiciais publicam em vários portais). Se sim: **custo ZERO** (só garantir que o agregador captura tudo).
+2. **Detectar a plataforma** do site independente. Vários usam a MESMA base white-label (ex.: a mesma do LEILOTECH/SUPORTE) → integrar a plataforma **onboarda vários de uma vez**.
+3. **Scraper dedicado** só para o que sobrar de fato independente. Reusar o framework `scripts/scraper-puppeteer.mjs` (mesmos guards: só-BR, sem sentinela, `reforcarTipo`, baseline auto-aprendido cobre o novo automaticamente).
+
+Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis); respeitar `robots`/rate; nunca derrubar o site; dedup por `fonte_id`.
+
+---
+
+## ✅ JÁ COBERTOS (via portal que já raspamos — confirmar cobertura, custo ~0)
+Match por NOME do leiloeiro no nosso acervo (⚠️ confirmar que é o mesmo CPF/leiloeiro):
+- [x] `webleiloes.com.br` → **WEBLEILOES** (direto, 92 ativos)
+- [x] `liderleiloes.com.br` → **SUPORTE** (Líder Leilões, 11)
+- [x] `topoleiloes.com.br` → **LEILOTECH** (Topo Leilões, 12)
+- [x] `alessandroteixeiraleiloes.com.br` → **LJUD** (Alessandro de Assis Teixeira, 13)
+- [x] `thaisteixeiraleiloes.com.br` → **LJUD** (Thaís Costa Bastos Teixeira, 53)
+- [x] `alvaroleiloes.com.br` → **LJUD** (Álvaro Sérgio Fuzo, 100) ⚠️confirmar
+- [x] `giordanoleiloes.com.br` → **LJUD** (Giordano Bruno Coan Amador, 117)
+- [x] `franciscofreitasleiloes.com.br` → **LJUD** (Francisco Freitas, 101)
+- [x] `rigolonleiloes.com.br` → **LJUD** (Rodrigo Aparecido Rigolon, 33)
+- [x] `carloferrarileiloes.com.br` → **LJUD** (Carlo Ferrari, 8)
+- [x] `danieloliveiraleiloes.com.br` → **LJUD** (Daniel Oliveira Júnior, 10)
+- [x] `fabiobarbosaleiloes.com.br` → **LJUD** (Fabio Gonçalves Barbosa, 5)
+- [x] `gilsonleiloes.com.br` → **LJUD** (Gilson Keniti Inumaru, 6)
+- [x] `verrileiloes.com.br` → **LJUD** (Helton Verri, 4)
+- [x] `akimotoleiloes.com.br` → **LJUD** (Zuleika Matsumura Akimoto, 2)
+- [x] `cidafixerleiloes.com.br` / `mariafixerleiloes.com.br` → **LJUD** (família Fixer: Aparecida/Conceição/Leonice, ~36) ⚠️confirmar qual
+- [ ] `brunoleiloes.com.br` → **LJUD provável** (Bruno Henrique Lopes / Bruno Fernando Meireles) ⚠️confirmar
+- [ ] `albertomacedoleiloes.com.br` → **SUPERBID** (Alberto Macedo, **0 ativos** hoje) ⚠️por que 0? verificar
+
+## 🔲 A INTEGRAR / VERIFICAR (sem match no acervo — checar portal antes de scraper dedicado)
+> Passo 1 para CADA: recon rápido — plataforma? já está no LJUD/outro portal? tem JSON/API?
+- [ ] `crepaldileiloes.com.br`
+- [ ] `planaltoleiloes.com.br`
+- [ ] `e-leiloeiro.com.br`  *(pode ser plataforma white-label — alto valor se onboarda vários)*
+- [ ] `centraljudicial.com.br`  *(nome sugere portal agregador — verificar)*
+- [ ] `extrajustleiloes.com.br`
+- [ ] `lancetotal.com.br`
+- [ ] `satoleiloes.com.br`
+- [ ] `sanchesleiloes.com.br`
+- [ ] `verdeamareloleiloes.com.br`
+- [ ] `lancenoleilao.com.br`
+- [ ] `eduardosorgileiloeiro.com.br`
+- [ ] `leilaobrasil.com.br`  *(possível plataforma — verificar)*
+- [ ] `alfaleiloes.com`
+- [ ] `sudesteleiloes.com.br`
+- [ ] `delanoleiloes.com.br`
+- [ ] `hastapublica.com.br`  *(nome de plataforma — verificar)*
+- [ ] `zaccarino.com.br`
+- [ ] `gustavoreisleiloes.com.br`
+- [ ] `sumareleiloes.com.br`
+- [ ] `vegasleiloes.com.br`
+- [ ] `cunhaleiloeiro.com.br`
+- [ ] `picellileiloes.com.br`
+- [ ] `valeroleiloes.com.br`
+- [ ] `saocaetanoleiloes.com.br`
+- [ ] `calilleiloes.com.br`
+- [ ] `capitalvalorleiloes.com.br`
+- [ ] `paulistanaleiloes.com.br`
+- [ ] `3torresleiloes.com.br`
+- [ ] `elizabethseoanes.com.br`
+- [ ] `destakleiloes.com.br`
+- [ ] `e-confianca.com.br`
+- [ ] `shiokawaleiloes.com.br`
+- [ ] `bomnegocioleiloes.com.br`
+- [ ] `osvaldoleiloes.com.br`
+- [ ] `judhastas.com.br`  *(nome sugere portal — verificar)*
+- [ ] `granadoleiloes.com.br`
+- [ ] `totalleiloes.com.br`
+- [ ] `hisaleiloes.com.br`
+- [ ] `vincoleiloes.com.br`
+
+## 📌 Notas
+- Lista original tinha duplicatas (`leilaobrasil` ×3, `hastapublica` ×2) — deduplicadas para **58 domínios únicos**.
+- Match "via LJUD" é por **nome** — confirmar CPF/leiloeiro no 1º recon (homônimos existem).
+- Ao integrar cada um: registrar em `leiloeiro_conhecimento` + o **baseline auto-aprendido** (monitor) já passa a vigiá-lo após alguns runs, sem hardcode.
+- **Não** captar equipamento/veículo, parte ideal, direito creditório (regras do dono).
