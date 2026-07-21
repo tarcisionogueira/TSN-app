@@ -3678,7 +3678,13 @@ function PainelCustosUso() {
   const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const int = (v) => Number(v || 0).toLocaleString('pt-BR');
 
-  if (erro) return null; // some silenciosamente se indisponível (não trava o dashboard)
+  // Indisponível: mostra um aviso discreto (não some — assim o admin sabe que a FONTE caiu,
+  // e não confunde "sem custo" com "custo não carregou"). Nunca trava o dashboard.
+  if (erro) return (
+    <div style={{ ...S.card, color: '#94a3b8', fontSize: 12.5, marginBottom: 16 }}>
+      💸 Custos &amp; Uso — indisponível no momento (falha ao consultar <code>/api/uso-integracoes</code>).
+    </div>
+  );
   if (!uso) return <div style={{ ...S.card, color: '#94a3b8', fontSize: 13, marginBottom: 16 }}>Carregando custos…</div>;
 
   return (
@@ -4166,12 +4172,13 @@ function DashboardTab() {
       setAsaasLoading(false);
     }
 
-    // Fotos: count total e quantas já estão no Storage
-    supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true)
-      .then(({ count: total }) => {
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).like('link_foto', '%supabase%')
-          .then(({ count: noStorage }) => setFotoStats({ total: total || 0, noStorage: noStorage || 0 }));
-      });
+    // Fotos: count total e quantas já estão no Storage (as duas contagens em PARALELO — antes
+    // eram aninhadas, custando 1 RTT a mais por load do dashboard).
+    Promise.all([
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).like('link_foto', '%supabase%'),
+    ]).then(([{ count: total }, { count: noStorage }]) =>
+      setFotoStats({ total: total || 0, noStorage: noStorage || 0 }));
 
     async function loadMp() {
       try {
@@ -8598,7 +8605,7 @@ function CentralEquipeTab() {
                     <div key={c.id} onClick={() => abrirFicha(c)}
                       style={{ background: 'white', border: `1px solid ${parado ? '#fecaca' : '#e2e8f0'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer' }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{nomes[c.cliente_id] || 'Cliente'}</div>
-                      <div style={{ fontSize: 11, color: '#64748b', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.imovel_endereco || 'Imóvel —'}</div>
+                      <div title={c.imovel_endereco || ''} style={{ fontSize: 11, color: '#64748b', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.imovel_endereco || 'Imóvel —'}</div>
                       <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
                         {c.advogado_id ? `Adv: ${nomes[c.advogado_id] || '—'}` : c.analista_id ? `Analista: ${nomes[c.analista_id] || '—'}` : 'Sem responsável'}
                       </div>
@@ -8699,7 +8706,7 @@ function RadarEditaisTab() {
               {editais.map(e=>(
                 <tr key={e.id} style={{ borderBottom:'1px solid #f1f5f9' }}>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{dt(e.data_disponibilizacao)}</td>
-                  <td style={{ padding:'8px 10px', maxWidth:170, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.orgao || e.comarca || '—'}</td>
+                  <td title={e.orgao || e.comarca || ''} style={{ padding:'8px 10px', maxWidth:170, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.orgao || e.comarca || '—'}</td>
                   <td style={{ padding:'8px 10px' }}>
                     {e.leiloeiro_nome || <span style={{ color:'#94a3b8' }}>—</span>}{' '}
                     {e.leiloeiro_nome && (e.leiloeiro_integrado
@@ -8777,9 +8784,9 @@ function QualidadeTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Central da Equipe', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Comercial', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Financeiro', 'Prestação de contas', 'Configurações'];
-
 // Menus agrupados por área — navegação mais fácil que a lista corrida de abas.
+// FONTE ÚNICA das abas: os botões, o tab default e o render saem daqui (não há mais
+// lista `TABS` paralela p/ dessincronizar). `flatMap` dá o conjunto plano quando preciso.
 const GRUPOS_ADMIN = [
   { nome: 'Início',              tabs: ['Dashboard'] },
   { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'Comercial', 'Contratos'] },
@@ -8798,6 +8805,7 @@ const ROTULO_TAB = {
   Registros: '🗂️ Registros',
   Editais: '📜 Radar de Editais',
   Qualidade: '✅ Qualidade',
+  Marketing: '📣 Marketing',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -8834,17 +8842,20 @@ function AgendaTab() {
 
   async function adicionarDisp() {
     setSalvando(true); setMsg('');
-    const { error } = await supabase.from('disponibilidade_analista').insert({ analista_id: analistaSel, ...novaDisp });
+    // insert().select() devolve a linha criada → anexa ao estado (sem refazer o SELECT completo).
+    const { data: nova, error } = await supabase.from('disponibilidade_analista')
+      .insert({ analista_id: analistaSel, ...novaDisp }).select().single();
     if (error) setMsg('Erro: ' + error.message);
     else {
       setMsg('✅ Disponibilidade adicionada');
-      const { data } = await supabase.from('disponibilidade_analista').select('*').eq('analista_id', analistaSel).order('dia_semana').order('hora_inicio');
-      setDisps(data || []);
+      setDisps(p => [...p, nova].sort((a, b) =>
+        a.dia_semana - b.dia_semana || String(a.hora_inicio).localeCompare(String(b.hora_inicio))));
     }
     setSalvando(false);
   }
 
   async function removerDisp(id) {
+    if (!window.confirm('Remover esta disponibilidade?')) return;
     await supabase.from('disponibilidade_analista').delete().eq('id', id);
     setDisps(p => p.filter(d => d.id !== id));
   }
@@ -9416,7 +9427,7 @@ export default function Admin() {
         {tab === 'Financeiro'     && <FinanceiroTab />}
         {tab === 'Central da Equipe' && <CentralEquipeTab />}
         {tab === 'Prestação de contas' && <PrestacaoContasTab />}
-        {tab === 'Marketing'      && role === 'admin' && <MarketingTab />}
+        {tab === 'Marketing'      && <MarketingTab />}
       </div>
     </div>
   );
