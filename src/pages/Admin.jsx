@@ -1160,7 +1160,40 @@ const DESCRICOES_PADRAO = {
   top2: 'Assinatura Investidor Pro — acesso à plataforma BidPro Brasil, cursos e ebooks incluídos. Valor: R$49,90/mês, cobrança recorrente. Cancelamento a qualquer momento.',
 };
 
+// FONTE ÚNICA dos VALORES do contrato: monta a descrição dos planos PAGOS (assessoria/clube/
+// investidor pro) a partir do `planos_config` (via usePlanos) — assim, ao mudar um preço/termo no
+// painel, TODO contrato novo já sai com o valor certo (fim do risco de texto chumbado divergir do
+// preço real). Os textos são PRÉ-PREENCHIMENTO editável (o contrato passa por revisão humana antes
+// de gerar). Planos sem preço (consultor/analista/advogado/nda) seguem no DESCRICOES_PADRAO estático.
+function fmtBRLContrato(v) {
+  const n = Number(v) || 0;
+  return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+}
+function descricaoContratoPlano(key, cfg) {
+  if (!cfg) return DESCRICOES_PADRAO[key] || ''; // config ainda carregando → texto estático
+  const preco = Number(cfg.preco) || 0;
+  const vista = Number(cfg.precoVista ?? cfg.preco_vista) || 0;
+  const descPct = Number(cfg.desconto_vista_pct) || 0;
+  const meses = Number(cfg.acesso_meses) || Number(cfg.fidelidade_meses) || 12;
+  const fid = Number(cfg.fidelidade_meses) || 12;
+  const multa = Number(cfg.multa_cancelamento_pct) || 0;
+  const exito = Number(cfg.honorarios_exito_pct) || 0;
+  const anual = Number(cfg.precoAnual ?? cfg.preco_anual) || 0;
+  const mensal = meses > 0 ? preco / meses : preco;
+  const vistaTxt = vista > 0 ? ` ou ${fmtBRLContrato(vista)} à vista${descPct > 0 ? ` (${Math.round(descPct)}% de desconto)` : ''}` : '';
+  const exitoTxt = exito > 0 ? ` + ${Math.round(exito)}% de honorários de êxito sobre o valor arrematado` : '';
+  const multaTxt = multa > 0 ? ` + multa de ${Math.round(multa)}%` : '';
+  if (key === 'assessorado')
+    return `Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até ${meses} meses. Valor: ${fmtBRLContrato(mensal)} em ${meses}x (total ${fmtBRLContrato(preco)})${vistaTxt}${exitoTxt}. Rescisão: aviso prévio de 30 dias${multaTxt}.`;
+  if (key === 'clube')
+    return `Adesão ao Clube de Negócios BidPro Brasil: mentoria, assessoria e arrematações ilimitadas por ${meses} meses. Valor: ${fmtBRLContrato(mensal)}/mês (total ${fmtBRLContrato(preco)})${vistaTxt}, vencimento dia 10. Fidelidade mínima de ${fid} meses. Rescisão antes do prazo: ${multa > 0 ? `multa de ${Math.round(multa)}% sobre as parcelas restantes` : 'pagamento integral das parcelas restantes'}.`;
+  if (key === 'top2')
+    return `Assinatura Investidor Pro — acesso à plataforma BidPro Brasil, cursos e ebooks incluídos. Valor: ${fmtBRLContrato(preco)}/mês, cobrança recorrente${anual > 0 ? ` (ou ${fmtBRLContrato(anual)}/ano)` : ''}. Cancelamento a qualquer momento.`;
+  return DESCRICOES_PADRAO[key] || '';
+}
+
 function ContratoModal({ chave, planos, onClose }) {
+  const planosCfg = usePlanos(); // preços/termos ao vivo do planos_config (fonte única do valor)
   // chave: 'assessorado' | 'curso:uuid:titulo' | 'ebook:uuid:titulo'
   const partes = chave.split(':');
   const isProduto = partes[0] === 'curso' || partes[0] === 'ebook';
@@ -1171,7 +1204,7 @@ function ContratoModal({ chave, planos, onClose }) {
     : planoObj?.nome || chave;
   const descPadrao = isProduto
     ? `Contrato de aquisição: ${nomeContrato}. Produto digital disponível na plataforma BidPro Brasil. Acesso individual e intransferível. Valor conforme acordado.`
-    : (DESCRICOES_PADRAO[chave] || '');
+    : descricaoContratoPlano(chave, planosCfg?.[chave]);
 
   // Etapas: 'dados' | 'gerando' | 'revisar' | 'aprovado'
   const [etapa, setEtapa] = useState('dados');
@@ -2288,6 +2321,7 @@ function ConfigTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function ContratosTab() {
+  const planosCfg = usePlanos(); // preços/termos ao vivo do planos_config (fonte única do valor)
   const [contratosLink, setContratosLink] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -2373,11 +2407,12 @@ function ContratosTab() {
     if (key === 'assessorado') {
       setTitulo('Contrato de Assessoria para Aquisição de Imóvel em Leilão');
       setTipo('servico');
-      setDescricao('Assessoria completa para identificação, análise de viabilidade, análise jurídica do edital e matrícula, acompanhamento do leilão e suporte pós-arrematação. Prazo: até 12 meses para conclusão da arrematação. Não inclui mentoria. Valor: R$500 em 12x (total R$6.000) ou R$4.800 à vista (20% de desconto) + 10% honorários de êxito sobre o valor arrematado. Rescisão: aviso prévio de 30 dias + multa de 10%.');
+      // Valores/termos vêm do planos_config (fonte única) — muda no painel, o contrato acompanha.
+      setDescricao(descricaoContratoPlano('assessorado', planosCfg?.assessorado));
     } else if (key === 'clube') {
       setTitulo('Contrato de Adesão ao Clube de Negócios BidPro Brasil');
       setTipo('servico');
-      setDescricao('Adesão ao Clube de Negócios BidPro Brasil: mentoria, assessoria e arrematações ilimitadas por 12 meses. Valor: R$5.000/mês (total R$60.000) ou R$48.000 à vista, vencimento dia 10. Fidelidade mínima de 12 meses. Rescisão antes do prazo: pagamento integral das parcelas restantes.');
+      setDescricao(descricaoContratoPlano('clube', planosCfg?.clube));
     } else if (key === 'analista') {
       setTitulo('Contrato de Prestação de Serviços de Análise de Imóveis em Leilão');
       setTipo('servico');
