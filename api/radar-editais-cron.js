@@ -119,7 +119,7 @@ async function extrairEditalIA(texto) {
   if (!apiKey) return null;
   const prompt = `Abaixo há uma COMUNICAÇÃO JUDICIAL sobre LEILÃO/HASTA de IMÓVEL (pode ser o edital, ou uma intimação/despacho que designa ou relata o leilão). Extraia os campos e responda APENAS um JSON válido (sem markdown, sem comentários) com estas chaves (use null quando não houver):
 {"leiloeiro_nome":string|null,"valor_avaliacao":number|null,"lance_minimo":number|null,"data_praca_1":"YYYY-MM-DD"|null,"data_praca_2":"YYYY-MM-DD"|null,"imovel_matricula":string|null,"imovel_endereco":string|null,"imovel_cidade":string|null,"imovel_uf":string|null,"ocupacao":"ocupado"|"desocupado"|null,"area_m2":number|null}
-Regras: valores como número puro (ex: 150000.50, sem "R$" nem pontos de milhar). leiloeiro_nome = a pessoa/empresa LEILOEIRA oficial (nunca o juiz, as partes ou advogados; se não citar, null). Se o texto NÃO tratar de leilão/hasta pública de um IMÓVEL, responda exatamente {"nao_edital":true}.
+Regras: valores como número puro (ex: 150000.50, sem "R$" nem pontos de milhar). leiloeiro_nome = o NOME PRÓPRIO da pessoa/empresa leiloeira (ex: "João da Silva Leilões"); se o texto só disser "leiloeiro oficial"/"cadastrado no Portal dos Auxiliares" SEM nomear, use null (nunca o juiz, as partes ou advogados). Se o texto NÃO tratar de leilão/hasta pública de um IMÓVEL, responda exatamente {"nao_edital":true}.
 
 TEXTO:
 ${String(texto || '').slice(0, 8000)}`;
@@ -159,8 +159,15 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
     if (out && out.nao_edital) {
       upd.status = 'nao_edital'; // IA confirmou que é despacho/decisão, não edital → telas ignoram
     } else if (out) {
-      const nome = String(out.leiloeiro_nome || '').trim().slice(0, 120) || null;
-      if (nome) { upd.leiloeiro_nome = nome; upd.leiloeiro_nome_norm = norm(nome); upd.leiloeiro_integrado = ehIntegrado(nome); }
+      // Só NOME PRÓPRIO (≥2 palavras, sem fragmento genérico): muitas intimações referenciam
+      // "leiloeiro oficial cadastrado no Portal dos Auxiliares" SEM nomear ninguém. Sobrescreve
+      // sempre (assim limpa também o lixo herdado da regex: "oficial", "cadastrado no portal"...).
+      const bruto = String(out.leiloeiro_nome || '').trim();
+      const nomeReal = (bruto && /\s/.test(bruto)
+        && !/^(oficial|cadastrad|leiloeir|nomead|portal|auxiliar|s[rn]a?\.?\s*$)/i.test(bruto)) ? bruto.slice(0, 120) : null;
+      upd.leiloeiro_nome = nomeReal;
+      upd.leiloeiro_nome_norm = nomeReal ? norm(nomeReal) : null;
+      upd.leiloeiro_integrado = nomeReal ? ehIntegrado(nomeReal) : false;
       if (numOk(out.valor_avaliacao)) upd.valor_avaliacao = out.valor_avaliacao;
       if (numOk(out.lance_minimo)) upd.lance_minimo = out.lance_minimo;
       if (numOk(out.area_m2)) upd.imovel_area_m2 = out.area_m2;
