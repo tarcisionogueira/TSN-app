@@ -66,7 +66,9 @@ const BASELINE_FONTES = {
   MEGA:       { min: 400,   campos: { foto: 90, valor: 95, area: 80, data: 90, matricula: 85, edital: 85, avaliacao: 90 } },
   GRUPOLANCE: { min: 250,   campos: { foto: 90, valor: 95, area: 75, matricula: 78, edital: 85 } },
   PESTANA:    { min: 120,   campos: { foto: 80, valor: 95, area: 75, data: 90, matricula: 78, edital: 85 } },
-  BIASI:      { min: 150,   campos: { foto: 90, valor: 95, matricula: 83, edital: 85 } },
+  // Piso 120: acervo REAL medido pela captura robusta nova (listagem agregada ?pagina) =
+  // 144 em 21/07 (o site oscila; era ~370 em meados de 07). Abaixo de 120 = regressão real.
+  BIASI:      { min: 120,   campos: { foto: 90, valor: 95, matricula: 83, edital: 85 } },
   FRAZAO:     { min: 90,    campos: { foto: 90, valor: 95, data: 90, matricula: 85, edital: 85 } },
   WEBLEILOES: { min: 60,    campos: { foto: 90, valor: 95, area: 80, matricula: 78, edital: 78 } },
   LEILOTECH:  { min: 60,    campos: { valor: 95, data: 90, matricula: 68, edital: 60, avaliacao: 80 } },
@@ -186,6 +188,33 @@ async function handler(req) {
       }
     }
   } catch { /* baseline é aditivo — não bloqueia o restante do monitor */ }
+
+  // C2) QUALIDADE / CORREÇÃO (pedido do dono): a Seção C mede campo VAZIO (cobertura); esta
+  //     mede campo TROCADO ou FRACO, que a cobertura escondia (uma matrícula que é a página,
+  //     ou o edital==matrícula, CONTAM como "tem" e até inflam). Via RPC fonte_qualidade():
+  //       • tipologia fraca  = % alto do balde genérico 'imovel' (captura de tipo regrediu).
+  //       • documento trocado = link_edital == link_matricula (o bug "Edital abre Matrícula").
+  //       • matrícula = lote  = link_matricula == url_lote (aponta p/ a página, não é doc).
+  //     Calibrado p/ 0 falso-positivo no acervo atual: gate de VOLUME (≥50 ativos) + limite
+  //     RELATIVO (≥3% e ≥5 lotes) — pega a REGRESSÃO em massa, ignora ruído de fonte pequena.
+  //     Aditivo: se a RPC falhar, nunca derruba o monitor.
+  try {
+    const { data: qualidade } = await supabase.rpc('fonte_qualidade');
+    for (const row of qualidade || []) {
+      const n = Number(row.ativos) || 0;
+      if (n >= 50 && Number(row.imovel_pct) > 25) {
+        problemas.push({ fonte: row.fonte, tipo: 'tipologia fraca', detalhe: `${row.imovel_pct}% dos lotes sem tipo (balde genérico 'imovel') — captura de tipologia regrediu` });
+      }
+      const edm = Number(row.ed_eq_matr) || 0;
+      if (edm >= 5 && (edm * 100) / n >= 3) {
+        problemas.push({ fonte: row.fonte, tipo: 'documento trocado (edital=matrícula)', detalhe: `${edm} lote(s) com o Edital apontando para a mesma URL da Matrícula` });
+      }
+      const mel = Number(row.matr_eq_lote) || 0;
+      if (mel >= 5 && (mel * 100) / n >= 3) {
+        problemas.push({ fonte: row.fonte, tipo: 'matrícula não é documento', detalhe: `${mel} lote(s) com a Matrícula apontando para a página do lote (não é arquivo)` });
+      }
+    }
+  } catch { /* qualidade é aditiva — nunca derruba o monitor */ }
 
   // D) VARREDURA "só Brasil" pós-geocode (rede Superbid). O guard do scraper
   //    (ehEstrangeiroSemUF) só reconhece estrangeiro quando a CIDADE já vem preenchida;
