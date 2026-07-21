@@ -697,21 +697,34 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
       // enriquecerDocumentosLote (enrich) segue como estava — nunca piora.
       const anexos = (() => {
         try {
-          const out = [], vis = new Set();
-          const add = (url, nome) => {
+          const out = [], vis = new Set(), objSeen = new Set();
+          // Classifica pelo ROTULO (objeto inteiro do anexo): a URL da rede Superbid é um
+          // UUID opaco (s.superbid.net/attachment/…/uuid.pdf), mas o TIPO/nome-de-arquivo
+          // vem em ALGUMA chave do objeto ("Edital", "Matrícula do imóvel"…). Por isso
+          // classificamos pelo JSON inteiro do anexo, não por uma chave específica.
+          const add = (url, label) => {
             if (!url || typeof url !== 'string') return;
             const u = url.startsWith('//') ? `https:${url}` : url;
             if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u)) return;
             vis.add(u);
-            const t = `${nome || ''} ${u}`.toLowerCase();
-            const tipo = /matr[ií]cul/.test(t) ? 'matricula' : /laudo|avalia/.test(t) ? 'laudo'
-                       : /(edital|regulament)/.test(t) ? 'edital' : 'outro';
-            out.push({ nome: nome || (tipo.charAt(0).toUpperCase() + tipo.slice(1)), url: u, tipo });
+            const t = `${label || ''} ${u}`.toLowerCase();
+            const tipo = /matr[ií]cul/.test(t) ? 'matricula' : /(laudo|avalia)/.test(t) ? 'laudo'
+                       : /(edital|regulament|condi[çc])/.test(t) ? 'edital' : 'outro';
+            out.push({ nome: tipo.charAt(0).toUpperCase() + tipo.slice(1), url: u, tipo });
           };
-          for (const arr of [of.offerDocument, of.attachments, of.documents, of.offerAttachments, p.attachments, det.attachments, det.documents].filter(Array.isArray))
-            for (const a of arr) add(a?.url || a?.link || a?.href || a?.fileUrl || a?.value, a?.name || a?.title || a?.description || a?.label);
-          for (const m of (JSON.stringify(of).match(/https?:\\?\/\\?\/[^"'\s\\]*\.pdf/gi) || [])) add(m.replace(/\\\//g, '/'));
-          return out.length ? out.slice(0, 10) : undefined;
+          // Varre recursivamente o objeto da oferta: qualquer objeto com uma URL .pdf vira
+          // anexo, rotulado pelo próprio objeto (pega o tipo em qualquer chave/aninhamento).
+          const walk = (node, depth) => {
+            if (!node || typeof node !== 'object' || depth > 5) return;
+            if (Array.isArray(node)) { for (const it of node) walk(it, depth + 1); return; }
+            const url = node.url || node.link || node.href || node.fileUrl || node.path || node.value || node.document || node.attachmentUrl;
+            if (typeof url === 'string' && /\.pdf(\?|#|$)/i.test(url)) add(url, JSON.stringify(node));
+            for (const k in node) { const v = node[k]; if (v && typeof v === 'object' && !objSeen.has(v)) { objSeen.add(v); walk(v, depth + 1); } }
+          };
+          walk(of, 0);
+          // Rede final: qualquer .pdf solto no JSON (sem objeto) — entra como "outro".
+          for (const m of (JSON.stringify(of).match(/https?:\\?\/\\?\/[^"'\s\\]*\.pdf/gi) || [])) add(m.replace(/\\\//g, '/'), '');
+          return out.length ? out.slice(0, 12) : undefined;
         } catch { return undefined; }
       })();
 
