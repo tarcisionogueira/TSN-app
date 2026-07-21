@@ -1164,6 +1164,21 @@ export default async function handler(req, res) {
       }
     } catch { /* geo pela matrícula é best-effort */ }
 
+    // Guarda o nº do PROCESSO (CNJ) extraído quando o imóvel não tem — é a CHAVE FORTE p/ cruzar
+    // com o edital do DJEN (editais_enriquecer_acervo) e preencher avaliação/área/endereço que
+    // faltam, DE GRAÇA. Assim "edital + leiloeiro + DJEN" se completam pela chave do processo.
+    try {
+      const proc = String(parsed.extracao?.numeroProcesso || '').trim();
+      if (/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/.test(proc)) {
+        const [imP] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=numero_processo&limit=1`)).json();
+        if (imP && !String(imP.numero_processo || '').trim()) {
+          await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ numero_processo: proc }),
+          }).catch(() => {});
+        }
+      }
+    } catch { /* captura do processo é best-effort */ }
+
     // Raio-X jurídico COMPACTO na TELA DO IMÓVEL (selos + campos): persiste um
     // resumo do raioX no imóvel para a ficha exibir sem reabrir o laudo. Custo
     // zero (mesma leitura). Sobrescreve com o dado mais recente da análise.
