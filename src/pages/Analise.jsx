@@ -139,7 +139,7 @@ export default function Analise() {
   const location = useLocation();
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, role } = useAuth();
+  const { user, role, nome } = useAuth();
   const imovelInicial = location.state?.imovel;
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
@@ -1076,14 +1076,24 @@ export default function Analise() {
     (relSel === 'laudo' && relLaudoGerado && !!laudoEntry?.result) ||
     ((relSel === 'mercado' || relSel === null) && !!parecer);
 
+  // Cabeçalho comum dos PDFs (identificação): quem solicitou + nível (role), e — quando o
+  // documental já rodou — executado/processo/matrícula extraídos. Todos opcionais (só aparece o
+  // que houver). Um só objeto passado aos 3 relatórios.
+  const cabPDF = {
+    solicitante: { nome, role },
+    executado: parecerDocumental?.extracao?.executadoNome || '',
+    processo: parecerDocumental?.extracao?.numeroProcesso || cnjNumero || '',
+    matricula: parecerDocumental?.extracao?.numeroMatricula || '',
+  };
+
   const imprimirPDF = () => {
     if (relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos) {
-      return gerarDocumentalPDF({ imovel: d, parecer: parecerDocumental, bidscore: bidscoreDoc });
+      return gerarDocumentalPDF({ imovel: d, parecer: parecerDocumental, bidscore: bidscoreDoc, cab: cabPDF });
     }
     if (relSel === 'laudo' && relLaudoGerado && laudoEntry?.result) {
-      return gerarLaudoPDF({ imovel: d, laudo: laudoEntry.result });
+      return gerarLaudoPDF({ imovel: d, laudo: laudoEntry.result, cab: cabPDF });
     }
-    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores });
+    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, cab: cabPDF });
   };
 
   // "Baixar os 3": só liberado quando os TRÊS relatórios estão prontos. Gera um
@@ -1095,9 +1105,9 @@ export default function Analise() {
 
   const imprimirTodosPDF = () => {
     gerarCombinadoPDF({
-      mercado: mercadoProntoPDF ? { d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores } : null,
-      documental: documentalProntoPDF ? { imovel: d, parecer: parecerDocumental, bidscore: bidscoreDoc } : null,
-      laudo: laudoProntoPDF ? { imovel: d, laudo: laudoEntry.result } : null,
+      mercado: mercadoProntoPDF ? { d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, cab: cabPDF } : null,
+      documental: documentalProntoPDF ? { imovel: d, parecer: parecerDocumental, bidscore: bidscoreDoc, cab: cabPDF } : null,
+      laudo: laudoProntoPDF ? { imovel: d, laudo: laudoEntry.result, cab: cabPDF } : null,
     });
   };
 
@@ -1926,7 +1936,7 @@ export default function Analise() {
                     <div style={{ fontSize:13, color:'#334155', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{String(L.parecer).replace(/§\s*SEÇÃO:/g, '\n§ ').trim()}</div>
                   </div>
                 )}
-                <button onClick={() => gerarLaudoPDF({ imovel: d, laudo: L })}
+                <button onClick={() => gerarLaudoPDF({ imovel: d, laudo: L, cab: cabPDF })}
                   style={{ marginTop:16, width:'100%', padding:'13px', background:'#111827', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                   <Printer size={16}/> Baixar Parecer Final em PDF
                 </button>

@@ -66,6 +66,7 @@ async function fetchPerfil(userId) {
     inadimplenteDias,
     // Cliente sem nome/telefone/CPF/cidade/UF/LGPD precisa completar antes de usar o app.
     cadastroIncompleto: ehCliente && cadastroFalta,
+    nome: data?.nome || '',
   };
 }
 
@@ -80,6 +81,7 @@ export function AuthProvider({ children }) {
   const [ativo, setAtivo]           = useState(true);
   const [inadimplenteDias, setInad] = useState(0);
   const [cadastroIncompleto, setCadastroIncompleto] = useState(false);
+  const [nome, setNome]             = useState(''); // nome do usuário (p/ cabeçalho de relatórios)
   const [loading, setLoading]       = useState(true);
   // Modo suporte: admin/analista visualizando a conta de um cliente
   const [impersonate, setImpersonate] = useState(loadImpersonate);
@@ -103,6 +105,7 @@ export function AuthProvider({ children }) {
       setAtivo(p.ativo);
       setInad(p.inadimplenteDias);
       setCadastroIncompleto(p.cadastroIncompleto ?? false);
+      setNome(p.nome || '');
       setLoading(false);
     });
 
@@ -132,6 +135,7 @@ export function AuthProvider({ children }) {
         setAtivo(p.ativo);
         setInad(p.inadimplenteDias);
         setCadastroIncompleto(p.cadastroIncompleto ?? false);
+      setNome(p.nome || '');
         // Vincula o cliente ao consultor que o indicou (link de afiliado), inclusive no
         // login Google onde o trigger não recebe o código. Só no sign-in real.
         if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
@@ -181,6 +185,7 @@ export function AuthProvider({ children }) {
       setAtivo(p.ativo);
       setInad(p.inadimplenteDias);
       setCadastroIncompleto(p.cadastroIncompleto ?? false);
+      setNome(p.nome || '');
     };
     const onVisible = () => { if (document.visibilityState === 'visible') refetchPerfil(); };
     window.addEventListener('focus', refetchPerfil);
@@ -207,6 +212,7 @@ export function AuthProvider({ children }) {
     setAtivo(p.ativo);
     setInad(p.inadimplenteDias);
     setCadastroIncompleto(p.cadastroIncompleto ?? false);
+    setNome(p.nome || '');
   };
 
   // Inicia o modo suporte. Os dados continuam protegidos por RLS: admin/analista
@@ -232,7 +238,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto,
+      user, role, nome, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto,
       isAdmin: role === 'admin',
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,

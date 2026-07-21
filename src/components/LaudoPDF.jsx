@@ -6,6 +6,7 @@
 
 // Escapa texto vindo da IA para não quebrar o HTML nem permitir injeção.
 import { imprimirHtml } from './pdfImprimir';
+import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -32,10 +33,10 @@ export const ESTILOS_LAUDO = `
   .cq-val{width:34px;text-align:right;font-size:9.5px;color:#64748b;}
   .sec{margin-bottom:10px;}
   .foot{margin-top:22px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:8.5px;color:#94a3b8;line-height:1.5;}
-`;
+` + ESTILOS_CABECALHO;
 
 // Corpo (conteúdo do <body>) do parecer final — exportado para o PDF combinado.
-export function corpoLaudo({ imovel: d = {}, laudo: L = {} }) {
+export function corpoLaudo({ imovel: d = {}, laudo: L = {}, cab = {} }) {
   const V = {
     aprovado:    { txt: 'APROVADO, VIÁVEL',                     cor: '#065f46', bg: '#d1fae5', bd: '#10b981', ic: '✓' },
     condicional: { txt: 'CONDICIONAL, VIÁVEL COM RESSALVAS',    cor: '#92400e', bg: '#fef3c7', bd: '#f59e0b', ic: '!' },
@@ -94,20 +95,17 @@ export function corpoLaudo({ imovel: d = {}, laudo: L = {} }) {
   const geradoEm = (() => { try { return new Date(L.geradoEm || Date.now()).toLocaleDateString('pt-BR'); } catch { return new Date().toLocaleDateString('pt-BR'); } })();
 
   return `
-<div class="hdr av">
-  <div>
-    <div style="font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:3px;">BidPro Brasil</div>
-    <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Aquisição em Leilão &amp; Investimentos Estratégicos</div>
-    <div style="font-size:13px;font-weight:900;margin-bottom:3px;">PARECER FINAL DE VIABILIDADE, LAUDO DE DEFESA</div>
-    <div style="font-size:10px;color:#475569;">${esc((d.tipo || '').toUpperCase())}${d.endereco ? ', ' + esc(d.endereco) : ''}${local ? ' · ' + esc(local) : ''}</div>
-    ${d.leiloeiro ? `<div style="font-size:9px;color:#64748b;margin-top:3px;">Leiloeiro: ${esc(d.leiloeiro)}${d.dataLeilao ? ' · ' + esc(d.dataLeilao) : ''}</div>` : ''}
-  </div>
-  <div style="text-align:right;flex-shrink:0;">
-    <div style="font-size:10px;font-weight:700;margin-bottom:3px;">Data: ${geradoEm}</div>
-    <div style="font-size:9px;color:#64748b;">Documento 3 de 3</div>
-    <div style="font-size:9px;color:#64748b;">Síntese Mercadológico + Documental</div>
-  </div>
-</div>
+${cabecalhoBidPro({
+  titulo: 'Parecer Final de Viabilidade — Laudo de Defesa',
+  subtitulo: 'Síntese Mercadológico + Documental',
+  docSeq: 'Documento 3 de 3',
+  imovel: d,
+  matricula: cab.matricula || '',
+  executado: cab.executado || '',
+  processo: cab.processo || '',
+  solicitante: cab.solicitante || {},
+  geradoEm: L.geradoEm,
+})}
 
 <div class="av" style="border:2px solid ${v.bd};background:${v.bg};border-radius:8px;padding:14px 16px;text-align:center;margin-bottom:14px;">
   <div style="font-size:16px;font-weight:900;color:${v.cor};">${v.ic} VEREDITO: ${v.txt}</div>
