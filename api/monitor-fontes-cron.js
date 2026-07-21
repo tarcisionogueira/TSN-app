@@ -66,7 +66,9 @@ const BASELINE_FONTES = {
   MEGA:       { min: 400,   campos: { foto: 90, valor: 95, area: 80, data: 90, matricula: 85, edital: 85, avaliacao: 90 } },
   GRUPOLANCE: { min: 250,   campos: { foto: 90, valor: 95, area: 75, matricula: 78, edital: 85 } },
   PESTANA:    { min: 120,   campos: { foto: 80, valor: 95, area: 75, data: 90, matricula: 78, edital: 85 } },
-  BIASI:      { min: 150,   campos: { foto: 90, valor: 95, matricula: 83, edital: 85 } },
+  // Piso 120: acervo REAL medido pela captura robusta nova (listagem agregada ?pagina) =
+  // 144 em 21/07 (o site oscila; era ~370 em meados de 07). Abaixo de 120 = regressão real.
+  BIASI:      { min: 120,   campos: { foto: 90, valor: 95, matricula: 83, edital: 85 } },
   FRAZAO:     { min: 90,    campos: { foto: 90, valor: 95, data: 90, matricula: 85, edital: 85 } },
   WEBLEILOES: { min: 60,    campos: { foto: 90, valor: 95, area: 80, matricula: 78, edital: 78 } },
   LEILOTECH:  { min: 60,    campos: { valor: 95, data: 90, matricula: 68, edital: 60, avaliacao: 80 } },
