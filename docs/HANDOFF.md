@@ -17,7 +17,28 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## ⏭️ COMEÇAR AQUI NA PRÓXIMA SESSÃO — 3 pedidos do dono (20/07, fim do dia)
+## ⏭️ COMEÇAR AQUI (21/07) — estado + pendências vivas
+> Sessão longa 20–21/07 (madrugada). **Tudo mesclado em `main`** (deploys Vercel READY). Segurança **0/0** o tempo todo.
+
+**Estado do sistema:**
+- **Geocode:** 33.313/33.353 ativos geocodificados (100%); Google só **on-demand** (página do imóvel) + **trava MENSAL** `GOOGLE_GEOCODE_MAX_MES` (default 10k = free tier). Cron/lote = 100% grátis. Custo ~US$0 (era ~US$120+/mês). **OK — dono aprovou.**
+- **⚠️ Supabase Storage:** ~12,5 GB vs **1 GB do free tier** (bucket `documentos` = 10,5 GB de PDFs). **DONO VAI FAZER UPGRADE p/ Pro NO FIM DO MÊS.** A limpeza `limpar-documentos-cron` agora LOOPA (drena o backlog); retenção = manter arrematado/data-futura/venda-direta-ativo/**com-relatório**. Saúde agora vigia o Storage (`infra_uso_storage`, alerta a 80%).
+- **E-mails:** dedup por mudança (health-check + monitor-fontes só avisam quando o conjunto MUDA ou há ERRO). Monitor movido p/ 15h UTC (após a coleta). Fim do e-mail diário repetido.
+
+**Captura de documentos (recon de 2 agentes — reenquadrou o problema):** os editais-PDF dos leiloeiros JÁ estão em `imoveis_leilao.anexos` (~2.100 imóveis) — a métrica media a coluna errada (corrigido). CEF: editais são COLETIVOS (`/editais/EL<NNNN><MMYY><UNID>.PDF`), capturados on-demand pela `cef_matricula_fila`; ~600 lotes tinham matrícula gravada como edital (limpo + guard no scraper). **Bright Data só p/ PECINI/RJ (~48 imóveis).**
+
+**PENDÊNCIAS / PRÓXIMOS PASSOS:**
+1. **SUPERBID (validação em curso):** o run de `leiloeiros-puppeteer fontes=SUPERBID` capturou docs p/ **1.168 imóveis** (de ~0), mas a URL é UUID opaco → classificação ajustada (lê o tipo do objeto inteiro do anexo). **Verificação agendada (`send_later` ~00:57 UTC)** confere se `anexos[tipo=edital]` subiu. Se a API não expõe o tipo, os docs seguem capturados/usáveis (IA lê). Reportar ao dono.
+2. **Varredura de telas admin (começou):** tela **Scrapers** teve os números corrigidos (servidor; fim do 0% geocode). Próximo: **reposicionar como "Operação de Coleta"** (enxugar duplicação com o Dashboard; encolher a aba Geocodificação — 99,9% feita/on-demand). Seguir tela a tela com o dono.
+3. **Roadmap captura (grátis, sem depender dos leiloeiros):** backfill CEF edital em massa com **DEDUPE por edital** (fazer PÓS-upgrade do Storage); SOLD/SBID/VENDASGOV (source/login-gated); replicar a promoção genérica de edital.
+4. **Métrica:** `edital` foi REMOVIDO do monitor p/ SUPERBID/SOLD/SBID9/VENDASGOV/PECINI (gap genuíno) — **re-adicionar** quando a captura estabilizar.
+5. **Opcionais:** raspar HTML no backfill p/ as **435 fotos CEF** sem URL previsível; ativar **LocationIQ** (`GEOCODER_KEY`) como rede se o Nominatim throttlar (dependemos mais dele agora).
+
+**Merges da sessão (main):** `d2c2daf` (e-mails dedup + timing) · `e20c773` (autozoom + geocode custo + re-check fotos) · `6f5792d` (trava mensal + backfill multi-padrão) · `8d43808` (edital dos anexos na tela + monitor 15h + ZUK 420 + regeocod só cidade/falhou) · `e5ccfa9` (monitor de Storage) · `b4cace8` (limpeza loop + keep-relatório + backfill gracioso) · `d181022` (edital CEF: fim do matrícula-como-edital + captura URL real) · `e6502b4`/`11efc9b` (SUPERBID captura via API) · `be63930` (métrica edital/matrícula REAL + monitor recalibrado) · `57c30b3` (tela Scrapers com números do servidor).
+
+---
+
+## ⏭️ (Anterior) 3 pedidos do dono (20/07) — captura de tipologia, diagnóstico de qualidade, filtro de locação — AINDA PENDENTES
 > Investigado e CONFIRMADO nesta sessão; **resolver na próxima**. Ordem sugerida: (3) filtro é rápido → (1) captura → (2) diagnóstico.
 
 **(1) Captura dos leiloeiros mais robusta + aprendizado — o agente deveria captar tipo/foto/edital/matrícula/anexo.**
