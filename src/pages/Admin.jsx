@@ -5894,11 +5894,13 @@ function ScrapersTab() {
 
   const geoPct = geoStats.total > 0 ? Math.round((geoStats.com / geoStats.total) * 100) : 0;
 
+  // Geocodificação foi movida para o FIM e enxugada: está ~100% e roda on-demand (o KPI de
+  // geocode fica no topo), então deixa de disputar espaço com Fontes/Parceiros.
   const ABAS = [
-    { key: 'fontes',    label: '🏛️ Fontes',         desc: `Caixa + ${FONTES_LEILAO.length} leiloeiros` },
-    { key: 'geocod',    label: '📍 Geocodificação',  desc: `${geoStats.com.toLocaleString('pt-BR')} / ${geoStats.total.toLocaleString('pt-BR')} imóveis` },
-    { key: 'parceiros', label: '🤝 Parceiros',       desc: `${parceiros.length} leiloeiros` },
-    { key: 'roadmap',   label: '🚀 Roadmap',         desc: `${scrapersPlanjados.length} fontes planejadas` },
+    { key: 'fontes',    label: '🏛️ Fontes',    desc: `Caixa + ${FONTES_LEILAO.length} leiloeiros` },
+    { key: 'parceiros', label: '🤝 Parceiros',  desc: `${parceiros.length} leiloeiros` },
+    { key: 'roadmap',   label: '🚀 Roadmap',    desc: `${scrapersPlanjados.length} fontes planejadas` },
+    { key: 'geocod',    label: '📍 Geo',        desc: `${geoPct}% · on-demand` },
   ];
 
   return (
@@ -8623,7 +8625,107 @@ function CentralEquipeTab() {
   );
 }
 
-const TABS = ['Dashboard', 'Central da Equipe', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Comercial', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Financeiro', 'Prestação de contas', 'Configurações'];
+// ═══════════════════════════════════════════════════════════════════════════════
+// RADAR DE EDITAIS (CNJ/DJEN) — editais de leilão novos × leiloeiro (ver docs/RADAR_EDITAIS_CNJ.md)
+// ═══════════════════════════════════════════════════════════════════════════════
+function RadarEditaisTab() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [dias, setDias] = React.useState(30);
+  const [soNaoInt, setSoNaoInt] = React.useState(false);
+  const [erro, setErro] = React.useState('');
+
+  const carregar = React.useCallback(() => {
+    setLoading(true); setErro('');
+    supabase.rpc('admin_radar_editais', { p_dias: dias, p_so_nao_integrado: soNaoInt })
+      .then(({ data, error }) => { if (error) setErro(error.message); else setData(data); })
+      .catch(e => setErro(String(e.message)))
+      .finally(() => setLoading(false));
+  }, [dias, soNaoInt]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const k = data?.kpis || {};
+  const editais = data?.editais || [];
+  const brl = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR') : '—';
+  const dt = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+
+  return (
+    <div style={{ maxWidth: 1100 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:18 }}>📜 Radar de Editais (CNJ)</h2>
+          <div style={{ fontSize:12, color:'#64748b' }}>Editais de leilão (TJSP/TRT-15) via DJEN — edital novo × leiloeiro.</div>
+        </div>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <select value={dias} onChange={e=>setDias(Number(e.target.value))} style={{ padding:'6px 8px', borderRadius:8, border:'1px solid #e2e8f0' }}>
+            <option value={7}>7 dias</option><option value={30}>30 dias</option><option value={90}>90 dias</option>
+          </select>
+          <label style={{ fontSize:12, display:'flex', gap:4, alignItems:'center' }}>
+            <input type="checkbox" checked={soNaoInt} onChange={e=>setSoNaoInt(e.target.checked)} /> só não integrados
+          </label>
+          <button onClick={carregar} style={{ padding:'6px 10px', borderRadius:8, border:'1px solid #e2e8f0', background:'white', cursor:'pointer' }}>↻</button>
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:10, marginBottom:16 }}>
+        {[
+          { l:'Editais', v:k.total ?? '—', c:'#0D63DB' },
+          { l:'Novos (7d)', v:k.novos_7d ?? '—', c:'#059669' },
+          { l:'Leiloeiros', v:k.leiloeiros_distintos ?? '—', c:'#475569' },
+          { l:'A integrar', v:k.nao_integrados ?? '—', c:'#d97706' },
+          { l:'Já no acervo', v:k.ja_no_acervo ?? '—', c:'#059669' },
+          { l:'Erro parse', v:k.erro_parse ?? '—', c:(k.erro_parse>0?'#dc2626':'#94a3b8') },
+        ].map(x=>(
+          <div key={x.l} style={{ background:'white', borderRadius:12, border:'1px solid #e2e8f0', padding:'12px 14px' }}>
+            <div style={{ fontSize:20, fontWeight:900, color:x.c }}>{x.v}</div>
+            <div style={{ fontSize:11, color:'#64748b' }}>{x.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {erro && <div style={{ background:'#fef2f2', color:'#b91c1c', padding:10, borderRadius:8, marginBottom:12, fontSize:13 }}>Erro: {erro}</div>}
+      {loading ? <div style={{ color:'#64748b' }}>Carregando…</div> :
+       editais.length === 0 ? (
+        <div style={{ background:'#f8fafc', border:'1px dashed #cbd5e1', borderRadius:12, padding:24, textAlign:'center', color:'#64748b', fontSize:13 }}>
+          Nenhum edital ainda. O cron <code>radar-editais-cron</code> (2×/dia) popula a partir do DJEN.
+          <br/>Validar o 1º run em produção (o proxy de dev bloqueia <code>pje.jus.br</code>).
+        </div>
+       ) : (
+        <div style={{ overflowX:'auto', border:'1px solid #e2e8f0', borderRadius:12 }}>
+          <table style={{ borderCollapse:'collapse', width:'100%', fontSize:12 }}>
+            <thead><tr style={{ background:'#f8fafc' }}>
+              {['Data','Comarca','Leiloeiro','Processo','1ª praça','Avaliação','Lance mín.','',''].map((h,i)=>(
+                <th key={i} style={{ padding:'8px 10px', fontWeight:700, color:'#475569', borderBottom:'1px solid #e2e8f0', whiteSpace:'nowrap', textAlign:'left' }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {editais.map(e=>(
+                <tr key={e.id} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{dt(e.data_disponibilizacao)}</td>
+                  <td style={{ padding:'8px 10px', maxWidth:170, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.orgao || e.comarca || '—'}</td>
+                  <td style={{ padding:'8px 10px' }}>
+                    {e.leiloeiro_nome || <span style={{ color:'#94a3b8' }}>—</span>}{' '}
+                    {e.leiloeiro_nome && (e.leiloeiro_integrado
+                      ? <span style={{ fontSize:10, background:'#dcfce7', color:'#166534', padding:'1px 6px', borderRadius:6 }}>integrado</span>
+                      : <span style={{ fontSize:10, background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:6 }}>integrar</span>)}
+                  </td>
+                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{e.numero_processo || '—'}</td>
+                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{dt(e.data_praca_1)}</td>
+                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{brl(e.valor_avaliacao)}</td>
+                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{brl(e.lance_minimo)}</td>
+                  <td style={{ padding:'8px 10px' }}>{e.status === 'erro_parse' ? '⚠' : '✓'}</td>
+                  <td style={{ padding:'8px 10px' }}>{e.leilao_plataforma_url && <a href={e.leilao_plataforma_url} target="_blank" rel="noreferrer">abrir</a>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+       )}
+    </div>
+  );
+}
+
+const TABS = ['Dashboard', 'Central da Equipe', 'Cursos', 'eBooks', 'Contratos', 'Promoções', 'Convites', 'Usuários', 'Comercial', 'Equipe', 'Agenda', 'Scrapers', 'Registros', 'CNJ', 'Editais', 'Financeiro', 'Prestação de contas', 'Configurações'];
 
 // Menus agrupados por área — navegação mais fácil que a lista corrida de abas.
 const GRUPOS_ADMIN = [
@@ -8631,10 +8733,19 @@ const GRUPOS_ADMIN = [
   { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'Comercial', 'Contratos'] },
   { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
   { nome: 'Equipe',              tabs: ['Central da Equipe', 'Equipe', 'Agenda'] },
-  { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ'] },
+  { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais'] },
   { nome: 'Financeiro',          tabs: ['Financeiro', 'Prestação de contas'] },
   { nome: 'Sistema',             tabs: ['Configurações'] },
 ];
+
+// Rótulos amigáveis das abas — a CHAVE interna (usada em tab===..., sessionStorage) NÃO muda,
+// só o texto do botão. "Scrapers" vira "Operação de Coleta" (reposicionamento pedido).
+const ROTULO_TAB = {
+  Scrapers: '📡 Operação de Coleta',
+  CNJ: '⚖️ CNJ',
+  Registros: '🗂️ Registros',
+  Editais: '📜 Radar de Editais',
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AGENDA TAB — Disponibilidade dos analistas e geração de slots
@@ -9226,7 +9337,7 @@ export default function Admin() {
             <div key={g.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, width: 130, flexShrink: 0 }}>{g.nome}</span>
               {g.tabs.map(t => (
-                <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{t}</button>
+                <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{ROTULO_TAB[t] || t}</button>
               ))}
             </div>
           ))}
@@ -9246,6 +9357,7 @@ export default function Admin() {
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Registros'      && <RegistrosTab />}
         {tab === 'CNJ'            && <CnjTab />}
+        {tab === 'Editais'        && <RadarEditaisTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Financeiro'     && <FinanceiroTab />}
         {tab === 'Central da Equipe' && <CentralEquipeTab />}

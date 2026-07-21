@@ -55,16 +55,49 @@ export async function reportarErroCliente({ msg, stack = '', url } = {}) {
   } catch { /* nunca quebra o app por causa do log de erro */ }
 }
 
+// Recarrega UMA vez quando um CHUNK de JS falha ao carregar. Após um deploy, o index.html
+// em cache do usuário aponta para chunks com hash antigo que não existem mais → "Importing a
+// module script failed" e o app fica quebrado até um refresh manual. Aqui recarregamos sozinho
+// (pega o index.html novo). Guarda anti-loop: só recarrega se não recarregou nos últimos 10s
+// (senão um erro de chunk persistente entraria em loop de reload).
+function ehErroDeChunk(msg = '') {
+  const m = String(msg).toLowerCase();
+  return m.includes('importing a module script failed')
+    || m.includes('failed to fetch dynamically imported module')
+    || m.includes('error loading dynamically imported module')
+    || m.includes('module script failed')
+    || m.includes("'text/html' is not a valid javascript mime type"); // chunk 404 devolveu HTML
+}
+function recarregarPorChunkStale(msg = '') {
+  if (!ehErroDeChunk(msg)) return false;
+  try {
+    const agora = Date.now();
+    const ultimo = Number(sessionStorage.getItem('__chunk_reload_at') || 0);
+    if (agora - ultimo < 10000) return false; // já recarregou há pouco — evita loop
+    sessionStorage.setItem('__chunk_reload_at', String(agora));
+  } catch { /* sessionStorage indisponível: 1 reload ainda é aceitável */ }
+  location.reload();
+  return true;
+}
+
 // Registra os handlers globais UMA vez (erros assíncronos que o ErrorBoundary não pega).
 export function instalarCapturaErros() {
   if (typeof window === 'undefined' || window.__capturaErrosOn) return;
   window.__capturaErrosOn = true;
+  // Evento nativo do Vite p/ falha de preload de chunk — o caminho mais confiável.
+  window.addEventListener('vite:preloadError', (e) => {
+    e.preventDefault(); // não deixa virar erro não tratado
+    reportarErroCliente({ msg: 'vite:preloadError (chunk stale pós-deploy)', url: location.href });
+    recarregarPorChunkStale('failed to fetch dynamically imported module');
+  });
   window.addEventListener('error', (e) => {
     // Erros de recurso (img/script 404) não têm message — ignora.
-    if (e?.message) reportarErroCliente({ msg: e.message, stack: e.error?.stack, url: location.href });
+    if (e?.message) { reportarErroCliente({ msg: e.message, stack: e.error?.stack, url: location.href }); recarregarPorChunkStale(e.message); }
   });
   window.addEventListener('unhandledrejection', (e) => {
     const r = e?.reason;
-    reportarErroCliente({ msg: r?.message || String(r), stack: r?.stack, url: location.href });
+    const msg = r?.message || String(r);
+    reportarErroCliente({ msg, stack: r?.stack, url: location.href });
+    recarregarPorChunkStale(msg);
   });
 }
