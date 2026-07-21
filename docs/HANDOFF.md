@@ -17,8 +17,8 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## ⏭️ COMEÇAR AQUI (21/07 — sessão 3) — CREDIBILIDADE dos relatórios + Radar resiliente
-> Tudo em `main` (PRs **#172–#175** mesclados). Deploy **#175 READY**. Segurança **0/0**. Branch: `claude/session-1hpqy6`.
+## ⏭️ COMEÇAR AQUI (21/07 — sessão 3) — CREDIBILIDADE dos relatórios + telas admin + relatórios/contratos/certidões
+> Tudo em `main` (PRs **#172–#187** mesclados). Segurança **0/0**. Branch: `claude/session-1hpqy6`.
 > **Motivação:** o dono gerou relatórios ao vivo para clientes e viu **metragem/avaliação erradas**, **desconto absurdo** e **endereço trocado** (Alagoinhas × Feira de Santana) — "essas coisas não podem ocorrer". Atacado na RAIZ.
 
 **Entregue:**
@@ -40,10 +40,23 @@ Auditoria completa das abas (`Admin.jsx`) → 15 achados priorizados; resolvidos
 4. **Fidelidade Infra & Custos (#179):** "custo mensal" inclui o **custo REAL de IA/integrações** (via `/api/uso-integracoes`) no lugar do fixo R$3; **câmbio real** (usd_brl ~5,4) no storage em vez do chumbado 6.0; detalhamento por componente.
 Segurança **0/0** após a RPC nova.
 
+**🩹 Atendimento pós-demo — relatórios, contratos, certidões, telas (PRs #181–#187):**
+1. **MarketingTab demografia via RPC (#181):** a seção "Perfis demográficos" vinha VAZIA (query usava colunas inexistentes `cidade`/`estado`; a UF real é `endereco_uf`). Nova RPC `admin_marketing_demografia()` agrega no servidor (role/UF/coorte/ativos).
+2. **DIVERGÊNCIA de imóvel ≠ risco jurídico (#182):** quando os docs descrevem outro imóvel (matrícula de Feira × cadastro de Alagoinhas), a IA marcava **`bloqueante`** → derrubava a nota jurídica (2.9), disparava REPROVADO + banner vermelho. Agora o motor **reclassifica**: tira de `riscos` (não pontua, não reprova) e manda p/ `result.divergenciasImovel`; a tela mostra banner ÂMBAR "Divergência de documentação — não é risco jurídico" + o caminho "Corrigir e regerar". Riscos REAIS (penhora de terceiro, ação anulatória) intactos. **Só vale p/ relatório NOVO** — o antigo precisa regerar.
+3. **Etapas manuais fantasma + caixa "Imóvel de outro leiloeiro" (#182, #187):** apareciam mesmo com relatório já gerado (gate dependia só de `modoManual`, que volta a true ao recarregar). Agora escondidos quando `relDocumentalGerado`.
+4. **Documentos abriam com erro / comprovante em código (#183, #185):** anexos do Storage usavam signed URL que EXPIRA → re-assina no clique via `/api/anexo-url`. Comprovante de certidão reabre num Blob forçando `text/html` (renderiza, não mostra código).
+5. **Contratos — valores do `planos_config` (#184):** helper `descricaoContratoPlano()` monta a descrição dos planos pagos a partir do config (fonte única) — mudou preço/termo no painel, o contrato acompanha. Pré-preenchimento revisado por humano.
+6. **Cabeçalho padronizado nos 3 PDFs (#186):** novo `src/components/pdfCabecalho.js` — marca BidPro, imóvel+matrícula, executado, processo, "Solicitado por [nome]—[nível]" + data. `AuthContext` passou a expor `nome`. Comprovantes de certidão vão no PDF documental.
+7. **"Fontes e comprovantes das informações" (#187):** a "Evolução das consultas" foi reenquadrada (tela + PDF) p/ mostrar a ORIGEM dos dados (docs lidos + consultas públicas + comprovante de cada uma).
+
 **PENDÊNCIAS:**
+- **🖊️ Contratos — termos a CONCLUIR (dono):** os valores de multa/rescisão no `planos_config` precisam do termo jurídico correto — **Assessoria** texto dizia multa 10% mas config=0; **Leilão Club** texto dizia "integral" mas config=30%. O dono ainda vai DEFINIR isso (o contrato pode mudar com o tempo: situação, participações, legislação). Deixado como **a concluir** — ajustar no painel Config→planos e o texto acompanha.
+- **📄 Layout do CORPO dos relatórios (de-densificar):** o cabeçalho já foi padronizado (#186); falta reorganizar o **corpo** (hoje "corrido, parecendo contrato") em cards/seções escaneáveis, como no mercadológico da tela. Follow-up desejado pelo dono.
+- **🧾 Certidões — auto-geração mais COMPLETA:** hoje só a CNDT (e CNIB/CENPROT quando o órgão responde) gera comprovante automático; fiscais/DJEN voltam como dado. Ampliar a cobertura automática + prévia/visualização das certidões. Follow-up.
 - **~3,6 mil imóveis SEM avaliação** aguardam leitura **PAGA** do PDF do edital (Bright Data) — **aguarda OK de custo do dono**.
 - **Monitorar o 1º run do Radar pós-#175** (confirmar que a re-tentativa pega editais que caíam no 403) — o dono ainda não pediu p/ armar.
-- **Achados MENORES do admin ainda não atacados** (baixa prioridade): preços de plano/limites chumbados como fallback em descrições de contrato; `perfis` inteiro puxado no `MarketingTab` (mesmo padrão da Frente C, se virar gargalo).
+
+**➡️ Como regerar o imóvel dos ASSESSORADOS (orientação ao dono):** para um imóvel com relatório ANTIGO (gerado antes do #182) que ainda mostra o banner vermelho de divergência: **regere o DOCUMENTAL primeiro** (ele relê os docs com a nova lógica → o banner vira a divergência âmbar, a nota jurídica sobe, some o REPROVADO) e, se aparecer o card **"Corrigir e regerar"**, use-o para o mercadológico com a cidade certa; por fim regere o **laudo**. Em imóvel NOVO (atribuído depois do #182) já sai correto pela sequência automática.
 
 ---
 
