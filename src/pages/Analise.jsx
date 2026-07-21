@@ -352,6 +352,22 @@ export default function Analise() {
   // Abre uma seção e rola até ela (usado pela barra lateral)
   const irPara = (k, id) => { setOpenSec(p => ({ ...p, [k]: true })); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); };
 
+  // Abre um anexo do nosso Storage RE-ASSINANDO na hora: as signed URLs do bucket `documentos`
+  // EXPIRAM, então a URL gravada em imovel_anexos dá erro ("invalid signature") depois de um tempo.
+  // Reserva a aba já no clique (evita bloqueio de popup) e navega quando a URL fresca chega do
+  // /api/anexo-url (servidor, service role, gated a staff/dono). Se falhar, cai na URL persistida.
+  const abrirAnexo = useCallback(async (e, anexoId, fallbackUrl) => {
+    e.preventDefault();
+    const w = window.open('', '_blank');
+    let url = fallbackUrl;
+    try {
+      const res = await apiCall('/api/anexo-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anexo_id: anexoId }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.url) url = data.url;
+    } catch { /* usa o fallback (URL persistida) */ }
+    if (w) w.location.href = url; else window.open(url, '_blank', 'noopener');
+  }, []);
+
   const up = useCallback((name, val) => setD(p => ({ ...p, [name]: val })), []);
   const upN = useCallback((e) => {
     const { name, value } = e.target;
@@ -1274,7 +1290,11 @@ export default function Analise() {
                 }
                 // Edital/regra/matrícula sempre com destino: arquivo, senão a página do leiloeiro.
                 const url = fileUrl || paginaLeiloeiro;
-                return { t, label: docMap[t], url, fileUrl, viaPagina: !fileUrl && !!paginaLeiloeiro };
+                // anexoId p/ RE-ASSINAR no clique: só quando a URL escolhida É a do nosso anexo
+                // (imovel_anexos) — as signed URLs do bucket `documentos` EXPIRAM e a URL gravada
+                // passa a dar erro ao abrir; re-assinamos na hora via /api/anexo-url.
+                const anexoId = (fileUrl && fileUrl === anexoUrl && a?.id) ? a.id : null;
+                return { t, label: docMap[t], url, fileUrl, anexoId, viaPagina: !fileUrl && !!paginaLeiloeiro };
               });
               // CONTRAMEDIDA (docs capturados que não classificaram): alguns leiloeiros
               // servem edital/matrícula por URLs OPACAS (hash, sem "edital"/"matric" no
@@ -1300,7 +1320,7 @@ export default function Analise() {
                 if (topicos.includes(a.tipo) && docsView.find(d => d.t === a.tipo)?.fileUrl) continue;
                 vistos.add(u);
                 const rot = docMap[a.tipo] || nomeLimpo(a.nome) || `Documento do lote${extras.length ? ' ' + (extras.length + 1) : ''}`;
-                extras.push({ t: `extra_${extras.length}`, label: rot, url: u, fileUrl: u });
+                extras.push({ t: `extra_${extras.length}`, label: rot, url: u, fileUrl: u, anexoId: a?.id || null });
               }
               // Quando HÁ PDFs capturados sem classificação (extras), o "no site" por
               // tópico vira enganoso: aparece "Matrícula → abre o site" AO LADO do PDF
@@ -1316,6 +1336,7 @@ export default function Analise() {
                 <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                   {docsFinal.map(it => it.url ? (
                     <a key={it.t} href={it.url} target="_blank" rel="noreferrer"
+                      onClick={it.anexoId ? (e) => abrirAnexo(e, it.anexoId, it.url) : undefined}
                       style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:8, textDecoration:'none', fontSize:13, fontWeight:600, color:'#0D63DB', minWidth:0 }}
                       onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                       <FileText size={14} style={{ flexShrink:0 }}/>
