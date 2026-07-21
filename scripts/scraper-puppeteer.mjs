@@ -38,14 +38,33 @@ function normalizarTipo(tipo) {
       t.includes('chacara') || t.includes('agricol') || t.includes('agropecu') ||
       t.includes('pecuari') || t.includes('haras') || t.includes('lavoura')) return 'rural';
   if (t.includes('apart') || t.includes('apto') || t.includes('flat') ||
-      t.includes('kitnet') || t.includes('studio') || t.includes('cobertura')) return 'apartamento';
+      t.includes('kitnet') || t.includes('kitinete') || t.includes('studio') || t.includes('cobertura')) return 'apartamento';
   if (t.includes('casa') || t.includes('sobrado') || t.includes('resid')) return 'casa';
-  if (t.includes('terreno') || t.includes('lote') || t.includes('gleba') || t.includes('area')) return 'terreno';
+  // 'area' CRU sai de propósito (bate com api/_tipo.js): senão "Galpão com área…" cairia
+  // em terreno (este ramo vem antes do comercial). Só "area/data de terra" indica terreno.
+  if (t.includes('terreno') || t.includes('lote') || t.includes('gleba') ||
+      t.includes('data de terra') || t.includes('area de terra')) return 'terreno';
   if (t.includes('comerc') || t.includes('sala') || t.includes('loja') || t.includes('galp') ||
       t.includes('barrac') || t.includes('industr') || t.includes('armazem') ||
       t.includes('deposito') || t.includes('predio') || t.includes('escritorio') ||
-      t.includes('conjunto') || t.includes('ponto') || t.includes('hotel') || t.includes('pousada')) return 'comercial';
+      t.includes('conjunto') || t.includes('ponto') || t.includes('hotel') ||
+      t.includes('pousada') || t.includes('motel')) return 'comercial';
   return 'imovel';
+}
+
+// Reforço CENTRAL de tipologia (choke point único p/ TODAS as fontes, aplicado no
+// salvarImoveis). Quando o mapper da fonte NÃO classificou (tipo genérico 'imovel'),
+// deriva o tipo: (a) da CATEGORIA embutida na URL do lote — autoritativa no Grupo Lance
+// (/imoveis/<categoria>/…: terrenos-e-lotes→terreno, casas→casa, imoveis-rurais→rural,
+// galpoes/imoveis-industriais→comercial…) — e, em seguida, (b) do TÍTULO do leiloeiro.
+// Só faz UPGRADE do balde genérico: nunca sobrescreve um tipo específico que a fonte já
+// entregou (regra do dono: o tipo espelha como veio do leiloeiro, não a nossa suposição).
+// Corrige o vazamento de terrenos genéricos na intenção "Locação" (ex.: Bertioga).
+function reforcarTipo(im) {
+  if (im && im.tipo && im.tipo !== 'imovel') return im.tipo;
+  const cat = (String((im && im.url_lote) || '').match(/\/imoveis\/([^/?#]+)/) || [])[1] || '';
+  if (cat) { const tc = normalizarTipo(cat.replace(/-/g, ' ')); if (tc !== 'imovel') return tc; }
+  return normalizarTipo((im && im.titulo) || '');
 }
 
 function toTitleCase(str) {
@@ -121,6 +140,7 @@ async function salvarImoveis(imoveis, fonte) {
     const temPar = Number(vAval) > 0 && Number(vMin) > 0;
     const row = {
       ...im,
+      tipo: reforcarTipo(im), // choke point: upgrade do balde 'imovel' via categoria-URL/título
       valor_minimo: vMin,
       valor_avaliacao: vAval,
       ativo: true, // coletado agora ⇒ está ativo (reativa lotes que voltaram)
@@ -1952,14 +1972,18 @@ async function scraperPestana(browser) {
 }
 
 // ─── BIASI LEILÕES ────────────────────────────────────────────────────────────
-// Server-rendered ASP.NET, SEM API JSON (todos os GetLotes dão 404). Os leilões de
-// imóvel estão na home (/leilao/{id}/…); cada página do leilão traz até 48 cards no
-// HTML (#leilao-lista-lote total/limit) com paginação por JavaScript (sem ?page).
-// Estrutura do card confirmada por captura real (debug_fetch):
+// Server-rendered ASP.NET, SEM API JSON (todos os GetLotes dão 404).
+// Estrutura do card (a mesma em toda listagem do site):
 //   a.leilao-lote[data-id] href=/sale/detail?id=X · .card-title="Lote em … - Cidade/UF"
 //   · .card-img-cover bg=cdn-biasi.blueintra.com/images/lot/… · "R$ …" (Valor Inicial)
-// Estratégia: navegador real — parseia o DOM de cada página e CLICA na paginação
-// (a click dispara o AJAX do próprio site, com a sessão certa).
+// ESTRATÉGIA (2 camadas, após a regressão 369→173→26 de 07/2026):
+//   1) PREFERIDA — listagem de imóveis paginada por URL (?pagina=N): determinística, sem
+//      depender da vitrine ROTATIVA da home nem do clique-AJAX (os dois pontos frágeis que
+//      regrediram). Reusa o MESMO card → qualidade idêntica; se a página não tiver o card,
+//      volta VAZIA e caímos na camada 2 (nunca grava lote de baixa qualidade — safe-by-constr.).
+//   2) FALLBACK — home (/leilao/{id}/…) → páginas do leilão por clique. Dedup POR LEILÃO
+//      (a versão anterior usava um Set GLOBAL: um leilão travado abortava os demais) + nº de
+//      páginas derivado de `total`/`limit`.
 const BIASI_BASE = 'https://www.biasileiloes.com.br';
 
 function mapLoteBiasi(l) {
@@ -1993,11 +2017,13 @@ function mapLoteBiasi(l) {
   };
 }
 
-// Extrai os cards de lote do DOM da página atual do leilão.
+// Extrai os cards de lote do DOM da página atual (leilão OU listagem agregada — o card
+// `a.leilao-lote` é o mesmo em ambas; sem exigir o container #leilao-lista-lote, a mesma
+// função serve as duas estratégias mantendo a MESMA qualidade de parse).
 function biasiParsePagina(page) {
   return page.evaluate(() => {
     const out = [];
-    document.querySelectorAll('#leilao-lista-lote a.leilao-lote').forEach((a) => {
+    document.querySelectorAll('a.leilao-lote[data-id]').forEach((a) => {
       const id = a.getAttribute('data-id');
       if (!id) return;
       const title = (a.querySelector('.card-title')?.textContent || '').replace(/\s+/g, ' ').trim();
@@ -2012,64 +2038,85 @@ function biasiParsePagina(page) {
 }
 
 async function scraperBiasi(browser) {
-  console.log('  Biasi Leilões — server-rendered (home → leilões → páginas de lotes)...');
+  console.log('  Biasi Leilões — listagem agregada (?pagina) + fallback home→leilões...');
   const page = await browser.newPage();
   const bens = new Map();
   try {
     await page.setUserAgent(USER_AGENT);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
 
-    // 1) Leilões (de imóvel) listados na home: links /leilao/{id}/…
-    let auctions = [];
-    try {
-      await page.goto(`${BIASI_BASE}/`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await new Promise(r => setTimeout(r, 2500));
-      auctions = await page.evaluate(() => {
-        const map = new Map();
-        document.querySelectorAll('a[href*="/leilao/"]').forEach((a) => {
-          const h = a.getAttribute('href') || '';
-          const mm = h.match(/\/leilao\/(\d+)\//);
-          if (mm) map.set(mm[1], h.startsWith('http') ? h : `https://www.biasileiloes.com.br${h}`);
-        });
-        return [...map.values()];
-      });
-    } catch (e) { console.log(`    Biasi home: ${String(e.message).slice(0, 50)}`); }
-    console.log(`    Biasi: ${auctions.length} leilões na home`);
+    // ── ESTRATÉGIA 1: listagem de IMÓVEIS paginada por URL (?pagina=N) ──────────────
+    // Determinística: sem vitrine rotativa e sem clique-AJAX. Só URLs imóvel-scoped (não
+    // /leiloes/... que mistura veículos). Reusa biasiParsePagina → mesma qualidade ou vazio.
+    for (const base of [`${BIASI_BASE}/lotes/imoveis/pesquisa`, `${BIASI_BASE}/lotes/imoveis`]) {
+      const antesBase = bens.size;
+      for (let p = 1; p <= 40; p++) {
+        try {
+          await page.goto(`${base}?pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+          await new Promise(r => setTimeout(r, 1200)); // render server-side
+        } catch { break; }
+        const lotes = await biasiParsePagina(page);
+        if (!lotes.length) break;                       // sem card = URL/estrutura não serve
+        let novos = 0;
+        for (const l of lotes) { if (l.id && !bens.has(l.id)) { bens.set(l.id, l); novos++; } }
+        if (!novos) break;                              // página repetiu = fim da paginação
+      }
+      if (bens.size - antesBase >= 30) break;           // esta base já entregou; não tenta a outra
+    }
+    console.log(`    Biasi: ${bens.size} lotes via listagem agregada`);
 
-    // 2) Cada leilão: parseia a 1ª página e clica na paginação p/ as demais.
-    for (const url of auctions) {
+    // ── ESTRATÉGIA 2 (fallback): home → leilões → páginas por clique ────────────────
+    // Só se a agregada veio fraca. Dedup POR LEILÃO (corrige o abort global da versão
+    // anterior) e nº de páginas por `total`/`limit`; para quando a página não avança.
+    if (bens.size < 60) {
+      let auctions = [];
       try {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        await new Promise(r => setTimeout(r, 1500));
-        const meta = await page.evaluate(() => {
-          const el = document.getElementById('leilao-lista-lote');
-          return { total: Number((el && el.getAttribute('total')) || 0), limit: Number((el && el.getAttribute('limit')) || 48) };
-        }).catch(() => ({ total: 0, limit: 48 }));
-        // Paginação ROBUSTA: NÃO depende do atributo `total` (se ele sumir/zerar, o
-        // cálculo antigo dava pages=1 e perdia todas as páginas seguintes — causa
-        // provável da queda 369→173 em 07/2026). Clica "próxima" (por índice OU botão
-        // next) e para quando 2 páginas seguidas não trazem lote NOVO, o clique falha,
-        // ou no teto de 25 páginas. void meta p/ manter compat (limit/total ainda lidos).
-        void meta;
-        let semNovos = 0;
-        for (let p = 1; p <= 25; p++) {
-          if (p > 1) {
-            const clicked = await page.evaluate((idx) => {
-              const byIdx = document.querySelector(`.nav-paging a[index="${idx}"]`);
-              const next = byIdx || document.querySelector('.nav-paging a[rel="next"], .nav-paging a.next, .nav-paging li.next a');
-              if (next) { next.click(); return true; }
-              return false;
-            }, p).catch(() => false);
-            if (!clicked) break;
-            await new Promise(r => setTimeout(r, 2500)); // espera o AJAX re-renderizar
+        await page.goto(`${BIASI_BASE}/`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 2500));
+        auctions = await page.evaluate(() => {
+          const map = new Map();
+          document.querySelectorAll('a[href*="/leilao/"]').forEach((a) => {
+            const h = a.getAttribute('href') || '';
+            const mm = h.match(/\/leilao\/(\d+)\//);
+            if (mm) map.set(mm[1], h.startsWith('http') ? h : `https://www.biasileiloes.com.br${h}`);
+          });
+          return [...map.values()];
+        });
+      } catch (e) { console.log(`    Biasi home: ${String(e.message).slice(0, 50)}`); }
+      console.log(`    Biasi (fallback): ${auctions.length} leilões na home`);
+
+      for (const url of auctions) {
+        try {
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+          await new Promise(r => setTimeout(r, 1500));
+          const meta = await page.evaluate(() => {
+            const el = document.getElementById('leilao-lista-lote');
+            return { total: Number((el && el.getAttribute('total')) || 0), limit: Number((el && el.getAttribute('limit')) || 48) };
+          }).catch(() => ({ total: 0, limit: 48 }));
+          const paginas = meta.total > 0 ? Math.min(25, Math.ceil(meta.total / (meta.limit || 48))) : 25;
+          const seen = new Set();               // dedup POR LEILÃO (não global)
+          let ultimoPrimeiro = null, semAvanco = 0;
+          for (let p = 1; p <= paginas; p++) {
+            if (p > 1) {
+              const clicked = await page.evaluate((idx) => {
+                const byIdx = document.querySelector(`.nav-paging a[index="${idx}"]`);
+                const next = byIdx || document.querySelector('.nav-paging a[rel="next"], .nav-paging a.next, .nav-paging li.next a');
+                if (next) { next.click(); return true; }
+                return false;
+              }, p).catch(() => false);
+              if (!clicked) break;
+              await new Promise(r => setTimeout(r, 2500)); // espera o AJAX re-renderizar
+            }
+            const lotes = await biasiParsePagina(page);
+            const primeiro = lotes[0]?.id || null;
+            // "não avançou" = página vazia OU o 1º lote repetiu (clique não paginou de fato).
+            if (!lotes.length || (primeiro && primeiro === ultimoPrimeiro)) { if (++semAvanco >= 2) break; else continue; }
+            semAvanco = 0; ultimoPrimeiro = primeiro;
+            for (const l of lotes) { if (l.id && !seen.has(l.id)) { seen.add(l.id); bens.set(l.id, l); } }
           }
-          const antes = bens.size;
-          const lotes = await biasiParsePagina(page);
-          for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
-          if (bens.size === antes) { if (++semNovos >= 2) break; } else semNovos = 0;
-        }
-      } catch { /* leilão a leilão; nunca derruba o scrape */ }
-      await new Promise(r => setTimeout(r, 150));
+        } catch { /* leilão a leilão; nunca derruba o scrape */ }
+        await new Promise(r => setTimeout(r, 150));
+      }
     }
   } finally { await page.close().catch(() => {}); }
 
@@ -2586,7 +2633,9 @@ const GL_BASE = 'https://www.grupolance.com.br';
 
 function mapLoteGrupoLance(l) {
   if (!l || !l.id) return null;
-  const titulo = String(l.titulo || '').replace(/\s+/g, ' ').trim();
+  // Limpa o glitch de scraping "sImóvel, 12.796,46m²…" (char extra colado ao início do
+  // título): uma letra minúscula solta grudada numa Maiúscula no começo é artefato.
+  const titulo = String(l.titulo || '').replace(/\s+/g, ' ').trim().replace(/^[a-zà-ÿ](?=[A-ZÀ-Þ])/, '');
   // "Cidade, UF" da card-locality; fallback: UF/cidade da URL /imoveis/{cat}/{uf}/{cidade}/...
   let cidade = '', uf = '';
   const lm = String(l.local || '').match(/^(.*?),\s*([A-Za-z]{2})\s*$/);
