@@ -32,10 +32,18 @@
 
 **Estado p/ DEMO (validado no banco):** acervo limpo (0 bleeding) · **ZUK 447 imóveis prontos** (avaliação+área+matrícula) · CEF 28k. Recomendação: demonstrar com ZUK/CEF; ao atribuir arremate ao vivo, só anexar docs + valor e deixar o sistema ler/gerar.
 
+**🔧 Revisão das TELAS do admin (pedido do dono — "há o que melhorar ali ainda") — FEITA (PRs #176–#179):**
+Auditoria completa das abas (`Admin.jsx`) → 15 achados priorizados; resolvidos:
+1. **Ganhos seguros (#176):** remove lista morta `TABS` (nav usa `GRUPOS_ADMIN` como fonte única); rótulo `📣 Marketing`; tira guard `role==='admin'` redundante; `confirm` antes de remover disponibilidade do analista; `insert().select()` sem refetch; painel de Custos mostra aviso quando a fonte cai (antes sumia); paraleliza contagens de fotos; `title` nos textos truncados.
+2. **Código morto (#177):** remove `SdrTab` (~669 linhas, nunca renderizado) + aba `Tour` órfã (~148) → **-817 linhas**.
+3. **Agregação via RPC + dedup de KPI (#178):** nova RPC `admin_dashboard_contadores(inicio,fim)` (admin-gated) agrega contagens/MRR/acervo no servidor — Dashboard **para de puxar `perfis` inteiro pro cliente** (escala p/ 10k+); "imóveis ativos" passa a sair da MESMA fonte do `/api/scraper-status` (acervo_stats) — validado 32.931==32.931.
+4. **Fidelidade Infra & Custos (#179):** "custo mensal" inclui o **custo REAL de IA/integrações** (via `/api/uso-integracoes`) no lugar do fixo R$3; **câmbio real** (usd_brl ~5,4) no storage em vez do chumbado 6.0; detalhamento por componente.
+Segurança **0/0** após a RPC nova.
+
 **PENDÊNCIAS:**
 - **~3,6 mil imóveis SEM avaliação** aguardam leitura **PAGA** do PDF do edital (Bright Data) — **aguarda OK de custo do dono**.
 - **Monitorar o 1º run do Radar pós-#175** (confirmar que a re-tentativa pega editais que caíam no 403) — o dono ainda não pediu p/ armar.
-- **🔧 Revisar as TELAS do admin** (pedido do dono nesta sessão — "há o que melhorar ali ainda"): revisão em andamento.
+- **Achados MENORES do admin ainda não atacados** (baixa prioridade): preços de plano/limites chumbados como fallback em descrições de contrato; `perfis` inteiro puxado no `MarketingTab` (mesmo padrão da Frente C, se virar gargalo).
 
 ---
 
