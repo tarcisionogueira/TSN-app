@@ -39,7 +39,7 @@ const DJEN_HEADERS = {
   'Origin': 'https://comunica.pje.jus.br',
 };
 const MAX_PAGINAS = 8;           // teto por (tribunal×termo): 8×100 = 800 itens
-const HARD_MS = 270000;          // deixa folga no maxDuration 300s
+const HARD_MS = 200000;          // teto do PULL (~200s) — garante fatia p/ a IA depois
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -136,7 +136,7 @@ ${String(texto || '').slice(0, 8000)}`;
 }
 
 const IA_LOTE = 10;        // teto de editais por run (economia; drena a fila em poucos runs)
-const IA_HARD_MS = 240000; // orçamento de tempo p/ a IA (deixa folga no maxDuration 300s)
+const IA_HARD_MS = 285000; // corte da IA (~285s do início) — o log do monitor_runs já ocorreu antes
 
 // Enriquece por IA os editais ainda não extraídos (fila via flag ia_extraido). Best-effort:
 // roda MESMO quando o pull do dia foi pulado (auto-ajuste), então a fila drena a cada 4h.
@@ -186,25 +186,23 @@ async function buscarDJEN(tribunal, termo, ini, fim) {
   for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
     const url = `${DJEN_BASE}?siglaTribunal=${encodeURIComponent(tribunal)}&texto=${encodeURIComponent(termo)}`
       + `&dataDisponibilizacaoInicio=${ini}&dataDisponibilizacaoFim=${fim}&itensPorPagina=100&pagina=${pagina}`;
-    // Tentativa DIRETA (2x com backoff curto): o WAF às vezes barra a 1ª e libera a 2ª.
+    // O DJEN bloqueia o IP de datacenter da Vercel (403 PERSISTENTE — validado: nem UA nem
+    // Origin/Referer de navegador resolvem). Então vai DIRETO no Bright Data (IP residencial),
+    // sem gastar ~23s/página em tentativas diretas fadadas ao 403 (economia de tempo E de
+    // requests). A tentativa direta fica só como ÚLTIMO recurso (ex.: cota do BD estourada).
     let json, ultimoStatus = 0;
-    for (let tent = 1; tent <= 2; tent++) {
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 30000);
-      try {
-        const resp = await fetch(url, { headers: DJEN_HEADERS, signal: ctrl.signal });
-        if (resp.ok) { json = await resp.json(); break; }
-        ultimoStatus = resp.status;
-      } finally { clearTimeout(to); }
-      if (tent === 1) await new Promise(r => setTimeout(r, 1500));
-    }
-    // FALLBACK Bright Data (IP residencial contorna o bloqueio por IP de datacenter da
-    // Vercel — validado: UA/headers de navegador não bastam, o 403 é por IP). Sob o teto
-    // semanal (proposito 'radar'); se não configurado/estourou a cota → cai fora (null).
-    if (!json && brightDataDisponivel()) {
-      const resp = await fetchViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 45000 });
+    if (brightDataDisponivel()) {
+      const resp = await fetchViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 30000 });
       if (resp && resp.ok) { try { json = JSON.parse(await resp.text()); } catch { /* corpo não-JSON */ } }
       else if (resp) ultimoStatus = resp.status;
+    }
+    if (!json) { // ÚLTIMO recurso: tenta direto (normalmente 403, mas cobre BD indisponível/cota)
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 20000);
+      try {
+        const resp = await fetch(url, { headers: DJEN_HEADERS, signal: ctrl.signal });
+        if (resp.ok) json = await resp.json(); else ultimoStatus = resp.status;
+      } catch { /* rede/timeout */ } finally { clearTimeout(to); }
     }
     if (!json) throw new Error(`HTTP ${ultimoStatus || 'sem resposta'}`);
     const items = json?.items || json?.content || json?.comunicacoes || [];
