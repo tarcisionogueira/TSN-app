@@ -117,11 +117,11 @@ function ehEditalReal(texto, tipoDoc) {
 async function extrairEditalIA(texto) {
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return null;
-  const prompt = `Extraia do EDITAL DE LEILÃO JUDICIAL abaixo os campos e responda APENAS um JSON válido (sem markdown, sem comentários) com estas chaves (use null quando não houver):
+  const prompt = `Abaixo há uma COMUNICAÇÃO JUDICIAL sobre LEILÃO/HASTA de IMÓVEL (pode ser o edital, ou uma intimação/despacho que designa ou relata o leilão). Extraia os campos e responda APENAS um JSON válido (sem markdown, sem comentários) com estas chaves (use null quando não houver):
 {"leiloeiro_nome":string|null,"valor_avaliacao":number|null,"lance_minimo":number|null,"data_praca_1":"YYYY-MM-DD"|null,"data_praca_2":"YYYY-MM-DD"|null,"imovel_matricula":string|null,"imovel_endereco":string|null,"imovel_cidade":string|null,"imovel_uf":string|null,"ocupacao":"ocupado"|"desocupado"|null,"area_m2":number|null}
-Regras: valores como número puro (ex: 150000.50, sem "R$" nem pontos de milhar). leiloeiro_nome = a pessoa/empresa LEILOEIRA oficial (nunca o juiz, as partes ou advogados). Se o texto NÃO for um edital de leilão de imóvel, responda exatamente {"nao_edital":true}.
+Regras: valores como número puro (ex: 150000.50, sem "R$" nem pontos de milhar). leiloeiro_nome = a pessoa/empresa LEILOEIRA oficial (nunca o juiz, as partes ou advogados; se não citar, null). Se o texto NÃO tratar de leilão/hasta pública de um IMÓVEL, responda exatamente {"nao_edital":true}.
 
-EDITAL:
+TEXTO:
 ${String(texto || '').slice(0, 8000)}`;
   const res = await iaGeminiPrimary({
     method: 'POST',
