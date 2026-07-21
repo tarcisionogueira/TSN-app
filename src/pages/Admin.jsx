@@ -5562,24 +5562,9 @@ function ScrapersTab() {
   }, [abaAtiva, geocTodos.rodando]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // Contagem de imóveis por fonte
-    // Caixa: registros novos têm fonte='caixa', antigos têm fonte=NULL — duas queries separadas pois
-    // o Supabase JS não suporta is.null dentro do .or()
-    // O banco grava fonte em MAIÚSCULAS (CEF/MEGA/SOLD/SUPERBID/BB). Conta também
-    // 'caixa' (legado) e NULL para a Caixa, por compatibilidade.
-    const fontes = FONTES_LEILAO.map(f => f.fonte);
-    Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', 'CEF'),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', 'caixa'),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('fonte', null),
-      ...fontes.map(f =>
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', f)
-      ),
-    ]).then(([cef, caixaLegado, caixaNull, ...rest]) => {
-      const contagem = { caixa: (cef.count || 0) + (caixaLegado.count || 0) + (caixaNull.count || 0) };
-      fontes.forEach((f, i) => { contagem[f] = rest[i]?.count || 0; });
-      setLeiloeiroContagem(contagem);
-    });
+    // Contagem por fonte (ativos REAIS) agora vem do /api/scraper-status (por_fonte,
+    // servidor) — antes eram ~14 counts no cliente que somavam INATIVOS e estouravam sob
+    // RLS/throttle. Aqui carregamos só a SAÚDE/qualidade por fonte.
     // Saúde/qualidade: última execução por fonte (monitor de regressão)
     supabase.from('fonte_saude')
       .select('fonte,total,status,valor_pct,uf_pct,link_pct,foto_pct,estrategia,motivo,executado_em')
@@ -5597,18 +5582,21 @@ function ScrapersTab() {
   }, []);
 
   useEffect(() => {
-    apiCall('/api/scraper-status').then(r => r.json()).then(setStatus).catch(() => {});
-    // Contador de imóveis geocodificados (coluna: latitude)
-    // Sem coordenadas = latitude IS NULL (nunca processado) + latitude=0 (falhou)
-    Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
-    ]).then(([comGeo, semNull, semZero]) => {
-      const com = comGeo.count || 0;
-      const sem = (semNull.count || 0) + (semZero.count || 0);
-      setGeoStats({ com, sem, total: com + sem });
-    });
+    // Números do SERVIDOR (acervo_stats + fonte_cobertura via /api/scraper-status): ativos,
+    // geocode REAL e contagem/cobertura por fonte. Substitui os ~17 counts que a tela fazia
+    // no cliente e estouravam sob RLS/throttle (mostrando 0% de geocode).
+    apiCall('/api/scraper-status').then(r => r.json()).then(d => {
+      setStatus(d);
+      if (typeof d?.geocod === 'number') {
+        setGeoStats({ com: d.geocod, sem: d.sem_geo || 0, total: (d.geocod || 0) + (d.sem_geo || 0) });
+      }
+      if (d?.por_fonte && typeof d.por_fonte === 'object') {
+        const c = {};
+        for (const [f, r] of Object.entries(d.por_fonte)) c[f] = r?.ativos || 0;
+        if (d.por_fonte.CEF) c.caixa = d.por_fonte.CEF.ativos || 0; // chave legada da Caixa
+        setLeiloeiroContagem(c);
+      }
+    }).catch(() => {});
   }, []);
 
   // Trigger manual via GitHub Actions — estado por estado com barra de progresso
@@ -5918,7 +5906,7 @@ function ScrapersTab() {
       {/* ── KPIs ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Imóveis no banco',   valor: status?.total?.toLocaleString('pt-BR') || '—',                                                        icon: '🏠', cor: '#0D63DB' },
+          { label: 'Imóveis ativos',     valor: (status?.ativos ?? status?.total)?.toLocaleString('pt-BR') || '—',                                     icon: '🏠', cor: '#0D63DB' },
           { label: 'Geocodificados',      valor: `${geoStats.com.toLocaleString('pt-BR')} (${geoPct}%)`,                                               icon: '📍', cor: geoPct > 80 ? '#059669' : geoPct > 50 ? '#d97706' : '#dc2626' },
           { label: 'Última atualização', valor: status?.ultima_atualizacao ? new Date(status.ultima_atualizacao).toLocaleString('pt-BR') : '—',       icon: '🕐', cor: '#475569' },
           { label: 'Sem coordenadas',    valor: geoStats.sem.toLocaleString('pt-BR'),                                                                  icon: '⚠️', cor: geoStats.sem > 0 ? '#d97706' : '#059669' },

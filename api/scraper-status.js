@@ -18,25 +18,28 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase env vars not configured' });
   }
 
-  try {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/imoveis_leilao?select=id,atualizado_em&order=atualizado_em.desc&limit=1`,
-      {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-          Prefer: 'count=exact',
-        },
-      }
-    );
+  const h = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' };
+  const rpc = async (nome, body = '{}') => {
+    try { const r = await fetch(`${supabaseUrl}/rest/v1/rpc/${nome}`, { method: 'POST', headers: h, body }); return r.ok ? await r.json() : null; }
+    catch { return null; }
+  };
 
-    const count = parseInt(response.headers.get('content-range')?.split('/')[1] || '0', 10);
-    const data = await response.json();
-    const ultimaAtualizacao = data?.[0]?.atualizado_em || null;
+  try {
+    // Estatísticas do acervo + cobertura por fonte em 2 RPCs no SERVIDOR (service role,
+    // sem RLS/timeout) — substitui os ~17 counts que a tela fazia no cliente e estouravam
+    // (mostrando 0% geocode). Números REAIS: ativos, geocodificados, cobertura de docs.
+    const [stats, cobertura] = await Promise.all([rpc('acervo_stats'), rpc('fonte_cobertura')]);
+
+    const porFonte = {};
+    for (const r of (Array.isArray(cobertura) ? cobertura : [])) porFonte[r.fonte] = r;
 
     return res.status(200).json({
-      total: count,
-      ultima_atualizacao: ultimaAtualizacao,
+      total: stats?.total ?? 0,
+      ativos: stats?.ativos ?? null,
+      geocod: stats?.geocod ?? null,
+      sem_geo: stats?.sem_geo ?? null,
+      ultima_atualizacao: stats?.ultima_atualizacao ?? null,
+      por_fonte: porFonte,
     });
   } catch (e) {
     console.error('[scraper-status]', e.message);
