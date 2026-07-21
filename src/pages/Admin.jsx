@@ -4124,39 +4124,35 @@ function DashboardTab() {
     if (periodo === 'custom' && (!dataInicio || !dataFim)) return;
     const range = getRange(periodo, dataInicio, dataFim);
     async function load() {
-      const [{ data: perfis }, { count: inadimCount }, { count: novosCount }, { data: dbSizeData }, { count: reembCount }] = await Promise.all([
-        supabase.from('perfis').select('role, plano, inadimplente_desde'),
-        supabase.from('perfis').select('id', { count: 'exact', head: true }).not('inadimplente_desde', 'is', null),
-        supabase.from('perfis').select('id', { count: 'exact', head: true })
-          .gte('created_at', range.inicio).lte('created_at', range.fim),
-        supabase.rpc('get_db_size_mb'),
-        supabase.from('reembolsos_garantia').select('id', { count: 'exact', head: true }).eq('status', 'solicitado'),
-      ]);
+      // Contagens/MRR/acervo AGREGADOS no SERVIDOR (RPC admin_dashboard_contadores): 1 chamada,
+      // sem puxar a tabela `perfis` inteira pro cliente (escala p/ 10k+ usuários). E o
+      // `imoveis_ativos` sai da MESMA fonte do /api/scraper-status (acervo_stats) → o KPI
+      // "imóveis ativos" não diverge mais entre o Dashboard e a Operação de Coleta.
+      const { data: m } = await supabase.rpc('admin_dashboard_contadores', { p_inicio: range.inicio, p_fim: range.fim });
 
-      // Conta TODOS os perfis. Planos ANUAIS (top2_anual etc.) somam ao plano-base (p/ o MRR
-      // e a contagem não os perderem); roles fora do conjunto conhecido caem em "outros".
-      const contagem = { admin: 0, explorador: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0, outros: 0 };
-      (perfis || []).forEach(p => { const r = String(p.role || '').replace(/_anual$/, ''); if (r in contagem) contagem[r]++; else contagem.outros++; });
+      // Contagem já normalizada no servidor (anuais somados ao plano-base; resto em "outros").
+      const contagem = { admin: 0, explorador: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0, outros: 0, ...(m?.contagem || {}) };
 
-      // MRR por preço REAL do planos_config (mrrMensalPlano — a MESMA conta do detalhe por
-      // plano, p/ não divergirem). Normaliza tudo p/ mensal-equivalente.
+      // MRR pelo preço REAL do planos_config (mrrMensalPlano — a MESMA conta do detalhe por
+      // plano), agora sobre as CONTAGENS agregadas no servidor. Normaliza p/ mensal-equivalente.
       const mrr = (contagem.top2 * mrrMensalPlano(planosCtx?.top2, 49.90))
         + (contagem.assessorado * mrrMensalPlano(planosCtx?.assessorado, 500))
         + (contagem.clube * mrrMensalPlano(planosCtx?.clube, 5000));
       const taxaPix = mrr * 0.01;
-      const liquido = mrr - taxaPix;
 
       setDados({
         contagem,
-        total: (perfis || []).length, // total REAL de perfis (inclui anuais/leiloeiro/pacote/outros)
+        total: m?.total || 0, // total REAL de perfis (inclui anuais/leiloeiro/pacote/outros)
         mrr,
         taxaPix,
-        liquido,
-        inadimplentes: inadimCount || 0,
-        reembolsosPendentes: reembCount || 0,
-        novosMes: novosCount || 0,
-        dbSizeMB: dbSizeData ?? null,
+        liquido: mrr - taxaPix,
+        inadimplentes: m?.inadimplentes || 0,
+        reembolsosPendentes: m?.reembolsos_pendentes || 0,
+        novosMes: m?.novos || 0,
+        dbSizeMB: m?.db_size_mb ?? null,
       });
+      // Acervo (imóveis ativos + fotos no Storage) vem na MESMA RPC — sem os 2 counts client-side.
+      setFotoStats({ total: m?.imoveis_ativos || 0, noStorage: m?.fotos_storage || 0 });
       setLoading(false);
     }
 
@@ -4171,14 +4167,6 @@ function DashboardTab() {
       }
       setAsaasLoading(false);
     }
-
-    // Fotos: count total e quantas já estão no Storage (as duas contagens em PARALELO — antes
-    // eram aninhadas, custando 1 RTT a mais por load do dashboard).
-    Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).like('link_foto', '%supabase%'),
-    ]).then(([{ count: total }, { count: noStorage }]) =>
-      setFotoStats({ total: total || 0, noStorage: noStorage || 0 }));
 
     async function loadMp() {
       try {
