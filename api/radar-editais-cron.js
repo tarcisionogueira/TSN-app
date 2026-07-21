@@ -26,7 +26,14 @@ const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 //   TJSP,TJRJ,TJMG,TJRS,TJPR,TJSC,TJBA,TJGO,TJDFT,TJPE,TJCE,TJES,TJMT,TJMS,TJPA,TJMA,TJPB,
 //   TJRN,TJAL,TJSE,TJPI,TJAM,TJRO,TJAC,TJAP,TJRR,TJTO,TRT1,TRT2,TRT15 ... (DJEN é nacional).
 const TRIBUNAIS = (process.env.RADAR_TRIBUNAIS || 'TJSP,TRT15').split(',').map(s => s.trim()).filter(Boolean);
-const TERMOS = ['edital de leilão', 'hasta pública', 'leilão judicial'];
+// Termos jurídicos que referenciam LEILÃO/VENDA de imóvel no DJEN. CONFIGURÁVEL por env
+// RADAR_TERMOS (o agente de captura/monitor APRENDE o rendimento de cada termo — quantos viram
+// edital REAL vs ruído — e liga/desliga termos sem deploy; ver docs/RADAR_EDITAIS_CNJ.md).
+// Mais termos = mais recall; o filtro duro (ehEditalReal) + a IA (nao_edital) cortam o ruído.
+// 'alienação judicial' = termo moderno do CPC art.879; 'alvará de venda' = venda em inventário.
+const TERMOS = (process.env.RADAR_TERMOS ||
+  'edital de leilão,leilão judicial,leilão eletrônico,hasta pública,alienação judicial,alvará de venda')
+  .split(',').map((s) => s.trim()).filter(Boolean);
 // O WAF do DJEN devolve 403 p/ UA de bot vindo de datacenter (Vercel). O frontend público
 // comunica.pje.jus.br consome ESTA MESMA API — então imitamos o navegador dele (UA real +
 // Origin/Referer do frontend oficial + Accept-Language) p/ passar pela proteção sem custo.
