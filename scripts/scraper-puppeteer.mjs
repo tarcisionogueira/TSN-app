@@ -635,20 +635,27 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
     await new Promise(r => setTimeout(r, 2500));
 
     const offers = await page.evaluate(async (portal) => {
-      const FIELDS = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
-      const apiUrl = n => `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${FIELDS}`;
-      const all = [];
-      for (let n = 1; n <= 100; n++) {
-        let data;
-        try {
-          const r = await fetch(apiUrl(n), { headers: { Accept: 'application/json' } });
-          if (!r.ok) break;
-          data = await r.json();
-        } catch { break; }
-        const arr = data.offers || data.content || data.results || data.items || (Array.isArray(data) ? data : []);
-        if (!arr || !arr.length) break;
-        all.push(...arr);
-        if (arr.length < 100) break;
+      const FIELDS_BASE = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
+      // Campos de DOCUMENTO (edital/matrícula/laudo). Candidatos — a API ignora os
+      // inexistentes; se por acaso REJEITAR o fieldList expandido (0 offers na 1ª página),
+      // o fallback volta ao FIELDS_BASE → a coleta NUNCA quebra por causa disto.
+      const FIELDS_DOCS = FIELDS_BASE + ';offerDocument;attachments;documents;offerAttachments;product.attachments;offerDetail.attachments;offerDetail.documents';
+      const apiUrl = (n, fields) => `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${fields}`;
+      const buscar = async (n, fields) => {
+        try { const r = await fetch(apiUrl(n, fields), { headers: { Accept: 'application/json' } }); if (!r.ok) return null; const d = await r.json(); return d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []); }
+        catch { return null; }
+      };
+      let fields = FIELDS_DOCS;
+      let first = await buscar(1, FIELDS_DOCS);
+      if (!first || !first.length) { fields = FIELDS_BASE; first = await buscar(1, FIELDS_BASE); } // fallback seguro
+      const all = [...(first || [])];
+      if (first && first.length >= 100) {
+        for (let n = 2; n <= 100; n++) {
+          const arr = await buscar(n, fields);
+          if (!arr || !arr.length) break;
+          all.push(...arr);
+          if (arr.length < 100) break;
+        }
       }
       return all;
     }, portalId);
@@ -683,6 +690,31 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
       // NULL nos ~1.431 SUPERBID + ~111 SBID, travando ~1,5k matrículas.
       const loteUrl = linkURL.startsWith('http') ? linkURL : (linkURL ? `${baseSite}${linkURL}` : `${baseSite}/oferta/${id}`);
 
+      // DOCUMENTOS (edital/matrícula/laudo): a rede Superbid serve os anexos como PDFs em
+      // s.superbid.net/attachment/… quando o fieldList os inclui. Varre as estruturas
+      // prováveis + rede de segurança (qualquer .pdf solto no JSON da oferta) e classifica
+      // pelo texto. Best-effort e ADITIVO: se não vier nada, `anexos` fica indefinido e o
+      // enriquecerDocumentosLote (enrich) segue como estava — nunca piora.
+      const anexos = (() => {
+        try {
+          const out = [], vis = new Set();
+          const add = (url, nome) => {
+            if (!url || typeof url !== 'string') return;
+            const u = url.startsWith('//') ? `https:${url}` : url;
+            if (!/\.pdf(\?|#|$)/i.test(u) || vis.has(u)) return;
+            vis.add(u);
+            const t = `${nome || ''} ${u}`.toLowerCase();
+            const tipo = /matr[ií]cul/.test(t) ? 'matricula' : /laudo|avalia/.test(t) ? 'laudo'
+                       : /(edital|regulament)/.test(t) ? 'edital' : 'outro';
+            out.push({ nome: nome || (tipo.charAt(0).toUpperCase() + tipo.slice(1)), url: u, tipo });
+          };
+          for (const arr of [of.offerDocument, of.attachments, of.documents, of.offerAttachments, p.attachments, det.attachments, det.documents].filter(Array.isArray))
+            for (const a of arr) add(a?.url || a?.link || a?.href || a?.fileUrl || a?.value, a?.name || a?.title || a?.description || a?.label);
+          for (const m of (JSON.stringify(of).match(/https?:\\?\/\\?\/[^"'\s\\]*\.pdf/gi) || [])) add(m.replace(/\\\//g, '/'));
+          return out.length ? out.slice(0, 10) : undefined;
+        } catch { return undefined; }
+      })();
+
       return {
         fonte,
         fonte_id: `${prefix}_${id}`,
@@ -701,6 +733,7 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
         link_edital: loteUrl,
         link_foto: p.thumbnailUrl || null,
         url_lote: loteUrl,
+        ...(anexos ? { anexos } : {}),
         // Sub-portais: o leiloeiro real é a "loja" (store) de cada oferta; cai no
         // rótulo genérico da fonte se o campo vier vazio.
         leiloeiro: (storeAsLeiloeiro && str(of.store)) ? str(of.store).slice(0, 120) : leiloeiro,
