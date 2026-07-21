@@ -131,10 +131,37 @@ async function salvarImoveis(imoveis, fonte) {
     } catch (e) { console.log(`  [${fonte}] merge-docs lookup erro: ${String(e.message).slice(0, 80)}`); }
   }
 
+  // ANTI VALUE-BLEEDING (raiz do bug LEILOFY): a MESMA avaliação/área COM CENTAVOS em >=3 lotes
+  // de >=2 cidades no MESMO scrape é quase certo um seletor GLOBAL vazando (bloco "destaque"/
+  // "relacionados") para vários lotes → anula (melhor "a confirmar" que um número mentiroso).
+  const bledSet = (campo) => {
+    const m = new Map();
+    for (const im of imoveis) {
+      const v = Number(im[campo]) || 0;
+      if (v > 0 && Math.round(v * 100) % 100 !== 0) {
+        const e = m.get(v) || { n: 0, cid: new Set() };
+        e.n++; e.cid.add(String(im.cidade || '')); m.set(v, e);
+      }
+    }
+    return new Set([...m].filter(([, e]) => e.n >= 3 && e.cid.size >= 2).map(([v]) => v));
+  };
+  const avalBled = bledSet('valor_avaliacao');
+  const areaBled = bledSet('area_m2');
+
   const rows = imoveis.map(im => {
     // Guarda 2: anula valores sentinela (placeholder) — nunca vira preço exibido.
     const vMin = semSentinela(im.valor_minimo);
-    const vAval = semSentinela(im.valor_avaliacao);
+    let vAval = semSentinela(im.valor_avaliacao);
+    // TRAVA DE CREDIBILIDADE: avaliação grudada (bleeding) OU que implique desconto >=88% (aval
+    // > 8,3x o mínimo — quase sempre mis-read/valor de outro lote) NÃO pode virar "% OFF" falso
+    // no card/relatório → vira AUSENTE. Espelha a trava do gerar-analise.js (defesa em 2 camadas).
+    if (avalBled.has(Number(vAval))) vAval = 0;
+    if (Number(vAval) > 0 && Number(vMin) > 0 && (1 - Number(vMin) / Number(vAval)) >= 0.88) vAval = 0;
+    let areaM2 = Number(im.area_m2) || 0;
+    if (areaBled.has(areaM2)) areaM2 = 0; // área grudada → melhor 0 (a matrícula/edital corrige)
+    // url_lote: sem ele o imóvel NUNCA entra na fila de captura de documentos (bug do MEGA, que
+    // só preenchia link_edital). Deriva da página do lote (link_edital http) quando o mapper faltou.
+    const urlLote = im.url_lote || (/^https?:\/\//i.test(im.link_edital || '') ? im.link_edital : null);
     // Desconto/viabilidade SÓ com os dois valores presentes (>0). Sem isto, mínimo nulo
     // com avaliação preenchida virava "100% de desconto" (falso).
     const temPar = Number(vAval) > 0 && Number(vMin) > 0;
@@ -143,6 +170,8 @@ async function salvarImoveis(imoveis, fonte) {
       tipo: reforcarTipo(im), // choke point: upgrade do balde 'imovel' via categoria-URL/título
       valor_minimo: vMin,
       valor_avaliacao: vAval,
+      area_m2: areaM2,
+      url_lote: urlLote,
       ativo: true, // coletado agora ⇒ está ativo (reativa lotes que voltaram)
       viavel: temPar ? (1 - vMin / vAval) >= 0.3 : null,
       score_viabilidade: temPar ? Math.min(100, Math.round((1 - vMin / vAval) * 150)) : 30,
@@ -2869,14 +2898,16 @@ function mapLoteLeilofy(raw, id) {
   // regex ancorada falhava → 0 mapeados. Este fallback não depende do fraseado.
   let avaliacao = parseBRL(q(/avalia[çc][ãa]o[^R]{0,60}R\$\s*([\d.]+,\d{2})/i));
   let lance = parseBRL(q(/(?:lance|arremat|m[íi]nimo|lote)[^R]{0,60}R\$\s*([\d.]+,\d{2})/i));
-  if (!avaliacao || !lance) {
+  // NÃO usar Math.max global p/ avaliação: a página é SPA e traz blocos "destaque/relacionados"
+  // com valores de OUTROS lotes — o max pegava o R$ de destaque e o mesmo valor vazava p/ vários
+  // imóveis (bug validado). Avaliação só vem pelo rótulo do próprio lote; sem rótulo fica 0
+  // (honesto — a matrícula/edital preenche depois). O lance (piso) pode usar o menor R$ p/ o lote
+  // não ser descartado por valor_minimo=0, mas se implicar desconto absurdo a trava central anula.
+  if (!lance) {
     const valores = [...text.matchAll(/R\$\s*([\d.]+,\d{2})/g)]
       .map(m => parseBRL(m[1]))
       .filter(v => v >= 10000 && v <= 500000000);
-    if (valores.length) {
-      if (!avaliacao) avaliacao = Math.max(...valores);
-      if (!lance) lance = valores.length > 1 ? Math.min(...valores) : avaliacao;
-    }
+    if (valores.length) lance = valores.length > 1 ? Math.min(...valores) : (avaliacao || valores[0]);
   }
   const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
   const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
