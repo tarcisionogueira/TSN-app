@@ -1,0 +1,25 @@
+name: Disparo FORÇADO — Radar de Editais (DJEN)
+
+# Dispara o /api/radar-editais-cron?forcar=1 (com header CRON_SECRET). O ?forcar=1
+# ignora o auto-ajuste (a trava de "já obtive 1 pull do DJEN hoje") e força um pull
+# imediato. Uso: validar o 1º run em produção, ou dar um empurrão quando o DJEN
+# ficou fora do ar por muito tempo. É idempotente (dedup por djen_id) e aditivo.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  disparar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Forçar pull do Radar de Editais
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET vazio"; exit 1; fi
+          BASE="${APP_BASE_URL:-https://bidprobrasil.com.br}"
+          echo "POST ${BASE}/api/radar-editais-cron?forcar=1"
+          curl -sSL --max-time 295 -X POST "${BASE}/api/radar-editais-cron?forcar=1" \
+            -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n"
+          echo "Resposta:"; cat resp.json; echo
+          python3 -c "import json,sys; d=json.load(open('resp.json')); print('vistos=',d.get('vistos'),'novos=',d.get('novos'),'enriquecidos=',d.get('enriquecidos'),'erro=',d.get('erro')); sys.exit(0 if d.get('ok') else 2)"
