@@ -554,11 +554,15 @@ function UsuariosTab() {
         const endereco = [ext.endereco, local].filter(Boolean).join(', ');
         const valorNum = Number(ext.valorArrematacao || ext.lanceMinimo || ext.valorMinimo || ext.valorAvaliacao || 0) || 0;
         const tipo = /judicial/i.test(ext.modalidade || '') && !/extra/i.test(ext.modalidade || '') ? 'judicial' : (/extra/i.test(ext.modalidade || '') ? 'extrajudicial' : '');
-        if (endereco && !acc.endereco) acc.endereco = endereco;
+        // SÓ pega endereço/cidade do IMÓVEL de documentos que DESCREVEM o imóvel (matrícula/
+        // edital/laudo) — NUNCA do comprovante de endereço do comprador (bug: entrava o endereço
+        // da pessoa no lugar do imóvel → pesquisa de mercado na cidade errada).
+        const ehImovelDoc = ext.descreveImovel === true || /matric|edital|laudo/i.test(String(ext.tipoDocumento || ''));
+        if (ehImovelDoc && endereco && !acc.endereco) acc.endereco = endereco;
         if (valorNum > acc.valor) acc.valor = valorNum;
         if (tipo && !acc.tipo) acc.tipo = tipo;
-        if (ext.cidade && !acc.cidade) acc.cidade = ext.cidade;
-        if (ext.estado && !acc.estado) acc.estado = ext.estado;
+        if (ehImovelDoc && ext.cidade && !acc.cidade) acc.cidade = ext.cidade;
+        if (ehImovelDoc && ext.estado && !acc.estado) acc.estado = ext.estado;
         const nproc = ext.numeroProcesso || ext.numero_processo || '';
         if (nproc && !acc.numero_processo) acc.numero_processo = String(nproc);
         const aval = Number(ext.valorAvaliacao || 0) || 0;

@@ -178,14 +178,19 @@ export async function extrairDadosDocumentoUrl(url) {
 }
 
 function getInstrucaoExtracao() {
-  return `Analise o documento (edital ou matrícula de imóvel em leilão) e extraia os dados estruturados.
+  return `Analise o documento e IDENTIFIQUE seu tipo. Extraia os dados estruturados do IMÓVEL objeto do leilão/arrematação.
+
+REGRA CRÍTICA sobre o ENDEREÇO: "endereco"/"cidade"/"estado"/"cep" devem ser SEMPRE o endereço do IMÓVEL (o bem descrito na matrícula/edital), NUNCA o endereço de uma pessoa. Se o documento for PESSOAL e NÃO descrever o imóvel — comprovante de endereço, conta de luz/água, boleto, RG/CPF, procuração, comprovante de pagamento — deixe endereco/cidade/estado/cep VAZIOS (esse endereço é da pessoa, não do imóvel). Só preencha o endereço quando ele vier da descrição do IMÓVEL na matrícula, no edital ou no laudo.
+
 Retorne APENAS JSON:
 {
+  "tipoDocumento": "matricula|edital|laudo|comprovante_endereco|boleto|documento_pessoal|outro",
+  "descreveImovel": true (se o documento descreve o IMÓVEL — matrícula/edital/laudo) ou false (documento pessoal/financeiro),
   "nome": "identificação curta",
   "tipo": "casa|apartamento|terreno|comercial",
-  "endereco": "endereço completo",
-  "cidade": "",
-  "estado": "UF",
+  "endereco": "endereço do IMÓVEL (vazio se o documento for pessoal/financeiro)",
+  "cidade": "cidade do IMÓVEL (vazio se pessoal)",
+  "estado": "UF do IMÓVEL (vazio se pessoal)",
   "cep": "",
   "valorAvaliacao": número,
   "valorArrematacao": número (lance mínimo),
