@@ -1,0 +1,194 @@
+/**
+ * /api/radar-editais-cron — Radar de Editais (CNJ). Monitora editais de leilão de imóvel
+ * publicados no DJEN (Diário de Justiça Eletrônico Nacional) via a API pública "Comunica"
+ * do CNJ, para TJSP e TRT-15 (SP). Popula public.editais_leilao (dedup por djen_id).
+ *
+ * Objetivo: saber o quanto antes quando sai um edital novo e a QUAL LEILOEIRO foi designado
+ * (amplia acervo + controle). Ver docs/RADAR_EDITAIS_CNJ.md.
+ *
+ * Fonte: GET https://comunicaapi.pje.jus.br/api/v1/comunicacao (pública, sem token, diária).
+ * ROBUSTO/ADITIVO: se o endpoint bloquear/mudar (o CNJ pode impor rate-limit/auth sem aviso),
+ * loga o erro em monitor_runs e retorna 200 sem quebrar nada. Autorizado por CRON_SECRET.
+ *
+ * ⚠️ VALIDAÇÃO: o proxy do ambiente de dev bloqueia *.pje.jus.br (403); em produção (Vercel)
+ * o egresso é aberto. Conferir o 1º run em monitor_runs (itens_vistos > 0).
+ */
+export const config = { runtime: 'nodejs', maxDuration: 300 };
+
+import { isCronAuthorized } from './_auth.js';
+import { createClient } from '@supabase/supabase-js';
+
+const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
+const TRIBUNAIS = ['TJSP', 'TRT15'];
+const TERMOS = ['edital de leilão', 'hasta pública', 'leilão judicial'];
+const UA = 'Mozilla/5.0 (compatible; BidProRadar/1.0; +https://bidprobrasil.com.br)';
+const MAX_PAGINAS = 8;           // teto por (tribunal×termo): 8×100 = 800 itens
+const HARD_MS = 270000;          // deixa folga no maxDuration 300s
+
+const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+function ymd(d) { return d.toISOString().slice(0, 10); }
+function parseBRL(s) {
+  if (!s) return null;
+  const n = parseFloat(String(s).replace(/\./g, '').replace(',', '.'));
+  return isFinite(n) && n > 0 ? n : null;
+}
+function parseDataBR(s) {
+  const m = String(s || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (!m) return null;
+  const [, dd, mm, yy] = m;
+  const ano = yy.length === 2 ? '20' + yy : yy;
+  const iso = `${ano}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  const dt = new Date(iso + 'T12:00:00Z');
+  return isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
+// Extrai o que der do texto do edital (regex conservador; o texto integral fica guardado
+// p/ refinar/plugar IA depois). Falha de parse NÃO descarta o edital (status='erro_parse').
+function parseEdital(texto) {
+  const t = String(texto || '');
+  const pega = (re) => { const m = t.match(re); return m ? (m[1] || '').replace(/\s+/g, ' ').trim() : null; };
+  const leiloeiro = pega(/leiloeir[ao]\s*(?:oficial|p[uú]blic[ao])?\s*[:\-]?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ.\s]{4,60}?)(?:,|\.|\s+JUCESP|\s+inscrit|\s+matr[íi]cula|\n)/i);
+  const jucesp = pega(/JUCESP[^\dA-Za-z]{0,6}(?:n[ºo.]?\s*)?([\d./-]{2,12})/i);
+  const av = pega(/avalia[çc][ãa]o[^\dR]{0,25}R\$\s*([\d.]+,\d{2})/i);
+  const lance = pega(/(?:lance|valor)\s+m[íi]nimo[^\dR]{0,25}R\$\s*([\d.]+,\d{2})/i);
+  const praca1 = pega(/(?:1[ªa]?|primeir[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  const praca2 = pega(/(?:2[ªa]?|segund[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  const matricula = pega(/matr[íi]cula\s*(?:n[ºo.]?\s*)?([\d.\-]{3,15})/i);
+  const plataforma = pega(/https?:\/\/([a-z0-9.\-]+\.(?:com|net|br)[^\s"'<>)]*)/i);
+  const parsedAlgo = !!(leiloeiro || jucesp || av || lance || praca1);
+  return {
+    leiloeiro_nome: leiloeiro, leiloeiro_jucesp: jucesp,
+    valor_avaliacao: parseBRL(av), lance_minimo: parseBRL(lance),
+    data_praca_1: parseDataBR(praca1), data_praca_2: parseDataBR(praca2),
+    imovel_matricula: matricula, leilao_plataforma_url: plataforma ? ('https://' + plataforma) : null,
+    status: parsedAlgo ? 'processado' : 'erro_parse',
+  };
+}
+
+// Campos do item DJEN vêm com nomes variados entre versões — pega o 1º que existir.
+const g = (o, ...ks) => { for (const k of ks) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
+
+async function buscarDJEN(tribunal, termo, ini, fim) {
+  const out = [];
+  for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
+    const url = `${DJEN_BASE}?siglaTribunal=${encodeURIComponent(tribunal)}&texto=${encodeURIComponent(termo)}`
+      + `&dataDisponibilizacaoInicio=${ini}&dataDisponibilizacaoFim=${fim}&itensPorPagina=100&pagina=${pagina}`;
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 30000);
+    let json;
+    try {
+      const resp = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: ctrl.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      json = await resp.json();
+    } finally { clearTimeout(to); }
+    const items = json?.items || json?.content || json?.comunicacoes || [];
+    if (!items.length) break;
+    out.push(...items);
+    const count = Number(json?.count ?? json?.totalElements ?? 0);
+    if (count && pagina * 100 >= count) break;
+  }
+  return out;
+}
+
+export const GET = handler;
+export const POST = handler;
+async function handler(req) {
+  if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
+  if (!process.env.VITE_SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+    return new Response(JSON.stringify({ error: 'Supabase não configurado' }), { status: 500 });
+  }
+  const t0 = Date.now();
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+  // Janela deslizante de 3 dias (pega itens carregados com atraso; dedup resolve repetição).
+  const hoje = new Date();
+  const ini = ymd(new Date(hoje.getTime() - 3 * 86400000));
+  const fim = ymd(hoje);
+
+  // Leiloeiros que JÁ raspamos (nome normalizado) → marca leiloeiro_integrado.
+  const integrados = new Set();
+  try {
+    const { data } = await supabase.from('imoveis_leilao').select('leiloeiro').eq('ativo', true).not('leiloeiro', 'is', null).limit(5000);
+    for (const r of data || []) { const n = norm(r.leiloeiro); if (n.length >= 4) integrados.add(n); }
+  } catch { /* aditivo */ }
+  const ehIntegrado = (nome) => {
+    const n = norm(nome);
+    if (n.length < 4) return false;
+    for (const i of integrados) { if (i.includes(n) || n.includes(i)) return true; }
+    return false;
+  };
+
+  let vistos = 0, novos = 0, erroGeral = null;
+  try {
+    for (const tribunal of TRIBUNAIS) {
+      for (const termo of TERMOS) {
+        if (Date.now() - t0 > HARD_MS) break;
+        let items = [];
+        try { items = await buscarDJEN(tribunal, termo, ini, fim); }
+        catch (e) { erroGeral = `${tribunal}/${termo}: ${String(e.message).slice(0, 80)}`; continue; }
+        vistos += items.length;
+        if (!items.length) continue;
+
+        // Monta linhas; dedup por djen_id (só insere as inéditas).
+        const linhas = items.map((it) => {
+          const djenId = String(g(it, 'id', 'numeroComunicacao', 'hash', 'idComunicacao') || '');
+          const texto = String(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo') || '');
+          const p = parseEdital(texto);
+          const orgao = g(it, 'nomeOrgao', 'orgao', 'nomeVara');
+          const nomeLeiloeiro = p.leiloeiro_nome;
+          return {
+            djen_id: djenId || null,
+            fonte: 'djen',
+            tribunal: g(it, 'siglaTribunal', 'tribunal') || tribunal,
+            numero_processo: g(it, 'numeroProcesso', 'numero_processo', 'numeroprocessocommascara'),
+            orgao, comarca: orgao, uf: 'SP',
+            classe: g(it, 'nomeClasse', 'classe'),
+            tipo_documento: g(it, 'tipoDocumento', 'tipoComunicacao', 'tipo'),
+            data_disponibilizacao: (String(g(it, 'data_disponibilizacao', 'dataDisponibilizacao', 'datadisponibilizacao') || fim)).slice(0, 10),
+            data_praca_1: p.data_praca_1, data_praca_2: p.data_praca_2,
+            leiloeiro_nome: nomeLeiloeiro, leiloeiro_nome_norm: nomeLeiloeiro ? norm(nomeLeiloeiro) : null,
+            leiloeiro_jucesp: p.leiloeiro_jucesp, leilao_plataforma_url: p.leilao_plataforma_url,
+            leiloeiro_integrado: nomeLeiloeiro ? ehIntegrado(nomeLeiloeiro) : false,
+            valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
+            imovel_matricula: p.imovel_matricula,
+            texto_integral: texto.slice(0, 20000),
+            hash_dedup: djenId ? null : norm(`${tribunal}|${g(it, 'numeroProcesso') || ''}|${texto.slice(0, 200)}`),
+            payload: it,
+            status: p.status,
+          };
+        }).filter((r) => r.djen_id || r.hash_dedup);
+
+        // Só as inéditas (evita reprocessar): confere djen_id já existentes.
+        const ids = linhas.map((r) => r.djen_id).filter(Boolean);
+        const existentes = new Set();
+        for (let i = 0; i < ids.length; i += 200) {
+          try {
+            const { data } = await supabase.from('editais_leilao').select('djen_id').in('djen_id', ids.slice(i, i + 200));
+            for (const r of data || []) existentes.add(r.djen_id);
+          } catch { /* aditivo */ }
+        }
+        const inserir = linhas.filter((r) => !r.djen_id || !existentes.has(r.djen_id));
+        if (inserir.length) {
+          const { error } = await supabase.from('editais_leilao').upsert(inserir, { onConflict: 'djen_id', ignoreDuplicates: true });
+          if (!error) novos += inserir.length;
+          else erroGeral = `upsert: ${String(error.message).slice(0, 80)}`;
+        }
+      }
+    }
+  } catch (e) {
+    erroGeral = String(e.message).slice(0, 120);
+  }
+
+  try {
+    await supabase.from('monitor_runs').insert({
+      fonte: 'radar-editais-djen', janela_inicio: ini, janela_fim: fim,
+      itens_vistos: vistos, itens_novos: novos, duracao_ms: Date.now() - t0, erro: erroGeral,
+    });
+  } catch { /* nunca quebra por causa do log */ }
+
+  return new Response(JSON.stringify({ ok: true, vistos, novos, erro: erroGeral, janela: [ini, fim] }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
