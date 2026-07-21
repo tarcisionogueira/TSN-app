@@ -25,7 +25,17 @@ const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 //   TJRN,TJAL,TJSE,TJPI,TJAM,TJRO,TJAC,TJAP,TJRR,TJTO,TRT1,TRT2,TRT15 ... (DJEN é nacional).
 const TRIBUNAIS = (process.env.RADAR_TRIBUNAIS || 'TJSP,TRT15').split(',').map(s => s.trim()).filter(Boolean);
 const TERMOS = ['edital de leilão', 'hasta pública', 'leilão judicial'];
-const UA = 'Mozilla/5.0 (compatible; BidProRadar/1.0; +https://bidprobrasil.com.br)';
+// O WAF do DJEN devolve 403 p/ UA de bot vindo de datacenter (Vercel). O frontend público
+// comunica.pje.jus.br consome ESTA MESMA API — então imitamos o navegador dele (UA real +
+// Origin/Referer do frontend oficial + Accept-Language) p/ passar pela proteção sem custo.
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+const DJEN_HEADERS = {
+  'User-Agent': UA,
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+  'Referer': 'https://comunica.pje.jus.br/',
+  'Origin': 'https://comunica.pje.jus.br',
+};
 const MAX_PAGINAS = 8;           // teto por (tribunal×termo): 8×100 = 800 itens
 const HARD_MS = 270000;          // deixa folga no maxDuration 300s
 
@@ -92,14 +102,19 @@ async function buscarDJEN(tribunal, termo, ini, fim) {
   for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
     const url = `${DJEN_BASE}?siglaTribunal=${encodeURIComponent(tribunal)}&texto=${encodeURIComponent(termo)}`
       + `&dataDisponibilizacaoInicio=${ini}&dataDisponibilizacaoFim=${fim}&itensPorPagina=100&pagina=${pagina}`;
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 30000);
-    let json;
-    try {
-      const resp = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: ctrl.signal });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      json = await resp.json();
-    } finally { clearTimeout(to); }
+    // 1 retry curto: o WAF do DJEN às vezes barra a 1ª tentativa (challenge) e libera a 2ª.
+    let json, ultimoStatus = 0;
+    for (let tent = 1; tent <= 2; tent++) {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 30000);
+      try {
+        const resp = await fetch(url, { headers: DJEN_HEADERS, signal: ctrl.signal });
+        if (resp.ok) { json = await resp.json(); break; }
+        ultimoStatus = resp.status;
+      } finally { clearTimeout(to); }
+      if (tent === 1) await new Promise(r => setTimeout(r, 1500)); // backoff antes de reintentar
+    }
+    if (!json) throw new Error(`HTTP ${ultimoStatus || 'sem resposta'}`);
     const items = json?.items || json?.content || json?.comunicacoes || [];
     if (!items.length) break;
     out.push(...items);
