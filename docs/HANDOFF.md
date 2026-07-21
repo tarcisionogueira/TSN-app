@@ -17,7 +17,29 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## ⏭️ COMEÇAR AQUI (21/07 — sessão 2) — tipologia na raiz + BIASI + BUG BOUNTY auto-aprendido
+## ⏭️ COMEÇAR AQUI (21/07 — sessão 3) — CREDIBILIDADE dos relatórios + Radar resiliente
+> Tudo em `main` (PRs **#172–#175** mesclados). Deploy **#175 READY**. Segurança **0/0**. Branch: `claude/session-1hpqy6`.
+> **Motivação:** o dono gerou relatórios ao vivo para clientes e viu **metragem/avaliação erradas**, **desconto absurdo** e **endereço trocado** (Alagoinhas × Feira de Santana) — "essas coisas não podem ocorrer". Atacado na RAIZ.
+
+**Entregue:**
+1. **Bug "valor grudado" (bleeding) na RAIZ — `scripts/scraper-puppeteer.mjs`:** o scraper (LEILOFY) estampava a MESMA avaliação/área em vários lotes (seletor global vazando). Guard central **`bledSet()`** no `salvarImoveis` (mesma avaliação/área com centavos em ≥3 lotes de ≥2 cidades → null) + trava de desconto 88% + `url_lote` fallback. Removido o `Math.max` global de avaliação no `mapLoteLeilofy`. **Limpeza no banco: 0 bleeding; descontos ≥88% de 199 → 1** (o único restante é CEF **real** de 87,7% em São Gonçalo/RJ — não é erro).
+2. **Trava de credibilidade no motor de relatório — `api/gerar-analise.js`:** avaliação que implica **desconto ≥88%** (aval > 8,3× o mínimo) é MIS-READ/bleed → rejeitada (`avalDb=0`) + `registrarAnomalia('avaliacao_implausivel')`. Candidatos de valor ordenados preferindo o DOCUMENTO.
+3. **Ler/classificar TODOS os documentos ANTES de preencher (bug Alagoinhas × Feira):** ao atribuir arremate manual **não se digita endereço** — a IA lia o 1º casamento (do comprovante de endereço). Agora o sistema **lê e classifica CADA anexo por tipo** e tira cada campo do doc autoritativo (matrícula→endereço/área; laudo/edital→avaliação; edital→lance/processo; **NUNCA** comprovante p/ campo de imóvel). Novo **`consolidarDocsImovel()`** (`src/utils/claude.js`, merge por prioridade + `_proveniencia`); `getInstrucaoExtracao` devolve `tipoDocumento`+`descreveImovel`. `src/pages/Admin.jsx`: atribuição consolida antes de preencher.
+4. **Automação dos 3 relatórios em SEQUÊNCIA (#174):** ao atribuir, gera mercadológico → documental → laudo automaticamente lendo os anexos (`autoGerar:true` + máquina de estados `autoSeqRef` no `Analise.jsx`).
+5. **Regerar-com-IMPACTO (#172):** quando o documental acha dado que CORRIGE o mercadológico (cidade/metragem/avaliação/endereço), NÃO regera em silêncio — grava `analises_mercado.correcoes_sugeridas` (migração `correcoes_sugeridas_relatorio.sql`) + `result.correcoesMercado`; a tela oferece **"Corrigir e regerar" / "Manter"** mostrando o impacto do erro. `api/gerar-documental.js` ganhou `municipioImovel`/`ufImovel` + correção de cidade/estado pela matrícula + captura do nº de processo.
+6. **Cruzar edital + leiloeiro + DJEN pela chave do PROCESSO (CNJ), de graça (#173):** `editais_enriquecer_acervo()` reescrita (migração `editais_cruzar_por_processo.sql`): match FORTE por nº de processo (≥18 díg.) preenche avaliação/área/endereço/cidade faltantes; mantém o match por `lance == mínimo` como reforço; trava de desconto 88%.
+7. **Radar resiliente (#175):** re-tentativa com backoff (1,5s→3s, ×2) quando o DJEN dá **403/429/5xx transitório** mesmo via Bright Data. Termos jurídicos ampliados via `RADAR_TERMOS` (edital de leilão, leilão judicial/eletrônico, hasta pública, alienação judicial, alvará de venda). IA drena `erro_parse` via `ia_extraido=false` (10 pendentes → 1 run).
+
+**Estado p/ DEMO (validado no banco):** acervo limpo (0 bleeding) · **ZUK 447 imóveis prontos** (avaliação+área+matrícula) · CEF 28k. Recomendação: demonstrar com ZUK/CEF; ao atribuir arremate ao vivo, só anexar docs + valor e deixar o sistema ler/gerar.
+
+**PENDÊNCIAS:**
+- **~3,6 mil imóveis SEM avaliação** aguardam leitura **PAGA** do PDF do edital (Bright Data) — **aguarda OK de custo do dono**.
+- **Monitorar o 1º run do Radar pós-#175** (confirmar que a re-tentativa pega editais que caíam no 403) — o dono ainda não pediu p/ armar.
+- **🔧 Revisar as TELAS do admin** (pedido do dono nesta sessão — "há o que melhorar ali ainda"): revisão em andamento.
+
+---
+
+## ⏭️ (21/07 — sessão 2) — tipologia na raiz + BIASI + BUG BOUNTY auto-aprendido
 > Tudo em `main` (PR **#153** mesclado). Segurança **0/0** o tempo todo. Branch: `claude/session-1hpqy6`.
 
 **Entregue:**
