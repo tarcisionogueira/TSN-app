@@ -7720,25 +7720,16 @@ function MarketingTab() {
 
       setBuscas({ total: totalBuscas, unicos: unicosSet.size, cidades: cidadesCount, estados: estadosCount, tipos: tiposCount, pagamentos: pagamentosCount });
 
-      // ── Seção 2: Perfis demográficos ──
-      const { data: perfisRaw } = await supabase.from('perfis').select('role, created_at, cidade, estado, ativo');
-      const roleMap = {};
-      const estadoPerfisMap = {};
-      let ativos = 0; let inativos = 0;
-      const semanaMap = {};
-      (perfisRaw || []).forEach(p => {
-        roleMap[p.role || 'explorador'] = (roleMap[p.role || 'explorador'] || 0) + 1;
-        if (p.estado) estadoPerfisMap[p.estado] = (estadoPerfisMap[p.estado] || 0) + 1;
-        if (p.ativo !== false) ativos++; else inativos++;
-        if (p.created_at) {
-          const diff = Math.floor((Date.now() - new Date(p.created_at)) / (7 * 24 * 60 * 60 * 1000));
-          if (diff < 12) { const semana = `S-${diff}`; semanaMap[semana] = (semanaMap[semana] || 0) + 1; }
-        }
-      });
-      const porRole = Object.entries(roleMap).sort((a, b) => b[1] - a[1]);
-      const porEstado = Object.entries(estadoPerfisMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      // ── Seção 2: Perfis demográficos (AGREGADO no servidor via RPC admin_marketing_demografia).
+      // Antes puxava a tabela `perfis` INTEIRA pro cliente E usava colunas inexistentes
+      // 'cidade'/'estado' (a UF real é endereco_uf) → a seção vinha VAZIA. Agora traz role/UF/
+      // coorte semanal/ativos REAIS, numa chamada agregada (escala p/ 10k+). ──
+      const { data: dem } = await supabase.rpc('admin_marketing_demografia');
+      const porRole = Object.entries(dem?.por_role || {}).sort((a, b) => b[1] - a[1]);
+      const porEstado = dem?.por_estado || []; // já vem [uf, contagem], ordenado desc e top10
+      const semanaMap = dem?.semanas || {};
       const semanas = Array.from({ length: 12 }, (_, i) => ({ label: `S${12 - i}`, count: semanaMap[`S-${11 - i}`] || 0 }));
-      setPerfisData({ porRole, porEstado, semanas, ativos, inativos, total: (perfisRaw || []).length });
+      setPerfisData({ porRole, porEstado, semanas, ativos: dem?.ativos || 0, inativos: dem?.inativos || 0, total: dem?.total || 0 });
 
       // ── Seção 3: SDR ──
       const [{ data: leadsRaw }, { data: produtosRaw }] = await Promise.all([
