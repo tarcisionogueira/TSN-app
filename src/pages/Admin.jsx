@@ -5894,11 +5894,13 @@ function ScrapersTab() {
 
   const geoPct = geoStats.total > 0 ? Math.round((geoStats.com / geoStats.total) * 100) : 0;
 
+  // Geocodificação foi movida para o FIM e enxugada: está ~100% e roda on-demand (o KPI de
+  // geocode fica no topo), então deixa de disputar espaço com Fontes/Parceiros.
   const ABAS = [
-    { key: 'fontes',    label: '🏛️ Fontes',         desc: `Caixa + ${FONTES_LEILAO.length} leiloeiros` },
-    { key: 'geocod',    label: '📍 Geocodificação',  desc: `${geoStats.com.toLocaleString('pt-BR')} / ${geoStats.total.toLocaleString('pt-BR')} imóveis` },
-    { key: 'parceiros', label: '🤝 Parceiros',       desc: `${parceiros.length} leiloeiros` },
-    { key: 'roadmap',   label: '🚀 Roadmap',         desc: `${scrapersPlanjados.length} fontes planejadas` },
+    { key: 'fontes',    label: '🏛️ Fontes',    desc: `Caixa + ${FONTES_LEILAO.length} leiloeiros` },
+    { key: 'parceiros', label: '🤝 Parceiros',  desc: `${parceiros.length} leiloeiros` },
+    { key: 'roadmap',   label: '🚀 Roadmap',    desc: `${scrapersPlanjados.length} fontes planejadas` },
+    { key: 'geocod',    label: '📍 Geo',        desc: `${geoPct}% · on-demand` },
   ];
 
   return (
@@ -8636,6 +8638,14 @@ const GRUPOS_ADMIN = [
   { nome: 'Sistema',             tabs: ['Configurações'] },
 ];
 
+// Rótulos amigáveis das abas — a CHAVE interna (usada em tab===..., sessionStorage) NÃO muda,
+// só o texto do botão. "Scrapers" vira "Operação de Coleta" (reposicionamento pedido).
+const ROTULO_TAB = {
+  Scrapers: '📡 Operação de Coleta',
+  CNJ: '⚖️ CNJ',
+  Registros: '🗂️ Registros',
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // AGENDA TAB — Disponibilidade dos analistas e geração de slots
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -9226,7 +9236,7 @@ export default function Admin() {
             <div key={g.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, width: 130, flexShrink: 0 }}>{g.nome}</span>
               {g.tabs.map(t => (
-                <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{t}</button>
+                <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{ROTULO_TAB[t] || t}</button>
               ))}
             </div>
           ))}
