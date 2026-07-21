@@ -30,6 +30,10 @@ const SUBCOTAS = {
   // Scraper RJ Leilões (100% Cloudflare → só via Web Unlocker): sub-cota própria p/
   // o RJ não monopolizar o teto semanal compartilhado.
   rj: parseInt(process.env.BRIGHTDATA_MAX_RJ_SEMANA || '120', 10),
+  // Radar de Editais (DJEN/Comunica): o WAF do CNJ bloqueia o IP de datacenter da
+  // Vercel (403). Sub-cota pequena — o auto-ajuste do radar já faz só 1 pull OK/dia
+  // (~6-18 req), então ~120/semana sobra e não devora o orçamento dos demais.
+  radar: parseInt(process.env.BRIGHTDATA_MAX_RADAR_SEMANA || '120', 10),
 };
 // Contagem por propósito na semana corrente, mantida na memória do processo. A
 // paginação profunda (o caso que estoura a cota) roda numa única invocação, então

@@ -17,6 +17,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
+import { fetchViaBrightData, brightDataDisponivel } from './_brightdata.js';
 
 const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 // Tribunais monitorados — CONFIGURÁVEL por env RADAR_TRIBUNAIS (Item 5: "todos os estados").
@@ -102,7 +103,7 @@ async function buscarDJEN(tribunal, termo, ini, fim) {
   for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
     const url = `${DJEN_BASE}?siglaTribunal=${encodeURIComponent(tribunal)}&texto=${encodeURIComponent(termo)}`
       + `&dataDisponibilizacaoInicio=${ini}&dataDisponibilizacaoFim=${fim}&itensPorPagina=100&pagina=${pagina}`;
-    // 1 retry curto: o WAF do DJEN às vezes barra a 1ª tentativa (challenge) e libera a 2ª.
+    // Tentativa DIRETA (2x com backoff curto): o WAF às vezes barra a 1ª e libera a 2ª.
     let json, ultimoStatus = 0;
     for (let tent = 1; tent <= 2; tent++) {
       const ctrl = new AbortController();
@@ -112,7 +113,15 @@ async function buscarDJEN(tribunal, termo, ini, fim) {
         if (resp.ok) { json = await resp.json(); break; }
         ultimoStatus = resp.status;
       } finally { clearTimeout(to); }
-      if (tent === 1) await new Promise(r => setTimeout(r, 1500)); // backoff antes de reintentar
+      if (tent === 1) await new Promise(r => setTimeout(r, 1500));
+    }
+    // FALLBACK Bright Data (IP residencial contorna o bloqueio por IP de datacenter da
+    // Vercel — validado: UA/headers de navegador não bastam, o 403 é por IP). Sob o teto
+    // semanal (proposito 'radar'); se não configurado/estourou a cota → cai fora (null).
+    if (!json && brightDataDisponivel()) {
+      const resp = await fetchViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 45000 });
+      if (resp && resp.ok) { try { json = JSON.parse(await resp.text()); } catch { /* corpo não-JSON */ } }
+      else if (resp) ultimoStatus = resp.status;
     }
     if (!json) throw new Error(`HTTP ${ultimoStatus || 'sem resposta'}`);
     const items = json?.items || json?.content || json?.comunicacoes || [];
