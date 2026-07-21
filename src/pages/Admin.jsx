@@ -4,7 +4,7 @@ import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
-import { extrairDadosDocumento } from '../utils/claude';
+import { extrairDadosDocumento, consolidarDocsImovel } from '../utils/claude';
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -540,7 +540,8 @@ function UsuariosTab() {
     atribFilesRef.current = [...atribFilesRef.current, ...lista]; // guarda p/ persistir depois
     setAtribDocs(prev => [...prev, ...lista.map(f => ({ nome: f.name, status: 'lendo' }))]);
     const marcar = (nome, status) => setAtribDocs(prev => { let feito = false; return prev.map(d => (!feito && d.nome === nome && d.status === 'lendo') ? (feito = true, { ...d, status }) : d); });
-    const acc = { endereco: '', valor: 0, tipo: '', cidade: '', estado: '', numero_processo: '', valor_avaliacao: 0 };
+    // 1) LÊ e CLASSIFICA TODOS os documentos ANTES de preencher (nada de preencher no 1º match).
+    const exts = [];
     let algum = false;
     for (const file of lista) {
       try {
@@ -550,36 +551,27 @@ function UsuariosTab() {
         const b64 = btoa(bin);
         const ext = await extrairDadosDocumento('', b64);
         if (!ext) throw new Error('sem dados');
-        const local = [ext.cidade, ext.estado].filter(Boolean).join('/');
-        const endereco = [ext.endereco, local].filter(Boolean).join(', ');
-        const valorNum = Number(ext.valorArrematacao || ext.lanceMinimo || ext.valorMinimo || ext.valorAvaliacao || 0) || 0;
-        const tipo = /judicial/i.test(ext.modalidade || '') && !/extra/i.test(ext.modalidade || '') ? 'judicial' : (/extra/i.test(ext.modalidade || '') ? 'extrajudicial' : '');
-        // SÓ pega endereço/cidade do IMÓVEL de documentos que DESCREVEM o imóvel (matrícula/
-        // edital/laudo) — NUNCA do comprovante de endereço do comprador (bug: entrava o endereço
-        // da pessoa no lugar do imóvel → pesquisa de mercado na cidade errada).
-        const ehImovelDoc = ext.descreveImovel === true || /matric|edital|laudo/i.test(String(ext.tipoDocumento || ''));
-        if (ehImovelDoc && endereco && !acc.endereco) acc.endereco = endereco;
-        if (valorNum > acc.valor) acc.valor = valorNum;
-        if (tipo && !acc.tipo) acc.tipo = tipo;
-        if (ehImovelDoc && ext.cidade && !acc.cidade) acc.cidade = ext.cidade;
-        if (ehImovelDoc && ext.estado && !acc.estado) acc.estado = ext.estado;
-        const nproc = ext.numeroProcesso || ext.numero_processo || '';
-        if (nproc && !acc.numero_processo) acc.numero_processo = String(nproc);
-        const aval = Number(ext.valorAvaliacao || 0) || 0;
-        if (aval > acc.valor_avaliacao) acc.valor_avaliacao = aval;
+        exts.push(ext);
         algum = true;
         marcar(file.name, 'ok');
       } catch { marcar(file.name, 'erro'); }
     }
+    // 2) CONSOLIDA por prioridade de tipo: matrícula manda no endereço/área; laudo/edital na
+    //    avaliação; edital no lance/processo. NUNCA usa endereço/área de comprovante/boleto.
+    const m = consolidarDocsImovel(exts);
+    const local = [m.cidade, m.estado].filter(Boolean).join('/');
+    const enderecoFull = [m.endereco, local].filter(Boolean).join(', ');
+    const valorArr = Number(m.valorArrematacao || m.valorAvaliacao || 0) || 0;
+    const tipoLeilao = /judicial/i.test(m.modalidade || '') && !/extra/i.test(m.modalidade || '') ? 'judicial' : (/extra/i.test(m.modalidade || '') ? 'extrajudicial' : '');
     setAtribForm(p => ({
       ...p,
-      endereco: acc.endereco || p.endereco,
-      valor: acc.valor ? acc.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.valor,
-      tipo: acc.tipo || p.tipo,
-      cidade: acc.cidade || p.cidade,
-      estado: acc.estado || p.estado,
-      numero_processo: acc.numero_processo || p.numero_processo,
-      valor_avaliacao: acc.valor_avaliacao || p.valor_avaliacao,
+      endereco: enderecoFull || p.endereco,
+      valor: valorArr ? valorArr.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.valor,
+      tipo: tipoLeilao || p.tipo,
+      cidade: m.cidade || p.cidade,
+      estado: m.estado || p.estado,
+      numero_processo: m.numeroProcesso || p.numero_processo,
+      valor_avaliacao: m.valorAvaliacao || p.valor_avaliacao,
     }));
     setAtribExtraindo(algum ? 'ok' : 'erro');
   };

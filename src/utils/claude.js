@@ -235,6 +235,56 @@ export async function extrairDadosDocumento(texto, pdfBase64 = null) {
   return parseJSON(extractText(data));
 }
 
+// Consolida a extração de VÁRIOS documentos: lê e CLASSIFICA todos (matrícula/edital/laudo/
+// comprovante/boleto) e escolhe, POR CAMPO, o valor do documento mais AUTORITATIVO — matrícula
+// manda no endereço/área, laudo/edital na avaliação, edital no lance/praças. NUNCA usa
+// endereço/área de documento PESSOAL (comprovante/boleto). Devolve os campos + a proveniência
+// (de qual tipo de doc veio cada campo) p/ o fluxo informar impactos de correção depois.
+export function consolidarDocsImovel(exts) {
+  const arr = (exts || []).filter(Boolean).map(e => {
+    const t = String(e.tipoDocumento || '').toLowerCase();
+    return { ...e, _tipo: t, _imovel: e.descreveImovel === true || /matric|edital|laudo/.test(t) };
+  });
+  const rank = (t, ordem) => { const i = ordem.indexOf(t); return i < 0 ? 90 : i; };
+  const pick = (campo, ordem, { imovelOnly = true } = {}) => {
+    let best = null, bestRank = 100, bestTipo = null;
+    for (const e of arr) {
+      if (imovelOnly && !e._imovel) continue;
+      const v = e[campo];
+      const ok = (typeof v === 'number') ? v > 0 : (v != null && String(v).trim() !== '');
+      if (!ok) continue;
+      const r = rank(e._tipo, ordem);
+      if (r < bestRank) { bestRank = r; best = v; bestTipo = e._tipo || 'outro'; }
+    }
+    return { valor: best, tipo: bestTipo };
+  };
+  const END = ['matricula', 'edital', 'laudo'];   // endereço/área: a matrícula é a verdade
+  const AVAL = ['laudo', 'edital', 'matricula'];  // avaliação: laudo pericial > edital
+  const LANCE = ['edital', 'matricula', 'laudo'];  // lance/praças/processo: o edital
+  const proveniencia = {};
+  const put = (k, r) => { if (r.valor != null && String(r.valor).trim?.() !== '') proveniencia[k] = r.tipo; return r.valor; };
+  const out = {
+    endereco: put('endereco', pick('endereco', END)),
+    cidade: put('cidade', pick('cidade', END)),
+    estado: put('estado', pick('estado', END)),
+    cep: put('cep', pick('cep', END)),
+    tipo: put('tipo', pick('tipo', END)),
+    areaM2: put('areaM2', pick('areaM2', END)),
+    areaTerrenoM2: put('areaTerrenoM2', pick('areaTerrenoM2', END)),
+    valorAvaliacao: put('valorAvaliacao', pick('valorAvaliacao', AVAL)),
+    valorArrematacao: put('valorArrematacao', pick('valorArrematacao', LANCE)) ?? put('valorArrematacao', pick('valorMinimo', LANCE)),
+    numeroProcesso: put('numeroProcesso', pick('numeroProcesso', LANCE, { imovelOnly: false })) ?? put('numeroProcesso', pick('numero_processo', LANCE, { imovelOnly: false })),
+    modalidade: put('modalidade', pick('modalidade', LANCE)),
+    leiloeiro: put('leiloeiro', pick('leiloeiro', LANCE)),
+    dataLeilao: put('dataLeilao', pick('dataLeilao', LANCE)),
+    descricao: put('descricao', pick('observacoes', END)),
+    riscos: (arr.find(e => Array.isArray(e.riscos) && e.riscos.length)?.riscos) || [],
+  };
+  out._proveniencia = proveniencia;
+  out._tiposLidos = arr.map(e => e._tipo || 'outro');
+  return out;
+}
+
 // Análise de mercado com dois níveis: mesmo condomínio + vizinhança
 export async function analisarMercado(inputs) {
   const { endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio } = inputs;
