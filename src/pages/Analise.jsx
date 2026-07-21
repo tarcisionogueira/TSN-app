@@ -144,6 +144,9 @@ export default function Analise() {
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
   const paraUserId = location.state?.paraUserId || null;
+  // Arremate atribuído com docs → gera os 3 relatórios EM SEQUÊNCIA automaticamente
+  // (mercadológico → documental → laudo), lendo os anexos. Só na chegada da atribuição.
+  const autoGerar = location.state?.autoGerar || false;
   // Modo "inclusão manual de lote": cola URL e/ou anexa edital/matrícula; a IA
   // extrai e libera os relatórios. Vira um botão de opção no menu — ao ativar, a
   // inclusão manual sobe pro topo do centro e a geração de relatórios fica abaixo.
@@ -919,6 +922,19 @@ export default function Analise() {
     iniciarLaudo({ imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId });
     setRelSel('laudo');
   };
+
+  // AUTO-SEQUÊNCIA (arremate atribuído com docs): gera os 3 relatórios EM ORDEM sozinho —
+  // mercadológico → documental → laudo. A ordem do produto já é segura: a atribuição (item 1)
+  // lê a matrícula p/ os dados, e o item 2 oferece regerar se o documental achar uma correção.
+  // Cada etapa dispara a seguinte quando a anterior CONCLUI (máquina de estados por ref).
+  const autoSeqRef = React.useRef({ etapa: 0 });
+  useEffect(() => {
+    if (!autoGerar) return;
+    const s = autoSeqRef.current;
+    if (s.etapa === 0 && !relMercadoGerado && analiseEntry?.status !== 'gerando') { s.etapa = 1; analisarMercadoClick(); return; }
+    if (s.etapa === 1 && relMercadoGerado && !relDocumentalGerado && !gerandoDocumental && !relDocumentalPreparando) { s.etapa = 2; gerarRelDocumental(true); return; }
+    if (s.etapa === 2 && ambosRelatorios && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
+  }, [autoGerar, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Reunião com analista → ACOMPANHAMENTO (fluxo real no Caso) ─────────────
   // O agendamento de verdade (escolher analista+horário, o analista dar o parecer
