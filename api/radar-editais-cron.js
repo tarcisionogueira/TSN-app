@@ -47,6 +47,8 @@ const DJEN_HEADERS = {
 };
 const MAX_PAGINAS = 8;           // teto por (tribunal×termo): 8×100 = 800 itens
 const HARD_MS = 200000;          // teto do PULL (~200s) — garante fatia p/ a IA depois
+const BD_RETRIES = 2;            // re-tentativas do Bright Data qdo o DJEN dá 403/5xx (instável)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -195,7 +197,7 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
 // Campos do item DJEN vêm com nomes variados entre versões — pega o 1º que existir.
 const g = (o, ...ks) => { for (const k of ks) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
 
-async function buscarDJEN(tribunal, termo, ini, fim) {
+async function buscarDJEN(tribunal, termo, ini, fim, t0) {
   const out = [];
   for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
     const url = `${DJEN_BASE}?siglaTribunal=${encodeURIComponent(tribunal)}&texto=${encodeURIComponent(termo)}`
@@ -206,9 +208,17 @@ async function buscarDJEN(tribunal, termo, ini, fim) {
     // requests). A tentativa direta fica só como ÚLTIMO recurso (ex.: cota do BD estourada).
     let json, ultimoStatus = 0;
     if (brightDataDisponivel()) {
-      const resp = await fetchViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 30000 });
-      if (resp && resp.ok) { try { json = JSON.parse(await resp.text()); } catch { /* corpo não-JSON */ } }
-      else if (resp) ultimoStatus = resp.status;
+      // O DJEN é instável: alguns combos tribunal×termo devolvem 403/5xx MESMO via Bright Data
+      // (IP residencial) — mas voltam no retry segundos depois. Então re-tenta com backoff curto
+      // (1,5s→3s) antes de desistir da página. 200/404/etc. NÃO re-tenta (resposta definitiva).
+      for (let tent = 0; tent <= BD_RETRIES; tent++) {
+        const resp = await fetchViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 30000 });
+        if (resp && resp.ok) { try { json = JSON.parse(await resp.text()); } catch { /* corpo não-JSON */ } break; }
+        if (resp) ultimoStatus = resp.status;
+        const transiente = !resp || resp.status === 403 || resp.status === 429 || resp.status >= 500;
+        if (!transiente || tent === BD_RETRIES || Date.now() - t0 > HARD_MS) break;
+        await sleep(1500 * (tent + 1)); // 1,5s, depois 3s
+      }
     }
     if (!json) { // ÚLTIMO recurso: tenta direto (normalmente 403, mas cobre BD indisponível/cota)
       const ctrl = new AbortController();
@@ -280,7 +290,7 @@ async function handler(req) {
       for (const termo of TERMOS) {
         if (Date.now() - t0 > HARD_MS) break;
         let items = [];
-        try { items = await buscarDJEN(tribunal, termo, ini, fim); }
+        try { items = await buscarDJEN(tribunal, termo, ini, fim, t0); }
         catch (e) { erroGeral = `${tribunal}/${termo}: ${String(e.message).slice(0, 80)}`; continue; }
         vistos += items.length;
         if (!items.length) continue;
