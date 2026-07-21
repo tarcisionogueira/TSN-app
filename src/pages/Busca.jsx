@@ -1063,7 +1063,7 @@ export default function Busca() {
       }
 
       // ── Modo normal: paginação server-side via Supabase ──
-      let dbData, dbError;
+      let dbData, dbError, totalBusca = 0;
       {
         const offset = (paginaAlvo - 1) * POR_PAGINA;
         const [{ count }, { data, error }] = await Promise.all([
@@ -1076,7 +1076,8 @@ export default function Busca() {
         ]);
         dbData = data;
         dbError = error;
-        setTotalResultados(count || 0);
+        totalBusca = count || 0; // valor REAL desta busca (o estado totalResultados é assíncrono → stale no log)
+        setTotalResultados(totalBusca);
       }
 
       let mapeados = (!dbError && dbData) ? dbData.map(im => ({
@@ -1124,7 +1125,7 @@ export default function Busca() {
         const sid = sessionStorage.getItem('tsn_session_id') || (() => { const s = Math.random().toString(36).slice(2); sessionStorage.setItem('tsn_session_id', s); return s; })();
         supabase.from('busca_historico').insert({
           user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos,
-          resultados_count: totalResultados || 0, cidade: filtrosAtivos.cidades?.join(', ') || null,
+          resultados_count: totalBusca, cidade: filtrosAtivos.cidades?.join(', ') || null,
           estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipos?.join(',') || null,
           valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
           valor_max: filtrosAtivos.valorMax ? Number(filtrosAtivos.valorMax) : null,
