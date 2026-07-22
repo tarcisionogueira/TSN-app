@@ -8429,8 +8429,21 @@ function QualidadeTab() {
       .then(({ data, error }) => { if (error) setErro(error.message); else setInv(data || []); })
       .catch(e => setErro(String(e.message))).finally(() => setLoading(false));
   }, []);
-  React.useEffect(() => { carregar(); }, [carregar]);
+  // Sugestões do supervisor de IA (Gemini) — meta-aprendizado. Leitura admin-gated.
+  const [sug, setSug] = React.useState([]);
+  const carregarSug = React.useCallback(() => {
+    supabase.rpc('admin_aprendizado_sugestoes').then(({ data }) => setSug(Array.isArray(data) ? data : [])).catch(() => {});
+  }, []);
+  const aplicarSug = async (id, aplicado) => {
+    await supabase.rpc('admin_aprendizado_sugestao_aplicar', { p_id: id, p_aplicado: aplicado }).catch(() => {});
+    setSug(s => s.map(x => x.id === id ? { ...x, aplicado } : x));
+  };
+  React.useEffect(() => { carregar(); carregarSug(); }, [carregar, carregarSug]);
   const alertas = (inv || []).filter(i => i.status === 'alerta');
+  const listaSug = (d) => {
+    const arr = d?.sugestoes?.sugestoes || d?.sugestoes || [];
+    return Array.isArray(arr) ? arr : [];
+  };
   return (
     <div style={{ maxWidth: 920 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:8, flexWrap:'wrap' }}>
@@ -8467,6 +8480,38 @@ function QualidadeTab() {
           </table>
         </div>
       )}
+
+      {/* Sugestões do supervisor de IA (Gemini) — meta-aprendizado; o dono revisa e aprova. */}
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+          <h3 style={{ margin:0, fontSize:15 }}>🤖 Sugestões do supervisor (IA)</h3>
+          <span style={{ fontSize:12, color:'#64748b' }}>Gemini lê anomalias/vícios da semana e sugere ajustes. Nada é aplicado sozinho.</span>
+        </div>
+        {!sug.length ? (
+          <div style={{ fontSize:13, color:'#94a3b8', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'12px 14px' }}>
+            Nenhuma sugestão ainda — a primeira rodada roda no cron diário (03:20).
+          </div>
+        ) : sug.map(s => (
+          <div key={s.id} style={{ border:'1px solid #e2e8f0', borderRadius:12, padding:'12px 14px', marginBottom:10, background: s.aplicado ? '#f0fdf4' : 'white' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>{s.resumo || 'Revisão de qualidade'}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:11, color:'#94a3b8' }}>{s.criado_em ? new Date(s.criado_em).toLocaleDateString('pt-BR') : ''}</span>
+                <button onClick={() => aplicarSug(s.id, !s.aplicado)} style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:8, border:'1px solid ' + (s.aplicado ? '#a7f3d0' : '#e2e8f0'), background: s.aplicado ? '#ecfdf5' : 'white', color: s.aplicado ? '#059669' : '#334155', cursor:'pointer' }}>
+                  {s.aplicado ? '✓ Aplicada' : 'Marcar aplicada'}
+                </button>
+              </div>
+            </div>
+            <ul style={{ margin:'4px 0 0', paddingLeft:18 }}>
+              {listaSug(s.detalhe).map((it, i) => (
+                <li key={i} style={{ fontSize:12.5, color:'#334155', lineHeight:1.6, marginBottom:4 }}>
+                  <strong>{it.titulo || it.acao}</strong>{it.acao && it.titulo ? ` — ${it.acao}` : ''}{it.porque ? <span style={{ color:'#64748b' }}> ({it.porque})</span> : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
