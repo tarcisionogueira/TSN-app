@@ -316,12 +316,16 @@ export default function Analise() {
   const [sinalizandoArremate, setSinalizandoArremate] = useState(false);
   const sinalizarArremate = async () => {
     if (arrematadoSinalizado || sinalizandoArremate) return;
-    if (!window.confirm(`Confirmar que você arrematou "${d.nome || imovelInicial?.titulo || 'este imóvel'}"? Assim guardamos os documentos do seu arremate.`)) return;
+    const raw = window.prompt(`Confirme o arremate de "${d.nome || imovelInicial?.titulo || 'este imóvel'}".\n\nPor quanto você arrematou? (somente números inteiros em reais, ex: 250000)`);
+    if (raw == null) return; // cancelou
+    const valor = Number(String(raw).replace(/[^\d]/g, ''));
+    if (!valor || valor <= 0) { window.alert('Informe um valor de arremate válido (somente números).'); return; }
     setSinalizandoArremate(true);
     try {
       const res = await apiCall('/api/sinalizar-arremate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imovel_id: analiseImovelId, titulo: d.nome || imovelInicial?.titulo, cidade: d.cidade, estado: d.estado }) });
+        body: JSON.stringify({ imovel_id: analiseImovelId, titulo: d.nome || imovelInicial?.titulo, cidade: d.cidade, estado: d.estado, valor }) });
       if (res.ok) setArrematadoSinalizado(true);
+      else { const dd = await res.json().catch(() => ({})); window.alert(dd.error || 'Não foi possível registrar o arremate.'); }
     } catch { /* ok */ }
     setSinalizandoArremate(false);
   };

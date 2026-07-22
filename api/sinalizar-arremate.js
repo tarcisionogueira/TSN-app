@@ -54,7 +54,13 @@ export default async function handler(req) {
   const titulo = (body.titulo ? String(body.titulo) : '').slice(0, 300) || null;
   const cidade = (body.cidade ? String(body.cidade) : '').slice(0, 120) || null;
   const estado = (body.estado ? String(body.estado) : '').slice(0, 60) || null;
-  const valor  = Number.isFinite(+body.valor) && +body.valor > 0 ? +body.valor : null;
+  // Valor do arremate é OBRIGATÓRIO (registro do negócio + calibra teto de lance).
+  // NÃO alimenta o Índice BidPro — arremate é operação extraordinária, não preço de
+  // mercado convencional (só a REVENDA vira amostra de mercado).
+  const valor  = Number(body.valor);
+  if (!Number.isFinite(valor) || valor <= 0) {
+    return new Response(JSON.stringify({ error: 'Informe por quanto você arrematou (valor do arremate).' }), { status: 400, headers });
+  }
 
   try {
     // 1) Já existe um "arrematado" deste usuário para este imóvel? (evita duplicar)
