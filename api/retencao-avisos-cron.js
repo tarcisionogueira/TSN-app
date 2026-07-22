@@ -11,10 +11,10 @@
  *   • Regra 1 (arrematado + assinatura em atraso): avisa; docs saem 30 dias após
  *     parar de pagar. Se regularizar/sinalizar, o aviso é revalidado e nada é apagado.
  *
- * SEGURANÇA / ROLLOUT: por padrão roda em DRY-RUN (só conta candidatos, sem enviar
- * nem gravar). Para ATIVAR os avisos de verdade, definir env RETENCAO_AVISOS_ATIVO=1.
- * Enquanto inativo, NADA é enviado ao cliente e NENHUM documento fica elegível a
- * deleção (a RPC de deleção exige aviso com email_enviado=true).
+ * SEGURANÇA / ROLLOUT: LIGADO por padrão (dono autorizou 22/07). Para PAUSAR, setar
+ * env RETENCAO_AVISOS_ATIVO=0 → volta ao dry-run (só conta, sem enviar nem gravar) e
+ * NENHUM documento fica elegível a deleção (a RPC de deleção exige email_enviado=true).
+ * Mesmo ligado, a 1ª deleção só ocorre após aviso enviado + carência (mín. 7 dias).
  *
  * Roda 1x/dia (vercel.json). Autorizado por CRON_SECRET.
  */
@@ -28,7 +28,10 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const APP_URL      = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const EMAIL_FROM   = process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>';
-const ATIVO        = process.env.RETENCAO_AVISOS_ATIVO === '1';
+// LIGADO por padrão (o dono autorizou a ativação em 22/07). Para PAUSAR os avisos,
+// setar env RETENCAO_AVISOS_ATIVO=0 (aí volta ao dry-run: não envia nem torna nada
+// elegível a deleção, pois a RPC de deleção exige aviso com email_enviado=true).
+const ATIVO        = process.env.RETENCAO_AVISOS_ATIVO !== '0';
 const VAPID = { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY, subject: 'mailto:alertas@bidprobrasil.com.br' };
 
 const CARENCIA_MIN_DIAS = 7;   // piso de carência entre o aviso e a deleção
