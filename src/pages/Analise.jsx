@@ -2722,6 +2722,40 @@ export default function Analise() {
                 );
               })()}
 
+              {/* Valorização BidPro — curva de preço/m² por ano (base própria de amostras datadas) */}
+              {Array.isArray(mercado.valorizacao?.serie) && mercado.valorizacao.serie.length >= 2 && (() => {
+                const vz = mercado.valorizacao;
+                const serie = vz.serie;
+                const max = Math.max(...serie.map(p => Number(p.m2) || 0)) || 1;
+                const pos = Number(vz.valorizacao_periodo_pct) >= 0;
+                return (
+                  <div style={{ borderRadius:12, border:'1px solid #bbf7d0', background:'#f0fdf4', padding:'12px 16px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, flexWrap:'wrap' }}>
+                      <TrendingUp size={14} color="#059669"/>
+                      <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Valorização BidPro (venda R$/m²)</span>
+                      <span style={{ fontSize:10.5, color:'#64748b' }}>{vz.ano_inicial}–{vz.ano_final} · base própria</span>
+                      <span style={{ marginLeft:'auto', fontSize:11, fontWeight:800, padding:'2px 10px', borderRadius:999, background: pos ? '#dcfce7' : '#fee2e2', color: pos ? '#166534' : '#991b1b' }}>
+                        {pos ? '+' : ''}{Number(vz.valorizacao_periodo_pct).toFixed(1)}% no período · {Number(vz.valorizacao_aa_pct).toFixed(1)}% a.a.
+                      </span>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'flex-end', gap:10, height:96, padding:'0 4px' }}>
+                      {serie.map(p => {
+                        const h = Math.max(6, Math.round((Number(p.m2) / max) * 72));
+                        return (
+                          <div key={p.ano} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, justifyContent:'flex-end', height:'100%' }}>
+                            <div style={{ fontSize:10, fontWeight:800, color:'#065f46' }}>R$ {fmt(p.m2)}</div>
+                            <div title={`${p.n} amostras`} style={{ width:'100%', maxWidth:46, height:h, borderRadius:'6px 6px 0 0', background:'linear-gradient(180deg,#34d399,#059669)' }} />
+                            <div style={{ fontSize:10.5, fontWeight:700, color:'#334155' }}>{p.ano}</div>
+                            <div style={{ fontSize:9, color:'#94a3b8' }}>{p.n} am.</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize:10.5, color:'#047857', marginTop:8, lineHeight:1.5 }}>Mediana do preço/m² dos <strong>anúncios de venda</strong> por ano na base BidPro da região — leitura de <strong>tendência</strong> (anos com poucas amostras têm menos precisão). Não inclui preços de leilão/arremate.</div>
+                  </div>
+                );
+              })()}
+
               {/* ═══════════ BANDA 3 — AMOSTRAS E COMPARATIVOS (recolhível) ═══════════ */}
               {/* A "muita informação" ficava aberta o tempo todo e poluía. Agora as amostras
                   brutas vêm num <details> fechado por padrão — o resumo/refs ficam à vista e
