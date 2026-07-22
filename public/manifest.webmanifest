@@ -1,0 +1,19 @@
+{
+  "name": "BidPro Brasil — Leilão de Imóveis",
+  "short_name": "BidPro",
+  "description": "Imóveis de leilão em todo o Brasil com análise por IA e assessoria para arrematar com segurança.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#111111",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": ["finance", "business", "shopping"],
+  "icons": [
+    { "src": "/favicon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/favicon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

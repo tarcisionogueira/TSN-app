@@ -12,6 +12,7 @@ import ContratoObrigatorio from './components/ContratoObrigatorio';
 import CompletarCadastroModal from './components/CompletarCadastroModal';
 import ChatSuporte from './components/ChatSuporte';
 import SugestaoImovel from './components/SugestaoImovel';
+import PwaInstall from './components/PwaInstall.jsx';
 import Landing from './pages/Landing';
 import MeusChamados from './pages/MeusChamados';
 import Atendimento from './pages/Atendimento';
@@ -302,6 +303,7 @@ export default function App() {
     <AuthProvider>
       <HashRouter>
         <RouteTracker />
+        <PwaInstall />
         <PlanosProvider>
         <AnalisesProvider>
         <Routes>
