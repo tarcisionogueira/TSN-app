@@ -831,6 +831,16 @@ export default async function handler(req, res) {
     // carrega) para não referenciar variável fora de escopo (bug "mercado is not defined").
     await aprenderNaEmissao(imovel, result.mercado, !!result.parecer, avalDb, vminImovel);
 
+    // MERCADO VAZIO (fonte instável no momento → 0 amostras / sem valor): o relatório é
+    // salvo e mostrado como "não estimado", mas NÃO cobramos a cota — o cliente gera de novo
+    // sem custo. Antes, um relatório "concluído mas vazio" consumia o crédito injustamente.
+    const mercadoVazio = !(Number(result.valorMercado) > 0)
+      && !(Number(result.mercado?.precoMedioM2) > 0)
+      && (((result.mercado?.nivel1?.vendas?.length || 0) + (result.mercado?.nivel2?.vendas?.length || 0)) === 0);
+    if (mercadoVazio && cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); cota.estornada = true; } catch { /* estorno best-effort */ }
+    }
+
     // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.
     // roi (parecerInputs.metricas) e areaM2 (mercadoInputs) vêm do CLIENTE e são
     // por-cenário — assim um usuário conseguia ENVENENAR score_financeiro/analise_viavel/
@@ -838,7 +848,7 @@ export default async function handler(req, res) {
     // processo confiável (api/calcular-score.js) a partir dos dados do PRÓPRIO imóvel,
     // nunca por input de usuário. A análise individual continua salva acima (upsertAnalise)
     // e visível só para quem a gerou.
-    res.status(200).json({ ok: true, result, cota });
+    res.status(200).json({ ok: true, result, cota, mercadoVazio });
   } catch (e) {
     const timeout = String(e?.message) === 'tempo_limite';
     const msg = timeout
