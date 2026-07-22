@@ -63,10 +63,17 @@ async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
 // exclusão do relatório (tabela separada de analises_*). Guarda só dado POISON-RESISTENTE:
 // valores do imóvel (scraper) e da pesquisa (servidor) — nunca derivados de input do
 // usuário (ex.: valorMercado depende de areaM2 do cliente), p/ não envenenar o coletivo.
-async function aprenderNaEmissao(imovel, mercado, temParecer) {
+async function aprenderNaEmissao(imovel, mercado, temParecer, avalReal, minReal) {
   try {
-    const aval = Number(imovel?.valor_avaliacao) || null;
-    const min  = Number(imovel?.valor_minimo) || null;
+    // Usa os valores VALIDADOS do imóvel (avalDb/vminImovel: lidos de imoveis_leilao após
+    // garantirValores, já com as travas de sentinela/implausível) quando o chamador os passa.
+    // Antes lia só imovel.valor_avaliacao (snake_case), mas a tela /analise envia valorAvaliacao
+    // (camelCase) → Number(...) = NaN → avaliacao_ausente:true em TODO relatório (sinal de
+    // aprendizado 100% ruído). Fallback aceita as duas grafias se os validados não vierem.
+    const aval = Number(avalReal) > 0 ? Number(avalReal)
+      : (Number(imovel?.valor_avaliacao) || Number(imovel?.valorAvaliacao) || null);
+    const min  = Number(minReal) > 0 ? Number(minReal)
+      : (Number(imovel?.valor_minimo) || Number(imovel?.valorMinimo) || null);
     const nAmostras = mercado?.amostras?.length || mercado?.comparaveis?.length || mercado?.anuncios?.length || 0;
     const precoM2 = Number(mercado?.precoMedioM2) || null;
     const corpus = {
@@ -579,7 +586,7 @@ export default async function handler(req, res) {
   const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), Math.max(20000, restante())));
 
   try {
-    const { result, valorMercado } = await Promise.race([prazo, (async () => {
+    const { result, valorMercado, avalDb, vminImovel } = await Promise.race([prazo, (async () => {
     // 1) Mercado — reaproveita pesquisa recente do mesmo imóvel (se houver), senão busca.
     // INVALIDAÇÃO type-aware: uma pesquisa antiga (anterior à avaliação por tipo) NÃO traz
     // consolidado.valorEstimadoImovel/baseCalculo. Para bases por m² construído/privativo
@@ -766,14 +773,14 @@ export default async function handler(req, res) {
     if (parecer) parecer += `\n\n${AVISO_MERCADO}`;
 
       const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
-      return { result, valorMercado };
+      return { result, valorMercado, avalDb, vminImovel };
     })()]);
 
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
     // mercado/parecer vivem DENTRO do Promise.race acima; aqui usamos o result (que os
     // carrega) para não referenciar variável fora de escopo (bug "mercado is not defined").
-    await aprenderNaEmissao(imovel, result.mercado, !!result.parecer);
+    await aprenderNaEmissao(imovel, result.mercado, !!result.parecer, avalDb, vminImovel);
 
     // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.
     // roi (parecerInputs.metricas) e areaM2 (mercadoInputs) vêm do CLIENTE e são

@@ -241,6 +241,46 @@ export default async function handler(req) {
     };
   }));
 
+  // ── 3f. Relatórios — QUALIDADE da emissão (concluídos, mas defeituosos) ──
+  // A seção 3e só vê status='erro' (exceção). Mas um relatório sem avaliação, sem
+  // parecer ou com mercado vazio CONCLUI (status='concluida') e ia embora silencioso —
+  // era exatamente "o relatório com falha que o health-check não apontava". Cada emissão
+  // grava seus sinais de qualidade (poison-resistente, sem IA) em agente_aprendizado;
+  // aqui a saúde os enxerga nas últimas 24h. (Depende do fix do sinal em gerar-analise.js:
+  // antes lia a chave errada — camelCase × snake_case — e marcava tudo como defeituoso.)
+  itens.push(await check('Relatórios — qualidade da emissão (24h)', async () => {
+    const desde = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const r = await sb(`agente_aprendizado?select=imovel_id,agente,qualidade,criado_em&criado_em=gte.${desde}&order=criado_em.desc&limit=500`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const rows = await r.json();
+    if (!Array.isArray(rows) || rows.length === 0) return { status: 'ok', detalhe: 'Nenhuma emissão de relatório nas últimas 24h' };
+    const flag = (q, k) => !!(q && q[k]);
+    const semParecer = new Set(), mercadoVazio = new Set(), semAval = new Set(), semMin = new Set();
+    for (const x of rows) {
+      const q = x.qualidade || {}; const id = String(x.imovel_id || x.agente);
+      if (flag(q, 'sem_parecer')) semParecer.add(id);
+      if (flag(q, 'mercado_vazio')) mercadoVazio.add(id);
+      if (flag(q, 'avaliacao_ausente')) semAval.add(id);
+      if (flag(q, 'minimo_ausente')) semMin.add(id);
+    }
+    const total = rows.length;
+    // "Defeituoso" de verdade = sem parecer OU mercado vazio (o relatório saiu FRACO).
+    // Avaliação/mínimo ausentes são GAP (muitos judiciais legítimos) → contam como nota, não erro.
+    const defeituosos = new Set([...semParecer, ...mercadoVazio]).size;
+    if (defeituosos === 0 && semAval.size === 0) return { status: 'ok', detalhe: `${total} emissão(ões) em 24h, todas com avaliação, mercado e parecer` };
+    const partes = [];
+    if (mercadoVazio.size) partes.push(`mercado vazio: ${mercadoVazio.size}`);
+    if (semParecer.size) partes.push(`sem parecer: ${semParecer.size}`);
+    if (semAval.size) partes.push(`sem avaliação: ${semAval.size}`);
+    if (semMin.size) partes.push(`sem lance mínimo: ${semMin.size}`);
+    // Escala p/ erro se metade+ das emissões saiu defeituosa (bug sistêmico, não caso isolado).
+    const critico = total >= 4 && defeituosos >= Math.ceil(total / 2);
+    return {
+      status: critico ? 'erro' : 'aviso',
+      detalhe: `${total} relatório(s) emitido(s) em 24h — ${partes.join(' · ')}. ${critico ? 'Fração alta de emissões defeituosas — investigar o gerador AGORA.' : 'Revisar os sinalizados (concluídos mas incompletos).'}`,
+    };
+  }));
+
   // ── 4. Supabase: clientes/leads sem consultor há >3 dias ──
   itens.push(await check('Comercial — clientes sem consultor', async () => {
     const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
