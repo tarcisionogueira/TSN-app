@@ -122,8 +122,8 @@ Retorne APENAS este JSON (sem markdown):
 {
   "veredito": "aprovado|condicional|reprovado",
   "resumoExecutivo": "2-3 frases para um leigo: comprar ou não, e a razão principal.",
-  "pontosFortes": ["", ""],
-  "pontosDeAtencao": ["", ""],
+  "pontosFortes": ["ESTE É O CORAÇÃO DO RELATÓRIO DE CONCLUSÃO. 3 a 5 TÓPICOS com o que há de mais relevante POSITIVAMENTE para a decisão, CRUZANDO OS DOIS relatórios (mercadológico/financeiro E documental/jurídico) — não repita literalmente, escolha o que REALMENTE pesa a favor. Cada tópico é uma ideia completa em 1 a 2 frases de leigo, com o número/fato concreto e de onde veio. Ex.: 'Desconto real de 38 por cento sobre o valor de mercado (avaliação R$420 mil contra lance mínimo R$260 mil), do relatório mercadológico'; 'Matrícula sem penhora de terceiros nem ações que impeçam a transferência, do documental'. Nada de tópico de uma palavra nem formalidade sem impacto."],
+  "pontosDeAtencao": ["3 a 5 TÓPICOS com o que há de mais crítico NEGATIVAMENTE, os maiores riscos e custos, CRUZANDO OS DOIS relatórios. Mesmo padrão: 1 a 2 frases de leigo, com o fato e a origem. Ex.: 'Imóvel provavelmente ocupado, com risco de resistência: some o prazo e o custo da desocupação (imissão de posse) ao investimento, do documental'; 'Débitos de condomínio estimados em R$18 mil que o arrematante assume, do financeiro'. Traga o que muda a decisão, não riscos genéricos."],
   "condicoes": ["condições objetivas para o 'condicional' — vazio se não se aplica"],
   "diligenciasPendentes": ["o que confirmar antes do lance, se houver"],
   "controleQualidade": { "confiancaMercadologico": 0, "confiancaDocumental": 0, "contradicoes": ["contradições entre os dois relatórios, se houver"], "lacunasCriticas": ["o que falta para decidir com segurança"], "recomendaRevisao": false },
