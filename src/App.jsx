@@ -33,6 +33,7 @@ const Consultor = lazy(() => import('./pages/Consultor'));
 const AtivarVendedor = lazy(() => import('./pages/AtivarVendedor'));
 const Contratos = lazy(() => import('./pages/Contratos'));
 const Calculadora = lazy(() => import('./pages/Calculadora'));
+const IndiceConsulta = lazy(() => import('./pages/IndiceConsulta'));
 const Membros = lazy(() => import('./pages/Membros'));
 const Cliente360 = lazy(() => import('./pages/Cliente360'));
 const Curso = lazy(() => import('./pages/Curso'));
@@ -289,6 +290,7 @@ function MainLayout() {
           <Route path="/registro-imovel" element={<PrivateRoute roles={['admin','analista','advogado','consultor']}><OnrRegistro /></PrivateRoute>} />
           <Route path="/registro-imovel/:imovelId" element={<PrivateRoute roles={['admin','analista','advogado','consultor']}><OnrRegistro /></PrivateRoute>} />
           <Route path="/calculadora" element={<Calculadora />} />
+          <Route path="/indice" element={<PrivateRoute><IndiceConsulta /></PrivateRoute>} />
           <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />

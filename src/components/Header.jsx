@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
@@ -160,6 +160,7 @@ export default function Header() {
   ];
   const linksPrivados = [
     { path: '/buscar', label: 'Leilões', icon: Search, tourId: 'leiloes' },
+    { path: '/indice', label: 'Índice BidPro', icon: MapPin, tourId: 'indice' },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
     ...(ROLES_CALC.includes(effectiveRole) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
