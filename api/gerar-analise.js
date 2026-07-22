@@ -157,6 +157,51 @@ async function lerIndiceBidPro(imDb) {
   } catch { return null; }
 }
 
+// Grava as amostras DATADAS deste relatório em indice_amostra (base da valorização por
+// ano e da recência real). Só residencial, poison-resistente (dados da pesquisa). O prompt
+// já descarta leilão das amostras → arremate NUNCA entra aqui. Dedup pelo índice único.
+async function gravarAmostrasIndice(imDb, mercado, imovelId) {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return;
+    const uf = String(imDb.estado).toUpperCase();
+    const nowMes = new Date().toISOString().slice(0, 7);
+    const dref = (d) => (/^\d{4}-\d{2}$/.test(String(d || '')) ? `${d}-01` : `${nowMes}-01`);
+    const vendas = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])];
+    const locs   = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || [])];
+    const rows = [];
+    for (const s of vendas) {
+      const m2 = Number(s?.valorM2);
+      if (!(m2 >= 200 && m2 <= 50000)) continue;
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: 'residencial',
+        especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
+        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
+    }
+    for (const s of locs) {
+      const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
+      if (!(mensal > 0)) continue;
+      const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: 'residencial',
+        especie: 'locacao', valor_m2: (vm2 && vm2 >= 1 && vm2 <= 1000) ? vm2 : null, valor_total: mensal, area_m2: area || null,
+        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
+    }
+    if (!rows.length) return;
+    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(rows) });
+  } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
+}
+
+// Valorização por ano (mediana de R$/m² de VENDA) da microrregião — vai no relatório
+// como MAIS UMA referência (curva no tempo), independente do FipeZAP.
+async function lerValorizacao(imDb) {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return null;
+    const r = await sb('rpc/indice_valorizacao_anual', { method: 'POST', body: JSON.stringify({
+      p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_tipo: 'residencial', p_especie: 'venda', p_anos: 6 }) });
+    if (!r.ok) return null;
+    const v = await r.json().catch(() => null);
+    return (v && Array.isArray(v.serie) && v.serie.length >= 2) ? v : null;
+  } catch { return null; }
+}
+
 // CLASSIFICAÇÃO DE INTENÇÃO — o mesmo objetivo dos filtros da busca (revenda/locação/temporada),
 // agora DENTRO do relatório: diz para QUÊ o imóvel é bom (um, vários ou os três) e POR QUÊ.
 // Alimenta a defesa do parecer e o aprendizado. Critérios ancorados nos dados que já temos.
@@ -470,6 +515,7 @@ MERCADO:
 - Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
 ${mercado?.referenciaFipeZap?.encontrado ? `- Referência FipeZAP (${mercado.referenciaFipeZap.localidade || inp.cidade || ''}, ${mercado.referenciaFipeZap.mesReferencia || 'recente'}): R$ ${brl(mercado.referenciaFipeZap.precoMedioM2)}/m² · valorização 12m: ${(Number(mercado.referenciaFipeZap.valorizacao12m) || 0).toFixed(1)}%. Compare com a média dos anúncios acima: se divergirem muito, comente e use a mais conservadora na defesa.` : ''}
 ${mercado?.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0) ? `- Índice BidPro (nossa base própria por microrregião, nível ${mercado.indiceBidPro.nivel})${Number(mercado.indiceBidPro.venda_m2) > 0 ? `: venda R$ ${brl(mercado.indiceBidPro.venda_m2)}/m²` : ''}${Number(mercado.indiceBidPro.aluguel_m2) > 0 ? ` · locação R$ ${brl(mercado.indiceBidPro.aluguel_m2)}/m²/mês` : ''}. Referência interna independente (venda e locação), consolidada das análises da plataforma — use como sanity-check adicional junto ao FipeZAP.` : ''}
+${mercado?.valorizacao?.serie?.length >= 2 ? `- Valorização BidPro (${inp.cidade || ''}, venda R$/m² por ano, base própria): ${mercado.valorizacao.serie.map(p => `${p.ano}: R$ ${brl(p.m2)}`).join(' · ')}. Variação no período: ${Number(mercado.valorizacao.valorizacao_periodo_pct).toFixed(1)}% (${Number(mercado.valorizacao.valorizacao_aa_pct).toFixed(1)}% a.a.). Use como leitura de TENDÊNCIA da microrregião (amostras podem ser poucas nos anos iniciais).` : ''}
 ${(() => {
   const c = mercado?.classificacaoIntencao;
   if (!c || !c.algum) return '';
@@ -710,6 +756,9 @@ export default async function handler(req, res) {
       const aluguelM2 = (Number(mercado.aluguelMedio) > 0 && areaM2 > 0) ? Number(mercado.aluguelMedio) / areaM2 : null;
       await semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras);
       mercado.indiceBidPro = await lerIndiceBidPro(imDb);
+      // Amostras datadas (valorização/recência) + curva de valorização por ano no relatório.
+      await gravarAmostrasIndice(imDb, mercado, imovelId);
+      mercado.valorizacao = await lerValorizacao(imDb);
     }
 
     // CLASSIFICAÇÃO DE INTENÇÃO (revenda/locação/temporada) — consta no relatório e vira defesa no
