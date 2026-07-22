@@ -425,6 +425,11 @@ export default function Analise() {
   const teto = useMemo(() => calcularTetoLance(d, isAVista, META, d.valorMercado||0), [d, isAVista, META]);
   const metricasTeto = useMemo(() => calcularMetricasCenario(d, teto, isAVista), [d, teto, isAVista]);
   const isViavel = isUsoProprio ? true : metricas.roi >= META;
+  // Pesquisa de mercado veio VAZIA (fonte instável no momento): sem valor de mercado o
+  // ROI daria "-100%/reprovada" — enganoso. Nesse caso mostramos "não estimado".
+  const mercadoSemDados = !(Number(d.valorMercado) > 0)
+    && !(Number(mercado?.precoMedioM2) > 0)
+    && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
   const riscosBloqueantes = (d.riscos||[]).filter(r => r.tipo === 'bloqueante');
 
   // ─── Cenários de disputa (relatório mercadológico) ─────────────────────────
@@ -2520,15 +2525,20 @@ export default function Analise() {
         {/* ── CAPA / RESUMO PARA LEIGOS: veredito + 3 números + próximo passo ── */}
         <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
-            {isViavel ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>}
-            <span style={{ fontSize:16, fontWeight:900, color:isViavel?'#065f46':'#b91c1c' }}>
-              {isUsoProprio ? 'Aprovado para uso próprio' : (isViavel ? 'Operação viável, vale avançar' : 'Operação reprovada, retorno insuficiente')}
+            {isUsoProprio ? <CheckCircle2 size={22} color="#10b981"/> : (mercadoSemDados ? <AlertTriangle size={22} color="#f59e0b"/> : (isViavel ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>))}
+            <span style={{ fontSize:16, fontWeight:900, color: mercadoSemDados ? '#92400e' : (isViavel?'#065f46':'#b91c1c') }}>
+              {isUsoProprio ? 'Aprovado para uso próprio' : (mercadoSemDados ? 'Mercado não estimado nesta análise' : (isViavel ? 'Operação viável, vale avançar' : 'Operação reprovada, retorno insuficiente'))}
             </span>
           </div>
+          {mercadoSemDados && (
+            <div style={{ fontSize:12.5, lineHeight:1.6, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, padding:'10px 12px', marginBottom:14 }}>
+              A pesquisa de mercado <strong>não retornou amostras desta vez</strong> (fonte instável no momento). <strong>Gere o relatório novamente</strong> ou informe o valor de mercado/anexe dados. Os indicadores de retorno (ROI/TIR) ficam indisponíveis até haver estimativa — <strong>não é uma reprovação da operação</strong>.
+            </div>
+          )}
           <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:10 }}>
             {[
               [areaSuspeita ? 'Desconto vs. avaliação' : 'Desconto vs. mercado', d.valorMercado>0 ? fmtPct((1-(d.valorArrematacao||0)/d.valorMercado)*100) : '—', '#0D63DB'],
-              [isAVista?'Retorno (ROI)':'Retorno (ROE)', fmtPct(metricas.roi), metricas.roi>=0?'#10b981':'#ef4444'],
+              [isAVista?'Retorno (ROI)':'Retorno (ROE)', mercadoSemDados ? '—' : fmtPct(metricas.roi), mercadoSemDados ? '#94a3b8' : (metricas.roi>=0?'#10b981':'#ef4444')],
               ['Rentabilidade anual (TIR)', indicadores.tir!=null ? fmtPct(indicadores.tir)+' a.a.' : '—', '#7c3aed'],
             ].map(([l,v,c])=>(
               <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', textAlign:'center', border:'1px solid #e2e8f0' }}>
@@ -2537,13 +2547,23 @@ export default function Analise() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop:14, padding:'12px 14px', background:isViavel?'#f0fdf4':'#fef2f2', border:`1px solid ${isViavel?'#bbf7d0':'#fecaca'}`, borderRadius:12, fontSize:13, color:isViavel?'#15803d':'#991b1b', lineHeight:1.6 }}>
-            <strong>Próximo passo:</strong> {isUsoProprio
-              ? 'Imóvel adequado ao uso próprio pelo preço analisado. Confirme os documentos com o time.'
-              : (isViavel
-                ? 'Os números fecham acima da meta. Agende a reunião com o analista para validar e seguir com a documentação.'
-                : 'Pelo lance analisado, o retorno fica abaixo da meta. Reveja o valor do lance (veja o teto adiante) ou avalie outro imóvel.')}
-          </div>
+          {(() => {
+            const okStyle = mercadoSemDados
+              ? { bg:'#fffbeb', bd:'#fde68a', fg:'#92400e' }
+              : (isViavel ? { bg:'#f0fdf4', bd:'#bbf7d0', fg:'#15803d' } : { bg:'#fef2f2', bd:'#fecaca', fg:'#991b1b' });
+            const txt = mercadoSemDados
+              ? 'Gere o relatório novamente para obter a estimativa de mercado e os indicadores de retorno (a fonte estava instável). Se preferir, informe o valor de mercado manualmente.'
+              : (isUsoProprio
+                ? 'Imóvel adequado ao uso próprio pelo preço analisado. Confirme os documentos com o time.'
+                : (isViavel
+                  ? 'Os números fecham acima da meta. Agende a reunião com o analista para validar e seguir com a documentação.'
+                  : 'Pelo lance analisado, o retorno fica abaixo da meta. Reveja o valor do lance (veja o teto adiante) ou avalie outro imóvel.'));
+            return (
+              <div style={{ marginTop:14, padding:'12px 14px', background:okStyle.bg, border:`1px solid ${okStyle.bd}`, borderRadius:12, fontSize:13, color:okStyle.fg, lineHeight:1.6 }}>
+                <strong>Próximo passo:</strong> {txt}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── INDICADORES DE RETORNO: VPL / TIR / payback / múltiplo + locação ── */}
