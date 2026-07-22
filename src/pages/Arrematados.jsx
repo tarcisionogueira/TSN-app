@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft } from 'lucide-react';
+import { Home, Search, Plus, Building2, FileText, DollarSign, X, Trash2, UploadCloud, ArrowUpCircle, ArrowDownCircle, ExternalLink, Loader2, ChevronLeft, TrendingUp } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
@@ -58,6 +58,25 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
   const [imovelId, setImovelId] = React.useState(arr.imovel_id || null);
   const [nums, setNums] = React.useState({ avaliacao: null, valorMercado: null });
   const [novo, setNovo] = React.useState({ tipo: 'saida', categoria: 'Reforma', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10) });
+  // Revenda: valor real de venda do imóvel arrematado → amostra do Índice + gabarito.
+  const [revenda, setRevenda] = React.useState({ open: false, valor: '', mes: new Date().toISOString().slice(0, 7), enviando: false, ok: !!arr.revenda_valor, erro: '' });
+  const enviarRevenda = async () => {
+    const valor = Number(String(revenda.valor).replace(/[^\d]/g, ''));
+    if (!valor || valor <= 0) { setRevenda(r => ({ ...r, erro: 'Informe o valor da revenda.' })); return; }
+    if (!/^\d{4}-\d{2}$/.test(revenda.mes)) { setRevenda(r => ({ ...r, erro: 'Informe o mês/ano da revenda.' })); return; }
+    setRevenda(r => ({ ...r, enviando: true, erro: '' }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/sinalizar-revenda', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ arrematado_id: arr.id, imovel_id: arr.imovel_id || imovelId, valor, data_mes: revenda.mes }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Falha ao registrar a revenda.');
+      setRevenda(r => ({ ...r, enviando: false, ok: true, open: false }));
+      onChange?.({ ...arr, revenda_valor: valor });
+    } catch (e) { setRevenda(r => ({ ...r, enviando: false, erro: e.message })); }
+  };
 
   React.useEffect(() => {
     supabase.from('arrematado_lancamentos').select('*').eq('arrematado_id', arr.id).order('data', { ascending: false })
@@ -198,6 +217,36 @@ function Detalhe({ arr, onBack, onChange, soLeitura }) {
         <StatOp label="Valor de mercado" valor={nums.valorMercado} cor="#0d9488" sub={nums.valorMercado == null ? 'gere o relatório' : null} />
         <StatOp label="Arrematação" valor={arrematacao} cor="#0D63DB" />
         <StatOp label="ROE × mercado" valor={lucro} cor={lucro == null ? null : (lucro >= 0 ? '#15803d' : '#dc2626')} sub={lucroPct == null ? null : `${lucroPct >= 0 ? '+' : ''}${lucroPct.toFixed(0)}% sobre a arrematação`} />
+      </div>
+
+      {/* Revenda — captura a venda real (vira amostra do Índice BidPro + gabarito de precisão) */}
+      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '12px 16px' }}>
+        {revenda.ok ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#065f46', fontWeight: 700 }}>
+            <TrendingUp size={15} /> Revenda registrada — obrigado! Isso entra como amostra de mercado e melhora o Índice BidPro da região.
+          </div>
+        ) : !revenda.open ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13, color: '#334155' }}><strong>Já revendeu este imóvel?</strong> Registre o valor da venda — vira referência real de mercado (não é o valor do arremate).</div>
+            <button onClick={() => setRevenda(r => ({ ...r, open: true }))} style={{ marginLeft: 'auto', background: '#059669', color: 'white', border: 'none', borderRadius: 10, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Revendi este imóvel</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>Registrar revenda</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input value={revenda.valor} onChange={e => setRevenda(r => ({ ...r, valor: e.target.value, erro: '' }))} placeholder="Valor da revenda (ex: 320000)" inputMode="numeric"
+                style={{ flex: 1, minWidth: 160, padding: '9px 12px', border: '1.5px solid #a7f3d0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
+              <input type="month" value={revenda.mes} onChange={e => setRevenda(r => ({ ...r, mes: e.target.value, erro: '' }))}
+                style={{ padding: '9px 12px', border: '1.5px solid #a7f3d0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            {revenda.erro && <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>{revenda.erro}</div>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={enviarRevenda} disabled={revenda.enviando} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: revenda.enviando ? 'default' : 'pointer' }}>{revenda.enviando ? 'Enviando…' : 'Salvar revenda'}</button>
+              <button onClick={() => setRevenda(r => ({ ...r, open: false, erro: '' }))} style={{ background: 'white', color: '#334155', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+            </div>
+            <div style={{ fontSize: 10.5, color: '#047857', lineHeight: 1.5 }}>Usamos o valor da revenda (com a data) como amostra real de mercado e para calibrar a precisão das próximas estimativas. O preço do <strong>arremate</strong> não entra no Índice.</div>
+          </div>
+        )}
       </div>
 
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0' }}>
