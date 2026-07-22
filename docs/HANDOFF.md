@@ -17,7 +17,27 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## ⏭️ COMEÇAR AQUI (21/07 — sessão 3) — CREDIBILIDADE dos relatórios + telas admin + relatórios/contratos/certidões
+## ⏭️ COMEÇAR AQUI (22/07 — diagnóstico de saúde + erros nos relatórios emitidos)
+> Branch: `claude/bidprobrasil-handoff-diagnostics-akwysq`. Segurança **0/0** o tempo todo. Build (vite) OK.
+> **Pedido do dono:** conferir os diagnósticos do dashboard (saúde + funcionalidades) e os **relatórios emitidos** ("há erros a resolver").
+
+**Diagnóstico de início (tudo íntegro):** segurança `0 crítico / 0 atenção`; bug bounty dos leiloeiros **vazio** (nenhuma fonte abaixo do piso aprendido); geocode **100%** (0 de 32.931 ativos sem lat/lng); fontes todas `ok` (só VENDASGOV `degradado`=2, gap conhecido login-gated); `qa_invariantes()` **todos ok**; deploy de produção **READY**.
+
+**Erros encontrados e RESOLVIDOS (atacados na raiz):**
+1. **Falso-positivo `cnj_vazio` em TODO relatório extrajudicial (raiz: regex `/judicial/` casa "extraJUDICIAL") — `api/gerar-documental.js`.** O gatilho da anomalia era `/judicial/i.test(modalidade) || !!procNum || execNome≥6`. Como "extrajudicial" contém "judicial", os **9.579 imóveis extrajudiciais** disparavam anomalia sempre que o CNJ (que por definição não existe em extrajudicial) voltava vazio; e ter só o NOME do executado sem achar processo é **título limpo**, não falha. Reescrito para o sinal REAL de integração: só sinaliza quando havia um **nº de processo concreto (≥15 díg.)** e mesmo assim o CNJ voltou vazio (nº malformado / token / fonte fora do ar).
+2. **Mesma família de regex corrigida em 3 lugares** (guard `&& !/extra/i`): `gerar-documental.js` read-cap (`ehJudicial` fazia extrajudicial ler peças a mais → custo IA), `api/atribuir-arremate.js` (arremate extrajudicial digitado pela equipe era gravado como `judicial`), `api/scraper-leiloeiros.js` (MEGA — classificava modalidade do `ctx`). Sem alteração retroativa em dados (não dá p/ saber quais dos 182 MEGA `judicial` vieram de ctx com "extrajudicial" sem re-scrape; o fix previne daqui pra frente).
+3. **Crash de cliente na `/analise` — `Cannot destructure property 'logUso' of 'undefined'` (`src/contexts/AuthContext.jsx`).** O `import('../utils/logUso').then(({ logUso }) => …)` não era guardado: em **chunk stale pós-deploy** o módulo vinha `undefined` e o destructure quebrava (o `try/catch` não pega a rejeição do `import()`). Trocado por `import(...).then(m => m?.logUso?.(…)).catch(()=>{})`.
+4. **Timeout do `snapshot_metricas_fontes` no `monitor-fontes-cron`** (alimenta `fonte_metricas_hist`, base do APRENDIZADO do bug bounty). Ele chama `fonte_cobertura()` (~5,8s, `jsonb_path_exists` por linha em 32k+ imóveis) + `fonte_qualidade()` (~1,3s); sob a carga de escrita da coleta (15h UTC) passava do `statement_timeout` (~8s) e era cancelado, abrindo buraco no histórico. **Migração** `snapshot_metricas_fontes_timeout_resiliente.sql`: teto de tempo próprio de 60s (aplicada via MCP; validado: 21 linhas gravadas, sem timeout).
+5. **2 anomalias `cnj_vazio` obsoletas resolvidas no banco** (id 12 extrajudicial LEILOFY — falso-positivo; id 13 judicial de teste `atribuido_manual` sem nº — ambas não voltam a disparar sob a lógica corrigida).
+
+**PENDÊNCIAS / follow-ups:**
+- **⚙️ Escala — `fonte_cobertura()` custa 5,8s** (agregação com `jsonb_path_exists` por linha em 32k ativos). NÃO reescrita nesta sessão (mudaria números de vários painéis; risco). Candidata a otimização (coluna/flag materializada dos tipos de anexo) antes de crescer o acervo. O timeout imediato já está blindado (item 4).
+- **`avaliacao_ausente` (GRUPOLANCE, 1 anomalia aberta)** segue como gap legítimo — avaliação só no PDF do edital, aguarda leitura PAGA (Bright Data / OK de custo do dono). Não é falso-positivo.
+- Advisors do Supabase: só INFO pré-existentes (RLS habilitado sem política em tabelas de backup `_bkp_gl_*`/`ab_mercadologica` — estado seguro). `auditoria_seguranca()`=0/0 é a referência do projeto.
+
+---
+
+## ⏭️ (21/07 — sessão 3) — CREDIBILIDADE dos relatórios + telas admin + relatórios/contratos/certidões
 > Tudo em `main` (PRs **#172–#187** mesclados). Segurança **0/0**. Branch: `claude/session-1hpqy6`.
 > **Motivação:** o dono gerou relatórios ao vivo para clientes e viu **metragem/avaliação erradas**, **desconto absurdo** e **endereço trocado** (Alagoinhas × Feira de Santana) — "essas coisas não podem ocorrer". Atacado na RAIZ.
 

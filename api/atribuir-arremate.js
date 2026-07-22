@@ -51,7 +51,9 @@ export default async function handler(req) {
 
   const agora = new Date();
   const valor = Number(String(imovel_valor ?? '').toString().replace(/\./g, '').replace(',', '.')) || null;
-  const modalidade = /judicial/i.test(tipo_leilao || '') ? 'judicial' : 'extrajudicial';
+  // Guard contra "extraJUDICIAL" casar /judicial/ (senão um arremate extrajudicial
+  // digitado pela equipe era gravado como 'judicial' — modalidade errada no imóvel).
+  const modalidade = /judicial/i.test(tipo_leilao || '') && !/extra/i.test(tipo_leilao || '') ? 'judicial' : 'extrajudicial';
 
   // 1) Cria o IMÓVEL-ÂNCORA oculto (ativo=false → fora da busca pública). É ele que
   //    habilita anexar o auto de arrematação/documentos (imovel_anexos exige imovel_id)

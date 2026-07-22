@@ -141,7 +141,11 @@ export function AuthProvider({ children }) {
         if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
           // Log de uso — prova de acesso para proteção contra chargeback
           if (event === 'SIGNED_IN') {
-            try { import('../utils/logUso').then(({ logUso }) => logUso(u.id, 'login')); } catch (_) {}
+            // O try/catch NÃO pega a rejeição do import() dinâmico: em chunk stale
+            // pós-deploy o módulo vem undefined e o destructure quebrava (erro-cliente
+            // "Cannot destructure property 'logUso' of 'undefined'" na /analise).
+            // Optional chaining + .catch tornam o log de acesso à prova de falha.
+            import('../utils/logUso').then(m => m?.logUso?.(u.id, 'login')).catch(() => {});
           }
           // Push automático (só 1x por navegador).
           try { ativarPushAutomatico(() => session); } catch (_) {}

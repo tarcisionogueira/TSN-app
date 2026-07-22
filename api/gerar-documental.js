@@ -512,7 +512,9 @@ export default async function handler(req, res) {
     // MUITOS anexos (auto de penhora/avaliação, laudo, decisão, certidões, ata) —
     // ampliamos o teto de candidatos para não descartar peça relevante antes da
     // leitura (a leitura em si continua limitada pelo cap + deadline abaixo).
-    const ehJudicial = /judicial/i.test(String(row?.modalidade || ''));
+    // "extraJUDICIAL" contém "judicial" — exige o guard p/ não tratar extrajudicial
+    // (Caixa/Lei 9.514, poucos anexos) como judicial e ler peças a mais (custo IA).
+    const ehJudicial = /judicial/i.test(String(row?.modalidade || '')) && !/extra/i.test(String(row?.modalidade || ''));
     const capCandidatos = ehJudicial ? 16 : 7;
     for (const a of anexos) { if (urls.length >= capCandidatos) break; add(a.url, a.nome || 'Anexo', a.tipo); }
     // 3º: URLs do cliente + os PDFs estáticos da Caixa (fallback quando não há arquivo guardado).
@@ -857,11 +859,16 @@ export default async function handler(req, res) {
         if (!execNome && passivo.nome) { execNome = passivo.nome; ex.executadoNome = passivo.nome; }
       }
     }
-    // Anomalia (aprendizado): esperava-se processo no CNJ (lote judicial, ou com nº/parte)
-    // mas a consulta voltou VAZIA — sinaliza p/ a saúde do sistema revisar (token/fonte/nº).
-    const esperavaCNJ = /judicial/i.test(im.modalidade || '') || !!procNum || (execNome && execNome.length >= 6);
-    if (esperavaCNJ && !(cnj && cnj.total)) {
-      registrarAnomalia('cnj_vazio', im.fonte, imovelId, 'cnj', `CNJ sem retorno (modalidade=${im.modalidade || '?'}, proc=${procNum || ex.numeroProcesso || '-'}).`).catch(() => {});
+    // Anomalia (aprendizado) — INTEGRAÇÃO do CNJ: só sinaliza quando tínhamos um nº de
+    // processo CONCRETO (do lote ou extraído dos docs) e mesmo assim a consulta voltou
+    // VAZIA — aí sim é suspeito (nº malformado, token/fonte do CNJ fora do ar). Sem nº
+    // concreto, vazio é ESPERADO e não é falha: extrajudicial (Lei 9.514, sem processo
+    // judicial prévio) não tem processo — e `/judicial/i` casava "extraJUDICIAL",
+    // gerando anomalia em TODO relatório extrajudicial; busca por NOME que não acha
+    // nada é título limpo (boa notícia), não erro de integração.
+    const numConcretoCNJ = String(procNum || ex.numeroProcesso || '').replace(/\D/g, '');
+    if (numConcretoCNJ.length >= 15 && !(cnj && cnj.total)) {
+      registrarAnomalia('cnj_vazio', im.fonte, imovelId, 'cnj', `CNJ sem retorno p/ processo ${numConcretoCNJ} (modalidade=${im.modalidade || '?'}).`).catch(() => {});
     }
     const procFontes = procNum || ex.numeroProcesso || (cnj?.processos?.[0]?.numero) || null;
     let fontesTxt = '', fontesExternas = null;
