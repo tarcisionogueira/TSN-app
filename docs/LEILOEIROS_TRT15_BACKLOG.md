@@ -139,3 +139,26 @@ Match por NOME do leiloeiro no nosso acervo (⚠️ confirmar que é o mesmo CPF
 **Grau-3 de maior valor unitário (priorizar):** alfaleiloes (só imóveis, nacional, provável API), gustavoreisleiloes (unificados TRT-2), 3torres, destak.
 
 **Próximo passo p/ fechar leads:** um recon de CDN por domínio (`static.suporteleiloes.com.br`, `vlance-cdn`, `plataformadeleiloes`) **em ambiente com egress liberado** — pode converter vários Grau 3 em 1/2. Aqui o WebFetch está bloqueado.
+
+---
+
+## ✅ Verificação no ACERVO (banco, 22/07) — corrige os chutes de plataforma da recon
+A captura é **dirigida por agregador**: um leiloeiro entra quando os lotes dele estão numa
+plataforma que já raspamos (CEF, SUPERBID, MEGA, ZUK, LJUD, LEILOTECH, WEBLEILOES, FRAZAO…).
+**Não há "config de leiloeiro" para adicionar** — daí não dá para "ligar de graça" um que não
+aparece. Situação real dos alvos checados:
+
+| Domínio | No acervo | Via (fonte real) | Status |
+|---|---|---|---|
+| frazao / **vinco** | 132 | FRAZAO | ✅ já flui |
+| sumaré | 12 | LEILOTECH/MEGA/WEBLEILOES | ✅ parcial |
+| planalto | 8 | MEGA/ZUK *(não LJUD como a recon supôs)* | ✅ parcial |
+| cunha | 4 | MEGA/ZUK *(não SUPORTE)* | ✅ parcial |
+| sanches | 2 | ZUK | ✅ parcial |
+| sato | 1 | ZUK | ✅ parcial |
+| verdeamarelo, zaccarino, alfaleiloes, gustavoreis, 3torres, destak, calil, extrajust, granado, lancetotal, valero, hisa, sorgi | 0 | — | ⏳ pendente (scraper dedicado) |
+
+**Conclusão:** os "gratuitos" (que ridem em agregador) **já estão entrando** — nada a construir.
+Os **0-acervo** exigem scraper dedicado (site do leiloeiro ou novo agregador), o que precisa de
+**recon da estrutura viva via Bright Data** — roda na Vercel/CI (o ambiente de dev bloqueia os
+sites). Não dá para construir/validar um scraper novo de dentro do dev.
