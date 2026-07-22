@@ -310,6 +310,21 @@ export default function Analise() {
   // contexto; o resultado é aplicado de volta quando concluído (efeito abaixo).
   const { iniciar: iniciarAnalise, getAnalise, iniciarDocumental, getDocumental, iniciarLaudo, getLaudo } = useAnalises();
   const analiseImovelId = imovelInicial?.id || d.id;
+  // "Arrematei este imóvel": o cliente sinaliza o arremate → mantém os documentos
+  // (Retenção Etapa 2). Autoconsentido; só protege, nunca apaga.
+  const [arrematadoSinalizado, setArrematadoSinalizado] = useState(false);
+  const [sinalizandoArremate, setSinalizandoArremate] = useState(false);
+  const sinalizarArremate = async () => {
+    if (arrematadoSinalizado || sinalizandoArremate) return;
+    if (!window.confirm(`Confirmar que você arrematou "${d.nome || imovelInicial?.titulo || 'este imóvel'}"? Assim guardamos os documentos do seu arremate.`)) return;
+    setSinalizandoArremate(true);
+    try {
+      const res = await apiCall('/api/sinalizar-arremate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imovel_id: analiseImovelId, titulo: d.nome || imovelInicial?.titulo, cidade: d.cidade, estado: d.estado }) });
+      if (res.ok) setArrematadoSinalizado(true);
+    } catch { /* ok */ }
+    setSinalizandoArremate(false);
+  };
   const analiseEntry = getAnalise(analiseImovelId);
   const docEntry = getDocumental(analiseImovelId);
   const laudoEntry = getLaudo(analiseImovelId);
@@ -1944,6 +1959,12 @@ export default function Analise() {
                 <button onClick={() => gerarLaudoPDF({ imovel: d, laudo: L, cab: cabPDF })}
                   style={{ marginTop:16, width:'100%', padding:'13px', background:'#111827', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                   <Printer size={16}/> Baixar Parecer Final em PDF
+                </button>
+                <button onClick={sinalizarArremate}
+                  disabled={arrematadoSinalizado || sinalizandoArremate}
+                  title="Confirmo que arrematei este imóvel — mantém os documentos guardados"
+                  style={{ marginTop:10, width:'100%', padding:'12px', background: arrematadoSinalizado ? '#ecfdf5' : 'white', color:'#059669', border:'1.5px solid #a7f3d0', borderRadius:12, fontWeight:800, fontSize:14, cursor: arrematadoSinalizado ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  <Award size={16}/> {arrematadoSinalizado ? 'Arremate confirmado ✓' : (sinalizandoArremate ? 'Enviando…' : 'Arrematei este imóvel')}
                 </button>
               </div>
             );

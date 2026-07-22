@@ -92,8 +92,39 @@ async function handler(req) {
     if (anexos.length < 500) break; // último lote (menos que o teto)
   }
 
+  // ── Retenção Etapa 2 (notify-first) ──────────────────────────────────────────
+  // Documentos elegíveis pelas Regras 1/2 do dono, MAS somente os que já receberam
+  // aviso (email_enviado=true) e cuja carência venceu (apagar_em<=now). A RPC
+  // anexos_expirados_avisados revalida o estado atual (inadimplência/arremate/
+  // relatórios), então nada é apagado se o cliente regularizou ou sinalizou depois.
+  // Enquanto o retencao-avisos-cron estiver em dry-run, esta RPC retorna vazio.
+  let removidosAvisados = 0;
+  while (Date.now() < DEADLINE && iteracoes < 80) {
+    iteracoes++;
+    const rpcRes = await sb('rpc/anexos_expirados_avisados', { method: 'POST', body: JSON.stringify({ p_limite: 500 }) });
+    if (!rpcRes.ok) { ultimoErro = await rpcRes.text().catch(() => ''); break; }
+    const anexos = await rpcRes.json().catch(() => []);
+    if (!Array.isArray(anexos) || !anexos.length) break; // drenado (ou vazio em dry-run)
+
+    const paths = anexos.map(a => a.storage_path).filter(Boolean);
+    const ids   = anexos.map(a => a.id);
+    await storage(`object/${BUCKET}`, { method: 'DELETE', body: JSON.stringify({ prefixes: paths }) });
+    await sb(`imovel_anexos?id=in.(${ids.join(',')})`, { method: 'PATCH', body: JSON.stringify({ storage_path: null, url: null }) });
+
+    const idsMatricula = [...new Set(paths
+      .map(p => (String(p).match(/^casos\/([0-9a-f-]{36})\/[^/]*matr[ií]cul[^/]*\.pdf$/i) || [])[1])
+      .filter(Boolean))];
+    if (idsMatricula.length) {
+      await sb(`imoveis_leilao?id=in.(${idsMatricula.join(',')})&link_matricula=not.is.null`, { method: 'PATCH', body: JSON.stringify({ link_matricula: null }) });
+      linksZerados += idsMatricula.length;
+    }
+
+    removidosAvisados += paths.length;
+    if (anexos.length < 500) break;
+  }
+
   return new Response(JSON.stringify({
-    removidos, iteracoes, links_matricula_zerados: linksZerados,
+    removidos, removidos_avisados: removidosAvisados, iteracoes, links_matricula_zerados: linksZerados,
     drenado: !ultimoErro && removidos >= 0, erro: ultimoErro || undefined,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

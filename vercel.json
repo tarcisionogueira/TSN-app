@@ -30,6 +30,7 @@
     { "path": "/api/renovacao-avisos-cron", "schedule": "0 9 * * *"    },
     { "path": "/api/scraper-transparencia",    "schedule": "0 3 * * *"    },
     { "path": "/api/financiamento-alertas-cron","schedule": "0 7 * * *"    },
+    { "path": "/api/retencao-avisos-cron",    "schedule": "0 1 * * *"    },
     { "path": "/api/limpar-documentos-cron",  "schedule": "0 2 * * *"    },
     { "path": "/api/gerar-slots",             "schedule": "0 1 * * *"    },
     { "path": "/api/cnj-monitor-cron",        "schedule": "0 10 * * *"   },
