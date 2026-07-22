@@ -4,6 +4,7 @@ import {
   Search, BarChart3, ShieldCheck, FileText, TrendingUp, Zap,
   ChevronRight, CheckCircle2, Star, Gavel, Users, Lock, Clock,
   MapPin, ArrowRight, ChevronDown, ChevronUp, Sparkles, BadgeCheck, HelpCircle,
+  Smartphone,
 } from 'lucide-react';
 
 const STATS = [
@@ -351,6 +352,69 @@ export default function Landing() {
             style={{ padding: '14px 32px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 28px rgba(16,185,129,0.35)' }}>
             🧮 Usar a Calculadora, é grátis
           </button>
+        </div>
+      </section>
+
+      {/* ── ÍNDICE BIDPRO + APP ──────────────────────────────────────── */}
+      <section style={{ padding: '80px 20px', background: 'white' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 44 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>Mais duas formas de decidir melhor</div>
+            <h2 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 900, color: '#111', margin: '0 0 12px' }}>O preço do m² na sua região e a BidPro no bolso</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+            {/* Índice BidPro — m² para VENDA e LOCAÇÃO */}
+            <div style={{ borderRadius: 20, border: '1px solid #e2e8f0', padding: '32px 28px', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 8, background: '#eff6ff', borderRadius: 20, padding: '5px 14px', fontSize: 11, color: '#0D63DB', fontWeight: 800, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 }}>
+                <MapPin size={13} /> Índice BidPro
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 900, color: '#111', margin: '0 0 10px', lineHeight: 1.25 }}>
+                Consulte o preço do m² na sua região
+              </h3>
+              <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7, margin: '0 0 16px' }}>
+                Descubra o valor médio do metro quadrado <strong style={{ color: '#0D63DB' }}>para venda</strong> e <strong style={{ color: '#0D63DB' }}>para locação</strong> por cidade e bairro, construído a partir de milhares de imóveis analisados na plataforma. Saiba se o desconto do leilão é real antes do lance.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 22 }}>
+                {['Valor do m² para venda e para locação', 'Por cidade e por bairro', 'Base própria da BidPro, sempre atualizada'].map(item => (
+                  <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CheckCircle2 size={15} color="#0D63DB" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: '#334155' }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => nav('/planos')}
+                style={{ marginTop: 'auto', alignSelf: 'flex-start', padding: '13px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9, boxShadow: '0 8px 24px rgba(13,99,219,0.3)' }}>
+                Consultar o m² (venda e locação) <ArrowRight size={16} />
+              </button>
+            </div>
+
+            {/* App BidPro (PWA) */}
+            <div style={{ borderRadius: 20, border: '1px solid rgba(255,255,255,0.08)', padding: '32px 28px', background: 'linear-gradient(135deg,#0a1f3d,#0d2a50)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 8, background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 20, padding: '5px 14px', fontSize: 11, color: '#34d399', fontWeight: 800, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 }}>
+                <Smartphone size={13} /> App BidPro
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 900, color: 'white', margin: '0 0 10px', lineHeight: 1.25 }}>
+                Leve a BidPro no bolso
+              </h3>
+              <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.7, margin: '0 0 16px' }}>
+                Instale o app na tela inicial do seu celular e receba <strong style={{ color: '#e2e8f0' }}>alertas de novos imóveis e leilões</strong> em primeira mão. Funciona no Android e no iPhone, direto do navegador, sem loja de apps.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 22 }}>
+                {['Acesso rápido, como um app nativo', 'Notificações de oportunidades e prazos', 'Abre mesmo com conexão instável'].map(item => (
+                  <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CheckCircle2 size={15} color="#34d399" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: '#cbd5e1' }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => window.dispatchEvent(new Event('tsn:pwa-install'))}
+                style={{ marginTop: 'auto', alignSelf: 'flex-start', padding: '13px 26px', background: '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9, boxShadow: '0 8px 24px rgba(16,185,129,0.3)' }}>
+                📲 Instalar o app BidPro
+              </button>
+            </div>
+
+          </div>
         </div>
       </section>
 

@@ -24,24 +24,40 @@ export default function PwaInstall() {
   const [prompt, setPrompt] = useState(null); // evento beforeinstallprompt (Android/desktop)
   const [iosAberto, setIosAberto] = useState(false);
   const [visivel, setVisivel] = useState(false);
+  const [forcado, setForcado] = useState(false); // aberto manualmente (menu / landing)
 
   useEffect(() => {
-    if (ehStandalone()) return;
-    if (localStorage.getItem(DISPENSADO) === '1') return;
+    const dispensadoAntes = () => localStorage.getItem(DISPENSADO) === '1';
 
-    const onPrompt = (e) => { e.preventDefault(); setPrompt(e); setVisivel(true); };
+    // beforeinstallprompt: GUARDA sempre o evento (o gatilho do menu precisa dele),
+    // mas só auto-abre o banner se não estiver instalado nem tiver sido dispensado.
+    const onPrompt = (e) => {
+      e.preventDefault();
+      setPrompt(e);
+      if (!ehStandalone() && !dispensadoAntes()) setVisivel(true);
+    };
     window.addEventListener('beforeinstallprompt', onPrompt);
 
-    const onInstalled = () => { setVisivel(false); setPrompt(null);
+    const onInstalled = () => { setVisivel(false); setPrompt(null); setForcado(false);
       try { localStorage.setItem(DISPENSADO, '1'); } catch { /* ok */ } };
     window.addEventListener('appinstalled', onInstalled);
 
-    // iOS Safari não dispara beforeinstallprompt — oferece a instrução manual.
-    if (ehIOS()) setVisivel(true);
+    // Gatilho manual pelo menu interno / landing ("Instalar app"): abre SEMPRE
+    // (ignora o "dispensado"), a menos que o app já esteja instalado.
+    const onManual = () => {
+      if (ehStandalone()) return;
+      setForcado(true); setIosAberto(false); setVisivel(true);
+    };
+    window.addEventListener('tsn:pwa-install', onManual);
+
+    // iOS Safari não dispara beforeinstallprompt — auto-oferta a instrução manual
+    // (só se não estiver instalado nem dispensado).
+    if (ehIOS() && !ehStandalone() && !dispensadoAntes()) setVisivel(true);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', onPrompt);
       window.removeEventListener('appinstalled', onInstalled);
+      window.removeEventListener('tsn:pwa-install', onManual);
     };
   }, []);
 
@@ -49,16 +65,19 @@ export default function PwaInstall() {
 
   const dispensar = () => {
     setVisivel(false);
-    try { localStorage.setItem(DISPENSADO, '1'); } catch { /* ok */ }
+    // Só grava "dispensado" quando o banner apareceu sozinho. Aberto pelo menu,
+    // fechar apenas oculta (sem silenciar a oferta automática de futuras visitas).
+    if (!forcado) { try { localStorage.setItem(DISPENSADO, '1'); } catch { /* ok */ } }
+    setForcado(false);
   };
 
   const instalar = async () => {
     if (prompt) {
       prompt.prompt();
       try { await prompt.userChoice; } catch { /* ok */ }
-      setPrompt(null); setVisivel(false);
+      setPrompt(null); setVisivel(false); setForcado(false);
     } else {
-      setIosAberto(true); // sem prompt nativo (iOS) → mostra o passo a passo
+      setIosAberto(true); // sem prompt nativo (iOS / desktop) → mostra o passo a passo
     }
   };
 
@@ -87,9 +106,19 @@ export default function PwaInstall() {
         <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
           <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>Adicionar à Tela de Início</div>
           <div style={{ opacity: 0.9 }}>
-            1. Toque no botão <b>Compartilhar</b> (o quadrado com a seta para cima), na barra do Safari.<br />
-            2. Escolha <b>Adicionar à Tela de Início</b>.<br />
-            3. Confirme em <b>Adicionar</b>. Pronto — o BidPro abre como app e libera as notificações.
+            {ehIOS() ? (
+              <>
+                1. Toque no botão <b>Compartilhar</b> (o quadrado com a seta para cima), na barra do Safari.<br />
+                2. Escolha <b>Adicionar à Tela de Início</b>.<br />
+                3. Confirme em <b>Adicionar</b>. Pronto — o BidPro abre como app e libera as notificações.
+              </>
+            ) : (
+              <>
+                1. Abra o menu do navegador (<b>⋮</b> no Chrome/Edge, no canto superior).<br />
+                2. Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.<br />
+                3. Confirme. Pronto — o BidPro abre como app, com acesso rápido e notificações.
+              </>
+            )}
           </div>
           <div style={{ textAlign: 'right', marginTop: 10 }}>
             <button onClick={dispensar} style={{ background: '#0D63DB', color: '#fff', border: 'none',

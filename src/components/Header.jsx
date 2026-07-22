@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
@@ -143,6 +143,14 @@ export default function Header() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  // "Instalar app" (PWA): só faz sentido quando ainda NÃO está instalado (standalone).
+  const [podeInstalar, setPodeInstalar] = useState(false);
+  React.useEffect(() => {
+    const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches
+      || window.navigator.standalone === true;
+    setPodeInstalar(!standalone);
+  }, []);
+  const abrirInstalarApp = () => window.dispatchEvent(new Event('tsn:pwa-install'));
 
   const ROLES_CALC = ['explorador', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
   const linksPublicos = [
@@ -325,6 +333,14 @@ export default function Header() {
                       {item.icon ? <item.icon size={14} /> : null} {item.label}
                     </button>
                   ))}
+                  {podeInstalar && (
+                    <button onClick={() => { abrirInstalarApp(); setShowUserMenu(false); }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#0D63DB', fontSize: 13, fontWeight: 700, borderRadius: 8, textAlign: 'left' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                      <Download size={14} /> Instalar app
+                    </button>
+                  )}
                   <div style={{ height: 1, background: '#f1f5f9', margin: '4px 0' }} />
                   <button onClick={handleLogout}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 13, fontWeight: 600, borderRadius: 8 }}
@@ -400,6 +416,12 @@ export default function Header() {
             <button onClick={() => { nav('/admin'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               ⚙️ Admin
+            </button>
+          )}
+          {podeInstalar && (
+            <button onClick={() => { abrirInstalarApp(); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#60a5fa', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              <Download size={16} /> Instalar app
             </button>
           )}
           {user
