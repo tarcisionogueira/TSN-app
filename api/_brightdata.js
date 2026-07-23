@@ -34,6 +34,13 @@ const SUBCOTAS = {
   // Vercel (403). Sub-cota pequena — o auto-ajuste do radar já faz só 1 pull OK/dia
   // (~6-18 req), então ~120/semana sobra e não devora o orçamento dos demais.
   radar: parseInt(process.env.BRIGHTDATA_MAX_RADAR_SEMANA || '250', 10),
+  // Cluster SOLEON multi-tenant (calil/vegas/3torres...): só o 3torres está atrás de
+  // Cloudflare — o scraper tenta fetch GRÁTIS primeiro e só cai no Web Unlocker quando
+  // barrado, então o gasto real fica bem abaixo desta sub-cota.
+  soleon: parseInt(process.env.BRIGHTDATA_MAX_SOLEON_SEMANA || '150', 10),
+  // Cluster "Gestão de Leilões" PHP (extrajust/lancetotal/lancenoleilao/granado): backend
+  // ÚNICO (mesmo idLeilao nos 4 domínios) atrás de Cloudflare → 1 fonte, Web Unlocker.
+  gestao: parseInt(process.env.BRIGHTDATA_MAX_GESTAO_SEMANA || '150', 10),
 };
 // Contagem por propósito na semana corrente, mantida na memória do processo. A
 // paginação profunda (o caso que estoura a cota) roda numa única invocação, então
