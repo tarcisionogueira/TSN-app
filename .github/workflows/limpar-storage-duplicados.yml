@@ -1,0 +1,31 @@
+name: Limpar storage duplicado/órfão (documentos)
+
+# Limpeza pontual do bucket 'documentos' (legado do bug do Date.now no caminho, já corrigido).
+# Manual. DRY-RUN por padrão — passe dryrun=0 p/ apagar de verdade.
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = só lista (dry-run); 0 = apaga'
+        required: false
+        default: '1'
+
+jobs:
+  limpar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Limpar storage
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LIMPAR_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
+        run: node scripts/limpar-storage-duplicados.mjs
