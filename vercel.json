@@ -53,6 +53,7 @@
     { "path": "/api/reconciliar-asaas-cron",      "schedule": "45 */6 * * *" },
     { "path": "/api/seguranca-auditoria-cron",    "schedule": "15 5 * * 1"   },
     { "path": "/api/regenerar-relatorios-cron",   "schedule": "0 */6 * * *"  },
-    { "path": "/api/radar-editais-cron",          "schedule": "0 */4 * * *"  }
+    { "path": "/api/radar-editais-cron",          "schedule": "0 */4 * * *"  },
+    { "path": "/api/backup-r2-cron",              "schedule": "40 4 * * *"   }
   ]
 }
