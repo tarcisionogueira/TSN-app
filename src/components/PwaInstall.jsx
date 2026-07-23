@@ -6,7 +6,11 @@ import { useEffect, useState } from 'react';
 //  • iOS/Safari: não há prompt programático → mostra a instrução manual "Compartilhar →
 //    Adicionar à Tela de Início" (é o que destrava, inclusive, o push no iPhone).
 //  • Se já está instalado (display-mode: standalone) ou o usuário dispensou, não aparece.
+//  • AUTO-OFERTA no máximo UMA VEZ (flag `ofertado`): depois disso o usuário instala pelo
+//    item FIXO do menu ("Instalar app"). Evita o popup reaparecer toda visita (inclusive no
+//    iOS, onde não dá para detectar de forma confiável que já foi instalado pelo Safari).
 const DISPENSADO = 'bidpro_pwa_dispensado';
+const OFERTADO = 'bidpro_pwa_ofertado';
 
 function ehStandalone() {
   return window.matchMedia?.('(display-mode: standalone)')?.matches
@@ -28,18 +32,22 @@ export default function PwaInstall() {
 
   useEffect(() => {
     const dispensadoAntes = () => localStorage.getItem(DISPENSADO) === '1';
+    const jaOfertado = () => localStorage.getItem(OFERTADO) === '1';
+    const marcarOfertado = () => { try { localStorage.setItem(OFERTADO, '1'); } catch { /* ok */ } };
+    // Auto-oferta UMA vez só: instalado OU dispensado OU já ofertado → não aparece sozinho.
+    const podeAutoOfertar = () => !ehStandalone() && !dispensadoAntes() && !jaOfertado();
 
     // beforeinstallprompt: GUARDA sempre o evento (o gatilho do menu precisa dele),
-    // mas só auto-abre o banner se não estiver instalado nem tiver sido dispensado.
+    // mas só auto-abre o banner UMA vez (depois, via item fixo do menu).
     const onPrompt = (e) => {
       e.preventDefault();
       setPrompt(e);
-      if (!ehStandalone() && !dispensadoAntes()) setVisivel(true);
+      if (podeAutoOfertar()) { setVisivel(true); marcarOfertado(); }
     };
     window.addEventListener('beforeinstallprompt', onPrompt);
 
     const onInstalled = () => { setVisivel(false); setPrompt(null); setForcado(false);
-      try { localStorage.setItem(DISPENSADO, '1'); } catch { /* ok */ } };
+      try { localStorage.setItem(DISPENSADO, '1'); localStorage.setItem(OFERTADO, '1'); } catch { /* ok */ } };
     window.addEventListener('appinstalled', onInstalled);
 
     // Gatilho manual pelo menu interno / landing ("Instalar app"): abre SEMPRE
@@ -50,9 +58,8 @@ export default function PwaInstall() {
     };
     window.addEventListener('tsn:pwa-install', onManual);
 
-    // iOS Safari não dispara beforeinstallprompt — auto-oferta a instrução manual
-    // (só se não estiver instalado nem dispensado).
-    if (ehIOS() && !ehStandalone() && !dispensadoAntes()) setVisivel(true);
+    // iOS Safari não dispara beforeinstallprompt — auto-oferta a instrução manual UMA vez.
+    if (ehIOS() && podeAutoOfertar()) { setVisivel(true); marcarOfertado(); }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', onPrompt);
