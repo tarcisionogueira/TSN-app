@@ -337,11 +337,19 @@ export default async function handler(req) {
     const buckets = d.por_bucket || {};
     const maior = Object.entries(buckets).sort((a, b) => (b[1] || 0) - (a[1] || 0))[0];
     const maiorTxt = maior ? ` — maior bucket: ${maior[0]} ${gb(maior[1]).toFixed(1)}GB` : '';
-    const limiteGb = Number(process.env.STORAGE_LIMITE_GB || 8);
-    const pct = limiteGb > 0 ? Math.round((stG / limiteGb) * 100) : 0;
-    const base = `Storage ${stG.toFixed(1)}GB · DB ${dbG.toFixed(2)}GB (teto ${limiteGb}GB → ${pct}%)${maiorTxt}.`;
-    if (limiteGb > 0 && stG >= limiteGb) return { status: 'erro', detalhe: `${base} ACIMA do teto do plano — risco de bloqueio/pausa. Upgrade do plano OU limpeza do bucket dominante.` };
-    if (pct >= 80) return { status: 'aviso', detalhe: `${base} Perto do teto — planejar upgrade/limpeza.` };
+    // O plano tem DOIS tetos DIFERENTES: o disco do BANCO (Postgres) e o FILE STORAGE.
+    // No Pro: DB disk ~8GB, file storage ~100GB incluídos (egress ~250GB é outra coisa).
+    // BUG anterior: comparava o FILE STORAGE contra 8GB (o teto do BANCO) → falso "ACIMA
+    // do teto" quando o bucket `documentos` passava de 8GB, mesmo com <12% do storage real.
+    // Agora cada recurso é medido contra o SEU próprio teto.
+    const stLimite = Number(process.env.STORAGE_LIMITE_GB || 100); // file storage (Pro: 100GB)
+    const dbLimite = Number(process.env.DB_LIMITE_GB || 8);        // disco do Postgres (Pro: 8GB)
+    const stPct = stLimite > 0 ? Math.round((stG / stLimite) * 100) : 0;
+    const dbPct = dbLimite > 0 ? Math.round((dbG / dbLimite) * 100) : 0;
+    const base = `Storage ${stG.toFixed(1)}GB/${stLimite}GB (${stPct}%) · DB ${dbG.toFixed(2)}GB/${dbLimite}GB (${dbPct}%)${maiorTxt}.`;
+    const estourou = (stLimite > 0 && stG >= stLimite) || (dbLimite > 0 && dbG >= dbLimite);
+    if (estourou) return { status: 'erro', detalhe: `${base} ACIMA do teto do plano — risco de bloqueio/pausa. Upgrade do plano OU limpeza do maior bucket.` };
+    if (stPct >= 80 || dbPct >= 80) return { status: 'aviso', detalhe: `${base} Perto do teto — planejar upgrade/limpeza.` };
     return { status: 'ok', detalhe: base };
   }));
 
