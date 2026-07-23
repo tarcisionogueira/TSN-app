@@ -196,8 +196,13 @@ export default async function handler(req) {
     const limite = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     const r = await sb(`erros_cliente?select=msg,rota,ocorrencias,user_id&resolvido=eq.false&ultima_em=gte.${limite}&order=ocorrencias.desc&limit=50`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const erros = await r.json();
-    if (!Array.isArray(erros) || erros.length === 0) return { status: 'ok', detalhe: 'Nenhum erro de runtime do cliente nas últimas 24h' };
+    const brutos = await r.json();
+    // Ignora CHUNK VELHO pós-deploy: é auto-recuperável (o app recarrega sozinho) e não é bug
+    // acionável — não deve escalar a saúde para ERRO a cada deploy. O cliente já quase não loga
+    // isso (só quando fica preso); este filtro é a 2ª camada de defesa.
+    const EH_CHUNK = /preloadError|chunk stale|importing a module|dynamically imported module|module script|reading 'default'/i;
+    const erros = (Array.isArray(brutos) ? brutos : []).filter(e => !EH_CHUNK.test(String(e.msg || '')));
+    if (erros.length === 0) return { status: 'ok', detalhe: 'Nenhum erro de runtime do cliente (fora chunk pós-deploy, auto-recuperável) nas últimas 24h' };
     const totalOcorr = erros.reduce((s, e) => s + (e.ocorrencias || 1), 0);
     const afetaLogado = erros.some(e => e.user_id);
     const pior = erros[0];

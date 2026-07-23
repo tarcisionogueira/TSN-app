@@ -146,7 +146,7 @@ export default function HomeCliente() {
         <div style={{ background: 'white', border: '2px solid #ddd6fe', borderRadius: 18, padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 88 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Gift size={18} color="#7c3aed" />
-            <div style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>Indique e Ganhe</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>Programa de Parceiros</div>
           </div>
           <div style={{ fontSize: 12.5, color: '#4c1d95', lineHeight: 1.65 }}>
             {ehPagoCliente ? (
