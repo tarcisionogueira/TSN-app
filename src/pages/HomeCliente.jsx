@@ -14,12 +14,12 @@ const PLANO_INFO = {
   advogado:          { nome: 'Jurídico',             limite: null, cor: '#0d9488', indica: false },
   consultor:         { nome: 'Consultor',            limite: null, cor: '#d97706', indica: false },
   explorador:        { nome: 'Explorador',           limite: 3,  cor: '#64748b', indica: false },
-  top2:              { nome: 'Investidor Pro',       limite: 15, cor: '#0D63DB', indica: true  },
-  top2_anual:        { nome: 'Investidor Pro',       limite: 15, cor: '#0D63DB', indica: true  },
-  assessorado:       { nome: 'Assessorado',          limite: 15, cor: '#d97706', indica: false },
-  assessorado_anual: { nome: 'Assessorado',          limite: 15, cor: '#d97706', indica: false },
-  clube:             { nome: 'Membro Leilão Club',   limite: 15, cor: '#059669', indica: false },
-  clube_anual:       { nome: 'Membro Leilão Club',   limite: 15, cor: '#059669', indica: false },
+  top2:              { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
+  top2_anual:        { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
+  assessorado:       { nome: 'Assessorado',          limite: 10, cor: '#d97706', indica: false },
+  assessorado_anual: { nome: 'Assessorado',          limite: 10, cor: '#d97706', indica: false },
+  clube:             { nome: 'Membro Leilão Club',   limite: 10, cor: '#059669', indica: false },
+  clube_anual:       { nome: 'Membro Leilão Club',   limite: 10, cor: '#059669', indica: false },
 };
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
@@ -32,8 +32,11 @@ const STATUS_CASO = {
 
 export default function HomeCliente() {
   const nav = useNavigate();
-  const { user, effectiveRole, effectiveUserId } = useAuth();
-  const info = PLANO_INFO[effectiveRole] || PLANO_INFO.explorador;
+  const { user, effectiveRole, effectiveUserId, planoLegado } = useAuth();
+  const infoBase = PLANO_INFO[effectiveRole] || PLANO_INFO.explorador;
+  // Assinante antigo (grandfather) mantém 15; o banco (limite_ia_efetivo) confirma na hora.
+  const ehPagoCliente = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'].includes(effectiveRole);
+  const info = (planoLegado && ehPagoCliente && infoBase.limite != null) ? { ...infoBase, limite: 15 } : infoBase;
   const primeiroNome = (user?.user_metadata?.nome || user?.email || 'Investidor').split(' ')[0].split('@')[0];
 
   const [usadas, setUsadas] = useState(0);

@@ -125,10 +125,15 @@ function BandaMercado({ n, titulo, sub, cor = '#0D63DB' }) {
 // recebe/visualiza demandas) → sem entrada aqui = limite 0.
 const LIMITE_POR_ROLE = {
   explorador: 3, consultor: 5,
-  top2: 15, top2_anual: 15,
-  assessorado: 15, assessorado_anual: 15,
-  clube: 15, clube_anual: 15,
+  top2: 10, top2_anual: 10,
+  assessorado: 10, assessorado_anual: 10,
+  clube: 10, clube_anual: 10,
 };
+// Assinantes ANTIGOS (plano_legado) mantêm 15 (grandfather). O banco é a fonte da
+// verdade (limite_ia_efetivo); aqui é só p/ o espelho de UI não bloquear antes da hora.
+const ROLES_PAGOS_CLIENTE = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+const limiteRelatorios = (role, planoLegado) =>
+  (planoLegado && ROLES_PAGOS_CLIENTE.includes(role)) ? 15 : (LIMITE_POR_ROLE[role] || 0);
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 const ROLES_SEM_LIMITE = ['admin'];
 // Documental/jurídico só a partir do Investidor Pro (explorador/consultor não têm).
@@ -139,7 +144,7 @@ export default function Analise() {
   const location = useLocation();
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, role, nome } = useAuth();
+  const { user, role, nome, planoLegado } = useAuth();
   const imovelInicial = location.state?.imovel;
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
@@ -160,7 +165,7 @@ export default function Analise() {
   const [analisesBloqueado, setAnalisesBloqueado] = useState(false);
   const [analisesUsadas, setAnalisesUsadas] = useState(0);
   const [analisesBonus, setAnalisesBonus] = useState(0);
-  const limiteRole = LIMITE_POR_ROLE[role] || 0;
+  const limiteRole = limiteRelatorios(role, planoLegado);
 
   // Lê os contadores de cota do perfil (fonte da verdade). O CONSUMO da cota
   // passou a ser server-side (/api/gerar-analise → consumir_analise_por); aqui só

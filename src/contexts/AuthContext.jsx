@@ -21,10 +21,10 @@ function isSessionExpired() {
 }
 
 async function fetchPerfil(userId) {
-  if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0, cadastroIncompleto: false };
+  if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0, cadastroIncompleto: false, planoLegado: false };
   const { data } = await supabase
     .from('perfis')
-    .select('role, ativo, inadimplente_desde, cpf_hash, lgpd_aceito, nome, telefone, endereco_cidade, endereco_uf')
+    .select('role, ativo, inadimplente_desde, cpf_hash, lgpd_aceito, nome, telefone, endereco_cidade, endereco_uf, plano_legado')
     .eq('id', userId)
     .single();
 
@@ -51,7 +51,7 @@ async function fetchPerfil(userId) {
       role_anterior: data.role,
       role: 'explorador',
     }).eq('id', userId);
-    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: cadastroFalta };
+    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: cadastroFalta, planoLegado: false };
   }
 
   // Normaliza o sufixo _anual: a modalidade anual é forma de PAGAMENTO, não um
@@ -67,6 +67,9 @@ async function fetchPerfil(userId) {
     // Cliente sem nome/telefone/CPF/cidade/UF/LGPD precisa completar antes de usar o app.
     cadastroIncompleto: ehCliente && cadastroFalta,
     nome: data?.nome || '',
+    // Grandfather de cota (assinantes antigos mantêm 15+15+5). Só o flag; a cota real
+    // vem de limite_ia_efetivo no banco — aqui é só para o espelho de UI não bloquear antes.
+    planoLegado: !!data?.plano_legado,
   };
 }
 
@@ -95,6 +98,7 @@ export function AuthProvider({ children }) {
   const [inadimplenteDias, setInad] = useState(0);
   const [cadastroIncompleto, setCadastroIncompleto] = useState(false);
   const [nome, setNome]             = useState(''); // nome do usuário (p/ cabeçalho de relatórios)
+  const [planoLegado, setPlanoLegado] = useState(false); // assinante antigo (cota 15+15+5)
   const [loading, setLoading]       = useState(true);
   // Modo suporte: admin/analista visualizando a conta de um cliente
   const [impersonate, setImpersonate] = useState(loadImpersonate);
@@ -106,6 +110,7 @@ export function AuthProvider({ children }) {
     const aplicarPerfil = (p) => {
       setRole(p.role); setAtivo(p.ativo); setInad(p.inadimplenteDias);
       setCadastroIncompleto(p.cadastroIncompleto ?? false); setNome(p.nome || '');
+      setPlanoLegado(p.planoLegado ?? false);
     };
     supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user ?? null;
@@ -155,6 +160,7 @@ export function AuthProvider({ children }) {
         setInad(p.inadimplenteDias);
         setCadastroIncompleto(p.cadastroIncompleto ?? false);
       setNome(p.nome || '');
+        setPlanoLegado(p.planoLegado ?? false);
         if (u) savePerfilCache(u.id, p);
         // Vincula o cliente ao consultor que o indicou (link de afiliado), inclusive no
         // login Google onde o trigger não recebe o código. Só no sign-in real.
@@ -210,6 +216,7 @@ export function AuthProvider({ children }) {
       setInad(p.inadimplenteDias);
       setCadastroIncompleto(p.cadastroIncompleto ?? false);
       setNome(p.nome || '');
+      setPlanoLegado(p.planoLegado ?? false);
       savePerfilCache(uid, p);
     };
     const onVisible = () => { if (document.visibilityState === 'visible') refetchPerfil(); };
@@ -238,6 +245,7 @@ export function AuthProvider({ children }) {
     setInad(p.inadimplenteDias);
     setCadastroIncompleto(p.cadastroIncompleto ?? false);
     setNome(p.nome || '');
+    setPlanoLegado(p.planoLegado ?? false);
   };
 
   // Inicia o modo suporte. Os dados continuam protegidos por RLS: admin/analista
@@ -263,7 +271,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role, nome, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto,
+      user, role, nome, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto, planoLegado,
       isAdmin: role === 'admin',
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,

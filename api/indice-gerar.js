@@ -58,7 +58,7 @@ export default async function handler(req) {
   // Papel + cota (fonte única limite_ia).
   const perfil = await perfilDe(user.id);
   const role = perfil?.role || 'explorador';
-  const limite = await rpc('limite_ia', { p_role: role, p_tipo: 'indice' }); // int | null (admin)
+  const limite = await rpc('limite_ia_efetivo', { p_user_id: user.id, p_tipo: 'indice' }); // int | null (admin/legado 5)
   const ilimitado = limite === null;
   const mesAtual = new Date().toISOString().slice(0, 7);
   const usadas = (perfil?.indice_mes === mesAtual) ? (perfil?.indice_count || 0) : 0;
