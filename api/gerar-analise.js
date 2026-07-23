@@ -126,7 +126,19 @@ async function corpusDaRegiao(uf, tipo) {
 // ÍNDICE BIDPRO — base própria de mercado por microrregião (cidade_indicadores). Cada relatório
 // SEMEIA (aprende) e LÊ o índice consolidado, sem depender de fonte externa. Best-effort: nunca
 // bloqueia o relatório. Recebe cidade_norm JÁ normalizado (coluna gerada) + bairro/lat/lng crus.
-async function semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras) {
+// SEGMENTO do Índice (mesma régua do SQL public.indice_segmento): não misturar apto com
+// terreno — unidades diferentes de R$/m². apto/casa = m² privativo/construído; terreno = m²
+// de terreno; comercial/industrial = régua própria; rural = R$/ha (fora do índice por m²).
+function segmentoIndice(tipoRaw) {
+  const t = String(tipoRaw || '').toLowerCase();
+  if (/terreno|lote|gleba|area|área/.test(t)) return 'terreno';
+  if (/rural|fazenda|sitio|sítio|chacara|chácara/.test(t)) return 'rural';
+  if (/comerc|loja|galp|barrac|industri|armaz/.test(t)) return 'comercial';
+  if (/apart|apto|flat|kitnet|studio|stúdio|cobertura|loft/.test(t)) return 'apartamento';
+  if (/casa|sobrado/.test(t)) return 'casa';
+  return 'apartamento';
+}
+async function semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return;
     const venda = Number(precoM2) > 0 ? Number(precoM2) : null;
@@ -137,19 +149,19 @@ async function semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras) {
       body: JSON.stringify({
         p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_bairro: imDb.bairro || '',
         p_lat: imDb.latitude ?? null, p_lng: imDb.longitude ?? null,
-        p_tipo: 'residencial', p_venda_m2: venda, p_aluguel_m2: aluguel, p_n: Number(nAmostras) || 0,
+        p_tipo: segmento, p_venda_m2: venda, p_aluguel_m2: aluguel, p_n: Number(nAmostras) || 0,
       }),
     });
   } catch { /* semeadura best-effort */ }
 }
-async function lerIndiceBidPro(imDb) {
+async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
     const r = await sb('rpc/indice_bidpro_regiao', {
       method: 'POST',
       body: JSON.stringify({
         p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_bairro: imDb.bairro || '',
-        p_lat: imDb.latitude ?? null, p_lng: imDb.longitude ?? null, p_tipo: 'residencial',
+        p_lat: imDb.latitude ?? null, p_lng: imDb.longitude ?? null, p_tipo: segmento,
       }),
     });
     const j = await r.json().catch(() => null);
@@ -160,7 +172,7 @@ async function lerIndiceBidPro(imDb) {
 // Grava as amostras DATADAS deste relatório em indice_amostra (base da valorização por
 // ano e da recência real). Só residencial, poison-resistente (dados da pesquisa). O prompt
 // já descarta leilão das amostras → arremate NUNCA entra aqui. Dedup pelo índice único.
-async function gravarAmostrasIndice(imDb, mercado, imovelId) {
+async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return;
     const uf = String(imDb.estado).toUpperCase();
@@ -172,7 +184,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId) {
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
       if (!(m2 >= 200 && m2 <= 50000)) continue;
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: 'residencial',
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
@@ -180,7 +192,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId) {
       const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
       if (!(mensal > 0)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: 'residencial',
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: segmento,
         especie: 'locacao', valor_m2: (vm2 && vm2 >= 1 && vm2 <= 1000) ? vm2 : null, valor_total: mensal, area_m2: area || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
@@ -191,11 +203,11 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId) {
 
 // Valorização por ano (mediana de R$/m² de VENDA) da microrregião — vai no relatório
 // como MAIS UMA referência (curva no tempo), independente do FipeZAP.
-async function lerValorizacao(imDb) {
+async function lerValorizacao(imDb, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
     const r = await sb('rpc/indice_valorizacao_anual', { method: 'POST', body: JSON.stringify({
-      p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_tipo: 'residencial', p_especie: 'venda', p_anos: 6 }) });
+      p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_tipo: segmento, p_especie: 'venda', p_anos: 6 }) });
     if (!r.ok) return null;
     const v = await r.json().catch(() => null);
     return (v && Array.isArray(v.serie) && v.serie.length >= 2) ? v : null;
@@ -762,31 +774,37 @@ export default async function handler(req, res) {
     // (2) LÊ o índice consolidado (bairro > grid > cidade) para CONSTAR no relatório
     //     (venda e locação). Só residencial: o índice é por m² privativo — terreno/rural
     //     têm régua própria (m² de terreno/hectare) e contaminariam a base residencial.
+    // ÍNDICE POR SEGMENTO: apto/casa (m² privativo), terreno (m² de terreno), comercial (régua
+    // própria). Cada segmento tem sua base — NÃO se misturam. Rural é R$/ha (fora do índice/m²).
+    // O terreno usa a ÁREA DE TERRENO (não a construída) para o R$/m².
     mercado.indiceBidPro = null;
-    if (baseTipo === 'residencial') {
+    const segIdx = segmentoIndice(mercadoInputs.tipoImovel || imovel?.tipo);
+    const areaTerreno = Number(mercadoInputs.areaTerrenoM2) || 0;
+    const areaSeg = segIdx === 'terreno' ? (areaTerreno || areaM2) : areaM2;
+    if (segIdx !== 'rural') {
       const nAmostras = (Number(mercado.nivel1?.totalAmostras) || 0) + (Number(mercado.nivel2?.totalAmostras) || 0)
         || ((mercado.vendas?.length || 0) + (mercado.locacoes?.length || 0));
-      const aluguelM2 = (Number(mercado.aluguelMedio) > 0 && areaM2 > 0) ? Number(mercado.aluguelMedio) / areaM2 : null;
-      await semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras);
-      mercado.indiceBidPro = await lerIndiceBidPro(imDb);
+      const aluguelM2 = (Number(mercado.aluguelMedio) > 0 && areaSeg > 0) ? Number(mercado.aluguelMedio) / areaSeg : null;
+      await semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras, segIdx);
+      mercado.indiceBidPro = await lerIndiceBidPro(imDb, segIdx);
       // Amostras datadas (valorização/recência) + curva de valorização por ano no relatório.
-      await gravarAmostrasIndice(imDb, mercado, imovelId);
-      mercado.valorizacao = await lerValorizacao(imDb);
+      await gravarAmostrasIndice(imDb, mercado, imovelId, segIdx);
+      mercado.valorizacao = await lerValorizacao(imDb, segIdx);
     }
 
     // FALLBACK ÍNDICE BIDPRO (regra do dono): sem comparativos ATIVOS de mercado na região agora
-    // (busca vazia OU fonte instável), mas COM base própria consolidada → a estimativa usa o Índice
-    // como referência, DEIXANDO EXPLÍCITO no relatório. É a forma "por falta de comparativo de
-    // mercado usamos o Índice". Só p/ base por m² privativo (residencial). Assim o cliente recebe
-    // uma estimativa útil em vez de "não estimado"; se NEM o Índice cobrir, cai no vazio (self-heal).
+    // (busca vazia OU fonte instável), mas COM base própria do MESMO segmento → a estimativa usa o
+    // Índice como referência, DEIXANDO EXPLÍCITO no relatório ("por falta de comparativo ativo,
+    // usamos o Índice"). Terreno usa m² de terreno; rural fica fora (régua de hectare no relatório).
     const indiceVenda = Number(mercado.indiceBidPro?.venda_m2) || 0;
-    if (!(valorMercado > 0) && !(precoM2 > 0) && indiceVenda > 0 && areaM2 > 0 && baseTipo === 'residencial') {
-      valorMercado = Math.round(indiceVenda * areaM2 * 0.9); // haircut conservador (asking → fechamento)
+    if (!(valorMercado > 0) && !(precoM2 > 0) && indiceVenda > 0 && areaSeg > 0 && segIdx !== 'rural') {
+      valorMercado = Math.round(indiceVenda * areaSeg * 0.9); // haircut conservador (asking → fechamento)
       mercado.precoMedioM2 = indiceVenda;
       const aluIdx = Number(mercado.indiceBidPro?.aluguel_m2) || 0;
-      if (aluIdx > 0) { mercado.aluguelMedio = Math.round(aluIdx * areaM2); valorLocacao = mercado.aluguelMedio; }
+      if (aluIdx > 0) { mercado.aluguelMedio = Math.round(aluIdx * areaSeg); valorLocacao = mercado.aluguelMedio; }
       mercado.fonteEstimativa = 'indice_bidpro';
-      mercado.comentario = `Não encontramos anúncios comparáveis ATIVOS para ${mercadoInputs.cidade || 'esta localidade'} no momento; a estimativa de mercado usa o Índice BidPro (nossa base própria por microrregião, R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m²${mercado.indiceBidPro?.nivel ? `, nível ${mercado.indiceBidPro.nivel}` : ''}) como referência. É uma referência interna consolidada das análises da plataforma, não um comparativo de anúncio ao vivo.`;
+      const rotSeg = { apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'imóvel comercial' }[segIdx] || segIdx;
+      mercado.comentario = `Não encontramos anúncios comparáveis ATIVOS de ${rotSeg} para ${mercadoInputs.cidade || 'esta localidade'} no momento; a estimativa usa o Índice BidPro (base própria por microrregião e segmento, R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m²${mercado.indiceBidPro?.nivel ? `, nível ${mercado.indiceBidPro.nivel}` : ''}) como referência. É uma referência interna consolidada das análises da plataforma, não um comparativo de anúncio ao vivo.`;
     }
 
     // CLASSIFICAÇÃO DE INTENÇÃO (revenda/locação/temporada) — consta no relatório e vira defesa no
