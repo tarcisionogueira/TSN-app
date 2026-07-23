@@ -19,8 +19,14 @@ const RE_IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)(?:[?#]|$)/i;
 // Palavras-chave de documento no caminho/nome/âncora. laudo (avaliação) e proposta
 // viraram tipos PRÓPRIOS: o laudo de avaliação traz o valor oficial e impacta o
 // mercadológico; o modelo de proposta é o documento de venda parcelada.
+// matrícula resiliente: pega a forma correta ("matrícula"/"matricula"), a
+// ACENTUADA-QUEBRADA por charset (mojibake do scraper: UTF-8 lido como Latin-1 →
+// "matrãâ­cula", com soft-hyphen U+00AD no meio), a SEM acento colada ("matrcula")
+// e a ABREVIADA ("matr-15964", "matr 129"). Sem isso, o SUPERBID gravava a
+// matrícula como anexo genérico e o laudo documental pedia "matrícula faltando".
+const RE_MATRICULA = /matr[a-zà-ÿ­]{0,4}cula|\bmatr[\s._:­-]+\d{2,}/i;
 const KW = {
-  matricula: /matr[ií]cul/i,
+  matricula: RE_MATRICULA,
   edital: /edital/i,
   laudo: /laudo|avalia[çc][ãa]o/i,
   proposta: /proposta|modelo\s*de\s*proposta/i,
@@ -58,7 +64,7 @@ function ehDocumento(url, label) {
   const alvo = `${url} ${label || ''}`;
   // Sem extensão de arquivo: só aceita se a URL/âncora cita explicitamente um doc
   // E aponta para um recurso (evita capturar a própria página do anúncio).
-  return /matr[ií]cul|edital|laudo|avalia|proposta|certid|\/docs?\/|\/documento|\/arquivo|\/anexo|\/download|blob\.core|amazonaws|storage|\/file/i.test(alvo);
+  return RE_MATRICULA.test(alvo) || /edital|laudo|avalia|proposta|certid|\/docs?\/|\/documento|\/arquivo|\/anexo|\/download|blob\.core|amazonaws|storage|\/file/i.test(alvo);
 }
 
 /**

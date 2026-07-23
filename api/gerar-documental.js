@@ -62,10 +62,17 @@ function storage(path, opts = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, ...(opts.headers || {}) },
   });
 }
+// matrícula resiliente ao rótulo cru do scraper: forma correta, ACENTUADA-QUEBRADA
+// por charset (mojibake "matrãâ­cula" com soft-hyphen), SEM acento colada ("matrcula")
+// e ABREVIADA ("matr-15964"). O SUPERBID gravava a matrícula como anexo genérico —
+// sem isto ela caía para o fim da fila de leitura (prioridade de 'anexo') e o GATE
+// dizia "matrícula faltando" mesmo com o PDF já no nosso acervo.
+const RE_MATRICULA_ROTULO = /matr[a-zà-ÿ­]{0,4}cula|\bmatr[\s._:­-]+\d{2,}/i;
 function tipoDoRotulo(rotulo) {
   const r = String(rotulo || '').toLowerCase();
-  if ((r.includes('matríc') || r.includes('matric')) && r.includes('registr')) return 'matricula_registrada';
-  if (r.includes('matríc') || r.includes('matric')) return 'matricula';
+  const ehMatricula = RE_MATRICULA_ROTULO.test(r);
+  if (ehMatricula && r.includes('registr')) return 'matricula_registrada';
+  if (ehMatricula) return 'matricula';
   if (r.includes('edital')) return 'edital';
   if (r.includes('regras')) return 'regras_venda';
   if (r.includes('carta') && r.includes('arremat')) return 'carta_arrematacao';
@@ -510,7 +517,17 @@ export default async function handler(req, res) {
     const ehPagina = (u) => /matricula\.asp|detalhe-imovel\.asp/i.test(u || '');
     // tipo: conhecido do anexo (a.tipo) OU inferido do rótulo. Alimenta o GATE que
     // exige matrícula E edital (não basta um anexo genérico qualquer).
-    const add = (u, rotulo, tipo) => { if (u && /^https?:\/\//.test(u) && !ehPagina(u) && !urls.find(x => x.url === u)) urls.push({ url: u, rotulo, tipo: tipo || tipoDoRotulo(rotulo) }); };
+    // O scrape marca MUITA coisa como tipo 'anexo' (genérico), inclusive matrículas cujo
+    // nome veio quebrado ("matrãâ­cula") ou abreviado ("matr-15964"). Um 'anexo' genérico
+    // NÃO pode ofuscar o que o rótulo revela: se o nome infere um tipo específico, ele
+    // vence — senão a matrícula ficava com prioridade de anexo (fim da fila) e o GATE a
+    // dava como faltando. Tipo específico já vindo do anexo (laudo/edital…) é preservado.
+    const add = (u, rotulo, tipo) => {
+      if (!(u && /^https?:\/\//.test(u) && !ehPagina(u) && !urls.find(x => x.url === u))) return;
+      const inferido = tipoDoRotulo(rotulo);
+      const t = (tipo && tipo !== 'anexo') ? tipo : (inferido || tipo || null);
+      urls.push({ url: u, rotulo, tipo: t });
+    };
     // 1º: anexos guardados no storage (capturados por navegador ou enviados pela equipe).
     try {
       const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url&limit=10`)).json();
