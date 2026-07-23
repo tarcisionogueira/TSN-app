@@ -1,0 +1,36 @@
+name: Recon profundo (listing+detalhe de um cluster)
+
+# Passo 2 do recon-first: busca URLs concretas (listing + páginas de detalhe) de um cluster
+# já classificado, e imprime extratos estruturados p/ desenhar os mappers do scraper novo.
+# Só diagnostica (log-only). Manual. Custo controlado por DEEP_MAX. Bright Data DIRETO.
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'URLs completas csv (listing + detalhe do cluster)'
+        required: true
+      max:
+        description: 'Teto de requests Bright Data. Default 12.'
+        required: false
+        default: '12'
+
+jobs:
+  recon-deep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon profundo
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          DEEP_URLS: ${{ github.event.inputs.urls }}
+          DEEP_MAX: ${{ github.event.inputs.max || '12' }}
+        run: node scripts/recon-deep.mjs
