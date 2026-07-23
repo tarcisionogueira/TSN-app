@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { MapPin, TrendingUp, Search, Home, Building2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
+import { useAuth } from '../contexts/AuthContext';
+
+// Quem pode GERAR o índice de uma região nova (o servidor é a fonte da verdade — isto é só UI).
+const PODE_GERAR = ['admin', 'top2', 'assessorado', 'clube', 'analista', 'advogado'];
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
@@ -12,10 +16,14 @@ const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFract
 // aponta para gerar (recurso dos planos pagos).
 export default function IndiceConsulta() {
   const nav = useNavigate();
-  const [form, setForm] = React.useState({ cidade: '', uf: 'SP', bairro: '', tipo: 'apartamento' });
+  const { effectiveRole } = useAuth();
+  const podeGerar = PODE_GERAR.includes(effectiveRole);
+  const [form, setForm] = React.useState({ cidade: '', uf: 'SP', bairro: '', tipo: 'apartamento', lat: null, lng: null });
   const [loading, setLoading] = React.useState(false);
   const [res, setRes] = React.useState(null);
   const [erro, setErro] = React.useState('');
+  const [gerando, setGerando] = React.useState(false);
+  const [gerMsg, setGerMsg] = React.useState('');
   const [manual, setManual] = React.useState(false); // fallback: preencher cidade/UF/bairro à mão
   const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' && window.innerWidth < 640);
   React.useEffect(() => {
@@ -27,7 +35,7 @@ export default function IndiceConsulta() {
   const consultar = async (e) => {
     e?.preventDefault?.();
     if (!form.cidade.trim() || !form.uf) { setErro('Informe a cidade e a UF.'); return; }
-    setLoading(true); setErro(''); setRes(null);
+    setLoading(true); setErro(''); setRes(null); setGerMsg('');
     try {
       const r = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(form) });
       const d = await r.json();
@@ -35,6 +43,21 @@ export default function IndiceConsulta() {
       setRes(d);
     } catch (e2) { setErro(e2.message); }
     setLoading(false);
+  };
+
+  // Gera o índice desta localidade (região não mapeada) e reconsulta p/ exibir.
+  const gerar = async () => {
+    setGerando(true); setGerMsg('');
+    try {
+      const r = await apiCall('/api/indice-gerar', { method: 'POST', body: JSON.stringify(form) });
+      const d = await r.json();
+      if (!r.ok) { setGerMsg(d.error || 'Não foi possível gerar.'); setGerando(false); return; }
+      if (!d.gerado) { setGerMsg('Ainda não há imóveis suficientes na nossa base nesta localidade nem para gerar. Tente uma cidade/bairro com mais amostras.'); setGerando(false); return; }
+      const rc = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(form) });
+      const dc = await rc.json();
+      if (rc.ok) { setRes(dc); setGerMsg(''); }
+    } catch (e) { setGerMsg(e.message || 'Falha ao gerar.'); }
+    setGerando(false);
   };
 
   const vz = res?.valorizacao;
@@ -62,6 +85,8 @@ export default function IndiceConsulta() {
                 cidade: end.cidade || f.cidade,
                 uf: (end.uf || f.uf || '').toUpperCase(),
                 bairro: end.bairro || f.bairro,
+                lat: end.lat ?? f.lat,
+                lng: end.lng ?? f.lng,
               }))}
             />
             {form.cidade && (
@@ -117,11 +142,25 @@ export default function IndiceConsulta() {
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: '18px 20px' }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>Região ainda não mapeada</div>
           <div style={{ fontSize: 13.5, color: '#78350f', lineHeight: 1.6, marginBottom: 14 }}>
-            Ainda não temos amostras suficientes para <strong>{form.cidade}/{form.uf}{form.bairro ? ` · ${form.bairro}` : ''}</strong>. Nos planos pagos você poderá <strong>gerar o índice desta localidade</strong> na hora (em breve).
+            Ainda não temos o índice de <strong>{form.cidade}/{form.uf}{form.bairro ? ` · ${form.bairro}` : ''}</strong>.
+            {podeGerar
+              ? ' Gere agora a partir da nossa base de imóveis analisados.'
+              : ' Nos planos pagos você pode gerar o índice desta localidade na hora.'}
           </div>
-          <button onClick={() => nav('/planos')} style={{ padding: '10px 18px', background: '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
-            Ver planos
-          </button>
+          {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>{gerMsg}</div>}
+          {podeGerar ? (
+            <button onClick={gerar} disabled={gerando}
+              style={{ padding: '10px 18px', background: gerando ? '#94a3b8' : '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
+              {gerando ? 'Gerando…' : '⚡ Gerar índice agora'}
+            </button>
+          ) : (
+            <button onClick={() => nav('/planos')} style={{ padding: '10px 18px', background: '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+              Ver planos
+            </button>
+          )}
+          {podeGerar && effectiveRole !== 'admin' && (
+            <div style={{ fontSize: 11, color: '#a16207', marginTop: 8 }}>Nos planos pagos: até 5 gerações de índice por mês.</div>
+          )}
         </div>
       )}
 
