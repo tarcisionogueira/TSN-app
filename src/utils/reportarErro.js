@@ -68,8 +68,9 @@ export function ehErroDeChunk(msg = '') {
     || m.includes('module script failed')
     || m.includes("'text/html' is not a valid javascript mime type"); // chunk 404 devolveu HTML
 }
-export function recarregarPorChunkStale(msg = '') {
-  if (!ehErroDeChunk(msg)) return false;
+// Recarrega UMA vez, com guarda anti-loop de 10s. Extraído para o ErrorBoundary poder
+// forçar o reload nos ERROS DERIVADOS de um chunk velho (ver houveChunkRecente).
+export function recarregarComGuarda() {
   try {
     const agora = Date.now();
     const ultimo = Number(sessionStorage.getItem('__chunk_reload_at') || 0);
@@ -79,6 +80,22 @@ export function recarregarPorChunkStale(msg = '') {
   location.reload();
   return true;
 }
+export function recarregarPorChunkStale(msg = '') {
+  if (!ehErroDeChunk(msg)) return false;
+  marcarChunkErro();
+  return recarregarComGuarda();
+}
+// Quando um chunk velho falha, o React.lazy recebe um módulo UNDEFINED e os erros que
+// vêm LOGO DEPOIS são derivados ("Cannot read properties of undefined (reading 'default')",
+// "Cannot destructure property ... of undefined"). Marcamos o instante do erro de chunk;
+// o ErrorBoundary trata qualquer erro dentro de ~10s como "chunk velho" (tela neutra +
+// reload), em vez de "Algo deu errado" + log — assim não polui a saúde nem assusta o usuário.
+export function marcarChunkErro() {
+  try { sessionStorage.setItem('__chunk_erro_at', String(Date.now())); } catch { /* ignore */ }
+}
+export function houveChunkRecente() {
+  try { return Date.now() - Number(sessionStorage.getItem('__chunk_erro_at') || 0) < 10000; } catch { return false; }
+}
 
 // Registra os handlers globais UMA vez (erros assíncronos que o ErrorBoundary não pega).
 export function instalarCapturaErros() {
@@ -87,6 +104,7 @@ export function instalarCapturaErros() {
   // Evento nativo do Vite p/ falha de preload de chunk — o caminho mais confiável.
   window.addEventListener('vite:preloadError', (e) => {
     e.preventDefault(); // não deixa virar erro não tratado
+    marcarChunkErro(); // marca a janela p/ o boundary tratar os erros derivados como chunk
     reportarErroCliente({ msg: 'vite:preloadError (chunk stale pós-deploy)', url: location.href });
     recarregarPorChunkStale('failed to fetch dynamically imported module');
   });

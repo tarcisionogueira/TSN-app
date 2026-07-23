@@ -12,8 +12,8 @@ const PLANO_INFO = {
   admin:             { nome: 'Administrador',        limite: null, cor: '#7c3aed', indica: false },
   analista:          { nome: 'Analista',             limite: null, cor: '#0d9488', indica: false },
   advogado:          { nome: 'Jurídico',             limite: null, cor: '#0d9488', indica: false },
-  consultor:         { nome: 'Consultor',            limite: null, cor: '#d97706', indica: false },
-  explorador:        { nome: 'Explorador',           limite: 3,  cor: '#64748b', indica: false },
+  consultor:         { nome: 'Consultor',            limite: null, cor: '#d97706', indica: true  },
+  explorador:        { nome: 'Explorador',           limite: 3,  cor: '#64748b', indica: true  },
   top2:              { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
   top2_anual:        { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
   assessorado:       { nome: 'Assessorado',          limite: 10, cor: '#d97706', indica: false },
@@ -149,13 +149,17 @@ export default function HomeCliente() {
             <div style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>Indique e Ganhe</div>
           </div>
           <div style={{ fontSize: 12.5, color: '#4c1d95', lineHeight: 1.65 }}>
-            Para cada pessoa que assinar o Investidor Pro pelo seu link, você ganha <strong>20% de desconto na sua mensalidade</strong>, <strong>acumulativo</strong> e válido <strong>enquanto ela continuar pagando</strong>. Indicou 5 que pagam? Sua mensalidade fica <strong>grátis</strong>.
+            {ehPagoCliente ? (
+              <>Para cada pessoa que assinar o Investidor Pro pelo seu link, você ganha <strong>20% de desconto na sua mensalidade</strong>, <strong>acumulativo</strong> e válido <strong>enquanto ela continuar pagando</strong>. Indicou 5 que pagam? Sua mensalidade fica <strong>grátis</strong>.</>
+            ) : (
+              <>Convide investidores para a BidPro. Quando alguém assina um plano pelo seu link, <strong>você é recompensado</strong>. Compartilhe seu link e comece a construir sua rede:</>
+            )}
           </div>
           <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkIndicacao}</div>
           <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
             {copiado ? <><Check size={15} /> Link copiado!</> : <><Copy size={15} /> Copiar meu link</>}
           </button>
-          <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5 }}>O desconto é aplicado automaticamente na sua próxima cobrança assim que o indicado assina.</div>
+          <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5 }}>{ehPagoCliente ? 'O desconto é aplicado automaticamente na sua próxima cobrança assim que o indicado assina.' : 'Sua recompensa é creditada automaticamente quando o indicado assina um plano.'}</div>
         </div>
       )}
     </div>

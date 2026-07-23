@@ -6,7 +6,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import './index.css'
 import { registrarServiceWorker } from './utils/push.js'
-import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale } from './utils/reportarErro.js'
+import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente } from './utils/reportarErro.js'
 
 // Registra o service worker em produção
 if (import.meta.env.PROD) {
@@ -24,7 +24,9 @@ class RootErrorBoundary extends React.Component {
     // Erro de CHUNK velho (pós-deploy, comum no PWA): não é bug — o index em cache aponta p/
     // um chunk que sumiu. Marca p/ mostrar "Atualizando…" (neutro) e recarregar sozinho, em
     // vez da tela vermelha "Algo deu errado" que pisca e assusta.
-    return { error: e, chunk: ehErroDeChunk(e?.message) };
+    // chunk = mensagem clássica de chunk OU erro DERIVADO logo após um preloadError
+    // (React.lazy com módulo undefined → "reading 'default'"/"destructure of undefined").
+    return { error: e, chunk: ehErroDeChunk(e?.message) || houveChunkRecente() };
   }
   componentDidMount() {
     // Recupera-se ao navegar: sem isto, um erro numa tela deixa o usuário PRESO no
@@ -41,6 +43,9 @@ class RootErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     // Chunk velho → recarrega sozinho (pega o index novo); anti-loop de 10s no helper.
     if (ehErroDeChunk(error?.message)) { recarregarPorChunkStale(error?.message); return; }
+    // Erro DERIVADO de um chunk velho (React.lazy undefined) logo após o preloadError:
+    // recarrega e NÃO loga (não é bug acionável, é o mesmo chunk stale).
+    if (houveChunkRecente()) { recarregarComGuarda(); return; }
     // Registra o erro no servidor (persiste em erros_cliente + Runtime Logs) p/ a saúde
     // enxergar — em produção o boundary não mostra o stack ao usuário, então sem isso
     // ficamos cegos. Centralizado em reportarErroCliente (dedup/teto/token do usuário).
