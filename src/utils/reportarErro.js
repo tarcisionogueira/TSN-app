@@ -105,17 +105,32 @@ export function instalarCapturaErros() {
   window.addEventListener('vite:preloadError', (e) => {
     e.preventDefault(); // não deixa virar erro não tratado
     marcarChunkErro(); // marca a janela p/ o boundary tratar os erros derivados como chunk
-    reportarErroCliente({ msg: 'vite:preloadError (chunk stale pós-deploy)', url: location.href });
-    recarregarPorChunkStale('failed to fetch dynamically imported module');
+    // Chunk velho pós-deploy é AUTO-RECUPERÁVEL (recarrega e resolve) → NÃO logamos (não é bug
+    // acionável e enchia a saúde de "erro" a cada deploy). Só logamos se a recarga foi BLOQUEADA
+    // pelo anti-loop (recarregou há < 10s e ainda falha) = chunk genuinamente preso, aí sim avisa.
+    if (!recarregarPorChunkStale('failed to fetch dynamically imported module')) {
+      reportarErroCliente({ msg: 'vite:preloadError PRESO (recarga bloqueada pelo anti-loop)', url: location.href });
+    }
   });
   window.addEventListener('error', (e) => {
     // Erros de recurso (img/script 404) não têm message — ignora.
-    if (e?.message) { reportarErroCliente({ msg: e.message, stack: e.error?.stack, url: location.href }); recarregarPorChunkStale(e.message); }
+    if (!e?.message) return;
+    // Chunk velho → recarrega e não loga (só loga se preso). Demais erros → loga normal.
+    if (ehErroDeChunk(e.message) || houveChunkRecente()) {
+      marcarChunkErro();
+      if (!recarregarComGuarda()) reportarErroCliente({ msg: e.message, stack: e.error?.stack, url: location.href });
+      return;
+    }
+    reportarErroCliente({ msg: e.message, stack: e.error?.stack, url: location.href });
   });
   window.addEventListener('unhandledrejection', (e) => {
     const r = e?.reason;
     const msg = r?.message || String(r);
+    if (ehErroDeChunk(msg) || houveChunkRecente()) {
+      marcarChunkErro();
+      if (!recarregarComGuarda()) reportarErroCliente({ msg, stack: r?.stack, url: location.href });
+      return;
+    }
     reportarErroCliente({ msg, stack: r?.stack, url: location.href });
-    recarregarPorChunkStale(msg);
   });
 }
