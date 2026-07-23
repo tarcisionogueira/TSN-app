@@ -40,16 +40,20 @@ export default async function handler(req) {
   const cidadeNorm = norm(body.cidade);
   const uf = String(body.uf || '').trim().toUpperCase();
   const bairroNorm = norm(body.bairro);
+  // Segmento (apartamento/casa/terreno/comercial) — o índice é por segmento (unidades de m²
+  // distintas). Default apartamento (o mais consultado). Rural fica fora (régua de hectare).
+  const SEGS = ['apartamento', 'casa', 'terreno', 'comercial'];
+  const tipo = SEGS.includes(String(body.tipo || '').toLowerCase()) ? String(body.tipo).toLowerCase() : 'apartamento';
   if (!cidadeNorm || !/^[A-Z]{2}$/.test(uf)) {
     return new Response(JSON.stringify({ error: 'Informe a cidade e a UF (2 letras).' }), { status: 400, headers });
   }
 
   try {
     const regiao = await rpc('indice_bidpro_regiao', {
-      p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: 'residencial',
+      p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo,
     });
     const valorizacao = await rpc('indice_valorizacao_anual', {
-      p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: 'residencial', p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6,
+      p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6,
     });
     const mapeado = !!(regiao && (Number(regiao.venda_m2) > 0 || Number(regiao.aluguel_m2) > 0));
     return new Response(JSON.stringify({ ok: true, mapeado, regiao: mapeado ? regiao : null, valorizacao: valorizacao || null }), { status: 200, headers });

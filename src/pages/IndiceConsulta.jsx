@@ -12,7 +12,7 @@ const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFract
 // aponta para gerar (recurso dos planos pagos).
 export default function IndiceConsulta() {
   const nav = useNavigate();
-  const [form, setForm] = React.useState({ cidade: '', uf: 'SP', bairro: '' });
+  const [form, setForm] = React.useState({ cidade: '', uf: 'SP', bairro: '', tipo: 'apartamento' });
   const [loading, setLoading] = React.useState(false);
   const [res, setRes] = React.useState(null);
   const [erro, setErro] = React.useState('');
@@ -79,6 +79,16 @@ export default function IndiceConsulta() {
           <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Bairro <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span></div>
           <input value={form.bairro} onChange={e => setForm(f => ({ ...f, bairro: e.target.value }))} placeholder="Ex: Alphaville"
             style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
+        </label>
+        <label style={{ flex: isMobile ? '1 1 100%' : '0 0 168px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Tipo</div>
+          <select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
+            style={{ width: '100%', padding: '10px 8px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', boxSizing: 'border-box' }}>
+            <option value="apartamento">Apartamento</option>
+            <option value="casa">Casa / condomínio</option>
+            <option value="terreno">Terreno / área</option>
+            <option value="comercial">Comercial / industrial</option>
+          </select>
         </label>
         <button type="submit" disabled={loading}
           style={{ flex: isMobile ? '1 1 100%' : '0 0 auto', justifyContent: 'center', padding: '11px 20px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
