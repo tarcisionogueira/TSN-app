@@ -1972,14 +1972,12 @@ export default function Busca() {
                       const m2 = im.areaM2 > 0 && im.valorMinimo ? im.valorMinimo / im.areaM2 : null;
                       const temEdital = /^https?:\/\//i.test(im.linkEdital || '');
                       const temMatricula = /^https?:\/\//i.test(im.linkMatricula || '') && !/matricula\.asp/i.test(im.linkMatricula || '');
-                      const score = im.scoreJuridico ?? im.scoreFinanceiro ?? null;
-                      if (!m2 && !temEdital && !temMatricula && score == null) return null;
+                      if (!m2 && !temEdital && !temMatricula) return null;
                       return (
                         <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
                           {m2 && <span style={{ fontSize:9, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>R$ {Number(m2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/m²</span>}
                           {temEdital && <span title="Edital disponível" style={{ fontSize:9, background:'#eff6ff', color:'#084BA6', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>📄 Edital</span>}
                           {temMatricula && <span title="Matrícula disponível" style={{ fontSize:9, background:'#f0fdf4', color:'#15803d', padding:'1px 6px', borderRadius:8, fontWeight:700 }}>📄 Matrícula</span>}
-                          {score != null && <span title="Score de análise" style={{ fontSize:9, background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:8, fontWeight:800 }}>★ {score}</span>}
                         </div>
                       );
                     })()}
