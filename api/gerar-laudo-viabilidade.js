@@ -50,6 +50,13 @@ function parseJSON(text) {
 async function anthropic(payload, fetchOpts) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) }, fetchOpts);
+  // FALHA-ALTO: erro NÃO-retryável do Anthropic não pode virar {} silencioso (laudo "vazio").
+  // Loga e propaga p/ o handler gravar status=erro e o self-heal re-tentar. Igual à /analise.
+  if (!r.ok) {
+    let corpo = ''; try { corpo = JSON.stringify(await r.clone().json()); } catch { try { corpo = await r.text(); } catch { /* corpo indisponível */ } }
+    console.error('[anthropic:laudo] HTTP', r.status, String(corpo).slice(0, 600));
+    throw new Error(`anthropic_http_${r.status}`);
+  }
   return r.json();
 }
 async function ultimoConcluido(tabela, userId, imovelId) {
