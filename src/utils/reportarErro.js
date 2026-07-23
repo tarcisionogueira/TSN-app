@@ -60,7 +60,7 @@ export async function reportarErroCliente({ msg, stack = '', url } = {}) {
 // module script failed" e o app fica quebrado até um refresh manual. Aqui recarregamos sozinho
 // (pega o index.html novo). Guarda anti-loop: só recarrega se não recarregou nos últimos 10s
 // (senão um erro de chunk persistente entraria em loop de reload).
-function ehErroDeChunk(msg = '') {
+export function ehErroDeChunk(msg = '') {
   const m = String(msg).toLowerCase();
   return m.includes('importing a module script failed')
     || m.includes('failed to fetch dynamically imported module')
@@ -68,7 +68,7 @@ function ehErroDeChunk(msg = '') {
     || m.includes('module script failed')
     || m.includes("'text/html' is not a valid javascript mime type"); // chunk 404 devolveu HTML
 }
-function recarregarPorChunkStale(msg = '') {
+export function recarregarPorChunkStale(msg = '') {
   if (!ehErroDeChunk(msg)) return false;
   try {
     const agora = Date.now();

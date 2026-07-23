@@ -6,7 +6,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import './index.css'
 import { registrarServiceWorker } from './utils/push.js'
-import { reportarErroCliente, instalarCapturaErros } from './utils/reportarErro.js'
+import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale } from './utils/reportarErro.js'
 
 // Registra o service worker em produção
 if (import.meta.env.PROD) {
@@ -19,8 +19,13 @@ if (import.meta.env.PROD) {
 instalarCapturaErros();
 
 class RootErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(e) { return { error: e }; }
+  constructor(props) { super(props); this.state = { error: null, chunk: false }; }
+  static getDerivedStateFromError(e) {
+    // Erro de CHUNK velho (pós-deploy, comum no PWA): não é bug — o index em cache aponta p/
+    // um chunk que sumiu. Marca p/ mostrar "Atualizando…" (neutro) e recarregar sozinho, em
+    // vez da tela vermelha "Algo deu errado" que pisca e assusta.
+    return { error: e, chunk: ehErroDeChunk(e?.message) };
+  }
   componentDidMount() {
     // Recupera-se ao navegar: sem isto, um erro numa tela deixa o usuário PRESO no
     // fallback (nem "voltar" sai). Ao mudar de rota (voltar/avançar/hash), zera o erro
@@ -34,6 +39,8 @@ class RootErrorBoundary extends React.Component {
     window.removeEventListener('hashchange', this._reset);
   }
   componentDidCatch(error, info) {
+    // Chunk velho → recarrega sozinho (pega o index novo); anti-loop de 10s no helper.
+    if (ehErroDeChunk(error?.message)) { recarregarPorChunkStale(error?.message); return; }
     // Registra o erro no servidor (persiste em erros_cliente + Runtime Logs) p/ a saúde
     // enxergar — em produção o boundary não mostra o stack ao usuário, então sem isso
     // ficamos cegos. Centralizado em reportarErroCliente (dedup/teto/token do usuário).
@@ -46,6 +53,17 @@ class RootErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       const dev = import.meta.env.DEV;
+      // Chunk stale: tela NEUTRA de "atualizando" enquanto o reload automático acontece —
+      // nada de "Algo deu errado". (Se o anti-loop bloquear o reload, some por navegação.)
+      if (this.state.chunk) {
+        return (
+          <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", color: '#64748b', fontSize: 14, gap: 10 }}>
+            <div style={{ width: 18, height: 18, border: '2px solid #cbd5e1', borderTopColor: '#0D63DB', borderRadius: '50%', animation: 'bp-spin 0.8s linear infinite' }} />
+            Atualizando…
+            <style>{'@keyframes bp-spin{to{transform:rotate(360deg)}}'}</style>
+          </div>
+        );
+      }
       return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: 24, fontFamily: "'Inter', sans-serif" }}>
           <div style={{ background: 'white', borderRadius: 16, padding: '36px 32px', maxWidth: 440, width: '100%', textAlign: 'center', boxShadow: '0 12px 40px rgba(0,0,0,0.1)' }}>
