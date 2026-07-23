@@ -1,0 +1,20 @@
+name: Recon Power BI MJ/SENAD (calendário de leilões)
+
+# Prova que o querydata do Power BI público do MJ responde do CI e descobre as colunas.
+# Log-only. Sem segredos (ResourceKey é público). Manual.
+on:
+  workflow_dispatch:
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recon Power BI
+        run: node scripts/recon-powerbi-mj.mjs
