@@ -249,7 +249,8 @@ function MainLayout() {
 
   if (isLoggedIn && !loading && !ativo) return <ContaInativa />;
   if (isLoggedIn && !loading) {
-    if (role === 'admin' && loc.pathname === '/') return <Navigate to="/admin" replace />;
+    // O admin/dono entra pela HOME normal (como um cliente) e acessa o painel pelo botão
+    // "⚙️ Admin" do menu (→ /admin). Antes havia um redirect forçado de "/" → "/admin".
     if (['analista','consultor','advogado'].includes(role) && loc.pathname === '/') return <Navigate to="/atendimento" replace />;
   }
   return (
