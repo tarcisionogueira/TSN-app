@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, TrendingUp, Search, Home, Building2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
@@ -50,6 +51,18 @@ export default function IndiceConsulta() {
       </p>
 
       <form onSubmit={consultar} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: 14, marginBottom: 20 }}>
+        <label style={{ flex: '1 1 100%' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Endereço, bairro ou cidade <span style={{ color: '#94a3b8', fontWeight: 400 }}>(preenche o resto sozinho)</span></div>
+          <EnderecoAutocomplete
+            placeholder="Ex: Alameda Dourada 71, Barueri"
+            onSelect={(end) => setForm(f => ({
+              ...f,
+              cidade: end.cidade || f.cidade,
+              uf: (end.uf || f.uf || '').toUpperCase(),
+              bairro: end.bairro || f.bairro,
+            }))}
+          />
+        </label>
         <label style={{ flex: isMobile ? '1 1 100%' : 2, minWidth: isMobile ? '100%' : 160 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Cidade</div>
           <input value={form.cidade} onChange={e => setForm(f => ({ ...f, cidade: e.target.value, }))} placeholder="Ex: Barueri"
