@@ -2532,7 +2532,7 @@ export default function Analise() {
           </div>
           {mercadoSemDados && (
             <div style={{ fontSize:12.5, lineHeight:1.6, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, padding:'10px 12px', marginBottom:14 }}>
-              A pesquisa de mercado <strong>não retornou amostras desta vez</strong> (fonte instável no momento). <strong>Gere o relatório novamente</strong> ou informe o valor de mercado/anexe dados. Os indicadores de retorno (ROI/TIR) ficam indisponíveis até haver estimativa — <strong>não é uma reprovação da operação</strong>.
+              A pesquisa de mercado <strong>não retornou amostras desta vez</strong> (fonte instável no momento). <strong>Não consumimos sua cota</strong> e o sistema vai <strong>tentar de novo automaticamente</strong> (a cada poucas horas, por até 48h) — quando preencher, aparece aqui sozinho. Se preferir na hora, <strong>gere novamente</strong> (grátis) ou informe o valor de mercado. Os indicadores de retorno (ROI/TIR) ficam indisponíveis até haver estimativa — <strong>não é uma reprovação da operação</strong>.
             </div>
           )}
           <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:10 }}>
@@ -2552,7 +2552,7 @@ export default function Analise() {
               ? { bg:'#fffbeb', bd:'#fde68a', fg:'#92400e' }
               : (isViavel ? { bg:'#f0fdf4', bd:'#bbf7d0', fg:'#15803d' } : { bg:'#fef2f2', bd:'#fecaca', fg:'#991b1b' });
             const txt = mercadoSemDados
-              ? 'Gere o relatório novamente para obter a estimativa de mercado e os indicadores de retorno (a fonte estava instável). Se preferir, informe o valor de mercado manualmente.'
+              ? 'O sistema já vai tentar de novo automaticamente (por até 48h, sem consumir sua cota) para obter a estimativa de mercado e os indicadores de retorno. Se preferir na hora, gere novamente (grátis) ou informe o valor de mercado manualmente.'
               : (isUsoProprio
                 ? 'Imóvel adequado ao uso próprio pelo preço analisado. Confirme os documentos com o time.'
                 : (isViavel

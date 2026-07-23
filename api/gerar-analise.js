@@ -821,7 +821,15 @@ export default async function handler(req, res) {
     const AVISO_MERCADO = '§ SEÇÃO: LEMBRETE E PRÓXIMO PASSO\nEsta análise mercadológica é gerada com apoio de inteligência artificial e tem caráter informativo — pode conter imprecisões e não substitui a verificação presencial. Antes de decidir, recomendamos VISITAR o imóvel pessoalmente ou AGENDAR com um corretor de confiança para conhecer um imóvel similar na região, confirmando estado de conservação, localização e o valor praticado no mercado.';
     if (parecer) parecer += `\n\n${AVISO_MERCADO}`;
 
-      const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
+      // MERCADO VAZIO (fonte instável no momento → 0 amostras / sem valor): marca no result.
+      // Serve para (a) o front mostrar "não estimado" e o servidor NÃO cobrar cota, e (b) o
+      // self-heal (regenerar-relatorios-cron) re-tentar com orçamento fresco por até 48h. Uma
+      // pesquisa que se PREENCHE numa próxima tentativa limpa o flag e para de ser re-tentada.
+      const mercadoVazio = !reaproveitado
+        && !(Number(valorMercado) > 0)
+        && !(Number(mercado?.precoMedioM2) > 0)
+        && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
+      const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm, mercadoVazio };
       return { result, valorMercado, avalDb, vminImovel };
     })()]);
 
@@ -834,9 +842,8 @@ export default async function handler(req, res) {
     // MERCADO VAZIO (fonte instável no momento → 0 amostras / sem valor): o relatório é
     // salvo e mostrado como "não estimado", mas NÃO cobramos a cota — o cliente gera de novo
     // sem custo. Antes, um relatório "concluído mas vazio" consumia o crédito injustamente.
-    const mercadoVazio = !(Number(result.valorMercado) > 0)
-      && !(Number(result.mercado?.precoMedioM2) > 0)
-      && (((result.mercado?.nivel1?.vendas?.length || 0) + (result.mercado?.nivel2?.vendas?.length || 0)) === 0);
+    // O flag foi calculado junto do result (acima) e será re-tentado pelo self-heal por 48h.
+    const mercadoVazio = !!result.mercadoVazio;
     if (mercadoVazio && cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); cota.estornada = true; } catch { /* estorno best-effort */ }
     }
