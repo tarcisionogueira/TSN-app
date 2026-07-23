@@ -15,9 +15,11 @@ function scoreColor(score) {
  *   size             'sm' | 'md'  (default 'sm')
  */
 export default function ScoreRisco({ scoreFinanceiro, scoreJuridico, size = 'sm' }) {
-  // Render nothing if both are null/undefined
-  const hasFinanceiro = scoreFinanceiro !== null && scoreFinanceiro !== undefined;
-  const hasJuridico   = scoreJuridico   !== null && scoreJuridico   !== undefined;
+  // 0 = "ainda não medido" (backfill pendente / sem laudo), NÃO uma nota real — mesma
+  // convenção do src/utils/score.js (que exige > 0 e esconde o 0 do selo BidPro). Sem
+  // isto, um score_financeiro=0 legado virava uma pílula VERMELHA falsa "Financeiro: 0".
+  const hasFinanceiro = scoreFinanceiro !== null && scoreFinanceiro !== undefined && scoreFinanceiro > 0;
+  const hasJuridico   = scoreJuridico   !== null && scoreJuridico   !== undefined && scoreJuridico   > 0;
   if (!hasFinanceiro && !hasJuridico) return null;
 
   const isMd = size === 'md';
@@ -62,14 +64,14 @@ export default function ScoreRisco({ scoreFinanceiro, scoreJuridico, size = 'sm'
   const financeiroPill = (
     <div style={pillStyle(scoreFinanceiro, hasFinanceiro)}>
       <div style={dotStyle(scoreFinanceiro, hasFinanceiro)} />
-      {hasFinanceiro ? `Financeiro: ${scoreFinanceiro}` : 'Financeiro: —'}
+      {hasFinanceiro ? `Financeiro: ${scoreFinanceiro}/100` : 'Financeiro: —'}
     </div>
   );
 
   const juridicoPill = (
     <div style={pillStyle(scoreJuridico, hasJuridico)}>
       <div style={dotStyle(scoreJuridico, hasJuridico)} />
-      {hasJuridico ? `Jurídico: ${scoreJuridico}` : <span style={{ fontStyle: 'italic' }}>Sem laudo</span>}
+      {hasJuridico ? `Jurídico: ${scoreJuridico}/100` : <span style={{ fontStyle: 'italic' }}>Sem laudo</span>}
     </div>
   );
 
