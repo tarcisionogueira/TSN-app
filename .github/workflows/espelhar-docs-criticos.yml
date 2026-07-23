@@ -1,0 +1,35 @@
+name: Espelhar documentos insubstituíveis (backup off-Supabase)
+
+# Copia os poucos docs que a re-captura NÃO recupera (uploads humanos + comprovantes) e
+# guarda como ARTEFATO (fora do Supabase, retenção 90 dias). Semanal + manual.
+on:
+  schedule:
+    - cron: '0 5 * * 0'   # domingo 05:00 UTC
+  workflow_dispatch:
+
+jobs:
+  espelhar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Baixar docs insubstituíveis
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BACKUP_DIR: backup-criticos
+        run: node scripts/espelhar-docs-criticos.mjs
+      - name: Guardar como artefato (90 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-criticos-${{ github.run_id }}
+          path: backup-criticos/
+          retention-days: 90
+          if-no-files-found: warn

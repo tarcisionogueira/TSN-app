@@ -1,0 +1,36 @@
+name: Repopular documentos (recuperação pós-catástrofe)
+
+# Re-enfileira imóveis ATIVOS cujos arquivos sumiram do storage → o cron captura-documentos
+# re-baixa das fontes. Uso em recuperação. DRY-RUN por padrão. Manual.
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = só conta (dry-run); 0 = enfileira'
+        required: false
+        default: '1'
+      todos:
+        description: '1 = TODOS os imóveis ativos com anexo (re-verificação completa)'
+        required: false
+        default: '0'
+
+jobs:
+  repopular:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Repopular fila de documentos
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          REPOPULAR_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
+          REPOPULAR_TODOS: ${{ github.event.inputs.todos || '0' }}
+        run: node scripts/repopular-documentos.mjs
