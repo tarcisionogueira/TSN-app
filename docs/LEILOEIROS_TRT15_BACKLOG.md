@@ -16,6 +16,28 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
 
 ---
 
+## 🚀 23/07 — RECON VIVO (Bright Data) + INTEGRAÇÃO POR CLUSTER
+O recon-1 (`recon-leiloeiros-backlog`) classificou a plataforma pela home; o recon-2
+(`recon-deep`, listing+detalhe) revelou a estrutura viva. Os 0-acervo se agrupam em POUCOS
+clusters de plataforma — **1 scraper onboarda vários**:
+
+| Cluster | Domínios | Estrutura | Acesso | Scraper |
+|---|---|---|---|---|
+| **SOLEON** | 3torres, calil, vegas (+ RJ Leilões já vivo) | listagem `/lotes/imovel?tipo=imovel&page=N`; detalhe `/item/{id}/detalhes` | Bright Data (bloqueiam datacenter mesmo sem CF aparente) | `scraper-soleon.mjs` ✅ |
+| **Gestão de Leilões (PHP)** | extrajust, lancetotal, lancenoleilao, granado | `leilao.php?idLeilao=N` = EVENTO multi-lote inline; latin1; filtra `CATEGORIA` | Bright Data (Cloudflare) | `scraper-gestao.mjs` ✅ |
+| **Vlance /v3/** | verdeamarelo, sudeste, capitalvalor | `/leilao/index/imoveis`, hasApi | — | ⏳ próximo |
+| **SUPERBID rede** | zaccarino, crepaldi | loja oficial Superbid | rede já raspada | verificar cobertura |
+| **WordPress/Nuxt** | e-confianca, (osvaldo/sanches/hisa? backend comum `/leilao/N`) | SPA Vue `LoteCard.vue` | — | ⏳ investigar |
+
+**Correções de plataforma vs. recon-1 (por evidência viva):** destak=**Vlance** (não indep.);
+verdeamarelo/sudeste/capitalvalor=**Vlance+LJUD**; zaccarino/crepaldi=**Superbid**;
+e-confianca=**WordPress+Nuxt**; gustavoreis/valero=**SUPORTE** (já integrados, #201).
+
+**Sub-cotas Bright Data** adicionadas: `soleon`=150/sem, `gestao`=150/sem (o teto global de
+450/sem no banco segue como trava dura de custo).
+
+---
+
 ## ✅ JÁ COBERTOS (via portal que já raspamos — confirmar cobertura, custo ~0)
 Match por NOME do leiloeiro no nosso acervo (⚠️ confirmar que é o mesmo CPF/leiloeiro):
 - [x] `webleiloes.com.br` → **WEBLEILOES** (direto, 92 ativos)
@@ -39,6 +61,10 @@ Match por NOME do leiloeiro no nosso acervo (⚠️ confirmar que é o mesmo CPF
 
 ## 🔲 A INTEGRAR / VERIFICAR (sem match no acervo — checar portal antes de scraper dedicado)
 > Passo 1 para CADA: recon rápido — plataforma? já está no LJUD/outro portal? tem JSON/API?
+- [x] `calilleiloes.com.br` → **SOLEON** (`scraper-soleon.mjs`, 23/07)
+- [x] `vegasleiloes.com.br` → **SOLEON** (`scraper-soleon.mjs`, 23/07)
+- [x] `3torresleiloes.com.br` → **SOLEON** (`scraper-soleon.mjs`, 23/07)
+- [~] `extrajustleiloes.com.br` / `lancetotal.com.br` / `lancenoleilao.com.br` / `granadoleiloes.com.br` → **Gestão de Leilões PHP** (`scraper-gestao.mjs`, 23/07)
 - [ ] `crepaldileiloes.com.br`
 - [ ] `planaltoleiloes.com.br`
 - [ ] `e-leiloeiro.com.br`  *(pode ser plataforma white-label — alto valor se onboarda vários)*
