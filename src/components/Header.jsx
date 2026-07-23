@@ -226,7 +226,11 @@ export default function Header() {
           </button>
         </div>
       )}
-      <div style={{ background: '#111111', borderBottom: '1px solid #111111' }}>
+      {/* paddingTop com o safe-area: como o index.html usa viewport-fit=cover + status bar
+          translúcida, sem isto a barra do logo/menu ficava POR BAIXO do relógio/bateria no
+          iPhone (não dava p/ clicar). O fundo #111 preenche a faixa da status bar e o conteúdo
+          de 62px desce para baixo dela. Fora de iPhone com notch o inset é 0 (sem efeito). */}
+      <div style={{ background: '#111111', borderBottom: '1px solid #111111', paddingTop: 'env(safe-area-inset-top)' }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 20px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 
         {/* Logo */}
