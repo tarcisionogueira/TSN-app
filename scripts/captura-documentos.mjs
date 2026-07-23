@@ -16,6 +16,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { Buffer } from 'buffer';
+import { createHash } from 'node:crypto';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -52,16 +53,25 @@ function classificar(url, nome = '', fonte = '') {
 }
 
 async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0) {
-  const path = `casos/${imovelId}/${tipo}_auto_${Date.now()}_${idx}.pdf`;
+  // Caminho ENDEREÇADO POR CONTEÚDO (hash do PDF), NÃO por Date.now(). Assim uma
+  // recaptura do MESMO documento reaproveita o mesmo objeto (upsert sobrescreve) em vez
+  // de criar uma cópia nova a cada run — era a causa do inchaço do bucket (lotes de
+  // "outro_auto" idênticos) e de objetos órfãos. Conteúdo diferente → hash diferente.
+  const hash = createHash('md5').update(buffer).digest('hex').slice(0, 16);
+  const path = `casos/${imovelId}/${tipo}_${hash}.pdf`;
+  // Já existe um anexo apontando p/ esse conteúdo neste imóvel? (dedup determinístico)
+  const { data: jaTem } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('storage_path', path).limit(1);
   const up = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: 'application/pdf', upsert: true });
   if (up.error) throw new Error('upload: ' + up.error.message);
   const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
   const url = signed.data?.signedUrl || null;
   const row = { imovel_id: imovelId, tipo, nome, url, storage_path: path, tamanho_kb: Math.round(buffer.length / 1024), role_criador: 'sistema' };
+  // Mesmo conteúdo já cadastrado (qualquer tipo) → só atualiza a linha, não duplica.
+  if (jaTem?.length) { await supabase.from('imovel_anexos').update(row).eq('id', jaTem[0].id); return; }
   // Classificados (edital/matrícula/laudo/regras): 1 por tipo → atualiza o existente.
   // 'outro' é GENÉRICO e pode haver VÁRIOS docs distintos do lote (edital+matrícula
-  // que não classificaram) — sempre INSERE, senão o 2º sobrescrevia o 1º e um doc
-  // sumia (era a causa de "edital não veio" no SUPERBID: baixado e descartado).
+  // que não classificaram) — insere os DISTINTOS (conteúdo diferente = path diferente),
+  // sem sobrescrever, mas sem duplicar os idênticos (guard acima).
   if (tipo !== 'outro') {
     const { data: existente } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('tipo', tipo).limit(1);
     if (existente?.length) { await supabase.from('imovel_anexos').update(row).eq('id', existente[0].id); return; }
