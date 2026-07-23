@@ -1,0 +1,37 @@
+name: Recon leiloeiros backlog (classifica plataforma)
+
+# Recon-first dos leiloeiros TRT-15 em 0-acervo: descobre a PLATAFORMA de cada site
+# (white-label/API/CDN) para decidir qual scraper escrever. Só diagnostica (log-only),
+# não grava no banco. Manual (workflow_dispatch). Custo controlado por RECON_MAX.
+on:
+  workflow_dispatch:
+    inputs:
+      max:
+        description: 'Teto de requests Bright Data (custo). Default 30.'
+        required: false
+        default: '30'
+      dominios:
+        description: 'Domínios csv (vazio = os do backlog em 0-acervo)'
+        required: false
+        default: ''
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          RECON_MAX: ${{ github.event.inputs.max || '30' }}
+          RECON_DOMINIOS: ${{ github.event.inputs.dominios }}
+        run: node scripts/recon-leiloeiros-backlog.mjs
