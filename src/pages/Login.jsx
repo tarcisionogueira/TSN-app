@@ -145,6 +145,23 @@ export default function Login() {
     return d.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2');
   };
 
+  // Login com Google: se o usuário ABRE a tela do Google e CANCELA (botão X / voltar),
+  // a página volta do bfcache do Safari com googleLoading=true — o botão fica travado em
+  // "Conectando…" e desabilitado, sem nenhum erro (o redirect tinha dado certo). Reseta o
+  // estado quando a página reaparece (pageshow do bfcache ou aba voltando a ficar visível).
+  // No caso de SUCESSO o retorno é um load novo (googleLoading já nasce false), então é seguro.
+  useEffect(() => {
+    const reset = () => setGoogleLoading(false);
+    const onPageShow = (e) => { if (e.persisted) reset(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') reset(); };
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   // Autocomplete de cidade (IBGE nacional, carregado uma vez)
   const [cidadesBR, setCidadesBR] = useState([]);
   useEffect(() => { buscarTodasCidades().then(setCidadesBR).catch(() => {}); }, []);
