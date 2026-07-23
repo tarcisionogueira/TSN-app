@@ -15,6 +15,12 @@ export default function IndiceConsulta() {
   const [loading, setLoading] = React.useState(false);
   const [res, setRes] = React.useState(null);
   const [erro, setErro] = React.useState('');
+  const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' && window.innerWidth < 640);
+  React.useEffect(() => {
+    const on = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
 
   const consultar = async (e) => {
     e?.preventDefault?.();
@@ -44,25 +50,25 @@ export default function IndiceConsulta() {
       </p>
 
       <form onSubmit={consultar} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: 14, marginBottom: 20 }}>
-        <label style={{ flex: 2, minWidth: 160 }}>
+        <label style={{ flex: isMobile ? '1 1 100%' : 2, minWidth: isMobile ? '100%' : 160 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Cidade</div>
           <input value={form.cidade} onChange={e => setForm(f => ({ ...f, cidade: e.target.value, }))} placeholder="Ex: Barueri"
             style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
         </label>
-        <label style={{ width: 84 }}>
+        <label style={{ width: isMobile ? 96 : 84 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>UF</div>
           <select value={form.uf} onChange={e => setForm(f => ({ ...f, uf: e.target.value }))}
             style={{ width: '100%', padding: '10px 8px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', boxSizing: 'border-box' }}>
             {UFS.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
         </label>
-        <label style={{ flex: 2, minWidth: 140 }}>
+        <label style={{ flex: isMobile ? '1 1 auto' : 2, minWidth: 140 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Bairro <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span></div>
           <input value={form.bairro} onChange={e => setForm(f => ({ ...f, bairro: e.target.value }))} placeholder="Ex: Alphaville"
             style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
         </label>
         <button type="submit" disabled={loading}
-          style={{ padding: '10px 20px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+          style={{ flex: isMobile ? '1 1 100%' : '0 0 auto', justifyContent: 'center', padding: '11px 20px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Search size={16} /> {loading ? 'Consultando…' : 'Consultar'}
         </button>
       </form>

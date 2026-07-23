@@ -99,6 +99,17 @@ export default function MinhasAnalises() {
     return null; // pronto: os chips por relatório mostram o veredito
   };
 
+  // "Arrematei" SÓ aparece quando os 3 relatórios estão realmente prontos — é o gatilho da
+  // retenção (guardar os documentos do arremate). Antes o botão aparecia em qualquer análise,
+  // mesmo incompleta/em um só relatório, o que confundia (parecia disponível "para todos").
+  const tresProntos = (it) => {
+    const r = it.reports || {};
+    const ok = (x) => x?.status === 'concluida';
+    return ok(r.mercado)
+      && ok(r.documental) && !r.documental?.result?.precisaDocumentos
+      && ok(r.laudo) && !r.laudo?.result?.precisaRelatorios;
+  };
+
   // Chips de veredito por relatório: dá pra ver na lista o que tem potencial de evoluir.
   const chipsDe = (it) => {
     const rs = it.reports, out = [];
@@ -189,12 +200,14 @@ export default function MinhasAnalises() {
                     <Briefcase size={13} /> {ETAPA_CURTA[casosPorImovel[String(a.imovelId)].status_etapa] || 'Acompanhamento'}
                   </button>
                 )}
+                {(tresProntos(a) || sinalizados[a.imovelId]) && (
                 <button onClick={(e) => sinalizarArremate(e, a)}
                   disabled={!!sinalizados[a.imovelId] || sinalizando === a.imovelId}
                   title="Confirmo que arrematei este imóvel (mantém os documentos)"
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: sinalizados[a.imovelId] ? 'default' : 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
                   <Trophy size={13} /> {sinalizados[a.imovelId] ? 'Arrematado ✓' : (sinalizando === a.imovelId ? 'Enviando…' : 'Arrematei')}
                 </button>
+                )}
                 <button onClick={(e) => { e.stopPropagation(); remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
               </div>
             );
