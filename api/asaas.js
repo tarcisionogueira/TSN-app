@@ -152,6 +152,9 @@ export default async function handler(req, res) {
       const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, {
         headers: { 'access_token': API_KEY },
       });
+      // Sem checar .ok, um 4xx/5xx transitório na busca daria data vazio → o código criaria
+      // um customer DUPLICADO no Asaas em vez de reusar o existente. Falha de busca ≠ inexistência.
+      if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);
       const searchData = await searchRes.json();
 
       let customerId;

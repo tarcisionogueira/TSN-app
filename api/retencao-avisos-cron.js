@@ -143,14 +143,19 @@ async function handler(req) {
     const email = c.user_id ? await emailDoUsuario(c.user_id) : null;
     if (email) {
       try {
-        await enviarEmail({
+        // enviarEmail NUNCA lança — retorna { ok:false } em falha (Resend fora, sem chave,
+        // destinatário inválido). Confiar no retorno é o que garante o "avisar ANTES de apagar":
+        // só marca email_enviado=true (que torna o doc elegível à deleção) num envio REAL.
+        const r = await enviarEmail({
           from: EMAIL_FROM, to: email,
           subject: c.regra === 'r1_inadimplente'
             ? 'Regularize sua assinatura para manter seus documentos'
             : 'Confirme seu arremate para guardar os documentos',
           html: corpoEmail({ regra: c.regra, titulo: c.titulo, dataFmt }),
         });
-        emailOk = true; resumo.emails_enviados++;
+        emailOk = !!r?.ok;
+        if (emailOk) resumo.emails_enviados++;
+        else console.error('[retencao-avisos] email nao enviado:', r?.error);
       } catch (e) { console.error('[retencao-avisos] email:', e?.message); }
     }
     pushOk = await enviarPush(c.user_id, c.regra, c.titulo);

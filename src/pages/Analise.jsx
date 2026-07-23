@@ -662,11 +662,17 @@ export default function Analise() {
     if (file.type === 'text/plain') {
       setTextoDoc(await file.text());
     } else if (file.type === 'application/pdf') {
-      const buf = await file.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
       // Extrai via IA diretamente do PDF — sem precisar de texto intermediário
       setLoadDoc(true);
       try {
+        const buf = await file.arrayBuffer();
+        // Base64 em BLOCOS: espalhar um PDF de vários MB em String.fromCharCode(...bytes)
+        // estoura a pilha (RangeError). Fora do try (como estava), a falha era silenciosa —
+        // o loader nem começava e nenhum erro aparecia. Converte em blocos, dentro do try.
+        const bytes = new Uint8Array(buf);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        const b64 = btoa(bin);
         const ext = await extrairDadosDocumento('', b64);
         if (ext) {
           setTextoDoc(`[PDF: ${file.name}]`);
@@ -994,7 +1000,7 @@ export default function Analise() {
   useEffect(() => {
     if (!autoGerar) return;
     const s = autoSeqRef.current;
-    if (s.etapa === 0 && !relMercadoGerado && analiseEntry?.status !== 'gerando') { s.etapa = 1; analisarMercadoClick(); return; }
+    if (s.etapa === 0 && !relMercadoGerado && analiseEntry?.status !== 'gerando') { s.etapa = 1; gerarRelMercado(); return; }
     if (s.etapa === 1 && relMercadoGerado && !relDocumentalGerado && !gerandoDocumental && !relDocumentalPreparando) { s.etapa = 2; gerarRelDocumental(true); return; }
     if (s.etapa === 2 && ambosRelatorios && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
   }, [autoGerar, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps

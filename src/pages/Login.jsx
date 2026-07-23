@@ -84,8 +84,11 @@ export default function Login() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
+      // Erro/rate-limit (429/5xx): NÃO rebaixar para "não duplicado" — isso destravaria
+      // o botão de cadastro e deixaria passar um e-mail já existente. Mantém o estado atual.
+      if (!res.ok) return;
       const data = await res.json();
-      setEmailDuplicado(data.temConta);
+      setEmailDuplicado(!!data.temConta);
     } catch (_) {}
   }
 
@@ -104,8 +107,12 @@ export default function Login() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf: cpfLimpo, produto }),
       });
-      const data = await res.json();
-      setCpfCheck(data);
+      // Só confia no resultado se a chamada OK; um 429/5xx tem corpo { error } que
+      // viraria cpfCheck.temConta = undefined e abriria os gates de "CPF já tem conta".
+      if (res.ok) {
+        const data = await res.json();
+        setCpfCheck(data);
+      }
     } catch (_) { setCpfCheck(null); }
     setCpfChecking(false);
   }
@@ -258,7 +265,7 @@ export default function Login() {
         throw new Error('A senha deve ter ao menos 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.');
       }
       if (!aceite) throw new Error('É necessário aceitar os Termos de Uso e a Política de Privacidade.');
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.senha,
         options: {
@@ -271,6 +278,14 @@ export default function Login() {
         },
       });
       if (error) throw error;
+      // Com "Confirm email" ligado, o Supabase NÃO retorna erro para um e-mail JÁ cadastrado
+      // (proteção anti-enumeração): devolve user com identities: [] e não envia e-mail. Sem este
+      // guard, o usuário via "Cadastro realizado! Verifique seu email" e esperava um e-mail que
+      // nunca chega. Detecta e trata como duplicata (mesma intenção do onBlur checarEmail).
+      if (signUpData?.user && Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0) {
+        setEmailDuplicado(true);
+        throw new Error('Este e-mail já está cadastrado. Faça login ou recupere a senha.');
+      }
       trackCadastro(form.email);
       // Preserva o plano na URL de confirmação de email (HashRouter usa /#/)
       if (planoEscolhido) {

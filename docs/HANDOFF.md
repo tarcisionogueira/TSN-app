@@ -17,6 +17,37 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ⏭️ COMEÇAR AQUI (23/07 — ROTINA DE INÍCIO: diagnóstico verde + bug bounty multi-agente do código)
+> Branch: `claude/handoff-startup-routine-eki4th`. Build (vite) OK. Segurança **0/0**. Sessão = ritual de abertura (CLAUDE.md itens 1–6), sem pedido de feature nova.
+
+**🩺 Diagnóstico de início (tudo íntegro):** acervo **32.931 ativos**, geocode **0 pendentes** (100%); a coleta roda **seg/qui 9–10h UTC** — como a checagem foi numa **quinta pré-9h**, `ativos_24h=0` é NORMAL (última coleta seg 20/07 `ok` em todas as fontes; a de hoje ainda ia rodar). ⚠️ *Nota de cobertura:* o bug-bounty dos leiloeiros compara o ÚLTIMO run com o piso — **não detecta parada TOTAL** da coleta (o último `fonte_saude` fica saudável); quem cobre isso é o `ativos_24h` do item Saúde. `auditoria_seguranca()`=**0/0**; `qa_invariantes()` todos ok; deploy prod (`ba99236`) **READY**; **relatório mercadológico OK às 06:04 UTC** → recarga de crédito Anthropic (causa-raiz do "vazio") confirmada resolvida. VENDASGOV `degradado`=2 (gap login-gated conhecido).
+
+**🐛 Bug bounty do CÓDIGO (4 agentes em paralelo: pré-login · telas logadas · api/ · crons&e-mails). 13 bugs de COMPORTAMENTO confirmados e CORRIGIDOS na raiz:**
+1. **[HIGH] Auto-sequência dos 3 relatórios quebrada — `src/pages/Analise.jsx:997`.** A etapa 0 chamava `analisarMercadoClick()` (fluxo **inline** legado, que NÃO persiste nem seta `relMercadoGerado`) em vez de `gerarRelMercado()` (fluxo **servidor** `/api/gerar-analise`). Efeito: ao atribuir um arremate ("gerar os 3 automaticamente"), só rodava uma pesquisa efêmera na tela do admin → `relMercadoGerado` nunca virava true → documental e laudo **nunca** geravam e **nada** persistia p/ o cliente. Trocado p/ `gerarRelMercado()`. Regressão de refactor (o #174 dizia funcionar).
+2. **[HIGH] Retenção apagava docs SEM aviso — `api/retencao-avisos-cron.js:153`.** `enviarEmail()` NUNCA lança (retorna `{ok:false}`); o cron fazia `emailOk=true` incondicional → `email_enviado=true` mesmo com Resend fora/sem chave/destinatário inválido → `anexos_expirados_avisados` tornava o doc elegível → `limpar-documentos-cron` apagava sem o usuário ser avisado (quebra o "notificar ANTES"). Agora confia no retorno (`emailOk=!!r?.ok`).
+3. **[MED] Cadastro com e-mail JÁ cadastrado → falso "Cadastro realizado!" — `src/pages/Login.jsx`.** `signUp` só extraía `{error}`; com confirm-email ON, um e-mail existente volta sem erro e com `identities:[]` (anti-enumeração) → usuário esperava um e-mail que nunca chega. Detecta `identities.length===0` e trata como duplicata.
+4. **[MED] Erro de API silenciado nas checagens de duplicidade — `Login.jsx` `checarEmail`/`checarCPF`.** `res.json()` sem `res.ok`: sob 429/5xx o aviso de duplicado sumia e o botão destravava. Agora `if(!res.ok) return` / só confia no corpo OK.
+5. **[MED] Export LGPD "Baixar meus dados" saía SEMPRE vazio (`{}`) — `src/pages/Perfil.jsx`.** `JSON.stringify(apiCall(...))` serializava o objeto `Response`. Agora checa `.ok` e lê `res.json()`.
+6. **[MED] "Excluir minha conta" reportava sucesso mesmo falhando no servidor — `Perfil.jsx`.** `fetch` não lança em 4xx/5xx; deslogava e mandava p/ home sem a conta ter sido apagada. Checa `res.ok` antes do `signOut()`.
+7. **[MED] Upload de PDF grande falhava em silêncio — `Analise.jsx` `handleFileUpload`.** `btoa(String.fromCharCode(...new Uint8Array(buf)))` FORA do try → `RangeError` (estouro de pilha) em edital de vários MB, sem loader nem erro. Convertido em BLOCOS (0x8000) dentro do try.
+8. **[MED] Relatório jurídico afirmava "sem sanções CEIS/CNEP" falsamente — `api/processar-analise.js:209`.** RPC `consultar_sancoes` lida sem `.ok` (PostgREST devolve JSON de erro, não lança) → `sancoes=[]` e a seção NÃO era marcada faltante. Agora `if(!r.ok) secoesFaltando.push('sancoes')`.
+9. **[MED] KYC selfie falhava-fechado em silêncio durante incidente do Claude — `api/validar-selfie.js`.** `claudeRes.json()` sem `.ok` → rejeição genérica em HTTP 200, indistinguível de reprovação real. Agora retorna **503** "temporariamente indisponível".
+10. **[MED] Aviso de renovação podia sumir antes da cobrança — `api/renovacao-avisos-cron.js`.** A trava de idempotência era gravada ANTES do envio; e-mail falho (não lança) → próximo run via 409 e pulava → cliente cobrado sem o aviso. Agora, em falha, SOLTA a trava p/ re-tentar.
+11. **[LOW] Customer Asaas duplicado em erro transitório — `api/asaas.js`.** Busca de customer sem `.ok` → `data` vazio → criava novo. Agora `if(!searchRes.ok) throw`.
+12. **[LOW] Cron de financiamento derrubava o run inteiro — `api/financiamento-alertas-cron.js`.** Leitura REST sem `.ok` → objeto não-iterável no `for`. Agora aborta limpo (502).
+13. **[LOW] `×` em Minhas Análises apagava os 3 relatórios (local+banco) sem confirmar — `src/pages/MinhasAnalises.jsx`.** Adicionado `window.confirm`.
+
+**✅ Verificado no banco (não é bug):** `retencao_candidatos_aviso()` **VIVA** já exclui `admin/analista` (r1 e r2) — o conserto do #192 está em produção. Era só **drift** (o arquivo de migração não tinha) → codificado em `supabase/migrations/retencao_candidatos_aviso_exclui_internos.sql` p/ um rebuild não regredir. Pagamentos/webhooks (Asaas/MP) auditados **sólidos**: HMAC/token timing-safe, re-fetch autoritativo, idempotência via INSERT-trap (23505). Os 3 geradores de relatório já checam `.ok` e **estornam cota** em vazio/erro.
+
+**PENDÊNCIAS / follow-ups (baixo risco, não feitos):**
+- **`.json()` sem `.ok` fail-safe (consistência):** `admin-chat.js:12` (sbGet, admin-only), `ab-mercadologica.js:54`, `verificar-identidade-kyc.js:131`, `validar-anexos-arremate.js:104`, `inbound-juridico.js:122`, `chat-suporte.js:81` — todos hoje caem em default SEGURO (revisar/indeterminado/escalar/null); guard de `.ok` só p/ clareza.
+- **Reset de senha (HashRouter + implicit flow):** `RedefinirSenha.jsx` pode dar "link inválido" em alguns casos — **precisa TESTE em runtime** (não dá p/ provar só no código); se reproduzir, migrar p/ `flowType:'pkce'`.
+- **`verificar-cpf.js` rate-limit:** insert fire-and-forget sem `await` + bucket e-mail/CPF compartilhado (anti-enumeração levemente mais frouxa) → migrar p/ `_rate-limit.js` (INCR atômico).
+- **`financiamento-alertas-cron` parcelas:** só o sinal tem flag `notificado`; parcelas dedupam só por "hoje" → re-run duplica / falha no dia não re-tenta. Precisa coluna/tabela de dedup por parcela.
+- **Segurança ofensiva (item 4 do ritual):** entraram rotas desde 15/07 (autocomplete, indice-consulta, sinalizar-arremate/revenda, retenção, atividade_log, backup-r2). O auditor determinístico cobre banco (0/0) e o agente de api/ varreu auth/RLS/IDOR/webhook sem achado de segurança; a Rotina mensal roda a ofensiva completa. Sem red flag nova.
+
+---
+
 ## ⏭️ COMEÇAR AQUI (23/07 — relatórios "vazios", Índice por segmento, autocomplete, Cliente 360)
 > Branch: `claude/bidprobrasil-handoff-diagnostics-akwysq`. Tudo levado à produção via PRs **#189–#196** (squash no `main`). Build (vite) OK em todos. Segurança **0/0**.
 > **Infra:** Supabase **Pro** ativo (transferido p/ org BidPro Brasil, sa-east-1); compute **MICRO** (ok p/ agora). Backup diário 7d ativo.
