@@ -39,6 +39,23 @@
 
 **✅ Verificado no banco (não é bug):** `retencao_candidatos_aviso()` **VIVA** já exclui `admin/analista` (r1 e r2) — o conserto do #192 está em produção. Era só **drift** (o arquivo de migração não tinha) → codificado em `supabase/migrations/retencao_candidatos_aviso_exclui_internos.sql` p/ um rebuild não regredir. Pagamentos/webhooks (Asaas/MP) auditados **sólidos**: HMAC/token timing-safe, re-fetch autoritativo, idempotência via INSERT-trap (23505). Os 3 geradores de relatório já checam `.ok` e **estornam cota** em vazio/erro.
 
+### 🏗️ Leiloeiros do backlog — RETOMADA (23/07, continuação da sessão)
+Sequência "siga o follow up e retome os leiloeiros". Publicado em produção:
+- **#203** — follow-ups da auditoria de cards da Busca (RPC `buscar_por_raio_v2` com campos ricos; anti-bleeding do `valor_minimo` no scraper).
+- **#204** — `recon-deep` (ferramenta de recon profundo listing+detalhe).
+- **#205/#206/#207** — **2 scrapers de CLUSTER novos** (recon-first: home→plataforma→estrutura viva via Bright Data):
+  - **SOLEON** (`scripts/scraper-soleon.mjs`) → **calil, vegas, 3torres** (mesma base do RJ Leilões, parser reusado). Detalhe `/item/{id}/detalhes`, listagem `/lotes/imovel?tipo=imovel&page=N`. **LIVE OK: 45 imóveis, 100% completos** (cidade+foto+valor+matrícula+edital). Fix de `cidade` (rótulo `Cidade: X/UF` primeiro). ⚠️ Os 3 caem no **Bright Data** (bloqueiam datacenter mesmo sem CF aparente) → sub-cota `soleon`=150/sem.
+  - **Gestão de Leilões PHP** (`scripts/scraper-gestao.mjs`) → **extrajust, lancetotal, lancenoleilao, granado** (back-office ÚNICO compartilhado). Decodifica **latin1**; `leilao.php?idLeilao=N` = evento multi-lote inline; filtra `CATEGORIA` (só imóvel); dedup global por idLote; leiloeiro do `<title>`. DEBUG validou (lancetotal 20/20). **Rodada LIVE em curso** — conferir: `select fonte,count(*),count(distinct leiloeiro) from imoveis_leilao where fonte='GESTAOLEILOES' group by fonte;`.
+- **`api/_brightdata.js`**: sub-cotas `soleon`=150 e `gestao`=150 (teto global 450/sem no banco = trava dura).
+
+**Bright Data (você pediu p/ sinalizar):** semana 20/07 usava **283/450** no início; após recon+debug+SOLEON live ~**347/450**. Cada evento do cluster PHP rende MUITOS imóveis por 1 request (granado idLeilao=98 tem 588 lotes) → barato por imóvel.
+
+**Próximas alavancas (recon já feito, ver `docs/LEILOEIROS_TRT15_BACKLOG.md`):**
+1. **Vlance /v3/** (verdeamarelo, sudeste, capitalvalor) — `/leilao/index/imoveis`, tem API; conferir se não já entram via LJUD.
+2. **WordPress/Nuxt** (e-confianca; possível backend comum com osvaldo/sanches/hisa — mesmo `/leilao/N`) — SPA Vue, precisa achar o endpoint de dados.
+3. **Acumular SOLEON**: calil (282) e vegas (31) só carregaram 20 cada (teto/run) — o cron semanal (seg 10:30 UTC) acumula; ou subir `max_lotes`.
+4. **SUPERBID** (zaccarino, crepaldi) — rede já raspada; verificar cobertura.
+
 **PENDÊNCIAS / follow-ups (baixo risco, não feitos):**
 - **`.json()` sem `.ok` fail-safe (consistência):** `admin-chat.js:12` (sbGet, admin-only), `ab-mercadologica.js:54`, `verificar-identidade-kyc.js:131`, `validar-anexos-arremate.js:104`, `inbound-juridico.js:122`, `chat-suporte.js:81` — todos hoje caem em default SEGURO (revisar/indeterminado/escalar/null); guard de `.ok` só p/ clareza.
 - **Reset de senha (HashRouter + implicit flow):** `RedefinirSenha.jsx` pode dar "link inválido" em alguns casos — **precisa TESTE em runtime** (não dá p/ provar só no código); se reproduzir, migrar p/ `flowType:'pkce'`.
