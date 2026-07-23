@@ -126,16 +126,26 @@ function parseCard(card, ctx) {
   const ehImovel = /im[óo]ve/i.test(categoria) || /ESTADO:\s*[A-Z]{2}\s*-\s*CIDADE:/i.test(txt);
   if (!ehImovel) return null;
 
-  // Valores rotulados no card. Venda direta: só "Valor para proposta".
+  // Valores rotulados. Fontes, em ordem de confiabilidade:
+  //  - cabeçalho do card: "Avaliação"/"Inicial"/"2ª Praça"/"Valor para proposta" (venda direta);
+  //  - DESCRIÇÃO (CAIXA/SFI): "VALOR DE AVALIAÇÃO / VALOR DE VENDA 1º/2º LEILÃO" — canônicos.
+  // O 2º leilão/2ª praça é o MÍNIMO real (com desconto). No CAIXA o "Inicial" (1º) às vezes
+  // supera a avaliação → nunca deixamos um valor ACIMA da avaliação virar o "mínimo".
   const val = re => num((txt.match(re) || [])[1]);
-  const avaliacao = val(/Avalia[çc][ãa]o:\s*R\$\s*([\d.]+,\d{2})/i)
-    || val(/VALOR DE AVALIA[ÇC][ÃA]O:\s*R\$\s*([\d.]+,\d{2})/i);
+  const avaliacao = val(/Avalia[çc][ãa]o:\s*R\$\s*([\d.]+,\d{2})/i);
   const inicial = val(/Inicial:\s*R\$\s*([\d.]+,\d{2})/i);
-  const praca2 = val(/2[ªa]\s*Pra[çc]a:\s*R\$\s*([\d.]+,\d{2})/i);
+  const praca2 = val(/2[ªaº°]\s*Pra[çc]a:\s*R\$\s*([\d.]+,\d{2})/i);
   const proposta = val(/Valor para proposta:\s*R\$\s*([\d.]+,\d{2})/i);
-  // Lance mínimo = o menor preço de ENTRADA disponível (2ª praça < inicial), ou proposta.
-  let valorMinimo = proposta || praca2 || inicial || 0;
-  const valorAval = avaliacao || inicial || proposta || 0;
+  const dAval = val(/VALOR DE AVALIA[ÇC][ÃA]O:\s*R\$\s*([\d.]+,\d{2})/i);
+  const dVenda1 = val(/VALOR DE VENDA 1[ºo°ª]?\s*LEIL[ÃA]O:\s*R\$\s*([\d.]+,\d{2})/i);
+  const dVenda2 = val(/VALOR DE VENDA 2[ºo°ª]?\s*LEIL[ÃA]O:\s*R\$\s*([\d.]+,\d{2})/i);
+
+  const valorAval = dAval || avaliacao || inicial || proposta || 0;
+  // Mínimo: prefere o 2º leilão/2ª praça (entrada com desconto); nunca o "Inicial" quando
+  // há um valor menor; cai p/ o menor candidato positivo se faltarem os rótulos de 2º.
+  let valorMinimo = proposta || dVenda2 || praca2 || dVenda1 || inicial || 0;
+  const candMin = [proposta, dVenda2, praca2, dVenda1, inicial].filter(v => v > 0);
+  if (candMin.length) valorMinimo = Math.min(valorMinimo || Infinity, ...candMin);
 
   // Campos do bloco DESCRIÇÃO: "ESTADO: XX - CIDADE: Y - ENDEREÇO: Z - BAIRRO: W - DESCRIÇÃO: ..."
   let estado = (txt.match(/ESTADO:\s*([A-Z]{2})\b/i) || [])[1] || null;
@@ -163,6 +173,7 @@ function parseCard(card, ctx) {
 
   const descricao = (txt.match(/DESCRI[ÇC][ÃA]O:\s*(.+?)(?:\s*-\s*VALOR DE AVALIA|\s*IPTU:|$)/i) || [])[1]?.trim()?.slice(0, 500) || null;
   const tituloBase = [inferirRotulo(txt), cidade, estado].filter(Boolean).join(' - ');
+  const temDesconto = valorAval > 0 && valorMinimo > 0 && valorMinimo <= valorAval;
 
   const row = {
     fonte: 'GESTAOLEILOES',
@@ -184,9 +195,11 @@ function parseCard(card, ctx) {
     data_leilao: ctx.data_leilao || null,
     forma_pagamento: 'a_vista',
     ativo: true,
-    viavel: valorAval > 0 ? (1 - valorMinimo / valorAval) >= 0.3 : null,
-    score_viabilidade: valorAval > 0 ? Math.min(100, Math.round((1 - valorMinimo / valorAval) * 150)) : 30,
-    desconto_percentual: valorAval > 0 ? Math.round((1 - valorMinimo / valorAval) * 100) : null,
+    // Só há desconto quando o mínimo é ABAIXO da avaliação; senão (lote premium/CAIXA sem 2º
+    // leilão OU rótulo faltante) não inventa um desconto NEGATIVO — deixa nulo/neutro.
+    viavel: temDesconto ? (1 - valorMinimo / valorAval) >= 0.3 : null,
+    score_viabilidade: temDesconto ? Math.min(100, Math.round((1 - valorMinimo / valorAval) * 150)) : 30,
+    desconto_percentual: temDesconto ? Math.round((1 - valorMinimo / valorAval) * 100) : null,
     atualizado_em: new Date().toISOString(),
   };
   return row;
