@@ -48,6 +48,23 @@ const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./
 if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const supabase = createClient(SB_URL, SB_KEY);
 
+// Cidade/UF robusta: 1º pelo rótulo estruturado do SOLEON ("Cidade: X/UF"); 2º "…em X/UF"
+// pegando só 1-3 palavras antes da /UF (evita frases inteiras como "comercial no Centro de
+// Vitoria" que o regex ganancioso capturava). estado sempre pela sigla após a barra.
+function cidadeUF(txt, titulo = '') {
+  const fonte = `${titulo} ${txt}`;
+  let m = fonte.match(/\bCidade:\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.\- ]{1,28}?)\s*[\/-]\s*([A-Z]{2})\b/i);
+  if (!m) m = fonte.match(/\b(?:em|de|no|na)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2})\s*\/\s*([A-Z]{2})\b/);
+  if (!m) m = fonte.match(/\b([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2})\s*\/\s*([A-Z]{2})\b/);
+  if (!m) return { cidade: null, estado: null };
+  return { cidade: m[1].trim().replace(/\s+/g, ' ').slice(0, 60), estado: (m[2] || '').toUpperCase() || null };
+}
+
+// Título sem o "sufixo de preço" que o og:title do SOLEON cola ("… - Lance Inicial: R$…").
+function limparTitulo(t) {
+  return (t || '').replace(/\s*[-–]\s*(?:Lance Inicial|Avalia[çc][ãa]o|Valor)\b.*$/i, '').replace(/\s+/g, ' ').trim();
+}
+
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 const ehChallenge = h => !h || /just a moment|challenge-platform|cf-chl|cf-mitigated|attention required/i.test(h.slice(0, 4000));
 
@@ -118,9 +135,7 @@ function parseDetalhe(html, url) {
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
   const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
-  const loc = ((base.titulo || '') + ' ' + txt).match(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'. ]{1,30})\/([A-Z]{2})\b/);
-  const cidade = loc ? loc[1].trim().replace(/\s+/g, ' ') : null;
-  const estado = loc ? loc[2] : null;
+  const { cidade, estado } = cidadeUF(txt, base.titulo || '');
   const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
 
   const docs = [];
@@ -135,7 +150,7 @@ function parseDetalhe(html, url) {
   const anexos = docs.map(d => ({ tipo: /matr[íi]cula/i.test(d.label + d.url) ? 'matricula' : (/edital/i.test(d.label + d.url) ? 'edital' : (/laudo/i.test(d.label + d.url) ? 'laudo' : 'outro')), nome: (d.label || 'Documento').slice(0, 80), url: d.url }));
 
   return {
-    titulo: (base.titulo || '').slice(0, 180) || null,
+    titulo: limparTitulo(base.titulo).slice(0, 180) || null,
     cidade, estado,
     link_foto: base.link_foto,
     valor_avaliacao: avaliacao, valor_minimo: valorMinimo,
