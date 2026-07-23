@@ -1,0 +1,53 @@
+name: Scraper SOLEON (multi-tenant)
+
+# Cluster SOLEON (calil, vegas, 3torres…) — mesma plataforma white-label do RJ Leilões,
+# cujo parser já é validado. calil/vegas NÃO estão atrás de Cloudflare (fetch grátis);
+# só o 3torres cai no Bright Data. Fluxo recon-first: DEBUG → dry-run → gravação.
+# No cron GRAVA; no dispatch manual é dry-run por padrão (dryrun=0 p/ gravar).
+on:
+  schedule:
+    - cron: '30 10 * * 1'   # 1x/semana (segunda), 10:30 UTC
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: '1 = RECON (dumpa listagem + 1 detalhe por tenant)'
+        required: false
+        default: '0'
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '1'
+      max_lotes:
+        description: 'Máx. de lotes NOVOS por tenant/execução'
+        required: false
+        default: '60'
+      tenants:
+        description: 'csv de fontes (vazio = todos). Ex.: CALIL,VEGAS'
+        required: false
+        default: ''
+
+jobs:
+  scraper-soleon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper SOLEON
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          SOLEON_DEBUG: ${{ github.event.inputs.debug || '0' }}
+          SOLEON_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          SOLEON_MAX_LOTES: ${{ github.event.inputs.max_lotes || '60' }}
+          SOLEON_TENANTS: ${{ github.event.inputs.tenants || '' }}
+        run: node scripts/scraper-soleon.mjs
