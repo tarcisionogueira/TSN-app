@@ -310,6 +310,25 @@ export default function Analise() {
   // contexto; o resultado é aplicado de volta quando concluído (efeito abaixo).
   const { iniciar: iniciarAnalise, getAnalise, iniciarDocumental, getDocumental, iniciarLaudo, getLaudo } = useAnalises();
   const analiseImovelId = imovelInicial?.id || d.id;
+  // "Arrematei este imóvel": o cliente sinaliza o arremate → mantém os documentos
+  // (Retenção Etapa 2). Autoconsentido; só protege, nunca apaga.
+  const [arrematadoSinalizado, setArrematadoSinalizado] = useState(false);
+  const [sinalizandoArremate, setSinalizandoArremate] = useState(false);
+  const sinalizarArremate = async () => {
+    if (arrematadoSinalizado || sinalizandoArremate) return;
+    const raw = window.prompt(`Confirme o arremate de "${d.nome || imovelInicial?.titulo || 'este imóvel'}".\n\nPor quanto você arrematou? (somente números inteiros em reais, ex: 250000)`);
+    if (raw == null) return; // cancelou
+    const valor = Number(String(raw).replace(/[^\d]/g, ''));
+    if (!valor || valor <= 0) { window.alert('Informe um valor de arremate válido (somente números).'); return; }
+    setSinalizandoArremate(true);
+    try {
+      const res = await apiCall('/api/sinalizar-arremate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imovel_id: analiseImovelId, titulo: d.nome || imovelInicial?.titulo, cidade: d.cidade, estado: d.estado, valor }) });
+      if (res.ok) setArrematadoSinalizado(true);
+      else { const dd = await res.json().catch(() => ({})); window.alert(dd.error || 'Não foi possível registrar o arremate.'); }
+    } catch { /* ok */ }
+    setSinalizandoArremate(false);
+  };
   const analiseEntry = getAnalise(analiseImovelId);
   const docEntry = getDocumental(analiseImovelId);
   const laudoEntry = getLaudo(analiseImovelId);
@@ -406,6 +425,11 @@ export default function Analise() {
   const teto = useMemo(() => calcularTetoLance(d, isAVista, META, d.valorMercado||0), [d, isAVista, META]);
   const metricasTeto = useMemo(() => calcularMetricasCenario(d, teto, isAVista), [d, teto, isAVista]);
   const isViavel = isUsoProprio ? true : metricas.roi >= META;
+  // Pesquisa de mercado veio VAZIA (fonte instável no momento): sem valor de mercado o
+  // ROI daria "-100%/reprovada" — enganoso. Nesse caso mostramos "não estimado".
+  const mercadoSemDados = !(Number(d.valorMercado) > 0)
+    && !(Number(mercado?.precoMedioM2) > 0)
+    && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
   const riscosBloqueantes = (d.riscos||[]).filter(r => r.tipo === 'bloqueante');
 
   // ─── Cenários de disputa (relatório mercadológico) ─────────────────────────
@@ -1945,6 +1969,12 @@ export default function Analise() {
                   style={{ marginTop:16, width:'100%', padding:'13px', background:'#111827', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                   <Printer size={16}/> Baixar Parecer Final em PDF
                 </button>
+                <button onClick={sinalizarArremate}
+                  disabled={arrematadoSinalizado || sinalizandoArremate}
+                  title="Confirmo que arrematei este imóvel — mantém os documentos guardados"
+                  style={{ marginTop:10, width:'100%', padding:'12px', background: arrematadoSinalizado ? '#ecfdf5' : 'white', color:'#059669', border:'1.5px solid #a7f3d0', borderRadius:12, fontWeight:800, fontSize:14, cursor: arrematadoSinalizado ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  <Award size={16}/> {arrematadoSinalizado ? 'Arremate confirmado ✓' : (sinalizandoArremate ? 'Enviando…' : 'Arrematei este imóvel')}
+                </button>
               </div>
             );
           })()}
@@ -2495,15 +2525,20 @@ export default function Analise() {
         {/* ── CAPA / RESUMO PARA LEIGOS: veredito + 3 números + próximo passo ── */}
         <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
-            {isViavel ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>}
-            <span style={{ fontSize:16, fontWeight:900, color:isViavel?'#065f46':'#b91c1c' }}>
-              {isUsoProprio ? 'Aprovado para uso próprio' : (isViavel ? 'Operação viável, vale avançar' : 'Operação reprovada, retorno insuficiente')}
+            {isUsoProprio ? <CheckCircle2 size={22} color="#10b981"/> : (mercadoSemDados ? <AlertTriangle size={22} color="#f59e0b"/> : (isViavel ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>))}
+            <span style={{ fontSize:16, fontWeight:900, color: mercadoSemDados ? '#92400e' : (isViavel?'#065f46':'#b91c1c') }}>
+              {isUsoProprio ? 'Aprovado para uso próprio' : (mercadoSemDados ? 'Mercado não estimado nesta análise' : (isViavel ? 'Operação viável, vale avançar' : 'Operação reprovada, retorno insuficiente'))}
             </span>
           </div>
+          {mercadoSemDados && (
+            <div style={{ fontSize:12.5, lineHeight:1.6, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, padding:'10px 12px', marginBottom:14 }}>
+              A pesquisa de mercado <strong>não retornou amostras desta vez</strong> (fonte instável no momento). <strong>Não consumimos sua cota</strong> e o sistema vai <strong>tentar de novo automaticamente</strong> (a cada poucas horas, por até 48h) — quando preencher, aparece aqui sozinho. Se preferir na hora, <strong>gere novamente</strong> (grátis) ou informe o valor de mercado. Os indicadores de retorno (ROI/TIR) ficam indisponíveis até haver estimativa — <strong>não é uma reprovação da operação</strong>.
+            </div>
+          )}
           <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap:10 }}>
             {[
               [areaSuspeita ? 'Desconto vs. avaliação' : 'Desconto vs. mercado', d.valorMercado>0 ? fmtPct((1-(d.valorArrematacao||0)/d.valorMercado)*100) : '—', '#0D63DB'],
-              [isAVista?'Retorno (ROI)':'Retorno (ROE)', fmtPct(metricas.roi), metricas.roi>=0?'#10b981':'#ef4444'],
+              [isAVista?'Retorno (ROI)':'Retorno (ROE)', mercadoSemDados ? '—' : fmtPct(metricas.roi), mercadoSemDados ? '#94a3b8' : (metricas.roi>=0?'#10b981':'#ef4444')],
               ['Rentabilidade anual (TIR)', indicadores.tir!=null ? fmtPct(indicadores.tir)+' a.a.' : '—', '#7c3aed'],
             ].map(([l,v,c])=>(
               <div key={l} style={{ background:'#f8fafc', borderRadius:12, padding:'12px 14px', textAlign:'center', border:'1px solid #e2e8f0' }}>
@@ -2512,13 +2547,23 @@ export default function Analise() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop:14, padding:'12px 14px', background:isViavel?'#f0fdf4':'#fef2f2', border:`1px solid ${isViavel?'#bbf7d0':'#fecaca'}`, borderRadius:12, fontSize:13, color:isViavel?'#15803d':'#991b1b', lineHeight:1.6 }}>
-            <strong>Próximo passo:</strong> {isUsoProprio
-              ? 'Imóvel adequado ao uso próprio pelo preço analisado. Confirme os documentos com o time.'
-              : (isViavel
-                ? 'Os números fecham acima da meta. Agende a reunião com o analista para validar e seguir com a documentação.'
-                : 'Pelo lance analisado, o retorno fica abaixo da meta. Reveja o valor do lance (veja o teto adiante) ou avalie outro imóvel.')}
-          </div>
+          {(() => {
+            const okStyle = mercadoSemDados
+              ? { bg:'#fffbeb', bd:'#fde68a', fg:'#92400e' }
+              : (isViavel ? { bg:'#f0fdf4', bd:'#bbf7d0', fg:'#15803d' } : { bg:'#fef2f2', bd:'#fecaca', fg:'#991b1b' });
+            const txt = mercadoSemDados
+              ? 'O sistema já vai tentar de novo automaticamente (por até 48h, sem consumir sua cota) para obter a estimativa de mercado e os indicadores de retorno. Se preferir na hora, gere novamente (grátis) ou informe o valor de mercado manualmente.'
+              : (isUsoProprio
+                ? 'Imóvel adequado ao uso próprio pelo preço analisado. Confirme os documentos com o time.'
+                : (isViavel
+                  ? 'Os números fecham acima da meta. Agende a reunião com o analista para validar e seguir com a documentação.'
+                  : 'Pelo lance analisado, o retorno fica abaixo da meta. Reveja o valor do lance (veja o teto adiante) ou avalie outro imóvel.'));
+            return (
+              <div style={{ marginTop:14, padding:'12px 14px', background:okStyle.bg, border:`1px solid ${okStyle.bd}`, borderRadius:12, fontSize:13, color:okStyle.fg, lineHeight:1.6 }}>
+                <strong>Próximo passo:</strong> {txt}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── INDICADORES DE RETORNO: VPL / TIR / payback / múltiplo + locação ── */}
@@ -2693,6 +2738,40 @@ export default function Analise() {
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>YIELD ÍNDICE</div><div style={{ fontWeight:800, color:'#059669' }}>{yieldIdx > 0 ? fmtPct(yieldIdx)+' a.a.' : '—'}</div></div>
                     </div>
                     <div style={{ fontSize:10.5, color:'#6366f1', marginTop:8, lineHeight:1.5 }}>Índice proprietário BidPro por microrregião, referência independente para <strong>venda</strong> e <strong>locação</strong>, consolidada das análises da plataforma (complementar ao FipeZAP e aos anúncios). O aluguel é semeado à medida que os relatórios da região são gerados.</div>
+                  </div>
+                );
+              })()}
+
+              {/* Valorização BidPro — curva de preço/m² por ano (base própria de amostras datadas) */}
+              {Array.isArray(mercado.valorizacao?.serie) && mercado.valorizacao.serie.length >= 2 && (() => {
+                const vz = mercado.valorizacao;
+                const serie = vz.serie;
+                const max = Math.max(...serie.map(p => Number(p.m2) || 0)) || 1;
+                const pos = Number(vz.valorizacao_periodo_pct) >= 0;
+                return (
+                  <div style={{ borderRadius:12, border:'1px solid #bbf7d0', background:'#f0fdf4', padding:'12px 16px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, flexWrap:'wrap' }}>
+                      <TrendingUp size={14} color="#059669"/>
+                      <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Valorização BidPro (venda R$/m²)</span>
+                      <span style={{ fontSize:10.5, color:'#64748b' }}>{vz.ano_inicial}–{vz.ano_final} · base própria</span>
+                      <span style={{ marginLeft:'auto', fontSize:11, fontWeight:800, padding:'2px 10px', borderRadius:999, background: pos ? '#dcfce7' : '#fee2e2', color: pos ? '#166534' : '#991b1b' }}>
+                        {pos ? '+' : ''}{Number(vz.valorizacao_periodo_pct).toFixed(1)}% no período · {Number(vz.valorizacao_aa_pct).toFixed(1)}% a.a.
+                      </span>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'flex-end', gap:10, height:96, padding:'0 4px' }}>
+                      {serie.map(p => {
+                        const h = Math.max(6, Math.round((Number(p.m2) / max) * 72));
+                        return (
+                          <div key={p.ano} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, justifyContent:'flex-end', height:'100%' }}>
+                            <div style={{ fontSize:10, fontWeight:800, color:'#065f46' }}>R$ {fmt(p.m2)}</div>
+                            <div title={`${p.n} amostras`} style={{ width:'100%', maxWidth:46, height:h, borderRadius:'6px 6px 0 0', background:'linear-gradient(180deg,#34d399,#059669)' }} />
+                            <div style={{ fontSize:10.5, fontWeight:700, color:'#334155' }}>{p.ano}</div>
+                            <div style={{ fontSize:9, color:'#94a3b8' }}>{p.n} am.</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize:10.5, color:'#047857', marginTop:8, lineHeight:1.5 }}>Mediana do preço/m² dos <strong>anúncios de venda</strong> por ano na base BidPro da região — leitura de <strong>tendência</strong> (anos com poucas amostras têm menos precisão). Não inclui preços de leilão/arremate.</div>
                   </div>
                 );
               })()}

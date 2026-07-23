@@ -117,5 +117,43 @@ export default async function handler(req, res) {
   } catch { /* self-heal best-effort: nunca derruba o cron */ }
   out.analises_mercado_timeout = mktRetry;
 
+  // SELF-HEAL do MERCADO VAZIO: relatório que CONCLUIU mas voltou SEM amostras (fonte de
+  // pesquisa instável no momento — 0 vendas/locações e sem preço) NÃO cobra cota do cliente
+  // e é re-tentado em background com orçamento fresco, até 48h após criado (janela pela IDADE
+  // do relatório — created_at não desliza no upsert). Teto de tentativas p/ não gastar IA
+  // eternamente num mercado GENUINAMENTE raso (imóvel atípico sem comparáveis): passado o teto,
+  // fica como "não estimado" (estado final correto). Ao PREENCHER, o flag some e para sozinho.
+  let mktVazio = 0;
+  const MAX_VAZIO = 8;                 // ~48h a cada 6h de cron
+  const idade48 = new Date(agora - 48 * 3600 * 1000).toISOString();
+  try {
+    const q = `analises_mercado?status=eq.concluida&result->>mercadoVazio=eq.true&regen_tentativas=lt.${MAX_VAZIO}`
+      + `&created_at=gt.${encodeURIComponent(idade48)}`
+      + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,regen_tentativas`;
+    const rows = await (await sb(q)).json();
+    if (Array.isArray(rows)) {
+      await Promise.allSettled(rows.map(async (r) => {
+        if (!r?.inputs?.mercadoInputs) return; // sem os inputs originais não dá p/ regerar
+        try {
+          await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ regen_tentativas: (r.regen_tentativas || 0) + 1, regen_em: new Date().toISOString() }),
+          });
+        } catch { /* segue mesmo assim */ }
+        await fetch(`${BASE}/api/gerar-analise`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+          body: JSON.stringify({
+            imovelId: r.imovel_id, paraUserId: r.user_id, titulo: r.titulo, cidade: r.cidade, estado: r.estado,
+            imovel: r.imovel || null, mercadoInputs: r.inputs.mercadoInputs, parecerInputs: r.inputs.parecerInputs,
+          }),
+          signal: AbortSignal.timeout(9000),
+        }).catch(() => {});
+        mktVazio++;
+      }));
+    }
+  } catch { /* self-heal best-effort: nunca derruba o cron */ }
+  out.analises_mercado_vazio = mktVazio;
+
   res.status(200).json({ ok: true, regenerados: out });
 }

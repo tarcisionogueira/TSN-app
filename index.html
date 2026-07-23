@@ -13,7 +13,15 @@
     <link rel="mask-icon" href="/favicon.svg?v=4" color="#111111" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4" />
     <meta name="theme-color" content="#111111" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- PWA: instalável (manifest + ícones 192/512 já existentes) + comportamento de app no iOS.
+         O service worker de push (public/sw.js) já é registrado em produção e agora também faz
+         cache de app-shell (Etapa 1 do PWA). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BidPro" />
     <title>Imóveis de Leilão com até 50% de desconto — BidPro Brasil</title>
     <meta name="description" content="Imóveis de leilão em todo o Brasil, com até 50% abaixo do mercado. Análise jurídica e de viabilidade por IA + assessoria para arrematar com segurança. Comece grátis." />
     <meta name="keywords" content="leilão de imóveis, imóveis de leilão, arrematação de imóveis, leilão judicial, leilão extrajudicial, leiloeiro credenciado, análise jurídica de leilão, assessoria em leilão" />

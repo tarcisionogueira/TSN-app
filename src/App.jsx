@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { trackPageView } from './utils/gtag';
 import { supabase } from './utils/supabase';
@@ -12,53 +12,68 @@ import ContratoObrigatorio from './components/ContratoObrigatorio';
 import CompletarCadastroModal from './components/CompletarCadastroModal';
 import ChatSuporte from './components/ChatSuporte';
 import SugestaoImovel from './components/SugestaoImovel';
-import Landing from './pages/Landing';
-import MeusChamados from './pages/MeusChamados';
-import Atendimento from './pages/Atendimento';
-import Termos from './pages/Termos';
-import Privacidade from './pages/Privacidade';
-import Busca from './pages/Busca';
-import ImovelDetalhe from './pages/ImovelDetalhe';
-import ImovelGate from './pages/ImovelGate';
-import Analise from './pages/Analise';
-import MinhasAnalises from './pages/MinhasAnalises';
-import Arrematados from './pages/Arrematados';
-import HomeCliente from './pages/HomeCliente';
-import Painel from './pages/Painel';
-import Consultor from './pages/Consultor';
-import AtivarVendedor from './pages/AtivarVendedor';
-import Contratos from './pages/Contratos';
-import Calculadora from './pages/Calculadora';
-import Membros from './pages/Membros';
-import Cliente360 from './pages/Cliente360';
-import Curso from './pages/Curso';
-import Planos from './pages/Planos';
-import AdminChargebacks from './pages/AdminChargebacks';
-import Login from './pages/Login';
-import CompletarCadastro from './pages/CompletarCadastro';
-import RedefinirSenha from './pages/RedefinirSenha';
-import Checkout from './pages/Checkout';
-import Admin from './pages/Admin';
-import AdminFinanceiro from './pages/AdminFinanceiro';
-import MapaImoveis from './pages/MapaImoveis';
-import Promo from './pages/Promo';
-import Convite from './pages/Convite';
-import ConviteEquipe from './pages/ConviteEquipe';
-import AdvogadoPortal from './pages/AdvogadoPortal';
-import ConviteLeiloeiro from './pages/ConviteLeiloeiro';
-import LeiloeiroPortal from './pages/LeiloeiroPortal';
-import EbookPage from './pages/EbookPage';
-import ContratoLink from './pages/ContratoLink';
-import ProdutoLanding from './pages/ProdutoLanding';
-import ProdutoPublico from './pages/ProdutoPublico';
-import CancelarAlertas from './pages/CancelarAlertas';
-import Perfil from './pages/Perfil';
-import Comissoes from './pages/Comissoes';
-import Caso from './pages/Caso';
-import CriarContrato from './pages/CriarContrato';
-import ContratosTemplates from './pages/ContratosTemplates';
-import OnrRegistro from './pages/OnrRegistro';
-import Festa from './pages/Festa';
+import PwaInstall from './components/PwaInstall.jsx';
+// Páginas carregadas SOB DEMANDA (code-splitting): cada rota vira um chunk próprio,
+// então o navegador baixa só a tela que o usuário abre — abertura mais rápida e menos
+// processamento. Funciona igual em Chrome/Safari/Firefox/Edge (import() é padrão).
+const Landing = lazy(() => import('./pages/Landing'));
+const MeusChamados = lazy(() => import('./pages/MeusChamados'));
+const Atendimento = lazy(() => import('./pages/Atendimento'));
+const Termos = lazy(() => import('./pages/Termos'));
+const Privacidade = lazy(() => import('./pages/Privacidade'));
+const Busca = lazy(() => import('./pages/Busca'));
+const ImovelDetalhe = lazy(() => import('./pages/ImovelDetalhe'));
+const ImovelGate = lazy(() => import('./pages/ImovelGate'));
+const Analise = lazy(() => import('./pages/Analise'));
+const MinhasAnalises = lazy(() => import('./pages/MinhasAnalises'));
+const Arrematados = lazy(() => import('./pages/Arrematados'));
+const HomeCliente = lazy(() => import('./pages/HomeCliente'));
+const Painel = lazy(() => import('./pages/Painel'));
+const Consultor = lazy(() => import('./pages/Consultor'));
+const AtivarVendedor = lazy(() => import('./pages/AtivarVendedor'));
+const Contratos = lazy(() => import('./pages/Contratos'));
+const Calculadora = lazy(() => import('./pages/Calculadora'));
+const IndiceConsulta = lazy(() => import('./pages/IndiceConsulta'));
+const Membros = lazy(() => import('./pages/Membros'));
+const Cliente360 = lazy(() => import('./pages/Cliente360'));
+const Curso = lazy(() => import('./pages/Curso'));
+const Planos = lazy(() => import('./pages/Planos'));
+const AdminChargebacks = lazy(() => import('./pages/AdminChargebacks'));
+const Login = lazy(() => import('./pages/Login'));
+const CompletarCadastro = lazy(() => import('./pages/CompletarCadastro'));
+const RedefinirSenha = lazy(() => import('./pages/RedefinirSenha'));
+const Checkout = lazy(() => import('./pages/Checkout'));
+const Admin = lazy(() => import('./pages/Admin'));
+const AdminFinanceiro = lazy(() => import('./pages/AdminFinanceiro'));
+const MapaImoveis = lazy(() => import('./pages/MapaImoveis'));
+const Promo = lazy(() => import('./pages/Promo'));
+const Convite = lazy(() => import('./pages/Convite'));
+const ConviteEquipe = lazy(() => import('./pages/ConviteEquipe'));
+const AdvogadoPortal = lazy(() => import('./pages/AdvogadoPortal'));
+const ConviteLeiloeiro = lazy(() => import('./pages/ConviteLeiloeiro'));
+const LeiloeiroPortal = lazy(() => import('./pages/LeiloeiroPortal'));
+const EbookPage = lazy(() => import('./pages/EbookPage'));
+const ContratoLink = lazy(() => import('./pages/ContratoLink'));
+const ProdutoLanding = lazy(() => import('./pages/ProdutoLanding'));
+const ProdutoPublico = lazy(() => import('./pages/ProdutoPublico'));
+const CancelarAlertas = lazy(() => import('./pages/CancelarAlertas'));
+const Perfil = lazy(() => import('./pages/Perfil'));
+const Comissoes = lazy(() => import('./pages/Comissoes'));
+const Caso = lazy(() => import('./pages/Caso'));
+const CriarContrato = lazy(() => import('./pages/CriarContrato'));
+const ContratosTemplates = lazy(() => import('./pages/ContratosTemplates'));
+const OnrRegistro = lazy(() => import('./pages/OnrRegistro'));
+const Festa = lazy(() => import('./pages/Festa'));
+
+// Fallback enquanto o chunk da página carrega (rápido; só na 1ª visita de cada tela).
+function PageLoading() {
+  return (
+    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 30, height: 30, border: '3px solid #e2e8f0', borderTopColor: '#0D63DB', borderRadius: '50%', animation: 'tsnspin 0.7s linear infinite' }} />
+      <style>{'@keyframes tsnspin{to{transform:rotate(360deg)}}'}</style>
+    </div>
+  );
+}
 
 function ContaInativa() {
   const { user } = useAuth();
@@ -248,6 +263,7 @@ function MainLayout() {
       {isLoggedIn && <SugestaoImovel />}
       <ChatSuporte />
       <main style={{ flex: 1 }}>
+        <Suspense fallback={<PageLoading />}>
         <Routes>
           {/* Visitante vê a Landing de marketing; cliente logado vê a Home por plano. */}
           <Route path="/" element={isLoggedIn ? <HomeCliente /> : <Landing />} />
@@ -274,6 +290,7 @@ function MainLayout() {
           <Route path="/registro-imovel" element={<PrivateRoute roles={['admin','analista','advogado','consultor']}><OnrRegistro /></PrivateRoute>} />
           <Route path="/registro-imovel/:imovelId" element={<PrivateRoute roles={['admin','analista','advogado','consultor']}><OnrRegistro /></PrivateRoute>} />
           <Route path="/calculadora" element={<Calculadora />} />
+          <Route path="/indice" element={<PrivateRoute><IndiceConsulta /></PrivateRoute>} />
           <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
@@ -291,6 +308,7 @@ function MainLayout() {
           <Route path="/cancelar-alertas" element={<CancelarAlertas />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </main>
       <Footer />
     </div>
@@ -302,8 +320,10 @@ export default function App() {
     <AuthProvider>
       <HashRouter>
         <RouteTracker />
+        <PwaInstall />
         <PlanosProvider>
         <AnalisesProvider>
+        <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/redefinir-senha" element={<RedefinirSenha />} />
@@ -321,6 +341,7 @@ export default function App() {
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />
           <Route path="*" element={<MainLayout />} />
         </Routes>
+        </Suspense>
         </AnalisesProvider>
         </PlanosProvider>
       </HashRouter>

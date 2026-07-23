@@ -228,7 +228,7 @@ async function coletarMega(ufs, deadline) {
         fonte: 'MEGA', fonte_id: `mega_${slug.slice(0, 80) || (m.index)}`,
         titulo: titulo || `Imóvel Mega Leilões ${uf}`,
         tipo: normalizarTipo(`${categoria} ${titulo}`),
-        modalidade: /judicial/i.test(ctx) ? 'judicial' : 'extrajudicial',
+        modalidade: /judicial/i.test(ctx) && !/extra/i.test(ctx) ? 'judicial' : 'extrajudicial',
         estado: ufHref.length === 2 ? ufHref : uf,
         cidade: titleCase(decodeURIComponent(cidadeSlug)), bairro: '', endereco: '',
         valor_avaliacao: aval, valor_minimo: valor, area_m2: area,

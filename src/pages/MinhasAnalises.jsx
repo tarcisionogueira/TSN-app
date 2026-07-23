@@ -1,9 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Building2, Plus, Home, Briefcase } from 'lucide-react';
+import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Building2, Plus, Home, Briefcase, Trophy } from 'lucide-react';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 import { useIsMobile } from '../utils/useIsMobile';
 import FotoImovel from '../components/FotoImovel';
 
@@ -62,6 +63,26 @@ export default function MinhasAnalises() {
   }, [analises, documentais, laudos]);
 
   const abrir = (a) => nav('/analise', { state: { imovel: a.imovel || { id: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado } } });
+
+  // "Arrematei este imóvel": o cliente sinaliza o arremate → mantém os documentos
+  // (Retenção Etapa 2). Autoconsentido; só protege, nunca apaga.
+  const [sinalizados, setSinalizados] = React.useState({});
+  const [sinalizando, setSinalizando] = React.useState(null);
+  const sinalizarArremate = async (e, a) => {
+    e.stopPropagation();
+    if (sinalizados[a.imovelId] || sinalizando) return;
+    const raw = window.prompt(`Confirme o arremate de "${a.titulo || 'este imóvel'}".\n\nPor quanto você arrematou? (somente números inteiros em reais, ex: 250000)`);
+    if (raw == null) return; // cancelou
+    const valor = Number(String(raw).replace(/[^\d]/g, ''));
+    if (!valor || valor <= 0) { window.alert('Informe um valor de arremate válido (somente números).'); return; }
+    setSinalizando(a.imovelId);
+    try {
+      const res = await apiCall('/api/sinalizar-arremate', { method: 'POST', body: JSON.stringify({ imovel_id: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado, valor }) });
+      if (res.ok) setSinalizados(p => ({ ...p, [a.imovelId]: true }));
+      else { const d = await res.json().catch(() => ({})); window.alert(d.error || 'Não foi possível registrar o arremate.'); }
+    } catch { /* ok */ }
+    setSinalizando(null);
+  };
 
   // Status GERAL do imóvel na lista. Um documental "concluida" mas com
   // result.precisaDocumentos ainda está capturando/preparando os documentos —
@@ -168,6 +189,12 @@ export default function MinhasAnalises() {
                     <Briefcase size={13} /> {ETAPA_CURTA[casosPorImovel[String(a.imovelId)].status_etapa] || 'Acompanhamento'}
                   </button>
                 )}
+                <button onClick={(e) => sinalizarArremate(e, a)}
+                  disabled={!!sinalizados[a.imovelId] || sinalizando === a.imovelId}
+                  title="Confirmo que arrematei este imóvel (mantém os documentos)"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: sinalizados[a.imovelId] ? 'default' : 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  <Trophy size={13} /> {sinalizados[a.imovelId] ? 'Arrematado ✓' : (sinalizando === a.imovelId ? 'Enviando…' : 'Arrematei')}
+                </button>
                 <button onClick={(e) => { e.stopPropagation(); remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
               </div>
             );

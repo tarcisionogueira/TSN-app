@@ -63,10 +63,17 @@ async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
 // exclusão do relatório (tabela separada de analises_*). Guarda só dado POISON-RESISTENTE:
 // valores do imóvel (scraper) e da pesquisa (servidor) — nunca derivados de input do
 // usuário (ex.: valorMercado depende de areaM2 do cliente), p/ não envenenar o coletivo.
-async function aprenderNaEmissao(imovel, mercado, temParecer) {
+async function aprenderNaEmissao(imovel, mercado, temParecer, avalReal, minReal) {
   try {
-    const aval = Number(imovel?.valor_avaliacao) || null;
-    const min  = Number(imovel?.valor_minimo) || null;
+    // Usa os valores VALIDADOS do imóvel (avalDb/vminImovel: lidos de imoveis_leilao após
+    // garantirValores, já com as travas de sentinela/implausível) quando o chamador os passa.
+    // Antes lia só imovel.valor_avaliacao (snake_case), mas a tela /analise envia valorAvaliacao
+    // (camelCase) → Number(...) = NaN → avaliacao_ausente:true em TODO relatório (sinal de
+    // aprendizado 100% ruído). Fallback aceita as duas grafias se os validados não vierem.
+    const aval = Number(avalReal) > 0 ? Number(avalReal)
+      : (Number(imovel?.valor_avaliacao) || Number(imovel?.valorAvaliacao) || null);
+    const min  = Number(minReal) > 0 ? Number(minReal)
+      : (Number(imovel?.valor_minimo) || Number(imovel?.valorMinimo) || null);
     const nAmostras = mercado?.amostras?.length || mercado?.comparaveis?.length || mercado?.anuncios?.length || 0;
     const precoM2 = Number(mercado?.precoMedioM2) || null;
     const corpus = {
@@ -147,6 +154,51 @@ async function lerIndiceBidPro(imDb) {
     });
     const j = await r.json().catch(() => null);
     return (j && (Number(j.venda_m2) > 0 || Number(j.aluguel_m2) > 0)) ? j : null;
+  } catch { return null; }
+}
+
+// Grava as amostras DATADAS deste relatório em indice_amostra (base da valorização por
+// ano e da recência real). Só residencial, poison-resistente (dados da pesquisa). O prompt
+// já descarta leilão das amostras → arremate NUNCA entra aqui. Dedup pelo índice único.
+async function gravarAmostrasIndice(imDb, mercado, imovelId) {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return;
+    const uf = String(imDb.estado).toUpperCase();
+    const nowMes = new Date().toISOString().slice(0, 7);
+    const dref = (d) => (/^\d{4}-\d{2}$/.test(String(d || '')) ? `${d}-01` : `${nowMes}-01`);
+    const vendas = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])];
+    const locs   = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || [])];
+    const rows = [];
+    for (const s of vendas) {
+      const m2 = Number(s?.valorM2);
+      if (!(m2 >= 200 && m2 <= 50000)) continue;
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: 'residencial',
+        especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
+        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
+    }
+    for (const s of locs) {
+      const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
+      if (!(mensal > 0)) continue;
+      const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: 'residencial',
+        especie: 'locacao', valor_m2: (vm2 && vm2 >= 1 && vm2 <= 1000) ? vm2 : null, valor_total: mensal, area_m2: area || null,
+        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
+    }
+    if (!rows.length) return;
+    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(rows) });
+  } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
+}
+
+// Valorização por ano (mediana de R$/m² de VENDA) da microrregião — vai no relatório
+// como MAIS UMA referência (curva no tempo), independente do FipeZAP.
+async function lerValorizacao(imDb) {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return null;
+    const r = await sb('rpc/indice_valorizacao_anual', { method: 'POST', body: JSON.stringify({
+      p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_tipo: 'residencial', p_especie: 'venda', p_anos: 6 }) });
+    if (!r.ok) return null;
+    const v = await r.json().catch(() => null);
+    return (v && Array.isArray(v.serie) && v.serie.length >= 2) ? v : null;
   } catch { return null; }
 }
 
@@ -463,6 +515,7 @@ MERCADO:
 - Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
 ${mercado?.referenciaFipeZap?.encontrado ? `- Referência FipeZAP (${mercado.referenciaFipeZap.localidade || inp.cidade || ''}, ${mercado.referenciaFipeZap.mesReferencia || 'recente'}): R$ ${brl(mercado.referenciaFipeZap.precoMedioM2)}/m² · valorização 12m: ${(Number(mercado.referenciaFipeZap.valorizacao12m) || 0).toFixed(1)}%. Compare com a média dos anúncios acima: se divergirem muito, comente e use a mais conservadora na defesa.` : ''}
 ${mercado?.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0) ? `- Índice BidPro (nossa base própria por microrregião, nível ${mercado.indiceBidPro.nivel})${Number(mercado.indiceBidPro.venda_m2) > 0 ? `: venda R$ ${brl(mercado.indiceBidPro.venda_m2)}/m²` : ''}${Number(mercado.indiceBidPro.aluguel_m2) > 0 ? ` · locação R$ ${brl(mercado.indiceBidPro.aluguel_m2)}/m²/mês` : ''}. Referência interna independente (venda e locação), consolidada das análises da plataforma — use como sanity-check adicional junto ao FipeZAP.` : ''}
+${mercado?.valorizacao?.serie?.length >= 2 ? `- Valorização BidPro (${inp.cidade || ''}, venda R$/m² por ano, base própria): ${mercado.valorizacao.serie.map(p => `${p.ano}: R$ ${brl(p.m2)}`).join(' · ')}. Variação no período: ${Number(mercado.valorizacao.valorizacao_periodo_pct).toFixed(1)}% (${Number(mercado.valorizacao.valorizacao_aa_pct).toFixed(1)}% a.a.). Use como leitura de TENDÊNCIA da microrregião (amostras podem ser poucas nos anos iniciais).` : ''}
 ${(() => {
   const c = mercado?.classificacaoIntencao;
   if (!c || !c.algum) return '';
@@ -579,7 +632,7 @@ export default async function handler(req, res) {
   const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), Math.max(20000, restante())));
 
   try {
-    const { result, valorMercado } = await Promise.race([prazo, (async () => {
+    const { result, valorMercado, avalDb, vminImovel } = await Promise.race([prazo, (async () => {
     // 1) Mercado — reaproveita pesquisa recente do mesmo imóvel (se houver), senão busca.
     // INVALIDAÇÃO type-aware: uma pesquisa antiga (anterior à avaliação por tipo) NÃO traz
     // consolidado.valorEstimadoImovel/baseCalculo. Para bases por m² construído/privativo
@@ -703,6 +756,9 @@ export default async function handler(req, res) {
       const aluguelM2 = (Number(mercado.aluguelMedio) > 0 && areaM2 > 0) ? Number(mercado.aluguelMedio) / areaM2 : null;
       await semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras);
       mercado.indiceBidPro = await lerIndiceBidPro(imDb);
+      // Amostras datadas (valorização/recência) + curva de valorização por ano no relatório.
+      await gravarAmostrasIndice(imDb, mercado, imovelId);
+      mercado.valorizacao = await lerValorizacao(imDb);
     }
 
     // CLASSIFICAÇÃO DE INTENÇÃO (revenda/locação/temporada) — consta no relatório e vira defesa no
@@ -765,15 +821,32 @@ export default async function handler(req, res) {
     const AVISO_MERCADO = '§ SEÇÃO: LEMBRETE E PRÓXIMO PASSO\nEsta análise mercadológica é gerada com apoio de inteligência artificial e tem caráter informativo — pode conter imprecisões e não substitui a verificação presencial. Antes de decidir, recomendamos VISITAR o imóvel pessoalmente ou AGENDAR com um corretor de confiança para conhecer um imóvel similar na região, confirmando estado de conservação, localização e o valor praticado no mercado.';
     if (parecer) parecer += `\n\n${AVISO_MERCADO}`;
 
-      const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm };
-      return { result, valorMercado };
+      // MERCADO VAZIO (fonte instável no momento → 0 amostras / sem valor): marca no result.
+      // Serve para (a) o front mostrar "não estimado" e o servidor NÃO cobrar cota, e (b) o
+      // self-heal (regenerar-relatorios-cron) re-tentar com orçamento fresco por até 48h. Uma
+      // pesquisa que se PREENCHE numa próxima tentativa limpa o flag e para de ser re-tentada.
+      const mercadoVazio = !reaproveitado
+        && !(Number(valorMercado) > 0)
+        && !(Number(mercado?.precoMedioM2) > 0)
+        && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
+      const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm, mercadoVazio };
+      return { result, valorMercado, avalDb, vminImovel };
     })()]);
 
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
     // mercado/parecer vivem DENTRO do Promise.race acima; aqui usamos o result (que os
     // carrega) para não referenciar variável fora de escopo (bug "mercado is not defined").
-    await aprenderNaEmissao(imovel, result.mercado, !!result.parecer);
+    await aprenderNaEmissao(imovel, result.mercado, !!result.parecer, avalDb, vminImovel);
+
+    // MERCADO VAZIO (fonte instável no momento → 0 amostras / sem valor): o relatório é
+    // salvo e mostrado como "não estimado", mas NÃO cobramos a cota — o cliente gera de novo
+    // sem custo. Antes, um relatório "concluído mas vazio" consumia o crédito injustamente.
+    // O flag foi calculado junto do result (acima) e será re-tentado pelo self-heal por 48h.
+    const mercadoVazio = !!result.mercadoVazio;
+    if (mercadoVazio && cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); cota.estornada = true; } catch { /* estorno best-effort */ }
+    }
 
     // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.
     // roi (parecerInputs.metricas) e areaM2 (mercadoInputs) vêm do CLIENTE e são
@@ -782,7 +855,7 @@ export default async function handler(req, res) {
     // processo confiável (api/calcular-score.js) a partir dos dados do PRÓPRIO imóvel,
     // nunca por input de usuário. A análise individual continua salva acima (upsertAnalise)
     // e visível só para quem a gerou.
-    res.status(200).json({ ok: true, result, cota });
+    res.status(200).json({ ok: true, result, cota, mercadoVazio });
   } catch (e) {
     const timeout = String(e?.message) === 'tempo_limite';
     const msg = timeout

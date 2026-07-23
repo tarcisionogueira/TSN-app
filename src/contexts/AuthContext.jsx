@@ -75,6 +75,19 @@ function loadImpersonate() {
   catch { return null; }
 }
 
+// Cache do perfil (role/nome/etc.) em localStorage → na volta do usuário, a tela aparece
+// INSTANTÂNEA com o último perfil conhecido enquanto o valor fresco é revalidado em 2º plano
+// (stale-while-revalidate). Antes, o app ficava em tela branca esperando a query do perfil.
+const PERFIL_CACHE_KEY = 'tsn_perfil_cache';
+function loadPerfilCache(uid) {
+  try { const c = JSON.parse(localStorage.getItem(PERFIL_CACHE_KEY) || 'null'); return (c && c.uid === uid) ? c.p : null; }
+  catch { return null; }
+}
+function savePerfilCache(uid, p) {
+  if (!uid) return;
+  try { localStorage.setItem(PERFIL_CACHE_KEY, JSON.stringify({ uid, p })); } catch { /* ok */ }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser]             = useState(null);
   const [role, setRole]             = useState('explorador');
@@ -90,23 +103,28 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Verificar expiração de 24h na carga inicial
-    supabase.auth.getSession().then(async ({ data }) => {
+    const aplicarPerfil = (p) => {
+      setRole(p.role); setAtivo(p.ativo); setInad(p.inadimplenteDias);
+      setCadastroIncompleto(p.cadastroIncompleto ?? false); setNome(p.nome || '');
+    };
+    supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user ?? null;
       if (u && isSessionExpired()) {
-        await supabase.auth.signOut();
+        supabase.auth.signOut();
         localStorage.removeItem(LAST_ACTIVITY_KEY);
+        localStorage.removeItem(PERFIL_CACHE_KEY);
         setLoading(false);
         return;
       }
       if (u) updateActivity();
       setUser(u);
-      const p = await fetchPerfil(u?.id);
-      setRole(p.role);
-      setAtivo(p.ativo);
-      setInad(p.inadimplenteDias);
-      setCadastroIncompleto(p.cadastroIncompleto ?? false);
-      setNome(p.nome || '');
-      setLoading(false);
+      if (!u) { setLoading(false); return; }
+      // Hidrata do cache NA HORA (se houver) e já libera a UI — sem esperar a rede.
+      const cached = loadPerfilCache(u.id);
+      if (cached) { aplicarPerfil(cached); setLoading(false); }
+      // Revalida em 2º plano; só o 1º acesso (sem cache) espera a query.
+      fetchPerfil(u.id).then((p) => { aplicarPerfil(p); savePerfilCache(u.id, p); setLoading(false); })
+        .catch(() => setLoading(false));
     });
 
     // Atualiza atividade em cliques e teclas
@@ -121,6 +139,7 @@ export function AuthProvider({ children }) {
       if (event === 'SIGNED_OUT') {
         sessionStorage.removeItem(IMPERSONATE_KEY);
         localStorage.removeItem(LAST_ACTIVITY_KEY);
+        localStorage.removeItem(PERFIL_CACHE_KEY);
         setImpersonate(null);
       }
       // IMPORTANTE: NÃO chamar funções async do supabase DENTRO do callback do
@@ -136,12 +155,17 @@ export function AuthProvider({ children }) {
         setInad(p.inadimplenteDias);
         setCadastroIncompleto(p.cadastroIncompleto ?? false);
       setNome(p.nome || '');
+        if (u) savePerfilCache(u.id, p);
         // Vincula o cliente ao consultor que o indicou (link de afiliado), inclusive no
         // login Google onde o trigger não recebe o código. Só no sign-in real.
         if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
           // Log de uso — prova de acesso para proteção contra chargeback
           if (event === 'SIGNED_IN') {
-            try { import('../utils/logUso').then(({ logUso }) => logUso(u.id, 'login')); } catch (_) {}
+            // O try/catch NÃO pega a rejeição do import() dinâmico: em chunk stale
+            // pós-deploy o módulo vem undefined e o destructure quebrava (erro-cliente
+            // "Cannot destructure property 'logUso' of 'undefined'" na /analise).
+            // Optional chaining + .catch tornam o log de acesso à prova de falha.
+            import('../utils/logUso').then(m => m?.logUso?.(u.id, 'login')).catch(() => {});
           }
           // Push automático (só 1x por navegador).
           try { ativarPushAutomatico(() => session); } catch (_) {}
@@ -186,6 +210,7 @@ export function AuthProvider({ children }) {
       setInad(p.inadimplenteDias);
       setCadastroIncompleto(p.cadastroIncompleto ?? false);
       setNome(p.nome || '');
+      savePerfilCache(uid, p);
     };
     const onVisible = () => { if (document.visibilityState === 'visible') refetchPerfil(); };
     window.addEventListener('focus', refetchPerfil);

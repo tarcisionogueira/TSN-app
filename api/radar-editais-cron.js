@@ -53,6 +53,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+// Palavras que NUNCA aparecem num nome próprio de leiloeiro, mas aparecem quando a regex/IA
+// pega um FRAGMENTO de frase do edital ("para os encargos de avaliação e leilão", "a
+// publicação do edital na forma do art", "inviável", "credenciado"…). Guard forte.
+const NOME_BLOQ = /(edital|públic|public|encargo|comiss|avalia|necessidade|d[ée]bito|trabalhist|\bforma\b|artigo|\bart\b|invi[áa]vel|credenciad|oficial|cadastrad|nomead|portal|auxiliar|processo|im[óo]vel|penhora|arremat|hasta|pra[çc]a|leil[ãa]o|expe[çc]a|intima|despach|senten|ju[íi]z|\bvara\b|autos|partes|advogad|requerid|exequ|execut|\bfls\b|plat[ao]|apura|imputa|realizada|\bbem\b|\bfato\b)/i;
+const CIDADE_BLOQ = /(cpf|cnpj|ltda|\bs\/?a\b|\bcri\b|cart[óo]rio|registro|of[íi]cio|expe[çc]a|matr[íi]cula|processo|edital|comarca|\bvara\b|\bforo\b)/i;
+const CONECTORES = new Set(['da', 'de', 'do', 'dos', 'das', 'e', 'di', 'del', 'la']);
+function tituloNome(s) {
+  return String(s).toLowerCase().split(' ').filter(Boolean)
+    .map((w, i) => (i > 0 && CONECTORES.has(w)) ? w : (w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
+}
+// Valida (e normaliza p/ Título) um nome de leiloeiro. Devolve o nome limpo ou null.
+function nomeLeiloeiroValido(s) {
+  let nome = String(s || '').replace(/\s+/g, ' ').trim();
+  nome = nome.replace(/^(sr|sra|dr|dra|exm[oa]|ilm[oa]|dd|me|excelent[íi]ssim[oa])\.?\s+/i, ''); // tira pronome de tratamento
+  if (nome.length < 6 || nome.length > 70) return null;
+  const palavras = nome.split(' ').filter(Boolean);
+  if (palavras.length < 2 || palavras.length > 6) return null; // nome próprio: 2–6 palavras
+  if (/\d/.test(nome)) return null;                            // nomes não têm números
+  if (NOME_BLOQ.test(nome)) return null;                       // é fragmento de frase, não nome
+  return tituloNome(nome).slice(0, 120);
+}
+function cidadeValida(s) {
+  const c = String(s || '').replace(/\s+/g, ' ').trim();
+  if (c.length < 3 || c.length > 40) return null;
+  if (/\d/.test(c)) return null;
+  if (CIDADE_BLOQ.test(c)) return null;
+  if (!/[a-zà-ÿ]/i.test(c)) return null; // precisa ter letra (evita siglas soltas)
+  return c;
+}
+
 function ymd(d) { return d.toISOString().slice(0, 10); }
 function parseBRL(s) {
   if (!s) return null;
@@ -90,16 +120,18 @@ function parseEdital(texto) {
   const debitos = /d[ée]bito|IPTU|condom[íi]ni|ônus|onus|hipotec|penhora/i.test(t) ? 'edital menciona débitos/ônus (IPTU/condomínio/hipoteca/penhora) — conferir no texto' : null;
   const endereco = pega(/(?:situad[oa]|localizad[oa])\s+(?:[àa]|na|no|em)\s+([A-ZÀ-Ý0-9][^,\n]{6,90})/i);
   const cidadeUf = t.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ.'\s]{2,40})\s*[\/\-]\s*([A-Z]{2})\b/);
-  const parsedAlgo = !!(leiloeiro || jucesp || av || lance || praca1);
+  const leiloeiroLimpo = nomeLeiloeiroValido(leiloeiro);
+  const cidadeLimpa = cidadeUf ? cidadeValida(cidadeUf[1]) : null;
+  const parsedAlgo = !!(leiloeiroLimpo || jucesp || av || lance || praca1);
   return {
-    leiloeiro_nome: leiloeiro, leiloeiro_jucesp: jucesp,
+    leiloeiro_nome: leiloeiroLimpo, leiloeiro_jucesp: jucesp,
     valor_avaliacao: parseBRL(av), lance_minimo: parseBRL(lance),
     data_praca_1: parseDataBR(praca1), data_praca_2: parseDataBR(praca2),
     imovel_matricula: matricula, leilao_plataforma_url: plataforma ? ('https://' + plataforma) : null,
     imovel_area_m2: area ? (parseFloat(area.replace(/\./g, '').replace(',', '.')) || null) : null,
     ocupacao, cartorio, debitos,
     imovel_endereco: endereco ? endereco.replace(/\s+/g, ' ').trim().slice(0, 200) : null,
-    imovel_cidade: cidadeUf ? cidadeUf[1].replace(/\s+/g, ' ').trim().slice(0, 80) : null,
+    imovel_cidade: cidadeLimpa,
     imovel_uf: cidadeUf ? cidadeUf[2] : null,
     status: parsedAlgo ? 'processado' : 'erro_parse',
   };
@@ -128,7 +160,7 @@ async function extrairEditalIA(texto) {
   if (!apiKey) return null;
   const prompt = `Abaixo há uma COMUNICAÇÃO JUDICIAL sobre LEILÃO/HASTA de IMÓVEL (pode ser o edital, ou uma intimação/despacho que designa ou relata o leilão). Extraia os campos e responda APENAS um JSON válido (sem markdown, sem comentários) com estas chaves (use null quando não houver):
 {"leiloeiro_nome":string|null,"valor_avaliacao":number|null,"lance_minimo":number|null,"data_praca_1":"YYYY-MM-DD"|null,"data_praca_2":"YYYY-MM-DD"|null,"imovel_matricula":string|null,"imovel_endereco":string|null,"imovel_cidade":string|null,"imovel_uf":string|null,"ocupacao":"ocupado"|"desocupado"|null,"area_m2":number|null}
-Regras: valores como número puro (ex: 150000.50, sem "R$" nem pontos de milhar). leiloeiro_nome = o NOME PRÓPRIO da pessoa/empresa leiloeira (ex: "João da Silva Leilões"); se o texto só disser "leiloeiro oficial"/"cadastrado no Portal dos Auxiliares" SEM nomear, use null (nunca o juiz, as partes ou advogados). Se o texto NÃO tratar de leilão/hasta pública de um IMÓVEL, responda exatamente {"nao_edital":true}.
+Regras: valores como número puro (ex: 150000.50, sem "R$" nem pontos de milhar). leiloeiro_nome = APENAS o NOME PRÓPRIO da pessoa/empresa leiloeira, em Caixa Alta e Baixa (ex: "João da Silva" ou "Zaccarino Leilões"), de 2 a 5 palavras — NUNCA uma frase, verbo ou trecho do edital; se o texto só disser "leiloeiro oficial"/"cadastrado no Portal dos Auxiliares" SEM nomear, use null (nunca o juiz, as partes ou advogados). Se o texto NÃO tratar de leilão/hasta pública de um IMÓVEL, responda exatamente {"nao_edital":true}.
 
 TEXTO:
 ${String(texto || '').slice(0, 8000)}`;
@@ -168,12 +200,9 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
     if (out && out.nao_edital) {
       upd.status = 'nao_edital'; // IA confirmou que é despacho/decisão, não edital → telas ignoram
     } else if (out) {
-      // Só NOME PRÓPRIO (≥2 palavras, sem fragmento genérico): muitas intimações referenciam
-      // "leiloeiro oficial cadastrado no Portal dos Auxiliares" SEM nomear ninguém. Sobrescreve
-      // sempre (assim limpa também o lixo herdado da regex: "oficial", "cadastrado no portal"...).
-      const bruto = String(out.leiloeiro_nome || '').trim();
-      const nomeReal = (bruto && /\s/.test(bruto)
-        && !/^(oficial|cadastrad|leiloeir|nomead|portal|auxiliar|s[rn]a?\.?\s*$)/i.test(bruto)) ? bruto.slice(0, 120) : null;
+      // Só NOME PRÓPRIO válido (2–6 palavras, sem fragmento de frase) — normaliza p/ Título.
+      // Sobrescreve SEMPRE (limpa também o lixo herdado da regex: "oficial", "para os encargos…").
+      const nomeReal = nomeLeiloeiroValido(out.leiloeiro_nome);
       upd.leiloeiro_nome = nomeReal;
       upd.leiloeiro_nome_norm = nomeReal ? norm(nomeReal) : null;
       upd.leiloeiro_integrado = nomeReal ? ehIntegrado(nomeReal) : false;
@@ -184,7 +213,7 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
       if (dataOk(out.data_praca_2)) upd.data_praca_2 = dataOk(out.data_praca_2);
       if (out.imovel_matricula) upd.imovel_matricula = String(out.imovel_matricula).slice(0, 40);
       if (out.imovel_endereco) upd.imovel_endereco = String(out.imovel_endereco).slice(0, 200);
-      if (out.imovel_cidade) upd.imovel_cidade = String(out.imovel_cidade).slice(0, 80);
+      { const cid = cidadeValida(out.imovel_cidade); if (cid) upd.imovel_cidade = cid; else if (out.imovel_cidade) upd.imovel_cidade = null; }
       if (out.imovel_uf && /^[A-Za-z]{2}$/.test(out.imovel_uf)) upd.imovel_uf = String(out.imovel_uf).toUpperCase();
       if (out.ocupacao === 'ocupado' || out.ocupacao === 'desocupado') upd.ocupacao = out.ocupacao;
       upd.status = 'processado';
