@@ -73,13 +73,17 @@ function extrairIdLeiloes(html) {
   return [...ids];
 }
 
-// Nome do leiloeiro a partir do <title> ("GRANADO LEILÕES :: Gestão de Leilões").
+// Title-case Unicode-safe (o \w quebra em acentos → "NegóCio"; \p{L} com /u resolve).
+function tituloCase(s) {
+  return s.toLowerCase().replace(/(^|[\s'"–—-])(\p{L})/gu, (_, p, c) => p + c.toUpperCase());
+}
+
+// Nome do leiloeiro a partir do <title>: fica só com a MARCA (corta no 1º separador —
+// "::", "-", "|" — que separa a marca da tagline "Gestão de Leilões"/"O melhor negócio…").
 function leiloeiroDoTitulo(html, dominio) {
-  const t = ((html.match(/<title>([^<]*)<\/title>/i) || [])[1] || '').split('::')[0]
-    .replace(/\s+/g, ' ').trim();
-  if (t && t.length >= 3 && !/gest[ãa]o de leil/i.test(t)) {
-    return t.replace(/\b(\w)(\w*)/g, (_, a, b) => a.toUpperCase() + b.toLowerCase());
-  }
+  let t = ((html.match(/<title>([^<]*)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
+  t = t.split(/\s*(?:::|[|–—-])\s*/)[0].trim();
+  if (t && t.length >= 3 && !/gest[ãa]o de leil/i.test(t)) return tituloCase(t).slice(0, 80);
   // Fallback: deriva do domínio (ex.: granadoleiloes → Granado Leilões).
   const base = dominio.replace(/^www\./, '').split('.')[0].replace(/leiloes?$/i, '');
   return `${base.charAt(0).toUpperCase()}${base.slice(1)} Leilões`;
@@ -134,11 +138,17 @@ function parseCard(card, ctx) {
   const valorAval = avaliacao || inicial || proposta || 0;
 
   // Campos do bloco DESCRIÇÃO: "ESTADO: XX - CIDADE: Y - ENDEREÇO: Z - BAIRRO: W - DESCRIÇÃO: ..."
-  const estado = (txt.match(/ESTADO:\s*([A-Z]{2})\b/i) || [])[1] || null;
-  const cidade = (txt.match(/CIDADE:\s*([^-]+?)\s*-\s*(?:ENDERE|BAIRRO|DESCRI)/i) || [])[1]?.trim() || null;
+  let estado = (txt.match(/ESTADO:\s*([A-Z]{2})\b/i) || [])[1] || null;
+  let cidade = (txt.match(/CIDADE:\s*([^-]+?)\s*-\s*(?:ENDERE|BAIRRO|DESCRI)/i) || [])[1]?.trim() || null;
   const endereco = (txt.match(/ENDERE[ÇC]O:\s*(.+?)\s*-\s*(?:BAIRRO|DESCRI|IPTU|MATR)/i) || [])[1]?.trim() || null;
   const bairro = (txt.match(/BAIRRO:\s*([^-]+?)\s*-\s*(?:DESCRI|IPTU|MATR)/i) || [])[1]?.trim() || null;
-  const matricula = (txt.match(/MATR[ÍI]CULA:\s*([\d.\-\/]{2,})/i) || [])[1] || null;
+  // Fallback venda-direta: o card usa "CIDADE (UF)" (ex.: "ID75411 CURITIBA (PR) - Portão").
+  if (!cidade) {
+    const m2 = txt.match(/\b([A-ZÀ-Ý][A-Za-zÀ-ÿ. ]{2,30}?)\s*\(([A-Z]{2})\)/);
+    if (m2) { cidade = tituloCase(m2[1].trim()); estado = estado || m2[2]; }
+  }
+  // Matrícula: aceita "MATRÍCULA: 44034" e "Matrícula 101339 do 6º CRI" (venda direta, sem ":").
+  const matricula = (txt.match(/matr[íi]cula[:\s]*n?[ºo°.]?\s*(\d[\d.\-\/]{2,})/i) || [])[1] || null;
   const area = num((txt.match(/([\d.]+,\d{2}|\d+(?:,\d+)?)\s*M2?\s*DE\s*[ÁA]REA\s*(?:PRIVATIVA|TOTAL|ÚTIL|UTIL|CONSTRU)/i) || [])[1])
     || num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
 
@@ -182,9 +192,11 @@ function parseCard(card, ctx) {
   return row;
 }
 
-// Rótulo curto do imóvel a partir do início da DESCRIÇÃO (ex.: "CASA", "APARTAMENTO").
+// Rótulo curto do imóvel: 1º pelo início da DESCRIÇÃO; senão pela 1ª palavra-tipo do card
+// (cobre venda direta, que usa "Descrição legal: Imóvel Urbano: Prédio Comercial…").
 function inferirRotulo(txt) {
-  const m = txt.match(/DESCRI[ÇC][ÃA]O:[^.]*?\b(CASA|APARTAMENTO|APTO|TERRENO|SALA|LOJA|GALP[ÃA]O|PR[ÉE]DIO|CH[ÁA]CARA|S[ÍI]TIO|FAZENDA|BARRAC[ÃA]O|IM[ÓO]VEL)\b/i);
+  const TIPOS = /\b(CASA|APARTAMENTO|APTO|TERRENO|SALA|LOJA|GALP[ÃA]O|PR[ÉE]DIO|CH[ÁA]CARA|S[ÍI]TIO|FAZENDA|BARRAC[ÃA]O|IM[ÓO]VEL)\b/i;
+  const m = txt.match(new RegExp(`DESCRI[ÇC][ÃA]O:[^.]*?${TIPOS.source}`, 'i')) || txt.match(TIPOS);
   return m ? m[1].toUpperCase() : 'IMÓVEL';
 }
 
