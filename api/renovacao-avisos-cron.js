@@ -108,13 +108,23 @@ async function handler(req) {
         const dataFmt = new Date(nextMs).toLocaleDateString('pt-BR', { timeZone: 'America/Bahia' });
 
         try {
-          await enviarEmail({
+          // enviarEmail NUNCA lança (retorna { ok:false }). A trava de idempotência já foi
+          // gravada por jaAvisado() ACIMA — se o envio falhar aqui, o próximo run veria 409 e
+          // pularia, e o cliente seria cobrado ~3 dias depois SEM o aviso prometido. Então,
+          // em falha, SOLTA a trava para re-tentar no próximo ciclo (dentro da janela).
+          const r = await enviarEmail({
             from: EMAIL_FROM,
             to: email,
             subject: `Sua assinatura ${plano} renova em ${dataFmt}`,
             html: corpoEmail({ nome, plano, valor, dataFmt }),
           });
-          avisados++;
+          if (r?.ok) {
+            avisados++;
+          } else {
+            await fetch(`${SUPABASE_URL}/rest/v1/webhook_eventos_processados?gateway=eq.mercadopago&gateway_payment_id=eq.${encodeURIComponent(String(sub.id))}&evento=eq.${encodeURIComponent('renov_aviso:' + nextDate)}`,
+              { method: 'DELETE', headers: { ...hdr } }).catch(() => {});
+            console.error('[renovacao-avisos] email nao enviado, trava liberada:', r?.error);
+          }
         } catch (e) { console.error('[renovacao-avisos] email:', e?.message); }
       }
 

@@ -206,8 +206,15 @@ export default async function handler(req, res) {
   if (executadoDoc) {
     try {
       const r = await sb('rpc/consultar_sancoes', { method: 'POST', body: JSON.stringify({ p_doc: executadoDoc }) });
-      const j = await r.json();
-      sancoes = Array.isArray(j) ? j : [];
+      // Sem checar r.ok, um erro da RPC (PostgREST devolve JSON de erro, NÃO lança) virava
+      // sancoes=[] e a seção NÃO era marcada como faltante → relatório jurídico afirmava
+      // "sem sanções CEIS/CNEP" falsamente. Falha de consulta ≠ ausência de sanção.
+      if (!r.ok) {
+        secoesFaltando.push('sancoes');
+      } else {
+        const j = await r.json();
+        sancoes = Array.isArray(j) ? j : [];
+      }
     } catch {
       secoesFaltando.push('sancoes');
     }

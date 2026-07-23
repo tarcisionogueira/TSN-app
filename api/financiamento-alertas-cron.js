@@ -24,6 +24,11 @@ export default async function handler(req, res) {
     `${SUPABASE_URL}/rest/v1/financiamentos?notificar_email=eq.true&select=*`,
     { headers: hdr }
   );
+  // Sem checar .ok, um erro do REST devolve um objeto (não-iterável) e o `for` abaixo
+  // derruba o run inteiro. Falha na leitura → aborta limpo, tenta no próximo ciclo.
+  if (!finRes.ok) {
+    return res.status(502).json({ ok: false, error: `financiamentos_${finRes.status}` });
+  }
   const fins = await finRes.json();
 
   let enviados = 0;

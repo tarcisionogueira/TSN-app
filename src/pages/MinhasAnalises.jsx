@@ -208,7 +208,7 @@ export default function MinhasAnalises() {
                   <Trophy size={13} /> {sinalizados[a.imovelId] ? 'Arrematado ✓' : (sinalizando === a.imovelId ? 'Enviando…' : 'Arrematei')}
                 </button>
                 )}
-                <button onClick={(e) => { e.stopPropagation(); remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
+                <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Remover esta análise? Os relatórios mercadológico, documental e laudo deste imóvel serão apagados e não há como desfazer.')) remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
               </div>
             );
           })}

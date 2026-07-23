@@ -551,7 +551,11 @@ export default function Perfil() {
     setLgpdErro(null);
     try {
       const res = await apiCall('/api/lgpd-exportar');
-      const blob = new Blob([JSON.stringify(res, null, 2)], { type: 'application/json' });
+      // apiCall devolve o Response cru; JSON.stringify(Response) vira "{}" — o export LGPD
+      // saía sempre vazio. Precisa ler o corpo (e falhar de verdade se não vier OK).
+      if (!res.ok) throw new Error('falha_exportar');
+      const dados = await res.json();
+      const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -570,7 +574,14 @@ export default function Perfil() {
     setExcluindo(true);
     setLgpdErro(null);
     try {
-      await apiCall('/api/lgpd-excluir', { method: 'POST' });
+      // fetch NÃO lança em 4xx/5xx — sem checar res.ok, uma exclusão que falhou no
+      // servidor ainda deslogava o usuário e o mandava pra home como se a conta (e a PII)
+      // tivessem sido apagadas. Confirma o sucesso ANTES de deslogar.
+      const res = await apiCall('/api/lgpd-excluir', { method: 'POST' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'falha_excluir');
+      }
       await supabase.auth.signOut();
       nav('/');
     } catch (err) {

@@ -112,6 +112,16 @@ Responda SOMENTE com o JSON, sem texto adicional.`;
       }),
     });
 
+    // Sem checar claudeRes.ok, uma indisponibilidade do Claude (4xx/5xx) virava corpo {} →
+    // parsed.ok !== true → rejeição genérica "tente novamente" em HTTP 200, indistinguível
+    // de uma reprovação real (usuário legítimo barrado durante um incidente da plataforma).
+    if (!claudeRes.ok) {
+      return new Response(JSON.stringify({
+        ok: false,
+        mensagem: 'Verificação temporariamente indisponível. Tente novamente em alguns minutos.',
+        indisponivel: true,
+      }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+    }
     const claudeData = await claudeRes.json();
     const text = claudeData?.content?.[0]?.text || '{}';
 

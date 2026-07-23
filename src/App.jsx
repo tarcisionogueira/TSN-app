@@ -253,7 +253,7 @@ function MainLayout() {
     if (['analista','consultor','advogado'].includes(role) && loc.pathname === '/') return <Navigate to="/atendimento" replace />;
   }
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100dvh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <Header />
       {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
       {showBonus && <PopupBonusAnalises userId={user.id} onFechar={() => setShowBonus(false)} />}
@@ -310,7 +310,10 @@ function MainLayout() {
         </Routes>
         </Suspense>
       </main>
-      <Footer />
+      {/* A Landing pré-login já tem rodapé PRÓPRIO (completo). Sem esta condição, o layout
+          empilhava DOIS rodapés na home do visitante — o próprio + este global — com uma
+          faixa clara entre eles ("excesso no fim da página"). Demais telas usam este. */}
+      {!(loc.pathname === '/' && !isLoggedIn) && <Footer />}
     </div>
   );
 }
