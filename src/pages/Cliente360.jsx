@@ -393,6 +393,29 @@ export default function Cliente360() {
             )}
           </div>
 
+          {/* Atividade recente (log de movimentos — diagnóstico; validade 90 dias) */}
+          <div style={card}>
+            <div style={{ ...label, marginBottom: 8 }}>Atividade recente ({(dados.atividade || []).length}) — diagnóstico (últimos 90 dias)</div>
+            {(dados.atividade || []).length === 0 ? <div style={{ fontSize: 12, color: '#94a3b8' }}>Sem movimentos registrados.</div> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {dados.atividade.map((a, i) => {
+                  const ev = a.evento || '';
+                  const cor = ev.includes('erro') ? '#dc2626' : (ev.includes('vazio') ? '#b45309' : '#059669');
+                  const rot = { relatorio_mercado_ok: 'Relatório mercadológico', relatorio_mercado_vazio: 'Mercado não estimado', relatorio_mercado_erro: 'Erro no relatório', arremate: 'Arremate sinalizado', revenda: 'Revenda sinalizada' }[ev] || ev;
+                  return (
+                    <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 5 : 0 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ color: cor, fontWeight: 700 }}>{rot}</span>
+                        {a.detalhe ? <span style={{ color: '#64748b' }}> · {a.detalhe}</span> : ''}
+                      </span>
+                      <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(a.criado_em)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Buscas recentes (intenções) */}
           <div style={card}>
             <div style={{ ...label, marginBottom: 8 }}>Buscas recentes ({(dados.buscas || []).length})</div>
