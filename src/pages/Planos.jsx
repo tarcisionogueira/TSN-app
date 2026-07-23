@@ -187,11 +187,16 @@ export default function Planos() {
             {periodo === 'anual'
               ? <div style={{ fontSize: 13, color: '#86efac', fontWeight: 700, marginBottom: 8 }}>{pLabel('top2', 'precoAnualLabel', 'R$ 449,90')}/ano{PLANOS.top2?.preco && PLANOS.top2?.precoAnual ? ` · economize ${fmtR(PLANOS.top2.preco * 12 - PLANOS.top2.precoAnual)}` : ''}</div>
               : <div style={{ fontSize: 12, color: '#7dd3fc', marginBottom: 8 }}>ou {pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49')}/mês no plano anual (-25%)</div>}
-            <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.15)', border: '1px solid rgba(134,239,172,0.3)', color: '#86efac', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 20, alignSelf: 'flex-start' }}>
+            <div style={{ display: 'inline-block', background: 'rgba(134,239,172,0.15)', border: '1px solid rgba(134,239,172,0.3)', color: '#86efac', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 12, alignSelf: 'flex-start' }}>
               {periodo === 'anual' ? 'Cancele a renovação automática quando quiser' : 'Cancele quando quiser'}
             </div>
+            {periodo !== 'anual' && (
+              <div style={{ display: 'inline-block', background: 'rgba(250,204,21,0.15)', border: '1px solid rgba(250,204,21,0.35)', color: '#fde047', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 20, alignSelf: 'flex-start' }}>
+                Valor promocional de lançamento até 30/09 · depois R$ 89,90/mês
+              </div>
+            )}
             <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 20, lineHeight: 1.7 }}>
-              Relatório completo de viabilidade por IA + análise documental e jurídica com base nos anexos do leilão. Até 15 relatórios de cada tipo por mês.
+              Relatório completo de viabilidade por IA + análise documental e jurídica com base nos anexos do leilão. Até 10 relatórios de cada tipo por mês, e relatórios adicionais por crédito quando precisar.
             </p>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
               {[
@@ -203,8 +208,10 @@ export default function Planos() {
                 'Rentabilidade do aluguel (mensal e anual)',
                 'Análise processual do imóvel',
                 'Alertas de risco (penhora, ônus reais)',
-                '15 relatórios mercadológicos/mês',
-                '15 relatórios documentais e jurídicos/mês',
+                '10 relatórios mercadológicos/mês',
+                '10 relatórios documentais e jurídicos/mês',
+                '3 gerações de Índice de mercado/mês',
+                'Relatórios adicionais por crédito (sem limite)',
               ].map(t => <CheckItem key={t} txt={t} light />)}
             </div>
             <button onClick={() => nav('/checkout?plano=top2')} disabled={atual('top2')}
