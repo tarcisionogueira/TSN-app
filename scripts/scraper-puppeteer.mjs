@@ -2545,6 +2545,9 @@ async function scraperLeilotech(browser) {
 // IMPORTANTE: pular tenants 100% PGFN (redirecionam p/ comprei.pgfn.gov.br — sem docs).
 const SUPORTE_TENANTS = [
   { domain: 'liderleiloes.com.br', leiloeiro: 'Líder Leilões' },
+  // Backlog TRT-15 (recon 23/07 confirmou white-label SUPORTE, com imóveis reais):
+  { domain: 'valeroleiloes.com.br', leiloeiro: 'Valero Leilões' },
+  { domain: 'gustavoreisleiloes.com.br', leiloeiro: 'Gustavo Reis Leilões' },
 ];
 
 function mapLoteSuporte(l, tenant) {
