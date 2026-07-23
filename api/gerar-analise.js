@@ -364,6 +364,15 @@ async function anthropic(payload, useSearch, fetchOpts) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
   const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) }, fetchOpts);
+  // FALHA-ALTO: um erro NÃO-retryável do Anthropic (400 modelo/beta inválido, 401 chave, 404,
+  // web_search indisponível) NÃO pode virar "mercado vazio" silencioso — o parseJSON do corpo
+  // de erro devolvia {} → 0 amostras → relatório inútil "concluído". Loga e PROPAGA a falha
+  // para o chamador tratar (re-tentar / cair no Índice BidPro). Era a causa-raiz do relatório vazio.
+  if (!r.ok) {
+    let corpo = ''; try { corpo = JSON.stringify(await r.clone().json()); } catch { try { corpo = await r.text(); } catch { /* corpo indisponível */ } }
+    console.error('[anthropic] HTTP', r.status, String(corpo).slice(0, 600));
+    throw new Error(`anthropic_http_${r.status}`);
+  }
   return r.json();
 }
 
@@ -510,8 +519,8 @@ IMÓVEL: ${inp.tipo || inp.tipoImovel} — ${inp.endereco}, ${inp.cidade || ''}/
 OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
 ${inp.nomeCondominio ? `CONDOMÍNIO: ${inp.nomeCondominio}` : ''}
 
-MERCADO:
-- Preço médio/m² (média dos anúncios): R$ ${brl(mercado?.precoMedioM2)}
+MERCADO:${mercado?.fonteEstimativa === 'indice_bidpro' ? '\n- ATENÇÃO: não há anúncios comparáveis ativos na região agora; a estimativa de mercado abaixo vem do ÍNDICE BIDPRO (base própria). O parecer DEVE informar isso ao cliente com transparência (referência de mercado por falta de comparativos ativos na localidade), SEM inventar comparáveis nem citar anúncios específicos.' : ''}
+- Preço médio/m² (${mercado?.fonteEstimativa === 'indice_bidpro' ? 'Índice BidPro, base própria' : 'média dos anúncios'}): R$ ${brl(mercado?.precoMedioM2)}
 - Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
 ${mercado?.referenciaFipeZap?.encontrado ? `- Referência FipeZAP (${mercado.referenciaFipeZap.localidade || inp.cidade || ''}, ${mercado.referenciaFipeZap.mesReferencia || 'recente'}): R$ ${brl(mercado.referenciaFipeZap.precoMedioM2)}/m² · valorização 12m: ${(Number(mercado.referenciaFipeZap.valorizacao12m) || 0).toFixed(1)}%. Compare com a média dos anúncios acima: se divergirem muito, comente e use a mais conservadora na defesa.` : ''}
 ${mercado?.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0) ? `- Índice BidPro (nossa base própria por microrregião, nível ${mercado.indiceBidPro.nivel})${Number(mercado.indiceBidPro.venda_m2) > 0 ? `: venda R$ ${brl(mercado.indiceBidPro.venda_m2)}/m²` : ''}${Number(mercado.indiceBidPro.aluguel_m2) > 0 ? ` · locação R$ ${brl(mercado.indiceBidPro.aluguel_m2)}/m²/mês` : ''}. Referência interna independente (venda e locação), consolidada das análises da plataforma — use como sanity-check adicional junto ao FipeZAP.` : ''}
@@ -684,8 +693,12 @@ export default async function handler(req, res) {
       // A busca FALHOU (abort/timeout/erro), não é "mercado vazio de verdade": trata como
       // TRANSITÓRIO → grava 'erro' com tempo_limite e o self-heal (cron) re-tenta com orçamento
       // fresco. Um mercado genuinamente vazio (JSON válido sem amostras) SEGUE e vira relatório.
-      if (mercado.__falhou) throw new Error('tempo_limite');
+      // NÃO derruba aqui: mesmo instável (__falhou) OU vazia, ainda podemos entregar o relatório
+      // pelo ÍNDICE BIDPRO (base própria) mais abaixo. A decisão de transitório só vem se o
+      // Índice NÃO cobrir (aí o self-heal re-tenta comparáveis reais).
+      if (mercado.__falhou) mercado = { vendas: [], locacoes: [], precoMedioM2: 0, pesquisaEm: new Date().toISOString(), __instavel: true };
     }
+    const buscaInstavel = !!mercado.__instavel;
 
     const precoM2 = Number(mercado.precoMedioM2) || 0;
     // A base do valor de mercado é a ÁREA PRIVATIVA (útil). Fonte de verdade da metragem é a
@@ -742,7 +755,7 @@ export default async function handler(req, res) {
       }
     } catch { /* coerência é best-effort: nunca bloqueia o relatório */ }
     mercado.areaAlerta = areaAlerta; // null quando coerente (limpa alerta antigo em reaproveitamento)
-    const valorLocacao = mercado.aluguelMedio ? Math.round(mercado.aluguelMedio) : null;
+    let valorLocacao = mercado.aluguelMedio ? Math.round(mercado.aluguelMedio) : null;
 
     // ÍNDICE BIDPRO (loop com os relatórios — fecha o ciclo de cidade_indicadores):
     // (1) SEMEIA a microrregião com venda R$/m² e aluguel R$/m² REAIS deste relatório;
@@ -759,6 +772,21 @@ export default async function handler(req, res) {
       // Amostras datadas (valorização/recência) + curva de valorização por ano no relatório.
       await gravarAmostrasIndice(imDb, mercado, imovelId);
       mercado.valorizacao = await lerValorizacao(imDb);
+    }
+
+    // FALLBACK ÍNDICE BIDPRO (regra do dono): sem comparativos ATIVOS de mercado na região agora
+    // (busca vazia OU fonte instável), mas COM base própria consolidada → a estimativa usa o Índice
+    // como referência, DEIXANDO EXPLÍCITO no relatório. É a forma "por falta de comparativo de
+    // mercado usamos o Índice". Só p/ base por m² privativo (residencial). Assim o cliente recebe
+    // uma estimativa útil em vez de "não estimado"; se NEM o Índice cobrir, cai no vazio (self-heal).
+    const indiceVenda = Number(mercado.indiceBidPro?.venda_m2) || 0;
+    if (!(valorMercado > 0) && !(precoM2 > 0) && indiceVenda > 0 && areaM2 > 0 && baseTipo === 'residencial') {
+      valorMercado = Math.round(indiceVenda * areaM2 * 0.9); // haircut conservador (asking → fechamento)
+      mercado.precoMedioM2 = indiceVenda;
+      const aluIdx = Number(mercado.indiceBidPro?.aluguel_m2) || 0;
+      if (aluIdx > 0) { mercado.aluguelMedio = Math.round(aluIdx * areaM2); valorLocacao = mercado.aluguelMedio; }
+      mercado.fonteEstimativa = 'indice_bidpro';
+      mercado.comentario = `Não encontramos anúncios comparáveis ATIVOS para ${mercadoInputs.cidade || 'esta localidade'} no momento; a estimativa de mercado usa o Índice BidPro (nossa base própria por microrregião, R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m²${mercado.indiceBidPro?.nivel ? `, nível ${mercado.indiceBidPro.nivel}` : ''}) como referência. É uma referência interna consolidada das análises da plataforma, não um comparativo de anúncio ao vivo.`;
     }
 
     // CLASSIFICAÇÃO DE INTENÇÃO (revenda/locação/temporada) — consta no relatório e vira defesa no

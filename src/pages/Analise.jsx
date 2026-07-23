@@ -2674,10 +2674,16 @@ export default function Analise() {
                 );
               })()}
 
+              {mercado.fonteEstimativa === 'indice_bidpro' && (
+                <div style={{ fontSize:12.5, lineHeight:1.6, color:'#3730a3', background:'#eef2ff', border:'1px solid #c7d2fe', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
+                  <strong>Referência: Índice BidPro.</strong> Não havia anúncios comparáveis ativos nesta localidade no momento, então a estimativa de mercado usa o <strong>Índice BidPro</strong> (nossa base própria por microrregião) como referência. Serve para saber se o valor é atrativo; assim que surgirem comparáveis ativos, o sistema atualiza automaticamente.
+                </div>
+              )}
+
               {/* KPIs consolidados */}
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
                 {[
-                  ['Preço Médio/m²', `R$ ${fmt(mercado.precoMedioM2||0)}`, '#0D63DB','#eff6ff'],
+                  [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', `R$ ${fmt(mercado.precoMedioM2||0)}`, '#0D63DB','#eff6ff'],
                   ['Aluguel Médio', `R$ ${fmt(mercado.aluguelMedio||0)}/mês`, '#8b5cf6','#ede9fe'],
                   ['Rentabilidade Bruta (aluguel)', fmtPct(mercado.yieldBruto||0)+' a.a.', '#10b981','#f0fdf4'],
                   ['Rentabilidade Líquida (aluguel)', fmtPct(mercado.yieldLiquido||0)+' a.a.', '#f59e0b','#fef3c7'],
