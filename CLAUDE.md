@@ -32,6 +32,19 @@ curto (5–8 linhas) antes de seguir:
    só considere "seguro" depois. Lógica de NEGÓCIO nova NÃO é coberta pelo item 3 — exige isto.
 5. **Escala (rumo a 10 mil usuários)**: relembre os gaps pendentes do HANDOFF (índices,
    chunking de crons, quotas) e sinalize o que precisa antes de crescer.
+6. **Bug bounty do CÓDIGO (multi-agente) — cada botão e função, do pré-login ao backend**:
+   ao ler o HANDOFF, rode uma varredura com vários agentes em paralelo procurando bugs de
+   COMPORTAMENTO/lógica (não só segurança), por camada: (a) pré-login (cadastro, login,
+   recuperação de senha, e-mails de verificação); (b) cada tela/botão logado (gera relatório,
+   sinaliza arremate/revenda, uploads, Índice, planos/checkout); (c) cada endpoint `api/`
+   (auth, RLS, tratamento de erro, cotas, webhooks, idempotência). PADRÕES-ALVO já conhecidos:
+   **erro de API silenciado** (`fetch/anthropicFetch` → `.json()` SEM checar `.ok` → resultado
+   falso-vazio — causa-raiz do "relatório vazio"; corrigido em gerar-analise/documental/laudo,
+   varrer novos); **botão/ação sem gate** (ex.: "Arrematei" aparecia sem os 3 relatórios
+   prontos); **cron/e-mail sem dedup ou sem excluir contas internas** (retenção nudava o admin);
+   **cobrança de cota em fluxo que falhou**. Cada achado: confirmar (repro/queries), corrigir na
+   raiz, e registrar no HANDOFF. A intenção do dono: essa varredura é ROTINA de abertura, não
+   pontual.
 
 ## Stack
 - **Frontend:** React + Vite → Vercel (Pro)
