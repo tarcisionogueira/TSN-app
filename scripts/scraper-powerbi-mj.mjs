@@ -103,6 +103,24 @@ function decodeDSR(dsr) {
   return rows.map(r => Object.fromEntries(COLS.map(([, k], i) => [k, r[i]])));
 }
 
+// Datas do Power BI vêm em epoch ms; alguns campos vêm em texto ou vazios.
+function toDate(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number' && v > 1e11) return new Date(v).toISOString().slice(0, 10);
+  const s = String(v);
+  const dmy = s.match(/(\d{2})\/(\d{2})\/(\d{4})/); if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  const iso = s.match(/\d{4}-\d{2}-\d{2}/); return iso ? iso[0] : null;
+}
+// Limpa link: tira o prefixo do visualizador de PDF (chrome-extension://…) que vazou no dado
+// e prefixa https:// quando veio só o domínio.
+function cleanLink(u) {
+  if (!u) return null;
+  u = String(u).replace(/^chrome-extension:\/\/[a-z]+\//i, '').trim();
+  if (!u) return null;
+  if (/^www\./i.test(u)) u = 'https://' + u;
+  return u.slice(0, 700);
+}
+
 async function main() {
   const r = await fetch(`${HOST}/public/reports/querydata?synchronous=true`, {
     method: 'POST', headers: H, body: JSON.stringify(buildBody()), signal: AbortSignal.timeout(45000),
@@ -111,7 +129,11 @@ async function main() {
   const dsr = j?.results?.[0]?.result?.data?.dsr;
   if (!dsr) { console.error('Sem DSR na resposta:', JSON.stringify(j).slice(0, 800)); process.exit(1); }
 
-  const linhas = decodeDSR(dsr).filter(x => x.link_leilao);
+  const linhas = decodeDSR(dsr).map(l => ({
+    uf: l.uf || null, contrato: l.contrato || null, leiloeiro: l.leiloeiro || null, fiscal: l.fiscal || null,
+    data_leilao: toDate(l.data_leilao), data_hasta2: toDate(l.data_hasta2),
+    link_leilao: cleanLink(l.link_leilao), link_edital: cleanLink(l.link_edital),
+  })).filter(l => l.leiloeiro || l.link_leilao);
   console.log(`📅 Extraídos ${linhas.length} leilões-imóvel do calendário do MJ.`);
   console.log('Amostra:', JSON.stringify(linhas.slice(0, 4), null, 1));
 
@@ -119,11 +141,13 @@ async function main() {
   if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
   const sb = createClient(SB_URL, SB_KEY);
 
-  const agora = new Date().toISOString();
-  const rows = linhas.map(l => ({ ...l, especie: 'IMÓVEL', atualizado_em: agora, visto_em: agora }));
-  const { error } = await sb.from('leiloes_mj_radar').upsert(rows, { onConflict: 'link_leilao' });
-  if (error) { console.error('erro upsert:', error.message); process.exit(1); }
-  console.log(`✅ ${rows.length} leilões gravados em leiloes_mj_radar.`);
+  const rows = linhas.map(l => ({ ...l, especie: 'IMÓVEL', atualizado_em: new Date().toISOString() }));
+  // Snapshot: limpa o calendário anterior e insere o atual.
+  const { error: eDel } = await sb.from('leiloes_mj_radar').delete().not('id', 'is', null);
+  if (eDel) { console.error('erro ao limpar snapshot:', eDel.message); process.exit(1); }
+  const { error } = await sb.from('leiloes_mj_radar').insert(rows);
+  if (error) { console.error('erro insert:', error.message); process.exit(1); }
+  console.log(`✅ ${rows.length} leilões gravados em leiloes_mj_radar (snapshot).`);
 
   // Cruzamento com o acervo (domínio do link × url_lote dos imóveis).
   const { data: cruz, error: eC } = await sb.rpc('cruzar_radar_mj');
