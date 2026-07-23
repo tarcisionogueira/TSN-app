@@ -1,20 +1,21 @@
 -- Radar do CALENDÁRIO OFICIAL de leilões do MJ/SENAD (Power BI público "publish to web").
--- Fonte ADICIONAL: cruza com o acervo p/ marcar leilões/leiloeiros já conhecidos × novos, e
--- traz LINK DO EDITAL/LEILÃO oficiais. Populada por scripts/scraper-powerbi-mj.mjs (service key).
-create table if not exists public.leiloes_mj_radar (
-  link_leilao   text primary key,
+-- Snapshot semanal (o scraper faz delete-all + insert). Fonte adicional/cruzamento com o acervo.
+-- id sintético: o link não é único (mesmo leiloeiro repete; alguns vêm só domínio).
+drop table if exists public.leiloes_mj_radar;
+create table public.leiloes_mj_radar (
+  id            uuid primary key default gen_random_uuid(),
   uf            text,
   contrato      text,
   leiloeiro     text,
   fiscal        text,
-  data_leilao   text,
-  data_hasta2   text,
+  data_leilao   date,
+  data_hasta2   date,
   ativos_qtd    integer,
+  link_leilao   text,
   link_edital   text,
   especie       text default 'IMÓVEL',
   leiloeiro_no_acervo boolean default false,
-  atualizado_em timestamptz default now(),
-  visto_em      timestamptz default now()
+  atualizado_em timestamptz default now()
 );
 alter table public.leiloes_mj_radar enable row level security;
 drop policy if exists leiloes_mj_radar_admin_sel on public.leiloes_mj_radar;
