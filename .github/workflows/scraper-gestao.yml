@@ -1,0 +1,53 @@
+name: Scraper Gestão de Leilões (PHP · Bright Data)
+
+# Cluster "Gestão de Leilões" (extrajust, lancetotal, lancenoleilao, granado) — mesmo
+# back-office PHP atrás de Cloudflare, servido em latin1, com lotes inline por evento.
+# Só via Bright Data. Fluxo recon-first: DEBUG → dry-run → gravação. No cron GRAVA; no
+# dispatch manual é dry-run por padrão (dryrun=0 p/ gravar).
+on:
+  schedule:
+    - cron: '0 12 * * 4'   # 1x/semana (quinta), 12 UTC — fonte PAGA
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: '1 = RECON (enumeração + 1 evento parseado por domínio)'
+        required: false
+        default: '0'
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '1'
+      max_eventos:
+        description: 'Máx. de eventos (leilao.php) por execução'
+        required: false
+        default: '25'
+      dominios:
+        description: 'csv de domínios (vazio = padrão do cluster)'
+        required: false
+        default: ''
+
+jobs:
+  scraper-gestao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper Gestão de Leilões
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          GESTAO_DEBUG: ${{ github.event.inputs.debug || '0' }}
+          GESTAO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          GESTAO_MAX_EVENTOS: ${{ github.event.inputs.max_eventos || '25' }}
+          GESTAO_DOMINIOS: ${{ github.event.inputs.dominios || '' }}
+        run: node scripts/scraper-gestao.mjs
