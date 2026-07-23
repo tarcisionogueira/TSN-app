@@ -31,6 +31,15 @@ async function upsertAnalise(row) {
     body: JSON.stringify({ ...row, updated_at: new Date().toISOString() }),
   });
 }
+// LOG DE ATIVIDADE (Cliente 360) — best-effort, nunca bloqueia o relatório. Registra o
+// movimento (relatório ok/erro) com o MOTIVO, para diagnóstico (ex.: "sem créditos").
+async function logAtividade(userId, evento, detalhe, meta) {
+  try {
+    if (!userId) return;
+    await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
+      p_user_id: userId, p_evento: evento, p_detalhe: detalhe || null, p_meta: meta || {} }) });
+  } catch { /* log é best-effort */ }
+}
 
 export function extractText(data) {
   if (!data?.content) return '';
@@ -692,7 +701,7 @@ export default async function handler(req, res) {
           m.locacoes = m.nivel2?.locacoes || [];
           m.pesquisaEm = new Date().toISOString();
           return m;
-        } catch { return { __falhou: true }; } // abort/timeout/erro → o chamador trata
+        } catch (e) { return { __falhou: true, __erroApi: String(e?.message || e || '').slice(0, 120) }; } // abort/timeout/erro → o chamador trata
       };
       const semAmostras = (m) => ((m.vendas?.length || 0) + (m.locacoes?.length || 0)) === 0 && !(m.precoMedioM2 > 0);
       // 1ª busca: guarda a reserva do parecer E ~80s p/ uma 2ª tentativa (uma busca que TRAVA
@@ -708,9 +717,10 @@ export default async function handler(req, res) {
       // NÃO derruba aqui: mesmo instável (__falhou) OU vazia, ainda podemos entregar o relatório
       // pelo ÍNDICE BIDPRO (base própria) mais abaixo. A decisão de transitório só vem se o
       // Índice NÃO cobrir (aí o self-heal re-tenta comparáveis reais).
-      if (mercado.__falhou) mercado = { vendas: [], locacoes: [], precoMedioM2: 0, pesquisaEm: new Date().toISOString(), __instavel: true };
+      if (mercado.__falhou) mercado = { vendas: [], locacoes: [], precoMedioM2: 0, pesquisaEm: new Date().toISOString(), __instavel: true, __erroApi: mercado.__erroApi || '' };
     }
     const buscaInstavel = !!mercado.__instavel;
+    const erroApiBusca = mercado.__erroApi || '';
 
     const precoM2 = Number(mercado.precoMedioM2) || 0;
     // A base do valor de mercado é a ÁREA PRIVATIVA (útil). Fonte de verdade da metragem é a
@@ -894,6 +904,17 @@ export default async function handler(req, res) {
       try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); cota.estornada = true; } catch { /* estorno best-effort */ }
     }
 
+    // LOG DE ATIVIDADE (Cliente 360): registra o resultado do relatório com o MOTIVO. Quando
+    // vazio, guarda o erro da API (ex.: "sem créditos") — é o que teria mostrado a causa na hora.
+    try {
+      const m = result.mercado || {};
+      const fonte = m.fonteEstimativa === 'indice_bidpro' ? 'índice' : 'mercado ao vivo';
+      const nComp = (m.nivel1?.vendas?.length || 0) + (m.nivel2?.vendas?.length || 0);
+      await logAtividade(ownerId, mercadoVazio ? 'relatorio_mercado_vazio' : 'relatorio_mercado_ok',
+        mercadoVazio ? `Sem estimativa de mercado${m.__erroApi ? ` (API: ${m.__erroApi})` : ' (sem comparáveis ativos)'}` : `Mercado estimado por ${fonte}${valorMercado ? ` — R$ ${Math.round(valorMercado).toLocaleString('pt-BR')}` : ''}`,
+        { imovelId: String(imovelId), cidade: cidade || null, fonte, comparaveis: nComp, valorMercado: valorMercado || null, erroApi: m.__erroApi || null, reaproveitado: !!result.reaproveitado, ator: user.id });
+    } catch { /* log best-effort */ }
+
     // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.
     // roi (parecerInputs.metricas) e areaM2 (mercadoInputs) vêm do CLIENTE e são
     // por-cenário — assim um usuário conseguia ENVENENAR score_financeiro/analise_viavel/
@@ -908,6 +929,7 @@ export default async function handler(req, res) {
       ? 'A pesquisa de mercado demorou mais que o tempo limite do servidor. Costuma ser temporário: tente gerar novamente.'
       : String(e?.message || e);
     await upsertAnalise({ ...base, status: 'erro', erro: msg });
+    try { await logAtividade(ownerId, 'relatorio_mercado_erro', String(msg).slice(0, 200), { imovelId: String(imovelId), cidade: cidade || null, timeout, ator: user.id }); } catch { /* log best-effort */ }
     // Estorna a cota consumida (não cobra por análise que falhou; evita cobrança
     // dupla na re-tentativa, já que 'erro' não conta como concluída em isNovo).
     if (cota && cota.ok && cota.tipo) {

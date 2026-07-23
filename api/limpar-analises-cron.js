@@ -58,5 +58,14 @@ export default async function handler(req, res) {
 
   const total = ['analises_mercado', 'analises_documental']
     .reduce((s, t) => s + ((apagados[t]?.por_leilao || 0) + (apagados[t]?.sem_data || 0)), 0);
-  return res.status(200).json({ ok: true, destravadas: out, apagados, total });
+
+  // TTL do log de atividade (Cliente 360): apaga o que passou de apagar_em (90d por padrão)
+  // — não deixa o histórico acumular lixo no banco.
+  let atividadeApagadas = 0;
+  try {
+    const ra = await sb('rpc/atividade_log_limpar', { method: 'POST', body: '{}' });
+    atividadeApagadas = ra.ok ? (Number(await ra.json().catch(() => 0)) || 0) : 0;
+  } catch { /* best-effort */ }
+
+  return res.status(200).json({ ok: true, destravadas: out, apagados, total, atividade_apagadas: atividadeApagadas });
 }

@@ -94,6 +94,14 @@ export default async function handler(req) {
       });
     }
 
+    // Log de atividade (Cliente 360) — best-effort.
+    try {
+      await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
+        p_user_id: user.id, p_evento: 'arremate',
+        p_detalhe: `Arremate sinalizado${Number.isFinite(valor) ? ` — R$ ${Math.round(valor).toLocaleString('pt-BR')}` : ''}${body.titulo ? ` · ${String(body.titulo).slice(0, 80)}` : ''}`,
+        p_meta: { imovel_id: imovelId, valor } }) });
+    } catch { /* log best-effort */ }
+
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha ao sinalizar arremate' }), { status: 500, headers });

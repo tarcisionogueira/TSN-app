@@ -43,6 +43,11 @@ export default async function handler(req) {
     data = await rpc('admin_360_estatisticas', {});
   } else if (uid) {
     data = await rpc('admin_usuario_360', { uid });
+    // Anexa o LOG DE ATIVIDADE (movimentos: relatórios ok/erro com motivo, arremate, etc.) —
+    // é o que dá diagnóstico do que o usuário (ou o admin) fez, com validade de 90 dias.
+    if (data && typeof data === 'object') {
+      try { data.atividade = (await rpc('atividade_usuario', { p_user_id: uid, p_limite: 100 })) || []; } catch { data.atividade = []; }
+    }
   } else {
     // Termo vazio → lista geral. Se o termo tem 11 dígitos, calcula o hash do CPF
     // (HMAC no backend) p/ casar cpf_hash; sempre passa o termo (nome/email/telefone).
