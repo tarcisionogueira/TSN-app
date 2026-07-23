@@ -147,16 +147,18 @@ async function salvarImoveis(imoveis, fonte) {
   };
   const avalBled = bledSet('valor_avaliacao');
   const areaBled = bledSet('area_m2');
+  const minBled  = bledSet('valor_minimo'); // o preço HEADLINE (lance mín.) também precisa da trava
 
   const rows = imoveis.map(im => {
     // Guarda 2: anula valores sentinela (placeholder) — nunca vira preço exibido.
-    const vMin = semSentinela(im.valor_minimo);
+    let vMin = semSentinela(im.valor_minimo);
     let vAval = semSentinela(im.valor_avaliacao);
     // TRAVA DE CREDIBILIDADE: avaliação grudada (bleeding) OU que implique desconto >=88% (aval
     // > 8,3x o mínimo — quase sempre mis-read/valor de outro lote) NÃO pode virar "% OFF" falso
     // no card/relatório → vira AUSENTE. Espelha a trava do gerar-analise.js (defesa em 2 camadas).
     if (avalBled.has(Number(vAval))) vAval = 0;
     if (Number(vAval) > 0 && Number(vMin) > 0 && (1 - Number(vMin) / Number(vAval)) >= 0.88) vAval = 0;
+    if (minBled.has(Number(vMin))) vMin = 0; // lance mín. grudado (seletor vazando) → melhor "—" que preço mentiroso
     let areaM2 = Number(im.area_m2) || 0;
     if (areaBled.has(areaM2)) areaM2 = 0; // área grudada → melhor 0 (a matrícula/edital corrige)
     // url_lote: sem ele o imóvel NUNCA entra na fila de captura de documentos (bug do MEGA, que
