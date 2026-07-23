@@ -16,6 +16,7 @@ export default function IndiceConsulta() {
   const [loading, setLoading] = React.useState(false);
   const [res, setRes] = React.useState(null);
   const [erro, setErro] = React.useState('');
+  const [manual, setManual] = React.useState(false); // fallback: preencher cidade/UF/bairro à mão
   const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' && window.innerWidth < 640);
   React.useEffect(() => {
     const on = () => setIsMobile(window.innerWidth < 640);
@@ -51,35 +52,44 @@ export default function IndiceConsulta() {
       </p>
 
       <form onSubmit={consultar} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: 14, marginBottom: 20 }}>
-        <label style={{ flex: '1 1 100%' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Endereço, bairro ou cidade <span style={{ color: '#94a3b8', fontWeight: 400 }}>(preenche o resto sozinho)</span></div>
-          <EnderecoAutocomplete
-            placeholder="Ex: Alameda Dourada 71, Barueri"
-            onSelect={(end) => setForm(f => ({
-              ...f,
-              cidade: end.cidade || f.cidade,
-              uf: (end.uf || f.uf || '').toUpperCase(),
-              bairro: end.bairro || f.bairro,
-            }))}
-          />
-        </label>
-        <label style={{ flex: isMobile ? '1 1 100%' : 2, minWidth: isMobile ? '100%' : 160 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Cidade</div>
-          <input value={form.cidade} onChange={e => setForm(f => ({ ...f, cidade: e.target.value, }))} placeholder="Ex: Barueri"
-            style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
-        </label>
-        <label style={{ width: isMobile ? 96 : 84 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>UF</div>
-          <select value={form.uf} onChange={e => setForm(f => ({ ...f, uf: e.target.value }))}
-            style={{ width: '100%', padding: '10px 8px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', boxSizing: 'border-box' }}>
-            {UFS.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
-        </label>
-        <label style={{ flex: isMobile ? '1 1 auto' : 2, minWidth: 140 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Bairro <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span></div>
-          <input value={form.bairro} onChange={e => setForm(f => ({ ...f, bairro: e.target.value }))} placeholder="Ex: Alphaville"
-            style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
-        </label>
+        {!manual && (
+          <label style={{ flex: '1 1 100%' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Endereço, bairro ou cidade <span style={{ color: '#94a3b8', fontWeight: 400 }}>(preenche o resto sozinho)</span></div>
+            <EnderecoAutocomplete
+              placeholder="Digite a rua e número, o bairro ou a cidade…"
+              onSelect={(end) => setForm(f => ({
+                ...f,
+                cidade: end.cidade || f.cidade,
+                uf: (end.uf || f.uf || '').toUpperCase(),
+                bairro: end.bairro || f.bairro,
+              }))}
+            />
+            {form.cidade && (
+              <div style={{ marginTop: 8, fontSize: 12.5, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <MapPin size={13} /> {[form.bairro, form.cidade].filter(Boolean).join(' · ')}{form.uf ? `/${form.uf}` : ''}
+              </div>
+            )}
+          </label>
+        )}
+        {manual && (<>
+          <label style={{ flex: isMobile ? '1 1 100%' : 2, minWidth: isMobile ? '100%' : 160 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Cidade</div>
+            <input value={form.cidade} onChange={e => setForm(f => ({ ...f, cidade: e.target.value }))} placeholder="Digite a cidade"
+              style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
+          </label>
+          <label style={{ width: isMobile ? 96 : 84 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>UF</div>
+            <select value={form.uf} onChange={e => setForm(f => ({ ...f, uf: e.target.value }))}
+              style={{ width: '100%', padding: '10px 8px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', boxSizing: 'border-box' }}>
+              {UFS.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </label>
+          <label style={{ flex: isMobile ? '1 1 auto' : 2, minWidth: 140 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Bairro <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span></div>
+            <input value={form.bairro} onChange={e => setForm(f => ({ ...f, bairro: e.target.value }))} placeholder="Digite o bairro"
+              style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }} />
+          </label>
+        </>)}
         <label style={{ flex: isMobile ? '1 1 100%' : '0 0 168px' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Tipo</div>
           <select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
@@ -90,9 +100,14 @@ export default function IndiceConsulta() {
             <option value="comercial">Comercial / industrial</option>
           </select>
         </label>
-        <button type="submit" disabled={loading}
-          style={{ flex: isMobile ? '1 1 100%' : '0 0 auto', justifyContent: 'center', padding: '11px 20px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button type="submit" disabled={loading || !form.cidade}
+          title={!form.cidade ? 'Escolha um endereço/cidade na lista' : ''}
+          style={{ flex: isMobile ? '1 1 100%' : '0 0 auto', justifyContent: 'center', padding: '11px 20px', background: (loading || !form.cidade) ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: (loading || !form.cidade) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Search size={16} /> {loading ? 'Consultando…' : 'Consultar'}
+        </button>
+        <button type="button" onClick={() => setManual(m => !m)}
+          style={{ flex: '1 1 100%', background: 'none', border: 'none', color: '#64748b', fontSize: 12, cursor: 'pointer', textAlign: 'left', padding: '2px 2px 0', textDecoration: 'underline' }}>
+          {manual ? '↺ Voltar a buscar pelo endereço' : 'Preferir digitar cidade/UF manualmente'}
         </button>
       </form>
 

@@ -177,17 +177,15 @@ export default function Membros() {
                 </div>
               ))}
             </div>
+            {/* Gerenciar/cancelar plano saiu daqui: vai no Perfil ("Cancelar plano"). Aqui fica
+                só o CTA de upgrade para quem é Explorador (venda), sem gestão de plano. */}
             <div style={{ marginLeft:'auto', display:'flex', gap:10, alignItems:'center' }}>
-              {plano !== 'explorador' && (
-                <button onClick={()=>setShowCancelar(true)}
-                  style={{ padding:'11px 16px', background:'transparent', color:'#ef4444', border:'1px solid #ef444460', borderRadius:10, fontWeight:600, fontSize:13, cursor:'pointer' }}>
-                  Cancelar plano
+              {plano === 'explorador' && (
+                <button onClick={()=>setShowPlanos(true)}
+                  style={{ padding:'11px 22px', background:'#6366f1', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
+                  <Crown size={15}/> Fazer upgrade
                 </button>
               )}
-              <button onClick={()=>setShowPlanos(true)}
-                style={{ padding:'11px 22px', background:'#6366f1', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:8 }}>
-                <Crown size={15}/> {plano==='explorador'?'Fazer upgrade':'Gerenciar plano'}
-              </button>
             </div>
           </div>
         </div>

@@ -639,7 +639,7 @@ export default function Perfil() {
               <button
                 onClick={() => { setCancelMsg(null); setCancelModal(true); }}
                 style={{ padding: '6px 12px', background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                {dentroGarantia ? 'Cancelar e reembolsar' : 'Cancelar assinatura'}
+                {dentroGarantia ? 'Cancelar plano e reembolsar' : 'Cancelar plano'}
               </button>
             )}
           </div>
@@ -1003,6 +1003,17 @@ export default function Perfil() {
             </div>
           )}
 
+          {ROLES_PAGANTES.includes(role) && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+              <div style={{ fontSize: 13, color: '#166534', lineHeight: 1.6, marginBottom: 10 }}>
+                Só quer <strong>parar de pagar</strong>? Você não precisa excluir a conta — <strong>cancele o plano</strong> e continue como <strong>Explorador</strong> (acesso gratuito), mantendo seu histórico e análises.
+              </div>
+              <button onClick={() => { setCancelMsg(null); setCancelModal(true); }}
+                style={{ padding: '10px 18px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Cancelar plano (continuar como Explorador)
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: mostrarConfirmacaoExclusao ? 16 : 0 }}>
             <button
               onClick={baixarDados}
@@ -1024,9 +1035,9 @@ export default function Perfil() {
               onClick={() => { setMostrarConfirmacaoExclusao(v => !v); setTextoConfirmacao(''); setLgpdErro(null); }}
               style={{
                 padding: '10px 18px',
-                background: '#dc2626',
-                color: 'white',
-                border: 'none',
+                background: 'white',
+                color: '#dc2626',
+                border: '1px solid #fca5a5',
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 700,
