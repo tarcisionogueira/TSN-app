@@ -12,6 +12,7 @@ import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { capturarDocsLoginOnDemand } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
+import { custoRespostaClaude } from './_uso.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
@@ -24,6 +25,10 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+// Custo REAL (micro-USD) acumulado da geração ATUAL (Node serverless = 1 req/instância →
+// seguro resetar por request). Usado p/ cobrar CRÉDITO quando a cota mensal do plano acaba.
+let _custoMicroReq = 0;
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -208,7 +213,9 @@ async function anthropic(payload, fetchOpts) {
     console.error('[anthropic:documental] HTTP', r.status, String(corpo).slice(0, 600));
     throw new Error(`anthropic_http_${r.status}`);
   }
-  return r.json();
+  const j = await r.json();
+  try { _custoMicroReq += custoRespostaClaude(payload?.model, j?.usage); } catch { /* medição nunca quebra a geração */ }
+  return j;
 }
 
 // Documentos ESTÁTICOS da Caixa (venda-imoveis.caixa.gov.br). O portal grava no
@@ -457,6 +464,7 @@ export default async function handler(req, res) {
   // imóvel; re-gerar/atualizar o mesmo não recobra. Explorador já foi barrado
   // acima; admin é ilimitado na RPC. O limite por plano vem de limite_ia (banco).
   let cota = null; // hoisted p/ permitir estorno no catch se a geração falhar
+  let cobrarCredito = false; // cota mensal esgotada → esta geração será cobrada do crédito
   try {
     const jaFeita = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
     const isNovo = !(Array.isArray(jaFeita) && jaFeita.length);
@@ -464,14 +472,27 @@ export default async function handler(req, res) {
       const rc = await sb('rpc/consumir_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null);
       if (cota && cota.ok === false) {
-        const msg = cota.erro === 'limite_mensal' ? 'Limite mensal de análises documentais atingido para o seu plano.'
-          : cota.erro === 'sem_documental' ? 'A análise documental e jurídica não está incluída no seu plano.'
-          : 'Cota de análises documentais indisponível.';
-        res.status(402).json({ error: msg, cota });
-        return;
+        // Cota MENSAL esgotada num plano que TEM documental → tenta crédito. 'sem_documental'
+        // é exclusão de plano (explorador/consultor) → não vende avulso, pede upgrade.
+        if (cota.erro === 'limite_mensal') {
+          const EST_DOCUMENTAL_MICRO = 500000; // ~US$0,50 (PDFs + CNJ; conservador)
+          const pode = await sb('rpc/pode_debitar', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_custo_micro_estimado: EST_DOCUMENTAL_MICRO }) });
+          if ((await pode.json().catch(() => false)) === true) {
+            cobrarCredito = true;
+          } else {
+            res.status(402).json({ error: 'Sua cota mensal de análises documentais acabou. Recarregue créditos para gerar análises adicionais.', motivo: 'sem_credito', cota });
+            return;
+          }
+        } else {
+          const msg = cota.erro === 'sem_documental' ? 'A análise documental e jurídica não está incluída no seu plano.'
+            : 'Cota de análises documentais indisponível.';
+          res.status(402).json({ error: msg, cota });
+          return;
+        }
       }
     }
   } catch { /* checagem de cota nunca bloqueia quem tem direito */ }
+  _custoMicroReq = 0; // zera o acumulador de custo desta geração (cobrança por crédito)
 
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
@@ -1124,6 +1145,18 @@ export default async function handler(req, res) {
       modalidade_indefinida: !im.modalidade,
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualDoc), regen_em: new Date().toISOString() });
+    // Cobra o CRÉDITO quando esta geração usou crédito (cota mensal esgotada). Só aqui, no
+    // sucesso REAL (com laudo) — os caminhos de "faltam documentos" estornam a cota e não
+    // cobram. Débito = custo real medido × multiplicador; nunca negativa (já pré-autorizado).
+    if (cobrarCredito) {
+      try {
+        const dc = await sb('rpc/debitar_credito', { method: 'POST', body: JSON.stringify({
+          p_user_id: user.id, p_func: 'documental', p_custo_micro: Math.round(_custoMicroReq),
+          p_justificativa: `Análise documental e jurídica — ${im.cidade || ''}/${im.estado || ''}`, p_referencia: String(imovelId),
+        }) });
+        cota = { ...(cota || {}), credito: await dc.json().catch(() => null) };
+      } catch { /* débito best-effort: não trava a entrega do laudo já pronto */ }
+    }
     await aprenderNaEmissao(sb, { agente: 'documental', imovel: { id: imovelId, cidade: row?.cidade, estado: row?.estado, tipo: row?.tipo, modalidade: im.modalidade },
       corpus: { tem_cnj: temProc, n_processos: cnj?.total || 0, matricula_lida: !!da.matricula, edital_lido: !!da.edital, n_riscos: (result.riscos || []).length },
       qualidade: qualDoc });

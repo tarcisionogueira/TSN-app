@@ -6,6 +6,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
+import { custoRespostaClaude } from './_uso.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 
@@ -14,6 +15,11 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
 const REUSE_DIAS = Number(process.env.ANALISE_REUSE_DIAS || 7); // reaproveita a pesquisa de mercado deste imóvel se feita há < N dias
+
+// Custo REAL (micro-USD) acumulado da geração ATUAL. A função Node da Vercel processa 1
+// requisição por instância → é seguro resetar por request. Usado para cobrar CRÉDITO quando
+// a cota mensal do plano acaba (débito = custo real × multiplicador, em debitar_credito).
+let _custoMicroReq = 0;
 
 const brl = (v) => (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -394,7 +400,9 @@ async function anthropic(payload, useSearch, fetchOpts) {
     console.error('[anthropic] HTTP', r.status, String(corpo).slice(0, 600));
     throw new Error(`anthropic_http_${r.status}`);
   }
-  return r.json();
+  const j = await r.json();
+  try { _custoMicroReq += custoRespostaClaude(payload?.model, j?.usage); } catch { /* medição nunca quebra a geração */ }
+  return j;
 }
 
 export function promptMercado({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio }) {
@@ -626,6 +634,7 @@ export default async function handler(req, res) {
   // deste imóvel para este usuário; re-gerar/atualizar o mesmo imóvel não recobra
   // (espelha o "isNovo" do cliente). Falha na checagem não trava quem tem direito.
   let cota = null;
+  let cobrarCredito = false; // cota mensal esgotada → esta geração será cobrada do crédito
   try {
     const jaConcluida = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
     const isNovo = !(Array.isArray(jaConcluida) && jaConcluida.length);
@@ -633,14 +642,21 @@ export default async function handler(req, res) {
       const rc = await sb('rpc/consumir_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
       cota = await rc.json().catch(() => null);
       if (cota && cota.ok === false) {
-        const msg = cota.erro === 'limite_mensal' ? 'Limite mensal de análises atingido para o seu plano.'
-          : cota.erro === 'sem_credito' ? 'Você não tem créditos de análise disponíveis.'
-          : 'Cota de análises indisponível.';
-        res.status(402).json({ error: msg, cota });
-        return;
+        // Cota mensal do plano acabou → tenta CRÉDITO. Pré-autoriza com uma estimativa
+        // conservadora do mercadológico (debitar_credito nunca deixa o saldo negativo).
+        const EST_MERCADO_MICRO = 1200000; // ~US$1,20 (busca web + tokens)
+        const pode = await sb('rpc/pode_debitar', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_custo_micro_estimado: EST_MERCADO_MICRO }) });
+        const podeCredito = await pode.json().catch(() => false);
+        if (podeCredito === true) {
+          cobrarCredito = true;
+        } else {
+          res.status(402).json({ error: 'Sua cota mensal de relatórios mercadológicos acabou. Recarregue créditos para gerar relatórios adicionais.', motivo: 'sem_credito', cota });
+          return;
+        }
       }
     }
   } catch { /* checagem de cota nunca bloqueia quem tem direito */ }
+  _custoMicroReq = 0; // zera o acumulador de custo desta geração (cobrança por crédito)
 
   // ORÇAMENTO DE TEMPO GLOBAL (< maxDuration 300s). Toda etapa cara (edital, busca de mercado,
   // parecer) é limitada ao tempo RESTANTE — nunca inicia uma chamada que não caberia antes do
@@ -902,6 +918,18 @@ export default async function handler(req, res) {
     const mercadoVazio = !!result.mercadoVazio;
     if (mercadoVazio && cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); cota.estornada = true; } catch { /* estorno best-effort */ }
+    }
+    // Cobra o CRÉDITO quando esta geração usou crédito (cota mensal esgotada) e o relatório
+    // NÃO saiu vazio. Débito = custo real medido × multiplicador; debitar_credito nunca deixa
+    // negativo (já pré-autorizamos). Best-effort: não trava a entrega do relatório já pronto.
+    if (cobrarCredito && !mercadoVazio) {
+      try {
+        const dc = await sb('rpc/debitar_credito', { method: 'POST', body: JSON.stringify({
+          p_user_id: user.id, p_func: 'mercadologico', p_custo_micro: Math.round(_custoMicroReq),
+          p_justificativa: `Relatório mercadológico — ${cidade || ''}/${estado || ''}`, p_referencia: String(imovelId),
+        }) });
+        cota = { ...(cota || {}), credito: await dc.json().catch(() => null) };
+      } catch { /* débito best-effort */ }
     }
 
     // LOG DE ATIVIDADE (Cliente 360): registra o resultado do relatório com o MOTIVO. Quando
