@@ -1091,6 +1091,8 @@ export default function Busca() {
         endereco: im.endereco,
         valorAvaliacao: im.valor_avaliacao,
         valorMinimo: im.valor_minimo,
+        valorMercado: im.valor_mercado,
+        analiseViavel: im.analise_viavel,
         descontoPercentual: im.desconto_percentual,
         areaM2: im.area_m2,
         descricao: im.descricao,
@@ -1228,7 +1230,8 @@ export default function Busca() {
   const resultadosPagina = resultados;
   const totalPaginas = Math.max(1, Math.ceil(totalResultados / POR_PAGINA));
 
-  const desconto = (im) => im.descontoPercentual ? Number(im.descontoPercentual) : (im.valorAvaliacao>0 ? (1-im.valorMinimo/im.valorAvaliacao)*100 : 0);
+  // valorMinimo NULL com avaliação > 0 fazia (1 - null/N)*100 = 100 → badge verde "-100%" falso.
+  const desconto = (im) => im.descontoPercentual ? Number(im.descontoPercentual) : (im.valorAvaliacao>0 && im.valorMinimo>0 ? (1-im.valorMinimo/im.valorAvaliacao)*100 : 0);
   const fmtDesc = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
@@ -1880,7 +1883,7 @@ export default function Busca() {
               const desc = desconto(im);
               const modalColor = im.modalidade==='judicial'||im.modalidade==='primeiro_leilao' ? { bg:'#fef3c7', color:'#92400e' } : { bg:'#dbeafe', color:'#084BA6' };
               const imgSrc = fotoCandidatos(im);
-              const sb = scoreBidPro({ desconto: desc, modalidade: im.modalidade, tipo: im.tipo, scoreLocalizacao: im.scoreLocalizacao, scoreJuridico: im.scoreJuridico, scoreFinanceiro: im.scoreFinanceiro, valorMercado: im.valor_mercado, valorMinimo: im.valor_minimo, analiseViavel: im.analise_viavel });
+              const sb = scoreBidPro({ desconto: desc, modalidade: im.modalidade, tipo: im.tipo, scoreLocalizacao: im.scoreLocalizacao, scoreJuridico: im.scoreJuridico, scoreFinanceiro: im.scoreFinanceiro, valorMercado: im.valorMercado, valorMinimo: im.valorMinimo, analiseViavel: im.analiseViavel });
               const sbTitle = sb ? `Score BidPro ${sb.nota.toFixed(1)}/10 · ${scoreLabel(sb.base)}\n` + sb.camadas.map(c => `• ${c.label}: ${c.nota.toFixed(1)} (peso ${c.peso})`).join('\n') : '';
 
               return (
@@ -1996,7 +1999,7 @@ export default function Busca() {
                       {(im.pagamento||[]).every(p => !p || !pagamentoBadge(p)) && (
                         <span style={{ fontSize:9, color:'#94a3b8', fontStyle:'italic' }}>Consultar edital</span>
                       )}
-                      {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{im.areaM2}m²</span>}
+                      {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{Number(im.areaM2).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m²</span>}
                       {(() => {
                         const c = contagemLeilao(im.dataLeilao);
                         return c

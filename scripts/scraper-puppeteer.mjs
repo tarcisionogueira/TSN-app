@@ -611,7 +611,7 @@ async function scraperSold(browser, pageNum = 1) {
           fonte_id: `sold_${id}`,
           titulo: lot.titulo.slice(0, 120) || `Imóvel Sold`,
           tipo: normalizarTipo(lot.titulo),
-          modalidade: lot.titulo.toLowerCase().includes('judicial') ? 'judicial' : 'extrajudicial',
+          modalidade: (lot.titulo.toLowerCase().includes('judicial') && !/extra/i.test(lot.titulo || '')) ? 'judicial' : 'extrajudicial',
           estado: lot.estado.replace(/.*[-–]\s*/, '').trim().slice(0, 2).toUpperCase() || '',
           cidade: '',
           bairro: '',
@@ -782,7 +782,7 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
         fonte_id: `${prefix}_${id}`,
         titulo: (titulo || `Imóvel ${leiloeiro}`).slice(0, 160),
         tipo: normalizarTipo(tipoRaw),
-        modalidade: (of.auction?.subMarketplaces || []).some(s => /judicial/i.test(str(s))) ? 'judicial' : 'extrajudicial',
+        modalidade: (of.auction?.subMarketplaces || []).some(s => /judicial/i.test(str(s)) && !/extra/i.test(str(s))) ? 'judicial' : 'extrajudicial',
         estado: (estadoMatch?.[1] || loc.state || loc.uf || '').toString().toUpperCase().slice(0, 2),
         cidade: toTitleCase((locStr || '').replace(/\s*[-–]\s*[A-Z]{2}\s*$/, '').trim()),
         bairro: toTitleCase(str(loc.neighborhood)),
@@ -1102,7 +1102,7 @@ async function scraperPortalZuk(browser) {
       const uf = (pm?.[1] || '').toUpperCase();
       const cidade = pm?.[2] ? toTitleCase(pm[2].replace(/-/g, ' ')) : '';
       const tipoRaw = c.tipo || c.title;
-      const modalidade = /judicial/i.test(c.title) ? 'judicial' : 'extrajudicial';
+      const modalidade = (/judicial/i.test(c.title) && !/extra/i.test(c.title || '')) ? 'judicial' : 'extrajudicial';
       return {
         fonte: 'ZUK',
         fonte_id: `zuk_${id}`,
@@ -1422,7 +1422,7 @@ async function scraperFrazao(browser) {
         fonte_id: `frazao_${c.id}`,
         titulo: (c.titulo || `Imóvel Frazão ${c.id}`).slice(0, 180),
         tipo: normalizarTipo(c.tipo || c.titulo),
-        modalidade: /judicial/i.test(c.titulo) ? 'judicial' : 'extrajudicial',
+        modalidade: (/judicial/i.test(c.titulo) && !/extra/i.test(c.titulo || '')) ? 'judicial' : 'extrajudicial',
         estado: uf,
         cidade: toTitleCase(cidade),
         bairro: '',
@@ -2448,7 +2448,7 @@ function mapLoteLeilotech(lote, leilao, tenant) {
     fonte_id: `lt_${tenantKey}_${lote.id}`,
     titulo: (titulo || `Imóvel ${tenant.leiloeiro}`).slice(0, 180),
     tipo: normalizarTipo(isRural ? 'rural' : (lote.categoria?.nome || titulo)),
-    modalidade: /judicial/i.test(leilao.modalidade || leilao.tipo || '') ? 'judicial' : 'extrajudicial',
+    modalidade: (/judicial/i.test(leilao.modalidade || leilao.tipo || '') && !/extra/i.test(leilao.modalidade || leilao.tipo || '')) ? 'judicial' : 'extrajudicial',
     estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
     cidade: toTitleCase(loc.city || ''),
     bairro: '',
@@ -2683,7 +2683,7 @@ function mapLoteGrupoLance(l) {
     fonte_id: `gl_${l.id}`,
     titulo: (titulo || `Imóvel Grupo Lance ${l.id}`).slice(0, 180),
     tipo: normalizarTipo(titulo),
-    modalidade: /judicial/i.test(l.modalidade || '') ? 'judicial' : 'extrajudicial',
+    modalidade: (/judicial/i.test(l.modalidade || '') && !/extra/i.test(l.modalidade || '')) ? 'judicial' : 'extrajudicial',
     estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
     cidade: cidade || '',
     bairro: '',
