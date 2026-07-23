@@ -7,6 +7,12 @@ import TriagemPerfil from '../components/TriagemPerfil';
 
 // Rótulo e configuração da home por plano (usa o role EFETIVO — respeita o modo suporte).
 const PLANO_INFO = {
+  // Admin/equipe entram pela home normal (o admin, desde o fim do redirect forçado) — sem o
+  // fallback "Explorador 3/3". limite null = ilimitado (esconde o contador "X de Y").
+  admin:             { nome: 'Administrador',        limite: null, cor: '#7c3aed', indica: false },
+  analista:          { nome: 'Analista',             limite: null, cor: '#0d9488', indica: false },
+  advogado:          { nome: 'Jurídico',             limite: null, cor: '#0d9488', indica: false },
+  consultor:         { nome: 'Consultor',            limite: null, cor: '#d97706', indica: false },
   explorador:        { nome: 'Explorador',           limite: 3,  cor: '#64748b', indica: false },
   top2:              { nome: 'Investidor Pro',       limite: 15, cor: '#0D63DB', indica: true  },
   top2_anual:        { nome: 'Investidor Pro',       limite: 15, cor: '#0D63DB', indica: true  },
