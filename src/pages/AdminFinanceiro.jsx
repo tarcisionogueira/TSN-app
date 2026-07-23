@@ -1,9 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/apiCall';
+import { supabase } from '../utils/supabase';
 import { AlertTriangle, Info } from 'lucide-react';
 
 const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ── Assinaturas — taxonomia (igual à do Mercado Pago), calculada de `perfis`.
+// Em dia: pagamento aprovado / vigente. Em atraso: tentativas de cobrança rolando
+// (inadimplente há poucos dias). Vencida: tentativas esgotadas. Cancelada: conta
+// inativa. Pausado/Teste grátis: hoje sem campo próprio — virão do status da
+// assinatura no Asaas (por ora ficam zerados, prontos p/ o dado). Grátis = Explorador.
+const PLANOS_PAGOS = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+const DIAS_ATRASO_MAX = Number(20); // ≤ este nº de dias inadimplente = "em atraso"; acima = "vencida"
+
+const STATUS_ASSIN = {
+  em_dia:   { label: 'Em dia',      cor: '#059669', bg: '#f0fdf4' },
+  atraso:   { label: 'Em atraso',   cor: '#d97706', bg: '#fffbeb' },
+  vencida:  { label: 'Vencida',     cor: '#dc2626', bg: '#fef2f2' },
+  pausado:  { label: 'Pausado',     cor: '#0ea5e9', bg: '#f0f9ff' },
+  cancelada:{ label: 'Cancelada',   cor: '#64748b', bg: '#f1f5f9' },
+  gratis:   { label: 'Grátis',      cor: '#7c3aed', bg: '#faf5ff' },
+};
+
+function statusAssinante(p) {
+  if (p.ativo === false) return 'cancelada';
+  const pago = PLANOS_PAGOS.includes(p.plano);
+  if (!pago) return 'gratis'; // Explorador / sem plano pago (não é assinatura ativa)
+  if (p.inadimplente_desde) {
+    const dias = Math.floor((Date.now() - new Date(p.inadimplente_desde).getTime()) / 86400000);
+    return dias <= DIAS_ATRASO_MAX ? 'atraso' : 'vencida';
+  }
+  return 'em_dia';
+}
 
 // Limite Bacen para instituições de pagamento: R$ 500.000/mês
 // Acima deste volume, é necessário autorização do Banco Central (Resolução BCB 80/2021)
@@ -26,6 +55,7 @@ export default function AdminFinanceiro() {
   const [pixModal, setPixModal] = useState(false);
   const [pixResult, setPixResult] = useState(null);
   const [pagina, setPagina] = useState(0);
+  const [aba, setAba] = useState('caixa'); // 'caixa' (fluxo) | 'assinaturas'
 
   useEffect(() => {
     loadFinancas();
@@ -118,6 +148,22 @@ export default function AdminFinanceiro() {
       </div>
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
+
+        {/* Seletor de visão: Fluxo de caixa × Assinaturas */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#e2e8f0', padding: 4, borderRadius: 10, width: 'fit-content' }}>
+          {[['caixa', '💰 Fluxo de caixa'], ['assinaturas', '👥 Assinaturas']].map(([k, label]) => (
+            <button key={k} onClick={() => setAba(k)}
+              style={{ padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                background: aba === k ? '#fff' : 'transparent', color: aba === k ? '#0D63DB' : '#64748b',
+                boxShadow: aba === k ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {aba === 'assinaturas' && <AbaAssinaturas />}
+
+        {aba === 'caixa' && <>
 
         {/* Marcador de volume Bacen */}
         {volumeMes > 0 && (
@@ -273,6 +319,8 @@ export default function AdminFinanceiro() {
             </button>
           </div>
         </div>
+
+        </>}
       </div>
 
       {/* Modal de confirmação */}
@@ -296,6 +344,77 @@ export default function AdminFinanceiro() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Aba Assinaturas: status de cada assinante (taxonomia Mercado Pago) ─────────
+function AbaAssinaturas() {
+  const [assinantes, setAssinantes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filtro, setFiltro] = useState(null);
+
+  useEffect(() => {
+    supabase.from('perfis')
+      .select('id, nome, email, plano, plano_ciclo, plano_vencimento, plano_pago_em, inadimplente_desde, ativo, created_at')
+      .in('role', ['explorador', 'top2', 'assessorado', 'clube'])
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { setAssinantes((data || []).map(p => ({ ...p, _status: statusAssinante(p) }))); setLoading(false); });
+  }, []);
+
+  const dataBR = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+  const contagem = Object.keys(STATUS_ASSIN).reduce((a, k) => { a[k] = assinantes.filter(x => x._status === k).length; return a; }, {});
+  const pagantes = assinantes.filter(a => ['em_dia', 'atraso', 'vencida'].includes(a._status)).length;
+  const lista = filtro ? assinantes.filter(a => a._status === filtro) : assinantes;
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>Carregando assinaturas…</div>;
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+        <b style={{ color: '#111' }}>{assinantes.length}</b> assinantes · <b style={{ color: '#059669' }}>{pagantes}</b> pagantes ativos · clique num status para filtrar.
+      </div>
+
+      {/* Cartões de status */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: 12, marginBottom: 24 }}>
+        {Object.entries(STATUS_ASSIN).map(([k, s]) => (
+          <button key={k} onClick={() => setFiltro(filtro === k ? null : k)}
+            style={{ background: s.bg, border: `2px solid ${filtro === k ? s.cor : 'transparent'}`, borderRadius: 12, padding: '15px 18px', cursor: 'pointer', textAlign: 'left' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: s.cor, textTransform: 'uppercase', letterSpacing: 0.3 }}>{s.label}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: s.cor, marginTop: 4 }}>{contagem[k]}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Lista de assinantes */}
+      <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontWeight: 700, fontSize: 15, color: '#111' }}>Assinantes</span>
+          <span style={{ fontSize: 13, color: '#94a3b8' }}>{lista.length}{filtro ? ` · ${STATUS_ASSIN[filtro].label}` : ''}</span>
+          {filtro && <button onClick={() => setFiltro(null)} style={{ marginLeft: 'auto', fontSize: 12, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>limpar filtro</button>}
+        </div>
+        {lista.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>Nenhum assinante nesse status.</div>
+        ) : lista.map(a => {
+          const s = STATUS_ASSIN[a._status];
+          return (
+            <div key={a.id} style={{ padding: '14px 22px', borderBottom: '1px solid #f8fafc', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome || a.email || '—'}</div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{a.plano || 'sem plano'}{a.plano_ciclo ? ` · ${a.plano_ciclo}` : ''}</div>
+              </div>
+              <div style={{ textAlign: 'right', fontSize: 11.5, color: '#64748b', minWidth: 92 }}>
+                <div>vence {dataBR(a.plano_vencimento)}</div>
+                <div style={{ color: '#94a3b8' }}>pgto {dataBR(a.plano_pago_em)}</div>
+              </div>
+              <span style={{ background: s.bg, color: s.cor, fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>{s.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 12, lineHeight: 1.55 }}>
+        Status calculado dos dados de cobrança (plano, vencimento, inadimplência): <b>Em dia</b> = pagamento vigente · <b>Em atraso</b> = inadimplente há ≤{DIAS_ATRASO_MAX} dias (tentativas de cobrança rolando) · <b>Vencida</b> = acima disso · <b>Cancelada</b> = conta inativa · <b>Grátis</b> = Explorador. <b>Pausado</b> e período de <b>teste</b> passam a contar quando plugarmos o status da assinatura no Asaas.
+      </p>
     </div>
   );
 }
