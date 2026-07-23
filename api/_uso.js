@@ -31,6 +31,22 @@ export function custoMicro(model, tin = 0, tout = 0) {
   return Math.round((tin * p.in + tout * p.out) * 1e6); // micro-USD
 }
 
+// Custo (micro-USD) de UMA resposta do Claude a partir do usage — inclui cache e buscas
+// web metradas. Usado pelos geradores para ACUMULAR o custo real da geração e cobrar
+// crédito (custo × multiplicador) quando a cota mensal do plano já acabou. Mesmo cálculo
+// do medirClaude (que alimenta o painel), mas RETORNANDO o valor em vez de só registrar.
+export function custoRespostaClaude(model, usage = {}) {
+  const tin = (usage.input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+  const tout = usage.output_tokens || 0;
+  const buscas = usage?.server_tool_use?.web_search_requests || 0;
+  return custoMicro(model, tin, tout) + Math.round(buscas * WEB_SEARCH_USD * 1e6);
+}
+// Custo (micro-USD) de N leituras via Bright Data (Web Unlocker ~US$1,5/1.000 = 1500 micro/req).
+export const BRIGHTDATA_MICRO_POR_REQ = 1500;
+export function custoBrightData(nRequests = 0) {
+  return Math.max(0, Math.round(nRequests)) * BRIGHTDATA_MICRO_POR_REQ;
+}
+
 // Registra uso (fire-and-forget: chame SEM await no caminho quente, ou com await
 // em contexto que já vai encerrar). dados: {requests, tokens_in, tokens_out,
 // unidades, custo_usd_micro}.
