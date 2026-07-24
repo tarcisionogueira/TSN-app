@@ -371,15 +371,32 @@ async function main() {
 
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
   let ok = 0, erros = 0;
+  // Negative-cache: quando CHECAMOS o lote e a matrícula NÃO saiu (só edital, ou nada),
+  // marca matricula_checada_em. Torna a lacuna CONHECIDA (não silenciosa) e faz o
+  // enfileirador respeitar um cooldown de 30d em vez de re-capturar todo dia um lote
+  // cuja matrícula não está na página pública. (ZUK/GRUPOLANCE não entram nesta fila —
+  // são login-gated, resolvidos pelos pipelines próprios — então não há conflito.)
+  const marcarChecadoSemMatricula = async (imovelId) => {
+    try {
+      await supabase.from('imoveis_leilao')
+        .update({ matricula_checada_em: new Date().toISOString() })
+        .eq('id', imovelId).is('link_matricula', null);
+    } catch { /* best-effort */ }
+  };
   for (const item of fila) {
-    await supabase.from('documentos_fila').update({ status: 'processando', tentativas: (item.tentativas || 0) + 1 }).eq('imovel_id', item.imovel_id);
+    const tentativaAtual = (item.tentativas || 0) + 1;
+    await supabase.from('documentos_fila').update({ status: 'processando', tentativas: tentativaAtual }).eq('imovel_id', item.imovel_id);
     try {
       const docs = await processar(browser, item);
       await supabase.from('documentos_fila').update({ status: 'ok', erro: null, processado_em: new Date().toISOString() }).eq('imovel_id', item.imovel_id);
       ok++; console.log(`✓ ${item.imovel_id}: ${docs.join(', ')}`);
+      // Checado com sucesso, mas sem matrícula (pegou só edital/anexo) → negative-cache.
+      if (!docs.includes('matricula')) await marcarChecadoSemMatricula(item.imovel_id);
     } catch (e) {
       await supabase.from('documentos_fila').update({ status: 'erro', erro: String(e.message).slice(0, 300), processado_em: new Date().toISOString() }).eq('imovel_id', item.imovel_id);
       erros++; console.log(`✗ ${item.imovel_id}: ${e.message}`);
+      // Erro TERMINAL (esgotou as 4 tentativas) sem nunca achar a matrícula → negative-cache.
+      if (tentativaAtual >= 4) await marcarChecadoSemMatricula(item.imovel_id);
     }
     await new Promise(r => setTimeout(r, 800));
   }
