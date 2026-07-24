@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
-import { BarChart2, Bell, BellOff, Camera, ShieldCheck, MapPin } from 'lucide-react';
+import { BarChart2, Bell, BellOff, Camera, ShieldCheck, MapPin, CreditCard, ArrowRight, ArrowDownCircle, Check } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscriptionAtiva } from '../utils/push';
 import { ESTADOS_UF } from '../data/cidades';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
+import { usePlanos } from '../contexts/PlanosContext';
+import { PLANOS as PLANOS_STATIC } from '../data/cursos';
+
+// Ordem hierárquica dos planos compráveis (para o quadro de upgrade/downgrade).
+const ORDEM_PLANOS = ['explorador', 'top2', 'assessorado', 'clube'];
+// Papéis de CLIENTE (têm assinatura a gerenciar). Operacionais (admin/consultor/…) não.
+const ROLES_CLIENTE = ['explorador', 'top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
 
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -196,6 +203,17 @@ export default function Perfil() {
   const { user, role, effectiveRole } = useAuth();
   const isMobile = useIsMobile();
   const nav = useNavigate();
+  const loc = useLocation();
+  const planosLive = usePlanos();
+
+  // Sub-abas do Meu Perfil (organização por funcionalidade). A "Assinatura" abre
+  // primeiro — é onde vive a gestão de plano (antes espalhada no menu/topo).
+  const abaInicial = new URLSearchParams(loc.search).get('aba') || 'assinatura';
+  const [aba, setAba] = useState(abaInicial);
+  useEffect(() => {
+    const a = new URLSearchParams(loc.search).get('aba');
+    if (a) setAba(a);
+  }, [loc.search]);
 
   const [nome, setNome] = useState(user?.user_metadata?.nome || '');
   const [cpf, setCpf] = useState('');
@@ -628,17 +646,55 @@ export default function Perfil() {
     marginBottom: 20,
   };
 
+  // ── Assinatura: posição do plano atual na hierarquia + planos acima/abaixo ──
+  const planosCat = planosLive || PLANOS_STATIC;
+  const baseRole = String(role || 'explorador').replace('_anual', '');
+  const idxAtual = ORDEM_PLANOS.indexOf(baseRole); // -1 = papel operacional (equipe)
+  const ehCliente = ROLES_CLIENTE.includes(role);
+  const fmtPreco = (p) => {
+    if (!p) return '';
+    if (Number(p.preco) === 0) return 'Grátis';
+    return `${p.precoLabel || ''}${p.periodicidade ? ' ' + p.periodicidade : ''}`;
+  };
+  const irCheckout = (key) => navGuard(`/checkout?plano=${key}`);
+
+  // Abas visíveis: Investidor só para cliente; Parceiros só para quem recebe comissão.
+  const TABS = [
+    { id: 'assinatura', label: 'Assinatura', icon: CreditCard },
+    { id: 'dados', label: 'Meus dados', icon: ShieldCheck },
+    ...(ehCliente ? [{ id: 'investidor', label: 'Investidor', icon: BarChart2 }] : []),
+    ...((temComissao || ehParceiro) ? [{ id: 'parceiros', label: 'Parceiros', icon: BarChart2 }] : []),
+    { id: 'preferencias', label: 'Preferências', icon: Bell },
+  ];
+  const abaValida = TABS.some(t => t.id === aba) ? aba : 'assinatura';
+
   return (
     <div style={{ minHeight: '80vh', background: '#f1f5f9', padding: isMobile ? '24px 16px' : '40px 20px', fontFamily: "'Inter', sans-serif" }}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         {/* Header */}
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 18 }}>
           <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, color: '#111111', margin: 0 }}>Meu Perfil</h1>
-          <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>Gerencie seus dados e segurança da conta</p>
+          <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>Gerencie sua assinatura, seus dados e suas preferências</p>
         </div>
 
-        {/* Card Plano */}
-        <div style={{ background: 'white', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        {/* Sub-abas por funcionalidade */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 22, overflowX: 'auto', paddingBottom: 4, WebkitOverflowScrolling: 'touch' }}>
+          {TABS.map(t => {
+            const on = abaValida === t.id;
+            return (
+              <button key={t.id} onClick={() => setAba(t.id)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999, border: on ? '1px solid #0D63DB' : '1px solid #e2e8f0',
+                  background: on ? '#0D63DB' : 'white', color: on ? 'white' : '#475569', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                <t.icon size={14} /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ═══ ABA: ASSINATURA ═══ */}
+        {abaValida === 'assinatura' && (<>
+        {/* Card Plano atual */}
+        <div style={{ background: 'white', borderRadius: 14, padding: '16px 20px', marginBottom: 16, border: `1px solid ${roleColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>PLANO ATUAL</div>
             <span style={{
@@ -650,22 +706,73 @@ export default function Perfil() {
               fontSize: 13,
               fontWeight: 700,
             }}>{roleLabel}</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-            <button
-              onClick={() => navGuard('/planos')}
-              style={{ padding: '8px 16px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              Fazer upgrade
-            </button>
-            {ROLES_PAGANTES.includes(role) && (
-              <button
-                onClick={() => { setCancelMsg(null); setCancelModal(true); }}
-                style={{ padding: '6px 12px', background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                {dentroGarantia ? 'Cancelar plano e reembolsar' : 'Cancelar plano'}
-              </button>
+            {ehCliente && idxAtual >= 0 && (
+              <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 8 }}>{fmtPreco(planosCat[baseRole])}</div>
             )}
           </div>
+          {ROLES_PAGANTES.includes(role) && (
+            <button
+              onClick={() => { setCancelMsg(null); setCancelModal(true); }}
+              style={{ padding: '6px 12px', background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {dentroGarantia ? 'Cancelar plano e reembolsar' : 'Cancelar plano'}
+            </button>
+          )}
         </div>
+
+        {/* Quadro de mudança de plano: acima = upgrade · abaixo = downgrade */}
+        {idxAtual >= 0 ? (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 10 }}>Mudar de plano</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {ORDEM_PLANOS.map((key, idx) => {
+                const p = planosCat[key] || PLANOS_STATIC[key];
+                if (!p) return null;
+                if (key !== 'explorador' && p.ativo === false) return null; // plano desativado no admin
+                const ehAtual = idx === idxAtual;
+                const acima = idx > idxAtual;
+                const cor = ROLE_COLORS[key] || '#64748b';
+                const nomeP = ROLE_LABELS[key] || p.nome || key;
+                return (
+                  <div key={key} style={{ background: 'white', border: `1px solid ${ehAtual ? cor : '#e2e8f0'}`, borderRadius: 12, padding: '14px 16px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', opacity: ehAtual ? 1 : 0.98 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: cor, flexShrink: 0 }} />
+                        <span style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{nomeP}</span>
+                        {ehAtual && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: `${cor}1a`, color: cor }}>ATUAL</span>}
+                        {!ehAtual && <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: acima ? '#eef2ff' : '#f8fafc', color: acima ? '#0D63DB' : '#94a3b8' }}>{acima ? 'Upgrade' : 'Downgrade'}</span>}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 4 }}>{fmtPreco(p)}</div>
+                    </div>
+                    {ehAtual ? (
+                      <span style={{ fontSize: 12, fontWeight: 700, color: cor, display: 'flex', alignItems: 'center', gap: 5 }}><Check size={14} /> Plano atual</span>
+                    ) : key === 'explorador' ? (
+                      ROLES_PAGANTES.includes(role) ? (
+                        <button onClick={() => { setCancelMsg(null); setCancelModal(true); }}
+                          style={{ padding: '9px 14px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                          <ArrowDownCircle size={14} /> Voltar ao gratuito
+                        </button>
+                      ) : null
+                    ) : (
+                      <button onClick={() => irCheckout(key)}
+                        style={{ padding: '9px 16px', background: acima ? cor : 'white', color: acima ? 'white' : cor, border: `1px solid ${cor}`, borderRadius: 9, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                        {acima ? <>Fazer upgrade <ArrowRight size={14} /></> : <>Mudar para este plano</>}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>
+              Upgrades entram em vigor no pagamento. Para descer de plano pago, fale com a nossa equipe pelo atendimento — cuidamos da transição e de qualquer ajuste proporcional.
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', marginBottom: 20, fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+            Sua conta é <strong>operacional</strong> (equipe BidPro), sem assinatura de cliente para gerenciar aqui.
+          </div>
+        )}
+        </>)}
 
         {/* Modal, cancelamento (garantia de 7 dias × renovação) */}
         {cancelModal && (
@@ -708,6 +815,8 @@ export default function Perfil() {
           </div>
         )}
 
+        {/* ═══ ABA: MEUS DADOS ═══ */}
+        {abaValida === 'dados' && (<>
         {/* Validação de Identidade, assessorado e clube */}
         {ROLES_SELFIE.includes(role) && (
           <div style={{ background: identValidada ? '#f0fdf4' : '#fffbeb', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: `1px solid ${identValidada ? '#bbf7d0' : '#fde68a'}` }}>
@@ -741,12 +850,21 @@ export default function Perfil() {
           </div>
         )}
 
-        {/* Perfil de investidor (editável) — direciona a recomendação por e-mail.
-            Só para clientes; equipe (admin/analista/etc.) não recebe recomendação. */}
-        {['explorador','top2','top2_anual','assessorado','assessorado_anual','clube','clube_anual'].includes(role) && (
-          <PerfilInvestidorCard userId={user?.id} isMobile={isMobile} />
+        </>)}
+
+        {/* ═══ ABA: INVESTIDOR ═══ */}
+        {abaValida === 'investidor' && (
+          <>
+          {/* Perfil de investidor (editável) — direciona a recomendação por e-mail.
+              Só para clientes; equipe (admin/analista/etc.) não recebe recomendação. */}
+          {['explorador','top2','top2_anual','assessorado','assessorado_anual','clube','clube_anual'].includes(role) && (
+            <PerfilInvestidorCard userId={user?.id} isMobile={isMobile} />
+          )}
+          </>
         )}
 
+        {/* ═══ ABA: PARCEIROS ═══ */}
+        {abaValida === 'parceiros' && (<>
         {/* Programa de Parceiros — relatório da rede (só cliente pagante) */}
         {ehParceiro && relRede && (
           <div style={{ background: 'white', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: '1px solid #e2e8f0' }}>
@@ -873,7 +991,15 @@ export default function Perfil() {
             )}
           </div>
         )}
+        {(!temComissao && !ehParceiro) && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+            O <strong>Programa de Parceiros</strong> é liberado para assinantes pagantes. Assine um plano e compartilhe seu link de convite para começar a receber comissões da sua rede.
+          </div>
+        )}
+        </>)}
 
+        {/* ═══ ABA: MEUS DADOS (continuação: dados cadastrais) ═══ */}
+        {abaValida === 'dados' && (<>
         {/* Dados cadastrais + endereço */}
         <div style={{ background: 'white', borderRadius: 14, padding: isMobile ? '20px 16px' : '28px 28px', border: '1px solid #e2e8f0' }}>
           <form onSubmit={salvar}>
@@ -1040,7 +1166,10 @@ export default function Perfil() {
             </div>
           </form>
         </div>
+        </>)}
 
+        {/* ═══ ABA: PREFERÊNCIAS ═══ */}
+        {abaValida === 'preferencias' && (<>
         {/* Seção Push Notifications */}
         {pushSupport && (
           <div style={{ background: 'white', borderRadius: 14, padding: 24, marginTop: 24, border: '1px solid #e2e8f0' }}>
@@ -1163,6 +1292,7 @@ export default function Perfil() {
             </div>
           )}
         </div>
+        </>)}
       </div>
 
       {/* Barra fixa: alterações não salvas */}
