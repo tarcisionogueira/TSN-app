@@ -68,16 +68,27 @@ export default async function handler(req) {
   if (!ilimitado && usadas >= limite)
     return new Response(JSON.stringify({ error: `Você já usou suas ${limite} gerações de índice deste mês.`, motivo: 'limite_mensal', usadas, limite }), { status: 402, headers });
 
-  // Gera (semeia só se houver amostras no acervo). Sem amostras → NÃO consome crédito.
-  const g = await rpc('gerar_indice_regiao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
-  if (!g || g.gerado !== true)
-    return new Response(JSON.stringify({ ok: true, gerado: false, motivo: g?.motivo || 'sem_amostras' }), { status: 200, headers });
+  // Fonte PRIMÁRIA: AMOSTRAS DE MERCADO (indice_amostras — pesquisa web + backfill histórico),
+  // ponderadas por recência do anúncio. Fallback: mediana do ACERVO (gerar_indice_regiao) quando
+  // a região ainda não tem amostras de mercado. Sem nenhuma das duas → NÃO consome crédito.
+  const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+  let out = null;
+  if (pond && pond.venda_m2 != null) {
+    out = {
+      fonte: 'mercado', nivel: pond.nivel, venda_m2: pond.venda_m2,
+      aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : Math.round(pond.venda_m2 * 0.004 * 100) / 100,
+      n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
+    };
+  } else {
+    const g = await rpc('gerar_indice_regiao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+    if (g && g.gerado === true) out = { fonte: 'acervo', nivel: g.nivel, venda_m2: g.venda_m2, aluguel_m2: g.aluguel_m2, n_amostras: g.n_amostras };
+  }
+  if (!out)
+    return new Response(JSON.stringify({ ok: true, gerado: false, motivo: 'sem_amostras' }), { status: 200, headers });
 
-  // Consome 1 crédito só quando gerou de verdade (admin não consome).
+  // Consome 1 crédito só quando ENTREGOU um índice (admin/legado ∞ não consome).
   let cota = { ilimitado: true };
   if (!ilimitado) cota = (await rpc('consumir_indice_por', { p_user_id: user.id })) || {};
 
-  return new Response(JSON.stringify({
-    ok: true, gerado: true, nivel: g.nivel, venda_m2: g.venda_m2, aluguel_m2: g.aluguel_m2, n_amostras: g.n_amostras, cota,
-  }), { status: 200, headers });
+  return new Response(JSON.stringify({ ok: true, gerado: true, cota, ...out }), { status: 200, headers });
 }
