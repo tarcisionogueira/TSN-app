@@ -25,6 +25,17 @@ function podeAssistir(licao, planAtual) {
   return planAtual === 'assessorado' || planAtual === 'clube';
 }
 
+// Selo de acesso/preço no estilo "vitrine" (Amazon): grátis, incluso no plano, ou preço.
+function acessoMaterial(m, plano) {
+  if (m.gratuito) return { txt: 'Grátis', cor: '#059669', bg: '#dcfce7' };
+  const incluso = m.assinatura || (Array.isArray(m.planos_gratis) && m.planos_gratis.includes(plano));
+  if (incluso) return { txt: 'Incluso no seu plano', cor: '#0D63DB', bg: '#eff6ff' };
+  const preco = Number(m.preco) || 0;
+  return preco > 0
+    ? { txt: `R$ ${preco.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, cor: '#111', bg: '#f1f5f9' }
+    : { txt: 'Grátis', cor: '#059669', bg: '#dcfce7' };
+}
+
 // Placeholder de capa de ebook com gradiente e inicial
 function EbookCover({ titulo }) {
   const colors = [
@@ -304,12 +315,16 @@ export default function Membros() {
               )}
 
               <div style={{ padding:'12px 14px' }}>
-                <div style={{ fontWeight:800, fontSize:13, color:'#111111', lineHeight:1.4 }}>{c.titulo}</div>
-                {concluidas > 0 && pct < 100 && (
-                  <div style={{ fontSize:10, color:'#0D63DB', fontWeight:700, marginTop:4 }}>{pct}% concluído</div>
-                )}
-                {pct === 100 && (
-                  <div style={{ fontSize:10, color:'#10b981', fontWeight:700, marginTop:4 }}>✅ Concluído</div>
+                <div style={{ fontWeight:800, fontSize:13, color:'#111111', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden', minHeight:37 }}>{c.titulo}</div>
+                <div style={{ fontSize:11, color:'#64748b', marginTop:3 }}>{c.aulas} aula{c.aulas === 1 ? '' : 's'} · BidPro Brasil</div>
+                {concluidas > 0 && pct < 100 ? (
+                  <div style={{ fontSize:10.5, color:'#0D63DB', fontWeight:700, marginTop:5 }}>{pct}% concluído · continue</div>
+                ) : pct === 100 ? (
+                  <div style={{ fontSize:10.5, color:'#10b981', fontWeight:700, marginTop:5 }}>✅ Concluído</div>
+                ) : (
+                  <div style={{ fontSize:12.5, fontWeight:900, marginTop:5, color: Number(c.preco) > 0 ? '#111' : '#059669' }}>
+                    {Number(c.preco) > 0 ? `R$ ${Number(c.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Grátis'}
+                  </div>
                 )}
               </div>
             </div>
@@ -317,30 +332,43 @@ export default function Membros() {
         })}
       </div>
 
-      {/* Seção de eBooks */}
+      {/* Seção de eBooks — vitrine estilo Amazon (capa + título + autor + preço/CTA) */}
       {ebooks.length > 0 && (
         <div style={{ marginTop:24 }}>
           <div style={{ fontSize:12, fontWeight:800, color:'#6366f1', textTransform:'uppercase', letterSpacing:1, marginBottom:14, display:'flex', alignItems:'center', gap:6 }}>
             📖 eBooks & Materiais
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:16 }}>
-            {ebooks.map(eb => (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))', gap:18 }}>
+            {ebooks.map(eb => {
+              const ac = acessoMaterial(eb, plano);
+              return (
               <div key={eb.id} onClick={()=>nav(`/membros/ebook/${eb.id}`)}
-                style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden', cursor:'pointer', transition:'all 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' }}
-                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.12)'; e.currentTarget.style.transform='translateY(-3px)'; }}
+                style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden', cursor:'pointer', transition:'all 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.05)', display:'flex', flexDirection:'column' }}
+                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 10px 28px rgba(0,0,0,0.14)'; e.currentTarget.style.transform='translateY(-3px)'; }}
                 onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.transform='none'; }}>
-                {eb.capa_url ? (
-                  <img src={eb.capa_url} alt={eb.titulo}
-                    style={{ width:'100%', aspectRatio:'2/3', objectFit:'cover', display:'block', background:'#f1f5f9' }}
-                    onError={e=>{ e.currentTarget.style.display='none'; e.currentTarget.insertAdjacentHTML('afterend',''); }}/>
-                ) : (
-                  <EbookCover titulo={eb.titulo}/>
-                )}
-                <div style={{ padding:'10px 12px' }}>
-                  <div style={{ fontWeight:800, fontSize:12, color:'#111111', lineHeight:1.4 }}>{eb.titulo}</div>
+                {/* Capa com moldura clara (destaca a arte, como na vitrine) */}
+                <div style={{ padding:'16px 16px 10px', background:'linear-gradient(180deg,#f8fafc,#fff)', display:'flex', justifyContent:'center' }}>
+                  <div style={{ width:'72%', aspectRatio:'2/3', borderRadius:6, overflow:'hidden', boxShadow:'0 6px 16px rgba(15,23,42,0.18)' }}>
+                    {eb.capa_url ? (
+                      <img src={eb.capa_url} alt={eb.titulo}
+                        style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', background:'#f1f5f9' }}
+                        onError={e=>{ e.currentTarget.style.display='none'; }}/>
+                    ) : (
+                      <EbookCover titulo={eb.titulo}/>
+                    )}
+                  </div>
+                </div>
+                <div style={{ padding:'0 14px 14px', display:'flex', flexDirection:'column', gap:5, flex:1 }}>
+                  <div style={{ fontWeight:800, fontSize:13, color:'#0f172a', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden', minHeight:35 }}>{eb.titulo}</div>
+                  <div style={{ fontSize:11.5, color:'#64748b' }}>por <span style={{ color:'#0D63DB' }}>BidPro Brasil</span></div>
+                  <div style={{ marginTop:'auto', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, paddingTop:6 }}>
+                    <span style={{ fontSize:13, fontWeight:900, color:ac.cor }}>{ac.txt}</span>
+                    <span style={{ fontSize:11, fontWeight:800, color:'#b45309', background:'#fef3c7', padding:'3px 9px', borderRadius:6, whiteSpace:'nowrap' }}>Ler eBook →</span>
+                  </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
