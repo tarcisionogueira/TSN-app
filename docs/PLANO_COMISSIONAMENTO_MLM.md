@@ -93,3 +93,39 @@ Dois trilhos, porque recorrente e pagamento-único têm margens diferentes:
 - Definir **quem qualifica** para níveis 2–5 (só assinante? assinante ou quem recarrega?).
 - **Recorrência da assinatura:** residual vitalício (enquanto paga) ou limitado a N meses?
 - **Piso de saque** de comissão (ex.: R$ 50) para reduzir taxa de transferência.
+
+---
+
+## 11. ATUALIZAÇÃO 24/07 — 10 níveis (no ar) + plano de carreira (a planejar)
+
+### 11.1 Profundidade estendida para 10 níveis (JÁ ATIVO)
+A pedido do dono. Cauda pequena mantém saudável (total muito abaixo da margem):
+| Tipo | N1 | N2 | N3 | N4 | N5 | N6–N10 (cada) | **Total** |
+|---|---|---|---|---|---|---|---|
+| Assinatura | 8 | 4 | 2 | 1 | 1 | 0,5 | **18,5%** |
+| Produto | 20 | 5 | 3 | 1 | 1 | 0,5 | **32,5%** |
+| Venda direta | 10 | 3 | 2 | 1 | 1 | 0,5 | **19,5%** |
+
+`distribuir_comissao_rede` já respeita o maior nível ativo → paga até o 10 automaticamente.
+Ainda dá para ir além (constraint até 10; se quiser mais, é ampliar a constraint + inserir linhas).
+
+### 11.2 Plano de carreira / ranks (PROPOSTA — não implementado)
+Estrutura estilo Hinode/Forever: além da comissão por nível, o parceiro sobe de **rank** conforme
+constrói a rede, ganhando **reconhecimento + bônus de rank** (pago de um POOL limitado — nunca
+estoura a margem).
+
+| Rank | Qualificação (sugestão) | Benefício (sugestão) |
+|---|---|---|
+| **Parceiro** | assinatura ativa | comissão de rede padrão |
+| **Bronze** | 3 diretos pagantes | +1% no N1 + selo |
+| **Prata** | 10 na rede (≥5 diretos pagantes) | bônus mensal fixo (ex.: R$ 100) |
+| **Ouro** | 30 na rede (≥3 Bronze diretos) | bônus + fatia de um pool de reconhecimento |
+| **Diamante** | 100 na rede (≥3 Ouro diretos) | bônus maior + reconhecimento/eventos |
+
+**Como manter saudável:** o bônus de rank sai de um **pool fechado** (ex.: 2–3% da receita de
+assinaturas reservada a bônus), rateado entre os qualificados — assim o custo total de rank é
+**limitado por definição**, independentemente de quantos batem o rank. Ranks são recalculados
+mensalmente (subir é fácil, cair exige perder qualificação por 2 meses, p/ não punir oscilação).
+
+**Decisões do dono p/ eu implementar os ranks:** (a) as qualificações e benefícios acima; (b) o
+tamanho do pool de bônus (% da receita); (c) recálculo mensal e regra de manutenção de rank.
