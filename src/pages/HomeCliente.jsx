@@ -24,17 +24,22 @@ const PLANO_INFO = {
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
-// Termo de aceite do Programa de Parceiros — só indica/recebe quem aceitar as regras.
-// (Sem revelar percentuais: mantém a estrutura comercial reservada.)
-const TERMO_PARCEIRO_VERSAO = 'v1-2026-07';
+// Termo de ADESÃO ao Programa de Parceiros — respaldo jurídico p/ o fluxo de indicação.
+// Só indica/recebe quem aceitar. (Sem revelar percentuais: estrutura comercial reservada.)
+const TERMO_PARCEIRO_VERSAO = 'v2-2026-07';
+const TERMO_PARCEIRO_PREAMBULO = 'Este Termo de Adesão rege sua participação no Programa de Parceiros da BidPro Brasil (indicação/afiliação) e complementa os Termos de Uso e a Política de Privacidade da plataforma. Ao aceitar, você concorda com as condições abaixo.';
 const TERMO_PARCEIRO = [
-  'Participo do Programa de Parceiros indicando pessoas para a BidPro Brasil.',
-  'Sou recompensado apenas sobre assinaturas, produtos/mentorias e vendas diretas efetivamente pagas por quem eu indicar (direta ou indiretamente na minha rede). Não há recompensa sobre honorários de êxito nem sobre recarga de créditos.',
-  'As recompensas valem enquanto minha assinatura estiver ativa (paga).',
-  'Os pagamentos são por PIX, semanais (às sextas), após conferência, e exigem cadastro completo: nome, CPF, telefone e chave PIX.',
-  'Indico de forma honesta: sem spam, sem autoindicação e sem informações falsas. Indicações irregulares podem ser canceladas e a participação encerrada.',
-  'Sou responsável pelos tributos incidentes sobre os valores que eu receber.',
-  'A BidPro pode ajustar as regras e os percentuais do Programa, com aviso prévio razoável.',
+  { t: '1. Natureza da relação', d: 'O Programa é de indicação/afiliação. Você atua de forma autônoma, por conta e risco próprios e sem exclusividade. Este Termo NÃO cria vínculo empregatício, societário, de representação comercial ou de sociedade com a BidPro Brasil.' },
+  { t: '2. Elegibilidade', d: 'Para participar você deve ser maior de 18 anos, manter uma assinatura ativa (paga) e um cadastro completo e verídico (nome, CPF, telefone e chave PIX). Dados falsos impedem o pagamento e podem encerrar a participação.' },
+  { t: '3. Como você é recompensado', d: 'A recompensa incide apenas sobre ASSINATURAS, PRODUTOS/MENTORIAS e VENDAS DIRETAS efetivamente pagas e não estornadas por pessoas que você indicar, direta ou indiretamente na sua rede. NÃO há recompensa sobre honorários de êxito nem sobre recarga de créditos.' },
+  { t: '4. Condições e estorno', d: 'As recompensas são devidas enquanto sua assinatura estiver ativa. Valores relativos a pagamentos posteriormente cancelados, estornados (chargeback) ou identificados como fraude são estornados do seu saldo.' },
+  { t: '5. Pagamento', d: 'Os pagamentos são feitos por PIX, semanalmente (às sextas-feiras), após conferência, para a chave PIX cadastrada em seu nome/CPF. É necessário ter o cadastro completo para liberar o saque.' },
+  { t: '6. Tributos', d: 'Você é o único responsável pelos tributos incidentes sobre os valores que receber, podendo ser exigida a emissão de recibo/nota fiscal conforme a legislação aplicável.' },
+  { t: '7. Conduta e anti-fraude', d: 'Você se compromete a indicar de forma honesta e lícita, sendo VEDADO: spam, autoindicação, contas falsas, informações enganosas, uso indevido da marca e captação em canais não autorizados. A violação acarreta o cancelamento das comissões relacionadas e a exclusão do Programa.' },
+  { t: '8. Proteção de dados (LGPD)', d: 'O tratamento de dados segue a Lei nº 13.709/2018 (LGPD) e a Política de Privacidade da BidPro Brasil. Você compartilha apenas o seu próprio link de indicação, sem tratar dados de terceiros indevidamente.' },
+  { t: '9. Alterações do Programa', d: 'A BidPro Brasil pode alterar regras, condições e percentuais do Programa mediante aviso prévio razoável pelos canais oficiais. A continuidade da participação após o aviso implica concordância.' },
+  { t: '10. Vigência e encerramento', d: 'A adesão vigora por prazo indeterminado. Qualquer das partes pode encerrar a participação a qualquer tempo; o encerramento não prejudica comissões já apuradas de boa-fé até a data.' },
+  { t: '11. Legislação e foro', d: 'Aplica-se a legislação brasileira. Fica eleito o foro do domicílio do parceiro para dirimir controvérsias, sem prejuízo das normas de proteção ao consumidor, quando aplicáveis.' },
 ];
 
 const STATUS_CASO = {
@@ -191,7 +196,10 @@ export default function HomeCliente() {
 
           {aceite ? (
             <>
-              {/* Já é parceiro → link liberado */}
+              {/* Já é parceiro → selo de pertencimento + link liberado */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 999, padding: '4px 11px', fontSize: 11, fontWeight: 800, color: '#6d28d9' }}>
+                <ShieldCheck size={12} /> Parceiro desde {(() => { try { return new Date(aceite).toLocaleDateString('pt-BR'); } catch { return 'hoje'; } })()}
+              </div>
               <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkIndicacao}</div>
               <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
                 {copiado ? <><Check size={15} /> Link copiado!</> : <><Copy size={15} /> Copiar meu link</>}
@@ -223,21 +231,22 @@ export default function HomeCliente() {
               <Gift size={20} color="#7c3aed" />
               <div style={{ fontSize: 18, fontWeight: 900, color: '#5b21b6' }}>Programa de Parceiros — Regras</div>
             </div>
-            <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, margin: '0 0 14px' }}>
-              Leia e aceite para ativar sua participação. Ao aceitar, você passa a poder <strong>indicar</strong> e <strong>receber</strong> pelo programa.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 16 }}>
-              {TERMO_PARCEIRO.map((t, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <Check size={15} color="#7c3aed" style={{ flexShrink: 0, marginTop: 2 }} />
-                  <span style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55 }}>{t}</span>
+            <p style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.6, margin: '0 0 14px' }}>{TERMO_PARCEIRO_PREAMBULO}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14, maxHeight: '40vh', overflowY: 'auto', padding: '2px 2px 2px 0' }}>
+              {TERMO_PARCEIRO.map((c, i) => (
+                <div key={i}>
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: '#5b21b6', marginBottom: 2 }}>{c.t}</div>
+                  <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.55 }}>{c.d}</div>
                 </div>
               ))}
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+              Este termo complementa os <a href="#/termos" target="_blank" rel="noreferrer" style={{ color: '#7c3aed', fontWeight: 700 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" rel="noreferrer" style={{ color: '#7c3aed', fontWeight: 700 }}>Política de Privacidade</a>. Versão {TERMO_PARCEIRO_VERSAO}.
             </div>
             <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', cursor: 'pointer', background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '11px 13px', marginBottom: 14 }}>
               <input type="checkbox" checked={concordo} onChange={e => setConcordo(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: '#7c3aed', cursor: 'pointer' }} />
               <span style={{ fontSize: 12.5, fontWeight: 700, color: '#5b21b6', lineHeight: 1.5 }}>
-                Li e concordo com as regras do Programa de Parceiros e declaro que vou indicar de acordo com elas.
+                Declaro que li, compreendi e concordo com este Termo de Adesão, os Termos de Uso e a Política de Privacidade, e que vou indicar de acordo com as regras.
               </span>
             </label>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

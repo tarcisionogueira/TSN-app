@@ -44,6 +44,10 @@ export default async function handler(req) {
   // distintas). Default apartamento (o mais consultado). Rural fica fora (régua de hectare).
   const SEGS = ['apartamento', 'casa', 'terreno', 'comercial'];
   const tipo = SEGS.includes(String(body.tipo || '').toLowerCase()) ? String(body.tipo).toLowerCase() : 'apartamento';
+  // Coordenadas do endereço/condomínio → o índice ponderado resolve o Nível 1 (≤250 m) e o
+  // Nível 2 (~1 km) por raio, como no mercadológico. Sem lat/lng, cai no bairro/cidade (texto).
+  const lat = Number.isFinite(+body.lat) ? +body.lat : null;
+  const lng = Number.isFinite(+body.lng) ? +body.lng : null;
   if (!cidadeNorm || !/^[A-Z]{2}$/.test(uf)) {
     return new Response(JSON.stringify({ error: 'Informe a cidade e a UF (2 letras).' }), { status: 400, headers });
   }
@@ -54,7 +58,7 @@ export default async function handler(req) {
     // a região recém-gerada continuava aparecendo como "não mapeada" (bug do "gerou e não
     // mostra"). Fallback: mediana do ACERVO (indice_bidpro_regiao) p/ regiões sem amostras.
     const pond = await rpc('indice_regiao_ponderado', {
-      p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo,
+      p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo,
     });
     let regiao = null;
     if (pond && (Number(pond.venda_m2) > 0 || Number(pond.locacao_m2) > 0)) {

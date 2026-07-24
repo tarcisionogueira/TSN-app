@@ -32,6 +32,10 @@ function comp(result) {
     lat: result?.geometry?.location?.lat ?? null,
     lng: result?.geometry?.location?.lng ?? null,
     formatado: result?.formatted_address || '',
+    // nome/tipos do LUGAR — quando é um condomínio/edifício/POI, `nome` traz o nome
+    // do empreendimento (referência do índice ≤250m, como no mercadológico).
+    nome: result?.name || '',
+    tipos: Array.isArray(result?.types) ? result.types : [],
   };
 }
 
@@ -58,7 +62,7 @@ export default async function handler(req) {
     if (placeId) {
       const u = new URL('https://maps.googleapis.com/maps/api/place/details/json');
       u.searchParams.set('place_id', placeId);
-      u.searchParams.set('fields', 'address_component,geometry,formatted_address');
+      u.searchParams.set('fields', 'address_component,geometry,formatted_address,name,type');
       u.searchParams.set('language', 'pt-BR');
       if (st) u.searchParams.set('sessiontoken', st);
       u.searchParams.set('key', KEY);

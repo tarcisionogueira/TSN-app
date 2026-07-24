@@ -18,7 +18,8 @@ export default function IndiceConsulta() {
   const nav = useNavigate();
   const { effectiveRole } = useAuth();
   const podeGerar = PODE_GERAR.includes(effectiveRole);
-  const [form, setForm] = React.useState({ cidade: '', uf: 'SP', bairro: '', tipo: 'apartamento', lat: null, lng: null });
+  // nivelConsulta: 'rua' (endereço+nº → condomínio/≤250m) · 'bairro' · 'cidade'.
+  const [form, setForm] = React.useState({ cidade: '', uf: 'SP', bairro: '', tipo: 'apartamento', lat: null, lng: null, endereco: '', condominio: '', numero: '', nivelConsulta: '' });
   const [loading, setLoading] = React.useState(false);
   const [res, setRes] = React.useState(null);
   const [erro, setErro] = React.useState('');
@@ -32,21 +33,31 @@ export default function IndiceConsulta() {
     return () => window.removeEventListener('resize', on);
   }, []);
 
-  const consultar = async (e) => {
-    e?.preventDefault?.();
-    if (!form.cidade.trim() || !form.uf) { setErro('Informe a cidade e a UF.'); return; }
-    setLoading(true); setErro(''); setRes(null); setGerMsg('');
-    try {
-      const r = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(form) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Falha na consulta');
-      setRes(d);
-    } catch (e2) { setErro(e2.message); }
+  // Consulta o índice de uma localidade (objeto form) e devolve o resultado {mapeado,...}.
+  const consultarDe = async (f) => {
+    const r = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(f) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Falha na consulta');
+    return d;
+  };
+
+  // Assim que o usuário ESCOLHE um endereço/bairro/cidade, já dizemos se está mapeado —
+  // sem botão. Se não estiver, o cartão convida a gerar na hora (na granularidade certa).
+  const autoConsultar = async (f) => {
+    setErro(''); setRes(null); setGerMsg(''); setLoading(true);
+    try { setRes(await consultarDe(f)); } catch (e2) { setErro(e2.message); }
     setLoading(false);
   };
 
-  // Gera o índice de MERCADO desta localidade: faz a pesquisa web ao vivo (api/indice-mercado),
+  const consultar = (e) => {
+    e?.preventDefault?.();
+    if (!form.cidade.trim() || !form.uf) { setErro('Informe a cidade e a UF.'); return; }
+    autoConsultar(form);
+  };
+
+  // Gera o índice de MERCADO desta localidade: pesquisa web ao vivo (api/indice-mercado),
   // guarda as amostras (peso por data) e reconsulta p/ exibir. Cobra cota/crédito no servidor.
+  // Passa endereço + condomínio → Nível 1 (mesmo condomínio/rua, ≤250 m), como no mercadológico.
   const gerar = async () => {
     setGerando(true); setGerMsg('');
     try {
@@ -54,9 +65,8 @@ export default function IndiceConsulta() {
       const d = await r.json();
       if (!r.ok) { setGerMsg(d.error || 'Não foi possível gerar.'); setGerando(false); return; }
       if (!d.gerado) { setGerMsg('A pesquisa não encontrou amostras de mercado suficientes nesta localidade. Tente uma cidade/bairro maior.'); setGerando(false); return; }
-      const rc = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(form) });
-      const dc = await rc.json();
-      if (rc.ok) { setRes(dc); setGerMsg(d.inseridas ? `Pesquisa concluída — ${d.inseridas} amostra(s) nova(s) na base.` : 'Índice atualizado.'); }
+      const dc = await consultarDe(form).catch(() => null);
+      if (dc) { setRes(dc); setGerMsg(d.inseridas ? `Pesquisa concluída — ${d.inseridas} amostra(s) nova(s) na base.` : 'Índice atualizado.'); }
     } catch (e) { setGerMsg(e.message || 'Falha ao gerar.'); }
     setGerando(false);
   };
@@ -65,20 +75,14 @@ export default function IndiceConsulta() {
   const reg = res?.regiao;
   const nivelLabel = reg?.nivel_label || (reg?.nivel === 'bairro' ? 'bairro' : reg?.nivel === 'grid' ? 'microrregião (~1 km)' : 'cidade');
 
-  // Regiões já mapeadas (chips) — navegar/consultar direto em vez de adivinhar.
-  const [mapeadas, setMapeadas] = React.useState([]);
-  React.useEffect(() => {
-    apiCall('/api/indice-mapeadas').then(r => r.json()).then(d => { if (d?.regioes) setMapeadas(d.regioes); }).catch(() => {});
-  }, []);
-  const consultarRegiao = (m) => {
-    const f = { cidade: m.cidade, uf: m.uf, bairro: '', tipo: form.tipo, lat: null, lng: null };
-    setForm(f); setErro(''); setRes(null); setGerMsg(''); setLoading(true);
-    apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(f) })
-      .then(r => r.json().then(d => ({ ok: r.ok, d })))
-      .then(({ ok, d }) => { if (ok) setRes(d); else setErro(d.error || 'Falha na consulta'); })
-      .catch(e => setErro(e.message))
-      .finally(() => setLoading(false));
+  // Como o condomínio/edifício vem do Google (POI/premise): nome ≠ rua.
+  const condominioDe = (end) => {
+    const poi = ['premise', 'subpremise', 'point_of_interest', 'establishment'].some(t => (end.tipos || []).includes(t));
+    const nome = String(end.nome || '').trim();
+    return (poi && nome && nome.toLowerCase() !== String(end.logradouro || '').toLowerCase()) ? nome : '';
   };
+  const rotuloNivel = { rua: 'rua/condomínio (raio de 250 m)', bairro: 'bairro e adjacências', cidade: 'cidade' };
+  const localLabel = [form.condominio, form.bairro, form.cidade].filter(Boolean).join(' · ') + (form.uf ? `/${form.uf}` : '');
 
   return (
     <div style={{ maxWidth: 780, margin: '0 auto', padding: '24px 16px', fontFamily: "'Inter', sans-serif" }}>
@@ -91,41 +95,31 @@ export default function IndiceConsulta() {
         Digite <strong>qualquer endereço, bairro ou cidade</strong> — se ainda não mapeamos, você <strong>gera a pesquisa na hora</strong>.
       </p>
 
-      {mapeadas.length > 0 && (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 8 }}>
-            Regiões já mapeadas <span style={{ color: '#94a3b8', fontWeight: 400 }}>(toque para consultar)</span>
-          </div>
-          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-            {mapeadas.slice(0, 14).map((m) => (
-              <button key={`${m.cidade_norm}-${m.uf}`} type="button" onClick={() => consultarRegiao(m)}
-                title={`${m.n_amostras} amostra(s)`}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999, border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e40af', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                <MapPin size={11} /> {m.cidade}/{m.uf}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <form onSubmit={consultar} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: 14, marginBottom: 20 }}>
         {!manual && (
           <label style={{ flex: '1 1 100%' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Endereço, bairro ou cidade <span style={{ color: '#94a3b8', fontWeight: 400 }}>(preenche o resto sozinho)</span></div>
             <EnderecoAutocomplete
               placeholder="Digite a rua e número, o bairro ou a cidade…"
-              onSelect={(end) => setForm(f => ({
-                ...f,
-                cidade: end.cidade || f.cidade,
-                uf: (end.uf || f.uf || '').toUpperCase(),
-                bairro: end.bairro || f.bairro,
-                lat: end.lat ?? f.lat,
-                lng: end.lng ?? f.lng,
-              }))}
+              onSelect={(end) => {
+                const numero = end.numero || '';
+                const condominio = condominioDe(end);
+                const nivel = (numero || condominio) ? 'rua' : (end.bairro ? 'bairro' : 'cidade');
+                const endereco = [end.logradouro, numero].filter(Boolean).join(', ') || end.formatado || '';
+                const f = {
+                  ...form,
+                  cidade: end.cidade || '', uf: (end.uf || '').toUpperCase(), bairro: end.bairro || '',
+                  lat: end.lat ?? null, lng: end.lng ?? null,
+                  endereco, condominio, numero, nivelConsulta: nivel,
+                };
+                setForm(f);
+                if (f.cidade && f.uf) autoConsultar(f); // já diz na hora se está mapeado
+              }}
             />
             {form.cidade && (
-              <div style={{ marginTop: 8, fontSize: 12.5, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <MapPin size={13} /> {[form.bairro, form.cidade].filter(Boolean).join(' · ')}{form.uf ? `/${form.uf}` : ''}
+              <div style={{ marginTop: 8, fontSize: 12.5, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                {form.condominio ? <Building2 size={13} /> : <MapPin size={13} />} {localLabel}
+                {form.nivelConsulta && <span style={{ color: '#15803d', opacity: 0.75 }}>· {rotuloNivel[form.nivelConsulta]}</span>}
               </div>
             )}
           </label>
@@ -174,12 +168,14 @@ export default function IndiceConsulta() {
 
       {res && !res.mapeado && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: '18px 20px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>Região ainda não mapeada</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
+            Ainda não mapeamos {form.nivelConsulta === 'rua' ? (form.condominio ? 'este condomínio' : 'esta rua') : form.nivelConsulta === 'bairro' ? 'este bairro' : 'esta cidade'}
+          </div>
           <div style={{ fontSize: 13.5, color: '#78350f', lineHeight: 1.6, marginBottom: 14 }}>
-            Ainda não temos o índice de <strong>{form.cidade}/{form.uf}{form.bairro ? ` · ${form.bairro}` : ''}</strong>.
+            Sem índice ainda para <strong>{localLabel || `${form.cidade}/${form.uf}`}</strong>.
             {podeGerar
-              ? ' Gere agora uma pesquisa de mercado ao vivo (venda e locação) desta localidade — as amostras ficam guardadas e passam a alimentar o índice e os relatórios.'
-              : ' Nos planos pagos você pode gerar o índice desta localidade na hora.'}
+              ? ` Gere agora uma pesquisa de mercado ao vivo (venda e locação) ${form.nivelConsulta === 'rua' ? 'com referência no condomínio/rua (raio de 250 m) e na vizinhança até 1 km' : form.nivelConsulta === 'bairro' ? 'do bairro e adjacências' : 'da cidade'} para ${form.tipo} — as amostras ficam guardadas e passam a alimentar o índice e os relatórios.`
+              : ' Nos planos pagos você gera o índice desta localidade na hora.'}
           </div>
           {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>{gerMsg}</div>}
           {podeGerar ? (
