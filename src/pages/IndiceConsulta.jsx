@@ -63,7 +63,22 @@ export default function IndiceConsulta() {
 
   const vz = res?.valorizacao;
   const reg = res?.regiao;
-  const nivelLabel = reg?.nivel === 'bairro' ? 'bairro' : reg?.nivel === 'grid' ? 'microrregião (~1 km)' : 'cidade';
+  const nivelLabel = reg?.nivel_label || (reg?.nivel === 'bairro' ? 'bairro' : reg?.nivel === 'grid' ? 'microrregião (~1 km)' : 'cidade');
+
+  // Regiões já mapeadas (chips) — navegar/consultar direto em vez de adivinhar.
+  const [mapeadas, setMapeadas] = React.useState([]);
+  React.useEffect(() => {
+    apiCall('/api/indice-mapeadas').then(r => r.json()).then(d => { if (d?.regioes) setMapeadas(d.regioes); }).catch(() => {});
+  }, []);
+  const consultarRegiao = (m) => {
+    const f = { cidade: m.cidade, uf: m.uf, bairro: '', tipo: form.tipo, lat: null, lng: null };
+    setForm(f); setErro(''); setRes(null); setGerMsg(''); setLoading(true);
+    apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(f) })
+      .then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => { if (ok) setRes(d); else setErro(d.error || 'Falha na consulta'); })
+      .catch(e => setErro(e.message))
+      .finally(() => setLoading(false));
+  };
 
   return (
     <div style={{ maxWidth: 780, margin: '0 auto', padding: '24px 16px', fontFamily: "'Inter', sans-serif" }}>
@@ -71,9 +86,27 @@ export default function IndiceConsulta() {
         <MapPin size={22} color="#0D63DB" />
         <h1 style={{ fontSize: 22, fontWeight: 900, color: '#111', margin: 0 }}>Índice BidPro</h1>
       </div>
-      <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 20px', lineHeight: 1.6 }}>
-        O preço do m² <strong>para venda e para locação</strong> na região, com a valorização por ano — da nossa base própria de milhares de imóveis analisados.
+      <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 14px', lineHeight: 1.6 }}>
+        O preço do m² <strong>para venda e para locação</strong> na região, com a valorização por ano.
+        Digite <strong>qualquer endereço, bairro ou cidade</strong> — se ainda não mapeamos, você <strong>gera a pesquisa na hora</strong>.
       </p>
+
+      {mapeadas.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 8 }}>
+            Regiões já mapeadas <span style={{ color: '#94a3b8', fontWeight: 400 }}>(toque para consultar)</span>
+          </div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {mapeadas.slice(0, 14).map((m) => (
+              <button key={`${m.cidade_norm}-${m.uf}`} type="button" onClick={() => consultarRegiao(m)}
+                title={`${m.n_amostras} amostra(s)`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999, border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e40af', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <MapPin size={11} /> {m.cidade}/{m.uf}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form onSubmit={consultar} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: 14, marginBottom: 20 }}>
         {!manual && (

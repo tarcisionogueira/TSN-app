@@ -49,14 +49,35 @@ export default async function handler(req) {
   }
 
   try {
-    const regiao = await rpc('indice_bidpro_regiao', {
-      p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo,
+    // Fonte PRIMÁRIA: AMOSTRAS DE MERCADO (indice_amostras — pesquisa web + backfill),
+    // ponderadas por recência. É o que a GERAÇÃO (api/indice-mercado) grava — sem ler aqui,
+    // a região recém-gerada continuava aparecendo como "não mapeada" (bug do "gerou e não
+    // mostra"). Fallback: mediana do ACERVO (indice_bidpro_regiao) p/ regiões sem amostras.
+    const pond = await rpc('indice_regiao_ponderado', {
+      p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo,
     });
+    let regiao = null;
+    if (pond && (Number(pond.venda_m2) > 0 || Number(pond.locacao_m2) > 0)) {
+      regiao = {
+        fonte: 'mercado',
+        venda_m2: pond.venda_m2,
+        aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : (Number(pond.venda_m2) > 0 ? Math.round(pond.venda_m2 * 0.004 * 100) / 100 : null),
+        n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
+        nivel: Number(pond.nivel) === 1 ? 'rua' : Number(pond.nivel) === 2 ? 'grid' : 'cidade',
+        nivel_label: Number(pond.nivel) === 1 ? 'rua/condomínio (~250 m)' : Number(pond.nivel) === 2 ? 'bairro e adjacências (~1 km)' : 'cidade',
+        bairro_norm: bairroNorm || null,
+      };
+    } else {
+      const acervo = await rpc('indice_bidpro_regiao', {
+        p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo,
+      });
+      if (acervo && (Number(acervo.venda_m2) > 0 || Number(acervo.aluguel_m2) > 0)) regiao = { fonte: 'acervo', ...acervo };
+    }
     const valorizacao = await rpc('indice_valorizacao_anual', {
       p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6,
     });
-    const mapeado = !!(regiao && (Number(regiao.venda_m2) > 0 || Number(regiao.aluguel_m2) > 0));
-    return new Response(JSON.stringify({ ok: true, mapeado, regiao: mapeado ? regiao : null, valorizacao: valorizacao || null }), { status: 200, headers });
+    const mapeado = !!regiao;
+    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha na consulta' }), { status: 500, headers });
   }
