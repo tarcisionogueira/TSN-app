@@ -492,6 +492,7 @@ export default function Caso() {
   // Posse do imóvel: encerra a assessoria deste caso. Quem já é Clube/Investidor
   // Pro mantém o plano; assessorado volta a Explorador (decisão do dono).
   const [posseLoad, setPosseLoad] = useState(false);
+  const [posseUpsell, setPosseUpsell] = useState(false); // modal pós-posse: oferta o Investidor Pro
   const marcarPosse = async () => {
     if (!window.confirm('Confirmar que você tomou a POSSE deste imóvel?\n\nIsto encerra o trabalho da assessoria para este imóvel.')) return;
     setPosseLoad(true);
@@ -501,8 +502,10 @@ export default function Caso() {
       if (!r.ok || !d.ok) throw new Error(d.error || 'Falha ao registrar a posse.');
       setCaso(c => ({ ...c, posse_em: d.posse_em, status_etapa: 'pos_arrematacao' }));
       if (d.reduziu) {
-        alert('Posse registrada! A assessoria deste imóvel foi concluída.\n\nSeu acesso voltou ao plano Explorador. Se quiser continuar com relatórios ilimitados, conheça o Investidor Pro.');
-        window.location.href = '/#/planos';
+        // A assessoria era para ESTA arrematação e encerra na posse → a conta volta ao Explorador.
+        // Em vez de jogar o cliente direto no /planos, PERGUNTA se quer manter os benefícios
+        // (relatórios completos + Índice BidPro) e recomenda o Investidor Pro (pedido do dono).
+        setPosseUpsell(true);
       } else {
         alert('Posse registrada! A assessoria deste imóvel foi concluída. Seu plano atual foi mantido.');
       }
@@ -1061,6 +1064,47 @@ export default function Caso() {
                       style={{ padding:'11px 18px', background: posseLoad ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: posseLoad ? 'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
                       {posseLoad ? <><Loader2 size={15} style={{ animation:'spin 1s linear infinite' }}/> Registrando…</> : <><CheckCircle2 size={15}/> Tomei posse do imóvel</>}
                     </button>
+                  </div>
+                )}
+                {/* Pós-posse: a assessoria (para esta arrematação) encerrou e a conta voltou ao
+                    Explorador. Pergunta se quer manter os benefícios e recomenda o Investidor Pro. */}
+                {posseUpsell && (
+                  <div onClick={() => setPosseUpsell(false)}
+                    style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }}>
+                    <div onClick={e => e.stopPropagation()}
+                      style={{ background:'white', borderRadius:18, width:'100%', maxWidth:440, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+                      <div style={{ background:'linear-gradient(135deg,#0D63DB,#084BA6)', padding:'22px 24px', color:'white' }}>
+                        <div style={{ fontSize:20, fontWeight:900, lineHeight:1.2 }}>Assessoria concluída! 🎉</div>
+                        <div style={{ fontSize:13, opacity:0.92, marginTop:6, lineHeight:1.55 }}>
+                          O trabalho da assessoria para este imóvel foi concluído com a posse. Sua conta voltou para o plano <strong>Explorador</strong>. Quer continuar com os benefícios de investidor?
+                        </div>
+                      </div>
+                      <div style={{ padding:'20px 24px' }}>
+                        <div style={{ fontSize:12, fontWeight:800, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:10 }}>Com o Investidor Pro você mantém</div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                          {[
+                            ['📑','Relatórios completos','Mercadológico, Documental + Jurídico e o Laudo (Parecer Final) de cada imóvel que analisar.'],
+                            ['📈','Índice BidPro','A referência de preço por região para avaliar as próximas oportunidades.'],
+                          ].map(([ic,t,ds],i) => (
+                            <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                              <span style={{ fontSize:18, flexShrink:0 }}>{ic}</span>
+                              <div>
+                                <div style={{ fontSize:13.5, fontWeight:800, color:'#111' }}>{t}</div>
+                                <div style={{ fontSize:12, color:'#64748b', lineHeight:1.5 }}>{ds}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={() => { setPosseUpsell(false); nav('/planos'); }}
+                          style={{ width:'100%', marginTop:18, padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:15, cursor:'pointer' }}>
+                          Assinar o Investidor Pro →
+                        </button>
+                        <button onClick={() => setPosseUpsell(false)}
+                          style={{ width:'100%', marginTop:8, padding:'10px', background:'none', color:'#94a3b8', border:'none', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                          Agora não, seguir no Explorador
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
