@@ -63,6 +63,13 @@ const PERFIS = [
   { v: 'revenda', label: 'Revenda (flip)' },
   { v: 'locacao', label: 'Locação (renda)' },
 ];
+// Filtro de ACESSO: última atividade (login OU busca OU imóvel visto OU relatório) na janela.
+const JANELA_ACESSO = 14; // dias
+const ACESSOS = [
+  { v: '', label: 'Todos' },
+  { v: 'acessando', label: `Acessando (${JANELA_ACESSO}d)` },
+  { v: 'nao_acessando', label: 'Sem acesso' },
+];
 const PERFIL_LABEL = { uso_proprio: 'Uso próprio', revenda: 'Revenda', locacao: 'Locação' };
 
 // Rótulo amigável do tipo de e-mail (histórico gravado a partir de agora).
@@ -72,6 +79,8 @@ const emailTipoLabel = (t) => EMAIL_TIPO_LABEL[t] || (t ? t.charAt(0).toUpperCas
 export default function Cliente360() {
   const [termo, setTermo] = useState('');
   const [perfilFiltro, setPerfilFiltro] = useState('');
+  const [acessoFiltro, setAcessoFiltro] = useState('');
+  const [resolvendo, setResolvendo] = useState(false);
   const [resultados, setResultados] = useState(null);
   const [buscando, setBuscando] = useState(false);
   const [dados, setDados] = useState(null);
@@ -91,37 +100,60 @@ export default function Cliente360() {
 
   // Busca AO VIVO: já carrega a lista ao abrir (termo vazio) e filtra a cada dígito
   // (debounce de 300ms) e ao trocar o filtro de perfil. Sem botão.
+  // Monta a URL de busca com os filtros ativos (perfil + acesso).
+  const urlBusca = (t) => `/api/admin-usuario-360?q=${encodeURIComponent(t)}`
+    + (perfilFiltro ? `&perfil=${perfilFiltro}` : '')
+    + (acessoFiltro ? `&acesso=${acessoFiltro}&janela=${JANELA_ACESSO}` : '');
+
   useEffect(() => {
     const t = termo.trim();
     if (t.length === 1) return;
     const id = setTimeout(async () => {
       setBuscando(true); setErro(''); setDados(null);
       try {
-        const r = await apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(t)}${perfilFiltro ? `&perfil=${perfilFiltro}` : ''}`);
+        const r = await apiCall(urlBusca(t));
         const j = await r.json();
-        setResultados(Array.isArray(j) ? j : []);
+        // Distingue FALHA (erro/HTTP não-ok) de resultado VAZIO — antes, uma falha do
+        // backend virava "Nenhum usuário encontrado" (a busca parecia zerada à toa).
+        if (!r.ok || j?.error || !Array.isArray(j)) { setErro(j?.error || 'Falha na busca.'); setResultados([]); }
+        else setResultados(j);
       } catch { setErro('Falha na busca.'); } finally { setBuscando(false); }
     }, 300);
     return () => clearTimeout(id);
-  }, [termo, perfilFiltro]);
+  }, [termo, perfilFiltro, acessoFiltro]); // eslint-disable-line
 
   const abrir = async (u) => {
-    setCarregando(true); setErro(''); setResultados(null);
+    // NÃO apaga a lista antes de carregar — se o detalhe falhar, o admin não fica num
+    // beco sem saída (lista sumia e só restava a busca). Só troca de tela no sucesso.
+    setCarregando(true); setErro('');
     try {
       const r = await apiCall(`/api/admin-usuario-360?user_id=${encodeURIComponent(u.id)}`);
       const j = await r.json();
-      if (j?.error) setErro(j.error); else setDados({ ...j, _busca: u });
+      if (!r.ok || j?.error) setErro(j?.error || 'Falha ao carregar o cliente.');
+      else { setResultados(null); setDados({ ...j, _busca: u }); }
     } catch { setErro('Falha ao carregar o cliente.'); } finally { setCarregando(false); }
   };
 
   // Volta do 360 do cliente para a lista (recarrega com o termo atual).
   const voltar = () => {
     setDados(null); setErro(''); setBuscando(true); setImportMsg(null);
-    apiCall(`/api/admin-usuario-360?q=${encodeURIComponent(termo.trim())}${perfilFiltro ? `&perfil=${perfilFiltro}` : ''}`)
-      .then((r) => r.json())
-      .then((j) => setResultados(Array.isArray(j) ? j : []))
+    apiCall(urlBusca(termo.trim()))
+      .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => { if (!ok || j?.error || !Array.isArray(j)) { setErro(j?.error || 'Falha na busca.'); setResultados([]); } else setResultados(j); })
       .catch(() => setErro('Falha na busca.'))
       .finally(() => setBuscando(false));
+  };
+
+  // Marca os erros do cliente aberto como resolvidos → limpa a tag "erro" na lista.
+  const resolverErros = async () => {
+    const uid = dados?._busca?.id || dados?.perfil?.id;
+    if (!uid || resolvendo) return;
+    setResolvendo(true);
+    try {
+      const r = await apiCall('/api/admin-usuario-360', { method: 'POST', body: JSON.stringify({ acao: 'resolver_erros', user_id: uid }) });
+      const j = await r.json();
+      if (r.ok && j?.ok) { if (dados?._busca) await abrir(dados._busca); }
+    } catch { /* silencioso */ } finally { setResolvendo(false); }
   };
 
   // Puxa o histórico do Resend p/ emails_log e recarrega o cliente aberto. É global
@@ -166,17 +198,31 @@ export default function Cliente360() {
         {buscando && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#94a3b8' }}>filtrando…</span>}
       </div>
 
-      {/* Filtro por perfil de investidor */}
+      {/* Filtros: perfil de investidor + acesso (acessando × sem acesso) */}
       {!dados && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {PERFIS.map((op) => (
-            <button key={op.v} onClick={() => setPerfilFiltro(op.v)}
-              style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', border: '1px solid',
-                background: perfilFiltro === op.v ? '#111' : '#fff', color: perfilFiltro === op.v ? '#fff' : '#475569',
-                borderColor: perfilFiltro === op.v ? '#111' : '#cbd5e1' }}>
-              {op.label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {PERFIS.map((op) => (
+              <button key={op.v} onClick={() => setPerfilFiltro(op.v)}
+                style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+                  background: perfilFiltro === op.v ? '#111' : '#fff', color: perfilFiltro === op.v ? '#fff' : '#475569',
+                  borderColor: perfilFiltro === op.v ? '#111' : '#cbd5e1' }}>
+                {op.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ ...label }}>Acesso:</span>
+            {ACESSOS.map((op) => (
+              <button key={op.v} onClick={() => setAcessoFiltro(op.v)}
+                style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+                  background: acessoFiltro === op.v ? '#0D63DB' : '#fff', color: acessoFiltro === op.v ? '#fff' : '#475569',
+                  borderColor: acessoFiltro === op.v ? '#0D63DB' : '#cbd5e1' }}>
+                {op.label}
+              </button>
+            ))}
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>última atividade: login, busca, imóvel visto ou relatório</span>
+          </div>
         </div>
       )}
 
@@ -283,6 +329,15 @@ export default function Cliente360() {
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{u.nome || '(sem nome)'}</div>
                     <div style={{ fontSize: 12, color: '#64748b' }}>{u.email}{u.telefone ? ` · ${u.telefone}` : ''}</div>
+                    {(() => {
+                      const d = u.ultima_atividade ? diasAtras(u.ultima_atividade) : null;
+                      const ativo = d != null && d <= JANELA_ACESSO;
+                      return (
+                        <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, color: ativo ? '#059669' : '#94a3b8' }}>
+                          {d == null ? '○ nunca acessou' : ativo ? `● ativo · há ${d === 0 ? 'menos de 1 dia' : d + 'd'}` : `○ sem acesso · há ${d}d`}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {u.tem_erro && <span title="Tem erro de navegação em aberto" style={{ fontSize: 10.5, fontWeight: 700, color: '#b91c1c', background: '#fee2e2', padding: '3px 8px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 3 }}><AlertTriangle size={11} /> erro</span>}
@@ -442,9 +497,15 @@ export default function Cliente360() {
           {/* Erros de navegação — telas de erro / inconsistências que o cliente bateu
               (window.onerror / unhandledrejection / ErrorBoundary → erros_cliente). */}
           <div style={card}>
-            <div style={{ ...label, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ ...label, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <AlertTriangle size={12} color={dados.erros_abertos > 0 ? '#dc2626' : '#94a3b8'} />
               Erros de navegação ({(dados.erros || []).length}){dados.erros_abertos > 0 ? ` · ${dados.erros_abertos} aberto(s)` : ''}
+              {dados.erros_abertos > 0 && (
+                <button onClick={resolverErros} disabled={resolvendo}
+                  style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontSize: 11, fontWeight: 700, cursor: resolvendo ? 'default' : 'pointer' }}>
+                  {resolvendo ? 'Resolvendo…' : '✓ Marcar como resolvidos'}
+                </button>
+              )}
             </div>
             {(dados.erros || []).length === 0 ? (
               <div style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum erro registrado — navegação sem incidentes.</div>

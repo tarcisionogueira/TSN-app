@@ -33,9 +33,25 @@ export default async function handler(req) {
   if (!SB || !KEY) return new Response(JSON.stringify({ error: 'Supabase não configurado' }), { status: 500, headers: { 'Content-Type': 'application/json', ...CORS } });
 
   const params = new URL(req.url).searchParams;
+
+  // POST → marcar os erros de um usuário como resolvidos (limpa a tag "erro" da lista).
+  if (req.method === 'POST') {
+    let body = {}; try { body = await req.json(); } catch { /* corpo vazio */ }
+    const alvo = body?.user_id || params.get('user_id');
+    if (body?.acao !== 'resolver_erros' || !alvo) {
+      return new Response(JSON.stringify({ error: 'Ação inválida' }), { status: 400, headers: { 'Content-Type': 'application/json', ...CORS } });
+    }
+    const n = await rpc('admin_resolver_erros_usuario', { p_user_id: alvo });
+    return new Response(JSON.stringify(n == null ? { error: 'Falha ao resolver' } : { ok: true, resolvidos: n }), {
+      status: n == null ? 502 : 200, headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  }
+
   const q = (params.get('q') || '').trim();
   const uid = params.get('user_id');
   const perfil = (params.get('perfil') || '').trim() || null;   // filtro por perfil_investidor
+  const acesso = (params.get('acesso') || '').trim() || null;   // acessando | nao_acessando
+  const janela = Math.min(365, Math.max(1, parseInt(params.get('janela') || '14', 10) || 14));
   const stats = params.get('stats');                             // ?stats=1 → estatísticas
 
   let data;
@@ -54,10 +70,15 @@ export default async function handler(req) {
     // p_perfil filtra por perfil de investidor (locacao/revenda/uso_proprio).
     const dig = q.replace(/\D/g, '');
     const cpfHash = dig.length === 11 ? await hashCpf(dig).catch(() => null) : null;
-    data = await rpc('admin_busca_usuarios', { termo: q, p_cpf_hash: cpfHash, p_perfil: perfil });
+    data = await rpc('admin_busca_usuarios', { termo: q, p_cpf_hash: cpfHash, p_perfil: perfil, p_acesso: acesso, p_janela: janela });
   }
 
-  return new Response(JSON.stringify(data ?? { error: 'Falha ao consultar' }), {
+  // Distingue FALHA (RPC null → 502) de resultado VAZIO (lista []). Sem isso, uma falha
+  // do backend virava "Nenhum usuário encontrado" na tela (bug de navegabilidade).
+  if (data == null) {
+    return new Response(JSON.stringify({ error: 'Falha ao consultar' }), { status: 502, headers: { 'Content-Type': 'application/json', ...CORS } });
+  }
+  return new Response(JSON.stringify(data), {
     status: 200, headers: { 'Content-Type': 'application/json', ...CORS },
   });
 }
