@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { extrairDadosDocumento, consolidarDocsImovel } from '../utils/claude';
+import { FinanceiroCaixa, AbaAssinaturas } from './AdminFinanceiro';
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -4477,7 +4478,7 @@ function DashboardTab({ irParaTab }) {
         {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} ${periodo === 'hoje' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : periodo === 'custom' ? 'no período' : 'este mês'}`, '#60a5fa')}
         {statCard('MRR estimado', `R$ ${fmt(dados.mrr)}`, 'Estimado por plano (receita real: Financeiro)', '#10b981')}
         {statCard('Inadimplentes', fmtN(dados.inadimplentes || 0), dados.inadimplentes ? 'assinaturas com pagamento em falha' : 'nenhum em atraso', dados.inadimplentes ? '#f59e0b' : '#94a3b8')}
-        {statCard('Reembolsos pendentes', fmtN(dados.reembolsosPendentes || 0), dados.reembolsosPendentes ? 'garantia 7 dias — ação em Prestação de contas' : 'nenhum pendente', dados.reembolsosPendentes ? '#dc2626' : '#94a3b8')}
+        {statCard('Reembolsos pendentes', fmtN(dados.reembolsosPendentes || 0), dados.reembolsosPendentes ? 'garantia 7 dias — ação em Financeiro › Saques' : 'nenhum pendente', dados.reembolsosPendentes ? '#dc2626' : '#94a3b8')}
       </div>
 
       {/* Cobertura de relatórios & inteligência (o que ocorre no sistema — dado real) */}
@@ -4617,8 +4618,10 @@ function DashboardTab({ irParaTab }) {
               const mpDisp = Number(mpSaldo?.available_balance) || 0;
               const mpIndispon = !!mpSaldo?.error;
               const total = asaasDisp + (mpIndispon ? 0 : mpDisp);
+              const recebidoMes = Number(asaasDados?.statsMes?.revenue) || 0;
+              const abrirFinanceiro = () => { sessionStorage.setItem('admin_fin_sub', 'caixa'); if (irParaTab) irParaTab('Financeiro'); };
               return (
-                <a href="/#/admin/financeiro" style={{ textDecoration: 'none' }}>
+                <div onClick={abrirFinanceiro} style={{ cursor: 'pointer' }}>
                   <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', borderRadius: 12, padding: '16px 18px', marginBottom: 12, color: 'white', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Saldo disponível (Asaas + Mercado Pago)</span>
@@ -4628,8 +4631,11 @@ function DashboardTab({ irParaTab }) {
                     <div style={{ fontSize: 11, opacity: 0.9 }}>
                       Asaas R$ {fmt(asaasDisp)} · Mercado Pago {mpIndispon ? '(consultar no painel MP)' : `R$ ${fmt(mpDisp)}`}
                     </div>
+                    <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.22)', paddingTop: 6 }}>
+                      Recebido no mês (Asaas): <strong>R$ {fmt(recebidoMes)}</strong> · o saldo zera após o saque para o banco
+                    </div>
                   </div>
-                </a>
+                </div>
               );
             })()}
             {asaasLoading ? (
@@ -4655,7 +4661,8 @@ function DashboardTab({ irParaTab }) {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>Dados direto da API Asaas · atualizado agora</div>
-                  <a href="/#/admin/financeiro" style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', textDecoration: 'none' }}>Ver detalhes →</a>
+                  <button onClick={() => { sessionStorage.setItem('admin_fin_sub', 'caixa'); if (irParaTab) irParaTab('Financeiro'); }}
+                    style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Ver detalhes →</button>
                 </div>
               </>
             ) : null}
@@ -7204,6 +7211,44 @@ function EquipeTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// FINANCEIRO (HUB) — unifica as telas de dinheiro em sub-abas: Fluxo de caixa (Asaas),
+// Assinaturas, Gateway & recebimentos (Mercado Pago) e Saques da equipe. Antes eram 3
+// telas separadas — inclusive a de fluxo de caixa/assinaturas, que era ÓRFÃ do menu
+// (só acessível pelos links do Dashboard). Agora tudo mora num lugar só.
+// ═══════════════════════════════════════════════════════════════════════════════
+function FinanceiroHub() {
+  const SUBS = [
+    { key: 'caixa',       label: '💰 Fluxo de caixa' },
+    { key: 'assinaturas', label: '👥 Assinaturas' },
+    { key: 'gateway',     label: '🏦 Gateway & recebimentos' },
+    { key: 'saques',      label: '💸 Saques da equipe' },
+  ];
+  const [sub, setSub] = React.useState(() => sessionStorage.getItem('admin_fin_sub') || 'caixa');
+  const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_fin_sub', k); };
+
+  return (
+    <div>
+      {/* Sub-abas do Financeiro */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 22, flexWrap: 'wrap', background: '#f1f5f9', padding: 5, borderRadius: 12, width: 'fit-content' }}>
+        {SUBS.map(s => (
+          <button key={s.key} onClick={() => irSub(s.key)}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700,
+              background: sub === s.key ? '#fff' : 'transparent', color: sub === s.key ? '#0D63DB' : '#64748b',
+              boxShadow: sub === s.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {sub === 'caixa'       && <FinanceiroCaixa />}
+      {sub === 'assinaturas' && <AbaAssinaturas />}
+      {sub === 'gateway'     && <FinanceiroTab />}
+      {sub === 'saques'      && <PrestacaoContasTab />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // FINANCEIRO TAB — Gateway (MP/Asaas), saldo MP, saques da equipe
 // ═══════════════════════════════════════════════════════════════════════════════
 function FinanceiroTab() {
@@ -8543,7 +8588,7 @@ const GRUPOS_ADMIN = [
   { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
   { nome: 'Equipe',              tabs: ['Central da Equipe', 'Equipe', 'Agenda'] },
   { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade'] },
-  { nome: 'Financeiro',          tabs: ['Financeiro', 'Prestação de contas'] },
+  { nome: 'Financeiro',          tabs: ['Financeiro'] },
   { nome: 'Sistema',             tabs: ['Configurações'] },
 ];
 
@@ -9096,7 +9141,13 @@ const ROLES_SIMULAVEIS = [
 export default function Admin() {
   const { role, loading, simularRole, roleSimulado } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState(() => sessionStorage.getItem('admin_tab') || 'Dashboard');
+  const [tab, setTab] = useState(() => {
+    let t = sessionStorage.getItem('admin_tab') || 'Dashboard';
+    // "Prestação de contas" virou sub-aba de Financeiro — migra tabs antigas persistidas
+    // p/ não renderizar tela em branco em quem tinha essa aba salva na sessão.
+    if (t === 'Prestação de contas') { sessionStorage.setItem('admin_fin_sub', 'saques'); sessionStorage.setItem('admin_tab', 'Financeiro'); t = 'Financeiro'; }
+    return t;
+  });
   const mudarTab = (t) => { setTab(t); sessionStorage.setItem('admin_tab', t); };
 
   if (loading) {
@@ -9173,9 +9224,8 @@ export default function Admin() {
         {tab === 'Editais'        && <RadarEditaisTab />}
         {tab === 'Qualidade'      && <QualidadeTab />}
         {tab === 'Configurações'  && <ConfigTab />}
-        {tab === 'Financeiro'     && <FinanceiroTab />}
+        {tab === 'Financeiro'     && <FinanceiroHub />}
         {tab === 'Central da Equipe' && <CentralEquipeTab />}
-        {tab === 'Prestação de contas' && <PrestacaoContasTab />}
         {tab === 'Marketing'      && <MarketingTab />}
       </div>
     </div>
