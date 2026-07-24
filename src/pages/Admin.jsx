@@ -4619,7 +4619,7 @@ function DashboardTab({ irParaTab }) {
               const mpIndispon = !!mpSaldo?.error;
               const total = asaasDisp + (mpIndispon ? 0 : mpDisp);
               const recebidoMes = Number(asaasDados?.statsMes?.revenue) || 0;
-              const abrirFinanceiro = () => { sessionStorage.setItem('admin_fin_sub', 'caixa'); if (irParaTab) irParaTab('Financeiro'); };
+              const abrirFinanceiro = () => { sessionStorage.setItem('admin_fin_sub', 'asaas'); if (irParaTab) irParaTab('Financeiro'); };
               return (
                 <div onClick={abrirFinanceiro} style={{ cursor: 'pointer' }}>
                   <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', borderRadius: 12, padding: '16px 18px', marginBottom: 12, color: 'white', cursor: 'pointer' }}>
@@ -4661,7 +4661,7 @@ function DashboardTab({ irParaTab }) {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>Dados direto da API Asaas · atualizado agora</div>
-                  <button onClick={() => { sessionStorage.setItem('admin_fin_sub', 'caixa'); if (irParaTab) irParaTab('Financeiro'); }}
+                  <button onClick={() => { sessionStorage.setItem('admin_fin_sub', 'asaas'); if (irParaTab) irParaTab('Financeiro'); }}
                     style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Ver detalhes →</button>
                 </div>
               </>
@@ -6883,6 +6883,40 @@ function MonitorJuridico() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// EQUIPE (HUB) — junta "Central da Equipe" (pipeline de casos) e "Equipe" (time +
+// convites + solicitações de análise) em sub-abas de uma tela só. Antes eram duas
+// abas de topo separadas, ambas sobre "operação da equipe" (tabelas diferentes:
+// casos × solicitações/perfis).
+// ═══════════════════════════════════════════════════════════════════════════════
+function EquipeHub() {
+  const SUBS = [
+    { key: 'casos', label: '📋 Pipeline de casos' },
+    { key: 'time',  label: '👥 Time & solicitações' },
+  ];
+  const [sub, setSub] = React.useState(() => sessionStorage.getItem('admin_equipe_sub') || 'casos');
+  const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_equipe_sub', k); };
+
+  return (
+    <div>
+      {/* Sub-abas da Equipe */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 22, flexWrap: 'wrap', background: '#f1f5f9', padding: 5, borderRadius: 12, width: 'fit-content' }}>
+        {SUBS.map(s => (
+          <button key={s.key} onClick={() => irSub(s.key)}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700,
+              background: sub === s.key ? '#fff' : 'transparent', color: sub === s.key ? '#0D63DB' : '#64748b',
+              boxShadow: sub === s.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {sub === 'casos' && <CentralEquipeTab />}
+      {sub === 'time'  && <EquipeTab />}
+    </div>
+  );
+}
+
 function EquipeTab() {
   const { user } = useAuth();
 
@@ -7217,13 +7251,20 @@ function EquipeTab() {
 // (só acessível pelos links do Dashboard). Agora tudo mora num lugar só.
 // ═══════════════════════════════════════════════════════════════════════════════
 function FinanceiroHub() {
+  // Ordem reflete a realidade do negócio: Mercado Pago é o PRINCIPAL (config_financeira.mp
+  // ativo), Asaas é o BACKUP. Por isso o MP vem primeiro e é o padrão.
   const SUBS = [
-    { key: 'caixa',       label: '💰 Fluxo de caixa' },
+    { key: 'mp',          label: '🏦 Mercado Pago (principal)' },
+    { key: 'asaas',       label: '💰 Asaas (backup)' },
     { key: 'assinaturas', label: '👥 Assinaturas' },
-    { key: 'gateway',     label: '🏦 Gateway & recebimentos' },
     { key: 'saques',      label: '💸 Saques da equipe' },
   ];
-  const [sub, setSub] = React.useState(() => sessionStorage.getItem('admin_fin_sub') || 'caixa');
+  const [sub, setSub] = React.useState(() => {
+    let s = sessionStorage.getItem('admin_fin_sub') || 'mp';
+    if (s === 'caixa') s = 'asaas';   // chaves antigas (#249) → novas
+    if (s === 'gateway') s = 'mp';
+    return s;
+  });
   const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_fin_sub', k); };
 
   return (
@@ -7240,9 +7281,9 @@ function FinanceiroHub() {
         ))}
       </div>
 
-      {sub === 'caixa'       && <FinanceiroCaixa />}
+      {sub === 'mp'          && <FinanceiroTab />}
+      {sub === 'asaas'       && <FinanceiroCaixa />}
       {sub === 'assinaturas' && <AbaAssinaturas />}
-      {sub === 'gateway'     && <FinanceiroTab />}
       {sub === 'saques'      && <PrestacaoContasTab />}
     </div>
   );
@@ -8328,9 +8369,9 @@ function CentralEquipeTab() {
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111', margin: 0 }}>Central da Equipe</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111', margin: 0 }}>Pipeline de casos</h2>
         <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
-          Pipeline dos clientes por etapa. A ação acontece na ficha do cliente — aqui você monitora e direciona.
+          Casos dos clientes por etapa. A ação acontece na ficha do cliente — aqui você monitora e direciona.
         </p>
       </div>
       {loading ? (
@@ -8586,7 +8627,7 @@ const GRUPOS_ADMIN = [
   { nome: 'Início',              tabs: ['Dashboard'] },
   { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'Comercial', 'Contratos'] },
   { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
-  { nome: 'Equipe',              tabs: ['Central da Equipe', 'Equipe', 'Agenda'] },
+  { nome: 'Equipe',              tabs: ['Equipe', 'Agenda'] },
   { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade'] },
   { nome: 'Financeiro',          tabs: ['Financeiro'] },
   { nome: 'Sistema',             tabs: ['Configurações'] },
@@ -9143,9 +9184,11 @@ export default function Admin() {
   const navigate = useNavigate();
   const [tab, setTab] = useState(() => {
     let t = sessionStorage.getItem('admin_tab') || 'Dashboard';
-    // "Prestação de contas" virou sub-aba de Financeiro — migra tabs antigas persistidas
-    // p/ não renderizar tela em branco em quem tinha essa aba salva na sessão.
+    // "Prestação de contas" virou sub-aba de Financeiro e "Central da Equipe" virou sub-aba de
+    // Equipe — migra tabs antigas persistidas p/ não renderizar tela em branco em quem as tinha
+    // salvas na sessão.
     if (t === 'Prestação de contas') { sessionStorage.setItem('admin_fin_sub', 'saques'); sessionStorage.setItem('admin_tab', 'Financeiro'); t = 'Financeiro'; }
+    if (t === 'Central da Equipe') { sessionStorage.setItem('admin_equipe_sub', 'casos'); sessionStorage.setItem('admin_tab', 'Equipe'); t = 'Equipe'; }
     return t;
   });
   const mudarTab = (t) => { setTab(t); sessionStorage.setItem('admin_tab', t); };
@@ -9216,7 +9259,7 @@ export default function Admin() {
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Comercial'      && <ComercialTab />}
-        {tab === 'Equipe'         && <EquipeTab />}
+        {tab === 'Equipe'         && <EquipeHub />}
         {tab === 'Agenda'         && <AgendaTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Registros'      && <RegistrosTab />}
@@ -9225,7 +9268,6 @@ export default function Admin() {
         {tab === 'Qualidade'      && <QualidadeTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Financeiro'     && <FinanceiroHub />}
-        {tab === 'Central da Equipe' && <CentralEquipeTab />}
         {tab === 'Marketing'      && <MarketingTab />}
       </div>
     </div>

@@ -38,16 +38,10 @@ function statusAssinante(p) {
 // Acima deste volume, é necessário autorização do Banco Central (Resolução BCB 80/2021)
 const LIMITE_BACEN = 500_000;
 
-const CONTAS = [
-  { key: 'mercadopago', label: 'Mercado Pago', ativo: false },
-  { key: 'asaas', label: 'Asaas', ativo: true },
-];
-
 // ── Fluxo de caixa (Asaas): saldo, extrato do mês, transferência PIX + marcador Bacen.
 // Componente REUTILIZÁVEL (sem a moldura de página) — usado tanto na rota /admin/financeiro
 // quanto na aba "Financeiro" do painel admin (hub unificado).
 export function FinanceiroCaixa() {
-  const [conta, setConta] = useState('asaas');
   const [financas, setFinancas] = useState(null);
   const [extrato, setExtrato] = useState([]);
   const [loadingFin, setLoadingFin] = useState(true);
@@ -61,7 +55,7 @@ export function FinanceiroCaixa() {
   useEffect(() => {
     loadFinancas();
     loadExtrato();
-  }, [conta]);
+  }, []);
 
   async function loadFinancas() {
     setLoadingFin(true);
@@ -171,22 +165,11 @@ export function FinanceiroCaixa() {
         </div>
       )}
 
-      {/* Filtro de conta */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
-        {CONTAS.map(c => (
-          <button key={c.key}
-            disabled={!c.ativo}
-            onClick={() => c.ativo && setConta(c.key)}
-            title={!c.ativo ? 'Em breve' : ''}
-            style={{
-              padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: c.ativo ? 'pointer' : 'not-allowed',
-              border: conta === c.key ? '2px solid #0D63DB' : '2px solid #e2e8f0',
-              background: conta === c.key ? '#eff6ff' : '#ffffff',
-              color: conta === c.key ? '#0D63DB' : c.ativo ? '#374151' : '#94a3b8',
-            }}>
-            {c.label}{!c.ativo && ' (em breve)'}
-          </button>
-        ))}
+      {/* Conta desta aba: Asaas (gateway de BACKUP). O principal é o Mercado Pago — os
+          recebimentos de verdade (mensalidades, produtos) estão na aba 🏦 Mercado Pago. */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 28, padding: '7px 14px', borderRadius: 8, background: '#fff', border: '2px solid #e2e8f0', fontSize: 13, fontWeight: 700, color: '#374151' }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#94a3b8' }} />
+        Conta Asaas <span style={{ fontWeight: 600, color: '#94a3b8' }}>· gateway de backup (o principal é o Mercado Pago)</span>
       </div>
 
       {/* Cards de saldo */}
