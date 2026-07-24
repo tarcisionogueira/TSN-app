@@ -1977,9 +1977,34 @@ export default function Analise() {
                 {L.parecer && (
                   <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid #f1f5f9' }}>
                     <div style={{ fontSize:12, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Parecer de defesa</div>
-                    <div style={{ fontSize:13, color:'#334155', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{String(L.parecer).replace(/§\s*SEÇÃO:/g, '\n§ ').trim()}</div>
+                    {/* § SEÇÃO vira tópicos titulados. O LEMBRETE (aviso legal) sai daqui e vai como
+                        rodapé, para o "Resumo da Operação" ser o fecho do relatório. */}
+                    {String(L.parecer).split(/§\s*SEÇÃO:/i).map(s => s.trim()).filter(Boolean)
+                      .filter(sec => !/^LEMBRETE/i.test(sec))
+                      .map((sec, i) => {
+                        const nl = sec.indexOf('\n');
+                        const titulo = (nl < 0 ? sec : sec.slice(0, nl)).trim();
+                        const corpo = (nl < 0 ? '' : sec.slice(nl)).trim();
+                        return (
+                          <div key={i} style={{ marginBottom:12 }}>
+                            <div style={{ fontSize:11.5, fontWeight:800, color:'#111827', textTransform:'uppercase', letterSpacing:0.5, marginBottom:3 }}>{titulo}</div>
+                            {corpo && <div style={{ fontSize:13, color:'#334155', lineHeight:1.75, whiteSpace:'pre-wrap' }}>{corpo}</div>}
+                          </div>
+                        );
+                      })}
                   </div>
                 )}
+                {Array.isArray(L.resumoOperacao) && L.resumoOperacao.length > 0 && (
+                  <div style={{ marginTop:16, padding:'14px 16px', border:'2px solid #111827', borderRadius:12, background:'#f8fafc' }}>
+                    <div style={{ fontSize:12, fontWeight:900, color:'#111827', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>Resumo da Operação</div>
+                    <ul style={{ margin:0, paddingLeft:18, display:'flex', flexDirection:'column', gap:5 }}>
+                      {L.resumoOperacao.map((it,i)=><li key={i} style={{ fontSize:13, color:'#1e293b', lineHeight:1.65, fontWeight:600 }}>{it}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <div style={{ marginTop:12, fontSize:11, color:'#94a3b8', lineHeight:1.5 }}>
+                  Documento de apoio à decisão, gerado com apoio de inteligência artificial a partir dos relatórios Mercadológico e Documental. Não substitui a análise de um profissional nem a vistoria do imóvel. Valide o veredito com um analista BidPro antes de qualquer lance.
+                </div>
                 <button onClick={() => gerarLaudoPDF({ imovel: d, laudo: L, cab: cabPDF })}
                   style={{ marginTop:16, width:'100%', padding:'13px', background:'#111827', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                   <Printer size={16}/> Baixar Parecer Final em PDF
