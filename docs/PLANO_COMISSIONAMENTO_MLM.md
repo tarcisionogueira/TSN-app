@@ -109,6 +109,38 @@ A pedido do dono. Cauda pequena mantém saudável (total muito abaixo da margem)
 `distribuir_comissao_rede` já respeita o maior nível ativo → paga até o 10 automaticamente.
 Ainda dá para ir além (constraint até 10; se quiser mais, é ampliar a constraint + inserir linhas).
 
+### 11.1.1 SAQUE ÚNICO — "toda venda, mesma regra" (JÁ ATIVO, 24/07)
+A base do saldo (`saldo_usuarios`) passou a incluir o **cliente pagante** (top2/assessorado/clube),
+não só a equipe. Assim TODA origem de ganho — comissão de rede, bônus de rank, venda direta,
+honorário de êxito — cai na mesma razão (`saldo_lancamentos`) e saca pela **mesma regra**:
+solicitação avulsa na semana, **pagamento sexta 12h (fuso Bahia)**, mesmos pré-requisitos
+(nome + CPF + telefone + chave PIX). A aba **Parceiros** de Meu Perfil já mostra saldo/saque.
+
+### 11.1.2 Percentuais consolidados — ESTRUTURA PARA VALIDAR (dono)
+Exposição MÁXIMA por venda (pior caso: cadeia de 10 pagantes cheia) vs. o teto saudável:
+| Origem | Rede (10 níveis) | Pool de rank | **Exposição máx.** | Observação |
+|---|--:|--:|--:|---|
+| **Assinatura** | 18,5% | +2% da receita | **~20,5%** | recorrente; margem de assinatura comporta com folga |
+| **Produto/curso** | 32,5% | — | **32,5%** | 1× por venda; produto digital tem margem alta |
+| **Venda direta** | 19,5% | — | **19,5%** | comissão sobre a venda fechada |
+| **Honorário de êxito / recarga de crédito** | 0% | 0% | **0%** | **NÃO comissiona** (regra do dono) |
+
+Racional de saúde: a "cauda" (N4–N10 = 1+1+0,5×5 = **4,5%**) é pequena e só é paga quando a rede
+é realmente profunda E paga (compressão dinâmica pula quem não paga). O **pool de rank é FECHADO**
+(2% da receita, rateado por peso) → custo limitado por definição, independentemente de quantos
+batem rank. **A validar pelo dono:** (a) confirmar/ajustar esses %; (b) o % do pool (2%); (c) se
+o N1 de produto (20%) fica assim ou menor. É só editar `comissao_regras` / `rank_config` — sem código.
+
+### 11.1.3 NOMES DOS RANKS — decisão pendente (COMEÇAR POR AQUI na próxima sessão)
+O dono gostou da linha **história + liderança** (rede de vendas/indicação) e vai **amadurecer** o
+nome. Manter **Pioneiro · Fundador · Mestre · Lenda** e completar o topo com títulos de **LÍDER**.
+Candidatos levantados (o dono escolhe/combina — é só `update comissao_ranks.nome`):
+- **Mestres & Guardiões:** Pioneiro · Fundador · Mestre · **Guardião** · **Embaixador** · Lenda
+- **História + liderança:** Pioneiro · Fundador · Mestre · **Mentor** · **Embaixador** · Lenda
+- **Conselho & Patronos:** Pioneiro · Fundador · **Mentor** · **Conselheiro** · **Patrono** · Lenda
+- **Desbravadores (mais épico):** **Desbravador** · Fundador · Mestre · Mentor · Embaixador · **Imortal**
+Enquanto isso, os ranks rodam com nome genérico "Nível 1..6".
+
 ### 11.2 Plano de carreira / ranks — FUNDAÇÃO IMPLEMENTADA (nome GENÉRICO, a renomear) — 24/07
 Estrutura estilo Hinode/Forever: além da comissão por nível, o parceiro sobe de **rank** conforme
 constrói a rede, ganhando **reconhecimento + bônus de rank** (pago de um POOL FECHADO — nunca
