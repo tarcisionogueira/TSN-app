@@ -13,7 +13,9 @@
 // Atualização: skipWaiting + clients.claim + limpeza de caches antigos por versão → o
 // deploy novo (push p/ main) chega ao PWA instalado na próxima abertura, sem app store.
 
-const CACHE = 'bidpro-shell-v1';
+// v2: força a limpeza do cache velho (o activate apaga caches != CACHE) — some o shell/manifest
+// antigos que ainda mostravam "BidPro Brasil — Leilão de Imóveis" no título do PWA instalado.
+const CACHE = 'bidpro-shell-v2';
 const SHELL = '/';
 
 self.addEventListener('install', e => {
@@ -44,6 +46,19 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;  // cross-origin (Supabase/fontes/CDN/gtag) → rede
   if (url.pathname.startsWith('/api/')) return;     // API → sempre ao vivo
+
+  // Manifest → NETWORK-FIRST (nunca stale): o nome/ícones do PWA precisam refletir o deploy na
+  // hora. Servi-lo do cache deixava o título velho ("Leilão de Imóveis") preso no app instalado.
+  if (url.pathname === '/manifest.webmanifest') {
+    e.respondWith((async () => {
+      try {
+        const fresh = await fetch(req);
+        (await caches.open(CACHE)).put(req, fresh.clone()).catch(() => {});
+        return fresh;
+      } catch { return (await caches.match(req)) || Response.error(); }
+    })());
+    return;
+  }
 
   // Navegação (abrir/recarregar o app) → network-first, fallback ao shell em cache (offline).
   if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
