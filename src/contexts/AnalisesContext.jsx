@@ -79,6 +79,29 @@ export function AnalisesProvider({ children }) {
   // Ao logar (ou trocar o usuário efetivo no suporte), carrega do banco.
   useEffect(() => { setAnalises([]); setDocumentais([]); setLaudos([]); if (uid) recarregar(); }, [uid, recarregar]);
 
+  // VARREDURA anti-fantasma: um 'gerando' pode existir SÓ no cache local (sem linha no banco
+  // p/ o merge corrigir) quando a aba fecha no meio, o servidor bloqueia no gate (cota/crédito)
+  // antes de criar a linha, ou a sequência automática dispara e é interrompida. Aí o card gira
+  // "Gerando…" para sempre e o polling nunca para. Aqui rebaixamos qualquer 'gerando' mais velho
+  // que STALE_GERANDO_MS para 'erro' (mesmo sem linha no banco) — some o spinner e para o polling.
+  useEffect(() => {
+    const demote = (list) => {
+      let mudou = false;
+      const out = list.map(a => {
+        if (a.status === 'gerando' && Date.now() - (a.startedAt || a.updatedAt || 0) > STALE_GERANDO_MS) {
+          mudou = true;
+          return { ...a, status: 'erro', erro: a.erro || 'A geração excedeu o tempo limite. Gere novamente.' };
+        }
+        return a;
+      });
+      return mudou ? out : list; // mesma referência quando nada muda → React não re-renderiza à toa
+    };
+    const varrer = () => { setAnalises(demote); setDocumentais(demote); setLaudos(demote); };
+    varrer();
+    const t = setInterval(varrer, 30000);
+    return () => clearInterval(t);
+  }, []);
+
   // Enquanto houver geração em andamento (de qualquer tipo), faz polling.
   const temGerando = analises.some(a => a.status === 'gerando') || documentais.some(a => a.status === 'gerando') || laudos.some(a => a.status === 'gerando');
   useEffect(() => {
