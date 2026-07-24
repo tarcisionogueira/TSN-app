@@ -45,17 +45,18 @@ export default function IndiceConsulta() {
     setLoading(false);
   };
 
-  // Gera o índice desta localidade (região não mapeada) e reconsulta p/ exibir.
+  // Gera o índice de MERCADO desta localidade: faz a pesquisa web ao vivo (api/indice-mercado),
+  // guarda as amostras (peso por data) e reconsulta p/ exibir. Cobra cota/crédito no servidor.
   const gerar = async () => {
     setGerando(true); setGerMsg('');
     try {
-      const r = await apiCall('/api/indice-gerar', { method: 'POST', body: JSON.stringify(form) });
+      const r = await apiCall('/api/indice-mercado', { method: 'POST', body: JSON.stringify(form) });
       const d = await r.json();
       if (!r.ok) { setGerMsg(d.error || 'Não foi possível gerar.'); setGerando(false); return; }
-      if (!d.gerado) { setGerMsg('Ainda não há imóveis suficientes na nossa base nesta localidade nem para gerar. Tente uma cidade/bairro com mais amostras.'); setGerando(false); return; }
+      if (!d.gerado) { setGerMsg('A pesquisa não encontrou amostras de mercado suficientes nesta localidade. Tente uma cidade/bairro maior.'); setGerando(false); return; }
       const rc = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(form) });
       const dc = await rc.json();
-      if (rc.ok) { setRes(dc); setGerMsg(''); }
+      if (rc.ok) { setRes(dc); setGerMsg(d.inseridas ? `Pesquisa concluída — ${d.inseridas} amostra(s) nova(s) na base.` : 'Índice atualizado.'); }
     } catch (e) { setGerMsg(e.message || 'Falha ao gerar.'); }
     setGerando(false);
   };
@@ -144,14 +145,14 @@ export default function IndiceConsulta() {
           <div style={{ fontSize: 13.5, color: '#78350f', lineHeight: 1.6, marginBottom: 14 }}>
             Ainda não temos o índice de <strong>{form.cidade}/{form.uf}{form.bairro ? ` · ${form.bairro}` : ''}</strong>.
             {podeGerar
-              ? ' Gere agora a partir da nossa base de imóveis analisados.'
+              ? ' Gere agora uma pesquisa de mercado ao vivo (venda e locação) desta localidade — as amostras ficam guardadas e passam a alimentar o índice e os relatórios.'
               : ' Nos planos pagos você pode gerar o índice desta localidade na hora.'}
           </div>
           {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>{gerMsg}</div>}
           {podeGerar ? (
             <button onClick={gerar} disabled={gerando}
               style={{ padding: '10px 18px', background: gerando ? '#94a3b8' : '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
-              {gerando ? 'Gerando…' : '⚡ Gerar índice agora'}
+              {gerando ? 'Pesquisando o mercado…' : '⚡ Gerar índice agora'}
             </button>
           ) : (
             <button onClick={() => nav('/planos')} style={{ padding: '10px 18px', background: '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
@@ -159,7 +160,7 @@ export default function IndiceConsulta() {
             </button>
           )}
           {podeGerar && effectiveRole !== 'admin' && (
-            <div style={{ fontSize: 11, color: '#a16207', marginTop: 8 }}>Nos planos pagos: até 5 gerações de índice por mês.</div>
+            <div style={{ fontSize: 11, color: '#a16207', marginTop: 8 }}>Consome 1 do seu limite mensal de índice; esgotado, usa crédito. A pesquisa leva alguns segundos.</div>
           )}
         </div>
       )}
