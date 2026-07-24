@@ -24,6 +24,19 @@ const PLANO_INFO = {
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
+// Termo de aceite do Programa de Parceiros — só indica/recebe quem aceitar as regras.
+// (Sem revelar percentuais: mantém a estrutura comercial reservada.)
+const TERMO_PARCEIRO_VERSAO = 'v1-2026-07';
+const TERMO_PARCEIRO = [
+  'Participo do Programa de Parceiros indicando pessoas para a BidPro Brasil.',
+  'Sou recompensado apenas sobre assinaturas, produtos/mentorias e vendas diretas efetivamente pagas por quem eu indicar (direta ou indiretamente na minha rede). Não há recompensa sobre honorários de êxito nem sobre recarga de créditos.',
+  'As recompensas valem enquanto minha assinatura estiver ativa (paga).',
+  'Os pagamentos são por PIX, semanais (às sextas), após conferência, e exigem cadastro completo: nome, CPF, telefone e chave PIX.',
+  'Indico de forma honesta: sem spam, sem autoindicação e sem informações falsas. Indicações irregulares podem ser canceladas e a participação encerrada.',
+  'Sou responsável pelos tributos incidentes sobre os valores que eu receber.',
+  'A BidPro pode ajustar as regras e os percentuais do Programa, com aviso prévio razoável.',
+];
+
 const STATUS_CASO = {
   analise_solicitada: 'Em análise', primeira_reuniao: 'Reunião agendada', segunda_reuniao: '2ª reunião',
   juridico_solicitado: 'No jurídico', juridico_concluido: 'Jurídico concluído', arrematado: '✅ Arrematado',
@@ -42,6 +55,10 @@ export default function HomeCliente() {
   const [usadas, setUsadas] = useState(0);
   const [copiado, setCopiado] = useState(false);
   const [meusCasos, setMeusCasos] = useState([]);
+  const [aceite, setAceite] = useState(undefined); // undefined=carregando · null=não aceitou · ts=aceitou
+  const [showTermo, setShowTermo] = useState(false);
+  const [concordo, setConcordo] = useState(false);
+  const [aceitando, setAceitando] = useState(false);
 
   useEffect(() => {
     if (!effectiveUserId) return;
@@ -59,6 +76,22 @@ export default function HomeCliente() {
   const restantes = info.limite != null ? Math.max(0, info.limite - usadas) : null;
   const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/planos?ref=${effectiveUserId || ''}`;
   const copiarLink = () => { navigator.clipboard?.writeText(linkIndicacao); setCopiado(true); setTimeout(() => setCopiado(false), 2000); };
+
+  // Aceite do Programa de Parceiros — habilita o link de indicação e o recebimento.
+  useEffect(() => {
+    if (!effectiveUserId || !info.indica) return;
+    supabase.from('perfis').select('parceiro_aceite_em').eq('id', effectiveUserId).single()
+      .then(({ data }) => setAceite(data?.parceiro_aceite_em || null));
+  }, [effectiveUserId, info.indica]);
+
+  const aceitarParceria = async () => {
+    if (!concordo || aceitando) return;
+    setAceitando(true);
+    try {
+      const { data, error } = await supabase.rpc('aceitar_parceria', { p_versao: TERMO_PARCEIRO_VERSAO });
+      if (!error) { setAceite(data || new Date().toISOString()); setShowTermo(false); }
+    } finally { setAceitando(false); }
+  };
 
   const Acao = ({ Icon, titulo, desc, cor, onClick }) => (
     <button onClick={onClick} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '16px 18px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, cursor: 'pointer', textAlign: 'left', transition: 'box-shadow .15s, border-color .15s' }}
@@ -141,7 +174,7 @@ export default function HomeCliente() {
         </div>
       </div>
 
-      {/* Coluna lateral: Indique e Ganhe (Investidor Pro) */}
+      {/* Coluna lateral: Programa de Parceiros — só libera o link após o TERMO DE ACEITE */}
       {info.indica && (
         <div style={{ background: 'white', border: '2px solid #ddd6fe', borderRadius: 18, padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 88 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -150,16 +183,72 @@ export default function HomeCliente() {
           </div>
           <div style={{ fontSize: 12.5, color: '#4c1d95', lineHeight: 1.65 }}>
             {ehPagoCliente ? (
-              <>Para cada pessoa que assinar o Investidor Pro pelo seu link, você ganha <strong>20% de desconto na sua mensalidade</strong>, <strong>acumulativo</strong> e válido <strong>enquanto ela continuar pagando</strong>. Indicou 5 que pagam? Sua mensalidade fica <strong>grátis</strong>.</>
+              <>Indique investidores para a BidPro e <strong>ganhe indicando</strong>: quando alguém da sua rede assina um plano, você é recompensado — enquanto sua assinatura estiver ativa.</>
             ) : (
-              <>Convide investidores para a BidPro. Quando alguém assina um plano pelo seu link, <strong>você é recompensado</strong>. Compartilhe seu link e comece a construir sua rede:</>
+              <>Convide investidores para a BidPro e <strong>ganhe indicando</strong>. Quando alguém assina um plano pela sua indicação, <strong>você é recompensado</strong>.</>
             )}
           </div>
-          <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkIndicacao}</div>
-          <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
-            {copiado ? <><Check size={15} /> Link copiado!</> : <><Copy size={15} /> Copiar meu link</>}
-          </button>
-          <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5 }}>{ehPagoCliente ? 'O desconto é aplicado automaticamente na sua próxima cobrança assim que o indicado assina.' : 'Sua recompensa é creditada automaticamente quando o indicado assina um plano.'}</div>
+
+          {aceite ? (
+            <>
+              {/* Já é parceiro → link liberado */}
+              <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkIndicacao}</div>
+              <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+                {copiado ? <><Check size={15} /> Link copiado!</> : <><Copy size={15} /> Copiar meu link</>}
+              </button>
+              <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5 }}>Sua recompensa é creditada automaticamente quando o indicado assina um plano. Você aceitou as regras do Programa.</div>
+            </>
+          ) : (
+            <>
+              {/* Ainda não é parceiro → convite + aceite */}
+              <div style={{ background: '#f5f3ff', border: '1px dashed #c4b5fd', borderRadius: 10, padding: '11px 13px', fontSize: 11.5, color: '#6d28d9', lineHeight: 1.6 }}>
+                Para indicar e receber, ative sua participação e <strong>aceite as regras</strong> do Programa. Leva 10 segundos.
+              </div>
+              <button onClick={() => { setConcordo(false); setShowTermo(true); }} disabled={aceite === undefined}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: aceite === undefined ? '#c4b5fd' : '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: aceite === undefined ? 'default' : 'pointer' }}>
+                <Gift size={15} /> Quero ser parceiro
+              </button>
+              <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5 }}>Traz segurança para você e para a BidPro: você indica de acordo com as regras.</div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Modal — Termo de aceite do Programa de Parceiros */}
+      {showTermo && (
+        <div onClick={() => !aceitando && setShowTermo(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 18, padding: 24, width: '100%', maxWidth: 520, maxHeight: '88vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <Gift size={20} color="#7c3aed" />
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#5b21b6' }}>Programa de Parceiros — Regras</div>
+            </div>
+            <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, margin: '0 0 14px' }}>
+              Leia e aceite para ativar sua participação. Ao aceitar, você passa a poder <strong>indicar</strong> e <strong>receber</strong> pelo programa.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 16 }}>
+              {TERMO_PARCEIRO.map((t, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <Check size={15} color="#7c3aed" style={{ flexShrink: 0, marginTop: 2 }} />
+                  <span style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55 }}>{t}</span>
+                </div>
+              ))}
+            </div>
+            <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', cursor: 'pointer', background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '11px 13px', marginBottom: 14 }}>
+              <input type="checkbox" checked={concordo} onChange={e => setConcordo(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: '#7c3aed', cursor: 'pointer' }} />
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#5b21b6', lineHeight: 1.5 }}>
+                Li e concordo com as regras do Programa de Parceiros e declaro que vou indicar de acordo com elas.
+              </span>
+            </label>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowTermo(false)} disabled={aceitando}
+                style={{ padding: '10px 16px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Agora não</button>
+              <button onClick={aceitarParceria} disabled={!concordo || aceitando}
+                style={{ padding: '10px 18px', background: (!concordo || aceitando) ? '#c4b5fd' : '#7c3aed', color: 'white', border: 'none', borderRadius: 9, fontWeight: 800, fontSize: 13, cursor: (!concordo || aceitando) ? 'default' : 'pointer' }}>
+                {aceitando ? 'Ativando…' : 'Aceitar e ativar meu link'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
