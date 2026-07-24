@@ -177,7 +177,9 @@ export function AuthProvider({ children }) {
           try { ativarPushAutomatico(() => session); } catch (_) {}
           const ref = sessionStorage.getItem('tsn_ref_codigo');
           if (ref) {
-            try { await supabase.rpc('vincular_indicacao', { p_codigo: ref }); } catch (_) {}
+            // vincular_upline: QUALQUER usuário pode ser o indicador (antes só consultor);
+            // aceita o id do link (?ref=<id>) ou um código de indicação. Grava indicado_por.
+            try { await supabase.rpc('vincular_upline', { p_ref: ref }); } catch (_) {}
             sessionStorage.removeItem('tsn_ref_codigo');
           }
           const convite = sessionStorage.getItem('tsn_convite_codigo');
