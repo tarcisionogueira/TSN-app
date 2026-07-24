@@ -59,15 +59,23 @@ export default async function handler(req) {
   const clienteId = caso.cliente_id;
   const [cliente] = await (await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}&select=role&limit=1`)).json().catch(() => []);
   const roleCliente = cliente?.role || null;
-  let reduziu = false, roleNovo = roleCliente;
+  let reduziu = false, roleNovo = roleCliente, outroAberto = false;
   if (roleCliente && !MANTEM_PLANO.includes(roleCliente) && roleCliente !== 'explorador') {
-    // assessorado (ou variante) → explorador: a assessoria deste imóvel encerrou.
-    await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}`, {
-      method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ role: 'explorador' }),
-    });
-    reduziu = true; roleNovo = 'explorador';
+    // A assessoria é POR IMÓVEL (caso), mas o plano é da CONTA. Só rebaixa para explorador
+    // quando ESTE era o ÚLTIMO caso em aberto do cliente — se ele ainda tem outro imóvel em
+    // assessoria (posse_em nulo), mantém o plano até tomar posse de todos. Como já marcamos a
+    // posse deste caso acima, a busca por outros abertos exclui este naturalmente.
+    const outros = await (await sb(`casos?cliente_id=eq.${encodeURIComponent(clienteId)}&id=neq.${encodeURIComponent(casoId)}&posse_em=is.null&select=id&limit=1`)).json().catch(() => []);
+    outroAberto = Array.isArray(outros) && outros.length > 0;
+    if (!outroAberto) {
+      // assessorado (ou variante) → explorador: a assessoria do cliente encerrou (último imóvel).
+      await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ role: 'explorador' }),
+      });
+      reduziu = true; roleNovo = 'explorador';
+    }
   }
 
-  return json({ ok: true, posse_em: posseEm, reduziu, role_novo: roleNovo, mantido: !reduziu });
+  return json({ ok: true, posse_em: posseEm, reduziu, role_novo: roleNovo, mantido: !reduziu, outro_imovel_em_assessoria: outroAberto });
 }
