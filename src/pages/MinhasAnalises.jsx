@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Building2, Plus, Home, Briefcase, Trophy } from 'lucide-react';
+import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Building2, Plus, Home, Briefcase, Trophy, FileWarning } from 'lucide-react';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -87,12 +87,22 @@ export default function MinhasAnalises() {
   // Status GERAL do imóvel na lista. Um documental "concluida" mas com
   // result.precisaDocumentos ainda está capturando/preparando os documentos —
   // NÃO é "Pronta" (era o que fazia a lista dizer Pronta e a tela abrir "carregando").
+  // A captura automática promete "docs em ~1 min, gera sozinho". Passado esse tempo com folga,
+  // se ainda faltam documentos é porque NÃO vem sozinho (fonte sem matrícula on-line, captura
+  // que falhou, etc.). Antes o card girava "Preparando documentos…" p/ sempre — havia relatórios
+  // presos assim há horas/dias. Agora, além do prazo, vira um estado ACIONÁVEL (anexar), sem spinner.
+  const CAPTURA_MAX_MS = 20 * 60 * 1000; // 20 min (a mensagem promete ~1 min)
   const statusGeral = (it) => {
     const rs = Object.values(it.reports);
     const anyGer = rs.some(r => r.status === 'gerando');
-    const docPrep = it.reports.documental?.status === 'concluida' && it.reports.documental.result?.precisaDocumentos;
+    const docRes = it.reports.documental?.status === 'concluida' ? it.reports.documental.result : null;
     if (anyGer) return { Icon: Loader2, cor: '#0d9488', txt: 'Gerando…', spin: true };
-    if (docPrep) return { Icon: Loader2, cor: '#b45309', txt: 'Preparando documentos…', spin: true };
+    if (docRes?.precisaDocumentos) {
+      const capturandoAgora = docRes.emCaptura && it.updatedAt && (Date.now() - it.updatedAt) < CAPTURA_MAX_MS;
+      return capturandoAgora
+        ? { Icon: Loader2, cor: '#b45309', txt: 'Preparando documentos…', spin: true }
+        : { Icon: FileWarning, cor: '#b45309', txt: 'Faltam documentos — anexe', spin: false };
+    }
     const anyOk = rs.some(r => r.status === 'concluida');
     const anyErr = rs.some(r => r.status === 'erro');
     if (anyErr && !anyOk) return { Icon: XCircle, cor: '#dc2626', txt: 'Erro ao gerar' };
