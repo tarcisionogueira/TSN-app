@@ -60,6 +60,13 @@
 4. **`link_matricula` = 0–5% em SUPERBID / SOLD / SBID9 / PECINI / VENDASGOV** — essas fontes
    **não publicam matrícula** no lote (normal na rede Superbid/SOLD). ZUK ~31% é captura em
    andamento. **Não alertar** matrícula onde o baseline já é baixo.
+   > **Resolução generalizada da matrícula (24/07):** `enfileirar_docs_faltantes()` roteia por
+   > fonte — **grátis** (página pública) → fila proativa (`documentos_fila`, drenada 30/30min);
+   > **login-gated** (ZUK, GRUPOLANCE) → pipeline próprio 4×/dia; **pago** (PECINI, RJLEILOES,
+   > GESTAOLEILOES) → **próxima coleta** + on-demand no laudo (não gasta Bright Data proativo);
+   > **não-publicadoras** (`docs_status='esperado'`) → matrícula vem do edital/da análise (lacuna
+   > esperada). Lote checado sem matrícula ganha `matricula_checada_em` (negative-cache, cooldown
+   > 30d). Auditoria por leiloeiro: `select * from matricula_cobertura();`.
 5. **`link_foto` < 100% em LJUD (62%)** — parte do acervo LJUD não tem `og:image`; há backfill
    por foto de capa. Abaixo de 62% seria regressão.
 
