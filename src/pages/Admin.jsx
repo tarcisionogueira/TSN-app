@@ -4619,7 +4619,7 @@ function DashboardTab({ irParaTab }) {
               const mpIndispon = !!mpSaldo?.error;
               const total = asaasDisp + (mpIndispon ? 0 : mpDisp);
               const recebidoMes = Number(asaasDados?.statsMes?.revenue) || 0;
-              const abrirFinanceiro = () => { sessionStorage.setItem('admin_fin_sub', 'caixa'); if (irParaTab) irParaTab('Financeiro'); };
+              const abrirFinanceiro = () => { sessionStorage.setItem('admin_fin_sub', 'asaas'); if (irParaTab) irParaTab('Financeiro'); };
               return (
                 <div onClick={abrirFinanceiro} style={{ cursor: 'pointer' }}>
                   <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', borderRadius: 12, padding: '16px 18px', marginBottom: 12, color: 'white', cursor: 'pointer' }}>
@@ -4661,7 +4661,7 @@ function DashboardTab({ irParaTab }) {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>Dados direto da API Asaas · atualizado agora</div>
-                  <button onClick={() => { sessionStorage.setItem('admin_fin_sub', 'caixa'); if (irParaTab) irParaTab('Financeiro'); }}
+                  <button onClick={() => { sessionStorage.setItem('admin_fin_sub', 'asaas'); if (irParaTab) irParaTab('Financeiro'); }}
                     style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Ver detalhes →</button>
                 </div>
               </>
@@ -7251,13 +7251,20 @@ function EquipeTab() {
 // (só acessível pelos links do Dashboard). Agora tudo mora num lugar só.
 // ═══════════════════════════════════════════════════════════════════════════════
 function FinanceiroHub() {
+  // Ordem reflete a realidade do negócio: Mercado Pago é o PRINCIPAL (config_financeira.mp
+  // ativo), Asaas é o BACKUP. Por isso o MP vem primeiro e é o padrão.
   const SUBS = [
-    { key: 'caixa',       label: '💰 Fluxo de caixa' },
+    { key: 'mp',          label: '🏦 Mercado Pago (principal)' },
+    { key: 'asaas',       label: '💰 Asaas (backup)' },
     { key: 'assinaturas', label: '👥 Assinaturas' },
-    { key: 'gateway',     label: '🏦 Gateway & recebimentos' },
     { key: 'saques',      label: '💸 Saques da equipe' },
   ];
-  const [sub, setSub] = React.useState(() => sessionStorage.getItem('admin_fin_sub') || 'caixa');
+  const [sub, setSub] = React.useState(() => {
+    let s = sessionStorage.getItem('admin_fin_sub') || 'mp';
+    if (s === 'caixa') s = 'asaas';   // chaves antigas (#249) → novas
+    if (s === 'gateway') s = 'mp';
+    return s;
+  });
   const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_fin_sub', k); };
 
   return (
@@ -7274,9 +7281,9 @@ function FinanceiroHub() {
         ))}
       </div>
 
-      {sub === 'caixa'       && <FinanceiroCaixa />}
+      {sub === 'mp'          && <FinanceiroTab />}
+      {sub === 'asaas'       && <FinanceiroCaixa />}
       {sub === 'assinaturas' && <AbaAssinaturas />}
-      {sub === 'gateway'     && <FinanceiroTab />}
       {sub === 'saques'      && <PrestacaoContasTab />}
     </div>
   );
