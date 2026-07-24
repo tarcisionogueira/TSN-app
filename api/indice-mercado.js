@@ -47,8 +47,8 @@ function parseJSON(txt) {
   try { return JSON.parse(s.slice(i, j + 1)); } catch { return null; }
 }
 
-const promptIndice = ({ endereco, tipo, cidade, uf }) => `Você é um perito avaliador imobiliário. Pesquise o MERCADO LIVRE de VENDA e LOCAÇÃO para o imóvel do tipo "${tipo}" em ${endereco || cidade}, ${cidade}/${uf}, em DOIS NÍVEIS:
-- NÍVEL 1: mesmo condomínio/rua ou raio de ~250m do endereço.
+const promptIndice = ({ endereco, condominio, tipo, cidade, uf }) => `Você é um perito avaliador imobiliário. Pesquise o MERCADO LIVRE de VENDA e LOCAÇÃO para o imóvel do tipo "${tipo}" em ${endereco || cidade}, ${cidade}/${uf}, em DOIS NÍVEIS:
+- NÍVEL 1: ${condominio ? `MESMO condomínio/empreendimento "${condominio}" (ou o quarteirão)` : 'mesmo condomínio/rua'} — raio de ~250m do endereço.
 - NÍVEL 2: bairro e adjacências (~1km).
 
 REGRAS:
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
         model: MODEL, max_tokens: 6000,
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         system: `Perito avaliador. Só ${tipo}, só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
-        messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, tipo, cidade: body.cidade, uf }) }],
+        messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, tipo, cidade: body.cidade, uf }) }],
       }),
     }, { retries: 0, timeoutMs: 100000, noFallback: true });
     if (!r.ok) throw new Error(`anthropic_http_${r.status}`);
