@@ -61,6 +61,7 @@ export default function HomeCliente() {
   const [copiado, setCopiado] = useState(false);
   const [meusCasos, setMeusCasos] = useState([]);
   const [aceite, setAceite] = useState(undefined); // undefined=carregando · null=não aceitou · ts=aceitou
+  const [refCodigo, setRefCodigo] = useState(''); // código curto de indicação (link enxuto)
   const [showTermo, setShowTermo] = useState(false);
   const [concordo, setConcordo] = useState(false);
   const [aceitando, setAceitando] = useState(false);
@@ -79,7 +80,10 @@ export default function HomeCliente() {
   }, [effectiveUserId, info.limite]);
 
   const restantes = info.limite != null ? Math.max(0, info.limite - usadas) : null;
-  const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/planos?ref=${effectiveUserId || ''}`;
+  // Link de parceiro ENXUTO: usa o código curto de indicação (…?ref=ABC123) em vez do UUID cru.
+  // Enquanto o código não carrega, cai no id (também aceito por vincular_upline) — link nunca quebra.
+  const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/planos?ref=${refCodigo || effectiveUserId || ''}`;
+  const linkDisplay = linkIndicacao.replace(/^https?:\/\/(www\.)?/, ''); // exibição sem https://www.
   const copiarLink = () => { navigator.clipboard?.writeText(linkIndicacao); setCopiado(true); setTimeout(() => setCopiado(false), 2000); };
 
   // Aceite do Programa de Parceiros — habilita o link de indicação e o recebimento.
@@ -88,6 +92,22 @@ export default function HomeCliente() {
     supabase.from('perfis').select('parceiro_aceite_em').eq('id', effectiveUserId).single()
       .then(({ data }) => setAceite(data?.parceiro_aceite_em || null));
   }, [effectiveUserId, info.indica]);
+
+  // Código curto de indicação — busca o existente; se não houver e o usuário já é parceiro,
+  // gera sob demanda (RPC idempotente). Deixa o link do card enxuto sem quebrar nada.
+  useEffect(() => {
+    if (!effectiveUserId || !info.indica || !aceite) return;
+    let vivo = true;
+    (async () => {
+      const { data } = await supabase.from('perfis').select('codigo_indicacao').eq('id', effectiveUserId).single();
+      let cod = data?.codigo_indicacao;
+      if (!cod) {
+        try { const { data: novo } = await supabase.rpc('gerar_codigo_indicacao', { p_id: effectiveUserId }); cod = novo; } catch (_) { /* mantém fallback no id */ }
+      }
+      if (vivo && cod) setRefCodigo(cod);
+    })();
+    return () => { vivo = false; };
+  }, [effectiveUserId, info.indica, aceite]);
 
   const aceitarParceria = async () => {
     if (!concordo || aceitando) return;
@@ -200,7 +220,7 @@ export default function HomeCliente() {
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 999, padding: '4px 11px', fontSize: 11, fontWeight: 800, color: '#6d28d9' }}>
                 <ShieldCheck size={12} /> Parceiro desde {(() => { try { return new Date(aceite).toLocaleDateString('pt-BR'); } catch { return 'hoje'; } })()}
               </div>
-              <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkIndicacao}</div>
+              <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkDisplay}</div>
               <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
                 {copiado ? <><Check size={15} /> Link copiado!</> : <><Copy size={15} /> Copiar meu link</>}
               </button>
