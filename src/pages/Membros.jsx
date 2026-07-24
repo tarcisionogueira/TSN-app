@@ -5,6 +5,7 @@ import {
   ChevronRight, Crown, Search, AlertTriangle,
 } from 'lucide-react';
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
+import { driveImage } from '../utils/driveUrl';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -297,7 +298,7 @@ export default function Membros() {
 
               {/* Capa */}
               {c.capa_url ? (
-                <img src={c.capa_url} alt={c.titulo}
+                <img src={driveImage(c.capa_url)} alt={c.titulo}
                   style={{ width:'100%', aspectRatio:'2/3', objectFit:'cover', display:'block', background:'#f1f5f9' }}
                   onError={e=>{ e.currentTarget.style.display='none'; }}/>
               ) : (
@@ -350,7 +351,7 @@ export default function Membros() {
                 <div style={{ padding:'16px 16px 10px', background:'linear-gradient(180deg,#f8fafc,#fff)', display:'flex', justifyContent:'center' }}>
                   <div style={{ width:'72%', aspectRatio:'2/3', borderRadius:6, overflow:'hidden', boxShadow:'0 6px 16px rgba(15,23,42,0.18)' }}>
                     {eb.capa_url ? (
-                      <img src={eb.capa_url} alt={eb.titulo}
+                      <img src={driveImage(eb.capa_url)} alt={eb.titulo}
                         style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', background:'#f1f5f9' }}
                         onError={e=>{ e.currentTarget.style.display='none'; }}/>
                     ) : (

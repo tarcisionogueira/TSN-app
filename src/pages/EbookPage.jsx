@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Sun, Moon, Minus, Plus, Download, BookOpen } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { driveImage, driveId, drivePreview, driveDownload } from '../utils/driveUrl';
 
 export default function EbookPage() {
   const { id } = useParams();
@@ -46,7 +47,12 @@ export default function EbookPage() {
 
   // A URL do arquivo vem da RPC de entitlement (não do registro público).
   const pdfUrl = arquivoUrl;
-  const isPdf = pdfUrl ? pdfUrl.toLowerCase().endsWith('.pdf') : false;
+  // Arquivos do Google Drive vêm como link de COMPARTILHAMENTO (não .pdf) — tratamos como
+  // PDF embutível (iframe /preview) para o leitor funcionar; download direto via /uc.
+  const isDrive = !!driveId(pdfUrl);
+  const isPdf = pdfUrl ? (pdfUrl.toLowerCase().endsWith('.pdf') || isDrive) : false;
+  const embedUrl = isDrive ? drivePreview(pdfUrl) : pdfUrl;
+  const baixarUrl = isDrive ? driveDownload(pdfUrl) : pdfUrl;
 
   if (loading) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', color:'#94a3b8' }}>
@@ -80,7 +86,7 @@ export default function EbookPage() {
             {/* Banner/capa */}
             <div style={{ background:'linear-gradient(135deg,#1e1b4b,#111111)', padding:'40px 24px', display:'flex', flexDirection:'column', alignItems:'center', gap:20 }}>
               {ebook.capa_url ? (
-                <img src={ebook.capa_url} alt={ebook.titulo}
+                <img src={driveImage(ebook.capa_url)} alt={ebook.titulo}
                   style={{ maxWidth:200, borderRadius:10, boxShadow:'0 16px 48px rgba(0,0,0,0.4)' }}/>
               ) : (
                 <div style={{ width:160, height:220, borderRadius:10, background:'linear-gradient(135deg,#6366f1,#4f46e5)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, boxShadow:'0 16px 48px rgba(0,0,0,0.4)' }}>
@@ -109,7 +115,7 @@ export default function EbookPage() {
                     </button>
                   )}
                   {pdfUrl && (
-                    <a href={pdfUrl} download target="_blank" rel="noreferrer"
+                    <a href={baixarUrl} download target="_blank" rel="noreferrer"
                       style={{ flex:1, minWidth:140, padding:'13px 24px', background:'white', color:'#111111', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, textDecoration:'none' }}>
                       <Download size={18}/> Baixar
                     </a>
@@ -165,7 +171,7 @@ export default function EbookPage() {
             {dark ? <Sun size={16}/> : <Moon size={16}/>}
           </button>
           {pdfUrl && (
-            <a href={pdfUrl} download target="_blank" rel="noreferrer"
+            <a href={baixarUrl} download target="_blank" rel="noreferrer"
               style={{ color: sutil, display:'flex', alignItems:'center' }}>
               <Download size={16}/>
             </a>
@@ -179,7 +185,7 @@ export default function EbookPage() {
         <div>
           <div style={{ background: dark ? '#111' : '#fffdf7', padding:'16px 24px', display:'flex', alignItems:'center', gap:16, borderBottom:`1px solid ${dark?'#333':'#e2e8f0'}` }}>
             {ebook.capa_url ? (
-              <img src={ebook.capa_url} alt={ebook.titulo}
+              <img src={driveImage(ebook.capa_url)} alt={ebook.titulo}
                 style={{ height:56, borderRadius:6, boxShadow:'0 4px 12px rgba(0,0,0,0.2)', flexShrink:0 }}/>
             ) : (
               <div style={{ width:40, height:56, borderRadius:6, background:'linear-gradient(135deg,#6366f1,#4f46e5)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'white', fontSize:20, fontWeight:900 }}>
@@ -190,12 +196,12 @@ export default function EbookPage() {
               <h2 style={{ margin:'0 0 4px', fontSize:16, fontWeight:800, color: dark ? '#e8e0d0' : '#111111' }}>{ebook.titulo}</h2>
               {ebook.descricao && <p style={{ margin:0, fontSize:12, color: sutil, lineHeight:1.4 }}>{ebook.descricao.slice(0,120)}{ebook.descricao.length>120?'…':''}</p>}
             </div>
-            <a href={pdfUrl} download target="_blank" rel="noreferrer"
+            <a href={baixarUrl} download target="_blank" rel="noreferrer"
               style={{ padding:'9px 18px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6, textDecoration:'none', flexShrink:0 }}>
               <Download size={14}/> Baixar PDF
             </a>
           </div>
-          <iframe src={pdfUrl} title={ebook.titulo}
+          <iframe src={embedUrl} title={ebook.titulo}
             sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
             style={{ width:'100%', minHeight:'70vh', height:'calc(100vh - 130px)', border:'none', display:'block', background: paper }}/>
         </div>
@@ -203,12 +209,12 @@ export default function EbookPage() {
         /* Não é PDF — mostra preview e botão download */
         <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 24px 80px', textAlign:'center' }}>
           {ebook.capa_url && (
-            <img src={ebook.capa_url} alt={ebook.titulo}
+            <img src={driveImage(ebook.capa_url)} alt={ebook.titulo}
               style={{ maxHeight:340, maxWidth:240, borderRadius:8, boxShadow:`0 12px 40px rgba(0,0,0,${dark?0.6:0.25})`, display:'block', margin:'0 auto 28px' }}/>
           )}
           <h2 style={{ fontSize:22, fontWeight:800, color: texto, margin:'0 0 16px' }}>{ebook.titulo}</h2>
           {ebook.descricao && <p style={{ fontSize:14, color: sutil, lineHeight:1.8, marginBottom:24 }}>{ebook.descricao}</p>}
-          <a href={pdfUrl} download target="_blank" rel="noreferrer"
+          <a href={baixarUrl} download target="_blank" rel="noreferrer"
             style={{ padding:'13px 32px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8, textDecoration:'none' }}>
             <Download size={18}/> Baixar material
           </a>
@@ -218,7 +224,7 @@ export default function EbookPage() {
         <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 24px 80px' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
             {ebook.capa_url && (
-              <img src={ebook.capa_url} alt={ebook.titulo}
+              <img src={driveImage(ebook.capa_url)} alt={ebook.titulo}
                 style={{ maxHeight:340, maxWidth:240, borderRadius:8, boxShadow:`0 12px 40px rgba(0,0,0,${dark?0.6:0.25})`, display:'block', margin:'0 auto 28px' }}/>
             )}
             <h1 style={{ fontSize:28, fontWeight:700, color: texto, margin:'0 0 8px', letterSpacing:'-0.5px', lineHeight:1.3 }}>{ebook.titulo}</h1>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { driveImage } from '../utils/driveUrl';
 
 export default function ProdutoPublico({ tipo }) {
   const { id } = useParams();
@@ -83,7 +84,7 @@ export default function ProdutoPublico({ tipo }) {
         <div style={{ color: 'white' }}>
           {/* Capa */}
           {produto.capa_url && (
-            <img src={produto.capa_url} alt={produto.titulo}
+            <img src={driveImage(produto.capa_url)} alt={produto.titulo}
               style={{ width: '100%', borderRadius: 16, marginBottom: 28, objectFit: 'cover', maxHeight: 280 }} />
           )}
           {!produto.capa_url && (
