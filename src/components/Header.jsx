@@ -164,9 +164,11 @@ export default function Header() {
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
     ...(ROLES_CALC.includes(effectiveRole) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
-  // Enquanto auth carrega: mostra links públicos para evitar flash
+  // Enquanto auth carrega: mostra links públicos para evitar flash.
+  // Logado: NÃO mostra "Planos" no topo — a gestão de assinatura (incl. upgrade/
+  // downgrade) mora em Meu Perfil › Assinatura. "Planos" segue no topo só p/ visitante.
   const links = (!loading && user)
-    ? [linksPublicos[0], ...linksPrivados, linksPublicos[2]]
+    ? [linksPublicos[0], ...linksPrivados]
     : linksPublicos;
 
   // Tour guiado de "primeiros passos" removido a pedido do dono — no lugar entrará
@@ -322,11 +324,12 @@ export default function Header() {
                     )}
                   </div>
                   {[
+                    // "Minha Assinatura" saiu do menu e do topo — a gestão de plano
+                    // (upgrade/downgrade/cancelar) agora é a 1ª aba de Meu Perfil.
                     { path: '/perfil', label: 'Meu Perfil', icon: User },
                     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
                     { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
-                    { path: '/planos', label: 'Minha Assinatura', icon: Tag },
                     ...(['admin','consultor','analista','advogado'].includes(effectiveRole)
                       ? [{ path: '/comissoes', label: 'Minhas Comissões', icon: DollarSign }]
                       : []),
