@@ -165,22 +165,30 @@ export async function suspenderPlanoDireto({ userId, gateway }) {
 export async function estornarComissao({ gatewayPaymentId, gateway }) {
   if (!gatewayPaymentId) return { skipped: 'sem_payment_id' };
   try {
-    const { data: com } = await supabase.from('comissoes')
-      .select('id, beneficiario_id, valor_comissao, status')
-      .eq('gateway_payment_id', gatewayPaymentId).eq('origem', 'assinatura').maybeSingle();
-    if (!com) return { skipped: 'sem_comissao' };
-    if (com.status === 'cancelado') return { ok: true, ja_estornada: true };
-    const { data: jaEstorno } = await supabase.from('saldo_lancamentos')
-      .select('id').eq('origem_id', gatewayPaymentId).eq('tipo', 'estorno_comissao').maybeSingle();
-    await supabase.from('comissoes').update({ status: 'cancelado' }).eq('id', com.id);
-    if (!jaEstorno && Number(com.valor_comissao) > 0) {
-      await supabase.from('saldo_lancamentos').insert({
-        user_id: com.beneficiario_id, tipo: 'estorno_comissao', valor: -Number(com.valor_comissao),
-        origem_tipo: 'assinatura', origem_id: gatewayPaymentId,
-        descricao: `Estorno de comissão (${gateway}) — pagamento revertido`, status: 'disponivel',
-      });
+    // Comissão MULTINÍVEL: um pagamento gera N lançamentos (origem_id = <pay>-n1..n5). Reverte
+    // TODOS os níveis, cada um idempotente por um origem_id de estorno próprio.
+    const { data: lancs } = await supabase.from('saldo_lancamentos')
+      .select('id, user_id, valor, origem_id, origem_tipo')
+      .eq('tipo', 'comissao_rede').like('origem_id', `${gatewayPaymentId}-n%`);
+    let estornado = 0;
+    for (const l of (lancs || [])) {
+      const estOid = `estorno-${l.origem_id}`;
+      const { data: ja } = await supabase.from('saldo_lancamentos')
+        .select('id').eq('origem_id', estOid).eq('tipo', 'estorno_comissao').maybeSingle();
+      if (!ja && Number(l.valor) > 0) {
+        await supabase.from('saldo_lancamentos').insert({
+          user_id: l.user_id, tipo: 'estorno_comissao', valor: -Number(l.valor),
+          origem_tipo: l.origem_tipo || 'assinatura', origem_id: estOid,
+          descricao: `Estorno de comissão de rede (${gateway}) — pagamento revertido`, status: 'disponivel',
+        });
+        estornado += Number(l.valor);
+      }
     }
-    return { ok: true, estornado: Number(com.valor_comissao) };
+    // Cancela as comissoes de rede deste pagamento (registro do relatório).
+    await supabase.from('comissoes').update({ status: 'cancelado' })
+      .eq('gateway_payment_id', gatewayPaymentId).eq('gateway', 'rede').neq('status', 'cancelado');
+    if (!lancs || lancs.length === 0) return { skipped: 'sem_comissao' };
+    return { ok: true, estornado };
   } catch (e) {
     console.error(`[${gateway}] estornarComissao:`, e.message);
     return { erro: e.message };
@@ -251,80 +259,20 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
     }
   }
 
-  // Comissão RECORRENTE do vendedor (consultor OU afiliado), sobre a MENSALIDADE.
-  // Beneficiário = comissionado_por (afiliado/consultor); cai em indicado_por para
-  // compatibilidade com indicações antigas. Recorrente: uma comissão por pagamento
-  // (dedupe por gateway_payment_id). Upgrade sobe o valor sozinho (é % do valor pago).
-  const beneficiarioId = cliente.comissionado_por || cliente.indicado_por;
-  if (beneficiarioId && mapeado && gatewayPaymentId) {
+  // COMISSÃO MULTINÍVEL (Programa de Parceiros) — substitui o nível-único de afiliado.
+  // Distribui pela árvore indicado_por, SÓ para uplines PAGANTES (compressão dinâmica),
+  // com os % de comissao_regras (tipo 'assinatura'). NÃO comissiona honorário de êxito
+  // nem recarga de crédito (esta função só roda no pagamento de ASSINATURA recorrente).
+  // Idempotente por pagamento+nível dentro de distribuir_comissao_rede.
+  if (mapeado && gatewayPaymentId) {
     try {
-      const { data: consultor } = await supabase
-        .from('perfis')
-        .select('comissao_afiliado_pct, role, ativo, comissionamento_bloqueado, ultima_indicacao_em')
-        .eq('id', beneficiarioId)
-        .single();
-
-      // Regras de PERDA (decisão do dono):
-      //  - conta DESATIVADA = perde de vez, não volta se reativar (bloqueio global).
-      //  - 3 meses sem indicação nova = perde ESTE cliente e "recomeça do zero" com
-      //    futuras indicações (não é bloqueio global; só desanexa o cliente atual).
-      const bloqueado = !!consultor?.comissionamento_bloqueado || consultor?.ativo === false;
-      let desanexar = false;
-      if (!bloqueado && consultor?.ultima_indicacao_em) {
-        const diasSemIndicar = (Date.now() - new Date(consultor.ultima_indicacao_em).getTime()) / 86400000;
-        if (diasSemIndicar > 92) desanexar = true;
-      }
-      if (desanexar) {
-        await supabase.from('perfis').update({ comissionado_por: null }).eq('id', cliente.id);
-      }
-
-      // Qualquer vendedor habilitado com % > 0 e não bloqueado. NÃO paga sobre êxito
-      // de arrematação — só sobre a assinatura (regra: "não agora").
-      if (!bloqueado && !desanexar) {
-        const pct = Number(consultor?.comissao_afiliado_pct || 0);
-        if (pct > 0) {
-          const valorComissao = Number((valor * pct / 100).toFixed(2));
-          const { data: existente } = await supabase
-            .from('comissoes')
-            .select('id')
-            .eq('gateway_payment_id', gatewayPaymentId)
-            .eq('origem', 'assinatura')
-            .maybeSingle();
-
-          if (!existente) {
-            // O índice único idx_comissoes_gateway_payment garante que só UMA
-            // execução vence este INSERT sob corrida (2 entregas concorrentes do
-            // webhook). Capturamos o erro e só creditamos o saldo se a comissão foi
-            // de fato inserida — senão haveria double-credit (saldo_lancamentos não
-            // tem constraint única).
-            const { error: cErr } = await supabase.from('comissoes').insert({
-              beneficiario_id:  beneficiarioId,
-              cliente_id:       cliente.id,
-              tipo:             'afiliado',
-              origem:           'assinatura',
-              referencia:       `Assinatura ${mapeado.plano} via ${gateway}`,
-              valor_base:       valor,
-              percentual:       pct,
-              valor_comissao:   valorComissao,
-              competencia:      new Date().toISOString().slice(0, 10),
-              status:           'pendente',
-              gateway_payment_id: gatewayPaymentId,
-              gateway,
-            });
-            // Credita o saldo unificado (razão saldo_lancamentos) — fonte do saque
-            if (!cErr) {
-              await supabase.from('saldo_lancamentos').insert({
-                user_id: beneficiarioId, tipo: 'comissao_venda', valor: valorComissao,
-                origem_tipo: 'assinatura', origem_id: gatewayPaymentId,
-                descricao: `Comissão recorrente — ${mapeado.plano} (${pct.toFixed(2)}%)`, status: 'disponivel',
-              });
-            }
-          }
-        }
-      }
+      const { data: dist } = await supabase.rpc('distribuir_comissao_rede', {
+        p_comprador: cliente.id, p_tipo: 'assinatura', p_valor: valor, p_gateway_payment_id: gatewayPaymentId,
+      });
+      if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede:`, JSON.stringify(dist).slice(0, 200));
     } catch (e) {
-      console.error(`[${gateway}] comissao:`, e.message);
-      alertarErro(`[${gateway}] Falha ao registrar comissão: ${e.message}`, { cliente_id: cliente?.id, beneficiario_id: beneficiarioId }).catch(() => {});
+      console.error(`[${gateway}] comissao_rede:`, e.message);
+      alertarErro(`[${gateway}] Falha na comissão de rede: ${e.message}`, { cliente_id: cliente?.id }).catch(() => {});
     }
   }
 
