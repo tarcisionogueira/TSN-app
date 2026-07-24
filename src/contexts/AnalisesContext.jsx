@@ -132,8 +132,11 @@ export function AnalisesProvider({ children }) {
     }).then(r => r.json()).then(d => {
       if (d?.result) upsert({ imovelId, status: 'concluida', result: d.result, erro: null });
       else if (d?.error) upsert({ imovelId, status: 'erro', erro: d.error });
+      // Resposta sem result nem error → NUNCA deixa preso em 'gerando' (o recarregar
+      // reconcilia com o banco caso o servidor ainda esteja processando de verdade).
+      else upsert({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
       recarregar();
-    }).catch(() => { recarregar(); });
+    }).catch(() => { upsert({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
   }, [upsert, recarregar]);
 
   // Documental: dispara /api/gerar-documental (server-side, persistente).
@@ -148,8 +151,9 @@ export function AnalisesProvider({ children }) {
     }).then(r => r.json()).then(d => {
       if (d?.result) upsertDoc({ imovelId, status: 'concluida', result: d.result, erro: null });
       else if (d?.error) upsertDoc({ imovelId, status: 'erro', erro: d.error });
+      else upsertDoc({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
       recarregar();
-    }).catch(() => { recarregar(); });
+    }).catch(() => { upsertDoc({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
   }, [upsertDoc, recarregar]);
 
   // Laudo de viabilidade (3º documento): consolida mercadológico + documental no
@@ -164,8 +168,9 @@ export function AnalisesProvider({ children }) {
     }).then(r => r.json()).then(d => {
       if (d?.result) upsertLaudo({ imovelId, status: 'concluida', result: d.result, erro: null });
       else if (d?.error) upsertLaudo({ imovelId, status: 'erro', erro: d.error });
+      else upsertLaudo({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
       recarregar();
-    }).catch(() => { recarregar(); });
+    }).catch(() => { upsertLaudo({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
   }, [upsertLaudo, recarregar]);
 
   const getAnalise = useCallback((imovelId) => analises.find(a => a.imovelId === imovelId) || null, [analises]);
