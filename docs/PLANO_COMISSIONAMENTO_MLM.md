@@ -109,23 +109,40 @@ A pedido do dono. Cauda pequena mantém saudável (total muito abaixo da margem)
 `distribuir_comissao_rede` já respeita o maior nível ativo → paga até o 10 automaticamente.
 Ainda dá para ir além (constraint até 10; se quiser mais, é ampliar a constraint + inserir linhas).
 
-### 11.2 Plano de carreira / ranks (PROPOSTA — não implementado)
+### 11.2 Plano de carreira / ranks — FUNDAÇÃO IMPLEMENTADA (nome GENÉRICO, a renomear) — 24/07
 Estrutura estilo Hinode/Forever: além da comissão por nível, o parceiro sobe de **rank** conforme
-constrói a rede, ganhando **reconhecimento + bônus de rank** (pago de um POOL limitado — nunca
-estoura a margem).
+constrói a rede, ganhando **reconhecimento + bônus de rank** (pago de um POOL FECHADO — nunca
+estoura a margem). Migração `comissao_ranks_fundacao` — cálculos e regras **no ar**, só o NOME dos
+ranks é provisório (o dono ainda vai amadurecer — ver "naming" abaixo). Trocar o nome é um
+`update comissao_ranks set nome=…` (nenhuma lógica depende do texto).
 
-| Rank | Qualificação (sugestão) | Benefício (sugestão) |
-|---|---|---|
-| **Parceiro** | assinatura ativa | comissão de rede padrão |
-| **Bronze** | 3 diretos pagantes | +1% no N1 + selo |
-| **Prata** | 10 na rede (≥5 diretos pagantes) | bônus mensal fixo (ex.: R$ 100) |
-| **Ouro** | 30 na rede (≥3 Bronze diretos) | bônus + fatia de um pool de reconhecimento |
-| **Diamante** | 100 na rede (≥3 Ouro diretos) | bônus maior + reconhecimento/eventos |
+**Config `comissao_ranks` (editável):** 6 faixas com nome genérico, qualificação por rede paga:
 
-**Como manter saudável:** o bônus de rank sai de um **pool fechado** (ex.: 2–3% da receita de
-assinaturas reservada a bônus), rateado entre os qualificados — assim o custo total de rank é
-**limitado por definição**, independentemente de quantos batem o rank. Ranks são recalculados
-mensalmente (subir é fácil, cair exige perder qualificação por 2 meses, p/ não punir oscilação).
+| rank_key | nome (genérico) | Qualificação | pool_peso |
+|---|---|---|--:|
+| r1 | Nível 1 | assinatura ativa | 0 (base, sem pool) |
+| r2 | Nível 2 | 3 diretos pagantes · 3 na rede | 1 |
+| r3 | Nível 3 | 5 diretos · 10 na rede | 2 |
+| r4 | Nível 4 | 10 diretos · 30 na rede | 4 |
+| r5 | Nível 5 | 20 diretos · 100 na rede | 8 |
+| r6 | Nível 6 | 40 diretos · 300 na rede | 16 |
 
-**Decisões do dono p/ eu implementar os ranks:** (a) as qualificações e benefícios acima; (b) o
-tamanho do pool de bônus (% da receita); (c) recálculo mensal e regra de manutenção de rank.
+**Saúde (pool fechado):** `distribuir_pool_rank(competência, receita_assinaturas)` reparte
+`rank_config.pool_pct`% (default **2%**) da receita entre os qualificados, **rateado por pool_peso**
+— custo total limitado por definição, idempotente por competência, credita em `saldo_lancamentos`
+(mesmo padrão de `distribuir_comissao_rede`). **Recálculo** `recalcular_ranks()` (rodar mensal):
+sobe na hora; só **cai** após `meses_carencia_queda` (default **2**) meses abaixo — não pune oscilação.
+Funções `rank_do_parceiro(uid)` / `rede_metricas_parceiro(uid)` calculam a qualificação a partir da
+árvore `perfis.indicado_por` + `eh_pagante`. Tudo SECURITY DEFINER, **service-only** (RLS nas tabelas
+de config, EXECUTE revogado de anon/authenticated) — estrutura **não divulgada** ao cliente.
+
+**A DEFINIR pelo dono (não bloqueia a fundação):**
+- **Naming dos ranks** (linha *história + liderança* que o dono curtiu): manter Pioneiro·Fundador·Mestre·Lenda
+  e completar o topo com **títulos de LÍDER** (rede de vendas/indicação). Candidatos discutidos:
+  *Pioneiro·Fundador·Mestre·**Mentor·Embaixador**·Lenda* · *…·**Guardião·Embaixador**·Lenda* ·
+  *…·**Conselheiro·Patrono**·Lenda* · *Desbravador·…·**Imortal***. → só um `update comissao_ranks.nome`.
+- **Go-live do pool:** confirmar `pool_pct` (2% sugerido) e **agendar** `recalcular_ranks()` +
+  `distribuir_pool_rank()` mensais (ainda **não** há cron — o pool só paga quando o dono ligar).
+- **Saque do cliente-parceiro:** a view `saldo_usuarios` (base do saque) hoje cobre só a equipe
+  operacional; pagar comissão/pool a clientes pagantes exige estender esse caminho (pendência do
+  MLM inteiro, não só dos ranks).
