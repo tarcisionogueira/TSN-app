@@ -3693,10 +3693,11 @@ function UsuariosPlanoDetalhe({ planoKey }) {
 // Painel "Custos & Uso das Integrações" — marcadores de teto (grátis/orçamento)
 // por provedor pago (Gemini, Claude, geocoders, Resend, Daily, Bright Data), para
 // não haver surpresa ao estourar cota/custo. Fonte: /api/uso-integracoes.
-function PainelCustosUso() {
-  const [uso, setUso] = React.useState(null);
-  const [erro, setErro] = React.useState(false);
+function PainelCustosUso({ controlado = false, uso: usoProp = null, erro: erroProp = false }) {
+  const [usoState, setUso] = React.useState(null);
+  const [erroState, setErro] = React.useState(false);
   React.useEffect(() => {
+    if (controlado) return; // dado vem do pai (evita 2ª chamada a /api/uso-integracoes)
     let vivo = true;
     (async () => {
       try {
@@ -3707,7 +3708,9 @@ function PainelCustosUso() {
       } catch { if (vivo) setErro(true); }
     })();
     return () => { vivo = false; };
-  }, []);
+  }, [controlado]);
+  const uso = controlado ? usoProp : usoState;
+  const erro = controlado ? erroProp : erroState;
 
   const COR = { verde: '#10b981', amarelo: '#f59e0b', vermelho: '#dc2626' };
   const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -4079,7 +4082,7 @@ function PainelDocsLeiloeiro() {
   );
 }
 
-function DashboardTab() {
+function DashboardTab({ irParaTab }) {
   const planosCtx = usePlanos();
   const pNome = (key) => planosCtx?.[key]?.nome || key;
   const [dados, setDados] = useState(null);
@@ -4089,6 +4092,7 @@ function DashboardTab() {
   const [asaasLoading, setAsaasLoading] = useState(true);
   const [fotoStats, setFotoStats] = useState({ total: 0, noStorage: 0 });
   const [custos, setCustos] = useState(null); // /api/uso-integracoes (câmbio real + custo real de IA)
+  const [custosErro, setCustosErro] = useState(false); // fonte de custos indisponível (p/ o painel Custos)
   const [usuariosDetalhe, setUsuariosDetalhe] = useState(false);
   const [healthLogs, setHealthLogs] = useState([]);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -4192,6 +4196,15 @@ function DashboardTab() {
       setLoading(false);
     }
 
+    load();
+    if (equipeDetalhe) loadEquipeDetalhe(equipeDetalhe, periodo, dataInicio, dataFim);
+  }, [periodo, dataInicio, dataFim]);
+
+  // Fontes que NÃO dependem do período (saldo Asaas/MP, custos de integrações, health-check):
+  // buscam 1× na montagem. Antes estavam no mesmo efeito do seletor de período — cada troca de
+  // período re-batia Asaas + Mercado Pago + /api/uso-integracoes à toa (chamadas pagas). Como
+  // essas três ignoram o intervalo de datas, ficam fora do efeito com deps de período.
+  useEffect(() => {
     async function loadAsaas() {
       try {
         const res = await apiCall('/api/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'financas' }) });
@@ -4215,20 +4228,21 @@ function DashboardTab() {
     async function loadCustos() {
       // Câmbio real (usd_brl) + custo REAL de IA/integrações do mês (total_mes.custo_brl), p/ o
       // "custo mensal estimado de infra" refletir o gasto de verdade, não um número chumbado.
+      // Fonte ÚNICA de /api/uso-integracoes — o painel "Custos & Uso" reusa este estado (não busca
+      // de novo), evitando a 2ª chamada ao mesmo endpoint por carga do Dashboard.
       try {
         const res = await apiCall('/api/uso-integracoes');
         const data = await res.json();
         setCustos(res.ok ? data : null);
-      } catch { setCustos(null); }
+        setCustosErro(!res.ok);
+      } catch { setCustos(null); setCustosErro(true); }
     }
 
-    load();
     loadAsaas();
     loadMp();
     loadCustos();
     loadHealth();
-    if (equipeDetalhe) loadEquipeDetalhe(equipeDetalhe, periodo, dataInicio, dataFim);
-  }, [periodo, dataInicio, dataFim]);
+  }, []);
 
   function marcoAsaas(mrr) {
     if (mrr >= 100000) return { cor: '#7c3aed', label: 'Tier Enterprise', desc: 'Exigir conta dedicada e taxa máxima de 0,3% no PIX' };
@@ -4289,8 +4303,10 @@ function DashboardTab() {
         await rodarHealthCheck();
         setAcaoStatus(s => ({ ...s, [label]: 'ok — executado' }));
       } else if (acao === 'ver_leads_sem_consultor') {
-        window.location.hash = '/admin';
-        setAcaoStatus(s => ({ ...s, [label]: 'ok — navegando para Comercial' }));
+        // Comercial é uma ABA interna (troca de estado `tab`), não uma rota — reescrever o
+        // hash /admin (rota atual) não fazia nada. Troca a aba de verdade.
+        if (irParaTab) irParaTab('Comercial');
+        setAcaoStatus(s => ({ ...s, [label]: 'ok — abrindo Comercial' }));
       }
     } catch(e) {
       setAcaoStatus(s => ({ ...s, [label]: `erro — ${e.message}` }));
@@ -4470,8 +4486,10 @@ function DashboardTab() {
       {/* Cobertura documental por leiloeiro + sinalizadores de confusão de documento */}
       <PainelDocsLeiloeiro />
 
-      {/* Custos & Uso das integrações pagas (marcadores de teto/orçamento) */}
-      <PainelCustosUso />
+      {/* Custos & Uso das integrações pagas (marcadores de teto/orçamento).
+          Recebe o dado JÁ buscado pelo Dashboard (loadCustos) — não busca /api/uso-integracoes
+          de novo (antes o endpoint era chamado 2× por carga). */}
+      <PainelCustosUso controlado uso={custos} erro={custosErro} />
 
       {/* Diagnóstico por IA sobre os indicadores (assertividade + economia) */}
       <PainelDiagnosticoIA />
@@ -4734,7 +4752,7 @@ function DashboardTab() {
                   <div style={{ fontWeight: 600, fontSize: 13, color: '#111111' }}>Supabase — Banda de Saída (Egress)</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>Limite gratuito: 5 GB/mês · Monitore no painel Supabase</div>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b' }}>Ver painel</div>
+                <a href="https://supabase.com/dashboard/project/_/settings/billing" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700, fontSize: 12, color: '#0D63DB', textDecoration: 'none', whiteSpace: 'nowrap' }}>Ver painel →</a>
               </div>
               <div style={{ marginTop: 6, padding: '7px 10px', background: '#eff6ff', borderRadius: 7, fontSize: 11, color: '#084BA6', lineHeight: 1.5 }}>
                 💡 Mantenha no Supabase apenas textos e lógica. Imagens, PDFs e vídeos devem ir para a Bunny.net — isso reduz drasticamente o egress e adia o upgrade.
@@ -9139,7 +9157,7 @@ export default function Admin() {
           ))}
         </div>
 
-        {tab === 'Dashboard'      && <DashboardTab />}
+        {tab === 'Dashboard'      && <DashboardTab irParaTab={mudarTab} />}
         {tab === 'Cursos'         && <CursosTab />}
         {tab === 'eBooks'         && <EbooksTab />}
         {tab === 'Contratos'      && <ContratosTab />}
