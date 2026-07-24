@@ -698,7 +698,13 @@ export default async function handler(req, res) {
             ? `Este leiloeiro não publica a matrícula on-line (ela sai por acesso restrito). ${jaTemTxt}Anexe ${faltaTxt} (PDF) — que você baixa na página do lote/leiloeiro — para gerar a análise agora.`
             : `A análise jurídica exige a matrícula e o edital. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
       };
-      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs });
+      // RAIZ do "Preparando documentos…" preso: sem regen_motivo, o regenerar-relatorios-cron
+      // NUNCA reprocessava este estado — então, quando a matrícula chegava (ou a captura falhava),
+      // nada regerava o laudo. Marcamos 'matricula_nao_lida' SÓ quando a captura pode se resolver
+      // sozinha (emCaptura): aí o cron re-roda a geração e, com a matrícula já baixada, emite o
+      // laudo completo e o vício some. Quando NÃO auto-resolve (anexar manual), fica null (estado
+      // final — sem gastar IA à toa).
+      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
       if (cota && cota.ok && cota.tipo) {
         try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
       }
@@ -1126,7 +1132,13 @@ export default async function handler(req, res) {
             ? `Este leiloeiro não publica a matrícula on-line (ela sai por acesso restrito). ${jaTemTxt}Anexe ${faltaTxt} (PDF) — que você baixa na página do lote/leiloeiro — para gerar a análise agora.`
             : `A análise jurídica só é gerada com a matrícula e o edital lidos. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
       };
-      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs });
+      // RAIZ do "Preparando documentos…" preso: sem regen_motivo, o regenerar-relatorios-cron
+      // NUNCA reprocessava este estado — então, quando a matrícula chegava (ou a captura falhava),
+      // nada regerava o laudo. Marcamos 'matricula_nao_lida' SÓ quando a captura pode se resolver
+      // sozinha (emCaptura): aí o cron re-roda a geração e, com a matrícula já baixada, emite o
+      // laudo completo e o vício some. Quando NÃO auto-resolve (anexar manual), fica null (estado
+      // final — sem gastar IA à toa).
+      await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
       if (cota && cota.ok && cota.tipo) {
         try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
       }
