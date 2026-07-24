@@ -81,7 +81,9 @@ export function corpoLaudo({ imovel: d = {}, laudo: L = {}, cab = {} }) {
   const parecerHtml = (() => {
     const txt = String(L.parecer || '').trim();
     if (!txt) return '';
-    const partes = txt.split(/§\s*SEÇÃO:/i).map(s => s.trim()).filter(Boolean);
+    // Tira o LEMBRETE (aviso legal) daqui: já consta no rodapé (.foot) e o fecho do
+    // documento é o "Resumo da Operação".
+    const partes = txt.split(/§\s*SEÇÃO:/i).map(s => s.trim()).filter(Boolean).filter(p => !/^LEMBRETE/i.test(p));
     const secoes = partes.map(p => {
       const nl = p.indexOf('\n');
       const titulo = nl < 0 ? p : p.slice(0, nl);
@@ -120,6 +122,11 @@ ${bloco('Diligências pendentes (confirmar antes do lance)', L.diligenciasPenden
 ${cqHtml}
 
 ${parecerHtml}
+
+${itens(L.resumoOperacao).length ? `<div class="av" style="border:2px solid #111827;border-radius:8px;background:#f8fafc;padding:14px 16px;margin-top:16px;">
+  <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#111827;margin-bottom:8px;">Resumo da Operação</div>
+  <ul>${listaHtml(L.resumoOperacao)}</ul>
+</div>` : ''}
 
 <div class="foot av">
   Este parecer final é um documento de apoio à decisão, gerado com apoio de inteligência artificial a partir dos relatórios Mercadológico + Viabilidade Financeira e Documental + Jurídico. Não substitui a análise de um profissional nem a verificação presencial do imóvel. Recomendamos agendar a reunião com um analista BidPro para validar o veredito antes de qualquer lance.
