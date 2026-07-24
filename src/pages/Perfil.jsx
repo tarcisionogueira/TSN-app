@@ -13,6 +13,9 @@ const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFra
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
 const ROLES_COM_COMISSAO = ['admin', 'consultor', 'analista', 'advogado'];
+// Clientes PAGANTES também recebem comissão (Programa de Parceiros — rede multinível) e
+// precisam ver saldo/saque + o relatório da rede.
+const ROLES_PAGOS_CLIENTE = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
 
 const ROLE_LABELS = {
   admin: 'Administrador',
@@ -409,7 +412,9 @@ export default function Perfil() {
   // Usa effectiveRole (não `role`) para que, durante o modo suporte/impersonate, os
   // blocos de comissão/PIX NÃO apareçam na tela de um cliente. Clientes nunca veem.
   // (Não gatear por comissao_afiliado_pct: a coluna tem DEFAULT 20, valeria p/ todos.)
-  const temComissao = ROLES_COM_COMISSAO.includes(effectiveRole);
+  const temComissao = ROLES_COM_COMISSAO.includes(effectiveRole) || ROLES_PAGOS_CLIENTE.includes(effectiveRole);
+  const ehParceiro = ROLES_PAGOS_CLIENTE.includes(effectiveRole); // cliente pagante → vê o relatório da rede
+  const [relRede, setRelRede] = useState(null); // relatório do Programa de Parceiros (rede multinível)
   const [saldoSaque, setSaldoSaque] = useState(null);
   const [valorSaque, setValorSaque] = useState('');
   const [showSaqueForm, setShowSaqueForm] = useState(false);
@@ -441,6 +446,12 @@ export default function Perfil() {
     if (!temComissao) return;
     carregarSaldo();
   }, [temComissao, user.id]); // eslint-disable-line
+
+  // Relatório do Programa de Parceiros (rede multinível) — sintético + analítico.
+  useEffect(() => {
+    if (!ehParceiro) return;
+    supabase.rpc('relatorio_comissoes_rede').then(({ data }) => { if (data && !data.erro) setRelRede(data); }).catch(() => {});
+  }, [ehParceiro, user.id]); // eslint-disable-line
 
   // CPF: só é digitado UMA vez. Grava cifrado (cpf-set) e passa a ser reusado em
   // pagamentos e saques. Depois de salvo, o campo vira somente-leitura (mascarado).
@@ -734,6 +745,57 @@ export default function Perfil() {
             Só para clientes; equipe (admin/analista/etc.) não recebe recomendação. */}
         {['explorador','top2','top2_anual','assessorado','assessorado_anual','clube','clube_anual'].includes(role) && (
           <PerfilInvestidorCard userId={user?.id} isMobile={isMobile} />
+        )}
+
+        {/* Programa de Parceiros — relatório da rede (só cliente pagante) */}
+        {ehParceiro && relRede && (
+          <div style={{ background: 'white', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 12 }}>PROGRAMA DE PARCEIROS</div>
+            {/* Sintético */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10, marginBottom: 14 }}>
+              {[
+                { l: 'Total recebido', v: fmtBRL(relRede.total_recebido || 0), c: '#16a34a' },
+                { l: 'Este mês', v: fmtBRL(relRede.mes_atual || 0), c: '#0D63DB' },
+                { l: 'A liberar', v: fmtBRL(relRede.pendente || 0), c: '#d97706' },
+                { l: 'Indicados', v: `${relRede.diretos || 0}`, c: '#111', sub: `${relRede.diretos_pagantes || 0} pagantes` },
+              ].map((k) => (
+                <div key={k.l} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>{k.l}</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: k.c }}>{k.v}</div>
+                  {k.sub && <div style={{ fontSize: 10, color: '#94a3b8' }}>{k.sub}</div>}
+                </div>
+              ))}
+            </div>
+            {/* Analítico por nível */}
+            {Array.isArray(relRede.por_nivel) && relRede.por_nivel.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: '#334155', marginBottom: 6 }}>Por nível da rede</div>
+                {relRede.por_nivel.map((n) => (
+                  <div key={n.nivel} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#475569', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <span>Nível {n.nivel} · {n.n} comissã{n.n === 1 ? 'o' : 'es'}</span>
+                    <strong style={{ color: '#16a34a' }}>{fmtBRL(n.valor || 0)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Últimas comissões */}
+            {Array.isArray(relRede.ultimos) && relRede.ultimos.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: '#334155', marginBottom: 6 }}>Últimas comissões</div>
+                {relRede.ultimos.slice(0, 6).map((u, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: '#64748b', padding: '3px 0' }}>
+                    <span>{new Date(u.data).toLocaleDateString('pt-BR')} · N{u.nivel} · {u.origem}</span>
+                    <strong style={{ color: '#16a34a' }}>{fmtBRL(u.valor || 0)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(!relRede.ultimos || relRede.ultimos.length === 0) && (
+              <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                Você ainda não tem comissões da rede. Compartilhe seu link de convite na tela inicial — quando um indicado assina um plano, você é recompensado.
+              </div>
+            )}
+          </div>
         )}
 
         {/* Card Comissões (apenas para papéis com repasse) */}
