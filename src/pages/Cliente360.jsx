@@ -156,6 +156,48 @@ export default function Cliente360() {
     } catch { /* silencioso */ } finally { setResolvendo(false); }
   };
 
+  // Gera o DOSSIÊ do cliente (aceites/datas + indicações + saques + relatórios + atividade)
+  // numa janela imprimível → o admin "Salvar em PDF" para uma eventual ocorrência jurídica.
+  const gerarDossie = () => {
+    if (!dados) return;
+    const pf = dados.perfil || {}, au = dados.auth || {}, par = dados.parceria || {}, fin = dados.financeiro || {}, rel = dados.relatorios || {};
+    const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const brlv = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const dt = (s) => { try { return s ? new Date(s).toLocaleString('pt-BR') : '—'; } catch { return '—'; } };
+    const dta = (s) => { try { return s ? new Date(s).toLocaleDateString('pt-BR') : '—'; } catch { return '—'; } };
+    const emitido = new Date().toLocaleString('pt-BR');
+    const linhasFin = (fin.lancamentos || []).map(l => `<tr><td>${dt(l.criado_em)}</td><td>${esc(l.tipo)}</td><td>${esc(l.descricao || '')}</td><td style="text-align:right">${brlv(l.valor)}</td><td>${esc(l.status)}</td></tr>`).join('');
+    const linhasDir = (par.diretos || []).map(x => `<tr><td>${esc(x.nome || '—')}</td><td>${esc(x.role || '')}</td><td>${x.parceiro_aceite_em ? 'aderiu ' + dta(x.parceiro_aceite_em) : 'não aderiu'}</td><td>${dta(x.created_at)}</td></tr>`).join('');
+    const atividade = (dados.atividade || []).slice(0, 60).map(a => `<tr><td>${dt(a.em || a.criado_em || a.data)}</td><td>${esc(a.tipo || a.evento || '')}</td><td>${esc(a.descricao || a.detalhe || a.motivo || '')}</td></tr>`).join('');
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Dossiê — ${esc(pf.nome || '')}</title>
+<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px;font-size:12px;line-height:1.5}h1{font-size:18px;margin:0}h2{font-size:13px;border-bottom:2px solid #0D63DB;padding-bottom:4px;margin:22px 0 8px;color:#0D63DB}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #e2e8f0;padding:5px 7px;text-align:left;vertical-align:top}th{background:#f1f5f9}.muted{color:#64748b}.kv{margin:2px 0}.box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px}@media print{.noprint{display:none}}</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:10px">
+<div><h1>BidPro Brasil — Dossiê do Cliente</h1><div class="muted">Documento de uso interno / jurídico</div></div>
+<div class="muted" style="text-align:right">Emitido em ${emitido}</div></div>
+<h2>Identificação</h2><div class="box">
+<div class="kv"><b>Nome:</b> ${esc(pf.nome || '—')}</div>
+<div class="kv"><b>E-mail:</b> ${esc(au.email || '—')} &nbsp; <b>Telefone:</b> ${esc(pf.telefone || '—')}</div>
+<div class="kv"><b>Plano:</b> ${esc(pf.role || '—')} &nbsp; <b>Status:</b> ${pf.ativo ? 'ativo' : 'inativo'}${pf.inadimplente_desde ? ' (inadimplente)' : ''}</div>
+<div class="kv"><b>Cadastro:</b> ${dt(au.created_at)} &nbsp; <b>Último acesso:</b> ${dt(au.last_sign_in_at)}</div></div>
+<h2>Programa de Parceiros — Termo de Adesão</h2><div class="box">
+${par.aceite_em ? `<div class="kv"><b>Aderiu ao Programa em:</b> ${dt(par.aceite_em)} &nbsp; <b>Versão do termo:</b> ${esc(par.aceite_versao || '—')}</div>` : `<div class="kv">O usuário <b>NÃO</b> aderiu ao Programa de Parceiros.</div>`}
+<div class="kv"><b>Indicado por:</b> ${par.indicado_por && par.indicado_por.nome ? esc(par.indicado_por.nome) : '—'}</div>
+<div class="kv"><b>Indicados diretos:</b> ${par.diretos_total || 0}</div></div>
+${(par.diretos || []).length ? `<table><thead><tr><th>Indicado</th><th>Plano</th><th>Aderiu ao termo</th><th>Cadastro</th></tr></thead><tbody>${linhasDir}</tbody></table>` : ''}
+<h2>Financeiro — Comissões e Saques</h2><div class="box">
+<div class="kv"><b>Saldo disponível:</b> ${brlv(fin.saldo)} &nbsp; <b>Total de comissões apuradas:</b> ${brlv(fin.comissoes_total)}</div></div>
+${(fin.lancamentos || []).length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>${linhasFin}</tbody></table>` : '<div class="muted" style="margin-top:6px">Sem lançamentos financeiros.</div>'}
+<h2>Relatórios gerados</h2><div class="box"><div class="kv"><b>Mercadológico:</b> ${rel.mercado?.total || 0} &nbsp; <b>Documental:</b> ${rel.documental?.total || 0} &nbsp; <b>Laudo:</b> ${rel.laudo?.total || 0}</div></div>
+${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Evento</th><th>Detalhe</th></tr></thead><tbody>${atividade}</tbody></table>` : ''}
+<div style="margin-top:26px;border-top:1px solid #e2e8f0;padding-top:8px" class="muted">Documento gerado automaticamente pela plataforma BidPro Brasil em ${emitido}. Uso restrito. Contém dados pessoais protegidos pela LGPD (Lei nº 13.709/2018) — tratar com confidencialidade.</div>
+<div class="noprint" style="margin-top:16px"><button onclick="window.print()" style="padding:8px 16px;font-size:13px;cursor:pointer">Imprimir / Salvar em PDF</button></div>
+</body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { setErro('Permita pop-ups para gerar o dossiê em PDF.'); return; }
+    w.document.write(html); w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch { /* usuário imprime pelo botão */ } }, 500);
+  };
+
   // Puxa o histórico do Resend p/ emails_log e recarrega o cliente aberto. É global
   // (não filtra por cliente — o Resend lista tudo), mas o efeito aparece na ficha.
   const importarResend = async () => {
@@ -373,6 +415,8 @@ export default function Cliente360() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <button onClick={gerarDossie} title="Gera o dossiê (aceites, indicações, saques, relatórios) para salvar em PDF"
+                style={{ padding: '8px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={14} /> Dossiê (PDF)</button>
               {email && <a href={`mailto:${email}`} style={{ padding: '8px 14px', background: '#0D63DB', color: 'white', borderRadius: 8, fontWeight: 700, fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}><Mail size={14} /> E-mail</a>}
               {waNum
                 ? <a href={`https://wa.me/${waNum}`} target="_blank" rel="noreferrer" style={{ padding: '8px 14px', background: '#25D366', color: 'white', borderRadius: 8, fontWeight: 700, fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}><MessageCircle size={14} /> WhatsApp</a>
@@ -392,6 +436,40 @@ export default function Cliente360() {
               </div>
             </div>
           )}
+
+          {/* Parceria & Financeiro — trilho jurídico (aceite do termo, indicações, saques) */}
+          {(() => {
+            const par = dados.parceria || {}, fin = dados.financeiro || {};
+            const brlv = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            return (
+              <div style={card}>
+                <div style={{ ...label, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Scale size={13} /> Parceria & financeiro (trilho jurídico)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8 }}>
+                  <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }}>ADESÃO AO PROGRAMA</div>
+                    <div style={{ fontSize: 12.5, color: '#334155', marginTop: 2 }}>{par.aceite_em ? `✓ em ${dataHoraBR(par.aceite_em)}` : 'não aderiu'}</div>
+                    {par.aceite_versao && <div style={{ fontSize: 10.5, color: '#94a3b8' }}>termo {par.aceite_versao}</div>}
+                  </div>
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>INDICAÇÕES</div>
+                    <div style={{ fontSize: 12.5, color: '#334155', marginTop: 2 }}>{par.diretos_total || 0} direto(s)</div>
+                    <div style={{ fontSize: 10.5, color: '#94a3b8' }}>indicado por: {par.indicado_por?.nome || '—'}</div>
+                  </div>
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 10.5, color: '#16a34a', fontWeight: 700 }}>SALDO</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#111', marginTop: 2 }}>{brlv(fin.saldo)}</div>
+                    <div style={{ fontSize: 10.5, color: '#94a3b8' }}>comissões: {brlv(fin.comissoes_total)}</div>
+                  </div>
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>LANÇAMENTOS</div>
+                    <div style={{ fontSize: 12.5, color: '#334155', marginTop: 2 }}>{(fin.lancamentos || []).length} registro(s)</div>
+                    <div style={{ fontSize: 10.5, color: '#94a3b8' }}>comissões e saques</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 8 }}>Use “Dossiê (PDF)” no topo para exportar o registro completo (aceites, indicações, saques, relatórios e atividade).</div>
+              </div>
+            );
+          })()}
 
           {/* Filtros salvos — o que o cliente monitora (características do imóvel que busca) */}
           <div style={card}>
