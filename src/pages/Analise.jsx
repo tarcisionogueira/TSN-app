@@ -165,6 +165,7 @@ export default function Analise() {
   const [analisesBloqueado, setAnalisesBloqueado] = useState(false);
   const [analisesUsadas, setAnalisesUsadas] = useState(0);
   const [analisesBonus, setAnalisesBonus] = useState(0);
+  const [upgrade, setUpgrade] = useState(null); // popup de compra: null | { tipo:'plano'|'cota', titulo }
   const limiteRole = limiteRelatorios(role, planoLegado);
 
   // Lê os contadores de cota do perfil (fonte da verdade). O CONSUMO da cota
@@ -1244,8 +1245,8 @@ export default function Analise() {
               : `📊 Análises este mês: ${analisesUsadas}/${limiteRole}`
           }</span>
           {analisesBloqueado && (
-            <button onClick={() => nav('/planos')} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
-              Ver planos
+            <button onClick={() => setUpgrade({ tipo:'cota', titulo:null })} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+              Fazer upgrade
             </button>
           )}
         </div>
@@ -1563,16 +1564,20 @@ export default function Analise() {
                     <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, flex:1 }}>{c.desc}</div>
                     <div style={{ display:'flex', gap:8 }}>
                       {c.planoBloqueado ? (
-                        <button onClick={()=>nav('/planos')}
+                        <button onClick={() => setUpgrade({ tipo:'plano', titulo:c.titulo })}
                           style={{ flex:1, padding:'10px', background:c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           <Lock size={14}/> Disponível no Investidor Pro
+                        </button>
+                      ) : c.block ? (
+                        <button onClick={() => setUpgrade({ tipo:'cota', titulo:c.titulo })}
+                          style={{ flex:1, padding:'10px', background:c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                          <Lock size={14}/> Limite atingido, fazer upgrade
                         </button>
                       ) : (
                         <button onClick={c.fn} disabled={travado}
                           style={{ flex:1, padding:'10px', background: travado?(c.preparando?'#d97706':'#cbd5e1'):c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: (travado && !c.preparando)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           {c.gerando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando...</>
                             : c.preparando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Preparando documentos…</>
-                            : c.block ? <><Lock size={14}/> Limite atingido</>
                             : c.seqBloqueado ? <><Lock size={14}/> Gere o 1º antes</>
                             : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}
                         </button>
@@ -3261,7 +3266,7 @@ export default function Analise() {
             Arrematar em leilão é uma <strong>operação de risco</strong> e deve ser conduzida de forma profissional. A viabilidade financeira sozinha não basta: gere também a <strong>Análise Documental + Jurídica</strong> (ônus, gravames, ocupação e processo) antes de dar o lance.
           </div>
           {ROLES_SEM_DOCUMENTAL.includes(role) ? (
-            <button onClick={()=>nav('/planos')} style={{ padding:'11px 18px', background:'#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+            <button onClick={() => setUpgrade({ tipo:'plano', titulo:'Análise Documental + Jurídica' })} style={{ padding:'11px 18px', background:'#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
               <Lock size={15}/> Análise Documental, disponível no Investidor Pro
             </button>
           ) : (
@@ -3281,6 +3286,58 @@ export default function Analise() {
 
         </div>{/* fim central */}
       </div>{/* fim grid 2 colunas */}
+
+      {/* Popup de compra (passo 5): upgrade para o Investidor Pro quando o cliente esbarra
+          num relatório bloqueado por plano ou por cota. Abre no lugar, sem tirar o cliente da
+          análise. O CTA usa o fluxo de assinatura existente (/planos); quando o checkout do
+          passo 7 estiver pronto, é só repontar aqui. */}
+      {upgrade && (
+        <div onClick={() => setUpgrade(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'white', borderRadius:18, width:'100%', maxWidth:440, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ background:'linear-gradient(135deg,#0D63DB,#084BA6)', padding:'22px 24px', color:'white' }}>
+              <div style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.18)', borderRadius:20, padding:'4px 12px', fontSize:11, fontWeight:800, letterSpacing:0.5, textTransform:'uppercase' }}>
+                <Sparkles size={13}/> Investidor Pro
+              </div>
+              <div style={{ fontSize:20, fontWeight:900, marginTop:12, lineHeight:1.2 }}>
+                {upgrade.tipo === 'cota' ? 'Você usou suas análises do mês' : 'Desbloqueie a análise completa'}
+              </div>
+              <div style={{ fontSize:13, opacity:0.92, marginTop:6, lineHeight:1.55 }}>
+                {upgrade.tipo === 'cota'
+                  ? `Você atingiu o limite de ${limiteRole} análises mensais. Assine o Investidor Pro e continue analisando com folga.`
+                  : `${upgrade.titulo ? `"${upgrade.titulo}" faz parte do ` : 'Faz parte do '}Investidor Pro: a leitura jurídica e o parecer final que decidem o lance com segurança.`}
+              </div>
+            </div>
+            <div style={{ padding:'20px 24px' }}>
+              <div style={{ fontSize:12, fontWeight:800, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5, marginBottom:10 }}>O que você desbloqueia</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {[
+                  ['⚖️','Análise Documental + Jurídica','Edital e matrícula lidos (ônus, gravames, ocupação) mais o processo no CNJ e as certidões.'],
+                  ['🏆','Laudo de Viabilidade (Parecer Final)','O veredito de defesa que cruza mercado e jurídico, com o resumo da operação.'],
+                  ['📊','Mais análises por mês','Volume de relatórios mercadológicos folgado para investir sem travar.'],
+                ].map(([ic,t,ds],i) => (
+                  <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                    <span style={{ fontSize:18, flexShrink:0 }}>{ic}</span>
+                    <div>
+                      <div style={{ fontSize:13.5, fontWeight:800, color:'#111' }}>{t}</div>
+                      <div style={{ fontSize:12, color:'#64748b', lineHeight:1.5 }}>{ds}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => { setUpgrade(null); nav('/planos'); }}
+                style={{ width:'100%', marginTop:18, padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:15, cursor:'pointer' }}>
+                Assinar o Investidor Pro →
+              </button>
+              <button onClick={() => setUpgrade(null)}
+                style={{ width:'100%', marginTop:8, padding:'10px', background:'none', color:'#94a3b8', border:'none', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                Agora não
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
     </div>
