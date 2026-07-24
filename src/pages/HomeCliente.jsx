@@ -10,8 +10,8 @@ const PLANO_INFO = {
   // Admin/equipe entram pela home normal (o admin, desde o fim do redirect forçado) — sem o
   // fallback "Explorador 3/3". limite null = ilimitado (esconde o contador "X de Y").
   admin:             { nome: 'Administrador',        limite: null, cor: '#0D63DB', indica: true  },
-  analista:          { nome: 'Analista',             limite: null, cor: '#0D63DB', indica: false },
-  advogado:          { nome: 'Jurídico',             limite: null, cor: '#0D63DB', indica: false },
+  analista:          { nome: 'Analista',             limite: null, cor: '#0D63DB', indica: true  },
+  advogado:          { nome: 'Jurídico',             limite: null, cor: '#0D63DB', indica: true  },
   consultor:         { nome: 'Consultor',            limite: null, cor: '#0D63DB', indica: true  },
   explorador:        { nome: 'Explorador',           limite: 3,  cor: '#0D63DB', indica: true  },
   top2:              { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
@@ -190,7 +190,7 @@ export default function HomeCliente() {
             {ehPagoCliente ? (
               <>Indique investidores para a BidPro e <strong>ganhe indicando</strong>: quando alguém da sua rede assina um plano, você é recompensado — enquanto sua assinatura estiver ativa.</>
             ) : (
-              <>Convide investidores para a BidPro e <strong>ganhe indicando</strong>. Quando alguém assina um plano pela sua indicação, <strong>você é recompensado</strong>.</>
+              <>Convide investidores para a BidPro — <strong>todos podem convidar</strong>. Suas indicações já ficam vinculadas a você; para <strong>receber as comissões</strong>, é preciso ter uma <strong>assinatura ativa</strong>.</>
             )}
           </div>
 
