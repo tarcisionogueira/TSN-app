@@ -9,17 +9,17 @@ import TriagemPerfil from '../components/TriagemPerfil';
 const PLANO_INFO = {
   // Admin/equipe entram pela home normal (o admin, desde o fim do redirect forçado) — sem o
   // fallback "Explorador 3/3". limite null = ilimitado (esconde o contador "X de Y").
-  admin:             { nome: 'Administrador',        limite: null, cor: '#7c3aed', indica: false },
-  analista:          { nome: 'Analista',             limite: null, cor: '#0d9488', indica: false },
-  advogado:          { nome: 'Jurídico',             limite: null, cor: '#0d9488', indica: false },
-  consultor:         { nome: 'Consultor',            limite: null, cor: '#d97706', indica: true  },
-  explorador:        { nome: 'Explorador',           limite: 3,  cor: '#64748b', indica: true  },
+  admin:             { nome: 'Administrador',        limite: null, cor: '#0D63DB', indica: true  },
+  analista:          { nome: 'Analista',             limite: null, cor: '#0D63DB', indica: false },
+  advogado:          { nome: 'Jurídico',             limite: null, cor: '#0D63DB', indica: false },
+  consultor:         { nome: 'Consultor',            limite: null, cor: '#0D63DB', indica: true  },
+  explorador:        { nome: 'Explorador',           limite: 3,  cor: '#0D63DB', indica: true  },
   top2:              { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
   top2_anual:        { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
-  assessorado:       { nome: 'Assessorado',          limite: 10, cor: '#d97706', indica: false },
-  assessorado_anual: { nome: 'Assessorado',          limite: 10, cor: '#d97706', indica: false },
-  clube:             { nome: 'Membro Leilão Club',   limite: 10, cor: '#059669', indica: false },
-  clube_anual:       { nome: 'Membro Leilão Club',   limite: 10, cor: '#059669', indica: false },
+  assessorado:       { nome: 'Assessorado',          limite: 10, cor: '#0D63DB', indica: true  },
+  assessorado_anual: { nome: 'Assessorado',          limite: 10, cor: '#0D63DB', indica: true  },
+  clube:             { nome: 'Membro Leilão Club',   limite: 10, cor: '#0D63DB', indica: true  },
+  clube_anual:       { nome: 'Membro Leilão Club',   limite: 10, cor: '#0D63DB', indica: true  },
 };
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
@@ -119,8 +119,8 @@ export default function HomeCliente() {
       <TriagemPerfil userId={user?.id} />
       {/* Coluna principal */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
-        {/* Boas-vindas */}
-        <div style={{ background: `linear-gradient(135deg, ${info.cor}, ${info.cor}dd)`, borderRadius: 18, padding: '26px 26px', color: 'white' }}>
+        {/* Boas-vindas — gradiente da marca (azul), consistente com o header e os planos */}
+        <div style={{ background: 'linear-gradient(135deg, #0D63DB 0%, #084BA6 100%)', borderRadius: 18, padding: '26px 26px', color: 'white', boxShadow: '0 8px 24px rgba(13,99,219,0.18)' }}>
           <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Bem-vindo, {info.nome}</div>
           <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.15 }}>Olá, {primeiroNome}! 👋</div>
           {restantes != null && (
