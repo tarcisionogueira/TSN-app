@@ -933,8 +933,12 @@ export default function Analise() {
       setDocMsg(r.motivo || 'Anexe a matrícula e o edital (PDF) para gerar a análise documental.');
       setRelSel('documental');
       // Leiloeiro integrado baixando os documentos → re-gera sozinho (até ~2 min).
-      // A captura foi disparada na hora pelo servidor; só esperamos ela chegar.
-      if (r.emCaptura && capturaPollRef.current.n < 5) {
+      // SÓ faz o poll quando a captura é REAL (emCaptura) E a linha é RECENTE (dentro da
+      // janela de captura ~3 min). Sem a trava de frescor, reabrir um relatório ANTIGO
+      // preso em "precisaDocumentos" reiniciava o loop de 5 regerações a cada visita
+      // (custo de IA à toa + spinner infinito). Linha antiga → mostra direto o anexo manual.
+      const fresco = docEntry.updatedAt && (Date.now() - new Date(docEntry.updatedAt).getTime() < 3 * 60 * 1000);
+      if (r.emCaptura && fresco && capturaPollRef.current.n < 5) {
         capturaPollRef.current.n += 1;
         setPreparandoDocs(true);
         showMsg('Preparando os documentos… a análise sai sozinha em cerca de 1 minuto.');
@@ -943,7 +947,7 @@ export default function Analise() {
       } else {
         setPreparandoDocs(false);
         capturaPollRef.current.n = 0;
-        showMsg('Anexe a matrícula e o edital para gerar a análise.', 'error');
+        showMsg(r.motivo || 'Anexe a matrícula e o edital para gerar a análise.', 'error');
       }
       return;
     }

@@ -10,7 +10,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
-import { capturarDocsLoginOnDemand } from './_leiloeiro-auth.js';
+import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude } from './_uso.js';
 import { buscarProcessosCNJ } from './_cnj.js';
@@ -497,7 +497,7 @@ export default async function handler(req, res) {
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
   try {
-    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,area_m2,valor_avaliacao&limit=1`)).json();
+    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,area_m2,valor_avaliacao,matricula_checada_em&limit=1`)).json();
     row = r || null;
   } catch { /* segue com o que veio no body */ }
 
@@ -676,19 +676,27 @@ export default async function handler(req, res) {
           await dispararCaptura('captura-documentos.yml'); // dispara agora
         } catch { /* segue com a mensagem */ }
       }
+      const faltandoInicial = faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital'];
       const nomeDoc = (t) => t === 'matricula' ? 'a matrícula' : t === 'regras_venda' ? 'as regras da venda' : 'o edital';
-      const faltaTxt = (faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital']).map(nomeDoc).join(' e ');
+      const faltaTxt = faltandoInicial.map(nomeDoc).join(' e ');
       const jaTemTxt = lidos.length ? `Já temos ${lidos.map(l => l.rotulo).join(', ')}. ` : '';
+      // Matrícula login-gated (ZUK/GRUPOLANCE) ou já negative-cached → NÃO promete "sai
+      // sozinha" (a captura genérica pula essas fontes e não há re-disparo do laudo).
+      const matriculaNaoAutoResolve = faltandoInicial.includes('matricula') && !ehCaixaFonte
+        && (temLoginParaFonte(row?.fonte) || !!row?.matricula_checada_em);
+      const emCaptura = enfileirado && !matriculaNaoAutoResolve;
       const semDocs = {
         precisaDocumentos: true,
-        integrado: ehCaixaFonte || temPaginaLote,
-        emCaptura: enfileirado,
-        faltando: faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital'],
+        integrado: (ehCaixaFonte || temPaginaLote) && !matriculaNaoAutoResolve,
+        emCaptura,
+        faltando: faltandoInicial,
         paginaLeiloeiro: [row?.link_edital, row?.link_regras_venda].find(u => /^https?:\/\//i.test(u || '')) || null,
         documentosLidos: lidos.map(l => ({ rotulo: l.rotulo, tipo: tipoLido(l) })),
-        motivo: enfileirado
+        motivo: emCaptura
           ? `A análise jurídica exige a matrícula e o edital. ${jaTemTxt}Estamos baixando ${faltaTxt} automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''} (leiloeiro integrado): leva cerca de 1 minuto e a análise é gerada sozinha assim que chegar. Se preferir na hora, anexe ${faltaTxt} (PDF).`
-          : `A análise jurídica exige a matrícula e o edital. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
+          : matriculaNaoAutoResolve
+            ? `Este leiloeiro não publica a matrícula on-line (ela sai por acesso restrito). ${jaTemTxt}Anexe ${faltaTxt} (PDF) — que você baixa na página do lote/leiloeiro — para gerar a análise agora.`
+            : `A análise jurídica exige a matrícula e o edital. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
       };
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs });
       if (cota && cota.ok && cota.tipo) {
@@ -1094,19 +1102,29 @@ export default async function handler(req, res) {
           await dispararCaptura('captura-documentos.yml');
         } catch { /* segue com a mensagem */ }
       }
+      // A matrícula NÃO chega sozinha por aqui quando é login-gated (ZUK/GRUPOLANCE — a
+      // captura genérica dispara mas PULA essas fontes) OU já foi negative-cached (checamos e
+      // a fonte não publica). Sem re-disparo do laudo, prometer "sai sozinha" trava o usuário
+      // no "Preparando os documentos…" para sempre. Nesses casos: mensagem HONESTA + anexo
+      // manual (que funciona na hora). Caixa segue com captura automática (pipeline próprio).
+      const matriculaNaoAutoResolve = faltando.includes('matricula') && !ehCaixaFonte
+        && (temLoginParaFonte(row?.fonte) || !!row?.matricula_checada_em);
+      const emCaptura = enfileirado && !matriculaNaoAutoResolve;
       const nomeDoc = (t) => t === 'matricula' ? 'a matrícula' : t === 'regras_venda' ? 'as regras da venda' : 'o edital';
       const faltaTxt = faltando.map(nomeDoc).join(' e ');
       const jaTemTxt = lidos.length ? `Já lemos ${lidos.map(l => l.rotulo).join(', ')}. ` : '';
       const semDocs = {
         precisaDocumentos: true,
-        integrado: ehCaixaFonte || temPaginaLote,
-        emCaptura: enfileirado,
+        integrado: (ehCaixaFonte || temPaginaLote) && !matriculaNaoAutoResolve,
+        emCaptura,
         faltando,
         paginaLeiloeiro,
         documentosLidos: lidos.map(l => ({ rotulo: l.rotulo, tipo: tipoLido(l) })),
-        motivo: enfileirado
+        motivo: emCaptura
           ? `A análise jurídica só é gerada com a matrícula e o edital lidos. ${jaTemTxt}Estamos obtendo ${faltaTxt} automaticamente${ehCaixaFonte ? ' direto da Caixa' : ''}: leva cerca de 1 minuto e a análise sai sozinha quando chegar. Se preferir na hora, anexe ${faltaTxt} (PDF).`
-          : `A análise jurídica só é gerada com a matrícula e o edital lidos. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
+          : matriculaNaoAutoResolve
+            ? `Este leiloeiro não publica a matrícula on-line (ela sai por acesso restrito). ${jaTemTxt}Anexe ${faltaTxt} (PDF) — que você baixa na página do lote/leiloeiro — para gerar a análise agora.`
+            : `A análise jurídica só é gerada com a matrícula e o edital lidos. ${jaTemTxt}Anexe ${faltaTxt} (PDF) para gerar a análise.`,
       };
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs });
       if (cota && cota.ok && cota.tipo) {
