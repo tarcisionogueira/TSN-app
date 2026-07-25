@@ -42,7 +42,7 @@
 4. **Cliente 360 — documental/laudo agora instrumentados.** Só `relatorio_mercado_ok` era logado → falhas de documental/laudo ficavam invisíveis no Cliente 360. Adicionei `logAtividade` em `gerar-documental` (ok/faltam_docs/erro) e `gerar-laudo-viabilidade` (ok/erro).
 5. **Retenção — guarda de leilão futuro no ramo sem_data (`retencao_analises_guard_semdata.sql`, aplicada).** O ramo que apaga análises com `data_leilao=null` > 60d não tinha a guarda de "imóvel ativo com leilão futuro" (o documental grava data_leilao=null com frequência) → podia apagar relatório de leilão futuro. Adicionada a mesma guarda dos outros ramos.
 
-> ⚠️ **Para o dono:** essas correções valem em produção **após merge na `main` + deploy**. Depois do deploy, o `regenerar-relatorios-cron` re-roda os documentais "faltando" e (com o Fix A + leitura correta) emite/preserva o parecer. Se quiser, eu forço a regeração dos 2 ativos (MEGA/GRUPOLANCE) e confiro.
+> ✅ **DEPLOYADO + CONFIRMADO EM PRODUÇÃO (25/07):** merge na `main` (`0f369f6`) → deploy Vercel READY. Regeração forçada (workflow `testar-analise-amostras.yml`, admin) + enricher CEF (`enriquecer-datas-cef.yml`). **Resultados:** MEGA Itaboraí → parecer 12.584 chars, `faltando=[]`; GRUPOLANCE Rio Claro → parecer 13.838 chars, `faltando=[]` (os 2 ativos que davam "faltam documentos" com doc no bucket, resolvidos); **2ª praça capturada em 93 imóveis CEF** (ex.: ALPHAVIEW Barueri 550k→**330k**, 07/08, 40% off — exatamente o print do dono); Cliente 360 logando `relatorio_documental_ok`. Os inativos/leilão-passado seguem "faltam documentos" (correto). Enricher CEF cobre o resto do acervo nas próximas rodadas (hora em hora).
 
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
