@@ -178,3 +178,91 @@ de config, EXECUTE revogado de anon/authenticated) — estrutura **não divulgad
 - **Saque do cliente-parceiro:** a view `saldo_usuarios` (base do saque) hoje cobre só a equipe
   operacional; pagar comissão/pool a clientes pagantes exige estender esse caminho (pendência do
   MLM inteiro, não só dos ranks).
+
+---
+
+## 12. ATUALIZAÇÃO 25/07 — HIERARQUIA + QUALIFICAÇÃO (modelagem do Clube Conselheiro)
+> Pedido do dono: modelar a **hierarquia/classificação** com base no **plano de negócios do Clube
+> Conselheiro** (Drive: *4-Plano-de-negcios-Clube-Conselheiro* + *Manual de Procedimentos*) e validar
+> a **saúde financeira**. Problema levantado pelo dono: *"do jeito que está, qualquer um ganha só
+> assinando — não é assim que funciona o multinível."* **CORRETO** — hoje `distribuir_comissao_rede`
+> paga os 10 níveis a qualquer upline pagante **em dia**, sem exigir rede própria ativa. Falta a
+> **qualificação por construção de rede** (o que o Conselheiro chama de graduação).
+
+### 12.1 O que o Clube Conselheiro ensina (mapeado p/ o BidPro)
+| Conselheiro | Papel/mecânica | Equivalente no BidPro |
+|---|---|---|
+| **Associado** (compra carteirinha, usa descontos) | consumidor | **Explorador** (grátis) / **Investidor Pro** (assinante) |
+| **CACC** (aceita, indica, ganha 20–25% direto) | vendedor direto | **Parceiro** (aceitou o programa + link) |
+| **LiFE** (comprou Kit, forma equipe, ganha multinível) | líder de equipe | **Parceiro pagante em dia** (destrava profundidade) |
+| **Graduações** Bronze→Prata→Ouro→Esmeralda→Rubi→Diamante | rank por rede DIRETA ativa | **6 faixas** (`comissao_ranks`) renomeadas |
+| **Regra-chave:** só ganha (direto OU multinível) quem tem **≥1 indicado válido pagante ativo** | qualificação mínima | **Piso de entrada** (r1 exige ≥1 direto pagante) |
+| **Bônus multinível por graduação** (Bronze paga 1 nível, Prata 2, … Rubi 5–6) | profundidade por rank | **`max_nivel` por rank** (novo) |
+| Bônus Diamante infinito · prêmios não-dinheiro (PIN/carro/viagem) | reconhecimento | Pool 2% + reconhecimento (fase 2) |
+
+**A lição central do Conselheiro (e a defesa jurídica dele):** *"a base que sustenta a formação de
+equipes é a comercialização de produtos/serviços… e não a simples comercialização de Kits, que leva
+a pirâmides fraudulentas e ilegais."* → **paga-se sobre PRODUÇÃO da rede, e só destrava profundidade
+quem construiu rede ativa.** É isso que falta hoje.
+
+### 12.2 A organização proposta — RANK GOVERNA A PROFUNDIDADE (o "conserto")
+Hoje: assina + fica em dia → recebe os 10 níveis. **Proposto:** assina → recebe **N1** (o direto);
+para receber **fundo** (N3…N10, a cauda) é preciso **subir de rank construindo rede DIRETA ativa**.
+O rank de cada parceiro define **até que nível ele PESSOALMENTE recebe** (`max_nivel`).
+
+| Ordem | rank_key | **Nome** (linha história+liderança) | Diretos pagantes ativos | Rede paga total | **Recebe até** | Pool peso |
+|---|---|---|--:|--:|:--:|--:|
+| 1 | r1 | **Pioneiro** | 1 | 1 | **N1–N2** | 0 |
+| 2 | r2 | **Fundador** | 3 | 5 | **N1–N4** | 1 |
+| 3 | r3 | **Mestre** | 5 | 15 | **N1–N6** | 2 |
+| 4 | r4 | **Mentor** | 8 | 40 | **N1–N8** | 4 |
+| 5 | r5 | **Embaixador** | 15 | 120 | **N1–N10** | 8 |
+| 6 | r6 | **Lenda** | 30 | 350 | **N1–N10** (+ destaque no pool) | 16 |
+
+- **Piso de entrada (anti-"só assinei"):** sem **≥1 indicado direto pagante ativo**, o parceiro **não
+  atinge nem o r1** → não recebe comissão de rede (fiel ao Conselheiro). *Alternativa mais suave a
+  decidir: 1 direto mesmo grátis destrava N1.*
+- **Compressão dinâmica preservada:** quem está fora de dia é pulado (já existe). **Novo:** quem está
+  em dia mas **sem rank para aquela profundidade não recebe aquele nível** — a fatia **fica com a
+  empresa** (mais seguro) — ou, se o dono preferir, **sobe** para o próximo upline qualificado (roll-up).
+- **Sobe na hora, cai só após carência** (2 meses) — já implementado em `recalcular_ranks()`.
+
+### 12.3 Como distribui (multinível, com qualificação)
+A cada pagamento elegível, `distribuir_comissao_rede` sobe a árvore `indicado_por`:
+1. upline **pagante + aceitou + em dia na data** (já hoje) **E** `nivel <= max_nivel(rank(upline))` (novo);
+2. paga `comissao_regras.pct` daquele nível; senão, **pula** (empresa retém — ou roll-up, se ligado);
+3. teto por trilho preservado (nunca paga mais que o total do trilho).
+Pool de 2% (`distribuir_pool_rank`) mensal por `pool_peso` — **inalterado**, FECHADO.
+
+### 12.4 VALIDAÇÃO DE SAÚDE FINANCEIRA
+Margens: assinatura Investidor Pro (R$ 49,90 hoje → **R$ 89,90** em 01/10) tem **~70–80% de margem
+bruta** (COGS ~R$ 9–29); produto digital ~90%; honorário/recarga **NÃO comissionam**.
+
+**(a) Exposição máxima por trilho (pior caso — rede cheia, todos qualificados):**
+| Trilho | Rede (N1–N10) | Pool | **Máx.** | Margem sobra (R$ 89,90) |
+|---|--:|--:|--:|---|
+| Assinatura | 18,5% | +2% | **20,5%** | 89,90 − 16,63 − 1,80 − COGS(~20) ≈ **R$ 51 (57%)** ✅ |
+| Produto | 32,5% | — | **32,5%** | margem ~90% → sobra **~57%** ✅ |
+| Venda direta | 19,5% | — | **19,5%** | % sobre a **receita do BidPro** na venda (não sobre o imóvel) ✅ |
+
+**(b) Por que o rank-gate torna TUDO mais seguro que hoje:** a cauda N3–N10 da assinatura
+(2+1+1+0,5×5 = **6,5%**) só é paga quando existem **construtores qualificados** na cadeia. Um
+assinante que não constrói recebe **só N1 (8%)**. Logo o pagamento **esperado < 18,5% sempre**, e a
+profundidade cara só "liga" com produção real de rede. **É estritamente MENOS custo que o modelo atual.**
+
+**(c) Anti-recursão / anti-pirâmide:** a soma dos níveis por trilho é **fixa e limitada** (guard
+`v_max`); o pool é **2% fechado**. Nenhum pagamento excede ~20,5% (assin.) / 32,5% (prod.). E, por
+pagar só sobre produção da rede + exigir rede ativa própria, o modelo segue **venda direta legítima**
+(a defesa do próprio Conselheiro), não captação por recrutamento.
+
+**Veredito:** modelo **saudável e sustentável**; o rank-gate **reduz** o custo esperado vs. hoje e
+alinha pagamento a mérito de construção. ✅
+
+### 12.5 Implementação (a fazer, quando o dono aprovar nome + piso)
+1. Migração: `alter table comissao_ranks add column max_nivel int`; `update` nas 6 faixas com
+   nome + `min_diretos_pagantes` (r1: 0→1) + `max_nivel` (2/4/6/8/10/10).
+2. `distribuir_comissao_rede`: gate `v_nivel <= max_nivel(rank(v_cur))` (rank calculado on-the-fly ou
+   lido de `perfis.rank_key`, atualizado por `recalcular_ranks` mensal). Base **vazia hoje**
+   (0 uplines) → migração de risco ~zero.
+3. Front (fase 2): mostrar rank + progresso ("faltam X diretos para Fundador") na aba Parceiros/Minha Rede.
+4. Cron mensal: `recalcular_ranks()` + `distribuir_pool_rank()` (go-live do pool).
