@@ -30,18 +30,25 @@ function sb(path, opts = {}) {
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) return res.status(401).send('Unauthorized');
 
-  const fila = await (await sb(`imoveis_leilao?select=id,latitude,longitude&proximidades_em=is.null&latitude=not.is.null&latitude=neq.0&ativo=eq.true&order=atualizado_em.desc&limit=${LOTE}`)).json();
+  // Fila: sem pontos ainda E com menos de MAX_TENT falhas (não exclui para sempre por
+  // uma falha transitória do Overpass — ver migration proximidades_tentativas_retry).
+  const MAX_TENT = 5;
+  const fila = await (await sb(`imoveis_leilao?select=id,latitude,longitude,proximidades_tentativas&proximidades_em=is.null&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&order=proximidades_tentativas.asc,atualizado_em.desc&limit=${LOTE}`)).json();
   let ok = 0, falhas = 0;
   for (const im of (Array.isArray(fila) ? fila : [])) {
     try {
       const pontos = await consultarProximidades(Number(im.latitude), Number(im.longitude));
+      // Sucesso (inclusive vazio {} = "sem POIs por perto", resultado válido): grava e
+      // sai da fila via proximidades_em.
       await sb(`imoveis_leilao?id=eq.${im.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString() }) });
       ok++;
     } catch (_) {
-      // marca a tentativa para não travar a fila (tenta de novo no próximo ciclo só se quiser)
+      // FALHA real (Overpass fora/limite): NÃO marca proximidades_em — só incrementa o
+      // contador, para ser re-tentado no próximo ciclo até MAX_TENT. Sem isto, uma falha
+      // transitória excluía o imóvel da fila para sempre.
       await sb(`imoveis_leilao?id=eq.${im.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ proximidades_em: new Date().toISOString() }) }).catch(() => {});
+        body: JSON.stringify({ proximidades_tentativas: (Number(im.proximidades_tentativas) || 0) + 1 }) }).catch(() => {});
       falhas++;
     }
   }

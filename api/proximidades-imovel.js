@@ -49,6 +49,9 @@ export default async function handler(req) {
       body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString() }) });
     return json({ pontos });
   } catch (e) {
-    return json({ pontos: null, erro: String(e?.message || e) }, 200);
+    // Falha REAL (Overpass fora/limite em todos os espelhos) → status de ERRO, não
+    // 200 com null. Assim o cliente distingue "sem pontos por perto" de "não deu p/
+    // buscar agora" e mostra "tentar novamente" em vez de ficar em branco.
+    return json({ pontos: null, erro: String(e?.message || e), retryable: true }, 502);
   }
 }

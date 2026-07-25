@@ -691,6 +691,8 @@ export default function ImovelDetalhe() {
   const [loading, setLoading] = useState(!loc.state?.imovel);
   const [imgIdx, setImgIdx] = useState(0); // índice do candidato de foto atual (fallback em cascata)
   const [compartilhado, setCompartilhado] = useState(false); // feedback "link copiado"
+  const [proxStatus, setProxStatus] = useState('idle'); // idle|loading|ok|empty|error — pontos próximos
+  const [proxTry, setProxTry] = useState(0); // incrementa p/ "tentar novamente"
 
   const id = loc.state?.imovel?.id || paramId;
 
@@ -828,15 +830,34 @@ export default function ImovelDetalhe() {
   useEffect(() => {
     const la = imovel?.latitude ?? imovel?.lat, lo = imovel?.longitude ?? imovel?.lng;
     const temC = la != null && lo != null && !(Number(la) === 0 && Number(lo) === 0);
-    if (!imovel?.id || !temC || imovel.pontosProximos) return;
+    // Já veio com pontos (do banco) → nada a buscar.
+    if (imovel?.pontosProximos && Object.keys(imovel.pontosProximos).length) { setProxStatus('ok'); return; }
+    if (!imovel?.id || !temC) return;
     let cancel = false;
-    apiCall(`/api/proximidades-imovel?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
-      if (!cancel && d?.pontos && Object.keys(d.pontos).length) {
-        setImovel(prev => prev ? { ...prev, pontosProximos: d.pontos } : prev);
+    setProxStatus('loading');
+    // ANTES: fetch sem checar res.ok, .catch(()=>{}) engolia tudo, e o backend
+    // devolvia 200 com pontos:null em falha → a UI ficava eternamente em branco
+    // ("não carrega nem após 1 min"). Agora há timeout, checagem de status e estados
+    // explícitos (loading/empty/error) com "tentar novamente".
+    (async () => {
+      try {
+        const r = await apiCall(`/api/proximidades-imovel?imovel_id=${imovel.id}`, { signal: AbortSignal.timeout(35000) });
+        if (!r.ok) throw new Error('http_' + r.status);
+        const d = await r.json();
+        const pontos = (d && d.pontos && typeof d.pontos === 'object') ? d.pontos : null;
+        if (cancel) return;
+        if (pontos && Object.keys(pontos).length) {
+          setImovel(prev => prev ? { ...prev, pontosProximos: pontos } : prev);
+          setProxStatus('ok');
+        } else {
+          setProxStatus('empty'); // resposta válida e vazia (sem POIs mapeados por perto)
+        }
+      } catch {
+        if (!cancel) setProxStatus('error'); // falha/timeout → botão "tentar novamente"
       }
-    }).catch(() => {});
+    })();
     return () => { cancel = true; };
-  }, [imovel?.id, imovel?.pontosProximos]);
+  }, [imovel?.id, imovel?.latitude, imovel?.longitude, imovel?.lat, imovel?.lng, proxTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Documentos do imóvel (matrícula/edital/regra) capturados/anexados — clientes
   // logados podem ver e baixar (RLS libera esses tipos).
@@ -1100,6 +1121,26 @@ export default function ImovelDetalhe() {
                           </span>
                         );
                       })}
+                    </div>
+                  )}
+                  {/* Estados explícitos dos pontos próximos (nunca mais "gira p/ sempre") */}
+                  {temCoord && proxStatus === 'loading' && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <Clock size={13} /> Buscando pontos de interesse próximos…
+                    </div>
+                  )}
+                  {temCoord && proxStatus === 'empty' && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>
+                      Nenhum ponto de interesse mapeado nas proximidades.
+                    </div>
+                  )}
+                  {temCoord && proxStatus === 'error' && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      Não foi possível carregar os pontos próximos agora.
+                      <button onClick={() => setProxTry(t => t + 1)}
+                        style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                        Tentar novamente
+                      </button>
                     </div>
                   )}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>

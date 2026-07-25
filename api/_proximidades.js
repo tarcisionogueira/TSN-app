@@ -2,7 +2,14 @@
  * Helper de proximidades via OpenStreetMap/Overpass (grátis).
  * Reusado pelo cron (enriquecer-proximidades) e pelo on-demand (proximidades-imovel).
  */
-const OVERPASS = 'https://overpass-api.de/api/interpreter';
+// Instâncias públicas do Overpass, em ordem. A primeira costuma limitar (429) nos
+// horários de pico; sem espelho, um 429 zerava os pontos próximos da tela inteira.
+// Tentamos as demais antes de desistir.
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
 const RAIO = 4000; // metros
 
 // Categorias → tags OSM. Chaves iguais às usadas na UI (CATS_PROX).
@@ -31,14 +38,23 @@ function classifica(tags) {
 export async function consultarProximidades(lat, lng) {
   const blocos = CATEGORIAS.flatMap(c => c.tags.map(([k, v]) => `nwr["${k}"="${v}"](around:${RAIO},${lat},${lng});`)).join('');
   const query = `[out:json][timeout:25];(${blocos});out center tags;`;
-  const res = await fetch(OVERPASS, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'data=' + encodeURIComponent(query),
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!res.ok) throw new Error(`overpass ${res.status}`);
-  const data = await res.json();
+  // Tenta cada espelho em sequência; só lança se TODOS falharem (aí o chamador
+  // responde com erro/retry, não com "vazio").
+  let data = null, ultimoErro = 'sem resposta';
+  for (const endpoint of OVERPASS_MIRRORS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) { ultimoErro = `overpass ${res.status}`; continue; }
+      data = await res.json();
+      break;
+    } catch (e) { ultimoErro = String(e?.message || e); }
+  }
+  if (!data) throw new Error(ultimoErro);
   const melhores = {};
   for (const el of (data.elements || [])) {
     const plat = el.lat ?? el.center?.lat, plng = el.lon ?? el.center?.lon;
