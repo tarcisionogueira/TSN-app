@@ -145,6 +145,15 @@
 - **Chargeback (`api/_webhook-core.js` `estornarComissao`):** já revertia todos os níveis com lançamento NEGATIVO (fica negativo se já sacado → **abate no pagamento seguinte**) e cancelava as `comissoes`. Agora **sinaliza o cliente**: busca `comissoes.cliente_id → perfis.nome` e grava a descrição do estorno como "Estorno de comissão — CHARGEBACK do cliente {nome} (gateway); descontado do saldo/pagamento seguinte", e a `comissoes.referencia` como "Cancelada por chargeback do cliente {nome}". Param `motivo` ('chargeback'|'reembolso'); chamada em `processarChargeback` passa 'chargeback'. Idempotência mantida.
 - **Regra final consolidada:** vínculo do indicado é permanente; comissão é DEVIDA por cobrança se o upline está em dia naquela data (senão sobe p/ o próximo elegível); o acumulado é sempre sacável; chargeback estorna e desconta no seguinte, identificando o cliente no relatório.
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 19: tela "Minha Rede" do parceiro (LGPD) + aposenta Consultor)
+> Deploy `main` · migração via MCP. Pedido do dono: aba de Parceiro no menu (após o aceite) com o link + nº de indicados + a ÁRVORE da rede (quem virou parceiro e a rede abaixo), SEM telefone/e-mail/contato (LGPD); admin também vê. E aposentar o Consultor (o MLM o substitui).
+
+- **RPC `minha_rede(p_root)` (SECURITY DEFINER, LGPD-safe):** devolve SÓ a sub-árvore do chamador (recursiva por `indicado_por`, até 10 níveis) com **apenas** id, parent_id, nível, **nome**, **cidade/UF**, `parceiro` (bool) e nº de indicados. **Nenhum dado de contato sai do banco.** Não-admin fica travado na própria raiz; admin passa `p_root` para ver a de qualquer parceiro. Helper `cidade_uf_publica(endereco)` extrai só "Cidade - UF" (descarta rua/número/CEP) — testado. EXECUTE só p/ authenticated.
+- **Página `src/pages/MinhaRede.jsx`:** cabeçalho/apresentação, link de indicação (mesmo formato da home) + copiar, números (diretos · rede total · viraram parceiros), árvore expandível por nível (nome + cidade + selo PARCEIRO), busca admin para ver a rede de outro. Aviso LGPD explícito. Rota `/minha-rede` (autenticado).
+- **Menu (`Header.jsx`):** item "Minha Rede" + "Comissões" no menu do usuário (desktop e mobile) **só quando `parceiro_aceite_em` está setado** (ou admin) — busca o aceite uma vez.
+- **`/comissoes` liberado:** antes era `roles=['admin','consultor','analista','advogado']` (parceiro pagante comum NÃO via as próprias comissões/PIX). Agora é autenticado (a página/‌API são escopadas ao user.id) — necessário para o MLM.
+- **Consultor APOSENTADO:** rota `/consultor` → **redireciona para `/minha-rede`**; botão "🤝 Comercial" removido do menu (desktop+mobile). `/afiliado` segue ativo (papel distinto). **Pendente (seguro, à parte):** parar de EMITIR novos convites de consultor no Admin e decidir a migração de quem já é `role='consultor'` (não mexi no role p/ não quebrar RLS/comissões existentes).
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**

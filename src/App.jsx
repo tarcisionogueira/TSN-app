@@ -30,6 +30,7 @@ const Arrematados = lazy(() => import('./pages/Arrematados'));
 const HomeCliente = lazy(() => import('./pages/HomeCliente'));
 const Painel = lazy(() => import('./pages/Painel'));
 const Consultor = lazy(() => import('./pages/Consultor'));
+const MinhaRede = lazy(() => import('./pages/MinhaRede'));
 const AtivarVendedor = lazy(() => import('./pages/AtivarVendedor'));
 const Contratos = lazy(() => import('./pages/Contratos'));
 const Calculadora = lazy(() => import('./pages/Calculadora'));
@@ -282,8 +283,11 @@ function MainLayout() {
           <Route path="/painel" element={<PrivateRoute><Painel /></PrivateRoute>} />
           {/* Sem gate por papel: a capacidade de vender pode estar em qualquer papel
               (cliente pagante ou equipe). O componente autoriza por papel OU vendedor_tipo. */}
-          <Route path="/consultor" element={<PrivateRoute><Consultor /></PrivateRoute>} />
+          {/* Consultor APOSENTADO (o MLM/Programa de Parceiros o substitui): a rota redireciona
+              para Minha Rede. /afiliado segue ativo (papel profissional distinto). */}
+          <Route path="/consultor" element={<Navigate to="/minha-rede" replace />} />
           <Route path="/afiliado" element={<PrivateRoute><Consultor /></PrivateRoute>} />
+          <Route path="/minha-rede" element={<PrivateRoute><MinhaRede /></PrivateRoute>} />
           <Route path="/ativar-vendedor/:token" element={<AtivarVendedor />} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
           <Route path="/contratos/novo" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><CriarContrato /></PrivateRoute>} />
@@ -300,7 +304,9 @@ function MainLayout() {
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
           <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
           <Route path="/perfil" element={<PrivateRoute><Perfil /></PrivateRoute>} />
-          <Route path="/comissoes" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><Comissoes /></PrivateRoute>} />
+          {/* Comissões: qualquer usuário autenticado vê as PRÓPRIAS comissões/saldo/PIX (o
+              MLM abrange clientes pagantes, não só equipe). A página é escopada ao user.id. */}
+          <Route path="/comissoes" element={<PrivateRoute><Comissoes /></PrivateRoute>} />
           <Route path="/admin/chargebacks" element={<PrivateRoute roles={['admin']}><AdminChargebacks /></PrivateRoute>} />
           <Route path="/atendimento" element={<PrivateRoute roles={['analista','consultor','admin','advogado']}><Atendimento /></PrivateRoute>} />
           <Route path="/advogado" element={<PrivateRoute roles={['advogado','admin']}><AdvogadoPortal /></PrivateRoute>} />

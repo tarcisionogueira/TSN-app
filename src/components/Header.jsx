@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin, Network } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
@@ -150,6 +150,14 @@ export default function Header() {
       || window.navigator.standalone === true;
     setPodeInstalar(!standalone);
   }, []);
+  // "Minha Rede" só aparece no menu depois que o usuário ACEITA ser parceiro (ou é admin).
+  const [ehParceiro, setEhParceiro] = useState(false);
+  React.useEffect(() => {
+    if (!user?.id) { setEhParceiro(false); return; }
+    supabase.from('perfis').select('parceiro_aceite_em').eq('id', user.id).maybeSingle()
+      .then(({ data }) => setEhParceiro(!!data?.parceiro_aceite_em)).catch(() => {});
+  }, [user?.id]);
+  const mostrarRede = ehParceiro || effectiveRole === 'admin';
   const abrirInstalarApp = () => window.dispatchEvent(new Event('tsn:pwa-install'));
 
   const ROLES_CALC = ['explorador', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
@@ -259,12 +267,6 @@ export default function Header() {
             </button>
           )}
 
-          {effectiveRole === 'consultor' && (
-            <button onClick={() => nav('/consultor')}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/consultor') ? '#059669' : '#05966922', color: '#6ee7b7', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              🤝 Comercial
-            </button>
-          )}
 
           {effectiveRole === 'afiliado' && (
             <button onClick={() => nav('/afiliado')}
@@ -329,6 +331,7 @@ export default function Header() {
                     // de comissões fica a um clique dentro da aba Parceiros.
                     { path: '/perfil', label: 'Meu Perfil', icon: User },
                     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
+                    ...(mostrarRede ? [{ path: '/minha-rede', label: 'Minha Rede', icon: Network }, { path: '/comissoes', label: 'Comissões', icon: DollarSign }] : []),
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
                     { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
                   ].map(item => (
@@ -388,11 +391,17 @@ export default function Header() {
               🏛️ Leiloeiro Parceiro
             </button>
           )}
-          {effectiveRole === 'consultor' && (
-            <button onClick={() => { nav('/consultor'); setOpen(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#6ee7b7', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-              🤝 Comercial
-            </button>
+          {mostrarRede && (
+            <>
+              <button onClick={() => { nav('/minha-rede'); setOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+                <Network size={16} /> Minha Rede
+              </button>
+              <button onClick={() => { nav('/comissoes'); setOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+                <DollarSign size={16} /> Comissões
+              </button>
+            </>
           )}
           {effectiveRole === 'afiliado' && (
             <button onClick={() => { nav('/afiliado'); setOpen(false); }}
