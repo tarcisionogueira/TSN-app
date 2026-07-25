@@ -9,6 +9,15 @@
 // que bloqueiam hotlink por referer — o /api/img-proxy é bloqueado por alguns,
 // então vem por último). Retorna um array; o consumidor tenta o próximo no onError.
 export function fotoCandidatos({ foto, fonte, fonteId }) {
+  // TRAVA DE CREDIBILIDADE (GESTAOLEILOES / "Lance no Leilão"): a foto é nomeada pelo
+  // idLote (<idLote>_NN.jpg). Se o prefixo do arquivo não bate com o idLote deste
+  // imóvel, é foto de OUTRO lote (bug de fatiamento já corrigido na origem) → descarta
+  // e mostra placeholder em vez de confundir o cliente com o imóvel errado.
+  if (fonte === 'GESTAOLEILOES' && foto) {
+    const idLote = String(fonteId || '').replace(/^gestao_/, '');
+    const idArq = (String(foto).match(/\/(\d+)_[^/]*$/) || [])[1];
+    if (idLote && idArq && idArq !== idLote) foto = null;
+  }
   const isCef = fonte === 'CEF' || fonte === 'caixa';
   const caixaUrl = isCef && fonteId
     ? `https://venda-imoveis.caixa.gov.br/fotos/F${String(fonteId).replace(/^(caixa_|cef_)/, '')}21.jpg`
