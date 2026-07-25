@@ -137,15 +137,58 @@ async function salvarDocBucket(imovelId, tipo, rotulo, origemUrl, base64, dataLe
   } catch { /* cache best-effort */ }
 }
 
-// Salva o COMPROVANTE (tela/impressão) de uma consulta de certidão no bucket e
-// devolve uma URL assinada — dá para o cliente/analista ABRIR a prova, em vez de
-// só um "sim/não". O HTML NÃO é guardado no result (evita inflar o JSONB).
-async function salvarComprovante(imovelId, chave, html) {
+// Valida o nº de processo no padrão CNJ pelo DÍGITO VERIFICADOR (Res. CNJ 65/2008,
+// mód-97 ISO 7064). Anti-golpe: número forjado/digitado errado quase nunca fecha o DV.
+function cnjValido(numero) {
+  const d = String(numero || '').replace(/\D/g, '');
+  if (d.length !== 20) return false;
   try {
-    const s = String(html || '');
-    if (s.length < 200) return null;
-    const buffer = Buffer.from(s.slice(0, 2_000_000), 'utf8'); // teto 2MB
-    const storagePath = `comprovantes/${imovelId}/${Date.now()}_${String(chave).replace(/[^a-z0-9]/gi, '')}.html`;
+    const base = BigInt(d.slice(0, 7) + d.slice(9, 13) + d.slice(13, 20) + '00');
+    return (98n - (base % 97n)) === BigInt(d.slice(7, 9));
+  } catch { return false; }
+}
+
+// HTML → texto puro (sem <script>/<style>/tags): retrato SEGURO do que o portal
+// público devolveu, para embutir no comprovante sem executar nada.
+function textoDeHtml(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ').trim();
+}
+const escHtml = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Salva o COMPROVANTE de uma consulta pública e devolve uma URL assinada. ANTES
+// guardávamos o HTML CRU do portal (SPA/JSF com captcha) e o front injetava um <base>
+// no domínio do órgão para renderizar — o que fazia o portal RE-HIDRATAR AO VIVO e
+// mostrar a TELA DE DIGITAÇÃO em vez da prova. Agora geramos um comprovante PRÓPRIO da
+// BidPro: página estática, SEM script e SEM <base>, com o RESULTADO da consulta + um
+// retrato em texto do retorno do portal (transparência). meta = { chave, titulo,
+// portalUrl }; fonte = objeto da consulta (resumo/dados/comprovanteHtml).
+async function salvarComprovante(imovelId, meta, fonte) {
+  try {
+    const capturado = textoDeHtml(fonte?.comprovanteHtml || '').slice(0, 6000);
+    if (capturado.length < 40) return null; // shell vazio → nada a comprovar
+    const quando = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const resumo = fonte?.resumo || fonte?.situacao || 'Consulta realizada';
+    const alerta = /⚠️|positiv|encontrad|possui|constam?\b|indisponibil|protestad|d[ée]bito/i.test(resumo) && !/sem\s|nada\s+consta|n[ãa]o\s|negativa/i.test(resumo);
+    const cor = alerta ? '#b91c1c' : '#047857';
+    const titulo = meta?.titulo || 'Consulta pública';
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Comprovante — ${escHtml(titulo)}</title></head>`
+      + `<body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f1f5f9;color:#0f172a;"><div style="max-width:760px;margin:0 auto;padding:24px;">`
+      + `<div style="background:#0f2f6b;color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;"><div style="font-size:12px;opacity:.85;letter-spacing:.5px;">BIDPRO BRASIL · COMPROVANTE DE CONSULTA</div><div style="font-size:19px;font-weight:800;margin-top:2px;">${escHtml(titulo)}</div></div>`
+      + `<div style="background:#fff;padding:20px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">`
+      + `<div style="font-size:15px;font-weight:800;color:${cor};">${escHtml(resumo)}</div>`
+      + `<div style="font-size:12.5px;color:#64748b;margin-top:6px;">Consulta automática realizada pela plataforma em ${escHtml(quando)} (horário de Brasília).</div>`
+      + `<div style="margin:16px 0;height:1px;background:#e2e8f0;"></div>`
+      + `<details><summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:#334155;">Ver o retorno do portal público (transparência)</summary>`
+      + `<pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-top:10px;max-height:360px;overflow:auto;">${escHtml(capturado)}</pre></details>`
+      + (meta?.portalUrl ? `<div style="font-size:11.5px;color:#94a3b8;margin-top:16px;">Para emitir a certidão OFICIAL (com validade jurídica; exige o preenchimento e o captcha do próprio órgão), acesse o portal público: <a href="${escHtml(meta.portalUrl)}" target="_blank" rel="noopener noreferrer" style="color:#1e40af;">${escHtml(meta.portalUrl)}</a></div>` : '')
+      + `</div><div style="text-align:center;font-size:10.5px;color:#94a3b8;margin-top:14px;">Documento gerado automaticamente pela BidPro Brasil. Não substitui a certidão oficial do órgão.</div>`
+      + `</div></body></html>`;
+    const buffer = Buffer.from(html.slice(0, 2_000_000), 'utf8');
+    const storagePath = `comprovantes/${imovelId}/${Date.now()}_${String(meta?.chave || 'fonte').replace(/[^a-z0-9]/gi, '')}.html`;
     const up = await storage(`object/${BUCKET}/${storagePath}`, { method: 'POST', headers: { 'Content-Type': 'text/html; charset=utf-8', 'x-upsert': 'true' }, body: buffer });
     if (!up.ok) return null;
     const sg = await storage(`object/sign/${BUCKET}/${storagePath}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 180 }) });
@@ -747,6 +790,24 @@ export default async function handler(req, res) {
       const resumoProc = cnj.processos.slice(0, 8).map(p => `- ${p.numero} (${p.tribunal || ''}) classe ${p.classe || '-'} | riscos: ${(p.riscos || []).map(r => r.categoria).join(', ') || 'nenhum'}`).join('\n');
       content.push({ type: 'text', text: `=== PROCESSOS CNJ (${cnj.total}) ===\nParecer automático: ${cnj.parecer?.texto || ''}\n${resumoProc}` });
     }
+    // ANTIFRAUDE (anti-golpe de leilão): duas defesas — PROCEDÊNCIA (o lote veio de um
+    // leiloeiro/fonte que integramos e monitoramos) e EXISTÊNCIA DO PROCESSO (nº CNJ com
+    // dígito verificador válido + confirmado no DataJud). Busca o registro da fonte uma
+    // vez (reaproveitado no result/checklist) e dá a dica de procedência ao parecer.
+    let fonteInfo = null;
+    try {
+      const [lc] = await (await sb(`leiloeiro_conhecimento?fonte=eq.${encodeURIComponent(String(row?.fonte || ''))}&select=fonte,plataforma,custo,qualidade&limit=1`)).json();
+      fonteInfo = lc || null;
+    } catch { /* best-effort */ }
+    const procDigitsPre = String(procNum || '').replace(/\D/g, '');
+    if (row?.fonte || procDigitsPre.length === 20) {
+      const antifraudeHint = [
+        'VERIFICAÇÃO DE PROCEDÊNCIA (anti-golpe — comente no parecer SE algo não fechar):',
+        row?.fonte ? `- Origem do lote: ${row.fonte}${fonteInfo ? ` (${fonteInfo.plataforma || 'plataforma integrada'}), fonte reconhecida e monitorada pela BidPro.` : ', fonte NÃO reconhecida pela plataforma — trate a idoneidade do leiloeiro como diligência a confirmar (registro na Junta Comercial e no tribunal).'}` : '',
+        procDigitsPre.length === 20 ? `- Processo ${procDigitsPre}: dígito verificador CNJ ${cnjValido(procDigitsPre) ? 'VÁLIDO' : 'INVÁLIDO (número possivelmente incorreto ou forjado)'}; DataJud ${temProc ? 'CONFIRMOU o processo' : 'NÃO localizou o processo (confirmar no tribunal antes do lance)'}.` : '',
+      ].filter(Boolean).join('\n');
+      content.push({ type: 'text', text: antifraudeHint });
+    }
     if (!content.length) content.push({ type: 'text', text: 'Nenhum documento pôde ser lido automaticamente. Produza a análise possível e detalhe em "lacunas" o que precisa ser obtido e onde.' });
     content.push({ type: 'text', text: promptDocumental(im, temProc) });
 
@@ -948,9 +1009,32 @@ export default async function handler(req, res) {
     // nada é título limpo (boa notícia), não erro de integração.
     const numConcretoCNJ = String(procNum || ex.numeroProcesso || '').replace(/\D/g, '');
     if (numConcretoCNJ.length >= 15 && !(cnj && cnj.total)) {
-      registrarAnomalia('cnj_vazio', im.fonte, imovelId, 'cnj', `CNJ sem retorno p/ processo ${numConcretoCNJ} (modalidade=${im.modalidade || '?'}).`).catch(() => {});
+      registrarAnomalia('cnj_vazio', row?.fonte, imovelId, 'cnj', `CNJ sem retorno p/ processo ${numConcretoCNJ} (modalidade=${im.modalidade || '?'}).`).catch(() => {});
     }
     const procFontes = procNum || ex.numeroProcesso || (cnj?.processos?.[0]?.numero) || null;
+
+    // Fecha a verificação ANTIFRAUDE com o número mais completo (inclui o extraído pela
+    // IA). Vira campo do result + riscos determinísticos que já entram na contagem de
+    // pontos de atenção e no parecer — o cliente vê o alerta de golpe em destaque.
+    const procAF = String(procFontes || '').replace(/\D/g, '');
+    const temNumCNJ = procAF.length === 20;
+    const dvOk = temNumCNJ ? cnjValido(procAF) : null;
+    const ehExtrajudicial = /extrajud|9\.?514|consolida|fiduci/i.test(String(im.modalidade || row?.modalidade || ''));
+    const riscosAntifraude = [];
+    if (row?.fonte && !fonteInfo) riscosAntifraude.push({ categoria: 'Procedência do leiloeiro', severidade: 'alerta', descricao: `A origem do lote ("${row.fonte}") não está na base de leiloeiros integrados e monitorados da plataforma. Confirme a idoneidade do leiloeiro (registro na Junta Comercial/JUCESP e no tribunal) antes de qualquer lance ou pagamento.`, constaNaDoc: false });
+    if (temNumCNJ && dvOk === false) riscosAntifraude.push({ categoria: 'Número do processo', severidade: 'alerta', descricao: `O número do processo informado (${procAF}) não passou na validação do dígito verificador do padrão CNJ. Pode estar digitado errado ou ser inválido: confirme o número real no tribunal antes de prosseguir.`, constaNaDoc: false });
+    if (temNumCNJ && dvOk && cnj && !temProc) riscosAntifraude.push({ categoria: 'Existência do processo', severidade: 'alerta', descricao: `O processo tem número válido, mas não foi localizado no DataJud (CNJ). Pode ser defasagem do sistema, mas também é sinal de alerta: confirme a existência do processo no tribunal antes do lance.`, constaNaDoc: false });
+    const antifraude = {
+      fonte: row?.fonte || null,
+      fonteReconhecida: row?.fonte ? !!fonteInfo : null,
+      plataforma: fonteInfo?.plataforma || null,
+      processoNumero: temNumCNJ ? procAF : null,
+      processoDvCNJValido: dvOk,
+      processoConfirmadoDataJud: temNumCNJ ? temProc : null,
+      extrajudicialSemProcesso: ehExtrajudicial && !temNumCNJ,
+      alertas: riscosAntifraude.map(r => r.descricao),
+      verificadoEm: new Date().toISOString(),
+    };
     let fontesTxt = '', fontesExternas = null;
     try {
       const [djen, cndt, cnib, prot, cert] = await Promise.all([
@@ -961,11 +1045,18 @@ export default async function handler(req, res) {
         docOk ? consultarCertidoesFiscais(execDoc).catch(() => null) : null,
       ]);
       fontesExternas = { djen, cndt, cnib, protestos: prot, certidoes: cert };
-      // Comprovantes: salva o HTML/tela capturado de cada fonte e guarda só a URL
-      // (a prova que o cliente pode abrir). Nunca deixa o HTML cru no result.
-      for (const f of Object.values(fontesExternas)) {
+      // Comprovantes: gera um comprovante PRÓPRIO (estático, sem script) de cada fonte
+      // e guarda só a URL (a prova que o cliente abre). Nunca deixa o HTML cru no result
+      // nem linka o portal ao vivo (era a causa da "tela de digitação").
+      const COMPROV_META = {
+        cndt:      { chave: 'cndt',    titulo: 'Débitos Trabalhistas (CNDT / TST)',  portalUrl: 'https://cndt-certidao.tst.jus.br/inicio.faces' },
+        cnib:      { chave: 'cnib',    titulo: 'Indisponibilidade de Bens (CNIB)',    portalUrl: 'https://www.indisponibilidade.org.br/' },
+        protestos: { chave: 'cenprot', titulo: 'Protestos em Cartório (CENPROT)',     portalUrl: 'https://resolve.cenprot.org.br/' },
+      };
+      for (const [k, f] of Object.entries(fontesExternas)) {
         if (f && f.comprovanteHtml) {
-          try { const cu = await salvarComprovante(String(imovelId), (f === cndt ? 'cndt' : f === cnib ? 'cnib' : f === prot ? 'cenprot' : f === cert ? 'fiscais' : 'fonte'), f.comprovanteHtml); if (cu) f.comprovanteUrl = cu; } catch { /* best-effort */ }
+          const meta = COMPROV_META[k] || { chave: k, titulo: 'Consulta pública', portalUrl: null };
+          try { const cu = await salvarComprovante(String(imovelId), meta, f); if (cu) f.comprovanteUrl = cu; } catch { /* best-effort */ }
           delete f.comprovanteHtml;
         }
       }
@@ -1003,6 +1094,11 @@ export default async function handler(req, res) {
       return { label, status: 'na', detalhe: `${fonte.erro || 'Não foi possível consultar automaticamente'}.` };
     };
     const checklist = [
+      { label: 'Procedência do lote (leiloeiro/fonte)',
+        status: antifraude.fonteReconhecida ? 'feito' : (row?.fonte ? 'diligencia' : 'na'),
+        detalhe: antifraude.fonteReconhecida
+          ? `Origem: ${row.fonte}${antifraude.plataforma ? ` (${antifraude.plataforma})` : ''} — leiloeiro/fonte integrado e monitorado pela plataforma.`
+          : (row?.fonte ? `Origem "${row.fonte}" não reconhecida — confirmar a idoneidade do leiloeiro antes do lance.` : 'Origem do lote não informada.') },
       { label: 'Documentos do lote (matrícula/edital/regras)',
         status: lidos.length ? 'feito' : (urls.length ? 'pendente' : 'na'),
         detalhe: lidos.length
@@ -1039,7 +1135,8 @@ export default async function handler(req, res) {
         : d.length === 14 ? `••.${d.slice(2, 5)}.${d.slice(5, 8)}/••••-••` : null;
     }
     // Pontos de atenção (resumo escaneável no topo, com contagem por severidade).
-    const rlist = Array.isArray(parsed.riscos) ? parsed.riscos : [];
+    // Os riscos ANTIFRAUDE (procedência/processo) entram na frente da lista da IA.
+    const rlist = [...riscosAntifraude, ...(Array.isArray(parsed.riscos) ? parsed.riscos : [])];
     const pontosAtencao = {
       total: rlist.length,
       altos: rlist.filter(r => r?.severidade === 'bloqueante').length,
@@ -1175,7 +1272,8 @@ export default async function handler(req, res) {
 
     const result = {
       extracao: parsed.extracao || null,
-      riscos: parsed.riscos || [],
+      riscos: rlist,
+      antifraude,
       pontosAtencao,
       faltando,
       paginaLeiloeiro,

@@ -16,6 +16,30 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
 
 ---
 
+## 📊 25/07 — STATUS VIVO da cobertura (auditoria no banco)
+Acervo total **~33,5 mil ativos** em **25 fontes**. Boa parte do backlog de 58 domínios já
+FLUI pelos agregadores (não exige scraper novo):
+- **LJUD** — 1.035 ativos, **39 leiloeiros distintos** (Álvaro, Thaís, Planalto/Ana Blasczyk,
+  Verde Amarelo/Arthur, família Fixer, Rigolon, Carlo Ferrari, Giordano, Francisco Freitas,
+  Akimoto, etc. — cobre a maioria dos judiciais de SP da lista).
+- **LEILOTECH** — 84 ativos, **13 leiloeiros** (Topo, AL, AM, Bringel, KS, Spencer, Túlio, VM…).
+- **SUPORTE** — 27 ativos, 3 (Gustavo Reis, Líder, Valero). **GESTAOLEILOES** — 123 (Granado,
+  Lance no Leilão). **SOLEON** — CALIL/VEGAS/TORRES3 (48). **SBID9** — LiderProp/NarvaezBid.
+
+**Ainda pendente (0 acervo → exige scraper dedicado, recon vivo via Bright Data na CI):**
+crepaldi, e-confianca, sato/hisa, osvaldo/elizabeth (Seoanes), alfaleiloes ⭐, destak ⭐,
+totalleiloes, delano, picelli, shiokawa, bomnegocio, paulistana, e o cluster **Vlance /v3/**
+(verdeamarelo/sudeste/capitalvalor/sanches). **Não dá para construir/testar daqui** — o egress
+do ambiente de dev está bloqueado (HTTP 000 nos sites); a construção roda na CI (`recon-deep.yml`
+→ scraper dedicado), e **consome cota Bright Data** (teto 450/sem), então precisa do go-ahead do dono.
+
+**Próximo lever de melhor retorno (ordem):** (1) **SUPORTE tenant enumeration** (cunha, vinco —
+tenants `static.suporteleiloes.com.br/{dominio}/`, o mais barato); (2) **Vlance /v3/** (1 scraper
+onboarda verdeamarelo+sudeste+capitalvalor+sanches); (3) grau-3 de alto valor unitário: **alfaleiloes**
+(só imóveis, nacional, provável API) e **destak**.
+
+---
+
 ## 🚀 23/07 — RECON VIVO (Bright Data) + INTEGRAÇÃO POR CLUSTER
 O recon-1 (`recon-leiloeiros-backlog`) classificou a plataforma pela home; o recon-2
 (`recon-deep`, listing+detalhe) revelou a estrutura viva. Os 0-acervo se agrupam em POUCOS

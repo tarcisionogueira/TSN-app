@@ -70,11 +70,21 @@ async function ultimoConcluido(tabela, userId, imovelId) {
 function resumoMercado(m) {
   if (!m) return 'RELATÓRIO MERCADOLÓGICO: ausente.';
   const merc = m.mercado || {};
+  const idx = merc.indiceBidPro || {};                 // base própria (venda_m2/aluguel_m2/nivel)
+  const val = merc.valorizacao || {};                  // curva R$/m² por ano (serie/…_pct)
   const partes = [
     `- Valor de mercado estimado: R$ ${Number(m.valorMercado || 0).toLocaleString('pt-BR')}`,
     merc.precoMedioM2 ? `- Preço médio/m²: R$ ${Number(merc.precoMedioM2).toLocaleString('pt-BR')}` : '',
     merc.aluguelMedio ? `- Aluguel médio: R$ ${Number(merc.aluguelMedio).toLocaleString('pt-BR')} (yield ${(merc.yieldBruto||0).toFixed?.(1) || merc.yieldBruto || 0}% bruto)` : '',
     merc.referenciaFipeZap?.encontrado ? `- FipeZAP ${merc.referenciaFipeZap.localidade || ''}: R$ ${Number(merc.referenciaFipeZap.precoMedioM2||0).toLocaleString('pt-BR')}/m², valorização 12m ${(Number(merc.referenciaFipeZap.valorizacao12m)||0).toFixed(1)}%` : '',
+    // ÍNDICE BIDPRO (aprendizado da plataforma): a base própria consolidada das análises
+    // já rodadas. O laudo de viabilidade DEVE cruzá-la com o FipeZAP e usá-la como
+    // referência independente de revenda/renda — antes só chegava aqui indiretamente.
+    (Number(idx.venda_m2) > 0 || Number(idx.aluguel_m2) > 0)
+      ? `- Índice BidPro (base própria, nível ${idx.nivel || 'regional'}): ${Number(idx.venda_m2) > 0 ? `venda R$ ${Number(idx.venda_m2).toLocaleString('pt-BR')}/m²` : ''}${Number(idx.aluguel_m2) > 0 ? `${Number(idx.venda_m2) > 0 ? ' · ' : ''}locação R$ ${Number(idx.aluguel_m2).toLocaleString('pt-BR')}/m²/mês` : ''} (referência interna independente — cruzar com o FipeZAP)`
+      : '',
+    Array.isArray(val.serie) && val.serie.length >= 2
+      ? `- Valorização BidPro (R$/m² de venda por ano, base própria): ${val.serie.map(p => `${p.ano}: R$ ${Number(p.m2).toLocaleString('pt-BR')}`).join(' · ')} — variação ${Number(val.valorizacao_periodo_pct||0).toFixed(1)}% no período (${Number(val.valorizacao_aa_pct||0).toFixed(1)}% a.a.); leitura de TENDÊNCIA da microrregião` : '',
     merc.comentario ? `- Leitura de mercado: ${String(merc.comentario).slice(0, 600)}` : '',
   ].filter(Boolean);
   const parecer = m.parecer ? `\nPARECER MERCADOLÓGICO/FINANCEIRO (na íntegra):\n${String(m.parecer).slice(0, 6000)}` : '';
@@ -119,6 +129,7 @@ Emita um VEREDITO consolidado, cruzando as duas visões:
 REGRAS:
 - Um RISCO BLOQUEANTE no jurídico derruba para "reprovado" ou "condicional" mesmo com bom retorno — explique o porquê.
 - VULNERABILIDADE NA OCUPAÇÃO (idoso, PcD, criança, vulnerabilidade social) é fator de RESISTÊNCIA/ATRASO na desocupação e deve entrar como CONDIÇÃO/diligência em TODO imóvel — o status "ocupado/desocupado" do edital é notoriamente furado (dito desocupado com moradores e vice-versa), então a verificação em campo é sempre necessária, mesmo que o documental não tenha apontado ocupação. Trate como "condicional", nunca bloqueio automático, e liste a verificação lícita (consulta processual/prioridade de tramitação se judicial, visita ao imóvel). Nunca sugira consultar dados de saúde/SUS — é ilegal (LGPD) e não deve constar como diligência.
+- ÍNDICE BIDPRO (aprendizado da plataforma): se a Entrada 1 trouxer o "Índice BidPro" e/ou a "Valorização BidPro" (base própria da plataforma), CRUZE-os com o FipeZAP e com o valor de mercado. Se o Índice divergir muito do FipeZAP, comente e ancore a defesa na referência mais CONSERVADORA. Use a valorização por ano como leitura de TENDÊNCIA da microrregião (nunca como promessa de retorno futuro).
 - Retorno abaixo de 30% (investimento) sem economia relevante = "reprovado".
 - Seja HONESTO e OBJETIVO. Se reprovado, seja curto e direto no porquê. Não invente dados que não estão nos relatórios; se algo é incerto, trate como condição/diligência.
 - Texto formal, simples, sem markdown/asteriscos e SEM travessão "—" (use vírgula, ponto ou dois-pontos; o travessão dá cara de texto de IA e reduz a confiança do cliente).

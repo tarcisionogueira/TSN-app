@@ -389,11 +389,13 @@ export default function Analise() {
     try {
       const res = await fetch(url);
       let html = await res.text();
-      if (!/<base\b/i.test(html)) {
-        const orig = (html.match(/https?:\/\/[a-z0-9.-]+\.(?:jus|gov|org|com)\.br/i) || [])[0];
-        const inj = `<meta charset="utf-8">${orig ? `<base href="${orig}/">` : ''}`;
-        html = /<head[^>]*>/i.test(html) ? html.replace(/<head([^>]*)>/i, `<head$1>${inj}`) : `<!doctype html><head>${inj}</head>${html}`;
-      }
+      // O comprovante é uma página PRÓPRIA, estática e sem dependências externas. NÃO
+      // injetamos <base> no domínio do órgão (era isso que fazia um shell de portal
+      // re-hidratar AO VIVO e mostrar a tela de digitação em vez da prova). Como defesa
+      // em profundidade contra comprovantes legados (shells crus), removemos qualquer
+      // <script> e <base> e renderizamos INERTE.
+      html = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<base\b[^>]*>/gi, '');
+      if (!/<meta\s+charset/i.test(html)) html = `<!doctype html><meta charset="utf-8">${html}`;
       const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
       if (w) w.location.href = blobUrl; else window.open(blobUrl, '_blank', 'noopener');
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
