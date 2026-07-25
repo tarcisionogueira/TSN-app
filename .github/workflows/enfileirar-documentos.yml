@@ -1,4 +1,4 @@
-name: Enfileirar documentos faltantes (matrícula)
+name: Enfileirar documentos (matrícula faltante + arquivamento de fontes instáveis)
 
 # Contramedida para a lacuna de matrículas: chama a função enfileirar_docs_faltantes(),
 # que põe na documentos_fila os imóveis públicos ativos sem matrícula (com url_lote). O
@@ -25,8 +25,23 @@ jobs:
           LIMITE: ${{ github.event.inputs.limite || '3000' }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_KEY" ]; then echo "::error::secrets ausentes"; exit 1; fi
-          echo "Enfileirando (limite $LIMITE)…"
+          echo "Enfileirando MATRÍCULA faltante (limite $LIMITE)…"
           curl -sS -X POST "$SUPABASE_URL/rest/v1/rpc/enfileirar_docs_faltantes" \
             -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"p_limite\": $LIMITE}" -w "\nHTTP %{http_code}\n"
+
+      - name: Chamar RPC enfileirar_docs_arquivar (fontes instáveis)
+        # Arquivamento proativo: guarda no bucket o PDF de imóveis de fontes que quebram
+        # (pago/misto/baixa qualidade) enquanto o link ainda está vivo. O mesmo job de
+        # captura genérica drena a fila. CEF fica de fora (pipeline próprio).
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_KEY" ]; then echo "::error::secrets ausentes"; exit 1; fi
+          echo "Enfileirando ARQUIVAMENTO de fontes instáveis (limite 1000)…"
+          curl -sS -X POST "$SUPABASE_URL/rest/v1/rpc/enfileirar_docs_arquivar" \
+            -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"p_limite\": 1000}" -w "\nHTTP %{http_code}\n"
