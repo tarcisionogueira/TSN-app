@@ -34,6 +34,12 @@ export async function fetchPlanosComConfig() {
       precoLabel: fmt(preco),
       precoAnual: anual,
       precoAnualLabel: anual ? fmt(anual) : null,
+      // Gatilho de preço agendado (passo 8): preço futuro + quando entra em vigor, para a
+      // contagem regressiva de "assine agora e trave o preço".
+      precoAgendado: cfg.preco_agendado != null ? Number(cfg.preco_agendado) : null,
+      precoAgendadoLabel: cfg.preco_agendado != null ? fmt(Number(cfg.preco_agendado)) : null,
+      precoAnualAgendado: cfg.preco_anual_agendado != null ? Number(cfg.preco_anual_agendado) : null,
+      precoVigencia: cfg.preco_vigencia || null,
       precoMensalAnual: anual ? anual / 12 : null,
       precoMensalAnualLabel: anual ? fmt(anual / 12) : null,
       precoVista: vista,
