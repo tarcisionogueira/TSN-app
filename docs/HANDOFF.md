@@ -65,6 +65,17 @@
 - **Bandas de PADRÃO** (`regiao.bandas` = percentis p25/p50/p75 de R$/m² de venda): popular · médio · alto. Feira de Santana Casa: **popular R$ 2.472 · médio R$ 2.638 · alto R$ 4.749** — um imóvel ALTO PADRÃO (ex.: Laguneville) deve olhar a faixa "alto" (~R$ 4.749), ~2× a mediana. Exibidas na tela do Índice (`IndiceConsulta.jsx`) e no PDF (`IndicePDF.jsx`).
 - **Laguneville:** NÃO é imóvel do acervo (foi uma consulta ao Índice) → não há mercadológico dele p/ regenerar. O ÍNDICE dele agora reflete o alto padrão. Para um MERCADOLÓGICO alto-padrão do endereço, roda-se a análise manual (já padrão-aware).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 10: reaproveitamento por região no mercadológico — cache do Índice)
+> Deploy `main` (`f2e0d0c`). Pedido do dono: o mercadológico/índice deve calcular um valor REAL de mercado pela **média dos anúncios por tipo, excluindo leilão**, para confrontar a avaliação (oportunidade ou não). E — sem re-buscar imóveis na web toda vez (custo alto) — **métricas de reaproveitamento por região** (volume por bairro/localidade). O dono aprovou ("gostei. faça e coloque em produção").
+
+**(a) Amostras com LOCALIDADE (`gravarAmostrasIndice` em `api/gerar-analise.js`).** Cada amostra gravada em `indice_amostra` agora leva `bairro_norm` (mesma normalização do banco) e `geo_grid` (~1 km, `'lat.dd,lng.dd'`) — antes iam **vazios**. É o pré-requisito para reaproveitar por bairro/grid (sem isso, só dava para escopar por cidade). Não muda comportamento visível; só enriquece a base própria.
+
+**(b) Cache de comparáveis por região — gate por env (`amostrasRegiaoCache` + `else` da busca).** Quando a microrregião **já tem** amostra DENSA (≥ 8, `MERCADO_CACHE_MIN`) e RECENTE (≤ 120 dias, `MERCADO_CACHE_DIAS`) de **VENDA sem leilão** na base própria, o gerador **injeta esses comparáveis REAIS como âncora** no `promptMercado` e **reduz a busca web de 5 → 2 usos** (a IA segue montando o mercado, só completa lacunas: padrão/anúncio ativo). Escopo do **mais fino ao mais amplo**: `bairro_norm → geo_grid → cidade`, parando no 1º nível com densidade suficiente. Assim uma região "aquecida" (muitos relatórios já feitos) **não paga a pesquisa cara toda vez** — a economia é ~60% da etapa de web search nos hits.
+- **FLAG OFF por padrão (`MERCADO_CACHE`):** em produção **nada muda** até o dono setar `MERCADO_CACHE=1` na Vercel (Production+Preview). O `console.log('[mercado-cache]', …)` grava **hit/miss + nível + nº de comparáveis + maxWeb** por relatório → dá para **medir a economia real** nos logs antes de deixar ligado em definitivo. Thresholds ajustáveis por env (`MERCADO_CACHE_MIN`, `MERCADO_CACHE_DIAS`).
+- **Sem risco de leilão/padrão errado:** a leitura filtra fonte de leilão (`ehFonteLeilao`) e usa só o MESMO tipo/segmento; a mediana injetada respeita o recorte da região. Rural fica fora (régua de hectare). Build (vite) OK · `node --check` OK.
+- **Confronto avaliação × mercado (parte conceitual do pedido):** já existente e reforçado — o mercadológico exclui leilão do comparativo (`FONTE_LEILAO` na sessão 8) e estima o valor pela média/mediana de anúncios do mesmo tipo; o Índice serve de norteamento de R$/m² por região. Este cache só barateia a obtenção desses comparáveis reutilizando o que já capturamos.
+- **Como ligar e medir:** (1) Vercel → Env `MERCADO_CACHE=1`; (2) gerar alguns mercadológicos em cidades já bastante analisadas (ex.: Feira de Santana); (3) `Vercel logs` filtrando `[mercado-cache]` → ver `hit:true` e `maxWeb:2`; (4) comparar consumo/tempo com a semana anterior. Reverter = apagar a env (volta a 5 buscas sempre).
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**
@@ -82,6 +93,7 @@
 5. **Ranks / plano de carreira** — nomear os ranks, validar percentuais + % do pool, e **agendar os crons mensais** (`recalcular_ranks` + `distribuir_pool_rank`).
 6. **Quando crescer o pago** — Resend (plano), Supabase (compute + read replica). *(Leaked-password já ligado.)*
 7. **Preço agendado 01/10** (49,90→89,90 / anual 899) — já configurado; só monitorar o gatilho.
+8. **Ligar o cache de mercado (opcional, economia)** — setar `MERCADO_CACHE=1` na Vercel (Production+Preview) para ativar o reaproveitamento por região (sessão 10). Fica OFF até o dono decidir; depois eu leio os logs `[mercado-cache]` e reporto a economia. Reverter = apagar a env.
 
 ## ✅ COMEÇAR AQUI (25/07 — sessão 4: Índice→viabilidade, antifraude documental, certidões, +leiloeiros)
 > Branch: `claude/bidprobrasil-handoff-storage-qzm1mc`. Build (vite) OK · `node --check` OK nos `api/`. Segurança **0/0**. 4 pedidos do dono; investigados com 3 agentes em paralelo + queries.
