@@ -167,8 +167,14 @@ function parseCard(card, ctx) {
     : /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : 'extrajudicial';
 
-  // Foto do lote: snapshot/fotos do próprio back-office (o card carrega a thumb).
-  const foto = (html.match(/(?:src|data-src)=["']([^"']*\/(?:leilao|bem_foto|fotos)\/[^"']+\.(?:jpe?g|png|webp|jfif)[^"']*)["']/i) || [])[1] || null;
+  // Foto do lote: o nome do arquivo é SEMPRE prefixado pelo idLote (<idLote>_NN.jpg).
+  // BUG CRÍTICO corrigido: os cards são fatiados pela COLUNA DE TEXTO (col-lg-8), e a
+  // imagem de cada lote fica na coluna que PRECEDE o texto do próximo lote → pegar a
+  // "1ª foto da fatia" trazia a foto do PRÓXIMO lote (foto de outro imóvel, perda de
+  // credibilidade). Buscamos no HTML INTEIRO do evento a foto cujo nome começa com
+  // ESTE idLote; se não achar, fica SEM foto (melhor nenhuma que a de outro imóvel).
+  const reFotoLote = new RegExp(`["']([^"']*/${card.idLote}_[^"'/]*\\.(?:jpe?g|png|webp|jfif)[^"']*)["']`, 'i');
+  const foto = (String(ctx.htmlEvento || html).match(reFotoLote) || [])[1] || null;
   const fotoAbs = foto ? (foto.startsWith('http') ? foto : `https://${ctx.dominio}/${foto.replace(/^\//, '')}`) : null;
 
   const descricao = (txt.match(/DESCRI[ÇC][ÃA]O:\s*(.+?)(?:\s*-\s*VALOR DE AVALIA|\s*IPTU:|$)/i) || [])[1]?.trim()?.slice(0, 500) || null;
@@ -222,6 +228,7 @@ async function coletarEvento(dominio, idLeilao) {
     dominio, idLeilao,
     leiloeiro: leiloeiroDoTitulo(html, dominio),
     data_leilao: dataEvento(cabecalho),
+    htmlEvento: html, // p/ resolver a foto pelo idLote no HTML INTEIRO (ver parseCard)
   };
   const cards = fatiarCards(html);
   const rows = [];

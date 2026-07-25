@@ -69,7 +69,7 @@ export default function MapaImoveis() {
 
     let q = supabase
       .from('imoveis_leilao')
-      .select('id, titulo, cidade, estado, tipo, valor_minimo, latitude, longitude, link_foto, fonte, fonte_id')
+      .select('id, titulo, cidade, estado, tipo, valor_minimo, latitude, longitude, link_foto, fonte, fonte_id, geocod_nivel')
       .eq('ativo', true)
       .not('latitude', 'is', null)
       .neq('latitude', 0)
@@ -109,8 +109,12 @@ export default function MapaImoveis() {
       lista.forEach(im => {
         if (im.latitude == null || im.longitude == null || im.latitude === 0 || im.longitude === 0) return;
         const cor = COR_TIPO[im.tipo] || '#111111';
+        // Localização APROXIMADA (bairro/centro da cidade) não deve parecer um pino
+        // exato — era a queixa "pino longe do imóvel". Marca esses com opacidade menor
+        // e um aviso no popup (não esconde: sumiria muito imóvel do mapa).
+        const aprox = im.geocod_nivel === 'cidade' || im.geocod_nivel === 'bairro';
         const icon = L.icon({ iconUrl: svgPin(cor), iconSize: [24, 36], iconAnchor: [12, 36], popupAnchor: [0, -36] });
-        const marker = L.marker([im.latitude, im.longitude], { icon });
+        const marker = L.marker([im.latitude, im.longitude], { icon, opacity: aprox ? 0.5 : 1 });
         const fmt = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
         // Foto da Caixa via hotlink direto (Vercel é bloqueada); outros usam link_foto.
         // Popup do Leaflet é HTML puro (não React) — fallback em cadeia inline: tenta
@@ -129,6 +133,7 @@ export default function MapaImoveis() {
               : ''}
             <div style="font-weight:700;font-size:13px;color:#111;margin-bottom:4px">${im.titulo || 'Imóvel'}</div>
             <div style="font-size:12px;color:#64748b;margin-bottom:6px">${im.cidade || ''} — ${im.estado || ''}</div>
+            ${aprox ? `<div style="font-size:11px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:3px 7px;margin-bottom:6px">📍 Localização aproximada (região da cidade)</div>` : ''}
             <div style="font-size:14px;font-weight:800;color:#0D63DB;margin-bottom:8px">${fmt(im.valor_minimo)}</div>
             <button onclick="window.location.hash='/imovel/${im.id}'" style="width:100%;padding:6px;background:#0D63DB;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:12px">Ver detalhes →</button>
           </div>

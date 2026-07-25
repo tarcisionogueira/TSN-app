@@ -594,6 +594,10 @@ export default async function handler(req, res) {
     // Cache-first: documentos já armazenados deste imóvel (poupa Bright Data).
     const podeCache = isUuid(String(imovelId));
     const cache = podeCache ? await mapaCache(String(imovelId)) : {};
+    // Tipos que JÁ temos guardados no bucket ANTES desta geração — usado para o
+    // aprendizado persistente (se tínhamos o arquivo mas a leitura voltou 0, é bug
+    // de leitura, não "doc ainda não capturado").
+    const tiposGuardados = Object.values(cache).filter((c) => c?.storage_path).map((c) => c.tipo);
     const blocos = [];
     const lidos = [];
     // Cap de leitura adaptativo: judicial lê mais peças (até 8) para o cruzamento
@@ -606,7 +610,10 @@ export default async function handler(req, res) {
     urls.sort((a, b) => (prioTipo[a.tipo] ?? 5) - (prioTipo[b.tipo] ?? 5));
     for (const u of urls) {
       if (blocos.length >= capLeitura || Date.now() > deadline) break; // limita custo/payload (deadline protege o tempo)
-      const tipoDoc = tipoDoRotulo(u.rotulo);
+      // Prefere o TIPO do anexo (vindo do banco, confiável) para achar a cópia no
+      // bucket; só cai no rótulo quando o tipo é genérico. Sem isto, um rótulo que
+      // não inferia o tipo furava o cache e caía na URL (que expirava) → doc não lido.
+      const tipoDoc = (u.tipo && u.tipo !== 'anexo') ? u.tipo : tipoDoRotulo(u.rotulo);
       let doc = null, deCache = false;
       // 1) Se já temos o PDF no bucket (manual do analista ou cache anterior), lê de lá.
       if (podeCache && tipoDoc && cache[tipoDoc]?.storage_path) {
@@ -710,6 +717,14 @@ export default async function handler(req, res) {
       // laudo completo e o vício some. Quando NÃO auto-resolve (anexar manual), fica null (estado
       // final — sem gastar IA à toa).
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
+      // APRENDIZADO PERSISTENTE (sobrevive à regeração, que sobrescreve o result):
+      // se TÍNHAMOS o(s) documento(s) no bucket e a leitura voltou 0, é falha de
+      // LEITURA (arquivo ilegível/assinatura, não "doc ainda não capturado"). Registra
+      // a anomalia idempotente p/ a saúde investigar — o dono quer manter esse log.
+      if (!lidos.length && tiposGuardados.length) {
+        registrarAnomalia('doc_guardado_nao_lido', row?.fonte, imovelId, 'documentos',
+          `Documento(s) no bucket (${tiposGuardados.join(', ')}) não lidos na geração — verificar arquivo/assinatura.`).catch(() => {});
+      }
       if (cota && cota.ok && cota.tipo) {
         try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
       }
@@ -1144,6 +1159,14 @@ export default async function handler(req, res) {
       // laudo completo e o vício some. Quando NÃO auto-resolve (anexar manual), fica null (estado
       // final — sem gastar IA à toa).
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
+      // APRENDIZADO PERSISTENTE (sobrevive à regeração, que sobrescreve o result):
+      // se TÍNHAMOS o(s) documento(s) no bucket e a leitura voltou 0, é falha de
+      // LEITURA (arquivo ilegível/assinatura, não "doc ainda não capturado"). Registra
+      // a anomalia idempotente p/ a saúde investigar — o dono quer manter esse log.
+      if (!lidos.length && tiposGuardados.length) {
+        registrarAnomalia('doc_guardado_nao_lido', row?.fonte, imovelId, 'documentos',
+          `Documento(s) no bucket (${tiposGuardados.join(', ')}) não lidos na geração — verificar arquivo/assinatura.`).catch(() => {});
+      }
       if (cota && cota.ok && cota.tipo) {
         try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
       }
